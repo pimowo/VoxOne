@@ -1,0 +1,15 @@
+UWAGA!!! Dotyczy wersji yoRadio 0.9.670 i nowszych (?)
+
+Pliki wklejasz (podmieniasz):
+
+displayL10n_custom.h ----> yoRadio\locale\
+utf8Rus.cpp          ----> yoRadio\src\displays\tools\
+glcdfont.c           ----> dokumenty\Arduino\libraries\Adafruit_GFX_Library\ 	(*UWAGA!, czytaj poniżej)
+
+w pliku myoptions.h dodać/zmienić: #define L10N_LANGUAGE	RU
+
+*UWAGA! Docelowo biblioteki są instalowane w dokumenty\Arduino\libraries\
+Jeśli w Twoim przypadku biblioteki Arduino są instalowane w innej lokalizacji - to wklej do odpowiedniego folderu w którym masz biblioteki.
+Aby sprawdzić gdzie Arduino IDE instaluje biblioteki, uruchom program i wejdź w menu do: Plik -> Preferencje, i sprawdź ścieżkę "Lokalizacja szkicownika".
+
+Adres dla wklejenia pliku glcdfont.c będzie wyglądał tak: "Lokalizacja szkicownika" \ libraries \ Adafruit_GFX_Library \

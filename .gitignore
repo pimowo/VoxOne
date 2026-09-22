@@ -1,0 +1,12 @@
+.pio/
+.vscode/
+*.code-workspace
+.clangd
+mytheme.h
+mqttoptions.h
+data/data/*
+!data/data/.gitignore
+*.bin
+*.elf
+*.map
+*.log
