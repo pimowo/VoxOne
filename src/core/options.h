@@ -332,11 +332,8 @@ The connection tables are located here https://github.com/e2002/yoradio#connecti
 #ifndef DSP_INVERT_TITLE
   #define DSP_INVERT_TITLE  true   // Invert title colors for displays ?
 #endif
-#ifndef EXT_WEATHER
-  #define EXT_WEATHER       true   // Extended weather
-#endif
 #ifndef RSSI_DIGIT
-  #define RSSI_DIGIT       false   // Extended weather
+  #define RSSI_DIGIT       false   // Numeric RSSI value
 #endif
 #ifndef RSSI_STEPS
   #define RSSI_STEPS       -50,-60,-70,-80
@@ -400,9 +397,6 @@ The connection tables are located here https://github.com/e2002/yoradio#connecti
 #ifndef COLOR_SNG_TITLE_2
   #define COLOR_SNG_TITLE_2       165, 162, 132
 #endif
-#ifndef COLOR_WEATHER
-  #define COLOR_WEATHER           255, 150,   0
-#endif
 #ifndef COLOR_VU_MAX
   #define COLOR_VU_MAX            231, 211,  90
 #endif
@@ -411,9 +405,6 @@ The connection tables are located here https://github.com/e2002/yoradio#connecti
 #endif
 #ifndef COLOR_CLOCK
   #define COLOR_CLOCK             231, 211,  90
-#endif
-#ifndef COLOR_CLOCK_BG
-  #define COLOR_CLOCK_BG           28,  28,  28
 #endif
 #ifndef COLOR_SECONDS
   #define COLOR_SECONDS           231, 211,  90

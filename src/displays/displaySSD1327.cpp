@@ -32,9 +32,7 @@ void DspCore::initDisplay() {
   config.theme.title1     = TFT_LOGO;
   config.theme.title2     = SILVER;
   config.theme.clock      = TFT_LOGO;
-  config.theme.clockbg    = DARK_GRAY;
   config.theme.rssi       = TFT_FG;
-  config.theme.weather    = ORANGE;
   config.theme.ip         = SILVER;
   config.theme.vol        = SILVER;
   config.theme.bitrate    = TFT_LOGO;

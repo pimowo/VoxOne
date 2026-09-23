@@ -47,16 +47,16 @@ static const Utf8LatinGlyph latinGlyphs[] = {
   {0xC3A5, 0xC385, 0xBB, 0xBC, 'a', 'A'}  // å Å
 };
 
-static bool mapLatinGlyph(uint8_t lead, uint8_t trail, bool uppercase, char &mapped) {
+static bool mapLatinGlyph(uint8_t lead, uint8_t trail, char &mapped) {
   const uint16_t utf8 = (static_cast<uint16_t>(lead) << 8) | trail;
   for (const Utf8LatinGlyph &entry : latinGlyphs) {
     const bool isLower = utf8 == entry.lowerUtf8;
     const bool isUpper = entry.upperUtf8 != 0 && utf8 == entry.upperUtf8;
     if (!isLower && !isUpper) continue;
 #if defined(DSP_LCD)
-    mapped = (uppercase || isUpper) ? entry.upperFallback : entry.lowerFallback;
+    mapped = isUpper ? entry.upperFallback : entry.lowerFallback;
 #else
-    mapped = static_cast<char>((uppercase || isUpper) ? entry.upperGlyph : entry.lowerGlyph);
+    mapped = static_cast<char>(isUpper ? entry.upperGlyph : entry.lowerGlyph);
 #endif
     return true;
   }
@@ -80,7 +80,7 @@ size_t strlen_utf8(const char* s) {
   return count;
 }
 
-char* utf8Rus(const char* str, bool uppercase) {
+char* utf8Rus(const char* str) {
   static char out[BUFLEN];
   int outPos = 0;
 #if defined(DSP_LCD) && !defined(LCD_RUS)
@@ -104,7 +104,7 @@ char* utf8Rus(const char* str, bool uppercase) {
     uint8_t c = (uint8_t)str[i];
     char latinGlyph;
     if ((c == 0xC3 || c == 0xC4 || c == 0xC5) && str[i+1] &&
-        mapLatinGlyph(c, static_cast<uint8_t>(str[i+1]), uppercase, latinGlyph)) {
+        mapLatinGlyph(c, static_cast<uint8_t>(str[i+1]), latinGlyph)) {
       out[outPos++] = latinGlyph;
       i++;
     } else if (c == 0xD0 && str[i+1]) {
@@ -114,20 +114,19 @@ char* utf8Rus(const char* str, bool uppercase) {
         const char* t = "YO";
         for (; *t && outPos < BUFLEN-1; t++) out[outPos++] = *t;
       #else
-        out[outPos++] = uppercase ? 0xA8 : 0xB8;
+        out[outPos++] = 0xA8;
       #endif
       } else if (n >= 144 && n <= 191) {
       #if defined(DSP_LCD) && !defined(LCD_RUS)
-        if(n>=176) n-=32;
+        const bool lower = n >= 176;
+        if(lower) n-=32;
         const char* t = mapD0[n - 0x90];
-        for (; *t && outPos < BUFLEN-1; t++) out[outPos++] = *t;
+        for (; *t && outPos < BUFLEN-1; t++) out[outPos++] = lower ? (char)tolower(*t) : *t;
       #else
         #if defined(DSP_LCD) && defined(LCD_RUS)
-          if(n>=176) n-=32;
           out[outPos++] = utf_recode[n - 0x90];
         #else
           uint8_t ch = n + 48;
-          if(n>=176 && uppercase) ch-=32;
           out[outPos++] = ch;
         #endif
       #endif
@@ -136,35 +135,32 @@ char* utf8Rus(const char* str, bool uppercase) {
       uint8_t n = (uint8_t)str[++i];
       if (n == 0x91) {                  // ё
       #if defined(DSP_LCD) && !defined(LCD_RUS)
-        const char* t = "YO";
+        const char* t = "yo";
         for (; *t && outPos < BUFLEN-1; t++) out[outPos++] = *t;
       #else
-        out[outPos++] = uppercase ? 0xA8 : 0xB8;
+        out[outPos++] = 0xB8;
       #endif
       } else if (n >= 128 && n <= 143) {
       #if defined(DSP_LCD) && !defined(LCD_RUS)
-        n+=16;
-        const char* t = mapD0[n - 128];
-        for (; *t && outPos < BUFLEN-1; t++) out[outPos++] = *t;
+        const char* t = mapD0[n - 0x70];
+        for (; *t && outPos < BUFLEN-1; t++) out[outPos++] = (char)tolower(*t);
       #else
         #if defined(DSP_LCD) && defined(LCD_RUS)
-          n+=16;
-          out[outPos++] = utf_recode[n - 128];
+          out[outPos++] = utf_recode[n - 0x50];
         #else
           uint8_t ch = n + 112;
-          if(uppercase) ch-=32;
           out[outPos++] = ch;
         #endif
       #endif
       }
     } else {                              // ASCII
     #if defined(DSP_LCD) && !defined(LCD_RUS)
-      char ch = (char)toupper(c);
+      char ch = (char)c;
       if (ch == 7) ch = (char)165;
       if (ch == 9) ch = (char)223;
       out[outPos++] = ch;
     #else
-      out[outPos++] = uppercase ? toupper(c) : c;
+      out[outPos++] = c;
     #endif
     }
   }

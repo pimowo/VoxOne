@@ -13,15 +13,15 @@ DspCore::DspCore(): DSP_INIT {}
 void DspCore::apScreen() {
   clear();
   setCursor(0,0);
-  print(utf8Rus(const_lcdApMode, false));
+  print(utf8Rus(const_lcdApMode));
   setCursor(0,1);
   print(config.ipToStr(WiFi.softAPIP()));
 #ifdef LCD_2004
   setCursor(0, 2);
-  print(utf8Rus(const_lcdApName, false));
+  print(utf8Rus(const_lcdApName));
   print(apSsid);
   setCursor(0, 3);
-  print(utf8Rus(const_lcdApPass, false));
+  print(utf8Rus(const_lcdApPass));
   print(apPassword);
 #endif
 }

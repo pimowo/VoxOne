@@ -6,7 +6,7 @@
 #include "netserver.h"
 #include "config.h"
 #include "controls.h"
-#include "telnet.h"
+#include "serialcli.h"
 
 #if DSP_MODEL==DSP_DUMMY
 #define DUMMYDISPLAY
@@ -53,7 +53,6 @@ bool CommandHandler::exec(const char *command, const char *value, uint8_t cid) {
   if (strEquals(command, "getscreen"))  { netserver.requestOnChange(GETSCREEN, cid); return true; }
   if (strEquals(command, "gettimezone")){ netserver.requestOnChange(GETTIMEZONE, cid); return true; }
   if (strEquals(command, "getcontrols")){ netserver.requestOnChange(GETCONTROLS, cid); return true; }
-  if (strEquals(command, "getweather")) { netserver.requestOnChange(GETWEATHER, cid); return true; }
   if (strEquals(command, "getactive"))  { netserver.requestOnChange(GETACTIVE, cid); return true; }
   if (strEquals(command, "newmode"))    { config.newConfigMode = atoi(value); netserver.requestOnChange(CHANGEMODE, cid); return true; }
   
@@ -72,7 +71,6 @@ bool CommandHandler::exec(const char *command, const char *value, uint8_t cid) {
   if (strEquals(command, "screensaverplayingtimeout")){ config.setScreensaverPlayingTimeout(static_cast<uint16_t>(atoi(value))); return true; }
   if (strEquals(command, "screensaverplayingblank"))  { config.setScreensaverPlayingBlank(static_cast<bool>(atoi(value))); return true; }
   if (strEquals(command, "abuff")){ config.saveValue(&config.store.abuff, static_cast<uint16_t>(atoi(value))); return true; }
-  if (strEquals(command, "telnet")){ config.saveValue(&config.store.telnet, static_cast<bool>(atoi(value))); telnet.toggle(); return true; }
   if (strEquals(command, "watchdog")){ config.saveValue(&config.store.watchdog, static_cast<bool>(atoi(value))); return true; }
   
   if (strEquals(command, "tzh"))        { config.saveValue(&config.store.tzHour, static_cast<int8_t>(atoi(value))); return true; }
@@ -86,11 +84,6 @@ bool CommandHandler::exec(const char *command, const char *value, uint8_t cid) {
   if (strEquals(command, "encacc"))  { setEncAcceleration(static_cast<uint16_t>(atoi(value))); return true; }
   if (strEquals(command, "irtlp"))            { setIRTolerance(static_cast<uint8_t>(atoi(value))); return true; }
   if (strEquals(command, "oneclickswitching")){ config.saveValue(&config.store.skipPlaylistUpDown, static_cast<bool>(atoi(value))); return true; }
-  if (strEquals(command, "showweather"))      { config.setShowweather(static_cast<bool>(atoi(value))); return true; }
-  if (strEquals(command, "lat"))              { config.saveValue(config.store.weatherlat, value, 10, false); return true; }
-  if (strEquals(command, "lon"))              { config.saveValue(config.store.weatherlon, value, 10, false); return true; }
-  if (strEquals(command, "key"))              { config.setWeatherKey(value); return true; }
-  if (strEquals(command, "wint"))  { config.saveValue(&config.store.weatherSyncInterval, static_cast<uint16_t>(atoi(value))); return true; }
   
   if (strEquals(command, "volume"))  { player.setVol(static_cast<uint8_t>(atoi(value))); return true; }
   if (strEquals(command, "sdpos"))   { config.setSDpos(static_cast<uint32_t>(atoi(value))); return true; }

@@ -67,18 +67,16 @@ class Widget{
 class TextWidget: public Widget {
   public:
     TextWidget() {}
-    TextWidget(WidgetConfig wconf, uint16_t buffsize, bool uppercase, uint16_t fgcolor, uint16_t bgcolor) { init(wconf, buffsize, uppercase, fgcolor, bgcolor); }
+    TextWidget(WidgetConfig wconf, uint16_t buffsize, uint16_t fgcolor, uint16_t bgcolor) { init(wconf, buffsize, fgcolor, bgcolor); }
     ~TextWidget();
     using Widget::init;
-    void init(WidgetConfig wconf, uint16_t buffsize, bool uppercase, uint16_t fgcolor, uint16_t bgcolor);
+    void init(WidgetConfig wconf, uint16_t buffsize, uint16_t fgcolor, uint16_t bgcolor);
     void setText(const char* txt);
     void setText(int val, const char *format);
     void setText(const char* txt, const char *format);
-    bool uppercase() { return _uppercase; }
   protected:
     char *_text;
     char *_oldtext;
-    bool _uppercase;
     uint16_t  _buffsize, _textwidth, _oldtextwidth, _oldleft, _textheight;
     uint8_t _charWidth;
   protected:
@@ -172,7 +170,7 @@ class VuWidget: public Widget {
 class NumWidget: public TextWidget {
   public:
     using Widget::init;
-    void init(WidgetConfig wconf, uint16_t buffsize, bool uppercase, uint16_t fgcolor, uint16_t bgcolor);
+    void init(WidgetConfig wconf, uint16_t buffsize, uint16_t fgcolor, uint16_t bgcolor);
     void setText(const char* txt);
     void setText(int val, const char *format);
   protected:
@@ -188,7 +186,7 @@ class ProgressWidget: public TextWidget {
     }
     using Widget::init;
     void init(WidgetConfig conf, ProgressConfig pconf, uint16_t fgcolor, uint16_t bgcolor){
-      TextWidget::init(conf, pconf.width, false, fgcolor, bgcolor);
+      TextWidget::init(conf, pconf.width, fgcolor, bgcolor);
       _speed = pconf.speed; _width = pconf.width; _barwidth = pconf.barwidth;
       _pg = 0; 
     }

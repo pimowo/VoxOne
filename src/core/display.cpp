@@ -115,7 +115,11 @@ void Display::init() {
   //_bootScreen();
   _pager = new Pager();
   _footer = new Page();
+#if DSP_MODEL==DSP_ST7789_76
+  _plwidget = nullptr;
+#else
   _plwidget = new PlayListWidget();
+#endif
   _nums = new NumWidget();
   _clock = new ClockWidget();
   _meta = new ScrollWidget();
@@ -144,8 +148,8 @@ uint16_t Display::height(){ return dsp.height(); }
 
 void Display::_bootScreen(){
   _boot = new Page();
-  _boot->addWidget(new ProgressWidget(bootWdtConf, bootPrgConf, BOOT_PRG_COLOR, 0));
-  _bootstring = (TextWidget*) &_boot->addWidget(new TextWidget(bootstrConf, 50, true, BOOT_TXT_COLOR, 0));
+  _boot->addWidget(new ProgressWidget(bootWdtConf, bootPrgConf, config.theme.title2, config.theme.background));
+  _bootstring = (TextWidget*) &_boot->addWidget(new TextWidget(bootstrConf, 50, config.theme.meta, config.theme.background));
   _pager->addPage(_boot);
   _pager->setPage(_boot, true);
   dsp.drawLogo(bootLogoTop);
@@ -161,15 +165,26 @@ void Display::_buildPager(){
   #else
     _plcurrent->init("*", playlistConf, config.theme.plcurrent, config.theme.plcurrentbg);
   #endif
+#if DSP_MODEL==DSP_ST7789_76
+  _plheader = new TextWidget(playlistHeaderConf, 30, config.theme.meta, config.theme.metabg);
+  _plcounter = new TextWidget(playlistCounterConf, 16, config.theme.title1, config.theme.background);
+  _plplaying = new TextWidget(playlistPlayingConf, 8, config.theme.title2, config.theme.background);
+  _plheader->setText("WEB - STACJA");
+#else
   _plwidget->init(_plcurrent);
   #if !defined(DSP_LCD)
     _plcurrent->moveTo({TFT_FRAMEWDT, (uint16_t)(_plwidget->currentTop()), (int16_t)playlistConf.width});
   #endif
+#endif
   #ifndef HIDE_TITLE2
     _title2 = new ScrollWidget("*", title2Conf, config.theme.title2, config.theme.background);
   #endif
   #if !defined(DSP_LCD) && DSP_MODEL!=DSP_NOKIA5110
+#if DSP_MODEL==DSP_ST7789_76
+    _plbackground = new FillWidget(playlBGConf, config.theme.metabg);
+#else
     _plbackground = new FillWidget(playlBGConf, config.theme.plcurrentfill);
+#endif
     #if DSP_INVERT_TITLE || defined(DSP_OLED)
       _metabackground = new FillWidget(metaBGConf, config.theme.metafill);
     #else
@@ -190,18 +205,15 @@ void Display::_buildPager(){
     _heapbar = new SliderWidget(heapbarConf, config.theme.buffer, config.theme.background, psramInit()?300000:1600 * config.store.abuff);
   #endif
   #ifndef HIDE_VOL
-    _voltxt = new TextWidget(voltxtConf, 10, false, config.theme.vol, config.theme.background);
+    _voltxt = new TextWidget(voltxtConf, 10, config.theme.vol, config.theme.background);
   #endif
   #ifndef HIDE_IP
-    _volip = new TextWidget(iptxtConf, 30, false, config.theme.ip, config.theme.background);
+    _volip = new TextWidget(iptxtConf, 30, config.theme.ip, config.theme.background);
   #endif
   #ifndef HIDE_RSSI
-    _rssi = new TextWidget(rssiConf, 20, false, config.theme.rssi, config.theme.background);
+    _rssi = new TextWidget(rssiConf, 20, config.theme.rssi, config.theme.background);
   #endif
-  _nums->init(numConf, 10, false, config.theme.digit, config.theme.background);
-  #ifndef HIDE_WEATHER
-    _weather = new ScrollWidget("\007", weatherConf, config.theme.weather, config.theme.background);
-  #endif
+  _nums->init(numConf, 10, config.theme.digit, config.theme.background);
   
   if(_volbar)   _footer->addWidget( _volbar);
   if(_voltxt)   _footer->addWidget( _voltxt);
@@ -213,12 +225,11 @@ void Display::_buildPager(){
   pages[PG_PLAYER]->addWidget(_meta);
   pages[PG_PLAYER]->addWidget(_title1);
   if(_title2) pages[PG_PLAYER]->addWidget(_title2);
-  if(_weather) pages[PG_PLAYER]->addWidget(_weather);
   #if BITRATE_FULL
     _fullbitrate = new BitrateWidget(fullbitrateConf, config.theme.bitrate, config.theme.background);
     pages[PG_PLAYER]->addWidget( _fullbitrate);
   #else
-    _bitrate = new TextWidget(bitrateConf, 30, false, config.theme.bitrate, config.theme.background);
+    _bitrate = new TextWidget(bitrateConf, 30, config.theme.bitrate, config.theme.background);
     pages[PG_PLAYER]->addWidget( _bitrate);
   #endif
   if(_vuwidget) pages[PG_PLAYER]->addWidget( _vuwidget);
@@ -233,6 +244,13 @@ void Display::_buildPager(){
   #if !defined(DSP_LCD) && DSP_MODEL!=DSP_NOKIA5110
     pages[PG_DIALOG]->addPage(_footer);
   #endif
+#if DSP_MODEL==DSP_ST7789_76
+  if(_plbackground) pages[PG_PLAYLIST]->addWidget(_plbackground);
+  pages[PG_PLAYLIST]->addWidget(_plheader);
+  pages[PG_PLAYLIST]->addWidget(_plcurrent);
+  pages[PG_PLAYLIST]->addWidget(_plcounter);
+  pages[PG_PLAYLIST]->addWidget(_plplaying);
+#else
   #if !defined(DSP_LCD)
   if(_plbackground) {
     pages[PG_PLAYLIST]->addWidget( _plbackground);
@@ -242,6 +260,7 @@ void Display::_buildPager(){
   #endif
   pages[PG_PLAYLIST]->addWidget(_plcurrent);
   pages[PG_PLAYLIST]->addWidget(_plwidget);
+#endif
   for(const auto& p: pages) _pager->addPage(p);
 }
 
@@ -258,13 +277,13 @@ void Display::_apScreen() {
     #endif
     ScrollWidget *bootTitle = (ScrollWidget*) &_boot->addWidget(new ScrollWidget("*", apTitleConf, config.theme.meta, config.theme.metabg));
     bootTitle->setText("ёRadio AP Mode");
-    TextWidget *apname = (TextWidget*) &_boot->addWidget(new TextWidget(apNameConf, 30, false, config.theme.title1, config.theme.background));
+    TextWidget *apname = (TextWidget*) &_boot->addWidget(new TextWidget(apNameConf, 30, config.theme.title1, config.theme.background));
     apname->setText(LANG::apNameTxt);
-    TextWidget *apname2 = (TextWidget*) &_boot->addWidget(new TextWidget(apName2Conf, 30, false, config.theme.clock, config.theme.background));
+    TextWidget *apname2 = (TextWidget*) &_boot->addWidget(new TextWidget(apName2Conf, 30, config.theme.clock, config.theme.background));
     apname2->setText(apSsid);
-    TextWidget *appass = (TextWidget*) &_boot->addWidget(new TextWidget(apPassConf, 30, false, config.theme.title1, config.theme.background));
+    TextWidget *appass = (TextWidget*) &_boot->addWidget(new TextWidget(apPassConf, 30, config.theme.title1, config.theme.background));
     appass->setText(LANG::apPassTxt);
-    TextWidget *appass2 = (TextWidget*) &_boot->addWidget(new TextWidget(apPass2Conf, 30, false, config.theme.clock, config.theme.background));
+    TextWidget *appass2 = (TextWidget*) &_boot->addWidget(new TextWidget(apPass2Conf, 30, config.theme.clock, config.theme.background));
     appass2->setText(apPassword);
     ScrollWidget *bootSett = (ScrollWidget*) &_boot->addWidget(new ScrollWidget("*", apSettConf, config.theme.title2, config.theme.background));
     bootSett->setText(config.ipToStr(WiFi.softAPIP()), LANG::apSettFmt);
@@ -298,14 +317,15 @@ void Display::_start() {
   
   if(_heapbar)  _heapbar->lock(!config.store.audioinfo);
   
-  if(_weather)  _weather->lock(!config.store.showweather);
-  if(_weather && config.store.showweather)  _weather->setText(LANG::const_getWeather);
 
   if(_vuwidget) _vuwidget->lock();
   if(_rssi)     _setRSSI(WiFi.RSSI());
   #ifndef HIDE_IP
     if(_volip) _volip->setText(config.ipToStr(WiFi.localIP()), iptxtFmt);
   #endif
+#if DSP_MODEL==DSP_ST7789_76
+  if(_volip) _volip->lock();
+#endif
   _pager->setPage( pages[PG_PLAYER]);
   _volume();
   _station();
@@ -331,6 +351,10 @@ void Display::_swichMode(displayMode_e newmode) {
   #endif
   if (newmode == _mode || (network.status != CONNECTED && network.status != SDREADY)) return;
   _mode = newmode;
+#if DSP_MODEL==DSP_ST7789_76
+  if(_volip) _volip->lock(newmode == PLAYER);
+  if(_rssi) _rssi->lock(newmode == VOL);
+#endif
   dsp.setScrollId(NULL);
   if (newmode == PLAYER) {
     if(player.isRunning())
@@ -393,8 +417,23 @@ void Display::resetQueue(){
 }
 
 void Display::_drawPlaylist() {
-  //dsp.drawPlaylist(currentPlItem);
+#if DSP_MODEL==DSP_ST7789_76
+  const uint16_t total = config.playlistLength();
+  if(total == 0) {
+    _plcurrent->setText("BRAK STACJI");
+    _plcounter->setText("0/0");
+    _plplaying->setText("");
+  } else {
+    if(currentPlItem < 1 || currentPlItem > total) currentPlItem = 1;
+    _plcurrent->setText(config.stationByNum(currentPlItem));
+    char counter[16];
+    snprintf(counter, sizeof(counter), "%u/%u", currentPlItem, total);
+    _plcounter->setText(counter);
+    _plplaying->setText(player.isRunning() && currentPlItem == config.lastStation() ? "PLAY" : "");
+  }
+#else
   _plwidget->drawPlaylist(currentPlItem);
+#endif
   timekeeper.waitAndReturnPlayer(30);
 }
 
@@ -421,19 +460,15 @@ void Display::_layoutChange(bool played){
       if(_vuwidget) _vuwidget->unlock();
       //_clock->moveTo(clockMove);
       if(clockMove.width<0) _clock->moveBack(); else _clock->moveTo(clockMove);
-      if(_weather) _weather->moveTo(weatherMoveVU);
     }else{
       if(_vuwidget) if(!_vuwidget->locked()) _vuwidget->lock();
       _clock->moveBack();
-      if(_weather) _weather->moveBack();
     }
   }else{
     if(played){
       if(clockMove.width<0) _clock->moveBack(); else _clock->moveTo(clockMove);
-      if(_weather) _weather->moveTo(weatherMove);
       //_clock->moveBack();
     }else{
-      if(_weather) _weather->moveBack();
       _clock->moveBack();
     }
   }
@@ -466,14 +501,32 @@ void Display::loop() {
           #endif*/
           break;
         case NEWTITLE: _title(); break;
-        case NEWSTATION: _station(); break;
+        case NEWSTATION:
+          _station();
+#if DSP_MODEL==DSP_ST7789_76
+          if(_mode==STATIONS && _plplaying) _plplaying->setText(player.isRunning() && currentPlItem == config.lastStation() ? "PLAY" : "");
+#endif
+          break;
         case NEXTSTATION: _drawNextStationNum(request.payload); break;
         case DRAWPLAYLIST: _drawPlaylist(); break;
         case DRAWVOL: _volume(); break;
         case DBITRATE: {
-            char buf[20]; 
-            snprintf(buf, 20, bitrateFmt, config.station.bitrate); 
-            if(_bitrate) { _bitrate->setText(config.station.bitrate==0?"":buf); } 
+            char buf[20];
+#if DSP_MODEL==DSP_ST7789_76
+            const char* codec = "";
+            switch(config.configFmt) {
+              case BF_MP3: codec = "MP3"; break;
+              case BF_AAC: codec = "AAC"; break;
+              case BF_FLAC: codec = "FLC"; break;
+              case BF_OGG: codec = "OGG"; break;
+              case BF_WAV: codec = "WAV"; break;
+              default: break;
+            }
+            snprintf(buf, sizeof(buf), codec[0] ? "%u %s" : "%u", config.station.bitrate, codec);
+#else
+            snprintf(buf, sizeof(buf), bitrateFmt, config.station.bitrate);
+#endif
+            if(_bitrate) { _bitrate->setText(config.station.bitrate==0?"":buf); }
             if(_fullbitrate) { 
               _fullbitrate->setBitrate(config.station.bitrate); 
               _fullbitrate->setFormat(config.configFmt); 
@@ -486,21 +539,6 @@ void Display::loop() {
             _vuwidget->lock(!config.store.vumeter); 
             _layoutChange(player.isRunning());
           }
-          break;
-        }
-        case SHOWWEATHER: {
-          if(_weather) _weather->lock(!config.store.showweather);
-          if(!config.store.showweather){
-            #ifndef HIDE_IP
-            if(_volip) _volip->setText(config.ipToStr(WiFi.localIP()), iptxtFmt);
-            #endif
-          }else{
-            if(_weather) _weather->setText(LANG::const_getWeather);
-          }
-          break;
-        }
-        case NEWWEATHER: {
-          if(_weather && timekeeper.weatherBuf) _weather->setText(timekeeper.weatherBuf);
           break;
         }
         case BOOTSTRING: {
@@ -521,8 +559,18 @@ void Display::loop() {
           break;
         }
         case DSPRSSI: if(_rssi){ _setRSSI(request.payload); } if (_heapbar && config.store.audioinfo) _heapbar->setValue(player.isRunning()?player.inBufferFilled():0); break;
-        case PSTART: _layoutChange(true);   break;
-        case PSTOP:  _layoutChange(false);  break;
+        case PSTART:
+          _layoutChange(true);
+#if DSP_MODEL==DSP_ST7789_76
+          if(_mode==STATIONS && _plplaying) _plplaying->setText(currentPlItem == config.lastStation() ? "PLAY" : "");
+#endif
+          break;
+        case PSTOP:
+          _layoutChange(false);
+#if DSP_MODEL==DSP_ST7789_76
+          if(_mode==STATIONS && _plplaying) _plplaying->setText("");
+#endif
+          break;
         case DSP_START: _start();  break;
         case NEWIP: {
           #ifndef HIDE_IP

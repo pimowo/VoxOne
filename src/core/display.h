@@ -45,7 +45,7 @@ class Display {
     uint16_t width();
     uint16_t height();
   private:
-    ScrollWidget *_meta, *_title1, *_plcurrent, *_weather, *_title2;
+    ScrollWidget *_meta, *_title1, *_plcurrent, *_title2;
     PlayListWidget *_plwidget;
     BitrateWidget *_fullbitrate;
     FillWidget *_metabackground, *_plbackground;
@@ -57,6 +57,9 @@ class Display {
     ClockWidget *_clock;
     Page *_boot;
     TextWidget *_bootstring, *_volip, *_voltxt, *_rssi, *_bitrate;
+#if DSP_MODEL==DSP_ST7789_76
+    TextWidget *_plheader, *_plcounter, *_plplaying;
+#endif
     bool _locked = false;
     uint8_t _bootStep;
     void _time(bool redraw = false);

@@ -16,7 +16,6 @@ void DspCore::initDisplay() {
   config.theme.background = TFT_BG;
   config.theme.meta       = TFT_FG;
   config.theme.clock      = TFT_FG;
-  config.theme.weather    = TFT_FG;
   config.theme.metabg     = TFT_BG;
   config.theme.metafill   = TFT_BG;
   config.theme.title1     = TFT_FG;

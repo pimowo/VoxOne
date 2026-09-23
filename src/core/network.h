@@ -12,8 +12,7 @@ class MyNetwork {
   public:
     MyNetwork() {};
     void begin();
-    void requestTimeSync(bool withTelnetOutput=false, uint8_t clientId=0);
-    void requestWeatherSync();
+    void requestTimeSync(bool withSerialOutput=false);
     void setWifiParams();
     bool wifiBegin(bool silent=false);
   private:

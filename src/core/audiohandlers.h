@@ -7,7 +7,7 @@
 
 void audio_info(const char *info) {
   if(player.lockOutput) return;
-  if(config.store.audioinfo) telnet.printf("##AUDIO.INFO#: %s\n", info);
+  if(config.store.audioinfo) serialCli.printf("##AUDIO.INFO#: %s\n", info);
   #ifdef USE_NEXTION
     nextion.audioinfo(info);
   #endif
@@ -29,7 +29,7 @@ void audio_info(const char *info) {
 
 void audio_bitrate(const char *info)
 {
-  if(config.store.audioinfo) telnet.printf("%s %s\n", "##AUDIO.BITRATE#:", info);
+  if(config.store.audioinfo) serialCli.printf("%s %s\n", "##AUDIO.BITRATE#:", info);
   config.station.bitrate = atoi(info) / 1000;
   display.putRequest(DBITRATE);
   #ifdef USE_NEXTION
@@ -101,7 +101,7 @@ void audio_beginSDread(){
 
 void audio_id3data(const char *info){  //id3 metadata
     if(player.lockOutput) return;
-    telnet.printf("##AUDIO.ID3#: %s\n", info);
+    serialCli.printf("##AUDIO.ID3#: %s\n", info);
 }
 
 void audio_eof_mp3(const char *info){  //end of file

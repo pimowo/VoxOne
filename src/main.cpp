@@ -2,7 +2,7 @@
 #include "core/options.h"
 #include "core/config.h"
 #include "pluginsManager/pluginsManager.h"
-#include "core/telnet.h"
+#include "core/serialcli.h"
 #include "core/player.h"
 #include "core/display.h"
 #include "core/network.h"
@@ -41,27 +41,27 @@ void setupOTA(){
     .onStart([]() {
       player.sendCommand({PR_STOP, 0});
       display.putRequest(NEWMODE, UPDATING);
-      telnet.printf("Start OTA updating %s\n", ArduinoOTA.getCommand() == U_FLASH?"firmware":"filesystem");
+      serialCli.printf("Start OTA updating %s\n", ArduinoOTA.getCommand() == U_FLASH?"firmware":"filesystem");
     })
     .onEnd([]() {
-      telnet.printf("\nEnd OTA update, Rebooting...\n");
+      serialCli.printf("\nEnd OTA update, Rebooting...\n");
       ESP.restart();
     })
     .onProgress([](unsigned int progress, unsigned int total) {
-      telnet.printf("Progress OTA: %u%%\r", (progress / (total / 100)));
+      serialCli.printf("Progress OTA: %u%%\r", (progress / (total / 100)));
     })
     .onError([](ota_error_t error) {
-      telnet.printf("Error[%u]: ", error);
+      serialCli.printf("Error[%u]: ", error);
       if (error == OTA_AUTH_ERROR) {
-        telnet.printf("Auth Failed\n");
+        serialCli.printf("Auth Failed\n");
       } else if (error == OTA_BEGIN_ERROR) {
-        telnet.printf("Begin Failed\n");
+        serialCli.printf("Begin Failed\n");
       } else if (error == OTA_CONNECT_ERROR) {
-        telnet.printf("Connect Failed\n");
+        serialCli.printf("Connect Failed\n");
       } else if (error == OTA_RECEIVE_ERROR) {
-        telnet.printf("Receive Failed\n");
+        serialCli.printf("Receive Failed\n");
       } else if (error == OTA_END_ERROR) {
-        telnet.printf("End Failed\n");
+        serialCli.printf("End Failed\n");
       }
     });
   ArduinoOTA.begin();
@@ -90,7 +90,6 @@ void setup() {
   }
   config.initPlaylistMode();
   netserver.begin();
-  telnet.begin();
   initControls();
   display.putRequest(DSP_START);
   while(!display.ready()) delay(10);
@@ -107,7 +106,7 @@ void setup() {
 
 void loop() {
   timekeeper.loop1();
-  telnet.loop();
+  serialCli.loop();
   if (network.status == CONNECTED || network.status==SDREADY) {
     player.loop();
 #if USE_OTA

@@ -3,203 +3,58 @@
 #include "config.h"
 #include "player.h"
 #include "network.h"
-#include "telnet.h"
-//#include "esp_heap_caps.h"
+#include "serialcli.h"
 
-Telnet telnet;
+SerialCli serialCli;
 
-bool Telnet::_isIPSet(IPAddress ip) {
-  return strcmp(config.ipToStr(ip), "0.0.0.0") == 0;
+void SerialCli::handleSerial() {
+  if (!Serial.available()) return;
+  String request = Serial.readStringUntil('\n');
+  request.trim();
+  on_input(request.c_str(), 0);
 }
 
-bool Telnet::begin(bool quiet) {
-  if(network.status==SDREADY) {
-    BOOTLOG("Ready in SD Mode!");
-    BOOTLOG("------------------------------------------------");
-    Serial.println("##[BOOT]#");
-    return true;
-  }
-  if(!quiet) Serial.print("##[BOOT]#\ttelnet.begin\t");
-  if (WiFi.status() == WL_CONNECTED || _isIPSet(WiFi.softAPIP())) {
-    toggle();
-    if(!quiet){
-      Serial.println("done");
-      Serial.println("##[BOOT]#");
-      BOOTLOG("Ready! Go to http:/%s/ to configure", config.ipToStr(WiFi.localIP()));
-      BOOTLOG("------------------------------------------------");
-      Serial.println("##[BOOT]#");
-    }
-    return true;
-  } else {
-    return false;
-  }
-}
-
-void Telnet::start() {
-  server.begin();
-  server.setNoDelay(true);
-}
-
-void Telnet::stop() {
-  server.stop();
-}
-
-void Telnet::toggle() {
-  if(config.store.telnet) { start(); }else{ stop(); }
-}
-
-void Telnet::emptyClientStream(WiFiClient client) {
-  #ifdef ESP_ARDUINO_3
-  client.clear();
-  #else
-  client.flush();
-  #endif
-  delay(50);
-  while (client.available()) {
-    client.read();
-  }
-}
-
-void Telnet::cleanupClients() {
-  for (int i = 0; i < MAX_TLN_CLIENTS; i++) {
-    if (!clients[i].connected()) {
-      if (clients[i]) {
-        Serial.printf("Client [%d] is %s\n", i, clients[i].connected() ? "connected" : "disconnected");
-        clients[i].stop();
-      }
-    }
-  }
-}
-
-void Telnet::handleSerial(){
-  if(Serial.available()){
-    String request = Serial.readStringUntil('\n'); request.trim();
-    on_input(request.c_str(), 100);
-  }
-}
-
-void Telnet::loop() {
-  if(network.status==SDREADY || network.status!=CONNECTED) {
-    handleSerial();
-    return;
-  }
-  uint8_t i;
-  if(config.store.telnet){
-    if (WiFi.status() == WL_CONNECTED) {
-      if (server.hasClient()) {
-        for (i = 0; i < MAX_TLN_CLIENTS; i++) {
-          if (!clients[i] || !clients[i].connected()) {
-            if (clients[i]) {
-              clients[i].stop();
-            }
-            #ifdef ESP_ARDUINO_3
-            clients[i] = server.accept();
-            #else
-            clients[i] = server.available();
-            #endif
-            if (!clients[i]) Serial.println("available broken");
-            on_connect(config.ipToStr(clients[i].remoteIP()), i);
-            clients[i].setNoDelay(true);
-            emptyClientStream(clients[i]);
-            break;
-          }
-        }
-        if (i >= MAX_TLN_CLIENTS) {
-          #ifdef ESP_ARDUINO_3
-          server.accept().stop();
-          #else
-          server.available().stop();
-          #endif
-        }
-      }
-      for (i = 0; i < MAX_TLN_CLIENTS; i++) {
-        if (clients[i] && clients[i].connected() && clients[i].available()) {
-          String inputstr = clients[i].readStringUntil('\n');
-          inputstr.trim();
-          on_input(inputstr.c_str(), i);
-        }
-      }
-    } else {
-      for (i = 0; i < MAX_TLN_CLIENTS; i++) {
-        if (clients[i]) {
-          clients[i].stop();
-        }
-      }
-      delay(1000);
-    }
-  }
+void SerialCli::loop() {
   handleSerial();
 }
 
-void Telnet::print(const char *buf) {
-  for (int id = 0; id < MAX_TLN_CLIENTS; id++) {
-    if (clients[id] && clients[id].connected()) {
-      print(id, buf);
-    }
-  }
-  Serial.print(buf);
-}
-
-void Telnet::print(uint8_t id, const char *buf) {
-  if (clients[id] && clients[id].connected()) {
-    clients[id].print(buf);
-  }
-}
-
-void Telnet::printf(const char *format, ...) {
+void SerialCli::printf(const char *format, ...) {
   va_list args;
-  va_start (args, format );
+  va_start(args, format);
   vsnprintf(cmBuf, sizeof(cmBuf), format, args);
-  va_end (args);
-  for (int id = 0; id < MAX_TLN_CLIENTS; id++) {
-    if (clients[id] && clients[id].connected()) {
-      clients[id].print(cmBuf);
-    }
-  }
+  va_end(args);
   if (strcmp(cmBuf, "> ") == 0) return;
-  //if(strstr(buf,"\n> ")==NULL) Serial.print(buf);
-  char *nl = strstr(cmBuf, "\n> ");
-  if (nl != NULL) { cmBuf[nl-cmBuf+1] = '\0'; }
+  char *prompt = strstr(cmBuf, "\n> ");
+  if (prompt != NULL) prompt[1] = '\0';
   Serial.print(cmBuf);
 }
 
-void Telnet::printf(uint8_t id, const char *format, ...) {
-  va_list argptr;
-  va_start(argptr, format);
-  vsnprintf(cmBuf, sizeof(cmBuf), format, argptr);
-  va_end(argptr);
-  if(id>MAX_TLN_CLIENTS){
-    Serial.print(cmBuf);
-    return;
-  }
-  if (clients[id] && clients[id].connected()) {
-    clients[id].print(cmBuf);
-  }
+void SerialCli::printf(uint8_t id, const char *format, ...) {
+  (void)id;
+  va_list args;
+  va_start(args, format);
+  vsnprintf(cmBuf, sizeof(cmBuf), format, args);
+  va_end(args);
+  Serial.print(cmBuf);
 }
-
-void Telnet::on_connect(const char* str, uint8_t clientId) {
-  Serial.printf("Telnet: [%d] %s connected\n", clientId, str);
-  print(clientId, "\nWelcome to ёRadio!\n(Use ^] + q  to disconnect.)\n> ");
-}
-
-void Telnet::info() {
-  telnet.printf("##CLI.INFO#\n");
+void SerialCli::info() {
+  printf("##CLI.INFO#\n");
   strftime(config.tmpBuf, sizeof(config.tmpBuf), "%Y-%m-%dT%H:%M:%S+03:00", &network.timeinfo);
-  telnet.printf("##SYS.DATE#: %s\n", config.tmpBuf); //TODO timezone offset
-  telnet.printf("##CLI.NAMESET#: %d %s\n", config.lastStation(), config.station.name);
+  printf("##SYS.DATE#: %s\n", config.tmpBuf); //TODO timezone offset
+  printf("##CLI.NAMESET#: %d %s\n", config.lastStation(), config.station.name);
   if (player.status() == PLAYING) {
-    telnet.printf("##CLI.META#: %s\n",  config.station.title);
+    printf("##CLI.META#: %s\n",  config.station.title);
   }
-  telnet.printf("##CLI.VOL#: %d\n", config.store.volume);
+  printf("##CLI.VOL#: %d\n", config.store.volume);
   if (player.status() == PLAYING) {
-    telnet.printf("##CLI.PLAYING#\n");
+    printf("##CLI.PLAYING#\n");
   } else {
-    telnet.printf("##CLI.STOPPED#\n");
+    printf("##CLI.STOPPED#\n");
   }
-  telnet.printf("> ");
+  printf("> ");
 }
 
-void Telnet::printHeapFragmentationInfo(uint8_t id){
+void SerialCli::printHeapFragmentationInfo(uint8_t id){
   size_t freeHeap = heap_caps_get_free_size(MALLOC_CAP_DEFAULT);
   size_t largestBlock = heap_caps_get_largest_free_block(MALLOC_CAP_DEFAULT);
   float fragmentation = 100.0 * (1.0 - ((float)largestBlock / (float)freeHeap));
@@ -209,7 +64,7 @@ void Telnet::printHeapFragmentationInfo(uint8_t id){
   printf(id, "* Fragmentation: %.2f%%\n", fragmentation);
   printf(id, "*************************************\n\n");
 }
-void Telnet::on_input(const char* str, uint8_t clientId) {
+void SerialCli::on_input(const char* str, uint8_t clientId) {
   if (strlen(str) == 0) return;
   if(network.status == CONNECTED){
     if (strcmp(str, "cli.prev") == 0 || strcmp(str, "prev") == 0) {
@@ -246,7 +101,7 @@ void Telnet::on_input(const char* str, uint8_t clientId) {
       return;
     }
     if (strcmp(str, "sys.date") == 0 || strcmp(str, "date") == 0 || strcmp(str, "time") == 0) {
-      network.requestTimeSync(true, clientId > MAX_TLN_CLIENTS?clientId:0);
+      network.requestTimeSync(true);
       return;
     }
     int volume;
@@ -460,9 +315,9 @@ void Telnet::on_input(const char* str, uint8_t clientId) {
     return;
   }
   char ssidbuf[50], passbuff[50];
-  if (sscanf(str, "wifi.con(\"%[^\"]\",\"%[^\"]\")", ssidbuf, passbuff) == 2 || 
-      sscanf(str, "wifi.con(%[^,],%[^)])", ssidbuf, passbuff) == 2 || 
-      sscanf(str, "wifi.con(%[^ ] %[^)])", ssidbuf, passbuff) == 2 || 
+  if (sscanf(str, "wifi.con(\"%[^\"]\",\"%[^\"]\")", ssidbuf, passbuff) == 2 ||
+      sscanf(str, "wifi.con(%[^,],%[^)])", ssidbuf, passbuff) == 2 ||
+      sscanf(str, "wifi.con(%[^ ] %[^)])", ssidbuf, passbuff) == 2 ||
       sscanf(str, "wifi %[^ ] %s", ssidbuf, passbuff) == 2) {
     snprintf(cmBuf, sizeof(cmBuf), "New SSID: \"%s\" with PASS: \"%s\" for next boot\n> ", ssidbuf, passbuff);
     printf(clientId, cmBuf);
@@ -473,8 +328,8 @@ void Telnet::on_input(const char* str, uint8_t clientId) {
     return;
   }
   if (strcmp(str, "wifi.status") == 0 || strcmp(str, "status") == 0) {
-    printf(clientId, "#WIFI.STATUS#\nStatus:\t\t%d\nMode:\t\t%s\nIP:\t\t%s\nMask:\t\t%s\nGateway:\t%s\nRSSI:\t\t%d dBm\n##WIFI.STATUS#\n> ", 
-      WiFi.status(), WiFi.getMode()==WIFI_STA?"WIFI_STA":"WIFI_AP", 
+    printf(clientId, "#WIFI.STATUS#\nStatus:\t\t%d\nMode:\t\t%s\nIP:\t\t%s\nMask:\t\t%s\nGateway:\t%s\nRSSI:\t\t%d dBm\n##WIFI.STATUS#\n> ",
+      WiFi.status(), WiFi.getMode()==WIFI_STA?"WIFI_STA":"WIFI_AP",
       WiFi.getMode()==WIFI_STA?config.ipToStr(WiFi.localIP()):config.ipToStr(WiFi.softAPIP()),
       WiFi.getMode()==WIFI_STA?config.ipToStr(WiFi.subnetMask()):"255.255.255.0",
       WiFi.getMode()==WIFI_STA?config.ipToStr(WiFi.gatewayIP()):config.ipToStr(WiFi.softAPIP()),
@@ -502,5 +357,5 @@ void Telnet::on_input(const char* str, uint8_t clientId) {
     WiFi.disconnect();
     return;
   }
-  telnet.printf(clientId, "##CMD_ERROR#\tunknown command <%s>\n> ", str);
+  printf(clientId, "##CMD_ERROR#\tunknown command <%s>\n> ", str);
 }

@@ -5,7 +5,7 @@
 #include "network.h"
 #include "display.h"
 #include "config.h"
-#include "telnet.h"
+#include "serialcli.h"
 #include "netserver.h"
 #include "player.h"
 #include "mqtt.h"
@@ -101,7 +101,6 @@ void searchWiFi(void * pvParameters){
   }else{
     network.status = CONNECTED;
     netserver.begin(true);
-    telnet.begin(true);
     network.setWifiParams();
     display.putRequest(NEWIP, 0);
     #ifdef MQTT_ROOT_TOPIC
@@ -160,14 +159,14 @@ void MyNetwork::setWifiParams(){
     MDNS.begin(config.store.mdnsname);
 }
 
-void MyNetwork::requestTimeSync(bool withTelnetOutput, uint8_t clientId) {
-  if (withTelnetOutput) {
+void MyNetwork::requestTimeSync(bool withSerialOutput) {
+  if (withSerialOutput) {
     char timeStringBuff[50];
     strftime(timeStringBuff, sizeof(timeStringBuff), "%Y-%m-%dT%H:%M:%S", &timeinfo);
     if (config.store.tzHour < 0) {
-      telnet.printf(clientId, "##SYS.DATE#: %s%03d:%02d\n> ", timeStringBuff, config.store.tzHour, config.store.tzMin);
+      serialCli.printf("##SYS.DATE#: %s%03d:%02d\n> ", timeStringBuff, config.store.tzHour, config.store.tzMin);
     } else {
-      telnet.printf(clientId, "##SYS.DATE#: %s+%02d:%02d\n> ", timeStringBuff, config.store.tzHour, config.store.tzMin);
+      serialCli.printf("##SYS.DATE#: %s+%02d:%02d\n> ", timeStringBuff, config.store.tzHour, config.store.tzMin);
     }
   }
 }
@@ -188,8 +187,4 @@ void MyNetwork::raiseSoftAP() {
   status = SOFT_AP;
   if(config.store.softapdelay>0)
     timekeeper.waitAndDo(config.store.softapdelay*60, rebootTime);
-}
-
-void MyNetwork::requestWeatherSync(){
-  display.putRequest(NEWWEATHER);
 }

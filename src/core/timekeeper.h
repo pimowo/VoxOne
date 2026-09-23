@@ -3,20 +3,16 @@
 #pragma once
 
 void _syncTask(void * pvParameters);
-bool _getWeather();
 
 class TimeKeeper {
   public:
-    volatile bool forceWeather;
     volatile bool forceTimeSync;
     volatile bool busy;
-    char *weatherBuf;
   public:
     TimeKeeper();
     bool loop0();
     bool loop1();
     void timeTask();
-    void weatherTask();
     void waitAndReturnPlayer(uint8_t time_s);
     void waitAndDo(uint8_t time_s, void (*callback)());
   private:

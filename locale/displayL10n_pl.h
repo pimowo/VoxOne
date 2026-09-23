@@ -31,27 +31,9 @@ const char octt[] PROGMEM = "październik";
 const char nov[] PROGMEM = "listopad";
 const char decc[] PROGMEM = "grudzień";
 
-const char wn_N[]   PROGMEM = "PN";
-const char wn_NNE[] PROGMEM = "PN-PN-W";
-const char wn_NE[]  PROGMEM = "PN-W";
-const char wn_ENE[] PROGMEM = "W-PN-W";
-const char wn_E[]   PROGMEM = "W";
-const char wn_ESE[] PROGMEM = "W-PD-W";
-const char wn_SE[]  PROGMEM = "PD-W";
-const char wn_SSE[] PROGMEM = "PD-PD-W";
-const char wn_S[]   PROGMEM = "PD";
-const char wn_SSW[] PROGMEM = "PD-PD-Z";
-const char wn_SW[]  PROGMEM = "PD-Z";
-const char wn_WSW[] PROGMEM = "Z-PD-Z";
-const char wn_W[]   PROGMEM = "Z";
-const char wn_WNW[] PROGMEM = "Z-PN-Z";
-const char wn_NW[]  PROGMEM = "PN-Z";
-const char wn_NNW[] PROGMEM = "PN-PN-Z";
-
 const char* const dow[]   PROGMEM = { sun, mon, tue, wed, thu, fri, sat };
 const char* const dowf[]  PROGMEM = { sunf, monf, tuef, wedf, thuf, frif, satf };
 const char* const mnths[] PROGMEM = { jan, feb, mar, apr, may, jun, jul, aug, sep, octt, nov, decc };
-const char* const wind[]  PROGMEM = { wn_N, wn_NNE, wn_NE, wn_ENE, wn_E, wn_ESE, wn_SE, wn_SSE, wn_S, wn_SSW, wn_SW, wn_WSW, wn_W, wn_WNW, wn_NW, wn_NNW, wn_N };
 
 const char const_PlReady[]    PROGMEM = "[gotowe]";
 const char const_PlStopped[]  PROGMEM = "[zatrzymano]";
@@ -60,19 +42,10 @@ const char const_DlgVolume[]  PROGMEM = "GŁOŚNOŚĆ";
 const char const_DlgLost[]    PROGMEM = "* BRAK SIECI *";
 const char const_DlgUpdate[]  PROGMEM = "* AKTUALIZACJA *";
 const char const_DlgNextion[] PROGMEM = "* NEXTION *";
-const char const_getWeather[] PROGMEM = "";
 const char const_waitForSD[]  PROGMEM = "INDEKS SD";
 
 const char apNameTxt[] PROGMEM = "NAZWA AP";
 const char apPassTxt[] PROGMEM = "HASŁO";
 const char bootstrFmt[] PROGMEM = "Łączenie z %s";
 const char apSettFmt[] PROGMEM = "USTAWIENIA: HTTP://%s/";
-#if EXT_WEATHER
-const char weatherFmt[] PROGMEM = "%s, %.1f\011C \007 odczuwalna: %.1f\011C \007 ciśnienie: %d hPa \007 wilgotność: %d%% \007 wiatr: %.1f m/s [%s]";
-#else
-const char weatherFmt[] PROGMEM = "%s, %.1f\011C \007 ciśnienie: %d hPa \007 wilgotność: %d%%";
-#endif
-const char weatherUnits[] PROGMEM = "metric";
-const char weatherLang[] PROGMEM = "pl";
-
 #endif

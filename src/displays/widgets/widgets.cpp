@@ -46,7 +46,7 @@ void TextWidget::_charSize(uint8_t textsize, uint8_t& width, uint16_t& height){
 #endif
 }
 
-void TextWidget::init(WidgetConfig wconf, uint16_t buffsize, bool uppercase, uint16_t fgcolor, uint16_t bgcolor) {
+void TextWidget::init(WidgetConfig wconf, uint16_t buffsize, uint16_t fgcolor, uint16_t bgcolor) {
   Widget::init(wconf, fgcolor, bgcolor);
   _buffsize = buffsize;
   _text = (char *) malloc(sizeof(char) * _buffsize);
@@ -55,11 +55,10 @@ void TextWidget::init(WidgetConfig wconf, uint16_t buffsize, bool uppercase, uin
   memset(_oldtext, 0, _buffsize);
   _charSize(_config.textsize, _charWidth, _textheight);
   _textwidth = _oldtextwidth = _oldleft = 0;
-  _uppercase = uppercase;
 }
 
 void TextWidget::setText(const char* txt) {
-  strlcpy(_text, utf8Rus(txt, _uppercase), _buffsize);
+  strlcpy(_text, utf8Rus(txt), _buffsize);
   _textwidth = strlen(_text) * _charWidth;
   if (strcmp(_oldtext, _text) == 0) return;
   if (_active) dsp.fillRect(_oldleft == 0 ? _realLeft() : min(_oldleft, _realLeft()),  _config.top, max(_oldtextwidth, _textwidth), _textheight, _bgcolor);
@@ -113,7 +112,7 @@ ScrollWidget::~ScrollWidget() {
 }
 
 void ScrollWidget::init(const char* separator, ScrollConfig conf, uint16_t fgcolor, uint16_t bgcolor) {
-  TextWidget::init(conf.widget, conf.buffsize, conf.uppercase, fgcolor, bgcolor);
+  TextWidget::init(conf.widget, conf.buffsize, fgcolor, bgcolor);
   _sep = (char *) malloc(sizeof(char) * 4);
   memset(_sep, 0, 4);
   snprintf(_sep, 4, " %.*s ", 1, separator);
@@ -153,7 +152,7 @@ bool ScrollWidget::_checkIsScrollNeeded() {
 }
 
 void ScrollWidget::setText(const char* txt) {
-  strlcpy(_text, utf8Rus(txt, _uppercase), _buffsize - 1);
+  strlcpy(_text, utf8Rus(txt), _buffsize - 1);
   if (strcmp(_oldtext, _text) == 0) return;
   _textwidth = strlen(_text) * _charWidth;
   _x = _fb->ready()?0:_config.left;
@@ -506,7 +505,7 @@ uint16_t _textWidth(const char *txt){
 /************************
       NUM WIDGET
  ************************/
-void NumWidget::init(WidgetConfig wconf, uint16_t buffsize, bool uppercase, uint16_t fgcolor, uint16_t bgcolor) {
+void NumWidget::init(WidgetConfig wconf, uint16_t buffsize, uint16_t fgcolor, uint16_t bgcolor) {
   Widget::init(wconf, fgcolor, bgcolor);
   _buffsize = buffsize;
   _text = (char *) malloc(sizeof(char) * _buffsize);
@@ -514,7 +513,6 @@ void NumWidget::init(WidgetConfig wconf, uint16_t buffsize, bool uppercase, uint
   _oldtext = (char *) malloc(sizeof(char) * _buffsize);
   memset(_oldtext, 0, _buffsize);
   _textwidth = _oldtextwidth = _oldleft = 0;
-  _uppercase = uppercase;
   _textheight = TIME_SIZE/*wconf.textsize*/;
 }
 
@@ -677,13 +675,6 @@ void ClockWidget::_printClock(bool force){
   if(force){
     _clearClock();
     _getTimeBounds();
-    #ifndef DSP_OLED
-    if(CLOCKFONT_MONO) {
-      gfx.setTextColor(config.theme.clockbg, config.theme.background);
-      gfx.setCursor(_left(), _top());
-      gfx.print("88:88");
-    }
-    #endif
     if(clockInTitle)
       gfx.setTextColor(config.theme.meta, config.theme.metabg);
     else
@@ -701,10 +692,10 @@ void ClockWidget::_printClock(bool force){
         gfx.setTextSize(_superfont);
         gfx.setCursor(_linesleft+_space+1, _top()-CHARHEIGHT * _superfont);
         gfx.setTextColor(config.theme.dow, config.theme.background);
-        gfx.print(utf8Rus(LANG::dow[network.timeinfo.tm_wday], false));
+        gfx.print(utf8Rus(LANG::dow[network.timeinfo.tm_wday]));
         sprintf(_tmp, "%2d %s %d", network.timeinfo.tm_mday,LANG::mnths[network.timeinfo.tm_mon], network.timeinfo.tm_year+1900);
         #ifndef HIDE_DATE
-        strlcpy(_datebuf, utf8Rus(_tmp, true), sizeof(_datebuf));
+        strlcpy(_datebuf, utf8Rus(_tmp), sizeof(_datebuf));
         uint16_t _datewidth = strlen(_datebuf) * CHARWIDTH*_dateheight;
         gfx.setTextSize(_dateheight);
         #if DSP_MODEL==DSP_GC9A01A
@@ -737,7 +728,7 @@ void ClockWidget::_printClock(bool force){
   gfx.setTextSize(Clock_GFXfontPtr==nullptr?TIME_SIZE:1);
   gfx.setFont(Clock_GFXfontPtr);
   #ifndef DSP_OLED
-  gfx.setTextColor(dots ? config.theme.clock : (CLOCKFONT_MONO?config.theme.clockbg:config.theme.background), config.theme.background);
+  gfx.setTextColor(dots ? config.theme.clock : config.theme.background, config.theme.background);
   #else
   if(clockInTitle)
     gfx.setTextColor(dots ? config.theme.meta:config.theme.metabg, config.theme.metabg);
@@ -948,7 +939,7 @@ void PlayListWidget::_printPLitem(uint8_t pos, const char* item){
     dsp.setTextColor(config.theme.playlist[plColor], config.theme.background);
     dsp.setCursor(TFT_FRAMEWDT, _plYStart + pos * _plItemHeight);
     dsp.fillRect(0, _plYStart + pos * _plItemHeight - 1, dsp.width(), _plItemHeight - 2, config.theme.background);
-    dsp.print(utf8Rus(item, true));
+    dsp.print(utf8Rus(item));
   }
 }
 #else
@@ -958,7 +949,7 @@ void PlayListWidget::_printPLitem(uint8_t pos, const char* item){
   } else {
     dsp.setCursor(1, pos);
     char tmp[dsp.width()] = {0};
-    strlcpy(tmp, utf8Rus(item, true), dsp.width());
+    strlcpy(tmp, utf8Rus(item), dsp.width());
     dsp.print(tmp);
   }
 }

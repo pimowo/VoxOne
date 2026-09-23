@@ -49,13 +49,12 @@ class Nextion {
     void  newNameset(const char* meta);
     void  setVol(uint8_t vol, bool dialog);
     void  fillVU(uint8_t LC, uint8_t RC);
-    char* utf8Rus(char* str, bool uppercase);
+    char* utf8Rus(const char* str);
     void  printClock(struct tm timeinfo);
     void  bitrate(int bpm);
     void  bitratePic(uint8_t pic);
     void  audioinfo(const char* info);
     void  rssi();
-    void  weatherVisible(uint8_t vis);
     void  localTime(struct tm timeinfo);
     void  drawPlaylist(uint16_t currentPlItem);
     void  printPLitem(uint8_t pos, const char* item);

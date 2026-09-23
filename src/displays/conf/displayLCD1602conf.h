@@ -23,17 +23,16 @@
 #define HIDE_HEAPBAR
 #define HIDE_RSSI
 #define HIDE_VU
-#define HIDE_WEATHER
 #define META_MOVE
 
 //#define bootLogoTop     68
 
-/* SROLLS  */                            /* {{ left, top, fontsize, align }, buffsize, uppercase, width, scrolldelay, scrolldelta, scrolltime } */
+/* SROLLS  */                            /* {{ left, top, fontsize, align }, buffsize, width, scrolldelay, scrolldelta, scrolltime } */
 #define SDELTA      2
 #define STIME       400
-const ScrollConfig      metaConf   PROGMEM = {{ 0, 0, 1, WA_LEFT }, 140, true, MAX_WIDTH-6, 2000, SDELTA, STIME };
-const ScrollConfig    title1Conf   PROGMEM = {{ 0, 1, 1, WA_LEFT }, 140, true, MAX_WIDTH-4, 2000, SDELTA, STIME };
-const ScrollConfig  playlistConf   PROGMEM = {{ 1, 1, 1, WA_LEFT }, 140, true, MAX_WIDTH-1, 2000, SDELTA, STIME };
+const ScrollConfig      metaConf   PROGMEM = {{ 0, 0, 1, WA_LEFT }, 140, MAX_WIDTH-6, 2000, SDELTA, STIME };
+const ScrollConfig    title1Conf   PROGMEM = {{ 0, 1, 1, WA_LEFT }, 140, MAX_WIDTH-4, 2000, SDELTA, STIME };
+const ScrollConfig  playlistConf   PROGMEM = {{ 1, 1, 1, WA_LEFT }, 140, MAX_WIDTH-1, 2000, SDELTA, STIME };
 
 /* WIDGETS  */                           /* { left, top, fontsize, align } */
 const WidgetConfig    bootstrConf  PROGMEM = { 0, 0, 1, WA_CENTER };

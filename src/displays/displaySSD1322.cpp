@@ -28,8 +28,6 @@ void DspCore::initDisplay() {
     config.theme.metafill   = TFT_BG;
   #endif  
     config.theme.clock      = TFT_FG;
-    config.theme.clockbg    = GRAY_1;
-    config.theme.weather    = GRAY_2;
     config.theme.title1     = GRAY_B;
     config.theme.title2     = GRAY_3;
     config.theme.rssi       = GRAY_5;

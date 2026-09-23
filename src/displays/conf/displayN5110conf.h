@@ -22,13 +22,12 @@
 
 #define bootLogoTop     0
 
-/* SROLLS  */                            /* {{ left, top, fontsize, align }, buffsize, uppercase, width, scrolldelay, scrolldelta, scrolltime } */
-const ScrollConfig metaConf       PROGMEM = {{ TFT_FRAMEWDT, TFT_FRAMEWDT, 1, WA_LEFT }, 140, true, MAX_WIDTH, 5000, 5, SCROLLDELAY };
-const ScrollConfig title1Conf     PROGMEM = {{ TFT_FRAMEWDT, 8, 1, WA_LEFT }, 140, true, MAX_WIDTH-24, 5000, 5, SCROLLDELAY };
-const ScrollConfig playlistConf   PROGMEM = {{ 2, 22, 1, WA_LEFT }, 140, true, MAX_WIDTH-4, 1000, 5, SCROLLDELAY };
-const ScrollConfig apTitleConf    PROGMEM = {{ TFT_FRAMEWDT, TFT_FRAMEWDT, 1, WA_CENTER }, 140, false, MAX_WIDTH, 0, 5, SCROLLDELAY };
-const ScrollConfig apSettConf     PROGMEM = {{ TFT_FRAMEWDT, 48-7, 1, WA_LEFT }, 140, false, MAX_WIDTH, 0, 5, SCROLLDELAY };
-const ScrollConfig weatherConf    PROGMEM = {{ TFT_FRAMEWDT, 48-11, 1, WA_LEFT }, 140, true, MAX_WIDTH-6*3-2, 1000, 5, SCROLLDELAY };
+/* SROLLS  */                            /* {{ left, top, fontsize, align }, buffsize, width, scrolldelay, scrolldelta, scrolltime } */
+const ScrollConfig metaConf       PROGMEM = {{ TFT_FRAMEWDT, TFT_FRAMEWDT, 1, WA_LEFT }, 140, MAX_WIDTH, 5000, 5, SCROLLDELAY };
+const ScrollConfig title1Conf     PROGMEM = {{ TFT_FRAMEWDT, 8, 1, WA_LEFT }, 140, MAX_WIDTH-24, 5000, 5, SCROLLDELAY };
+const ScrollConfig playlistConf   PROGMEM = {{ 2, 22, 1, WA_LEFT }, 140, MAX_WIDTH-4, 1000, 5, SCROLLDELAY };
+const ScrollConfig apTitleConf    PROGMEM = {{ TFT_FRAMEWDT, TFT_FRAMEWDT, 1, WA_CENTER }, 140, MAX_WIDTH, 0, 5, SCROLLDELAY };
+const ScrollConfig apSettConf     PROGMEM = {{ TFT_FRAMEWDT, 48-7, 1, WA_LEFT }, 140, MAX_WIDTH, 0, 5, SCROLLDELAY };
 
 /* BACKGROUNDS  */                       /* {{ left, top, fontsize, align }, width, height, outlined } */
 const FillConfig  playlBGConf     PROGMEM = {{ 0, 20, 0, WA_LEFT }, DSP_WIDTH, 11, false };
@@ -59,7 +58,5 @@ const char        bitrateFmt[]    PROGMEM = "%d";
 
 /* MOVES  */                             /* { left, top, width (0 - auto, -1 - lock } */
 const MoveConfig    clockMove     PROGMEM = { 0, 0, -1 };
-const MoveConfig   weatherMove    PROGMEM = { 0, 0, -1 };
-const MoveConfig   weatherMoveVU  PROGMEM = { 0, 0, -1 };
 
 #endif

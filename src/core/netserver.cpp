@@ -5,7 +5,7 @@
 #include "config.h"
 #include "netserver.h"
 #include "player.h"
-#include "telnet.h"
+#include "serialcli.h"
 #include "display.h"
 #include "network.h"
 #include "mqtt.h"
@@ -142,11 +142,6 @@ void NetServer::chunkedHtmlPage(const String& contentType, AsyncWebServerRequest
 #else
   #define DSP_CAN_FLIPPED false
 #endif
-#if !defined(HIDE_WEATHER) && (!defined(DUMMYDISPLAY) && !defined(USE_NEXTION))
-  #define SHOW_WEATHER  true
-#else
-  #define SHOW_WEATHER  false
-#endif
 
 const char *getFormat(BitrateFormat _format) {
   switch (_format) {
@@ -191,7 +186,6 @@ void NetServer::processQueue(){
             if (BRIGHTNESS_PIN != 255 || DSP_CAN_FLIPPED || DSP_MODEL == DSP_NOKIA5110 || dbgact)    APPEND_GROUP("group_display");
           #ifdef USE_NEXTION
                                                                 APPEND_GROUP("group_nextion");
-            if (!SHOW_WEATHER || dbgact)                        APPEND_GROUP("group_weather");
             nxtn=true;
           #endif
                                                               #if defined(LCD_I2C) || defined(DSP_OLED)
@@ -205,7 +199,6 @@ void NetServer::processQueue(){
             if (TS_MODEL != TS_MODEL_UNDEFINED || dbgact)       APPEND_GROUP("group_touch");
             if (DSP_MODEL == DSP_NOKIA5110)                     APPEND_GROUP("group_nokia");
                                                                 APPEND_GROUP("group_timezone");
-            if (SHOW_WEATHER || dbgact)                         APPEND_GROUP("group_weather");
                                                                 APPEND_GROUP("group_controls");
             if (ENC_BTNL != 255 || ENC2_BTNL != 255 || dbgact)  APPEND_GROUP("group_encoder");
             if (IR_PIN != 255 || dbgact)                        APPEND_GROUP("group_ir");
@@ -236,7 +229,7 @@ void NetServer::processQueue(){
           return; 
           break;
         }
-      case GETSYSTEM:     sprintf (wsBuf, "{\"sst\":%d,\"aif\":%d,\"vu\":%d,\"softr\":%d,\"vut\":%d,\"mdns\":\"%s\",\"ipaddr\":\"%s\", \"abuff\": %d, \"telnet\": %d, \"watchdog\": %d }", 
+      case GETSYSTEM:     sprintf (wsBuf, "{\"sst\":%d,\"aif\":%d,\"vu\":%d,\"softr\":%d,\"vut\":%d,\"mdns\":\"%s\",\"ipaddr\":\"%s\", \"abuff\": %d, \"watchdog\": %d }",
                                   config.store.smartstart != 2, 
                                   config.store.audioinfo, 
                                   config.store.vumeter, 
@@ -245,7 +238,6 @@ void NetServer::processQueue(){
                                   config.store.mdnsname,
                                   config.ipToStr(WiFi.localIP()),
                                   config.store.abuff,
-                                  config.store.telnet,
                                   config.store.watchdog); 
                                   break;
       case GETSCREEN:     sprintf (wsBuf, "{\"flip\":%d,\"inv\":%d,\"nump\":%d,\"tsf\":%d,\"tsd\":%d,\"dspon\":%d,\"br\":%d,\"con\":%d,\"scre\":%d,\"scrt\":%d,\"scrb\":%d,\"scrpe\":%d,\"scrpt\":%d,\"scrpb\":%d}", 
@@ -272,13 +264,6 @@ void NetServer::processQueue(){
                                   config.store.timeSyncInterval,
                                   config.store.timeSyncIntervalRTC); 
                                   break;
-      case GETWEATHER:    sprintf (wsBuf, "{\"wen\":%d,\"wlat\":\"%s\",\"wlon\":\"%s\",\"wkey\":\"%s\",\"wint\":%d}", 
-                                  config.store.showweather, 
-                                  config.store.weatherlat, 
-                                  config.store.weatherlon, 
-                                  config.store.weatherkey,
-                                  config.store.weatherSyncInterval); 
-                                  break;
       case GETCONTROLS:   sprintf (wsBuf, "{\"vols\":%d,\"enca\":%d,\"irtl\":%d,\"skipup\":%d}", 
                                   config.store.volsteps, 
                                   config.store.encacc, 
@@ -289,8 +274,8 @@ void NetServer::processQueue(){
       case STATION:       requestOnChange(STATIONNAME, clientId); requestOnChange(ITEM, clientId); break;
       case STATIONNAME:   sprintf (wsBuf, "{\"payload\":[{\"id\":\"nameset\", \"value\": \"%s\"}]}", config.station.name); break;
       case ITEM:          sprintf (wsBuf, "{\"current\": %d}", config.lastStation()); break;
-      case TITLE:         sprintf (wsBuf, "{\"payload\":[{\"id\":\"meta\", \"value\": \"%s\"}]}", config.station.title); telnet.printf("##CLI.META#: %s\n> ", config.station.title); break;
-      case VOLUME:        sprintf (wsBuf, "{\"payload\":[{\"id\":\"volume\", \"value\": %d}]}", config.store.volume); telnet.printf("##CLI.VOL#: %d\n", config.store.volume); break;
+      case TITLE:         sprintf (wsBuf, "{\"payload\":[{\"id\":\"meta\", \"value\": \"%s\"}]}", config.station.title); serialCli.printf("##CLI.META#: %s\n> ", config.station.title); break;
+      case VOLUME:        sprintf (wsBuf, "{\"payload\":[{\"id\":\"volume\", \"value\": %d}]}", config.store.volume); serialCli.printf("##CLI.VOL#: %d\n", config.store.volume); break;
       case NRSSI:         sprintf (wsBuf, "{\"payload\":[{\"id\":\"rssi\", \"value\": %d}, {\"id\":\"heap\", \"value\": %d}]}", rssi, (player.isRunning() && config.store.audioinfo)?(int)(100*player.inBufferFilled()/playerBufMax):0); /*rssi = 255;*/ break;
       case SDPOS:         sprintf (wsBuf, "{\"sdpos\": %lu,\"sdend\": %lu,\"sdtpos\": %lu,\"sdtend\": %lu}", 
                                   player.getFilePos(), 
@@ -301,7 +286,7 @@ void NetServer::processQueue(){
       case SDLEN:         sprintf (wsBuf, "{\"sdmin\": %lu,\"sdmax\": %lu}", player.sd_min, player.sd_max); break;
       case SDSNUFFLE:     sprintf (wsBuf, "{\"snuffle\": %d}", config.store.sdsnuffle); break;
       case BITRATE:       sprintf (wsBuf, "{\"payload\":[{\"id\":\"bitrate\", \"value\": %d}, {\"id\":\"fmt\", \"value\": \"%s\"}]}", config.station.bitrate, getFormat(config.configFmt)); break;
-      case MODE:          sprintf (wsBuf, "{\"payload\":[{\"id\":\"playerwrap\", \"value\": \"%s\"}]}", player.status() == PLAYING ? "playing" : "stopped"); telnet.info(); break;
+      case MODE:          sprintf (wsBuf, "{\"payload\":[{\"id\":\"playerwrap\", \"value\": \"%s\"}]}", player.status() == PLAYING ? "playing" : "stopped"); serialCli.info(); break;
       case EQUALIZER:     sprintf (wsBuf, "{\"payload\":[{\"id\":\"bass\", \"value\": %d}, {\"id\": \"middle\", \"value\": %d}, {\"id\": \"trebble\", \"value\": %d}]}", config.store.bass, config.store.middle, config.store.trebble); break;
       case BALANCE:       sprintf (wsBuf, "{\"payload\":[{\"id\": \"balance\", \"value\": %d}]}", config.store.balance); break;
       case SDINIT:        sprintf (wsBuf, "{\"sdinit\": %d}", SDC_CS!=255); break;

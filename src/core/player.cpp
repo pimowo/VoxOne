@@ -1,7 +1,7 @@
 #include "options.h"
 #include "player.h"
 #include "config.h"
-#include "telnet.h"
+#include "serialcli.h"
 #include "display.h"
 #include "sdmanager.h"
 #include "netserver.h"
@@ -88,7 +88,7 @@ void Player::stopInfo() {
 void Player::setError(){
   _hasError=true;
   config.setTitle(config.tmpBuf);
-  telnet.printf("##ERROR#:\t%s\n", config.tmpBuf);
+  serialCli.printf("##ERROR#:\t%s\n", config.tmpBuf);
 }
 
 void Player::setError(const char *e){
@@ -240,7 +240,7 @@ void Player::_play(uint16_t stationId) {
     if (player_on_start_play) player_on_start_play();
     pm.on_start_play();
   }else{
-    telnet.printf("##ERROR#:\tError connecting to %.128s\n", config.station.url);
+    serialCli.printf("##ERROR#:\tError connecting to %.128s\n", config.station.url);
     snprintf(config.tmpBuf, sizeof(config.tmpBuf), "Error connecting to %.128s", config.station.url); setError();
     _stop(true);
   };
@@ -264,7 +264,7 @@ void Player::browseUrl(){
     if (player_on_start_play) player_on_start_play();
     pm.on_start_play();
   }else{
-    telnet.printf("##ERROR#:\tError connecting to %.128s\n", burl);
+    serialCli.printf("##ERROR#:\tError connecting to %.128s\n", burl);
     snprintf(config.tmpBuf, sizeof(config.tmpBuf), "Error connecting to %.128s", burl); setError();
     _stop(true);
   }

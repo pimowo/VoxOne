@@ -14,7 +14,6 @@ struct WidgetConfig {
 struct ScrollConfig {
   WidgetConfig widget;
   uint16_t buffsize;
-  bool uppercase;
   uint16_t width;
   uint16_t startscrolldelay;
   uint8_t scrolldelta;

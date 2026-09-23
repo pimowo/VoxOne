@@ -18,14 +18,13 @@
 
 #define bootLogoTop     8
 
-/* SROLLS  */                            /* {{ left, top, fontsize, align }, buffsize, uppercase, width, scrolldelay, scrolldelta, scrolltime } */
-const ScrollConfig metaConf       PROGMEM = {{ TFT_FRAMEWDT, 0, 2, WA_LEFT }, 140, true, MAX_WIDTH, 5000, 3, 15 };
-const ScrollConfig title1Conf     PROGMEM = {{ 0, 17, 1, WA_LEFT }, 140, true, DSP_WIDTH-6*4, 5000, 2, 35 };
-const ScrollConfig title2Conf     PROGMEM = {{ 0, 26, 1, WA_LEFT }, 140, true, DSP_WIDTH, 5000, 2, 35 };
-const ScrollConfig playlistConf   PROGMEM = {{ TFT_FRAMEWDT, 26, 1, WA_LEFT }, 140, true, MAX_WIDTH, 500, 2, 25 };
-const ScrollConfig apTitleConf    PROGMEM = {{ TFT_FRAMEWDT, 0, 2, WA_CENTER }, 140, false, MAX_WIDTH, 0, 2, 35 };
-const ScrollConfig apSettConf     PROGMEM = {{ TFT_FRAMEWDT, 64-7, 1, WA_LEFT }, 140, false, MAX_WIDTH, 0, 2, 15 };
-const ScrollConfig weatherConf    PROGMEM = {{ 0, 64-11, 1, WA_LEFT }, 140, true, DSP_WIDTH-6*4, 0, 2, 25 }; // ПОГОДА!!
+/* SROLLS  */                            /* {{ left, top, fontsize, align }, buffsize, width, scrolldelay, scrolldelta, scrolltime } */
+const ScrollConfig metaConf       PROGMEM = {{ TFT_FRAMEWDT, 0, 2, WA_LEFT }, 140, MAX_WIDTH, 5000, 3, 15 };
+const ScrollConfig title1Conf     PROGMEM = {{ 0, 17, 1, WA_LEFT }, 140, DSP_WIDTH-6*4, 5000, 2, 35 };
+const ScrollConfig title2Conf     PROGMEM = {{ 0, 26, 1, WA_LEFT }, 140, DSP_WIDTH, 5000, 2, 35 };
+const ScrollConfig playlistConf   PROGMEM = {{ TFT_FRAMEWDT, 26, 1, WA_LEFT }, 140, MAX_WIDTH, 500, 2, 25 };
+const ScrollConfig apTitleConf    PROGMEM = {{ TFT_FRAMEWDT, 0, 2, WA_CENTER }, 140, MAX_WIDTH, 0, 2, 35 };
+const ScrollConfig apSettConf     PROGMEM = {{ TFT_FRAMEWDT, 64-7, 1, WA_LEFT }, 140, MAX_WIDTH, 0, 2, 15 };
 
 /* BACKGROUNGC9106DS  */                       /* {{ left, top, fontsize, align }, width, height, outlined } */
 const FillConfig   metaBGConf     PROGMEM = {{ 0, 0,  0, WA_LEFT }, DSP_WIDTH, 16, false };
@@ -63,7 +62,5 @@ const char        bitrateFmt[]    PROGMEM = "%d";
 
 /* MOVES  */                             /* { left, top, width } */
 const MoveConfig    clockMove     PROGMEM = { 0, 0, -1 };
-const MoveConfig   weatherMove    PROGMEM = { 0, 0, -1 };
-const MoveConfig   weatherMoveVU  PROGMEM = { 0, 0, -1 };
 
 #endif

@@ -20,14 +20,13 @@
 #endif
 #define bootLogoTop     28
 
-/* SROLLS  */                            /* {{ left, top, fontsize, align }, buffsize, uppercase, width, scrolldelay, scrolldelta, scrolltime } */
-const ScrollConfig metaConf       PROGMEM = {{ TFT_FRAMEWDT, TFT_FRAMEWDT+1, 2, WA_LEFT }, 140, true, MAX_WIDTH, 5000, 4, 30 };
-const ScrollConfig title1Conf     PROGMEM = {{ TFT_FRAMEWDT, 31, 2, WA_LEFT }, 140, true, MAX_WIDTH-TITLE_FIX, 5000, 3, 25 };
-const ScrollConfig title2Conf     PROGMEM = {{ TFT_FRAMEWDT, 51, 2, WA_LEFT }, 140, true, MAX_WIDTH-TITLE_FIX, 5000, 3, 25 };
-const ScrollConfig playlistConf   PROGMEM = {{ TFT_FRAMEWDT, 80, 2, WA_LEFT }, 140, true, MAX_WIDTH, 1000, 4, 30 };
-const ScrollConfig apTitleConf    PROGMEM = {{ TFT_FRAMEWDT, TFT_FRAMEWDT, 2, WA_CENTER }, 140, false, MAX_WIDTH, 0, 4, 30 };
-const ScrollConfig apSettConf     PROGMEM = {{ TFT_FRAMEWDT, DSP_HEIGHT-TFT_FRAMEWDT-16, 2, WA_LEFT }, 140, false, MAX_WIDTH, 0, 3, 25 };
-const ScrollConfig weatherConf    PROGMEM = {{ TFT_FRAMEWDT, 146, 1, WA_LEFT }, 140, true, MAX_WIDTH, 0, 4, 30 };
+/* SROLLS  */                            /* {{ left, top, fontsize, align }, buffsize, width, scrolldelay, scrolldelta, scrolltime } */
+const ScrollConfig metaConf       PROGMEM = {{ TFT_FRAMEWDT, TFT_FRAMEWDT+1, 2, WA_LEFT }, 140, MAX_WIDTH, 5000, 4, 30 };
+const ScrollConfig title1Conf     PROGMEM = {{ TFT_FRAMEWDT, 31, 2, WA_LEFT }, 140, MAX_WIDTH-TITLE_FIX, 5000, 3, 25 };
+const ScrollConfig title2Conf     PROGMEM = {{ TFT_FRAMEWDT, 51, 2, WA_LEFT }, 140, MAX_WIDTH-TITLE_FIX, 5000, 3, 25 };
+const ScrollConfig playlistConf   PROGMEM = {{ TFT_FRAMEWDT, 80, 2, WA_LEFT }, 140, MAX_WIDTH, 1000, 4, 30 };
+const ScrollConfig apTitleConf    PROGMEM = {{ TFT_FRAMEWDT, TFT_FRAMEWDT, 2, WA_CENTER }, 140, MAX_WIDTH, 0, 4, 30 };
+const ScrollConfig apSettConf     PROGMEM = {{ TFT_FRAMEWDT, DSP_HEIGHT-TFT_FRAMEWDT-16, 2, WA_LEFT }, 140, MAX_WIDTH, 0, 3, 25 };
 
 /* BACKGROUNDS  */                       /* {{ left, top, fontsize, align }, width, height, outlined } */
 const FillConfig   metaBGConf     PROGMEM = {{ 0, 0, 0, WA_LEFT }, DSP_WIDTH, 24, false };
@@ -65,7 +64,5 @@ const char        bitrateFmt[]    PROGMEM = "%d kBs";
 
 /* MOVES  */                             /* { left, top, width } */
 const MoveConfig    clockMove     PROGMEM = { TFT_FRAMEWDT*2, 122, -1 };
-const MoveConfig   weatherMove    PROGMEM = { TFT_FRAMEWDT, 146, MAX_WIDTH };
-const MoveConfig   weatherMoveVU  PROGMEM = { TFT_FRAMEWDT+46, 146, MAX_WIDTH-46 };
 
 #endif

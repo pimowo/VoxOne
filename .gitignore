@@ -3,6 +3,7 @@
 *.code-workspace
 .clangd
 mytheme.h
+!/mytheme.h
 mqttoptions.h
 data/data/*
 !data/data/.gitignore

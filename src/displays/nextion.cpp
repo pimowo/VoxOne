@@ -111,7 +111,6 @@ void Nextion::processQueue(){
         bitratePic(ICON_NA);
         break;
       }
-      case SHOWWEATHER:   weatherVisible(strlen(config.store.weatherkey)>0 && config.store.showweather); break;
       case NEXTSTATION:   drawNextStationNum(request.payload); break;
       case DRAWPLAYLIST:  drawPlaylist(request.payload); break;
       case DRAWVOL: {
@@ -351,16 +350,6 @@ void Nextion::rssi(){
   putcmdf("rssi.txt=\"%d dBm\"", WiFi.RSSI());
 }
 
-void Nextion::weatherVisible(uint8_t vis){
-  putcmd("weatherVisible", vis, false, 20);
-  putcmdf("vis press_img,%d", vis, 20);
-  putcmdf("vis press_txt,%d", vis, 20);
-  putcmdf("vis hum_img,%d", vis, 20);
-  putcmdf("vis hum_txt,%d", vis, 20);
-  putcmdf("vis temp_img,%d", vis, 20);
-  putcmdf("vis temp_txt,%d", vis, 20);
-  putcmdf("vis cond_img,%d", vis, 20);
-}
 
 void Nextion::bitratePic(uint8_t pic){
   putcmd("player.bitrate.pic", pic);
@@ -376,13 +365,13 @@ void Nextion::audioinfo(const char* info){
 void Nextion::bootString(const char* bs) {
   char buf[50] = { 0 };
   strlcpy(buf, bs, 50);
-  putcmd("boot.bootstring.txt", utf8Rus(buf, false));
+  putcmd("boot.bootstring.txt", utf8Rus(buf));
 }
 
 void Nextion::newNameset(const char* meta){
   char newnameset[59] = { 0 };
   strlcpy(newnameset, meta, 59);
-  putcmd("player.meta.txt", utf8Rus(newnameset, true));
+  putcmd("player.meta.txt", utf8Rus(newnameset));
 }
 
 void Nextion::setVol(uint8_t vol, bool dialog){
@@ -410,8 +399,8 @@ void Nextion::newTitle(const char* title){
       strlcpy(ttl, title, 50);
       sng[0] = '\0';
     }
-    putcmd("player.title1.txt", utf8Rus(ttl, true));
-    putcmd("player.title2.txt", utf8Rus(sng, true));
+    putcmd("player.title1.txt", utf8Rus(ttl));
+    putcmd("player.title2.txt", utf8Rus(sng));
   }
 }
 
@@ -421,7 +410,7 @@ void Nextion::printClock(struct tm timeinfo){
   putcmd(timeStringBuff);
   putcmdf("player.secText.txt=\"%02d\"", timeinfo.tm_sec);
   snprintf(timeStringBuff, sizeof(timeStringBuff), "player.dateText.txt=\"%s, %d %s %d\"", LANG::dowf[timeinfo.tm_wday], timeinfo.tm_mday, LANG::mnths[timeinfo.tm_mon], timeinfo.tm_year+1900);
-  putcmd(utf8Rus(timeStringBuff, false));
+  putcmd(utf8Rus(timeStringBuff));
   if(mode==TIMEZONE) localTime(network.timeinfo);
   if(mode==INFO)     rssi();
 }
@@ -434,7 +423,7 @@ void Nextion::localTime(struct tm timeinfo){
 
 void Nextion::printPLitem(uint8_t pos, const char* item){
   char cmd[60]={0};
-  snprintf(cmd, sizeof(cmd) - 1, "t%d.txt=\"%s\"", pos, nextion.utf8Rus((char*)item, true));
+  snprintf(cmd, sizeof(cmd) - 1, "t%d.txt=\"%s\"", pos, nextion.utf8Rus(item));
   putcmd(cmd);
 }
 
@@ -490,7 +479,7 @@ void Nextion::drawPlaylist(uint16_t currentPlItem){
 }
 
 void Nextion::drawNextStationNum(uint16_t num) {//dialog
-  putcmd("dialog.title.txt", utf8Rus(config.stationByNum(num), true));
+  putcmd("dialog.title.txt", utf8Rus(config.stationByNum(num)));
   putcmd("dialog.text.txt", num, true);
   _volDelay = millis();
 }
@@ -544,45 +533,10 @@ void Nextion::wake(void) {
 /*
   По мотивам https://forum.amperka.ru/threads/%D0%94%D0%B8%D1%81%D0%BF%D0%BB%D0%B5%D0%B9-nextion-%D0%B0%D0%B7%D1%8B-arduino-esp8266.9204/page-18#post-173442
 */
-char* Nextion::utf8Rus(char* str, bool uppercase) {
+char* Nextion::utf8Rus(const char* str) {
   int index = 0;
   static char out[BUFLEN];
-  bool E = false;
   memset(out, 0, sizeof(out));
-  if (uppercase) {
-    bool next = false;
-    for (char *iter = str; *iter != '\0'; ++iter)
-    {
-      if (E) {
-        E = false;
-        continue;
-      }
-      uint8_t rus = (uint8_t) * iter;
-      if (rus == 208 && (uint8_t) * (iter + 1) == 129) {
-        *iter = (char)209;
-        *(iter + 1) = (char)145;
-        E = true;
-        continue;
-      }
-      if (rus == 209 && (uint8_t) * (iter + 1) == 145) {
-        *iter = (char)209;
-        *(iter + 1) = (char)145;
-        E = true;
-        continue;
-      }
-      if (next) {
-        if (rus >= 128 && rus <= 143) *iter = (char)(rus + 32);
-        if (rus >= 176 && rus <= 191) *iter = (char)(rus - 32);
-        next = false;
-      }
-      if (rus == 208) next = true;
-      if (rus == 209) {
-        *iter = (char)208;
-        next = true;
-      }
-      *iter = toupper(*iter);
-    }
-  }
   uint32_t codepoint = 0;
   while (str[index])
   {
