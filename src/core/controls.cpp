@@ -19,8 +19,38 @@ int lpId = -1;
 #define ISPUSHBUTTONS BTN_LEFT!=255 || BTN_CENTER!=255 || BTN_RIGHT!=255 || ENC_BTNB!=255 || BTN_UP!=255 || BTN_DOWN!=255 || ENC2_BTNB!=255 || BTN_MODE!=255
 #if ISPUSHBUTTONS
 #include "../OneButton/OneButton.h"
-OneButton button[] {{BTN_LEFT, true, BTN_INTERNALPULLUP}, {BTN_CENTER, true, BTN_INTERNALPULLUP}, {BTN_RIGHT, true, BTN_INTERNALPULLUP}, {ENC_BTNB, true, ENC_INTERNALPULLUP}, {BTN_UP, true, BTN_INTERNALPULLUP}, {BTN_DOWN, true, BTN_INTERNALPULLUP}, {ENC2_BTNB, true, ENC2_INTERNALPULLUP}, {BTN_MODE, true, BTN_INTERNALPULLUP}};
-constexpr uint8_t nrOfButtons = sizeof(button) / sizeof(button[0]);
+struct ButtonBinding {
+  OneButton button;
+  controlEvt_e event;
+};
+
+ButtonBinding buttons[] {
+#if BTN_LEFT!=255
+  {{BTN_LEFT, true, BTN_INTERNALPULLUP}, EVT_BTNLEFT},
+#endif
+#if BTN_CENTER!=255
+  {{BTN_CENTER, true, BTN_INTERNALPULLUP}, EVT_BTNCENTER},
+#endif
+#if BTN_RIGHT!=255
+  {{BTN_RIGHT, true, BTN_INTERNALPULLUP}, EVT_BTNRIGHT},
+#endif
+#if ENC_BTNB!=255
+  {{ENC_BTNB, true, ENC_INTERNALPULLUP}, EVT_ENCBTNB},
+#endif
+#if BTN_UP!=255
+  {{BTN_UP, true, BTN_INTERNALPULLUP}, EVT_BTNUP},
+#endif
+#if BTN_DOWN!=255
+  {{BTN_DOWN, true, BTN_INTERNALPULLUP}, EVT_BTNDOWN},
+#endif
+#if ENC2_BTNB!=255
+  {{ENC2_BTNB, true, ENC2_INTERNALPULLUP}, EVT_ENC2BTNB},
+#endif
+#if BTN_MODE!=255
+  {{BTN_MODE, true, BTN_INTERNALPULLUP}, EVT_BTNMODE},
+#endif
+};
+constexpr uint8_t nrOfButtons = sizeof(buttons) / sizeof(buttons[0]);
 #endif
 
 #if ENC_HALFQUARD==false
@@ -103,21 +133,21 @@ void initControls() {
 #if ISPUSHBUTTONS
   for (int i = 0; i < nrOfButtons; i++)
   {
-    if ((i == 0 && BTN_LEFT == 255) || (i == 1 && BTN_CENTER == 255) || (i == 2 && BTN_RIGHT == 255) || (i == 3 && ENC_BTNB == 255) || (i == 4 && BTN_UP == 255) || (i == 5 && BTN_DOWN == 255) || (i == 6 && ENC2_BTNB == 255) || (i == 7 && BTN_MODE == 255)) continue;
-    button[i].attachClick([](void* p) {
-      onBtnClick((int)p);
-    }, (void*)i);
-    button[i].attachDoubleClick([](void* p) {
-      onBtnDoubleClick((int)p);
-    }, (void*)i);
-    button[i].attachLongPressStart([](void* p) {
-      onBtnLongPressStart((int)p);
-    }, (void*)i);
-    button[i].attachLongPressStop([](void* p) {
-      onBtnLongPressStop((int)p);
-    }, (void*)i);
-    button[i].setClickTicks(BTN_CLICK_TICKS);
-    button[i].setPressTicks(BTN_PRESS_TICKS);
+    void* event = &buttons[i].event;
+    buttons[i].button.attachClick([](void* p) {
+      onBtnClick(*static_cast<controlEvt_e*>(p));
+    }, event);
+    buttons[i].button.attachDoubleClick([](void* p) {
+      onBtnDoubleClick(*static_cast<controlEvt_e*>(p));
+    }, event);
+    buttons[i].button.attachLongPressStart([](void* p) {
+      onBtnLongPressStart(*static_cast<controlEvt_e*>(p));
+    }, event);
+    buttons[i].button.attachLongPressStop([](void* p) {
+      onBtnLongPressStop(*static_cast<controlEvt_e*>(p));
+    }, event);
+    buttons[i].button.setClickTicks(BTN_CLICK_TICKS);
+    buttons[i].button.setPressTicks(BTN_PRESS_TICKS);
   }
 #endif
 #if (TS_MODEL!=TS_MODEL_UNDEFINED) && (DSP_MODEL!=DSP_DUMMY)
@@ -147,8 +177,7 @@ void loopControls() {
 #if ISPUSHBUTTONS
   for (unsigned i = 0; i < nrOfButtons; i++)
   {
-    if ((i == 0 && BTN_LEFT == 255) || (i == 1 && BTN_CENTER == 255) || (i == 2 && BTN_RIGHT == 255) || (i == 3 && ENC_BTNB == 255) || (i == 4 && BTN_UP == 255) || (i == 5 && BTN_DOWN == 255) || (i == 6 && ENC2_BTNB == 255)) continue;
-    button[i].tick();
+    buttons[i].button.tick();
     if (lpId >= 0) {
       if (DSP_MODEL == DSP_DUMMY && (lpId == 4 || lpId == 5)) continue;
       onBtnDuringLongPress(lpId);
@@ -169,7 +198,16 @@ void encodersLoop(yoEncoder *enc, bool first){
   int8_t encoderDelta = enc->encoderChanged();
   if (encoderDelta!=0)
   {
-    uint8_t encBtnState = digitalRead(first?ENC_BTNB:ENC2_BTNB);
+    uint8_t encBtnState = HIGH;
+    if(first){
+#if ENC_BTNB!=255
+      encBtnState = digitalRead(ENC_BTNB);
+#endif
+    }else{
+#if ENC2_BTNB!=255
+      encBtnState = digitalRead(ENC2_BTNB);
+#endif
+    }
 #   if defined(DUMMYDISPLAY) && !defined(USE_NEXTION)
     first = first?(first && encBtnState):(!encBtnState);
     if(first){
