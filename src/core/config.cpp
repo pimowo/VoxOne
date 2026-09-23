@@ -17,6 +17,12 @@
 #endif
 #include <cstddef>
 
+namespace {
+constexpr char WARSAW_TZ[] = "CET-1CEST,M3.5.0/2,M10.5.0/3";
+constexpr char DEFAULT_NTP_1[] = "0.pl.pool.ntp.org";
+constexpr char DEFAULT_NTP_2[] = "1.pl.pool.ntp.org";
+}
+
 #if DSP_MODEL==DSP_DUMMY
 #define DUMMYDISPLAY
 #endif
@@ -86,6 +92,7 @@ void Config::init() {
   }
   if(store.version>CONFIG_VERSION) store.version=1;
   while(store.version!=CONFIG_VERSION) _setupVersion();
+  _normalizeProductConfig();
   BOOTLOG("CONFIG_VERSION\t%d", store.version);
   store.play_mode = store.play_mode & 0b11;
   if(store.play_mode>1) store.play_mode=PM_WEB;
@@ -115,7 +122,7 @@ void Config::_setupVersion(){
       saveValue(&store.screensaverTimeout, (uint16_t)20);
       break;
     case 2:
-      snprintf(tmpBuf, MDNS_LENGTH, "yoradio-%x", (unsigned int)getChipId());
+      _makeDefaultMdnsName(tmpBuf, sizeof(tmpBuf));
       saveValue(store.mdnsname, tmpBuf, MDNS_LENGTH);
       saveValue(&store.skipPlaylistUpDown, false);
       break;
@@ -422,18 +429,10 @@ void Config::setScreensaverPlayingBlank(bool val){
 #endif
 }
 void Config::setSntpOne(const char *val){
-  bool tzdone = false;
-  if (strlen(val) > 0 && strlen(store.sntp2) > 0) {
-    configTime(store.tzHour * 3600 + store.tzMin * 60, getTimezoneOffset(), val, store.sntp2);
-    tzdone = true;
-  } else if (strlen(val) > 0) {
-    configTime(store.tzHour * 3600 + store.tzMin * 60, getTimezoneOffset(), val);
-    tzdone = true;
-  }
-  if (tzdone) {
-    timekeeper.forceTimeSync = true;
-    saveValue(config.store.sntp1, val, 35);
-  }
+  if (strlen(val) == 0) return;
+  saveValue(store.sntp1, val, sizeof(store.sntp1));
+  setTimeConf();
+  timekeeper.forceTimeSync = true;
 }
 void Config::setSDpos(uint32_t val){
   if (getMode()==PM_SDCARD){
@@ -463,8 +462,8 @@ void Config::resetSystem(const char *val, uint8_t clientId){
     saveValue(&store.softapdelay, (uint8_t)0, false);
     saveValue(&store.abuff, (uint16_t)(VS1053_CS==255?7:10), false);
     saveValue(&store.watchdog, true);
-    snprintf(store.mdnsname, MDNS_LENGTH, "yoradio-%x", (unsigned int)getChipId());
-    saveValue(store.mdnsname, store.mdnsname, MDNS_LENGTH, true, true);
+    _makeDefaultMdnsName(tmpBuf, sizeof(tmpBuf));
+    saveValue(store.mdnsname, tmpBuf, MDNS_LENGTH, true, true);
     display.putRequest(NEWMODE, CLEAR); display.putRequest(NEWMODE, PLAYER);
     netserver.requestOnChange(GETSYSTEM, clientId);
     return;
@@ -472,8 +471,6 @@ void Config::resetSystem(const char *val, uint8_t clientId){
   if (strcmp(val, "screen") == 0) {
     saveValue(&store.flipscreen, false, false);
     display.flip();
-    saveValue(&store.invertdisplay, false, false);
-    display.invert();
     saveValue(&store.dspon, true, false);
     store.brightness = 100;
     setBrightness(false);
@@ -491,13 +488,11 @@ void Config::resetSystem(const char *val, uint8_t clientId){
     return;
   }
   if (strcmp(val, "timezone") == 0) {
-    saveValue(&store.tzHour, (int8_t)3, false);
-    saveValue(&store.tzMin, (int8_t)0, false);
-    saveValue(store.sntp1, "pool.ntp.org", 35, false);
-    saveValue(store.sntp2, "0.ru.pool.ntp.org", 35);
+    saveValue(store.sntp1, DEFAULT_NTP_1, sizeof(store.sntp1), false);
+    saveValue(store.sntp2, DEFAULT_NTP_2, sizeof(store.sntp2));
     saveValue(&store.timeSyncInterval, (uint16_t)60);
     saveValue(&store.timeSyncIntervalRTC, (uint16_t)24);
-    configTime(store.tzHour * 3600 + store.tzMin * 60, getTimezoneOffset(), store.sntp1, store.sntp2);
+    setTimeConf();
     timekeeper.forceTimeSync = true;
     netserver.requestOnChange(GETTIMEZONE, clientId);
     return;
@@ -519,6 +514,34 @@ void Config::resetSystem(const char *val, uint8_t clientId){
 }
 
 
+
+void Config::_makeDefaultMdnsName(char *buffer, size_t size) {
+  const uint32_t macSuffix = static_cast<uint32_t>(ESP.getEfuseMac() & 0xFFFFFFULL);
+  snprintf(buffer, size, "VoxOne-%06X", (unsigned int)macSuffix);
+}
+
+void Config::_normalizeProductConfig() {
+  char legacyMdnsName[MDNS_LENGTH];
+  snprintf(legacyMdnsName, sizeof(legacyMdnsName), "yoradio-%x", (unsigned int)getChipId());
+  if (store.mdnsname[0] == '\0' || strcmp(store.mdnsname, legacyMdnsName) == 0) {
+    _makeDefaultMdnsName(tmpBuf, sizeof(tmpBuf));
+    saveValue(store.mdnsname, tmpBuf, sizeof(store.mdnsname));
+  }
+
+  const bool usesLegacyDefaultNtp =
+    strcmp(store.sntp1, "pool.ntp.org") == 0 &&
+    (strcmp(store.sntp2, "0.ru.pool.ntp.org") == 0 ||
+     strcmp(store.sntp2, "1.ru.pool.ntp.org") == 0);
+  if (usesLegacyDefaultNtp) {
+    saveValue(store.sntp1, DEFAULT_NTP_1, sizeof(store.sntp1), false);
+    saveValue(store.sntp2, DEFAULT_NTP_2, sizeof(store.sntp2));
+  } else {
+    if (store.sntp1[0] == '\0') saveValue(store.sntp1, DEFAULT_NTP_1, sizeof(store.sntp1));
+    if (store.sntp2[0] == '\0') saveValue(store.sntp2, DEFAULT_NTP_2, sizeof(store.sntp2));
+  }
+
+  saveValue(&store.watchdog, true);
+}
 
 void Config::setDefaults() {
   store.config_set = 4262;
@@ -547,8 +570,8 @@ void Config::setDefaults() {
   store.dspon=true;
   store.brightness=100;
   store.contrast=55;
-  strlcpy(store.sntp1,"pool.ntp.org", 35);
-  strlcpy(store.sntp2,"1.ru.pool.ntp.org", 35);
+  strlcpy(store.sntp1, DEFAULT_NTP_1, sizeof(store.sntp1));
+  strlcpy(store.sntp2, DEFAULT_NTP_2, sizeof(store.sntp2));
   memset(store.reservedWeather, 0, sizeof(store.reservedWeather));
   store._reserved = 0;
   store.lastSdStation = 0;
@@ -571,7 +594,7 @@ void Config::setDefaults() {
   store.screensaverEnabled = false;
   store.screensaverTimeout = 20;
   store.screensaverBlank = false;
-  snprintf(store.mdnsname, MDNS_LENGTH, "yoradio-%x", (unsigned int)getChipId());
+  _makeDefaultMdnsName(store.mdnsname, sizeof(store.mdnsname));
   store.skipPlaylistUpDown = false;
   store.screensaverPlayingEnabled = false;
   store.screensaverPlayingTimeout = 5;
@@ -586,6 +609,7 @@ void Config::setDefaults() {
 }
 
 void Config::setTimezone(int8_t tzh, int8_t tzm) {
+  // Preserve legacy CLI/Nextion storage without affecting the fixed Warsaw TZ.
   saveValue(&store.tzHour, tzh, false);
   saveValue(&store.tzMin, tzm);
 }
@@ -881,9 +905,9 @@ bool Config::saveWifi() {
 
 void Config::setTimeConf(){
   if(strlen(store.sntp1)>0 && strlen(store.sntp2)>0){
-    configTime(store.tzHour * 3600 + store.tzMin * 60, getTimezoneOffset(), store.sntp1, store.sntp2);
+    configTzTime(WARSAW_TZ, store.sntp1, store.sntp2);
   }else if(strlen(store.sntp1)>0){
-    configTime(store.tzHour * 3600 + store.tzMin * 60, getTimezoneOffset(), store.sntp1);
+    configTzTime(WARSAW_TZ, store.sntp1);
   }
 }
 

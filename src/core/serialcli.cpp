@@ -39,8 +39,8 @@ void SerialCli::printf(uint8_t id, const char *format, ...) {
 }
 void SerialCli::info() {
   printf("##CLI.INFO#\n");
-  strftime(config.tmpBuf, sizeof(config.tmpBuf), "%Y-%m-%dT%H:%M:%S+03:00", &network.timeinfo);
-  printf("##SYS.DATE#: %s\n", config.tmpBuf); //TODO timezone offset
+  strftime(config.tmpBuf, sizeof(config.tmpBuf), "%Y-%m-%dT%H:%M:%S%z", &network.timeinfo);
+  printf("##SYS.DATE#: %s\n", config.tmpBuf);
   printf("##CLI.NAMESET#: %d %s\n", config.lastStation(), config.station.name);
   if (player.status() == PLAYING) {
     printf("##CLI.META#: %s\n",  config.station.title);
@@ -151,12 +151,8 @@ void SerialCli::on_input(const char* str, uint8_t clientId) {
     }
     if (strcmp(str, "cli.info") == 0 || strcmp(str, "info") == 0) {
       printf(clientId, "##CLI.INFO#\n");
-      strftime(config.tmpBuf, sizeof(config.tmpBuf), "%Y-%m-%dT%H:%M:%S", &network.timeinfo);
-      if (config.store.tzHour < 0) {
-        printf(clientId, "##SYS.DATE#: %s%03d:%02d\n", config.tmpBuf, config.store.tzHour, config.store.tzMin);
-      } else {
-        printf(clientId, "##SYS.DATE#: %s+%02d:%02d\n", config.tmpBuf, config.store.tzHour, config.store.tzMin);
-      }
+      strftime(config.tmpBuf, sizeof(config.tmpBuf), "%Y-%m-%dT%H:%M:%S%z", &network.timeinfo);
+      printf(clientId, "##SYS.DATE#: %s\n", config.tmpBuf);
       printf(clientId, "##CLI.NAMESET#: %d %s\n", config.lastStation(), config.station.name);
       if (player.status() == PLAYING) {
         printf(clientId, "##CLI.META#: %s\n", config.station.title);

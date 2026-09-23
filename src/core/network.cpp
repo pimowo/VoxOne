@@ -68,6 +68,7 @@ bool MyNetwork::wifiBegin(bool silent){
     //WiFi.disconnect(true, true); //disconnect & erase internal credentials https://github.com/e2002/yoradio/pull/164/commits/89d8b4450dde99cd7930b84bb14d81dab920b879
     //delay(100);
     WiFi.mode(WIFI_STA);
+    if(strlen(config.store.mdnsname)>0) WiFi.setHostname(config.store.mdnsname);
     WiFi.begin(config.ssids[ls].ssid, config.ssids[ls].password);
     while (WiFi.status() != WL_CONNECTED) {
       if(!silent) Serial.print(".");
@@ -162,12 +163,8 @@ void MyNetwork::setWifiParams(){
 void MyNetwork::requestTimeSync(bool withSerialOutput) {
   if (withSerialOutput) {
     char timeStringBuff[50];
-    strftime(timeStringBuff, sizeof(timeStringBuff), "%Y-%m-%dT%H:%M:%S", &timeinfo);
-    if (config.store.tzHour < 0) {
-      serialCli.printf("##SYS.DATE#: %s%03d:%02d\n> ", timeStringBuff, config.store.tzHour, config.store.tzMin);
-    } else {
-      serialCli.printf("##SYS.DATE#: %s+%02d:%02d\n> ", timeStringBuff, config.store.tzHour, config.store.tzMin);
-    }
+    strftime(timeStringBuff, sizeof(timeStringBuff), "%Y-%m-%dT%H:%M:%S%z", &timeinfo);
+    serialCli.printf("##SYS.DATE#: %s\n> ", timeStringBuff);
   }
 }
 
@@ -177,6 +174,7 @@ void rebootTime() {
 
 void MyNetwork::raiseSoftAP() {
   WiFi.mode(WIFI_AP);
+  if(strlen(config.store.mdnsname)>0) WiFi.softAPsetHostname(config.store.mdnsname);
   WiFi.softAP(apSsid, apPassword);
   Serial.println("##[BOOT]#");
   BOOTLOG("************************************************");

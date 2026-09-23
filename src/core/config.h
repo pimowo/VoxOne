@@ -79,9 +79,9 @@ struct config_t
   uint8_t   lastSSID;
   bool      audioinfo;
   uint8_t   smartstart;
-  int8_t    tzHour;
-  int8_t    tzMin;
-  uint16_t  timezoneOffset;
+  int8_t    tzHour;          // legacy/reserved: fixed Europe/Warsaw TZ is used
+  int8_t    tzMin;           // legacy/reserved: keep EEPROM layout
+  uint16_t  timezoneOffset;  // legacy/reserved: keep EEPROM layout
   bool      vumeter;
   uint8_t   softapdelay;
   bool      flipscreen;
@@ -123,7 +123,7 @@ struct config_t
   bool      skipPlaylistUpDown;
   uint16_t  abuff;
   bool      reservedTelnet;
-  bool      watchdog;
+  bool      watchdog; // legacy/reserved: runtime always forces audio watchdog on
   uint16_t  timeSyncInterval;
   uint16_t  timeSyncIntervalRTC;
   uint16_t  reservedWeatherSyncInterval;
@@ -289,6 +289,8 @@ class Config {
     static void doSleep();
     uint16_t color565(uint8_t r, uint8_t g, uint8_t b);
     void _setupVersion();
+    void _makeDefaultMdnsName(char *buffer, size_t size);
+    void _normalizeProductConfig();
     void _initHW();
     bool _isFSempty();
     uint16_t _randomStation(){

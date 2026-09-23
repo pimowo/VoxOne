@@ -102,10 +102,6 @@ bool TimeKeeper::loop1(){ // core1 (player)
     _last2s = currentTime;
   }
 
-  //#ifdef DUMMYDISPLAY
-  #if defined(DUMMYDISPLAY) && !defined(USE_NEXTION)
-  return true;
-  #endif
 
   static uint32_t lastTimeTime = 0;
   if (currentTime - lastTimeTime >= TIME_SYNC_INTERVAL) {

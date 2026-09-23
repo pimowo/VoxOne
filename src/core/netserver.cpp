@@ -199,8 +199,8 @@ void NetServer::processQueue(){
             if (TS_MODEL != TS_MODEL_UNDEFINED || dbgact)       APPEND_GROUP("group_touch");
             if (DSP_MODEL == DSP_NOKIA5110)                     APPEND_GROUP("group_nokia");
                                                                 APPEND_GROUP("group_timezone");
+            if (TS_MODEL != TS_MODEL_UNDEFINED || IR_PIN != 255 || dbgact)
                                                                 APPEND_GROUP("group_controls");
-            if (ENC_BTNL != 255 || ENC2_BTNL != 255 || dbgact)  APPEND_GROUP("group_encoder");
             if (IR_PIN != 255 || dbgact)                        APPEND_GROUP("group_ir");
             if (!psramInit())                                   APPEND_GROUP("group_buffer");
                                                               #if RTCSUPPORTED
@@ -229,20 +229,17 @@ void NetServer::processQueue(){
           return; 
           break;
         }
-      case GETSYSTEM:     sprintf (wsBuf, "{\"sst\":%d,\"aif\":%d,\"vu\":%d,\"softr\":%d,\"vut\":%d,\"mdns\":\"%s\",\"ipaddr\":\"%s\", \"abuff\": %d, \"watchdog\": %d }",
+      case GETSYSTEM:     sprintf (wsBuf, "{\"sst\":%d,\"vu\":%d,\"softr\":%d,\"vut\":%d,\"mdns\":\"%s\",\"ipaddr\":\"%s\", \"abuff\": %d }",
                                   config.store.smartstart != 2, 
-                                  config.store.audioinfo, 
                                   config.store.vumeter, 
                                   config.store.softapdelay,
                                   config.vuThreshold,
                                   config.store.mdnsname,
                                   config.ipToStr(WiFi.localIP()),
-                                  config.store.abuff,
-                                  config.store.watchdog); 
+                                  config.store.abuff);
                                   break;
-      case GETSCREEN:     sprintf (wsBuf, "{\"flip\":%d,\"inv\":%d,\"nump\":%d,\"tsf\":%d,\"tsd\":%d,\"dspon\":%d,\"br\":%d,\"con\":%d,\"scre\":%d,\"scrt\":%d,\"scrb\":%d,\"scrpe\":%d,\"scrpt\":%d,\"scrpb\":%d}", 
+      case GETSCREEN:     sprintf (wsBuf, "{\"flip\":%d,\"nump\":%d,\"tsf\":%d,\"tsd\":%d,\"dspon\":%d,\"br\":%d,\"con\":%d,\"scre\":%d,\"scrt\":%d,\"scrb\":%d,\"scrpe\":%d,\"scrpt\":%d,\"scrpb\":%d}",
                                   config.store.flipscreen, 
-                                  config.store.invertdisplay, 
                                   config.store.numplaylist, 
                                   config.store.fliptouch, 
                                   config.store.dbgtouch, 
@@ -256,19 +253,14 @@ void NetServer::processQueue(){
                                   config.store.screensaverPlayingTimeout,
                                   config.store.screensaverPlayingBlank);
                                   break;
-      case GETTIMEZONE:   sprintf (wsBuf, "{\"tzh\":%d,\"tzm\":%d,\"sntp1\":\"%s\",\"sntp2\":\"%s\", \"timeint\":%d,\"timeintrtc\":%d}", 
-                                  config.store.tzHour, 
-                                  config.store.tzMin, 
+      case GETTIMEZONE:   sprintf (wsBuf, "{\"sntp1\":\"%s\",\"sntp2\":\"%s\", \"timeint\":%d,\"timeintrtc\":%d}",
                                   config.store.sntp1, 
                                   config.store.sntp2,
                                   config.store.timeSyncInterval,
                                   config.store.timeSyncIntervalRTC); 
                                   break;
-      case GETCONTROLS:   sprintf (wsBuf, "{\"vols\":%d,\"enca\":%d,\"irtl\":%d,\"skipup\":%d}", 
-                                  config.store.volsteps, 
-                                  config.store.encacc, 
-                                  config.store.irtlp,
-                                  config.store.skipPlaylistUpDown); 
+      case GETCONTROLS:   sprintf (wsBuf, "{\"irtl\":%d}", config.store.irtlp);
+
                                   break;
       case DSPON:         sprintf (wsBuf, "{\"dspontrue\":%d}", 1); break;
       case STATION:       requestOnChange(STATIONNAME, clientId); requestOnChange(ITEM, clientId); break;
