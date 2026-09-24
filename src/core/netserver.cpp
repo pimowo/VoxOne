@@ -33,6 +33,9 @@
   //#define NS_QUEUE_TICKS pdMS_TO_TICKS(2)
   #define NS_QUEUE_TICKS 0
 #endif
+#ifndef NS_VOLUME_INTERVAL_MS
+  #define NS_VOLUME_INTERVAL_MS 75
+#endif
 
 #ifdef DEBUG_V
 #define DBGVB( ... ) { char buf[200]; sprintf( buf, __VA_ARGS__ ) ; Serial.print("[DEBUG]\t"); Serial.println(buf); }
@@ -43,6 +46,7 @@
 //#define CORS_DEBUG //Enable CORS policy: 'Access-Control-Allow-Origin' (for testing)
 
 NetServer netserver;
+portMUX_TYPE netserverVolumeMux = portMUX_INITIALIZER_UNLOCKED;
 
 AsyncWebServer webserver(80);
 AsyncWebSocket websocket("/ws");
@@ -75,6 +79,8 @@ bool NetServer::begin(bool quiet) {
   importRequest = IMDONE;
   irRecordEnable = false;
   playerBufMax = psramInit()?300000:1600 * config.store.abuff;
+  _volumeUpdatePending = false;
+  _lastVolumeUpdate = millis() - NS_VOLUME_INTERVAL_MS;
   nsQueue = xQueueCreate( 20, sizeof( nsRequestParams_t ) );
   while(nsQueue==NULL){;}
 
@@ -158,7 +164,7 @@ void NetServer::processQueue(){
   if(nsQueue==NULL) return;
   nsRequestParams_t request;
   if(xQueueReceive(nsQueue, &request, NS_QUEUE_TICKS)){
-    uint8_t clientId = request.clientId;
+    uint32_t clientId = request.clientId;
     wsBuf[0]='\0';
     switch (request.type) {
       case PLAYLIST:        getPlaylist(clientId); break;
@@ -298,6 +304,33 @@ void NetServer::processQueue(){
   }
 }
 
+void NetServer::processVolumeUpdate(){
+  bool pending;
+  portENTER_CRITICAL(&netserverVolumeMux);
+  pending = _volumeUpdatePending;
+  portEXIT_CRITICAL(&netserverVolumeMux);
+  if(!pending) return;
+
+  bool hasWebClients = websocket.count() > 0;
+  uint32_t now = millis();
+  if((uint32_t)(now - _lastVolumeUpdate) < NS_VOLUME_INTERVAL_MS) return;
+  if(hasWebClients && websocket.hasQueuedMessages()) return;
+
+  portENTER_CRITICAL(&netserverVolumeMux);
+  pending = _volumeUpdatePending;
+  _volumeUpdatePending = false;
+  portEXIT_CRITICAL(&netserverVolumeMux);
+  if(!pending) return;
+
+  _lastVolumeUpdate = now;
+  sprintf(wsBuf, "{\"payload\":[{\"id\":\"volume\", \"value\": %d}]}", config.store.volume);
+  if(hasWebClients) websocket.textAll(wsBuf);
+  serialCli.printf("##CLI.VOL#: %d\n", config.store.volume);
+#ifdef MQTT_ROOT_TOPIC
+  mqttPublishVolume();
+#endif
+}
+
 void NetServer::loop() {
   if(network.status==SDREADY) return;
   if (shouldReboot) {
@@ -306,6 +339,7 @@ void NetServer::loop() {
     ESP.restart();
   }
   processQueue();
+  processVolumeUpdate();
   websocket.cleanupClients();
   switch (importRequest) {
     case IMPL:    importPlaylist();  importRequest = IMDONE; break;
@@ -329,7 +363,7 @@ void NetServer::irValsToWs() {
 }
 #endif
 
-void NetServer::onWsMessage(void *arg, uint8_t *data, size_t len, uint8_t clientId) {
+void NetServer::onWsMessage(void *arg, uint8_t *data, size_t len, uint32_t clientId) {
   AwsFrameInfo *info = (AwsFrameInfo*)arg;
   if (info->final && info->index == 0 && info->len == len && info->opcode == WS_TEXT) {
     data[len] = 0;
@@ -369,7 +403,7 @@ void NetServer::onWsMessage(void *arg, uint8_t *data, size_t len, uint8_t client
   }
 }
 
-void NetServer::getPlaylist(uint8_t clientId) {
+void NetServer::getPlaylist(uint32_t clientId) {
   sprintf(nsBuf, "{\"file\": \"http://%s%s\"}", config.ipToStr(WiFi.localIP()), PLAYLIST_PATH);
   if (clientId == 0) { websocket.textAll(nsBuf); } else { websocket.text(clientId, nsBuf); }
 }
@@ -422,12 +456,20 @@ bool NetServer::importPlaylist() {
   return false;
 }
 
-void NetServer::requestOnChange(requestType_e request, uint8_t clientId) {
+void NetServer::requestOnChange(requestType_e request, uint32_t clientId) {
   if(nsQueue==NULL) return;
+  if(request == VOLUME && clientId == 0){
+    portENTER_CRITICAL(&netserverVolumeMux);
+    _volumeUpdatePending = true;
+    portEXIT_CRITICAL(&netserverVolumeMux);
+    return;
+  }
   nsRequestParams_t nsrequest;
   nsrequest.type = request;
   nsrequest.clientId = clientId;
-  xQueueSend(nsQueue, &nsrequest, NSQ_SEND_DELAY);
+  if(xQueueSend(nsQueue, &nsrequest, NSQ_SEND_DELAY) != pdPASS){
+    serialCli.printf("##ERROR#:\tnetserver queue full for request %u\n", static_cast<unsigned>(request));
+  }
 }
 
 void NetServer::resetQueue(){

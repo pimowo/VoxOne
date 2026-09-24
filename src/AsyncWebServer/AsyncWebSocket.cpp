@@ -895,6 +895,13 @@ bool AsyncWebSocket::availableForWrite(uint32_t id){
   return true;
 }
 
+bool AsyncWebSocket::hasQueuedMessages(){
+  for(const auto& c: _clients){
+    if(c->status() == WS_CONNECTED && !c->queueIsEmpty()) return true;
+  }
+  return false;
+}
+
 size_t AsyncWebSocket::count() const {
   return _clients.count_if([](AsyncWebSocketClient * c){
     return c->status() == WS_CONNECTED;

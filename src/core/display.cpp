@@ -40,7 +40,12 @@ Nextion nextion;
   #define DSQ_SEND_DELAY  pdMS_TO_TICKS(200)
 #endif
 
+#ifndef DISPLAY_VOLUME_INTERVAL_MS
+  #define DISPLAY_VOLUME_INTERVAL_MS 40
+#endif
+
 QueueHandle_t displayQueue;
+portMUX_TYPE displayVolumeMux = portMUX_INITIALIZER_UNLOCKED;
 
 static void loopDspTask(void * pvParameters){
   while(true){
@@ -105,6 +110,9 @@ void Display::init() {
   analogSetAttenuation(ADC_0db);
 #endif
   _bootStep = 0;
+  _volumePending = false;
+  _volumeModePending = false;
+  _lastVolumeDraw = millis() - DISPLAY_VOLUME_INTERVAL_MS;
   dsp.initDisplay();
   displayQueue=NULL;
   displayQueue = xQueueCreate( 5, sizeof( requestParams_t ) );
@@ -448,7 +456,31 @@ void Display::putRequest(displayRequestType_e type, int payload){
   requestParams_t request;
   request.type = type;
   request.payload = payload;
-  xQueueSend(displayQueue, &request, DSQ_SEND_DELAY);
+  if(type == DRAWVOL){
+    portENTER_CRITICAL(&displayVolumeMux);
+    _volumePending = true;
+    portEXIT_CRITICAL(&displayVolumeMux);
+    #ifdef USE_NEXTION
+      nextion.putRequest(request);
+    #endif
+    return;
+  }
+  bool volumeModeRequest = type == NEWMODE && payload == VOL;
+  if(volumeModeRequest){
+    bool skipRequest;
+    portENTER_CRITICAL(&displayVolumeMux);
+    skipRequest = _volumeModePending || _mode == VOL;
+    if(!skipRequest) _volumeModePending = true;
+    portEXIT_CRITICAL(&displayVolumeMux);
+    if(skipRequest) return;
+  }
+  if(xQueueSend(displayQueue, &request, DSQ_SEND_DELAY) != pdPASS && volumeModeRequest){
+    portENTER_CRITICAL(&displayVolumeMux);
+    _volumeModePending = false;
+    portEXIT_CRITICAL(&displayVolumeMux);
+    Serial.println("##ERROR#:\tdisplay queue full for volume mode");
+    return;
+  }
   #ifdef USE_NEXTION
     nextion.putRequest(request);
   #endif
@@ -491,7 +523,15 @@ void Display::loop() {
     pm.on_display_queue(request, pm_result);
     if(pm_result)
       switch (request.type){
-        case NEWMODE: _swichMode((displayMode_e)request.payload); break;
+        case NEWMODE: {
+          _swichMode((displayMode_e)request.payload);
+          if(request.payload == VOL){
+            portENTER_CRITICAL(&displayVolumeMux);
+            _volumeModePending = false;
+            portEXIT_CRITICAL(&displayVolumeMux);
+          }
+          break;
+        }
         case CLOSEPLAYLIST: player.sendCommand({PR_PLAY, request.payload}); break;
         case CLOCK: 
           if(_mode==PLAYER || _mode==SCREENSAVER) _time(request.payload==1); 
@@ -585,6 +625,21 @@ void Display::loop() {
         if (uxQueueMessagesWaiting(displayQueue))
           return;
       }
+  }
+
+  uint32_t now = millis();
+  if((uint32_t)(now - _lastVolumeDraw) >= DISPLAY_VOLUME_INTERVAL_MS){
+    bool drawVolume = false;
+    portENTER_CRITICAL(&displayVolumeMux);
+    if(_volumePending){
+      _volumePending = false;
+      drawVolume = true;
+    }
+    portEXIT_CRITICAL(&displayVolumeMux);
+    if(drawVolume){
+      _lastVolumeDraw = now;
+      _volume();
+    }
   }
 
   dsp.loop();

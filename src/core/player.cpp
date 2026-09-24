@@ -13,6 +13,7 @@
 #endif
 Player player;
 QueueHandle_t playerQueue;
+portMUX_TYPE playerVolumeMux = portMUX_INITIALIZER_UNLOCKED;
 
 #if VS1053_CS!=255 && !I2S_INTERNAL
   #if VS_HSPI
@@ -41,6 +42,8 @@ void Player::init() {
   playerQueue=NULL;
   _resumeFilePos = 0;
   _hasError=false;
+  _pendingVolume = config.store.volume;
+  _volumePending = false;
   playerQueue = xQueueCreate( 5, sizeof( playerRequestParams_t ) );
   setOutputPins(false);
   delay(50);
@@ -142,6 +145,19 @@ void resetPlayer(){
 #endif
 void Player::loop() {
   if(playerQueue==NULL) return;
+  uint8_t pendingVolume = 0;
+  bool volumePending = false;
+  portENTER_CRITICAL(&playerVolumeMux);
+  if(_volumePending){
+    pendingVolume = _pendingVolume;
+    _volumePending = false;
+    volumePending = true;
+  }
+  portEXIT_CRITICAL(&playerVolumeMux);
+  if(volumePending){
+    config.setVolume(pendingVolume);
+    Audio::setVolume(volToI2S(pendingVolume));
+  }
   playerRequestParams_t requestP;
   if(xQueueReceive(playerQueue, &requestP, isRunning()?PL_QUEUE_TICKS:PL_QUEUE_TICKS_ST)){
     switch (requestP.type){
@@ -328,5 +344,8 @@ void Player::_loadVol(uint8_t volume) {
 void Player::setVol(uint8_t volume) {
   _volTicks = millis();
   _volTimer = true;
-  player.sendCommand({PR_VOL, volume});
+  portENTER_CRITICAL(&playerVolumeMux);
+  _pendingVolume = volume;
+  _volumePending = true;
+  portEXIT_CRITICAL(&playerVolumeMux);
 }

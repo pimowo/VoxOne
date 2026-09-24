@@ -61,6 +61,9 @@ class Display {
     TextWidget *_plheader, *_plcounter, *_plplaying;
 #endif
     bool _locked = false;
+    volatile bool _volumePending = false;
+    volatile bool _volumeModePending = false;
+    uint32_t _lastVolumeDraw = 0;
     uint8_t _bootStep;
     void _time(bool redraw = false);
     void _apScreen();
