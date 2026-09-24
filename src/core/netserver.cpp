@@ -356,7 +356,7 @@ void NetServer::onWsMessage(void *arg, uint8_t *data, size_t len, uint8_t client
       if (strcmp(_wscmd, "submitplaylistdone") == 0) {
 #ifdef MQTT_ROOT_TOPIC
         //mqttplaylistticker.attach(5, mqttplaylistSend);
-        timekeeper.waitAndDo(5, mqttplaylistSend);
+        timekeeper.waitAndDo(5, mqttplaylistSend, DelayedActionSlot::MQTT);
 #endif
         if (player.isRunning()) player.sendCommand({PR_PLAY, -config.lastStation()});
         return;

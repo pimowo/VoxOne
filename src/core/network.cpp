@@ -184,5 +184,5 @@ void MyNetwork::raiseSoftAP() {
   BOOTLOG("************************************************");
   status = SOFT_AP;
   if(config.store.softapdelay>0)
-    timekeeper.waitAndDo(config.store.softapdelay*60, rebootTime);
+    timekeeper.waitAndDo(static_cast<uint32_t>(config.store.softapdelay) * 60UL, rebootTime, DelayedActionSlot::REBOOT);
 }

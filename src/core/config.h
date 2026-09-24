@@ -35,8 +35,6 @@ enum playMode_e      : uint8_t  { PM_WEB=0, PM_SDCARD=1 };
 
 void u8fix(char *src);
 
-void checkAllTasksStack();
-
 struct theme_t {
   uint16_t background;
   uint16_t meta;

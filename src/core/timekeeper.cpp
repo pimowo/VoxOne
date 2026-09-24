@@ -23,6 +23,20 @@
 #define SYNC_TASK_CORE        0
 #define SYNC_TASK_PRIORITY    3
 
+namespace {
+constexpr uint32_t secondsToMillis(uint32_t seconds) {
+  return seconds > UINT32_MAX / 1000UL ? UINT32_MAX : seconds * 1000UL;
+}
+
+constexpr bool timeoutElapsed(uint32_t now, uint32_t startedAt, uint32_t delayMs) {
+  return static_cast<uint32_t>(now - startedAt) >= delayMs;
+}
+
+static_assert(secondsToMillis(300) == 300000UL, "timeouts above 255 seconds must be preserved");
+static_assert(timeoutElapsed(0x00000020UL, 0xFFFFFFF0UL, 0x30UL), "timeout must survive millis wraparound");
+static_assert(!timeoutElapsed(0x0000001FUL, 0xFFFFFFF0UL, 0x30UL), "timeout must not fire early after millis wraparound");
+}
+
 #ifdef HEAP_DBG
   void printHeapFragmentationInfo(const char* title){
     size_t freeHeap = heap_caps_get_free_size(MALLOC_CAP_DEFAULT);
@@ -50,7 +64,12 @@ void _syncTask(void *pvParameters) {
 TimeKeeper::TimeKeeper(){
   busy          = false;
   forceTimeSync = true;
-  _returnPlayerTime = _doAfterTime = 0;
+  _returnPlayerStartedAt = 0;
+  _returnPlayerDelayMs = 0;
+  _returnPlayerPending = false;
+  for(uint8_t i = 0; i < static_cast<uint8_t>(DelayedActionSlot::COUNT); i++){
+    _delayedActions[i] = {0, 0, nullptr};
+  }
 }
 
 bool TimeKeeper::loop0(){ // core0 (display)
@@ -111,7 +130,7 @@ bool TimeKeeper::loop1(){ // core1 (player)
   if (!busy && forceTimeSync && network.status == CONNECTED) {
     busy = true;
     //config.setTimeConf();
-    xTaskCreatePinnedToCore(
+    BaseType_t result = xTaskCreatePinnedToCore(
       _syncTask,
       "syncTask",
       SYNC_STACK_SIZE,
@@ -120,29 +139,41 @@ bool TimeKeeper::loop1(){ // core1 (player)
       NULL,           // Descriptor
       SYNC_TASK_CORE
     );
+    if(result != pdPASS){
+      busy = false;
+      Serial.println("##[ERROR]#\tFailed to create syncTask; time sync will retry");
+    }
   }
   
   return true; // just in case
 }
 
-void TimeKeeper::waitAndReturnPlayer(uint8_t time_s){
-  _returnPlayerTime = millis()+time_s*1000;
+void TimeKeeper::waitAndReturnPlayer(uint32_t time_s){
+  _returnPlayerStartedAt = millis();
+  _returnPlayerDelayMs = secondsToMillis(time_s);
+  _returnPlayerPending = true;
 }
 void TimeKeeper::_returnPlayer(){
-  if(_returnPlayerTime>0 && millis()>=_returnPlayerTime){
-    _returnPlayerTime = 0;
+  if(_returnPlayerPending && timeoutElapsed(millis(), _returnPlayerStartedAt, _returnPlayerDelayMs)){
+    _returnPlayerPending = false;
     display.putRequest(NEWMODE, PLAYER);
   }
 }
 
-void TimeKeeper::waitAndDo(uint8_t time_s, void (*callback)()){
-  _doAfterTime = millis()+time_s*1000;
-  _aftercallback = callback;
+void TimeKeeper::waitAndDo(uint32_t time_s, void (*callback)(), DelayedActionSlot slot){
+  uint8_t index = static_cast<uint8_t>(slot);
+  if(index >= static_cast<uint8_t>(DelayedActionSlot::COUNT) || callback == nullptr) return;
+  _delayedActions[index] = {millis(), secondsToMillis(time_s), callback};
 }
 void TimeKeeper::_doAfterWait(){
-  if(_doAfterTime>0 && millis()>=_doAfterTime){
-    _doAfterTime = 0;
-    _aftercallback();
+  uint32_t now = millis();
+  for(uint8_t i = 0; i < static_cast<uint8_t>(DelayedActionSlot::COUNT); i++){
+    DelayedAction &action = _delayedActions[i];
+    if(action.callback != nullptr && timeoutElapsed(now, action.startedAt, action.delayMs)){
+      void (*callback)() = action.callback;
+      action.callback = nullptr;
+      callback();
+    }
   }
 }
 

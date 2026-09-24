@@ -1004,7 +1004,7 @@ void Config::doSleepW(){
 
 void Config::sleepForAfter(uint16_t sf, uint16_t sa){
   sleepfor = sf;
-  if(sa > 0) timekeeper.waitAndDo(sa * 60, doSleep);
+  if(sa > 0) timekeeper.waitAndDo(static_cast<uint32_t>(sa) * 60UL, doSleep, DelayedActionSlot::SLEEP);
   else doSleep();
 }
 
