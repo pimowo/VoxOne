@@ -170,6 +170,7 @@ class AsyncWebSocketClient {
 
     uint32_t _lastMessageTime;
     uint32_t _keepAlivePeriod;
+    bool _lagging;
 
     void _queueMessage(AsyncWebSocketMessage *dataMessage);
     void _queueControl(AsyncWebSocketControl *controlMessage);

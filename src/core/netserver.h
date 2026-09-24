@@ -116,7 +116,7 @@ class NetServer {
     requestType_e request;
     QueueHandle_t nsQueue;
     char _wscmd[65], _wsval[65];
-    char wsBuf[BUFLEN*2];
+    char wsBuf[BUFLEN*7];
     int rssi;
     uint32_t playerBufMax;
     volatile bool _volumeUpdatePending = false;

@@ -480,6 +480,7 @@ AsyncWebSocketClient::AsyncWebSocketClient(AsyncWebServerRequest *request, Async
   _pstate = 0;
   _lastMessageTime = millis();
   _keepAlivePeriod = 0;
+  _lagging = false;
   _client->setRxTimeout(0);
   _client->onError([](void *r, AsyncClient* c, int8_t error){ (void)c; ((AsyncWebSocketClient*)(r))->_onError(error); }, this);
   _client->onAck([](void *r, AsyncClient* c, size_t len, uint32_t time){ (void)c; ((AsyncWebSocketClient*)(r))->_onAck(len, time); }, this);
@@ -521,6 +522,10 @@ void AsyncWebSocketClient::_onAck(size_t len, uint32_t time){
 }
 
 void AsyncWebSocketClient::_onPoll(){
+  if(_lagging){
+    _client->close(true);
+    return;
+  }
   if(_client->canSend() && (!_controlQueue.isEmpty() || !_messageQueue.isEmpty())){
     _runQueue();
   } else if(_keepAlivePeriod > 0 && _controlQueue.isEmpty() && _messageQueue.isEmpty() && (millis() - _lastMessageTime) >= _keepAlivePeriod){
@@ -552,9 +557,14 @@ void AsyncWebSocketClient::_queueMessage(AsyncWebSocketMessage *dataMessage){
     delete dataMessage;
     return;
   }
-  if(_messageQueue.length() >= WS_MAX_QUEUED_MESSAGES){
-      ets_printf("ERROR: Too many messages queued\n");
+  const size_t highWater = WS_MAX_QUEUED_MESSAGES > 32 ? 32 : WS_MAX_QUEUED_MESSAGES;
+  if(_lagging || _messageQueue.length() >= highWater){
+      if(!_lagging){
+        _lagging = true;
+        ets_printf("WS client #%lu lagging; disconnecting\n", static_cast<unsigned long>(_clientId));
+      }
       delete dataMessage;
+      return;
   } else {
       _messageQueue.add(dataMessage);
   }

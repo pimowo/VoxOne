@@ -282,6 +282,51 @@ const char *getFormat(BitrateFormat _format) {
   }
 }
 
+static void formatWsTextPayload(char *output, size_t capacity, const char *id, const char *value) {
+  const int prefix = snprintf(output, capacity,
+      "{\"payload\":[{\"id\":\"%s\", \"value\":\"", id);
+  if (prefix < 0 || static_cast<size_t>(prefix) >= capacity) {
+    output[0] = '\0';
+    return;
+  }
+
+  size_t used = static_cast<size_t>(prefix);
+  const size_t valueLength = strlen(value);
+  for (size_t i = 0; i < valueLength;) {
+    const unsigned char ch = static_cast<unsigned char>(value[i]);
+    char encoded[7];
+    size_t count = 1;
+    size_t consumed = 1;
+    if (ch == '"' || ch == '\\') {
+      encoded[0] = '\\';
+      encoded[1] = static_cast<char>(ch);
+      count = 2;
+    } else if (ch < 0x20) {
+      snprintf(encoded, sizeof(encoded), "\\u%04x", ch);
+      count = 6;
+    } else if (ch >= 0x80) {
+      const size_t utf8Length = ch >= 0xF0 ? (ch <= 0xF4 ? 4 : 0) :
+                                ch >= 0xE0 ? 3 : ch >= 0xC2 ? 2 : 0;
+      bool valid = utf8Length != 0 && i + utf8Length <= valueLength;
+      for (size_t j = 1; valid && j < utf8Length; ++j) {
+        valid = (static_cast<unsigned char>(value[i + j]) & 0xC0) == 0x80;
+      }
+      if (valid) {
+        count = consumed = utf8Length;
+        memcpy(encoded, value + i, count);
+      } else {
+        encoded[0] = '?';
+      }
+    } else {
+      encoded[0] = static_cast<char>(ch);
+    }
+    if (used + count + 5 > capacity) break;
+    memcpy(output + used, encoded, count);
+    used += count;
+    i += consumed;
+  }
+  memcpy(output + used, "\"}]}", 5);
+}
 void NetServer::processQueue(){
   if(nsQueue==NULL) return;
   nsRequestParams_t request;
@@ -392,11 +437,11 @@ void NetServer::processQueue(){
                                   break;
       case DSPON:         sprintf (wsBuf, "{\"dspontrue\":%d}", 1); break;
       case STATION:       requestOnChange(STATIONNAME, clientId); requestOnChange(ITEM, clientId); break;
-      case STATIONNAME:   sprintf (wsBuf, "{\"payload\":[{\"id\":\"nameset\", \"value\": \"%s\"}]}", config.station.name); break;
+      case STATIONNAME:   formatWsTextPayload(wsBuf, sizeof(wsBuf), "nameset", config.station.name); break;
       case ITEM:          sprintf (wsBuf, "{\"current\": %d}", config.lastStation()); break;
-      case TITLE:         sprintf (wsBuf, "{\"payload\":[{\"id\":\"meta\", \"value\": \"%s\"}]}", config.station.title); serialCli.printf("##CLI.META#: %s\n> ", config.station.title); break;
+      case TITLE:         formatWsTextPayload(wsBuf, sizeof(wsBuf), "meta", config.station.title); serialCli.printf("##CLI.META#: %s\n> ", config.station.title); break;
       case VOLUME:        sprintf (wsBuf, "{\"payload\":[{\"id\":\"volume\", \"value\": %d}]}", config.store.volume); serialCli.printf("##CLI.VOL#: %d\n", config.store.volume); break;
-      case NRSSI:         sprintf (wsBuf, "{\"payload\":[{\"id\":\"rssi\", \"value\": %d}, {\"id\":\"heap\", \"value\": %d}]}", rssi, (player.isRunning() && config.store.audioinfo)?(int)(100*player.inBufferFilled()/playerBufMax):0); /*rssi = 255;*/ break;
+      case NRSSI:         rssi = WiFi.RSSI(); sprintf (wsBuf, "{\"payload\":[{\"id\":\"rssi\", \"value\": %d}, {\"id\":\"heap\", \"value\": %d}]}", rssi, (player.isRunning() && config.store.audioinfo)?(int)(100*player.inBufferFilled()/playerBufMax):0); /*rssi = 255;*/ break;
       case SDPOS:         sprintf (wsBuf, "{\"sdpos\": %lu,\"sdend\": %lu,\"sdtpos\": %lu,\"sdtend\": %lu}", 
                                   player.getFilePos(), 
                                   player.getFileSize(), 

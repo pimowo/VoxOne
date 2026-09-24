@@ -48,6 +48,7 @@ bool CommandHandler::exec(const char *command, const char *value, uint32_t cid) 
   /****************** WEBSOCKET ****************/
   /*********************************************/
   if (strEquals(command, "getindex"))  { netserver.requestOnChange(GETINDEX, cid); return true; }
+  if (strEquals(command, "getrssi"))   { netserver.requestOnChange(NRSSI, cid); return true; }
   
   if (strEquals(command, "getsystem"))  { netserver.requestOnChange(GETSYSTEM, cid); return true; }
   if (strEquals(command, "getscreen"))  { netserver.requestOnChange(GETSCREEN, cid); return true; }
