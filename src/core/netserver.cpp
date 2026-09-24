@@ -2,6 +2,9 @@
 #include "Arduino.h"
 #include <SPIFFS.h>
 #include <Update.h>
+#include <esp_ota_ops.h>
+#include <esp_partition.h>
+#include <nvs.h>
 #include "config.h"
 #include "netserver.h"
 #include "player.h"
@@ -57,6 +60,7 @@ void handleNotFound(AsyncWebServerRequest * request);
 void onWsEvent(AsyncWebSocket *server, AsyncWebSocketClient *client, AwsEventType type, void *arg, uint8_t *data, size_t len);
 
 bool  shouldReboot  = false;
+uint32_t webUpdateRebootAt = 0;
 #ifdef MQTT_ROOT_TOPIC
 //Ticker mqttplaylistticker;
 bool  mqttplaylistblock = false;
@@ -67,6 +71,122 @@ void mqttplaylistSend() {
   mqttplaylistblock = false;
 }
 #endif
+
+namespace {
+struct WebUpdateFile {
+  const char* path;
+  const char* key;
+};
+constexpr WebUpdateFile kWebUpdateFiles[] = {
+  {SSIDS_PATH, "wifi"},
+  {PLAYLIST_PATH, "playlist"},
+  {PLAYLIST_SD_PATH, "playlistsd"}
+};
+constexpr char kWebUpdateNamespace[] = "voxupdate";
+AsyncWebServerRequest* activeUpdateRequest = nullptr;
+
+struct WebUpdateSession {
+  size_t expected;
+  size_t limit;
+  int target;
+  bool started;
+  bool finished;
+  const char* error;
+};
+
+bool backupWebUpdateData(const char*& error) {
+  nvs_handle_t handle;
+  if (nvs_open(kWebUpdateNamespace, NVS_READWRITE, &handle) != ESP_OK) {
+    error = "Cannot open NVS backup";
+    return false;
+  }
+  uint8_t pending = 0;
+  if (nvs_get_u8(handle, "pending", &pending) == ESP_OK && pending) {
+    error = "Previous SPIFFS backup is pending; reboot before retry";
+    nvs_close(handle);
+    return false;
+  }
+  if (nvs_erase_all(handle) != ESP_OK) {
+    error = "Could not initialize NVS backup";
+    nvs_close(handle);
+    return false;
+  }
+  for (const auto& item : kWebUpdateFiles) {
+    File file = SPIFFS.open(item.path, "r");
+    if (!file) continue;
+    const size_t size = file.size();
+    uint8_t* bytes = static_cast<uint8_t*>(malloc(size ? size : 1));
+    if (!bytes || file.read(bytes, size) != size ||
+        nvs_set_blob(handle, item.key, bytes, size) != ESP_OK) {
+      free(bytes);
+      file.close();
+      error = "NVS backup has insufficient space or could not save data";
+      nvs_erase_all(handle);
+      nvs_commit(handle);
+      nvs_close(handle);
+      return false;
+    }
+    free(bytes);
+    file.close();
+  }
+  if (nvs_set_u8(handle, "pending", 1) != ESP_OK ||
+      nvs_commit(handle) != ESP_OK) {
+    error = "Could not commit NVS backup";
+    nvs_close(handle);
+    return false;
+  }
+  nvs_close(handle);
+  if (nvs_open(kWebUpdateNamespace, NVS_READONLY, &handle) != ESP_OK) {
+    error = "Could not reopen NVS backup";
+    return false;
+  }
+  if (nvs_get_u8(handle, "pending", &pending) != ESP_OK || pending != 1) {
+    error = "Could not verify NVS backup";
+    nvs_close(handle);
+    return false;
+  }
+  nvs_close(handle);
+  return true;
+}
+}  // namespace
+
+bool restoreWebUpdateData() {
+  nvs_handle_t handle;
+  if (nvs_open(kWebUpdateNamespace, NVS_READWRITE, &handle) != ESP_OK) return false;
+  uint8_t pending = 0;
+  if (nvs_get_u8(handle, "pending", &pending) != ESP_OK || pending != 1) {
+    nvs_close(handle);
+    return true;
+  }
+  Serial.println("##[BOOT]# Restoring Web Update data from NVS");
+  for (const auto& item : kWebUpdateFiles) {
+    size_t size = 0;
+    esp_err_t result = nvs_get_blob(handle, item.key, nullptr, &size);
+    if (result == ESP_ERR_NVS_NOT_FOUND) continue;
+    uint8_t* bytes = static_cast<uint8_t*>(malloc(size ? size : 1));
+    if (result != ESP_OK || !bytes ||
+        nvs_get_blob(handle, item.key, bytes, &size) != ESP_OK) {
+      free(bytes);
+      Serial.printf("##[ERROR]# Web Update restore failed: %s (NVS read)\n", item.path);
+      nvs_close(handle);
+      return false;
+    }
+    File file = SPIFFS.open(item.path, "w");
+    const bool written = file && file.write(bytes, size) == size;
+    file.close();
+    free(bytes);
+    if (!written) {
+      Serial.printf("##[ERROR]# Web Update restore failed: %s (SPIFFS write)\n", item.path);
+      nvs_close(handle);
+      return false;
+    }
+    Serial.printf("##[BOOT]# Restored %s (%u B)\n", item.path, static_cast<unsigned>(size));
+  }
+  const bool cleared = nvs_erase_all(handle) == ESP_OK && nvs_commit(handle) == ESP_OK;
+  nvs_close(handle);
+  if (!cleared) Serial.println("##[ERROR]# Web Update backup cleanup failed");
+  return cleared;
+}
 
 char* updateError() {
   sprintf(netserver.nsBuf, "Update failed with error (%d)<br /> %s", (int)Update.getError(), Update.errorString());
@@ -333,7 +453,7 @@ void NetServer::processVolumeUpdate(){
 
 void NetServer::loop() {
   if(network.status==SDREADY) return;
-  if (shouldReboot) {
+  if (shouldReboot && (int32_t)(millis() - webUpdateRebootAt) >= 0) {
     Serial.println("Rebooting...");
     delay(100);
     ESP.restart();
@@ -476,6 +596,155 @@ void NetServer::resetQueue(){
   if(nsQueue!=NULL) xQueueReset(nsQueue);
 }
 
+void handleWebUpdateUpload(AsyncWebServerRequest *request, const String& filename,
+                           size_t index, uint8_t *data, size_t len, bool final) {
+#if defined(HTTP_USER) && defined(HTTP_PASS)
+  if (network.status == CONNECTED && !request->authenticate(HTTP_USER, HTTP_PASS)) return;
+#endif
+  WebUpdateSession* session = static_cast<WebUpdateSession*>(request->_tempObject);
+  if (index == 0) {
+    if (session) {
+      session->error = "Only one image per request is allowed";
+      if (activeUpdateRequest == request) Update.abort();
+      return;
+    }
+    session = static_cast<WebUpdateSession*>(calloc(1, sizeof(WebUpdateSession)));
+    if (!session) return;
+    request->_tempObject = session;
+    session->error = nullptr;
+    if (activeUpdateRequest && activeUpdateRequest != request) {
+      session->error = "Another update is already running";
+      return;
+    }
+    activeUpdateRequest = request;
+    request->onDisconnect([request]() {
+      if (activeUpdateRequest == request) {
+        Update.abort();
+        activeUpdateRequest = nullptr;
+      }
+    });
+    if (!request->hasParam("updatetarget", true)) {
+      session->error = "Missing update target";
+      return;
+    }
+    const String target = request->getParam("updatetarget", true)->value();
+    if (target == "firmware" || target == "fw") {
+      session->target = U_FLASH;
+    } else if (target == "spiffs") {
+      session->target = U_SPIFFS;
+    } else {
+      session->error = "Unknown update target";
+      return;
+    }
+    String lowerName = filename;
+    lowerName.toLowerCase();
+    if (!lowerName.endsWith(".bin")) {
+      session->error = "Only .bin images are accepted";
+      return;
+    }
+    if (lowerName.indexOf("-full.bin") >= 0) {
+      session->error = "full.bin is for esptool recovery only";
+      return;
+    }
+    if ((session->target == U_FLASH && lowerName.indexOf("spiffs") >= 0) ||
+        (session->target == U_SPIFFS && lowerName.indexOf("firmware") >= 0)) {
+      session->error = "Image filename does not match the selected target";
+      return;
+    }
+    if (len < 8) {
+      session->error = "Image header is too short";
+      return;
+    }
+    if (session->target == U_FLASH) {
+      if (data[0] != 0xE9 || data[1] == 0 || data[1] > 16) {
+        session->error = "Invalid ESP32 firmware image header";
+        return;
+      }
+    } else if (data[0] != 0 || data[1] != 0 || data[2] != 1 ||
+               data[3] != 0 || data[4] != 1 || data[5] != 0) {
+      session->error = "Invalid SPIFFS image header";
+      return;
+    }
+    const esp_partition_t* partition = session->target == U_FLASH
+        ? esp_ota_get_next_update_partition(nullptr)
+        : esp_partition_find_first(ESP_PARTITION_TYPE_DATA,
+                                   ESP_PARTITION_SUBTYPE_DATA_SPIFFS, nullptr);
+    if (!partition) {
+      session->error = "Update partition not found";
+      return;
+    }
+    session->limit = partition->size;
+    if (request->hasParam("filesize", true)) {
+      const String sizeText = request->getParam("filesize", true)->value();
+      for (size_t i = 0; i < sizeText.length(); ++i) {
+        if (!isDigit(sizeText[i])) {
+          session->error = "Invalid image size";
+          return;
+        }
+      }
+      session->expected = static_cast<size_t>(sizeText.toInt());
+    }
+    if ((session->expected == 0 && request->contentLength() > session->limit) ||
+        session->expected > session->limit) {
+      session->error = "Image exceeds update partition";
+      return;
+    }
+    if (session->target == U_SPIFFS && session->expected != session->limit) {
+      session->error = "SPIFFS image must exactly match the partition size";
+      return;
+    }
+    if (session->expected && session->expected > request->contentLength()) {
+      session->error = "Declared image size exceeds upload size";
+      return;
+    }
+    if (session->target == U_SPIFFS) {
+      if (!backupWebUpdateData(session->error)) return;
+      SPIFFS.end();
+    }
+    if (!Update.begin(session->expected ? session->expected : UPDATE_SIZE_UNKNOWN,
+                      session->target)) {
+      Serial.printf("Web Update begin failed: %s\n", Update.errorString());
+      session->error = "Update.begin failed (see Serial)";
+      if (session->target == U_SPIFFS) SPIFFS.begin(false);
+      return;
+    }
+    session->started = true;
+    Serial.printf("Web Update started: %s, %u bytes, limit %u\n",
+                  session->target == U_FLASH ? "firmware" : "SPIFFS",
+                  static_cast<unsigned>(session->expected),
+                  static_cast<unsigned>(session->limit));
+    player.sendCommand({PR_STOP, 0});
+    display.putRequest(NEWMODE, UPDATING);
+  }
+  if (!session || session->error || !session->started) return;
+  if (index > session->limit || len > session->limit - index ||
+      (session->expected && (index > session->expected ||
+                             len > session->expected - index))) {
+    session->error = "Uploaded image exceeds declared size or partition";
+    Update.abort();
+    return;
+  }
+  if (len && Update.write(data, len) != len) {
+    Serial.printf("Web Update write failed: %s\n", Update.errorString());
+    session->error = "Update.write failed (see Serial)";
+    Update.abort();
+    return;
+  }
+  if (final) {
+    if (session->expected && index + len != session->expected) {
+      session->error = "Incomplete upload: image size differs";
+      Update.abort();
+    } else if (!Update.end(session->expected == 0)) {
+      Serial.printf("Web Update end failed: %s\n", Update.errorString());
+      session->error = "Update.end failed (see Serial)";
+    } else {
+      session->finished = true;
+      Serial.printf("Web Update success: %u bytes\n", static_cast<unsigned>(index + len));
+    }
+    activeUpdateRequest = nullptr;
+  }
+}
+
 void handleUpload(AsyncWebServerRequest *request, String filename, size_t index, uint8_t *data, size_t len, bool final) {
   static int freeSpace = 0;
   if(request->url()=="/upload"){
@@ -502,30 +771,7 @@ void handleUpload(AsyncWebServerRequest *request, String filename, size_t index,
       freeSpace = 0;
     }
   }else if(request->url()=="/update"){
-    if (!index) {
-      int target = (request->getParam("updatetarget", true)->value() == "spiffs") ? U_SPIFFS : U_FLASH;
-      Serial.printf("Update Start: %s\n", filename.c_str());
-      player.sendCommand({PR_STOP, 0});
-      display.putRequest(NEWMODE, UPDATING);
-      if (!Update.begin(UPDATE_SIZE_UNKNOWN, target)) {
-        Update.printError(Serial);
-        request->send(200, "text/html", updateError());
-      }
-    }
-    if (!Update.hasError()) {
-      if (Update.write(data, len) != len) {
-        Update.printError(Serial);
-        request->send(200, "text/html", updateError());
-      }
-    }
-    if (final) {
-      if (Update.end(true)) {
-        Serial.printf("Update Success: %uB\n", index + len);
-      } else {
-        Update.printError(Serial);
-        request->send(200, "text/html", updateError());
-      }
-    }
+    handleWebUpdateUpload(request, filename, index, data, len, final);
   }else{ // "/webboard"
     DBGVB("File: %s, size:%u bytes, index: %u, final: %s\n", filename.c_str(), len, index, final?"true":"false");
     if (!index) {
@@ -601,11 +847,29 @@ void handleNotFound(AsyncWebServerRequest * request) {
       }
       return;
     }
-    if(request->url()=="/update"){ // <--upload firmware
-      shouldReboot = !Update.hasError();
-      AsyncWebServerResponse *response = request->beginResponse(200, "text/plain", shouldReboot ? "OK" : updateError());
+    if(request->url()=="/update"){
+#if defined(HTTP_USER) && defined(HTTP_PASS)
+      if (network.status == CONNECTED && !request->authenticate(HTTP_USER, HTTP_PASS)) {
+        activeUpdateRequest = nullptr;
+        request->requestAuthentication();
+        return;
+      }
+#endif
+      WebUpdateSession* session = static_cast<WebUpdateSession*>(request->_tempObject);
+      const bool success = session && session->finished && !session->error;
+      shouldReboot = success;
+      if (success) webUpdateRebootAt = millis() + 1500;
+      const char* message = success ? "OK" :
+          (session && session->error ? session->error : "No valid update image received");
+      AsyncWebServerResponse *response = request->beginResponse(
+          success ? 200 : 400, "text/plain", message);
       response->addHeader("Connection", "close");
+      response->addHeader("Cache-Control", "no-store");
       request->send(response);
+      if (!success && activeUpdateRequest == request) {
+        Update.abort();
+        activeUpdateRequest = nullptr;
+      }
       return;
     }
   }// if (request->method() == HTTP_POST)
@@ -615,7 +879,7 @@ void handleNotFound(AsyncWebServerRequest * request) {
     return;
   }
   if (request->url() == "/variables.js") {
-    sprintf (netserver.nsBuf, "var voxOneVersion='%s';\nvar yoRadioVersion='%s';\nvar yoVersion=voxOneVersion;\nvar formAction='%s';\nvar playMode='%s';\n", VOXONE_VERSION, YOVERSION, (network.status == CONNECTED && !config.emptyFS)?"webboard":"", (network.status == CONNECTED)?"player":"ap");
+    sprintf (netserver.nsBuf, "var voxOneVersion='%s';\nvar yoRadioVersion='%s';\nvar yoVersion=voxOneVersion;\nvar voxOneProfile='%s';\nvar formAction='%s';\nvar playMode='%s';\n", VOXONE_VERSION, YOVERSION, VOXONE_PROFILE_NAME, (network.status == CONNECTED && !config.emptyFS)?"webboard":"", (network.status == CONNECTED)?"player":"ap");
     request->send(200, "text/html", netserver.nsBuf);
     return;
   }

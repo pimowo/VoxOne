@@ -102,6 +102,7 @@ void Config::init() {
     return;
   }
   BOOTLOG("SPIFFS mounted");
+  if (!restoreWebUpdateData()) Serial.println("##[ERROR]# Web Update data restore incomplete");
   emptyFS = _isFSempty();
   if(emptyFS) BOOTLOG("SPIFFS is empty!");
   ssidsCount = 0;

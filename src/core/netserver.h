@@ -129,6 +129,7 @@ class NetServer {
     int _readPlaylistLine(File &file, char * line, size_t size);
 };
 
+bool restoreWebUpdateData();
 extern NetServer netserver;
 extern AsyncWebSocket websocket;
 
