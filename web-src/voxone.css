@@ -1,0 +1,39 @@
+:root{color-scheme:dark;--bg:#0b121b;--panel:#151f2b;--panel-2:#1b2937;--line:#314456;--text:#edf5fa;--muted:#a2b5c5;--cyan:#71d8e8;--cyan-dark:#173f4b}
+*{box-sizing:border-box}
+html{scroll-behavior:smooth}
+body{margin:0;background:var(--bg);color:var(--text);font:16px/1.5 system-ui,-apple-system,"Segoe UI",sans-serif}
+button,a{font:inherit}
+.shell{width:min(840px,calc(100% - 40px));margin:auto}
+.topbar{display:flex;justify-content:space-between;align-items:center;gap:20px;padding:30px 0 24px;border-bottom:1px solid var(--line)}
+.brand{display:flex;align-items:center;gap:14px;min-width:0}.brand img{display:block;flex:none;border-radius:12px}
+h1,h2,h3,p{margin-top:0}h1{font-size:26px;line-height:1.1;margin:2px 0 0;letter-spacing:.01em}h2{font-size:25px;line-height:1.2;margin:3px 0 0}h3{font-size:18px;margin:0 0 16px}
+.eyebrow{color:var(--cyan);font-size:11px;font-weight:750;letter-spacing:.15em;margin:0}
+.identity{display:flex;align-items:flex-end;flex-direction:column;gap:6px;color:var(--muted);font-size:13px;white-space:nowrap}
+.profile,.badge{border:1px solid var(--line);background:var(--panel-2);border-radius:999px;padding:4px 11px;color:var(--text);font-size:12px}
+.tabs{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px;margin:20px 0 28px}
+.tabs a{display:block;min-height:46px;padding:10px 8px;text-align:center;text-decoration:none;color:var(--muted);border:1px solid var(--line);border-radius:10px;background:var(--panel)}
+.tabs a:hover{color:var(--text);border-color:var(--cyan)}
+.tabs a[aria-current=page]{color:var(--cyan);background:var(--cyan-dark);border-color:var(--cyan)}
+a:focus-visible,button:focus-visible{outline:2px solid var(--cyan);outline-offset:3px}
+.section-heading{display:flex;align-items:end;justify-content:space-between;gap:12px;margin:0 0 16px}
+.section-heading .badge{white-space:nowrap}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:15px;padding:22px;margin:0 0 14px;min-width:0}
+.hero{padding:26px}.hero h3{font-size:31px;line-height:1.12;margin:8px 0 8px;overflow-wrap:anywhere}
+.label{font-size:11px;font-weight:750;letter-spacing:.14em;color:var(--muted)}
+.track{font-size:17px;margin:0 0 12px;overflow-wrap:anywhere}.separator{color:var(--cyan)}
+.hint{font-size:13px;color:var(--muted);margin:12px 0 0}
+.muted{color:var(--muted)}
+.transport{display:flex;justify-content:center;gap:12px;margin-top:27px}
+button{min-height:46px;border:1px solid var(--line);border-radius:10px;color:var(--text);background:var(--panel-2);padding:10px 16px;font-weight:650}
+.transport button{min-width:60px;font-size:24px;line-height:1}.transport .primary{background:var(--cyan-dark);border-color:var(--cyan)}
+button:disabled{opacity:.48;cursor:not-allowed}
+.grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px}.grid .card{margin:0 0 14px}
+.facts{margin:0}.facts div{display:flex;justify-content:space-between;gap:15px;border-top:1px solid var(--line);padding:10px 0}.facts div:first-child{border-top:0;padding-top:0}.facts dt{color:var(--muted)}.facts dd{margin:0;text-align:right;overflow-wrap:anywhere}
+.volume{font-size:36px;font-weight:700;line-height:1.1}.volume .muted{font-size:15px;font-weight:400}
+.meter{height:8px;background:var(--panel-2);border-radius:99px;margin-top:16px}.meter span{display:block;width:0;height:100%;background:var(--cyan);border-radius:inherit}
+.placeholder-row{display:flex;align-items:center;gap:14px;padding:14px;border:1px dashed var(--line);border-radius:10px;color:var(--muted)}.placeholder-row span:nth-child(1){flex:1;color:var(--text)}.placeholder-tag{font-size:12px}
+.quiet-link{display:inline-block;color:var(--cyan);margin-top:12px;text-decoration:none}.quiet-link:hover{text-decoration:underline}
+footer{color:var(--muted);font-size:12px;text-align:center;border-top:1px solid var(--line);padding:20px 0 30px;margin-top:28px}
+[hidden]{display:none!important}
+@media(max-width:640px){.shell{width:min(100% - 24px,560px)}.topbar{padding:20px 0;align-items:flex-start}.identity{font-size:12px}.grid{grid-template-columns:1fr}.grid .card{margin-bottom:14px}.hero h3{font-size:27px}}
+@media(max-width:420px){.topbar{flex-wrap:wrap;gap:12px}.identity{width:100%;flex-direction:row;align-items:center;justify-content:space-between}.tabs{gap:5px;margin:15px 0 24px}.tabs a{font-size:13px;padding:11px 3px}.card,.hero{padding:17px}.section-heading{align-items:flex-start;flex-direction:column}.section-heading .badge{margin-top:2px}.transport button{min-width:56px}.facts div{gap:8px}}

@@ -208,6 +208,8 @@ bool NetServer::begin(bool quiet) {
   webserver.onNotFound(handleNotFound);
   webserver.onFileUpload(handleUpload);
 
+  // Preview HTML must revalidate after a SPIFFS update; legacy WWW keeps its cache policy.
+  webserver.serveStatic("/voxone.html", SPIFFS, "/www/voxone.html").setCacheControl("no-cache, max-age=0, must-revalidate");
   webserver.serveStatic("/", SPIFFS, "/www/").setCacheControl("max-age=31536000");
 #ifdef CORS_DEBUG
   DefaultHeaders::Instance().addHeader(F("Access-Control-Allow-Origin"), F("*"));
@@ -812,6 +814,12 @@ void handleNotFound(AsyncWebServerRequest * request) {
     }
 #endif
   if(request->url()=="/emergency") { request->send_P(200, "text/html", emergency_form); return; }
+  if (request->method() == HTTP_GET && request->url() == "/legacy.html") {
+    AsyncWebServerResponse *response = request->beginResponse_P(200, "text/html", index_html);
+    response->addHeader("Cache-Control", "max-age=31536000");
+    request->send(response);
+    return;
+  }
   if(request->method() == HTTP_POST && request->url()=="/webboard" && config.emptyFS) { request->redirect("/"); ESP.restart(); return; }
   if (request->method() == HTTP_GET) {
     DBGVB("[%s] client ip=%s request of %s", __func__, config.ipToStr(request->client()->remoteIP()), request->url().c_str());
@@ -927,10 +935,7 @@ void handleIndex(AsyncWebServerRequest * request) {
 #endif
   if (strcmp(request->url().c_str(), "/") == 0 && request->params() == 0) {
     if(network.status == CONNECTED) {
-      AsyncWebServerResponse *response = request->beginResponse_P(200, "text/html", index_html);
-      response->addHeader("Cache-Control","max-age=31536000");
-      request->send(response);
-      //request->send_P(200, "text/html", index_html); 
+      request->redirect("/voxone.html");
     } else request->redirect("/settings.html");
     return;
   }

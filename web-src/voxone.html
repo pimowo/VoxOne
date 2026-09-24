@@ -1,0 +1,72 @@
+<!doctype html>
+<html lang="pl">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#0b121b">
+  <title>VoxOne — podgląd WWW</title>
+  <link rel="icon" type="image/svg+xml" href="/voxone-logo.svg?v={voxone-logo.svg-hash}">
+  <link rel="stylesheet" href="/voxone.css?v={voxone.css-hash}">
+  <script src="/variables.js"></script>
+  <script src="/voxone.js?v={voxone.js-hash}" defer></script>
+</head>
+<body>
+  <div class="shell">
+    <header class="topbar">
+      <div class="brand">
+        <img src="/voxone-logo.svg?v={voxone-logo.svg-hash}" alt="" width="48" height="48">
+        <div><p class="eyebrow">RADIO INTERNETOWE</p><h1>VoxOne</h1></div>
+      </div>
+      <div class="identity"><span id="header-version">VoxOne —</span><span id="header-profile" class="profile">Profil —</span></div>
+    </header>
+
+    <nav class="tabs" aria-label="Główna nawigacja">
+      <a href="#status" data-tab="status" aria-current="page">Status</a>
+      <a href="#stations" data-tab="stations">Stacje</a>
+      <a href="#settings" data-tab="settings">Ustawienia</a>
+      <a href="#system" data-tab="system">System</a>
+    </nav>
+
+    <main id="main">
+      <section id="status" data-panel aria-labelledby="status-title">
+        <div class="section-heading"><div><p class="eyebrow">TERAZ GRA</p><h2 id="status-title">Status radia</h2></div><span class="badge">Podgląd interfejsu</span></div>
+        <article class="card hero">
+          <span class="label">STACJA</span><h3 id="station-name">Nazwa stacji</h3>
+          <p class="track"><span id="artist">Artysta</span><span class="separator"> · </span><span id="track">Tytuł utworu</span></p>
+          <p class="hint">Dane odtwarzania zostaną podłączone w WEB-1B.</p>
+          <div class="transport" aria-label="Sterowanie odtwarzaniem — jeszcze niedostępne">
+            <button type="button" disabled aria-label="Poprzednia stacja">‹‹</button>
+            <button type="button" disabled class="primary" aria-label="Odtwarzaj lub pauza">▶</button>
+            <button type="button" disabled aria-label="Następna stacja">››</button>
+          </div>
+        </article>
+        <div class="grid">
+          <article class="card"><h3>Sygnał i źródło</h3><dl class="facts"><div><dt>Źródło</dt><dd id="source">—</dd></div><div><dt>Kodek / bitrate</dt><dd id="codec">—</dd></div><div><dt>Wi-Fi RSSI</dt><dd id="rssi">—</dd></div></dl></article>
+          <article class="card"><h3>Głośność</h3><div class="volume"><span id="volume">—</span><span class="muted">/ 100</span></div><div class="meter" aria-hidden="true"><span></span></div><p class="hint">Sterowanie głośnością będzie dostępne w WEB-1B.</p></article>
+        </div>
+      </section>
+
+      <section id="stations" data-panel aria-labelledby="stations-title" hidden>
+        <div class="section-heading"><div><p class="eyebrow">BIBLIOTEKA</p><h2 id="stations-title">Stacje</h2></div><span class="badge">W przygotowaniu</span></div>
+        <article class="card"><h3>Lista stacji</h3><p class="muted">Tu pojawią się zapisane stacje i wybór odtwarzania.</p><div class="placeholder-row">01 <span>Stacja przykładowa</span><span class="placeholder-tag">Podgląd</span></div></article>
+        <article class="card"><h3>Dodaj lub edytuj stację</h3><p class="muted">Formularz zarządzania stacjami zostanie podłączony do istniejącego backendu w WEB-1B.</p><button type="button" disabled>Dodaj stację</button></article>
+      </section>
+
+      <section id="settings" data-panel aria-labelledby="settings-title" hidden>
+        <div class="section-heading"><div><p class="eyebrow">KONFIGURACJA</p><h2 id="settings-title">Ustawienia</h2></div><span class="badge">W przygotowaniu</span></div>
+        <div class="grid">
+          <article class="card"><h3>Sieć</h3><dl class="facts"><div><dt>Hostname</dt><dd>—</dd></div><div><dt>Wi-Fi</dt><dd>—</dd></div></dl><p class="hint">Pola tylko poglądowe.</p></article>
+          <article class="card"><h3>Sen</h3><dl class="facts"><div><dt>Timer wyłączenia</dt><dd>—</dd></div></dl><p class="hint">Konfiguracja w kolejnym etapie.</p></article>
+        </div>
+      </section>
+
+      <section id="system" data-panel aria-labelledby="system-title" hidden>
+        <div class="section-heading"><div><p class="eyebrow">URZĄDZENIE</p><h2 id="system-title">System</h2></div><span class="badge">Podgląd</span></div>
+        <article class="card"><h3>Oprogramowanie</h3><dl class="facts"><div><dt>Firmware</dt><dd id="system-version">VoxOne —</dd></div><div><dt>Profil</dt><dd id="system-profile">—</dd></div><div><dt>Baza</dt><dd id="system-base">yoRadio —</dd></div></dl></article>
+        <div class="grid"><article class="card"><h3>Informacje systemowe</h3><p class="muted">Uptime, pamięć i status urządzenia pojawią się w WEB-1B.</p></article><article class="card"><h3>Aktualizacja</h3><p class="muted">Panel aktualizacji pojawi się później. Obecny Web Update pozostaje dostępny osobno.</p><a class="quiet-link" href="/update.html">Otwórz obecny Web Update ↗</a></article></div>
+      </section>
+    </main>
+    <footer>VoxOne · podgląd nowego interfejsu · funkcje oznaczone jako niedostępne nie sterują urządzeniem</footer>
+  </div>
+</body>
+</html>
