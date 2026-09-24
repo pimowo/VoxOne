@@ -1,7 +1,7 @@
-#ifndef YOVOXONE_PROFILE_CHECKS_H
-#define YOVOXONE_PROFILE_CHECKS_H
+#ifndef VOXONE_PROFILE_CHECKS_H
+#define VOXONE_PROFILE_CHECKS_H
 
-namespace yovoxone {
+namespace voxone {
 namespace profile_checks {
 
 constexpr bool displayMatchesLegacy(Display display, int dspModel) {
@@ -36,7 +36,7 @@ static_assert(!activeProfile.capabilities.hasLocalUi ||
 static_assert(activeProfile.capabilities.hasVu == displaySupportsVu(activeProfile.display),
               "Profile capability hasVu does not match the selected display VU configuration");
 
-#if defined(YOVOXONE_PROFILE_SALON_DSP)
+#if defined(VOXONE_PROFILE_SALON_DSP)
 static_assert(activeProfile.capabilities.hasTda7719,
               "SALON_DSP profile requires hasTda7719=true");
 #else
@@ -62,6 +62,6 @@ static_assert(activeProfile.mcu == Mcu::Esp32,
 #endif
 
 }  // namespace profile_checks
-}  // namespace yovoxone
+}  // namespace voxone
 
 #endif

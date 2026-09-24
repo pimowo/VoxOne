@@ -1,20 +1,20 @@
-#ifndef YOVOXONE_PROFILE_DESK_H
-#define YOVOXONE_PROFILE_DESK_H
+#ifndef VOXONE_PROFILE_DESK_H
+#define VOXONE_PROFILE_DESK_H
 
-#define YOVOXONE_PROFILE_NAME "desk"
-#define YOVOXONE_PROFILE_MCU yovoxone::Mcu::Esp32
-#define YOVOXONE_PROFILE_DISPLAY yovoxone::Display::St7789_284x76
-#define YOVOXONE_PROFILE_AUDIO yovoxone::AudioOutput::Pcm5102a
+#define VOXONE_PROFILE_NAME "desk"
+#define VOXONE_PROFILE_MCU voxone::Mcu::Esp32
+#define VOXONE_PROFILE_DISPLAY voxone::Display::St7789_284x76
+#define VOXONE_PROFILE_AUDIO voxone::AudioOutput::Pcm5102a
 
-#define YOVOXONE_HAS_DISPLAY 1
-#define YOVOXONE_HAS_ENCODER 1
-#define YOVOXONE_HAS_VU 0
-#define YOVOXONE_HAS_BT 0
-#define YOVOXONE_HAS_AUX 0
-#define YOVOXONE_HAS_SPDIF 0
-#define YOVOXONE_HAS_TDA7719 false
-#define YOVOXONE_HAS_LOCAL_UI 1
-#define YOVOXONE_PIN_MAP_COMPLETE 1
+#define VOXONE_HAS_DISPLAY 1
+#define VOXONE_HAS_ENCODER 1
+#define VOXONE_HAS_VU 0
+#define VOXONE_HAS_BT 0
+#define VOXONE_HAS_AUX 0
+#define VOXONE_HAS_SPDIF 0
+#define VOXONE_HAS_TDA7719 false
+#define VOXONE_HAS_LOCAL_UI 1
+#define VOXONE_PIN_MAP_COMPLETE 1
 
 // Existing, physically verified YV-M1 DESK pin map.
 #define DSP_MODEL DSP_ST7789_76

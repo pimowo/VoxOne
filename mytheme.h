@@ -1,5 +1,5 @@
-#ifndef YOVOXONE_THEME_H
-#define YOVOXONE_THEME_H
+#ifndef VOXONE_THEME_H
+#define VOXONE_THEME_H
 
 // Exact RGB palette from reference/VoxOne/src/ui/DisplayService.cpp.
 #define COLOR_BACKGROUND          6,   8,  12  // kColorBackground

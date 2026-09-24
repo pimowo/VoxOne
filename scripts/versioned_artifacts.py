@@ -13,7 +13,7 @@ from SCons.Script import COMMAND_LINE_TARGETS
 PROJECT_DIR = Path(env.subst("$PROJECT_DIR"))
 VERSION_HEADER = PROJECT_DIR / "src" / "core" / "version.h"
 VERSION_PATTERN = re.compile(
-    r'^\s*#define\s+YOVOXONE_VERSION\s+"(\d+\.\d+\.\d+)"\s*$',
+    r'^\s*#define\s+VOXONE_VERSION\s+"(\d+\.\d+\.\d+)"\s*$',
     re.MULTILINE,
 )
 
@@ -22,7 +22,7 @@ def read_product_version():
     match = VERSION_PATTERN.search(VERSION_HEADER.read_text(encoding="utf-8"))
     if not match:
         raise RuntimeError(
-            "YOVOXONE_VERSION must be a SemVer value in src/core/version.h"
+            "VOXONE_VERSION must be a SemVer value in src/core/version.h"
         )
     return match.group(1)
 
@@ -31,14 +31,14 @@ PRODUCT_VERSION = read_product_version()
 BUILD_DIR = Path(env.subst("$BUILD_DIR"))
 FIRMWARE_IMAGE = BUILD_DIR / f"{env.subst('$PROGNAME')}.bin"
 SPIFFS_IMAGE = BUILD_DIR / "spiffs.bin"
-FULL_IMAGE = BUILD_DIR / f"yoVoxOne-{PRODUCT_VERSION}-full.bin"
+FULL_IMAGE = BUILD_DIR / f"VoxOne-{PRODUCT_VERSION}-full.bin"
 
 
 def versioned_copy_action(artifact_name):
     def copy_versioned_artifact(target, source, env):
         source_path = Path(str(target[0]))
         destination = source_path.with_name(
-            f"yoVoxOne-{PRODUCT_VERSION}-{artifact_name}.bin"
+            f"VoxOne-{PRODUCT_VERSION}-{artifact_name}.bin"
         )
         shutil.copy2(source_path, destination)
         print(f"Versioned artifact: {destination}")
@@ -138,11 +138,11 @@ def build_full_image(target, source, env):
 
     shutil.copy2(
         FIRMWARE_IMAGE,
-        BUILD_DIR / f"yoVoxOne-{PRODUCT_VERSION}-firmware.bin",
+        BUILD_DIR / f"VoxOne-{PRODUCT_VERSION}-firmware.bin",
     )
     shutil.copy2(
         SPIFFS_IMAGE,
-        BUILD_DIR / f"yoVoxOne-{PRODUCT_VERSION}-spiffs.bin",
+        BUILD_DIR / f"VoxOne-{PRODUCT_VERSION}-spiffs.bin",
     )
     print(
         f"Full flash image: {output}, {len(full_data)} bytes, "

@@ -49,7 +49,7 @@ input[type=text],input[type=password]{width:170px;background:#272727;color:#e3d2
 <script>
 document.wifiform.action = `/${formAction}`;
 if(playMode=='player') document.getElementById("wupload").classList.add("hidden");
-document.getElementById("version").innerHTML=` | yoVoxOne ${yoVoxOneVersion} | based on yoRadio ${yoRadioVersion}`;
+document.getElementById("version").innerHTML=` | VoxOne ${voxOneVersion} | based on yoRadio ${yoRadioVersion}`;
 </script>
 </html>
 )";

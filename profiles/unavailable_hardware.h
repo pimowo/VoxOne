@@ -1,5 +1,5 @@
-#ifndef YOVOXONE_UNAVAILABLE_HARDWARE_H
-#define YOVOXONE_UNAVAILABLE_HARDWARE_H
+#ifndef VOXONE_UNAVAILABLE_HARDWARE_H
+#define VOXONE_UNAVAILABLE_HARDWARE_H
 
 // Disable optional yoRadio hardware unless the selected profile defines it.
 #ifndef TFT_CS

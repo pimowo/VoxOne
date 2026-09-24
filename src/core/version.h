@@ -1,3 +1,3 @@
 #pragma once
 
-#define YOVOXONE_VERSION "0.2.0"
+#define VOXONE_VERSION "0.2.0"

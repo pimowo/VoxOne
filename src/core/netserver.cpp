@@ -573,7 +573,7 @@ void handleNotFound(AsyncWebServerRequest * request) {
     return;
   }
   if (request->url() == "/variables.js") {
-    sprintf (netserver.nsBuf, "var yoVoxOneVersion='%s';\nvar yoRadioVersion='%s';\nvar yoVersion=yoVoxOneVersion;\nvar formAction='%s';\nvar playMode='%s';\n", YOVOXONE_VERSION, YOVERSION, (network.status == CONNECTED && !config.emptyFS)?"webboard":"", (network.status == CONNECTED)?"player":"ap");
+    sprintf (netserver.nsBuf, "var voxOneVersion='%s';\nvar yoRadioVersion='%s';\nvar yoVersion=voxOneVersion;\nvar formAction='%s';\nvar playMode='%s';\n", VOXONE_VERSION, YOVERSION, (network.status == CONNECTED && !config.emptyFS)?"webboard":"", (network.status == CONNECTED)?"player":"ap");
     request->send(200, "text/html", netserver.nsBuf);
     return;
   }

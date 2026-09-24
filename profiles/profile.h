@@ -1,7 +1,7 @@
-#ifndef YOVOXONE_PROFILE_H
-#define YOVOXONE_PROFILE_H
+#ifndef VOXONE_PROFILE_H
+#define VOXONE_PROFILE_H
 
-namespace yovoxone {
+namespace voxone {
 
 enum class Mcu {
   Esp32,
@@ -38,53 +38,53 @@ struct HardwareProfile {
   bool pinMapComplete;
 };
 
-}  // namespace yovoxone
+}  // namespace voxone
 
-#if (defined(YOVOXONE_PROFILE_DESK) + defined(YOVOXONE_PROFILE_DIN) + \
-     defined(YOVOXONE_PROFILE_SALON) + defined(YOVOXONE_PROFILE_SALON_DSP)) != 1
-#error "Select exactly one yoVoxOne hardware profile"
+#if (defined(VOXONE_PROFILE_DESK) + defined(VOXONE_PROFILE_DIN) + \
+     defined(VOXONE_PROFILE_SALON) + defined(VOXONE_PROFILE_SALON_DSP)) != 1
+#error "Select exactly one VoxOne hardware profile"
 #endif
 
-#if defined(YOVOXONE_PROFILE_DESK)
+#if defined(VOXONE_PROFILE_DESK)
 #include "desk.h"
-#elif defined(YOVOXONE_PROFILE_DIN)
+#elif defined(VOXONE_PROFILE_DIN)
 #include "din.h"
-#elif defined(YOVOXONE_PROFILE_SALON)
+#elif defined(VOXONE_PROFILE_SALON)
 #include "salon.h"
-#elif defined(YOVOXONE_PROFILE_SALON_DSP)
+#elif defined(VOXONE_PROFILE_SALON_DSP)
 #include "salon_dsp.h"
 #endif
 
 #include "unavailable_hardware.h"
 
-namespace yovoxone {
+namespace voxone {
 
 static constexpr HardwareProfile activeProfile = {
-  YOVOXONE_PROFILE_NAME,
-  YOVOXONE_PROFILE_MCU,
-  YOVOXONE_PROFILE_DISPLAY,
-  YOVOXONE_PROFILE_AUDIO,
+  VOXONE_PROFILE_NAME,
+  VOXONE_PROFILE_MCU,
+  VOXONE_PROFILE_DISPLAY,
+  VOXONE_PROFILE_AUDIO,
   {
-    YOVOXONE_HAS_DISPLAY,
-    YOVOXONE_HAS_ENCODER,
-    YOVOXONE_HAS_VU,
-    YOVOXONE_HAS_BT,
-    YOVOXONE_HAS_AUX,
-    YOVOXONE_HAS_SPDIF,
-    YOVOXONE_HAS_TDA7719,
-    YOVOXONE_HAS_LOCAL_UI
+    VOXONE_HAS_DISPLAY,
+    VOXONE_HAS_ENCODER,
+    VOXONE_HAS_VU,
+    VOXONE_HAS_BT,
+    VOXONE_HAS_AUX,
+    VOXONE_HAS_SPDIF,
+    VOXONE_HAS_TDA7719,
+    VOXONE_HAS_LOCAL_UI
   },
-  YOVOXONE_PIN_MAP_COMPLETE
+  VOXONE_PIN_MAP_COMPLETE
 };
 
-}  // namespace yovoxone
+}  // namespace voxone
 
-#if !YOVOXONE_PIN_MAP_COMPLETE
-  #if defined(YOVOXONE_PROFILE_DIN)
+#if !VOXONE_PIN_MAP_COMPLETE
+  #if defined(VOXONE_PROFILE_DIN)
     #error "DIN profile is not buildable: PCM5102A I2S pin map is not documented"
-  #elif defined(YOVOXONE_PROFILE_SALON)
+  #elif defined(VOXONE_PROFILE_SALON)
     #error "SALON profile is not buildable: ST7796S, encoder and PCM5102A pin maps are not documented"
-  #elif defined(YOVOXONE_PROFILE_SALON_DSP)
+  #elif defined(VOXONE_PROFILE_SALON_DSP)
     #error "SALON_DSP profile is not buildable: ST7796S, encoder, PCM5102A and TDA7719 pin maps are not documented"
   #endif
 #endif
