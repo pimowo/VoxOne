@@ -290,18 +290,23 @@ void Player::browseUrl(){
 
 void Player::prev() {
   uint16_t lastStation = config.lastStation();
+  const uint16_t count = config.playlistLength();
+  if (count == 0) return;
   if(config.getMode()==PM_WEB || !config.store.sdsnuffle){
-    if (lastStation == 1) config.lastStation(config.playlistLength()); else config.lastStation(lastStation-1);
+    if (lastStation <= 1) config.lastStation(count); else config.lastStation(lastStation-1);
   }
   sendCommand({PR_PLAY, config.lastStation()});
 }
 
 void Player::next() {
   uint16_t lastStation = config.lastStation();
+  const uint16_t count = config.playlistLength();
+  if (count == 0) return;
   if(config.getMode()==PM_WEB || !config.store.sdsnuffle){
-    if (lastStation == config.playlistLength()) config.lastStation(1); else config.lastStation(lastStation+1);
+    if (lastStation == 0 || lastStation >= count) config.lastStation(1);
+    else config.lastStation(lastStation+1);
   }else{
-    config.lastStation(random(1, config.playlistLength()));
+    config.lastStation(random(1, count));
   }
   sendCommand({PR_PLAY, config.lastStation()});
 }
@@ -310,7 +315,9 @@ void Player::toggle() {
   if (_status == PLAYING) {
     sendCommand({PR_STOP, 0});
   } else {
-    sendCommand({PR_PLAY, config.lastStation()});
+    const uint16_t selected = config.lastStation();
+    if (selected == 0 && config.playlistLength() == 0) return;
+    sendCommand({PR_PLAY, selected == 0 ? 1 : selected});
   }
 }
 

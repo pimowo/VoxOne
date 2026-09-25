@@ -6,7 +6,10 @@
 #include <esp_partition.h>
 #include <nvs.h>
 #include <memory>
+#include <algorithm>
 #include "config.h"
+#include "playlist_store.h"
+#include "playlist_mapping.h"
 #include "netserver.h"
 #include "player.h"
 #include "serialcli.h"
@@ -57,6 +60,8 @@ AsyncWebSocket websocket("/ws");
 
 void handleUpload(AsyncWebServerRequest *request, String filename, size_t index, uint8_t *data, size_t len, bool final);
 void handleStationsRead(AsyncWebServerRequest *request);
+void handleStationsReadSnapshot(AsyncWebServerRequest *request);
+void handleStationsMutation(AsyncWebServerRequest *request);
 void handleIndex(AsyncWebServerRequest * request);
 void handleNotFound(AsyncWebServerRequest * request);
 void onWsEvent(AsyncWebSocket *server, AsyncWebSocketClient *client, AwsEventType type, void *arg, uint8_t *data, size_t len);
@@ -207,7 +212,11 @@ bool NetServer::begin(bool quiet) {
   while(nsQueue==NULL){;}
 
   webserver.on("/", HTTP_ANY, handleIndex);
-  webserver.on("/api/stations", HTTP_GET, handleStationsRead);
+  webserver.on("/api/stations", HTTP_GET, handleStationsReadSnapshot);
+  webserver.on("/api/stations/add", HTTP_POST, handleStationsMutation);
+  webserver.on("/api/stations/edit", HTTP_POST, handleStationsMutation);
+  webserver.on("/api/stations/delete", HTTP_POST, handleStationsMutation);
+  webserver.on("/api/stations/reorder", HTTP_POST, handleStationsMutation);
   webserver.onNotFound(handleNotFound);
   webserver.onFileUpload(handleUpload);
 
@@ -498,6 +507,236 @@ void handleStationsRead(AsyncWebServerRequest *request) {
   response->addHeader("Cache-Control", "no-store");
   request->send(response);
 }
+void handleStationsReadSnapshot(AsyncWebServerRequest *request) {
+  PlaylistGuard guard;
+  std::vector<PlaylistRow> rows;
+  String revision;
+  if (!guard || !playlistStore.snapshot(rows, revision)) {
+    AsyncWebServerResponse* error = request->beginResponse(
+        500, "application/json; charset=utf-8", "{\"error\":\"playlist_read_failed\"}");
+    error->addHeader("Cache-Control", "no-store");
+    request->send(error);
+    return;
+  }
+  const uint16_t selected = config.lastStation();
+  const uint16_t current = selected <= rows.size() ? selected : 0;
+  size_t capacity = 80 + rows.size() * 70;
+  for (const PlaylistRow& row : rows)
+    capacity += 6 * (row.name.length() + row.url.length());
+  String body;
+  if (capacity > ESP.getFreeHeap() / 2 || !body.reserve(capacity)) {
+    AsyncWebServerResponse* error = request->beginResponse(
+        500, "application/json; charset=utf-8", "{\"error\":\"playlist_read_failed\"}");
+    error->addHeader("Cache-Control", "no-store");
+    request->send(error);
+    return;
+  }
+  body = "{\"revision\":\"" + revision + "\",\"current\":" + String(current) +
+         ",\"count\":" + String(rows.size()) + ",\"stations\":[";
+  char encoded[BUFLEN * 6 + 1];
+  for (size_t i = 0; i < rows.size(); ++i) {
+    body += (i ? "," : "") + String("{\"number\":") + String(i + 1) + ",\"name\":\"";
+    size_t used = 0;
+    if (!appendJsonEscaped(encoded, sizeof(encoded), used, rows[i].name.c_str())) return;
+    body += encoded;
+    body += "\",\"url\":\"";
+    used = 0;
+    if (!appendJsonEscaped(encoded, sizeof(encoded), used, rows[i].url.c_str())) return;
+    body += encoded;
+    body += "\",\"ovol\":" + String(rows[i].ovol) + "}";
+  }
+  body += "]}";
+  AsyncWebServerResponse* response = request->beginResponse(
+      200, "application/json; charset=utf-8", body);
+  response->addHeader("Cache-Control", "no-store");
+  request->send(response);
+}
+
+static void stationsReply(AsyncWebServerRequest* request, int code, const String& body) {
+  AsyncWebServerResponse* response = request->beginResponse(
+      code, "application/json; charset=utf-8", body);
+  response->addHeader("Cache-Control", "no-store");
+  request->send(response);
+}
+
+static void stationsError(AsyncWebServerRequest* request, int code, const char* error) {
+  stationsReply(request, code, String("{\"error\":\"") + error + "\"}");
+}
+
+static bool stationNumber(const String& text, uint16_t& number) {
+  if (!text.length() || text.length() > 5) return false;
+  uint32_t value = 0;
+  for (size_t i = 0; i < text.length(); ++i) {
+    if (text[i] < '0' || text[i] > '9') return false;
+    value = value * 10 + text[i] - '0';
+  }
+  if (value > UINT16_MAX) return false;
+  number = static_cast<uint16_t>(value);
+  return true;
+}
+
+static bool stationParam(AsyncWebServerRequest* request, const char* key, String& value) {
+  if (!request->hasParam(key, true)) return false;
+  value = request->getParam(key, true)->value();
+  return true;
+}
+
+void handleStationsMutation(AsyncWebServerRequest *request) {
+  const String route = request->url();
+  const bool add = route == "/api/stations/add";
+  const bool edit = route == "/api/stations/edit";
+  const bool remove = route == "/api/stations/delete";
+  const bool reorder = route == "/api/stations/reorder";
+  if (!add && !edit && !remove && !reorder) {
+    stationsError(request, 404, "not_found");
+    return;
+  }
+  String clientRevision;
+  if (!stationParam(request, "revision", clientRevision) || clientRevision.length() != 8) {
+    stationsError(request, 400, "bad_revision");
+    return;
+  }
+  clientRevision.toUpperCase();
+  for (char ch : clientRevision) {
+    if (!isxdigit(static_cast<unsigned char>(ch))) {
+      stationsError(request, 400, "bad_revision");
+      return;
+    }
+  }
+  PlaylistGuard guard;
+  std::vector<PlaylistRow> rows;
+  String currentRevision;
+  if (!guard || !playlistStore.recover() ||
+      !playlistStore.snapshot(rows, currentRevision)) {
+    stationsError(request, 500, "playlist_read_failed");
+    return;
+  }
+  if (clientRevision != currentRevision) {
+    stationsError(request, 409, "revision_conflict");
+    return;
+  }
+  const uint16_t oldCurrent = config.lastStation();
+  uint16_t newCurrent = oldCurrent;
+  uint16_t number = 0;
+  bool reconnect = false, stop = false, refreshCurrent = false;
+  if (config.getMode() != PM_WEB || oldCurrent > rows.size()) {
+    stationsError(request, 500, "invalid_playlist_state");
+    return;
+  }
+  if (add || edit) {
+    String name, url, ovolText;
+    if (!stationParam(request, "name", name) || !stationParam(request, "url", url) ||
+        !stationParam(request, "ovol", ovolText)) {
+      stationsError(request, 400, "missing_parameter");
+      return;
+    }
+    int ovol = 0;
+    if (!PlaylistStore::parseInteger(ovolText, ovol)) {
+      stationsError(request, 400, "bad_ovol");
+      return;
+    }
+    PlaylistRow replacement;
+    replacement.name = name;
+    replacement.url = url;
+    replacement.ovol = ovol;
+    if (!PlaylistStore::validRecord(replacement)) {
+      stationsError(request, 422, "invalid_station");
+      return;
+    }
+    if (edit) {
+      String numberText;
+      if (!stationParam(request, "number", numberText) ||
+          !stationNumber(numberText, number)) {
+        stationsError(request, 400, "bad_number");
+        return;
+      }
+      if (number == 0 || number > rows.size()) {
+        stationsError(request, 404, "station_not_found");
+        return;
+      }
+      reconnect = number == oldCurrent && rows[number - 1].url != replacement.url;
+      refreshCurrent = number == oldCurrent;
+      rows[number - 1] = replacement;
+    } else {
+      if (rows.size() >= UINT16_MAX) {
+        stationsError(request, 507, "playlist_full");
+        return;
+      }
+      rows.push_back(replacement);
+    }
+  }
+  if (remove) {
+    String numberText;
+    if (!stationParam(request, "number", numberText) ||
+        !stationNumber(numberText, number)) {
+      stationsError(request, 400, "bad_number");
+      return;
+    }
+    if (number == 0 || number > rows.size()) {
+      stationsError(request, 404, "station_not_found");
+      return;
+    }
+    rows.erase(rows.begin() + number - 1);
+    newCurrent = stationAfterDelete(oldCurrent, number, rows.size());
+    if (number == oldCurrent) {
+      reconnect = newCurrent != 0;
+      stop = newCurrent == 0;
+    }
+    refreshCurrent = number <= oldCurrent;
+  }
+  if (reorder) {
+    String fromText, toText;
+    uint16_t from = 0, to = 0;
+    if (!stationParam(request, "from", fromText) ||
+        !stationParam(request, "to", toText) ||
+        !stationNumber(fromText, from) || !stationNumber(toText, to)) {
+      stationsError(request, 400, "bad_number");
+      return;
+    }
+    if (from == 0 || to == 0 || from > rows.size() || to > rows.size()) {
+      stationsError(request, 404, "station_not_found");
+      return;
+    }
+    PlaylistRow moved = rows[from - 1];
+    rows.erase(rows.begin() + from - 1);
+    rows.insert(rows.begin() + to - 1, moved);
+    newCurrent = stationAfterMove(oldCurrent, from, to);
+    refreshCurrent = newCurrent != oldCurrent;
+  }
+  String newRevision;
+  const PlaylistWriteError result = playlistStore.commit(rows, newCurrent, newRevision);
+  if (result != PlaylistWriteError::OK) {
+    if (result == PlaylistWriteError::INVALID) stationsError(request, 422, "invalid_station");
+    else if (result == PlaylistWriteError::NO_SPACE) stationsError(request, 507, "insufficient_storage");
+    else stationsError(request, 500, "playlist_write_failed");
+    return;
+  }
+  if (edit && number == oldCurrent && !reconnect) {
+    const PlaylistRow& active = rows[number - 1];
+    const bool volumeChanged = config.station.ovol != active.ovol;
+    strlcpy(config.station.name, active.name.c_str(), sizeof(config.station.name));
+    strlcpy(config.station.url, active.url.c_str(), sizeof(config.station.url));
+    config.station.ovol = active.ovol;
+    if (volumeChanged) player.setVol(config.store.volume);
+    display.putRequest(NEWSTATION);
+  }
+  if (stop) {
+    config.station.name[0] = '\0';
+    config.station.url[0] = '\0';
+    player.sendCommand({PR_STOP, 0});
+    display.putRequest(NEWSTATION);
+    netserver.requestOnChange(STATION, 0);
+  } else if (reconnect) {
+    netserver.requestOnChange(ITEM, 0);
+    player.sendCommand({PR_PLAY, newCurrent});
+  } else if (refreshCurrent) {
+    netserver.requestOnChange(STATION, 0);
+  }
+  stationsReply(request, 200, String("{\"ok\":true,\"revision\":\"") +
+      newRevision + "\",\"current\":" + String(newCurrent) +
+      ",\"count\":" + String(rows.size()) + "}");
+}
+
 void NetServer::processQueue(){
   if(nsQueue==NULL) return;
   nsRequestParams_t request;

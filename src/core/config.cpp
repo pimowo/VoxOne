@@ -1,5 +1,6 @@
 #include "options.h"
 #include "config.h"
+#include "playlist_store.h"
 #include "display.h"
 #include "player.h"
 #include "network.h"
@@ -103,6 +104,8 @@ void Config::init() {
   }
   BOOTLOG("SPIFFS mounted");
   if (!restoreWebUpdateData()) Serial.println("##[ERROR]# Web Update data restore incomplete");
+  if (!playlistStore.begin() || !playlistStore.recover())
+    Serial.println("##[ERROR]# Playlist recovery incomplete");
   emptyFS = _isFSempty();
   if(emptyFS) BOOTLOG("SPIFFS is empty!");
   ssidsCount = 0;
@@ -275,6 +278,7 @@ void Config::configPostPlaying(uint16_t stationId){
 }
 void Config::initPlaylistMode(){
   uint16_t _lastStation = 0;
+  if(getMode()==PM_WEB && !emptyFS) initPlaylist();
   uint16_t cs = playlistLength();
   #ifdef USE_SD
     if(getMode()==PM_SDCARD){
@@ -305,9 +309,11 @@ void Config::initPlaylistMode(){
     store.play_mode=PM_WEB;
     _lastStation = store.lastStation;
   #endif
-  if(getMode()==PM_WEB && !emptyFS) initPlaylist();
+  if (getMode()==PM_WEB && cs==0) _lastStation=0;
+  else if (getMode()==PM_WEB && _lastStation>cs) _lastStation=1;
   log_i("%d" ,_lastStation);
-  if (_lastStation == 0 && cs > 0) {
+  if (_lastStation == 0 && cs > 0 &&
+      !(getMode()==PM_WEB && store._reserved==VOXONE_NO_STATION_MARKER)) {
     _lastStation = getMode()==PM_WEB?1:_randomStation();
   }
   lastStation(_lastStation);
@@ -669,6 +675,24 @@ uint8_t Config::setLastStation(uint16_t val) {
   return store.lastStation;
 }
 
+bool Config::setLastStationChecked(uint16_t val, bool intentionalZero) {
+  const uint16_t marker = val == 0 && intentionalZero ? VOXONE_NO_STATION_MARKER : 0;
+  if (store.lastStation == val && store._reserved == marker) return true;
+  const uint16_t previous = store.lastStation;
+  const uint16_t previousMarker = store._reserved;
+  store.lastStation = val;
+  store._reserved = marker;
+  EEPROM.put(getAddr(&store.lastStation), val);
+  EEPROM.put(getAddr(&store._reserved), marker);
+  if (EEPROM.commit()) return true;
+  store.lastStation = previous;
+  store._reserved = previousMarker;
+  EEPROM.put(getAddr(&store.lastStation), previous);
+  EEPROM.put(getAddr(&store._reserved), previousMarker);
+  EEPROM.commit();
+  return false;
+}
+
 uint8_t Config::setCountStation(uint16_t val) {
   saveValue(&store.countStation, val);
   return store.countStation;
@@ -697,9 +721,7 @@ void Config::setStation(const char* station) {
 
 void Config::indexPlaylist() {
   File playlist = SPIFFS.open(PLAYLIST_PATH, "r");
-  if (!playlist) {
-    return;
-  }
+  if (!playlist) return;
   int sOvol;
   File index = SPIFFS.open(INDEX_PATH, "w");
   while (playlist.available()) {
@@ -714,7 +736,8 @@ void Config::indexPlaylist() {
 
 void Config::initPlaylist() {
   //store.countStation = 0;
-  if (!SPIFFS.exists(INDEX_PATH)) indexPlaylist();
+  if (!SPIFFS.exists(INDEX_PATH) && !playlistStore.rebuildIndex())
+    Serial.println("##[ERROR]# Playlist index rebuild failed");
 
   /*if (SPIFFS.exists(INDEX_PATH)) {
     File index = SPIFFS.open(INDEX_PATH, "r");
@@ -724,6 +747,8 @@ void Config::initPlaylist() {
   }*/
 }
 uint16_t Config::playlistLength(){
+  PlaylistGuard guard;
+  if (getMode() == PM_WEB && !guard) return 0;
   uint16_t out = 0;
   if (SDPLFS()->exists(REAL_INDEX)) {
     File index = SDPLFS()->open(REAL_INDEX, "r");
@@ -733,6 +758,14 @@ uint16_t Config::playlistLength(){
   return out;
 }
 bool Config::loadStation(uint16_t ls) {
+  PlaylistGuard guard;
+  if (getMode() == PM_WEB && !guard) return false;
+  if (ls == 0 && store._reserved == VOXONE_NO_STATION_MARKER) {
+    station.name[0] = '\0';
+    station.url[0] = '\0';
+    station.ovol = 0;
+    return false;
+  }
   int sOvol;
   uint16_t cs = playlistLength();
   if (cs == 0) {
@@ -765,6 +798,11 @@ bool Config::loadStation(uint16_t ls) {
 }
 
 char * Config::stationByNum(uint16_t num){
+  PlaylistGuard guard;
+  if (getMode() == PM_WEB && !guard) {
+    _stationBuf[0] = '\0';
+    return _stationBuf;
+  }
   File playlist = SDPLFS()->open(REAL_PLAYL, "r");
   File index = SDPLFS()->open(REAL_INDEX, "r");
   index.seek((num - 1) * 4, SeekSet);

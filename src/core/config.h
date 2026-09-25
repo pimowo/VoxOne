@@ -30,6 +30,7 @@
 #endif
 
 #define CONFIG_VERSION  5
+constexpr uint16_t VOXONE_NO_STATION_MARKER = 0xC302;
 
 enum playMode_e      : uint8_t  { PM_WEB=0, PM_SDCARD=1 };
 
@@ -93,7 +94,7 @@ struct config_t
   char      sntp1[35];
   char      sntp2[35];
   uint8_t   reservedWeather[79];
-  uint16_t  _reserved;
+  uint16_t  _reserved; // VoxOne: intentional current=0 marker; EEPROM layout unchanged
   uint16_t  lastSdStation;
   bool      sdsnuffle;
   uint8_t   volsteps;
@@ -188,6 +189,7 @@ class Config {
     void setTone(int8_t bass, int8_t middle, int8_t trebble);
     void setBalance(int8_t balance);
     uint8_t setLastStation(uint16_t val);
+    bool setLastStationChecked(uint16_t val, bool intentionalZero=true);
     uint8_t setCountStation(uint16_t val);
     uint8_t setLastSSID(uint8_t val);
     void setTitle(const char* title);
@@ -213,7 +215,13 @@ class Config {
       return getMode()==PM_WEB?store.lastStation:store.lastSdStation;
     }
     void lastStation(uint16_t newstation){
-      if(getMode()==PM_WEB) saveValue(&store.lastStation, newstation);
+      if(getMode()==PM_WEB) {
+        const bool clearMarker = newstation != 0 &&
+                                 store._reserved == VOXONE_NO_STATION_MARKER;
+        if (clearMarker)
+          saveValue(&store._reserved, static_cast<uint16_t>(0), false);
+        saveValue(&store.lastStation, newstation, true, clearMarker);
+      }
       else saveValue(&store.lastSdStation, newstation);
     }
     char * stationByNum(uint16_t num);
