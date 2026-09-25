@@ -1,13 +1,13 @@
 #ifndef VOXONE_THEME_H
 #define VOXONE_THEME_H
 
-// Exact RGB palette from reference/VoxOne/src/ui/DisplayService.cpp.
+// VoxOne theme; selected colors adjusted for LCD-TEST-1.
 #define COLOR_BACKGROUND          6,   8,  12  // kColorBackground
 #define COLOR_STATION_NAME      245, 245, 245  // kColorPrimaryText
 #define COLOR_STATION_BG         18,  22,  28  // kColorSurface
 #define COLOR_STATION_FILL       18,  22,  28  // kColorSurface
-#define COLOR_SNG_TITLE_1       180, 200, 220  // kColorSecondaryText
-#define COLOR_SNG_TITLE_2       120, 170, 255  // kColorSonyBlue
+#define COLOR_SNG_TITLE_1       120, 170, 255  // LCD-TEST-1 artist
+#define COLOR_SNG_TITLE_2        90, 140, 230  // LCD-TEST-1 song
 #define COLOR_VU_MAX            120, 170, 255  // kColorSonyBlue
 #define COLOR_VU_MIN             40,  50,  65  // kColorInactive
 #define COLOR_CLOCK             245, 245, 245  // kColorPrimaryText
@@ -18,7 +18,7 @@
 #define COLOR_BUFFER             80, 160, 220  // kColorInfo
 #define COLOR_IP                180, 200, 220  // kColorSecondaryText
 #define COLOR_VOLUME_VALUE      120, 170, 255  // kColorSonyBlue
-#define COLOR_RSSI              180, 200, 220  // kColorSecondaryText
+#define COLOR_RSSI              200, 200, 200  // LCD-TEST-1 RSSI
 #define COLOR_VOLBAR_OUT         40,  50,  65  // kColorInactive
 #define COLOR_VOLBAR_IN         120, 170, 255  // kColorSonyBlue
 #define COLOR_DIGITS            120, 170, 255  // kColorSonyBlue
@@ -31,6 +31,6 @@
 #define COLOR_PLAYLIST_2         40,  90, 160  // kColorDivider
 #define COLOR_PLAYLIST_3         40,  50,  65  // kColorInactive
 #define COLOR_PLAYLIST_4         18,  22,  28  // kColorSurface
-#define COLOR_BITRATE           120, 170, 255  // kColorSonyBlue
+#define COLOR_BITRATE           180, 200, 255  // LCD-TEST-1 bitrate
 
 #endif

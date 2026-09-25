@@ -23,8 +23,9 @@
 
 /* SROLLS  */                            /* {{ left, top, fontsize, align }, buffsize, width, scrolldelay, scrolldelta, scrolltime } */
 const ScrollConfig metaConf       PROGMEM = {{ TFT_FRAMEWDT+1, TFT_FRAMEWDT+1, 2, WA_LEFT }, 140, MAX_WIDTH-2, 5000, 2, 25 };
-const ScrollConfig title1Conf     PROGMEM = {{ TFT_FRAMEWDT, 21, 1, WA_LEFT }, 140, DSP_WIDTH/2+18, 5000, 2, 25 };
-const ScrollConfig title2Conf     PROGMEM = {{ TFT_FRAMEWDT, 30, 1, WA_LEFT }, 140, DSP_WIDTH/2+18, 5000, 2, 25 };
+const ScrollConfig deskStationConf PROGMEM = {{ TFT_FRAMEWDT, 2, 2, WA_LEFT }, 140, MAX_WIDTH, 5000, 2, 25 };
+const ScrollConfig title1Conf     PROGMEM = {{ TFT_FRAMEWDT, 21, 2, WA_LEFT }, 140, MAX_WIDTH, 5000, 2, 25 };
+const ScrollConfig title2Conf     PROGMEM = {{ TFT_FRAMEWDT, 40, 2, WA_LEFT }, 140, MAX_WIDTH, 5000, 2, 25 };
 const ScrollConfig playlistConf   PROGMEM = {{ TFT_FRAMEWDT, 30, 1, WA_CENTER }, 140, MAX_WIDTH, 500, 2, 25 };
 const ScrollConfig apTitleConf    PROGMEM = {{ TFT_FRAMEWDT+1, TFT_FRAMEWDT+1, 1, WA_CENTER }, 140, MAX_WIDTH-2, 0, 2, 25 };
 const ScrollConfig apSettConf     PROGMEM = {{ TFT_FRAMEWDT, 64-7, 1, WA_LEFT }, 140, MAX_WIDTH, 0, 2, 25 };
@@ -38,7 +39,10 @@ const FillConfig  heapbarConf     PROGMEM = {{ 0, 63, 0, WA_LEFT }, DSP_WIDTH, 1
 
 /* WIDGETS  */                           /* { left, top, fontsize, align } */
 const WidgetConfig bootstrConf    PROGMEM = { 0, DSP_HEIGHT-10, 1, WA_CENTER };
-const WidgetConfig bitrateConf    PROGMEM = { TFT_FRAMEWDT+20, 64-11-10, 1, WA_LEFT };
+const WidgetConfig bitrateConf    PROGMEM = { TFT_FRAMEWDT, 64, 1, WA_LEFT };
+const WidgetConfig deskRssiConf   PROGMEM = { 174, 64, 1, WA_LEFT };
+const WidgetConfig deskVolumeConf PROGMEM = { 0, 64, 1, WA_CENTER };
+const WidgetConfig deskClockConf  PROGMEM = { TFT_FRAMEWDT, 64, 1, WA_RIGHT };
 //const WidgetConfig voltxtConf     PROGMEM = { 32, 108, 1, WA_RIGHT };
 const WidgetConfig  iptxtConf     PROGMEM = { TFT_FRAMEWDT, 64-12, 1, WA_LEFT };
 const WidgetConfig   rssiConf     PROGMEM = { TFT_FRAMEWDT, 64-11-10, 1, WA_LEFT };
@@ -68,5 +72,8 @@ const char        bitrateFmt[]    PROGMEM = "%d kBs";
 
 /* MOVES  */                             /* { left, top, width } */
 const MoveConfig    clockMove     PROGMEM = { 0, 0, -1 };
+
+const FillConfig deskStationBandConf PROGMEM = {{ 0, 0, 0, WA_LEFT }, DSP_WIDTH, 19, false };
+const FillConfig deskDividerConf     PROGMEM = {{ 0, 59, 0, WA_LEFT }, DSP_WIDTH, 1, false };
 
 #endif

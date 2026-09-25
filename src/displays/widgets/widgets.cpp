@@ -101,6 +101,19 @@ void TextWidget::_draw() {
 /************************
       SCROLL WIDGET
  ************************/
+#if DSP_MODEL==DSP_ST7789_76
+static uint8_t deskScrollFrameSlot = 2;
+
+void ScrollWidget::setDeskScrollSlot(uint8_t slot) {
+  _deskIndependentScroll = true;
+  _deskScrollSlot = slot;
+}
+
+void ScrollWidget::nextDeskScrollFrame() {
+  deskScrollFrameSlot = (deskScrollFrameSlot + 1) % 3;
+}
+#endif
+
 ScrollWidget::ScrollWidget(const char* separator, ScrollConfig conf, uint16_t fgcolor, uint16_t bgcolor) {
   init(separator, conf, fgcolor, bgcolor);
 }
@@ -206,7 +219,13 @@ void ScrollWidget::setText(const char* txt, const char *format){
 
 void ScrollWidget::loop() {
   if(_locked) return;
-  if (!_doscroll || _config.textsize == 0 || (dsp.getScrollId() != NULL && dsp.getScrollId() != this)) return;
+  if (!_doscroll || _config.textsize == 0) return;
+#if DSP_MODEL==DSP_ST7789_76
+  if (_deskIndependentScroll) {
+    if (_deskScrollSlot != deskScrollFrameSlot) return;
+  } else
+#endif
+  if (dsp.getScrollId() != NULL && dsp.getScrollId() != this) return;
   uint16_t fbl = _fb->ready()?0:_config.left;
   if (_checkDelay(_x == fbl ? _startscrolldelay : _scrolltime, _scrolldelay)) {
     _calcX();
@@ -284,8 +303,14 @@ void ScrollWidget::_calcX() {
   uint16_t fbl = _fb->ready()?0:_config.left;
   if (-_x > _textwidth + _sepwidth - fbl) {
     _x = fbl;
+#if DSP_MODEL==DSP_ST7789_76
+    if (!_deskIndependentScroll)
+#endif
     dsp.setScrollId(NULL);
   } else {
+#if DSP_MODEL==DSP_ST7789_76
+    if (!_deskIndependentScroll)
+#endif
     dsp.setScrollId(this);
   }
 }
@@ -300,6 +325,9 @@ bool ScrollWidget::_checkDelay(int m, uint32_t &tstamp) {
 }
 
 void ScrollWidget::_reset(){
+#if DSP_MODEL==DSP_ST7789_76
+  if (!_deskIndependentScroll)
+#endif
   dsp.setScrollId(NULL);
   _x = _fb->ready()?0:_config.left;
   _scrolldelay = millis();

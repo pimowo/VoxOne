@@ -166,7 +166,14 @@ void Display::_bootScreen(){
 
 void Display::_buildPager(){
   _meta->init("*", metaConf, config.theme.meta, config.theme.metabg);
+#if DSP_MODEL==DSP_ST7789_76
+  _deskStation = new ScrollWidget("*", deskStationConf, config.theme.meta, config.theme.metabg);
+  _deskStation->setDeskScrollSlot(0);
+#endif
   _title1->init("*", title1Conf, config.theme.title1, config.theme.background);
+#if DSP_MODEL==DSP_ST7789_76
+  _title1->setDeskScrollSlot(1);
+#endif
   _clock->init(clockConf, 0, 0);
   #if DSP_MODEL==DSP_NOKIA5110
     _plcurrent->init("*", playlistConf, 0, 1);
@@ -186,6 +193,9 @@ void Display::_buildPager(){
 #endif
   #ifndef HIDE_TITLE2
     _title2 = new ScrollWidget("*", title2Conf, config.theme.title2, config.theme.background);
+#if DSP_MODEL==DSP_ST7789_76
+    _title2->setDeskScrollSlot(2);
+#endif
   #endif
   #if !defined(DSP_LCD) && DSP_MODEL!=DSP_NOKIA5110
 #if DSP_MODEL==DSP_ST7789_76
@@ -221,6 +231,11 @@ void Display::_buildPager(){
   #ifndef HIDE_RSSI
     _rssi = new TextWidget(rssiConf, 20, config.theme.rssi, config.theme.background);
   #endif
+#if DSP_MODEL==DSP_ST7789_76
+  _deskRssi = new TextWidget(deskRssiConf, 16, config.theme.rssi, config.theme.background);
+  _deskVolume = new TextWidget(deskVolumeConf, 12, config.theme.vol, config.theme.background);
+  _deskClock = new TextWidget(deskClockConf, 8, config.theme.clock, config.theme.background);
+#endif
   _nums->init(numConf, 10, config.theme.digit, config.theme.background);
   
   if(_volbar)   _footer->addWidget( _volbar);
@@ -229,8 +244,13 @@ void Display::_buildPager(){
   if(_rssi)     _footer->addWidget( _rssi);
   if(_heapbar)  _footer->addWidget( _heapbar);
   
+#if DSP_MODEL==DSP_ST7789_76
+  pages[PG_PLAYER]->addWidget(new FillWidget(deskStationBandConf, config.theme.metabg));
+  pages[PG_PLAYER]->addWidget(_deskStation);
+#else
   if(_metabackground) pages[PG_PLAYER]->addWidget( _metabackground);
   pages[PG_PLAYER]->addWidget(_meta);
+#endif
   pages[PG_PLAYER]->addWidget(_title1);
   if(_title2) pages[PG_PLAYER]->addWidget(_title2);
   #if BITRATE_FULL
@@ -241,9 +261,16 @@ void Display::_buildPager(){
     pages[PG_PLAYER]->addWidget( _bitrate);
   #endif
   if(_vuwidget) pages[PG_PLAYER]->addWidget( _vuwidget);
+#if DSP_MODEL==DSP_ST7789_76
+  pages[PG_PLAYER]->addWidget(new FillWidget(deskDividerConf, config.theme.div));
+  pages[PG_PLAYER]->addWidget(_deskRssi);
+  pages[PG_PLAYER]->addWidget(_deskVolume);
+  pages[PG_PLAYER]->addWidget(_deskClock);
+#else
   pages[PG_PLAYER]->addWidget(_clock);
-  pages[PG_SCREENSAVER]->addWidget(_clock);
   pages[PG_PLAYER]->addPage(_footer);
+#endif
+  pages[PG_SCREENSAVER]->addWidget(_clock);
 
   if(_metabackground) pages[PG_DIALOG]->addWidget( _metabackground);
   pages[PG_DIALOG]->addWidget(_meta);
@@ -334,7 +361,7 @@ void Display::_start() {
 #if DSP_MODEL==DSP_ST7789_76
   if(_volip) _volip->lock();
 #endif
-  _pager->setPage( pages[PG_PLAYER]);
+  _pager->setPage(pages[PG_PLAYER]);
   _volume();
   _station();
   _time(false);
@@ -378,9 +405,12 @@ void Display::_swichMode(displayMode_e newmode) {
     #endif
     _meta->setAlign(metaConf.widget.align);
     _meta->setText(config.station.name);
+#if DSP_MODEL==DSP_ST7789_76
+    _deskStation->setText(config.station.name);
+#endif
     _nums->setText("");
     config.isScreensaver = false;
-    _pager->setPage( pages[PG_PLAYER]);
+    _pager->setPage(pages[PG_PLAYER]);
     config.setDspOn(config.store.dspon, false);
     pm.on_display_player();
   }
@@ -513,6 +543,9 @@ void Display::loop() {
     return;
   }
   if(displayQueue==NULL || _locked) return;
+#if DSP_MODEL==DSP_ST7789_76
+  if(_mode == PLAYER) ScrollWidget::nextDeskScrollFrame();
+#endif
   _pager->loop();
 #ifdef USE_NEXTION
   nextion.loop();
@@ -651,6 +684,9 @@ void Display::loop() {
 }
 
 void Display::_setRSSI(int rssi) {
+#if DSP_MODEL==DSP_ST7789_76
+  if(_deskRssi) _deskRssi->setText(rssi, "RSSI %ddBm");
+#endif
   if(!_rssi) return;
 #if RSSI_DIGIT
   _rssi->setText(rssi, rssiFmt);
@@ -669,6 +705,9 @@ void Display::_setRSSI(int rssi) {
 void Display::_station() {
   _meta->setAlign(metaConf.widget.align);
   _meta->setText(config.station.name);
+#if DSP_MODEL==DSP_ST7789_76
+  if(_deskStation) _deskStation->setText(config.station.name);
+#endif
 /*#ifdef USE_NEXTION
   nextion.newNameset(config.station.name);
   nextion.bitrate(config.station.bitrate);
@@ -727,6 +766,13 @@ void Display::_time(bool redraw) {
     _clock->moveTo({lt, ft, 0});
   }
   _clock->draw(redraw);
+#if DSP_MODEL==DSP_ST7789_76
+  if(_mode==PLAYER && _deskClock) {
+    char timeText[6];
+    strftime(timeText, sizeof(timeText), "%H:%M", &network.timeinfo);
+    _deskClock->setText(timeText);
+  }
+#endif
   /*#ifdef USE_NEXTION
     nextion.printClock(network.timeinfo);
   #endif*/
@@ -734,6 +780,9 @@ void Display::_time(bool redraw) {
 
 void Display::_volume() {
   if(_volbar) _volbar->setValue(config.store.volume);
+#if DSP_MODEL==DSP_ST7789_76
+  if(_deskVolume) _deskVolume->setText(config.store.volume, "\023 %d");
+#endif
   #ifndef HIDE_VOL
     if(_voltxt) _voltxt->setText(config.store.volume, voltxtFmt);
   #endif

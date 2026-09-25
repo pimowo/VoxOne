@@ -107,6 +107,10 @@ class ScrollWidget: public TextWidget {
     void loop();
     void setText(const char* txt);
     void setText(const char* txt, const char *format);
+#if DSP_MODEL==DSP_ST7789_76
+    void setDeskScrollSlot(uint8_t slot);
+    static void nextDeskScrollFrame();
+#endif
   private:
     char *_sep;
     char *_window;
@@ -118,6 +122,10 @@ class ScrollWidget: public TextWidget {
     uint16_t _sepwidth, _startscrolldelay;
     uint8_t _charWidth;
     psFrameBuffer* _fb=nullptr;
+#if DSP_MODEL==DSP_ST7789_76
+    bool _deskIndependentScroll = false;
+    uint8_t _deskScrollSlot = 0;
+#endif
   private:
     void _setTextParams();
     void _calcX();

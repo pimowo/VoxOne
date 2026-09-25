@@ -59,6 +59,8 @@ class Display {
     TextWidget *_bootstring, *_volip, *_voltxt, *_rssi, *_bitrate;
 #if DSP_MODEL==DSP_ST7789_76
     TextWidget *_plheader, *_plcounter, *_plplaying;
+    ScrollWidget *_deskStation;
+    TextWidget *_deskRssi, *_deskVolume, *_deskClock;
 #endif
     bool _locked = false;
     volatile bool _volumePending = false;
