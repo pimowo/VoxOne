@@ -9,6 +9,10 @@
   };
   const volumeSlider = document.getElementById("volume-slider");
   const volumeMeter = document.getElementById("volume-meter");
+  const stationList = document.getElementById("station-list");
+  const stationSearch = document.getElementById("station-search");
+  const stationClear = document.getElementById("station-search-clear");
+  const stationRetry = document.getElementById("stations-retry");
   const state = {
     connection: "connecting",
     source: null,
@@ -20,6 +24,9 @@
     volume: null,
     playing: null,
     current: null,
+    stations: [],
+    stationsStatus: "idle",
+    stationQuery: "",
     ip: null,
     profile: typeof voxOneProfile === "string" ? voxOneProfile : null,
     version: typeof voxOneVersion === "string" ? voxOneVersion : null,
@@ -53,6 +60,7 @@
       if (tab === selected) link.setAttribute("aria-current", "page");
       else link.removeAttribute("aria-current");
     }
+    if (selected === "stations" && state.stationsStatus === "idle") loadStations();
   }
 
   function renderConnection() {
@@ -68,6 +76,9 @@
     buttons.next.disabled = !connected;
     buttons.play.disabled = !connected || state.playing === null;
     volumeSlider.disabled = !connected || state.volume === null;
+    stationList.querySelectorAll(".station-play").forEach(button => {
+      button.disabled = !connected;
+    });
   }
 
   function renderStation() {
@@ -122,7 +133,120 @@
     text("system-base", "yoRadio " + (state.baseVersion || "—"));
   }
 
+  function updateCurrentMarker(previous) {
+    for (const number of [previous, state.current]) {
+      if (!Number.isInteger(number)) continue;
+      const row = stationList.querySelector('[data-station="' + number + '"]');
+      if (!row) continue;
+      const active = number === state.current;
+      row.classList.toggle("is-current", active);
+      row.querySelector(".station-playing").hidden = !active;
+      if (active) row.setAttribute("aria-current", "true");
+      else row.removeAttribute("aria-current");
+    }
+  }
+
+  function stationCountLabel(count) {
+    if (count === 1) return "1 stacja";
+    if (count % 10 >= 2 && count % 10 <= 4 && (count % 100 < 12 || count % 100 > 14)) {
+      return count + " stacje";
+    }
+    return count + " stacji";
+  }
+
+  function renderStationList() {
+    const query = state.stationQuery.trim().toLocaleLowerCase("pl");
+    const visible = state.stations.filter(station =>
+      station.name.toLocaleLowerCase("pl").includes(query) ||
+      station.url.toLocaleLowerCase("pl").includes(query)
+    );
+    const fragment = document.createDocumentFragment();
+    for (const station of visible) {
+      const active = station.number === state.current;
+      const row = document.createElement("li");
+      row.className = "station-row";
+      row.dataset.station = String(station.number);
+      if (active) {
+        row.classList.add("is-current");
+        row.setAttribute("aria-current", "true");
+      }
+
+      const number = document.createElement("span");
+      number.className = "station-number";
+      number.textContent = String(station.number);
+
+      const main = document.createElement("div");
+      main.className = "station-main";
+      const title = document.createElement("div");
+      title.className = "station-title";
+      const name = document.createElement("strong");
+      name.textContent = station.name;
+      name.title = station.name;
+      const badge = document.createElement("span");
+      badge.className = "station-playing";
+      badge.textContent = "GRA";
+      badge.hidden = !active;
+      title.append(name, badge);
+      const url = document.createElement("span");
+      url.className = "station-url";
+      url.textContent = station.url;
+      url.title = station.url;
+      main.append(title, url);
+
+      const ovol = document.createElement("span");
+      ovol.className = "station-ovol";
+      ovol.textContent = (station.ovol > 0 ? "+" : "") + station.ovol;
+
+      const play = document.createElement("button");
+      play.type = "button";
+      play.className = "station-play";
+      play.dataset.number = String(station.number);
+      play.textContent = "GRAJ";
+      play.setAttribute("aria-label", "Graj: " + station.name);
+      play.disabled = state.connection !== "connected";
+
+      row.append(number, main, ovol, play);
+      fragment.append(row);
+    }
+    stationList.replaceChildren(fragment);
+    text("stations-count", query ? visible.length + " z " + state.stations.length : stationCountLabel(state.stations.length));
+    document.querySelector(".station-list-heading").hidden = state.stations.length === 0;
+    text("stations-message", state.stations.length === 0 ? "Brak zapisanych stacji." :
+      visible.length === 0 ? "Brak stacji pasujących do wyszukiwania." : "");
+  }
+
+  async function loadStations() {
+    if (state.stationsStatus === "loading") return;
+    state.stationsStatus = "loading";
+    text("stations-count", "Ładowanie...");
+    text("stations-message", "Pobieranie listy stacji...");
+    stationRetry.hidden = true;
+    try {
+      const response = await fetch("/api/stations", { cache: "no-store" });
+      if (!response.ok) throw new Error("HTTP " + response.status);
+      const data = await response.json();
+      if (!data || !Array.isArray(data.stations) || !Number.isInteger(data.count) ||
+          data.count !== data.stations.length || !Number.isInteger(data.current) ||
+          data.current < 0 || data.current > data.count ||
+          !data.stations.every((station, index) =>
+            station.number === index + 1 && typeof station.name === "string" &&
+            typeof station.url === "string" && Number.isInteger(station.ovol))) {
+        throw new Error("Niepoprawna odpowiedź listy stacji");
+      }
+      state.stations = data.stations;
+      state.stationsStatus = "ready";
+      if (state.current === null) state.current = data.current;
+      renderStationList();
+    } catch (error) {
+      console.warn("VoxOne: stations fetch failed", error);
+      state.stationsStatus = "error";
+      text("stations-count", "Stacje niedostępne");
+      text("stations-message", "Nie udało się pobrać listy stacji.");
+      stationRetry.hidden = false;
+    }
+  }
   function resetRuntime() {
+    const previousCurrent = state.current;
     for (const key of ["source", "station", "metadata", "codec", "bitrate", "rssi", "volume", "playing", "current", "ip"]) {
       state[key] = null;
     }
@@ -139,6 +263,7 @@
     renderPlaying();
     showVolume(null);
     text("system-ip", "—");
+    updateCurrentMarker(previousCurrent);
   }
 
   function send(command, value) {
@@ -216,7 +341,11 @@
     if (Array.isArray(message.payload)) {
       for (const item of message.payload) updatePayload(item.id, item.value);
     }
-    if (typeof message.current === "number") state.current = message.current;
+    if (typeof message.current === "number") {
+      const previousCurrent = state.current;
+      state.current = Number.isInteger(message.current) ? message.current : null;
+      updateCurrentMarker(previousCurrent);
+    }
     if (typeof message.playermode === "string") {
       const modes = { modeweb: "WEB", modesd: "SD" };
       state.source = modes[message.playermode] || message.playermode;
@@ -279,6 +408,26 @@
   });
   buttons.next.addEventListener("click", () => {
     if (send("next", 1)) flashButton(buttons.next);
+  });
+
+  stationSearch.addEventListener("input", () => {
+    state.stationQuery = stationSearch.value;
+    stationClear.disabled = state.stationQuery.length === 0;
+    if (state.stationsStatus === "ready") renderStationList();
+  });
+  stationClear.addEventListener("click", () => {
+    stationSearch.value = "";
+    state.stationQuery = "";
+    stationClear.disabled = true;
+    if (state.stationsStatus === "ready") renderStationList();
+    stationSearch.focus();
+  });
+  stationRetry.addEventListener("click", loadStations);
+  stationList.addEventListener("click", event => {
+    const button = event.target.closest(".station-play");
+    if (!button || button.disabled) return;
+    const number = Number(button.dataset.number);
+    if (Number.isInteger(number) && send("playstation", number)) flashButton(button);
   });
 
   function sendPendingVolume() {

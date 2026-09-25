@@ -47,11 +47,16 @@
       </section>
 
       <section id="stations" data-panel aria-labelledby="stations-title" hidden>
-        <div class="section-heading"><div><p class="eyebrow">BIBLIOTEKA</p><h2 id="stations-title">Stacje</h2></div><span class="badge">W przygotowaniu</span></div>
-        <article class="card"><h3>Lista stacji</h3><p class="muted">Tu pojawią się zapisane stacje i wybór odtwarzania.</p><div class="placeholder-row">01 <span>Stacja przykładowa</span><span class="placeholder-tag">Podgląd</span></div></article>
-        <article class="card"><h3>Dodaj lub edytuj stację</h3><p class="muted">Formularz zarządzania stacjami jest w przygotowaniu.</p><button type="button" disabled>Dodaj stację</button></article>
+        <div class="section-heading"><div><p class="eyebrow">BIBLIOTEKA</p><h2 id="stations-title">Stacje</h2></div><span class="badge" id="stations-count" aria-live="polite">Ładowanie...</span></div>
+        <article class="card">
+          <label class="station-search-label" for="station-search">Szukaj stacji</label>
+          <div class="station-search-wrap"><input id="station-search" class="station-search" type="search" placeholder="Szukaj stacji..." autocomplete="off"><button id="station-search-clear" type="button" disabled>Wyczyść</button></div>
+          <div id="stations-message" class="stations-message" role="status" aria-live="polite"></div>
+          <button id="stations-retry" type="button" hidden>Ponów</button>
+          <div class="station-list-heading" aria-hidden="true" hidden><span>Nr</span><span>Stacja / URL</span><span>OVol</span><span>Odtwarzanie</span></div>
+          <ul id="station-list" class="station-list" aria-label="Zapisane stacje"></ul>
+        </article>
       </section>
-
       <section id="settings" data-panel aria-labelledby="settings-title" hidden>
         <div class="section-heading"><div><p class="eyebrow">KONFIGURACJA</p><h2 id="settings-title">Ustawienia</h2></div><span class="badge">W przygotowaniu</span></div>
         <div class="grid">
