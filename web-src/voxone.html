@@ -31,7 +31,7 @@
       <section id="status" data-panel aria-labelledby="status-title">
         <div class="section-heading"><div><p class="eyebrow">TERAZ GRA</p><h2 id="status-title">Status radia</h2></div><span class="badge" id="ws-state" role="status" aria-live="polite" data-state="connecting">Łączenie...</span></div>
         <article class="card hero">
-          <span class="label">STACJA</span><h3 id="station-name">—</h3>
+          <span class="label">STACJA</span><h3 id="current-station-name">—</h3>
           <p class="track" id="metadata">—</p>
           <p class="hint">Metadata z bieżącego strumienia.</p>
           <div class="transport" aria-label="Sterowanie odtwarzaniem">
@@ -49,13 +49,25 @@
       <section id="stations" data-panel aria-labelledby="stations-title" hidden>
         <div class="section-heading"><div><p class="eyebrow">BIBLIOTEKA</p><h2 id="stations-title">Stacje</h2></div><span class="badge" id="stations-count" aria-live="polite">Ładowanie...</span></div>
         <article class="card">
+          <div class="station-toolbar"><button id="station-add" type="button" disabled>+ Dodaj stację</button><span id="stations-saving" role="status" hidden>Zapisywanie…</span></div>
           <label class="station-search-label" for="station-search">Szukaj stacji</label>
           <div class="station-search-wrap"><input id="station-search" class="station-search" type="search" placeholder="Szukaj stacji..." autocomplete="off"><button id="station-search-clear" type="button" disabled>Wyczyść</button></div>
+          <div id="stations-feedback" class="stations-feedback" role="status" aria-live="polite"></div>
           <div id="stations-message" class="stations-message" role="status" aria-live="polite"></div>
           <button id="stations-retry" type="button" hidden>Ponów</button>
-          <div class="station-list-heading" aria-hidden="true" hidden><span>Nr</span><span>Stacja / URL</span><span>OVol</span><span>Odtwarzanie</span></div>
+          <div class="station-list-heading" aria-hidden="true" hidden><span>Nr</span><span>Stacja / URL</span><span>OVol</span><span>Akcje</span></div>
           <ul id="station-list" class="station-list" aria-label="Zapisane stacje"></ul>
         </article>
+        <dialog id="station-dialog" aria-labelledby="station-dialog-title">
+          <form id="station-form" novalidate>
+            <h3 id="station-dialog-title">Dodaj stację</h3>
+            <label for="station-name">Nazwa</label><input id="station-name" name="name" type="text" required autocomplete="off">
+            <label for="station-url">URL</label><input id="station-url" name="url" type="text" required autocomplete="off" autocapitalize="off" spellcheck="false">
+            <label for="station-ovol">OVOL (−30 do 30)</label><input id="station-ovol" name="ovol" type="number" min="-30" max="30" step="1" required value="0">
+            <p id="station-form-error" class="station-form-error" role="alert"></p>
+            <div class="station-form-actions"><button id="station-cancel" type="button">Anuluj</button><button id="station-save" type="submit">Zapisz</button></div>
+          </form>
+        </dialog>
       </section>
       <section id="settings" data-panel aria-labelledby="settings-title" hidden>
         <div class="section-heading"><div><p class="eyebrow">KONFIGURACJA</p><h2 id="settings-title">Ustawienia</h2></div><span class="badge">W przygotowaniu</span></div>

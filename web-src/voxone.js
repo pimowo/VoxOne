@@ -13,6 +13,17 @@
   const stationSearch = document.getElementById("station-search");
   const stationClear = document.getElementById("station-search-clear");
   const stationRetry = document.getElementById("stations-retry");
+  const stationAdd = document.getElementById("station-add");
+  const stationSaving = document.getElementById("stations-saving");
+  const stationFeedback = document.getElementById("stations-feedback");
+  const stationDialog = document.getElementById("station-dialog");
+  const stationForm = document.getElementById("station-form");
+  const stationName = document.getElementById("station-name");
+  const stationUrl = document.getElementById("station-url");
+  const stationOvol = document.getElementById("station-ovol");
+  const stationFormError = document.getElementById("station-form-error");
+  const stationCancel = document.getElementById("station-cancel");
+  const stationSave = document.getElementById("station-save");
   const state = {
     connection: "connecting",
     source: null,
@@ -27,6 +38,13 @@
     stations: [],
     stationsStatus: "idle",
     stationQuery: "",
+    count: 0,
+    revision: null,
+    loading: false,
+    mutationInProgress: false,
+    error: "",
+    notice: "",
+    editorNumber: null,
     ip: null,
     profile: typeof voxOneProfile === "string" ? voxOneProfile : null,
     version: typeof voxOneVersion === "string" ? voxOneVersion : null,
@@ -45,6 +63,7 @@
   let awaitingVolume = null;
   let draggingVolume = false;
   let leaving = false;
+  let wsCurrentSequence = 0;
 
   function text(id, value) {
     const node = document.getElementById(id);
@@ -79,10 +98,11 @@
     stationList.querySelectorAll(".station-play").forEach(button => {
       button.disabled = !connected;
     });
+    renderStationActions();
   }
 
   function renderStation() {
-    text("station-name", state.station || "—");
+    text("current-station-name", state.station || "—");
   }
 
   function renderMetadata() {
@@ -154,6 +174,46 @@
     return count + " stacji";
   }
 
+  function renderStationFeedback() {
+    stationFeedback.textContent = state.error || state.notice;
+    stationFeedback.dataset.kind = state.error ? "error" : "notice";
+    stationFormError.textContent = stationDialog.open ? state.error : "";
+  }
+
+  function setStationFeedback(message, isError = false) {
+    state.error = isError ? message : "";
+    state.notice = isError ? "" : message;
+    renderStationFeedback();
+  }
+
+  function renderStationActions() {
+    const locked = state.loading || state.mutationInProgress ||
+      state.stationsStatus !== "ready" || !state.revision;
+    stationAdd.disabled = locked;
+    stationRetry.disabled = state.loading || state.mutationInProgress;
+    stationSaving.hidden = !state.mutationInProgress;
+    stationList.querySelectorAll(".station-mutate").forEach(button => {
+      button.disabled = locked || button.dataset.boundary === "true";
+    });
+    for (const input of [stationName, stationUrl, stationOvol, stationCancel, stationSave]) {
+      input.disabled = state.mutationInProgress;
+    }
+  }
+
+  function stationAction(action, label, ariaLabel, number, boundary = false) {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "station-action station-mutate";
+    button.dataset.action = action;
+    button.dataset.number = String(number);
+    if (boundary) button.dataset.boundary = "true";
+    button.textContent = label;
+    button.setAttribute("aria-label", ariaLabel);
+    if (action === "up" || action === "down") button.title = ariaLabel;
+    button.disabled = boundary || state.loading || state.mutationInProgress;
+    return button;
+  }
+
   function renderStationList() {
     const query = state.stationQuery.trim().toLocaleLowerCase("pl");
     const visible = state.stations.filter(station =>
@@ -197,6 +257,8 @@
       ovol.className = "station-ovol";
       ovol.textContent = (station.ovol > 0 ? "+" : "") + station.ovol;
 
+      const actions = document.createElement("div");
+      actions.className = "station-actions";
       const play = document.createElement("button");
       play.type = "button";
       play.className = "station-play";
@@ -204,23 +266,33 @@
       play.textContent = "GRAJ";
       play.setAttribute("aria-label", "Graj: " + station.name);
       play.disabled = state.connection !== "connected";
-
-      row.append(number, main, ovol, play);
+      actions.append(
+        play,
+        stationAction("edit", "Edytuj", "Edytuj: " + station.name, station.number),
+        stationAction("delete", "Usuń", "Usuń: " + station.name, station.number),
+        stationAction("up", "↑", "Przesuń w górę: " + station.name, station.number, station.number === 1),
+        stationAction("down", "↓", "Przesuń w dół: " + station.name, station.number, station.number === state.count)
+      );
+      row.append(number, main, ovol, actions);
       fragment.append(row);
     }
     stationList.replaceChildren(fragment);
-    text("stations-count", query ? visible.length + " z " + state.stations.length : stationCountLabel(state.stations.length));
-    document.querySelector(".station-list-heading").hidden = state.stations.length === 0;
-    text("stations-message", state.stations.length === 0 ? "Brak zapisanych stacji." :
+    text("stations-count", query ? visible.length + " z " + state.count : stationCountLabel(state.count));
+    document.querySelector(".station-list-heading").hidden = state.count === 0;
+    text("stations-message", state.count === 0 ? "Brak zapisanych stacji." :
       visible.length === 0 ? "Brak stacji pasujących do wyszukiwania." : "");
+    renderStationActions();
   }
 
   async function loadStations() {
-    if (state.stationsStatus === "loading") return;
+    if (state.loading) return false;
+    state.loading = true;
     state.stationsStatus = "loading";
+    const currentSequence = wsCurrentSequence;
     text("stations-count", "Ładowanie...");
     text("stations-message", "Pobieranie listy stacji...");
     stationRetry.hidden = true;
+    renderStationActions();
     try {
       const response = await fetch("/api/stations", { cache: "no-store" });
       if (!response.ok) throw new Error("HTTP " + response.status);
@@ -228,22 +300,120 @@
       if (!data || !Array.isArray(data.stations) || !Number.isInteger(data.count) ||
           data.count !== data.stations.length || !Number.isInteger(data.current) ||
           data.current < 0 || data.current > data.count ||
+          typeof data.revision !== "string" || !/^[0-9a-f]{8}$/i.test(data.revision) ||
           !data.stations.every((station, index) =>
             station.number === index + 1 && typeof station.name === "string" &&
             typeof station.url === "string" && Number.isInteger(station.ovol))) {
         throw new Error("Niepoprawna odpowiedź listy stacji");
       }
       state.stations = data.stations;
+      state.count = data.count;
+      state.revision = data.revision;
       state.stationsStatus = "ready";
-      if (state.current === null) state.current = data.current;
+      state.error = "";
+      state.notice = "";
+      if (wsCurrentSequence === currentSequence) state.current = data.current;
+      renderStationFeedback();
       renderStationList();
+      return true;
     } catch (error) {
       console.warn("VoxOne: stations fetch failed", error);
       state.stationsStatus = "error";
+      state.revision = null;
+      state.error = "Nie udało się pobrać listy stacji.";
+      state.notice = "";
+      renderStationFeedback();
       text("stations-count", "Stacje niedostępne");
       text("stations-message", "Nie udało się pobrać listy stacji.");
       stationRetry.hidden = false;
+      return false;
+    } finally {
+      state.loading = false;
+      renderStationActions();
     }
+  }
+
+  function utf8Length(value) {
+    if (typeof TextEncoder !== "undefined") return new TextEncoder().encode(value).length;
+    return new Blob([value]).size;
+  }
+
+  function validateStationForm() {
+    const name = stationName.value.trim();
+    const url = stationUrl.value.trim();
+    const ovolText = stationOvol.value.trim();
+    if (!name) return { error: "Podaj nazwę stacji." };
+    if (utf8Length(name) > 169) return { error: "Nazwa może mieć najwyżej 169 bajtów UTF-8." };
+    if (!url) return { error: "Podaj URL stacji." };
+    if (utf8Length(url) > 169) return { error: "URL może mieć najwyżej 169 bajtów." };
+    if (!/^[+-]?\d+$/.test(ovolText) || !Number.isInteger(Number(ovolText)) ||
+        Number(ovolText) < -30 || Number(ovolText) > 30) {
+      return { error: "OVOL musi być liczbą całkowitą od −30 do 30." };
+    }
+    return { name, url, ovol: String(Number(ovolText)) };
+  }
+
+  function mutationErrorMessage(status) {
+    return ({
+      400: "Nieprawidłowe dane.",
+      404: "Stacja już nie istnieje.",
+      409: "Lista stacji została zmieniona w innym oknie.",
+      422: "Nazwa, URL lub OVOL są nieprawidłowe.",
+      507: "Brak miejsca na bezpieczny zapis playlisty.",
+      500: "Nie udało się zapisać playlisty. Poprzednia lista została zachowana."
+    })[status] || "Nie udało się zapisać zmiany. Sprawdź połączenie i spróbuj ponownie.";
+  }
+
+  async function mutateStation(route, fields, successMessage) {
+    if (state.loading || state.mutationInProgress || state.stationsStatus !== "ready" ||
+        !state.revision) return;
+    state.mutationInProgress = true;
+    setStationFeedback("");
+    renderStationActions();
+    try {
+      const body = new URLSearchParams({ revision: state.revision, ...fields });
+      const response = await fetch("/api/stations/" + route, {
+        method: "POST", body, cache: "no-store"
+      });
+      const result = await response.json().catch(() => null);
+      if (response.status === 409 && result && result.error === "revision_conflict") {
+        if (stationDialog.open) stationDialog.close();
+        state.editorNumber = null;
+        const refreshed = await loadStations();
+        setStationFeedback(refreshed ?
+          "Lista stacji została zmieniona w innym oknie. Odświeżono aktualne dane." :
+          "Lista stacji została zmieniona w innym oknie. Nie udało się pobrać aktualnych danych.", !refreshed);
+        return;
+      }
+      if (!response.ok) throw { status: response.status };
+      if (!result || result.ok !== true) throw { status: 500 };
+      if (stationDialog.open) stationDialog.close();
+      state.editorNumber = null;
+      const refreshed = await loadStations();
+      setStationFeedback(refreshed ? successMessage :
+        "Zmiana została zapisana, ale nie udało się odświeżyć listy. Użyj przycisku Ponów.", !refreshed);
+    } catch (error) {
+      console.warn("VoxOne: station mutation failed", error);
+      setStationFeedback(mutationErrorMessage(error.status), true);
+    } finally {
+      state.mutationInProgress = false;
+      renderStationActions();
+    }
+  }
+
+  function openStationForm(number = null) {
+    if (state.loading || state.mutationInProgress || state.stationsStatus !== "ready") return;
+    const station = number === null ? null : state.stations[number - 1];
+    if (number !== null && (!station || station.number !== number)) return;
+    state.editorNumber = number;
+    stationForm.reset();
+    text("station-dialog-title", station ? "Edytuj stację" : "Dodaj stację");
+    stationName.value = station ? station.name : "";
+    stationUrl.value = station ? station.url : "";
+    stationOvol.value = station ? String(station.ovol) : "0";
+    setStationFeedback("");
+    stationDialog.showModal();
+    stationName.focus();
   }
   function resetRuntime() {
     const previousCurrent = state.current;
@@ -344,6 +514,7 @@
     if (typeof message.current === "number") {
       const previousCurrent = state.current;
       state.current = Number.isInteger(message.current) ? message.current : null;
+      wsCurrentSequence++;
       updateCurrentMarker(previousCurrent);
     }
     if (typeof message.playermode === "string") {
@@ -423,13 +594,64 @@
     stationSearch.focus();
   });
   stationRetry.addEventListener("click", loadStations);
-  stationList.addEventListener("click", event => {
-    const button = event.target.closest(".station-play");
-    if (!button || button.disabled) return;
-    const number = Number(button.dataset.number);
-    if (Number.isInteger(number) && send("playstation", number)) flashButton(button);
+  stationAdd.addEventListener("click", () => openStationForm());
+  stationCancel.addEventListener("click", () => stationDialog.close());
+  stationDialog.addEventListener("cancel", event => {
+    if (state.mutationInProgress) event.preventDefault();
   });
-
+  stationDialog.addEventListener("close", () => {
+    state.editorNumber = null;
+    stationFormError.textContent = "";
+  });
+  stationForm.addEventListener("submit", event => {
+    event.preventDefault();
+    if (state.mutationInProgress) return;
+    const fields = validateStationForm();
+    if (fields.error) {
+      setStationFeedback(fields.error, true);
+      return;
+    }
+    if (state.editorNumber === null) {
+      mutateStation("add", fields, "Dodano stację.");
+    } else {
+      mutateStation("edit", { number: String(state.editorNumber), ...fields }, "Zapisano stację.");
+    }
+  });
+  stationList.addEventListener("click", event => {
+    const button = event.target.closest("button");
+    if (!button || button.disabled || !stationList.contains(button)) return;
+    const number = Number(button.dataset.number);
+    if (!Number.isInteger(number) || number < 1 || number > state.count) return;
+    if (button.classList.contains("station-play")) {
+      if (send("playstation", number)) flashButton(button);
+      return;
+    }
+    if (state.loading || state.mutationInProgress || state.stationsStatus !== "ready") return;
+    const station = state.stations[number - 1];
+    if (!station || station.number !== number) return;
+    switch (button.dataset.action) {
+      case "edit":
+        openStationForm(number);
+        break;
+      case "delete": {
+        const activeNote = number === state.current ? "\nTo jest aktualnie odtwarzana stacja." : "";
+        if (window.confirm("Usunąć stację „" + station.name + "”?" + activeNote)) {
+          mutateStation("delete", { number: String(number) }, "Usunięto stację.");
+        }
+        break;
+      }
+      case "up":
+      case "down": {
+        const target = number + (button.dataset.action === "up" ? -1 : 1);
+        if (target >= 1 && target <= state.count) {
+          mutateStation("reorder", { from: String(number), to: String(target) }, "Zmieniono kolejność stacji.");
+        }
+        break;
+      }
+      default:
+        break;
+    }
+  });
   function sendPendingVolume() {
     clearTimeout(volumeTimer);
     if (pendingVolume === null) return;
