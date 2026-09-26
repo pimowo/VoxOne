@@ -10,7 +10,7 @@ h1,h2,h3,p{margin-top:0}h1{font-size:26px;line-height:1.1;margin:2px 0 0;letter-
 .eyebrow{color:var(--cyan);font-size:11px;font-weight:750;letter-spacing:.15em;margin:0}
 .identity{display:flex;align-items:flex-end;flex-direction:column;gap:6px;color:var(--muted);font-size:13px;white-space:nowrap}
 .profile,.badge{border:1px solid var(--line);background:var(--panel-2);border-radius:999px;padding:4px 11px;color:var(--text);font-size:12px}
-.tabs{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px;margin:20px 0 28px}
+.tabs{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:8px;margin:20px 0 28px}
 .tabs a{display:block;min-height:46px;padding:10px 8px;text-align:center;text-decoration:none;color:var(--muted);border:1px solid var(--line);border-radius:10px;background:var(--panel)}
 .tabs a:hover{color:var(--text);border-color:var(--cyan)}
 .tabs a[aria-current=page]{color:var(--cyan);background:var(--cyan-dark);border-color:var(--cyan)}
@@ -31,12 +31,14 @@ button:disabled{opacity:.48;cursor:not-allowed}
 .facts{margin:0}.facts div{display:flex;justify-content:space-between;gap:15px;border-top:1px solid var(--line);padding:10px 0}.facts div:first-child{border-top:0;padding-top:0}.facts dt{color:var(--muted)}.facts dd{margin:0;text-align:right;overflow-wrap:anywhere}
 .volume{font-size:36px;font-weight:700;line-height:1.1}.volume .muted{font-size:15px;font-weight:400}
 .meter{height:8px;background:var(--panel-2);border-radius:99px;margin-top:16px}.meter span{display:block;width:0;height:100%;background:var(--cyan);border-radius:inherit}
+.balance-note{display:block;color:var(--muted);font-size:12px}
+.audio-control{border-top:1px solid var(--line);padding:12px 0}.audio-control:first-of-type{border-top:0;padding-top:0}.audio-control-heading{display:flex;justify-content:space-between;gap:12px}.audio-control-heading label{color:var(--muted)}.audio-control-heading output{font-variant-numeric:tabular-nums;font-weight:650}.audio-control .volume-slider{margin:3px 0 0}
 .placeholder-row{display:flex;align-items:center;gap:14px;padding:14px;border:1px dashed var(--line);border-radius:10px;color:var(--muted)}.placeholder-row span:nth-child(1){flex:1;color:var(--text)}.placeholder-tag{font-size:12px}
 .quiet-link{display:inline-block;color:var(--cyan);margin-top:12px;text-decoration:none}.quiet-link:hover{text-decoration:underline}
 footer{color:var(--muted);font-size:12px;text-align:center;border-top:1px solid var(--line);padding:20px 0 30px;margin-top:28px}
 [hidden]{display:none!important}
-@media(max-width:640px){.shell{width:min(100% - 24px,560px)}.topbar{padding:20px 0;align-items:flex-start}.identity{font-size:12px}.grid{grid-template-columns:1fr}.grid .card{margin-bottom:14px}.hero h3{font-size:27px}}
-@media(max-width:420px){.topbar{flex-wrap:wrap;gap:12px}.identity{width:100%;flex-direction:row;align-items:center;justify-content:space-between}.tabs{gap:5px;margin:15px 0 24px}.tabs a{font-size:13px;padding:11px 3px}.card,.hero{padding:17px}.section-heading{align-items:flex-start;flex-direction:column}.section-heading .badge{margin-top:2px}.transport button{min-width:56px}.facts div{gap:8px}}.badge[data-state=connected]{color:var(--cyan);border-color:var(--cyan-dark)}
+@media(max-width:640px){.shell{width:min(100% - 24px,560px)}.topbar{padding:20px 0;align-items:flex-start}.identity{font-size:12px}.tabs{grid-template-columns:repeat(3,minmax(0,1fr))}.grid{grid-template-columns:1fr}.grid .card{margin-bottom:14px}.hero h3{font-size:27px}}
+@media(max-width:420px){.topbar{flex-wrap:wrap;gap:12px}.identity{width:100%;flex-direction:row;align-items:center;justify-content:space-between}.tabs{grid-template-columns:repeat(3,minmax(0,1fr));gap:5px;margin:15px 0 24px}.tabs a{font-size:13px;padding:11px 3px}.card,.hero{padding:17px}.section-heading{align-items:flex-start;flex-direction:column}.section-heading .badge{margin-top:2px}.transport button{min-width:56px}.facts div{gap:8px}}.badge[data-state=connected]{color:var(--cyan);border-color:var(--cyan-dark)}
 .badge[data-state=disconnected]{color:var(--muted)}
 .transport button.is-pending{border-color:var(--cyan);box-shadow:0 0 0 2px var(--cyan-dark)}
 .volume-slider{display:block;width:100%;min-height:44px;margin:10px 0 0;accent-color:var(--cyan);cursor:pointer}

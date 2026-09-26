@@ -23,6 +23,7 @@
     <nav class="tabs" aria-label="Główna nawigacja">
       <a href="#status" data-tab="status" aria-current="page">Status</a>
       <a href="#stations" data-tab="stations">Stacje</a>
+      <a href="#audio" data-tab="audio">Audio</a>
       <a href="#settings" data-tab="settings">Ustawienia</a>
       <a href="#system" data-tab="system">System</a>
     </nav>
@@ -83,6 +84,21 @@
           <div class="station-form-actions"><button id="station-import-cancel" type="button">Anuluj</button><button id="station-import-confirm" type="button">Importuj</button></div>
         </dialog>
       </section>
+
+      <section id="audio" data-panel aria-labelledby="audio-title" hidden>
+        <div class="section-heading"><div><p class="eyebrow">DŹWIĘK</p><h2 id="audio-title">Audio</h2></div><span class="badge">Sterowanie</span></div>
+        <div class="grid">
+          <article class="card"><h3>Głośność</h3><div class="volume"><span id="audio-volume">—</span><span class="muted"> / 254</span></div><div class="meter" aria-hidden="true"><span id="audio-volume-meter"></span></div><p class="hint">Aktualna wartość backendowa. Tylko do odczytu.</p></article>
+          <article class="card"><h3>Korekcja</h3>
+            <div class="audio-control"><div class="audio-control-heading"><label for="audio-bass-slider">Bass</label><output id="audio-bass">—</output></div><input id="audio-bass-slider" class="volume-slider" type="range" min="-16" max="16" step="1" value="0" disabled></div>
+            <div class="audio-control"><div class="audio-control-heading"><label for="audio-middle-slider">Middle</label><output id="audio-middle">—</output></div><input id="audio-middle-slider" class="volume-slider" type="range" min="-16" max="16" step="1" value="0" disabled></div>
+            <div class="audio-control"><div class="audio-control-heading"><label for="audio-treble-slider">Treble</label><output id="audio-treble">—</output></div><input id="audio-treble-slider" class="volume-slider" type="range" min="-16" max="16" step="1" value="0" disabled></div>
+            <div class="audio-control"><div class="audio-control-heading"><label for="audio-balance-slider">Balance</label><output id="audio-balance">—</output></div><input id="audio-balance-slider" class="volume-slider" type="range" min="-16" max="16" step="1" value="0" disabled><span id="audio-balance-note" class="balance-note"></span></div>
+            <p class="hint">Zakres sterowania: −16 do +16. Wartości potwierdza urządzenie.</p>
+          </article>
+        </div>
+      </section>
+
       <section id="settings" data-panel aria-labelledby="settings-title" hidden>
         <div class="section-heading"><div><p class="eyebrow">KONFIGURACJA</p><h2 id="settings-title">Ustawienia</h2></div><span class="badge">W przygotowaniu</span></div>
         <div class="grid">

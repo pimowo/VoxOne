@@ -1,7 +1,7 @@
 (() => {
   "use strict";
 
-  const tabs = ["status", "stations", "settings", "system"];
+  const tabs = ["status", "stations", "audio", "settings", "system"];
   const buttons = {
     prev: document.getElementById("prev-button"),
     play: document.getElementById("play-button"),
@@ -9,6 +9,12 @@
   };
   const volumeSlider = document.getElementById("volume-slider");
   const volumeMeter = document.getElementById("volume-meter");
+  const audioControls = {
+    bass: { slider: document.getElementById("audio-bass-slider"), command: "bass" },
+    middle: { slider: document.getElementById("audio-middle-slider"), command: "middle" },
+    treble: { slider: document.getElementById("audio-treble-slider"), command: "trebble" },
+    balance: { slider: document.getElementById("audio-balance-slider"), command: "balance" }
+  };
   const stationList = document.getElementById("station-list");
   const stationSearch = document.getElementById("station-search");
   const stationClear = document.getElementById("station-search-clear");
@@ -41,6 +47,10 @@
     bitrate: null,
     rssi: null,
     volume: null,
+    bass: null,
+    middle: null,
+    treble: null,
+    balance: null,
     playing: null,
     current: null,
     stations: [],
@@ -104,6 +114,9 @@
     buttons.next.disabled = !connected;
     buttons.play.disabled = !connected || state.playing === null;
     volumeSlider.disabled = !connected || state.volume === null;
+    for (const [key, control] of Object.entries(audioControls)) {
+      control.slider.disabled = !connected || state[key] === null;
+    }
     stationList.querySelectorAll(".station-play").forEach(button => {
       button.disabled = !connected;
     });
@@ -150,6 +163,26 @@
   function renderVolume() {
     if (draggingVolume || awaitingVolume !== null) return;
     showVolume(state.volume);
+  }
+
+  function signedValue(value) {
+    if (value === null) return "—";
+    return (value > 0 ? "+" : "") + value;
+  }
+
+  function renderAudio() {
+    text("audio-volume", state.volume === null ? "—" : String(state.volume));
+    const meter = document.getElementById("audio-volume-meter");
+    meter.style.width = state.volume === null ? "0%" : (100 * state.volume / 254) + "%";
+    text("audio-bass", signedValue(state.bass));
+    text("audio-middle", signedValue(state.middle));
+    text("audio-treble", signedValue(state.treble));
+    text("audio-balance", signedValue(state.balance));
+    text("audio-balance-note", state.balance === null ? "" : state.balance < 0 ? "lewo" : state.balance > 0 ? "prawo" : "środek");
+    for (const [key, control] of Object.entries(audioControls)) {
+      if (state[key] !== null && !control.dragging) control.slider.value = String(state[key]);
+    }
+    renderConnection();
   }
 
   function renderIdentity() {
@@ -493,7 +526,7 @@
   }
   function resetRuntime() {
     const previousCurrent = state.current;
-    for (const key of ["source", "station", "metadata", "codec", "bitrate", "rssi", "volume", "playing", "current", "ip"]) {
+    for (const key of ["source", "station", "metadata", "codec", "bitrate", "rssi", "volume", "bass", "middle", "treble", "balance", "playing", "current", "ip"]) {
       state[key] = null;
     }
     draggingVolume = false;
@@ -508,6 +541,11 @@
     renderRssi();
     renderPlaying();
     showVolume(null);
+    for (const control of Object.values(audioControls)) {
+      control.dragging = false;
+      clearTimeout(control.ackTimer);
+    }
+    renderAudio();
     text("system-ip", "—");
     updateCurrentMarker(previousCurrent);
   }
@@ -545,6 +583,19 @@
           clearTimeout(volumeAckTimer);
         }
         renderVolume();
+        renderAudio();
+        break;
+      }
+      case "bass":
+      case "middle":
+      case "trebble":
+      case "balance": {
+        const setting = Number(value);
+        if (!Number.isInteger(setting)) break;
+        const key = id === "trebble" ? "treble" : id;
+        state[key] = setting;
+        clearTimeout(audioControls[key].ackTimer);
+        renderAudio();
         break;
       }
       case "rssi": {
@@ -634,7 +685,11 @@
       clearTimeout(volumeAckTimer);
       socket = null;
       state.connection = "disconnected";
-      renderConnection();
+      for (const control of Object.values(audioControls)) {
+        control.dragging = false;
+        clearTimeout(control.ackTimer);
+      }
+      renderAudio();
       if (!leaving) {
         reconnectTimer = setTimeout(connect, reconnectDelay);
         reconnectDelay = Math.min(reconnectDelay * 2, 15000);
@@ -796,6 +851,24 @@
       renderVolume();
     }, 1500);
   });
+
+  for (const control of Object.values(audioControls)) {
+    control.dragging = false;
+    control.slider.addEventListener("input", () => {
+      if (!control.slider.disabled) control.dragging = true;
+    });
+    control.slider.addEventListener("change", () => {
+      if (control.slider.disabled) return;
+      const value = Number(control.slider.value);
+      control.dragging = false;
+      if (!Number.isInteger(value) || value < -16 || value > 16 || !send(control.command, value)) {
+        renderAudio();
+      } else {
+        clearTimeout(control.ackTimer);
+        control.ackTimer = setTimeout(renderAudio, 1500);
+      }
+    });
+  }
 
   window.addEventListener("hashchange", showTab);
   window.addEventListener("online", () => {
