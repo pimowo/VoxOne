@@ -1,4 +1,5 @@
 #include "Arduino.h"
+#include <ctype.h>
 #include "options.h"
 #include "WiFi.h"
 #include "time.h"
@@ -467,7 +468,7 @@ void Display::_drawPlaylist() {
     char counter[16];
     snprintf(counter, sizeof(counter), "%u/%u", currentPlItem, total);
     _plcounter->setText(counter);
-    _plplaying->setText(player.isRunning() && currentPlItem == config.lastStation() ? "PLAY" : "");
+    _plplaying->setText(player.isRunning() && currentPlItem == config.lastStation() ? "GRA" : "");
   }
 #else
   _plwidget->drawPlaylist(currentPlItem);
@@ -577,7 +578,7 @@ void Display::loop() {
         case NEWSTATION:
           _station();
 #if DSP_MODEL==DSP_ST7789_76
-          if(_mode==STATIONS && _plplaying) _plplaying->setText(player.isRunning() && currentPlItem == config.lastStation() ? "PLAY" : "");
+          if(_mode==STATIONS && _plplaying) _plplaying->setText(player.isRunning() && currentPlItem == config.lastStation() ? "GRA" : "");
 #endif
           break;
         case NEXTSTATION: _drawNextStationNum(request.payload); break;
@@ -635,7 +636,7 @@ void Display::loop() {
         case PSTART:
           _layoutChange(true);
 #if DSP_MODEL==DSP_ST7789_76
-          if(_mode==STATIONS && _plplaying) _plplaying->setText(currentPlItem == config.lastStation() ? "PLAY" : "");
+          if(_mode==STATIONS && _plplaying) _plplaying->setText(currentPlItem == config.lastStation() ? "GRA" : "");
 #endif
           break;
         case PSTOP:
@@ -722,16 +723,70 @@ char *split(char *str, const char *delim) {
   return dmp + strlen(delim);
 }
 
+#if DSP_MODEL==DSP_ST7789_76
+static uint32_t deskNextCodepoint(const char*& text, const char* end) {
+  const uint8_t first = static_cast<uint8_t>(*text++);
+  if(first < 0x80) return first;
+  const uint8_t extra = (first & 0xE0) == 0xC0 ? 1 :
+                        (first & 0xF0) == 0xE0 ? 2 :
+                        (first & 0xF8) == 0xF0 ? 3 : 0;
+  if(extra == 0 || end - text < extra) return first;
+  uint32_t codepoint = first & (0x7F >> extra);
+  for(uint8_t i = 0; i < extra; ++i) {
+    const uint8_t next = static_cast<uint8_t>(text[i]);
+    if((next & 0xC0) != 0x80) return first;
+    codepoint = (codepoint << 6) | (next & 0x3F);
+  }
+  text += extra;
+  return codepoint;
+}
+
+static uint32_t deskFoldCodepoint(uint32_t value) {
+  if(value >= 'A' && value <= 'Z') return value + ('a' - 'A');
+  if((value >= 0xC0 && value <= 0xD6) || (value >= 0xD8 && value <= 0xDE) ||
+     (value >= 0x410 && value <= 0x42F)) return value + 0x20;
+  switch(value) {
+    case 0x104: case 0x106: case 0x118: case 0x141:
+    case 0x143: case 0x15A: case 0x179: case 0x17B:
+      return value + 1;
+    case 0x401: return 0x451;
+    default: return value;
+  }
+}
+
+static bool deskArtistIsStation(const char* artist, const char* station) {
+  const char* artistEnd = artist + strlen(artist);
+  const char* stationEnd = station + strlen(station);
+  while(artist < artistEnd && isspace(static_cast<unsigned char>(*artist))) ++artist;
+  while(station < stationEnd && isspace(static_cast<unsigned char>(*station))) ++station;
+  while(artistEnd > artist && isspace(static_cast<unsigned char>(artistEnd[-1]))) --artistEnd;
+  while(stationEnd > station && isspace(static_cast<unsigned char>(stationEnd[-1]))) --stationEnd;
+  while(artist < artistEnd && station < stationEnd) {
+    if(deskFoldCodepoint(deskNextCodepoint(artist, artistEnd)) !=
+       deskFoldCodepoint(deskNextCodepoint(station, stationEnd))) return false;
+  }
+  return artist == artistEnd && station == stationEnd;
+}
+#endif
+
 void Display::_title() {
   if (strlen(config.station.title) > 0) {
     char tmpbuf[strlen(config.station.title)+1];
     strlcpy(tmpbuf, config.station.title, strlen(config.station.title)+1);
     char *stitle = split(tmpbuf, " - ");
     if(stitle && _title2){
+#if DSP_MODEL==DSP_ST7789_76
+      _title1->setText(deskArtistIsStation(tmpbuf, config.station.name) ? "" : tmpbuf);
+#else
       _title1->setText(tmpbuf);
+#endif
       _title2->setText(stitle);
     }else{
+#if DSP_MODEL==DSP_ST7789_76
+      _title1->setText(deskArtistIsStation(config.station.title, config.station.name) ? "" : config.station.title);
+#else
       _title1->setText(config.station.title);
+#endif
       if(_title2) _title2->setText("");
     }
     /*#ifdef USE_NEXTION

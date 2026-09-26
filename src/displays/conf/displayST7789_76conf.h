@@ -26,7 +26,7 @@ const ScrollConfig metaConf       PROGMEM = {{ TFT_FRAMEWDT+1, TFT_FRAMEWDT+1, 2
 const ScrollConfig deskStationConf PROGMEM = {{ TFT_FRAMEWDT, 2, 2, WA_LEFT }, 140, MAX_WIDTH, 5000, 2, 25 };
 const ScrollConfig title1Conf     PROGMEM = {{ TFT_FRAMEWDT, 21, 2, WA_LEFT }, 140, MAX_WIDTH, 5000, 2, 25 };
 const ScrollConfig title2Conf     PROGMEM = {{ TFT_FRAMEWDT, 40, 2, WA_LEFT }, 140, MAX_WIDTH, 5000, 2, 25 };
-const ScrollConfig playlistConf   PROGMEM = {{ TFT_FRAMEWDT, 30, 1, WA_CENTER }, 140, MAX_WIDTH, 500, 2, 25 };
+const ScrollConfig playlistConf   PROGMEM = {{ TFT_FRAMEWDT, 38, 1, WA_CENTER }, 140, MAX_WIDTH, 500, 2, 25 };
 const ScrollConfig apTitleConf    PROGMEM = {{ TFT_FRAMEWDT+1, TFT_FRAMEWDT+1, 1, WA_CENTER }, 140, MAX_WIDTH-2, 0, 2, 25 };
 const ScrollConfig apSettConf     PROGMEM = {{ TFT_FRAMEWDT, 64-7, 1, WA_LEFT }, 140, MAX_WIDTH, 0, 2, 25 };
 
@@ -44,7 +44,7 @@ const WidgetConfig deskRssiConf   PROGMEM = { 174, 64, 1, WA_LEFT };
 const WidgetConfig deskVolumeConf PROGMEM = { 0, 64, 1, WA_CENTER };
 const WidgetConfig deskClockConf  PROGMEM = { TFT_FRAMEWDT, 64, 1, WA_RIGHT };
 //const WidgetConfig voltxtConf     PROGMEM = { 32, 108, 1, WA_RIGHT };
-const WidgetConfig  iptxtConf     PROGMEM = { TFT_FRAMEWDT, 64-12, 1, WA_LEFT };
+const WidgetConfig  iptxtConf     PROGMEM = { TFT_FRAMEWDT, 64, 1, WA_LEFT };
 const WidgetConfig   rssiConf     PROGMEM = { TFT_FRAMEWDT, 64-11-10, 1, WA_LEFT };
 const WidgetConfig numConf        PROGMEM = { TFT_FRAMEWDT, 57, 0, WA_CENTER };
 const WidgetConfig apNameConf     PROGMEM = { 0, 18, 1, WA_CENTER };
