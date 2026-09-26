@@ -169,12 +169,8 @@ void Display::_buildPager(){
   _meta->init("*", metaConf, config.theme.meta, config.theme.metabg);
 #if DSP_MODEL==DSP_ST7789_76
   _deskStation = new ScrollWidget("*", deskStationConf, config.theme.meta, config.theme.metabg);
-  _deskStation->setDeskScrollSlot(0);
 #endif
   _title1->init("*", title1Conf, config.theme.title1, config.theme.background);
-#if DSP_MODEL==DSP_ST7789_76
-  _title1->setDeskScrollSlot(1);
-#endif
   _clock->init(clockConf, 0, 0);
   #if DSP_MODEL==DSP_NOKIA5110
     _plcurrent->init("*", playlistConf, 0, 1);
@@ -194,9 +190,6 @@ void Display::_buildPager(){
 #endif
   #ifndef HIDE_TITLE2
     _title2 = new ScrollWidget("*", title2Conf, config.theme.title2, config.theme.background);
-#if DSP_MODEL==DSP_ST7789_76
-    _title2->setDeskScrollSlot(2);
-#endif
   #endif
   #if !defined(DSP_LCD) && DSP_MODEL!=DSP_NOKIA5110
 #if DSP_MODEL==DSP_ST7789_76

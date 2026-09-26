@@ -23,9 +23,9 @@
 
 /* SROLLS  */                            /* {{ left, top, fontsize, align }, buffsize, width, scrolldelay, scrolldelta, scrolltime } */
 const ScrollConfig metaConf       PROGMEM = {{ TFT_FRAMEWDT+1, TFT_FRAMEWDT+1, 2, WA_LEFT }, 140, MAX_WIDTH-2, 5000, 2, 25 };
-const ScrollConfig deskStationConf PROGMEM = {{ TFT_FRAMEWDT, 2, 2, WA_LEFT }, 140, MAX_WIDTH, 5000, 2, 25 };
-const ScrollConfig title1Conf     PROGMEM = {{ TFT_FRAMEWDT, 21, 2, WA_LEFT }, 140, MAX_WIDTH, 5000, 2, 25 };
-const ScrollConfig title2Conf     PROGMEM = {{ TFT_FRAMEWDT, 40, 2, WA_LEFT }, 140, MAX_WIDTH, 5000, 2, 25 };
+const ScrollConfig deskStationConf PROGMEM = {{ TFT_FRAMEWDT, 2, 2, WA_LEFT }, 140, MAX_WIDTH, 5000, 1, 9 };
+const ScrollConfig title1Conf     PROGMEM = {{ TFT_FRAMEWDT, 21, 2, WA_LEFT }, 140, MAX_WIDTH, 5000, 1, 9 };
+const ScrollConfig title2Conf     PROGMEM = {{ TFT_FRAMEWDT, 40, 2, WA_LEFT }, 140, MAX_WIDTH, 5000, 1, 9 };
 const ScrollConfig playlistConf   PROGMEM = {{ TFT_FRAMEWDT, 38, 1, WA_CENTER }, 140, MAX_WIDTH, 500, 2, 25 };
 const ScrollConfig apTitleConf    PROGMEM = {{ TFT_FRAMEWDT+1, TFT_FRAMEWDT+1, 1, WA_CENTER }, 140, MAX_WIDTH-2, 0, 2, 25 };
 const ScrollConfig apSettConf     PROGMEM = {{ TFT_FRAMEWDT, 64-7, 1, WA_LEFT }, 140, MAX_WIDTH, 0, 2, 25 };
