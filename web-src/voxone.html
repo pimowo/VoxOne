@@ -49,9 +49,17 @@
       <section id="stations" data-panel aria-labelledby="stations-title" hidden>
         <div class="section-heading"><div><p class="eyebrow">BIBLIOTEKA</p><h2 id="stations-title">Stacje</h2></div><span class="badge" id="stations-count" aria-live="polite">Ładowanie...</span></div>
         <article class="card">
-          <div class="station-toolbar"><button id="station-add" type="button" disabled>+ Dodaj stację</button><span id="stations-saving" role="status" hidden>Zapisywanie…</span></div>
-          <label class="station-search-label" for="station-search">Szukaj stacji</label>
-          <div class="station-search-wrap"><input id="station-search" class="station-search" type="search" placeholder="Szukaj stacji..." autocomplete="off"><button id="station-search-clear" type="button" disabled>Wyczyść</button></div>
+          <div class="station-toolbar">
+            <div class="station-search-group">
+              <label class="sr-only" for="station-search">Szukaj stacji</label>
+              <div class="station-search-wrap"><input id="station-search" class="station-search" type="search" placeholder="Szukaj stacji..." autocomplete="off"><button id="station-search-clear" type="button" disabled>Wyczyść</button></div>
+            </div>
+            <button id="station-add" type="button" disabled>+ Dodaj stację</button>
+            <button id="station-import" type="button" disabled>Importuj</button>
+            <a id="station-export" class="station-download" href="/api/stations/export" download="VoxOne-playlist.csv">Eksportuj</a>
+            <input id="station-import-file" type="file" accept=".csv,text/csv,text/plain,text/tab-separated-values" hidden>
+            <span id="stations-saving" role="status" hidden>Zapisywanie…</span>
+          </div>
           <div id="stations-feedback" class="stations-feedback" role="status" aria-live="polite"></div>
           <div id="stations-message" class="stations-message" role="status" aria-live="polite"></div>
           <button id="stations-retry" type="button" hidden>Ponów</button>
@@ -67,6 +75,12 @@
             <p id="station-form-error" class="station-form-error" role="alert"></p>
             <div class="station-form-actions"><button id="station-cancel" type="button">Anuluj</button><button id="station-save" type="submit">Zapisz</button></div>
           </form>
+        </dialog>
+        <dialog id="station-import-dialog" aria-labelledby="station-import-title">
+          <h3 id="station-import-title">Importuj playlistę</h3>
+          <p id="station-import-details"></p>
+          <p id="station-import-warning"></p>
+          <div class="station-form-actions"><button id="station-import-cancel" type="button">Anuluj</button><button id="station-import-confirm" type="button">Importuj</button></div>
         </dialog>
       </section>
       <section id="settings" data-panel aria-labelledby="settings-title" hidden>

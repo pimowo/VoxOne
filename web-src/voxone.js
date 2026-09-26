@@ -14,6 +14,14 @@
   const stationClear = document.getElementById("station-search-clear");
   const stationRetry = document.getElementById("stations-retry");
   const stationAdd = document.getElementById("station-add");
+  const stationImport = document.getElementById("station-import");
+  const stationExport = document.getElementById("station-export");
+  const stationImportFile = document.getElementById("station-import-file");
+  const stationImportDialog = document.getElementById("station-import-dialog");
+  const stationImportDetails = document.getElementById("station-import-details");
+  const stationImportWarning = document.getElementById("station-import-warning");
+  const stationImportCancel = document.getElementById("station-import-cancel");
+  const stationImportConfirm = document.getElementById("station-import-confirm");
   const stationSaving = document.getElementById("stations-saving");
   const stationFeedback = document.getElementById("stations-feedback");
   const stationDialog = document.getElementById("station-dialog");
@@ -42,6 +50,7 @@
     revision: null,
     loading: false,
     mutationInProgress: false,
+    importing: false,
     error: "",
     notice: "",
     editorNumber: null,
@@ -188,10 +197,15 @@
 
   function renderStationActions() {
     const locked = state.loading || state.mutationInProgress ||
-      state.stationsStatus !== "ready" || !state.revision;
+      stationImportDialog.open || state.stationsStatus !== "ready" || !state.revision;
     stationAdd.disabled = locked;
+    stationImport.disabled = locked;
+    const exportLocked = state.loading || state.mutationInProgress || stationImportDialog.open;
+    stationExport.setAttribute("aria-disabled", String(exportLocked));
+    stationExport.tabIndex = exportLocked ? -1 : 0;
     stationRetry.disabled = state.loading || state.mutationInProgress;
     stationSaving.hidden = !state.mutationInProgress;
+    stationSaving.textContent = state.importing ? "Importowanie..." : "Zapisywanie…";
     stationList.querySelectorAll(".station-mutate").forEach(button => {
       button.disabled = locked || button.dataset.boundary === "true";
     });
@@ -401,6 +415,68 @@
     }
   }
 
+  function importErrorMessage(status) {
+    return ({
+      400: "Nieprawidłowe żądanie importu.",
+      409: "Lista stacji została zmieniona w innym oknie.",
+      413: "Plik playlisty jest zbyt duży.",
+      422: "Plik playlisty ma nieprawidłowy format.",
+      507: "Brak miejsca na bezpieczny zapis playlisty.",
+      500: "Nie udało się zaimportować playlisty. Poprzednia lista została zachowana."
+    })[status] || "Nie udało się zaimportować playlisty. Sprawdź połączenie i spróbuj ponownie.";
+  }
+
+  async function importPlaylist() {
+    if (state.loading || state.mutationInProgress || state.stationsStatus !== "ready" ||
+        !state.revision) return;
+    const file = stationImportFile.files[0];
+    if (!file) {
+      stationImportDialog.close();
+      return;
+    }
+    if (file.size > 8192) {
+      stationImportDialog.close();
+      setStationFeedback(importErrorMessage(413), true);
+      return;
+    }
+    const revision = state.revision;
+    state.mutationInProgress = true;
+    state.importing = true;
+    stationImportDialog.close();
+    setStationFeedback("");
+    renderStationActions();
+    try {
+      const body = new FormData();
+      body.append("revision", revision);
+      if (file.size === 0) body.append("empty", "1");
+      else body.append("file", file, file.name);
+      const response = await fetch("/api/stations/import", {
+        method: "POST", body, cache: "no-store"
+      });
+      const result = await response.json().catch(() => null);
+      if (response.status === 409) {
+        const refreshed = await loadStations();
+        setStationFeedback(refreshed ?
+          "Lista stacji została zmieniona w innym oknie. Odświeżono aktualne dane. Wybierz plik ponownie, jeśli nadal chcesz go zaimportować." :
+          "Lista stacji została zmieniona w innym oknie. Nie udało się pobrać aktualnych danych.", !refreshed);
+        return;
+      }
+      if (!response.ok) throw { status: response.status };
+      if (!result || result.ok !== true) throw { status: 500 };
+      const refreshed = await loadStations();
+      setStationFeedback(refreshed ? "Playlista została zaimportowana." :
+        "Playlista została zaimportowana, ale nie udało się odświeżyć listy. Użyj przycisku Ponów.", !refreshed);
+    } catch (error) {
+      console.warn("VoxOne: playlist import failed", error);
+      setStationFeedback(importErrorMessage(error.status), true);
+    } finally {
+      stationImportFile.value = "";
+      state.importing = false;
+      state.mutationInProgress = false;
+      renderStationActions();
+    }
+  }
+
   function openStationForm(number = null) {
     if (state.loading || state.mutationInProgress || state.stationsStatus !== "ready") return;
     const station = number === null ? null : state.stations[number - 1];
@@ -595,6 +671,41 @@
   });
   stationRetry.addEventListener("click", loadStations);
   stationAdd.addEventListener("click", () => openStationForm());
+  stationImport.addEventListener("click", () => {
+    if (!stationImport.disabled) stationImportFile.click();
+  });
+  stationExport.addEventListener("click", event => {
+    if (stationExport.getAttribute("aria-disabled") === "true") event.preventDefault();
+  });
+  stationImportFile.addEventListener("change", () => {
+    const file = stationImportFile.files[0];
+    if (!file) {
+      stationImportFile.value = "";
+      return;
+    }
+    if (file.size > 8192) {
+      stationImportFile.value = "";
+      setStationFeedback(importErrorMessage(413), true);
+      return;
+    }
+    stationImportDetails.textContent = file.name + " · " + file.size + " B";
+    stationImportWarning.textContent = file.size === 0 ?
+      "Wybrany plik jest pusty.\nImport usunie wszystkie stacje z listy.\nKontynuować?" :
+      "Import zastąpi obecną listę stacji. Aktualna playlista zostanie zachowana bezpiecznie do czasu zakończenia zapisu.";
+    setStationFeedback("");
+    stationImportDialog.showModal();
+    renderStationActions();
+    stationImportConfirm.focus();
+  });
+  stationImportCancel.addEventListener("click", () => stationImportDialog.close());
+  stationImportConfirm.addEventListener("click", importPlaylist);
+  stationImportDialog.addEventListener("cancel", event => {
+    if (state.mutationInProgress) event.preventDefault();
+  });
+  stationImportDialog.addEventListener("close", () => {
+    stationImportFile.value = "";
+    renderStationActions();
+  });
   stationCancel.addEventListener("click", () => stationDialog.close());
   stationDialog.addEventListener("cancel", event => {
     if (state.mutationInProgress) event.preventDefault();
