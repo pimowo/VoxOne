@@ -48,6 +48,10 @@ Nextion nextion;
 QueueHandle_t displayQueue;
 portMUX_TYPE displayVolumeMux = portMUX_INITIALIZER_UNLOCKED;
 
+#if DSP_MODEL==DSP_ST7789_76
+constexpr uint32_t DESK_UI_RETURN_TIMEOUT_S = 10;
+#endif
+
 static void loopDspTask(void * pvParameters){
   while(true){
   #ifndef DUMMYDISPLAY
@@ -422,6 +426,9 @@ void Display::_swichMode(displayMode_e newmode) {
     config.isScreensaver = false;
   }
   if (newmode == VOL) {
+#if DSP_MODEL==DSP_ST7789_76
+    timekeeper.waitAndReturnPlayer(DESK_UI_RETURN_TIMEOUT_S);
+#endif
     #ifndef HIDE_IP
       _showDialog(LANG::const_DlgVolume);
     #else
@@ -466,7 +473,11 @@ void Display::_drawPlaylist() {
 #else
   _plwidget->drawPlaylist(currentPlItem);
 #endif
+#if DSP_MODEL==DSP_ST7789_76
+  timekeeper.waitAndReturnPlayer(DESK_UI_RETURN_TIMEOUT_S);
+#else
   timekeeper.waitAndReturnPlayer(30);
+#endif
 }
 
 void Display::_drawNextStationNum(uint16_t num) {
@@ -848,7 +859,11 @@ void Display::_volume() {
     if(_voltxt) _voltxt->setText(config.store.volume, voltxtFmt);
   #endif
   if(_mode==VOL) {
+#if DSP_MODEL==DSP_ST7789_76
+    timekeeper.waitAndReturnPlayer(DESK_UI_RETURN_TIMEOUT_S);
+#else
     timekeeper.waitAndReturnPlayer(3);
+#endif
     _nums->setText(config.store.volume, numtxtFmt);
   }
   /*#ifdef USE_NEXTION
