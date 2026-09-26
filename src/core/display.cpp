@@ -179,8 +179,8 @@ void Display::_buildPager(){
   #endif
 #if DSP_MODEL==DSP_ST7789_76
   _plheader = new TextWidget(playlistHeaderConf, 30, config.theme.meta, config.theme.metabg);
-  _plcounter = new TextWidget(playlistCounterConf, 16, config.theme.title1, config.theme.background);
-  _plplaying = new TextWidget(playlistPlayingConf, 8, config.theme.title2, config.theme.background);
+  _plcounter = new TextWidget(playlistCounterConf, 16, config.theme.meta, config.theme.background);
+  _plplaying = new TextWidget(playlistPlayingConf, 8, config.theme.meta, config.theme.background);
   _plheader->setText("WEB - STACJA");
 #else
   _plwidget->init(_plcurrent);
@@ -679,7 +679,20 @@ void Display::loop() {
 
 void Display::_setRSSI(int rssi) {
 #if DSP_MODEL==DSP_ST7789_76
-  if(_deskRssi) _deskRssi->setText(rssi, "RSSI %ddBm");
+  static bool deskRssiDisplayed = false;
+  static int lastDisplayedRssi = 0;
+  static uint32_t lastRssiDisplayMs = 0;
+  const uint32_t now = millis();
+  const int rssiDelta = rssi - lastDisplayedRssi;
+  if(_deskRssi && (!deskRssiDisplayed ||
+      ((uint32_t)(now - lastRssiDisplayMs) >= 10000 &&
+       (rssiDelta >= 2 || rssiDelta <= -2)))) {
+    _deskRssi->setText(rssi, "RSSI %ddBm");
+    lastDisplayedRssi = rssi;
+    lastRssiDisplayMs = now;
+    deskRssiDisplayed = true;
+  }
+  if(_mode == VOL) return;
 #endif
   if(!_rssi) return;
 #if RSSI_DIGIT
