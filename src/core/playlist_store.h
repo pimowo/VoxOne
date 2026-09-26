@@ -11,6 +11,7 @@ struct PlaylistRow {
 };
 
 enum class PlaylistWriteError : uint8_t { OK, INVALID, NO_SPACE, IO_ERROR };
+enum class PlaylistReadError : uint8_t { OK, INVALID, IO_ERROR };
 
 class PlaylistStore {
  public:
@@ -18,6 +19,7 @@ class PlaylistStore {
   bool recover();
   bool rebuildIndex();
   bool snapshot(std::vector<PlaylistRow>& rows, String& revision);
+  PlaylistReadError readImport(const char* path, std::vector<PlaylistRow>& rows);
   PlaylistWriteError commit(const std::vector<PlaylistRow>& rows, uint16_t current,
                             String& revision);
   static bool validRecord(const PlaylistRow& row);

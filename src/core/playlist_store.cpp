@@ -38,9 +38,12 @@ bool parseLine(char* line, PlaylistRow& row) {
 }
 
 bool readRows(const char* path, std::vector<PlaylistRow>& rows, String& revision,
-              std::vector<uint32_t>* offsets = nullptr) {
+              std::vector<uint32_t>* offsets = nullptr, bool* ioError = nullptr) {
   File file = SPIFFS.open(path, "r");
-  if (!file) return false;
+  if (!file) {
+    if (ioError) *ioError = true;
+    return false;
+  }
   rows.clear();
   if (offsets) offsets->clear();
   char line[BUFLEN * 3];
@@ -49,7 +52,10 @@ bool readRows(const char* path, std::vector<PlaylistRow>& rows, String& revision
   const size_t fileSize = file.size();
   while (position < fileSize) {
     const int value = file.read();
-    if (value < 0) return false;
+    if (value < 0) {
+      if (ioError) *ioError = true;
+      return false;
+    }
     crc = playlistCrcByte(crc, static_cast<uint8_t>(value));
     ++position;
     if (value == '\n') {
@@ -183,6 +189,15 @@ bool PlaylistStore::snapshot(std::vector<PlaylistRow>& rows, String& revision) {
     return true;
   }
   return readRows(PLAYLIST_PATH, rows, revision);
+}
+
+PlaylistReadError PlaylistStore::readImport(const char* path,
+                                            std::vector<PlaylistRow>& rows) {
+  bool ioError = false;
+  String ignoredRevision;
+  if (readRows(path, rows, ignoredRevision, nullptr, &ioError))
+    return PlaylistReadError::OK;
+  return ioError ? PlaylistReadError::IO_ERROR : PlaylistReadError::INVALID;
 }
 
 bool PlaylistStore::rebuildIndex() {

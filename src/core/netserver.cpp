@@ -62,6 +62,10 @@ void handleUpload(AsyncWebServerRequest *request, String filename, size_t index,
 void handleStationsRead(AsyncWebServerRequest *request);
 void handleStationsReadSnapshot(AsyncWebServerRequest *request);
 void handleStationsMutation(AsyncWebServerRequest *request);
+void handleStationsExport(AsyncWebServerRequest *request);
+void handleStationsImport(AsyncWebServerRequest *request);
+void handleStationsImportUpload(AsyncWebServerRequest *request, String filename,
+                                size_t index, uint8_t *data, size_t len, bool final);
 void handleIndex(AsyncWebServerRequest * request);
 void handleNotFound(AsyncWebServerRequest * request);
 void onWsEvent(AsyncWebSocket *server, AsyncWebSocketClient *client, AwsEventType type, void *arg, uint8_t *data, size_t len);
@@ -212,6 +216,9 @@ bool NetServer::begin(bool quiet) {
   while(nsQueue==NULL){;}
 
   webserver.on("/", HTTP_ANY, handleIndex);
+  webserver.on("/api/stations/export", HTTP_GET, handleStationsExport);
+  webserver.on("/api/stations/import", HTTP_POST, handleStationsImport,
+               handleStationsImportUpload);
   webserver.on("/api/stations", HTTP_GET, handleStationsReadSnapshot);
   webserver.on("/api/stations/add", HTTP_POST, handleStationsMutation);
   webserver.on("/api/stations/edit", HTTP_POST, handleStationsMutation);
@@ -561,6 +568,257 @@ static void stationsReply(AsyncWebServerRequest* request, int code, const String
 
 static void stationsError(AsyncWebServerRequest* request, int code, const char* error) {
   stationsReply(request, code, String("{\"error\":\"") + error + "\"}");
+}
+
+static bool stationParam(AsyncWebServerRequest* request, const char* key, String& value);
+
+namespace {
+constexpr char kPlaylistUploadPath[] = "/data/playlist.upload";
+constexpr size_t kPlaylistUploadLimit = 8192;
+AsyncWebServerRequest* activePlaylistUpload = nullptr;
+
+struct PlaylistImportSession {
+  File file;
+  size_t bytes = 0;
+  bool finished = false;
+  int status = 0;
+  const char* error = nullptr;
+};
+
+void finishPlaylistUpload(AsyncWebServerRequest* request) {
+  PlaylistImportSession* session =
+      static_cast<PlaylistImportSession*>(request->_tempObject);
+  if (session) {
+    session->file.close();
+    delete session;
+    request->_tempObject = nullptr;
+  }
+  if (activePlaylistUpload == request) {
+    activePlaylistUpload = nullptr;
+    SPIFFS.remove(kPlaylistUploadPath);
+  }
+}
+}  // namespace
+
+void handleStationsExport(AsyncWebServerRequest* request) {
+  PlaylistGuard guard;
+  std::vector<PlaylistRow> rows;
+  String revision;
+  if (!guard || !SPIFFS.exists(PLAYLIST_PATH) ||
+      !playlistStore.snapshot(rows, revision)) {
+    stationsError(request, 500, "playlist_read_failed");
+    return;
+  }
+  File file = SPIFFS.open(PLAYLIST_PATH, "r");
+  if (!file) {
+    stationsError(request, 500, "playlist_read_failed");
+    return;
+  }
+  AsyncWebServerResponse* response = request->beginResponse(
+      file, "VoxOne-playlist.csv", "text/tab-separated-values; charset=utf-8", true);
+  response->addHeader("Cache-Control", "no-store");
+  request->send(response);
+}
+
+void handleStationsImportUpload(AsyncWebServerRequest* request, String,
+                                size_t index, uint8_t* data, size_t len, bool final) {
+  PlaylistImportSession* session =
+      static_cast<PlaylistImportSession*>(request->_tempObject);
+  if (!session) {
+    session = new (std::nothrow) PlaylistImportSession;
+    if (!session) return;
+    request->_tempObject = session;
+    request->onDisconnect([request]() { finishPlaylistUpload(request); });
+    if (activePlaylistUpload && activePlaylistUpload != request) {
+      session->status = 507;
+      session->error = "insufficient_storage";
+      return;
+    }
+    activePlaylistUpload = request;
+    if (index != 0 || (SPIFFS.exists(kPlaylistUploadPath) &&
+                       !SPIFFS.remove(kPlaylistUploadPath))) {
+      session->status = 500;
+      session->error = "upload_failed";
+      return;
+    }
+    session->file = SPIFFS.open(kPlaylistUploadPath, "w");
+    if (!session->file) {
+      session->status = 507;
+      session->error = "insufficient_storage";
+      return;
+    }
+  }
+  if (session->error) return;
+  if (session->finished || index != session->bytes) {
+    session->status = 400;
+    session->error = "bad_upload";
+    return;
+  }
+  if (len > kPlaylistUploadLimit - session->bytes) {
+    session->status = 413;
+    session->error = "playlist_too_large";
+    return;
+  }
+  if (len && session->file.write(data, len) != len) {
+    session->status = 507;
+    session->error = "insufficient_storage";
+    return;
+  }
+  session->bytes += len;
+  if (final) {
+    session->file.flush();
+    session->file.close();
+    session->finished = true;
+  }
+}
+
+void handleStationsImport(AsyncWebServerRequest* request) {
+  PlaylistImportSession* session =
+      static_cast<PlaylistImportSession*>(request->_tempObject);
+  if (!request->multipart()) {
+    stationsError(request, 400, "bad_request");
+    finishPlaylistUpload(request);
+    return;
+  }
+  String clientRevision;
+  if (!stationParam(request, "revision", clientRevision) ||
+      clientRevision.length() != 8) {
+    stationsError(request, 400, "bad_revision");
+    finishPlaylistUpload(request);
+    return;
+  }
+  clientRevision.toUpperCase();
+  for (char ch : clientRevision) {
+    if (!isxdigit(static_cast<unsigned char>(ch))) {
+      stationsError(request, 400, "bad_revision");
+      finishPlaylistUpload(request);
+      return;
+    }
+  }
+  const bool hasEmpty = request->hasParam("empty", true);
+  const bool empty = hasEmpty && request->getParam("empty", true)->value() == "1";
+  size_t fileCount = 0;
+  for (size_t i = 0; i < request->params(); ++i)
+    if (request->getParam(i)->isFile()) ++fileCount;
+
+  PlaylistGuard guard;
+  std::vector<PlaylistRow> rows;
+  String currentRevision;
+  if (!guard || !playlistStore.recover() ||
+      !playlistStore.snapshot(rows, currentRevision)) {
+    stationsError(request, 500, "playlist_read_failed");
+    finishPlaylistUpload(request);
+    return;
+  }
+  if (clientRevision != currentRevision) {
+    stationsError(request, 409, "revision_conflict");
+    finishPlaylistUpload(request);
+    return;
+  }
+  const size_t oldCount = rows.size();
+  if (hasEmpty && !empty) {
+    stationsError(request, 400, "bad_empty");
+    finishPlaylistUpload(request);
+    return;
+  }
+  if ((!empty && fileCount == 0) || (empty && (fileCount != 0 || session))) {
+    stationsError(request, 400, empty ? "bad_request" : "missing_file");
+    finishPlaylistUpload(request);
+    return;
+  }
+  if (fileCount > 1) {
+    stationsError(request, 400, "bad_request");
+    finishPlaylistUpload(request);
+    return;
+  }
+  if (activePlaylistUpload && activePlaylistUpload != request) {
+    stationsError(request, 507, "insufficient_storage");
+    finishPlaylistUpload(request);
+    return;
+  }
+  if (!empty) {
+    if (!session) {
+      stationsError(request, 500, "upload_failed");
+      return;
+    }
+    if (session->error) {
+      stationsError(request, session->status, session->error);
+      finishPlaylistUpload(request);
+      return;
+    }
+    if (!session->finished || !session->bytes) {
+      stationsError(request, 400, "bad_upload");
+      finishPlaylistUpload(request);
+      return;
+    }
+    File uploaded = SPIFFS.open(kPlaylistUploadPath, "r");
+    const bool intact = uploaded && uploaded.size() == session->bytes;
+    uploaded.close();
+    if (!intact) {
+      stationsError(request, 500, "upload_failed");
+      finishPlaylistUpload(request);
+      return;
+    }
+    const PlaylistReadError readResult =
+        playlistStore.readImport(kPlaylistUploadPath, rows);
+    if (readResult != PlaylistReadError::OK) {
+      stationsError(request, readResult == PlaylistReadError::INVALID ? 422 : 500,
+                    readResult == PlaylistReadError::INVALID ?
+                        "invalid_playlist" : "upload_failed");
+      finishPlaylistUpload(request);
+      return;
+    }
+    // Free upload space before PlaylistStore creates its transactional copy.
+    if (!SPIFFS.remove(kPlaylistUploadPath)) {
+      stationsError(request, 500, "upload_failed");
+      finishPlaylistUpload(request);
+      return;
+    }
+  } else {
+    if (SPIFFS.exists(kPlaylistUploadPath) &&
+        !SPIFFS.remove(kPlaylistUploadPath)) {
+      stationsError(request, 500, "upload_failed");
+      finishPlaylistUpload(request);
+      return;
+    }
+    rows.clear();
+  }
+  const uint16_t oldCurrent = config.lastStation();
+  if (config.getMode() != PM_WEB || oldCurrent > oldCount) {
+    stationsError(request, 500, "invalid_playlist_state");
+    finishPlaylistUpload(request);
+    return;
+  }
+  const uint16_t newCurrent = rows.empty() ? 0 :
+      (oldCurrent > rows.size() ? static_cast<uint16_t>(rows.size()) : oldCurrent);
+  String newRevision;
+  const PlaylistWriteError result =
+      playlistStore.commit(rows, newCurrent, newRevision);
+  if (result != PlaylistWriteError::OK) {
+    if (result == PlaylistWriteError::NO_SPACE)
+      stationsError(request, 507, "insufficient_storage");
+    else if (result == PlaylistWriteError::INVALID)
+      stationsError(request, 422, "invalid_playlist");
+    else
+      stationsError(request, 500, "playlist_write_failed");
+    finishPlaylistUpload(request);
+    return;
+  }
+  finishPlaylistUpload(request);
+  if (rows.empty()) {
+    config.station.name[0] = '\0';
+    config.station.url[0] = '\0';
+    config.station.ovol = 0;
+    player.sendCommand({PR_STOP, 0});
+    display.putRequest(NEWSTATION);
+    netserver.requestOnChange(STATION, 0);
+  } else {
+    // Keep the existing stream; only announce the selected list index.
+    netserver.requestOnChange(ITEM, 0);
+  }
+  stationsReply(request, 200, String("{\"ok\":true,\"revision\":\"") +
+      newRevision + "\",\"current\":" + String(newCurrent) +
+      ",\"count\":" + String(rows.size()) + "}");
 }
 
 static bool stationNumber(const String& text, uint16_t& number) {
