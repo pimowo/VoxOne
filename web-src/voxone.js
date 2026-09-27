@@ -56,6 +56,30 @@
   const stationFormError = document.getElementById("station-form-error");
   const stationCancel = document.getElementById("station-cancel");
   const stationSave = document.getElementById("station-save");
+  const mqttForm = document.getElementById("mqtt-form");
+  const mqttEnabled = document.getElementById("mqtt-enabled");
+  const mqttFields = document.getElementById("mqtt-fields");
+  const mqttHost = document.getElementById("mqtt-host");
+  const mqttPort = document.getElementById("mqtt-port");
+  const mqttUsername = document.getElementById("mqtt-username");
+  const mqttPassword = document.getElementById("mqtt-password");
+  const mqttPasswordState = document.getElementById("mqtt-password-state");
+  const mqttClearPassword = document.getElementById("mqtt-clear-password");
+  const mqttCustomRootWrap = document.getElementById("mqtt-custom-root-wrap");
+  const mqttRootTopic = document.getElementById("mqtt-root-topic");
+  const mqttEffectiveRoot = document.getElementById("mqtt-effective-root");
+  const mqttRootModeLabel = document.getElementById("mqtt-root-mode-label");
+  const mqttTopicList = document.getElementById("mqtt-topic-list");
+  const mqttFeedback = document.getElementById("mqtt-feedback");
+  const mqttSave = document.getElementById("mqtt-save");
+  const haName = document.getElementById("ha-name");
+  const haYaml = document.getElementById("ha-yaml");
+  const haCopy = document.getElementById("ha-copy");
+  const haCopyStatus = document.getElementById("ha-copy-status");
+  let mqttConfigLoaded = false;
+  let mqttPasswordSet = false;
+  let mqttEffectiveRootValue = "";
+  let mqttSaving = false;
   const state = {
     connection: "connecting",
     source: null,
@@ -125,6 +149,116 @@
       else link.removeAttribute("aria-current");
     }
     if (selected === "stations" && state.stationsStatus === "idle") loadStations();
+    if (selected === "settings" && !mqttConfigLoaded) loadMqttConfig();
+  }
+
+  function mqttRootMode() {
+    const selected = mqttForm.querySelector('input[name="mqtt-root-mode"]:checked');
+    return selected ? selected.value : "auto";
+  }
+
+  function renderMqttRoot() {
+    const custom = mqttRootMode() === "custom";
+    mqttCustomRootWrap.hidden = !custom;
+    mqttRootModeLabel.textContent = custom ? "Własny" : "Automatyczny";
+    mqttEffectiveRoot.textContent = mqttEffectiveRootValue || "—";
+    mqttTopicList.textContent = mqttEffectiveRootValue ? ["command", "status", "volume", "playlist"].map(suffix => mqttEffectiveRootValue + "/" + suffix).join(" · ") : "—";
+    renderHaYaml();
+  }
+
+  function renderHaYaml() {
+    const name = haName.value.trim() || "VoxOne";
+    const escapedName = name.replace(/\\/g, "\\\\").replace(/"/g, '\\"').replace(/[\r\n]/g, " ");
+    const root = mqttEffectiveRootValue || "—";
+    haYaml.textContent = "media_player:\n  - platform: yoradio\n    name: \"" + escapedName + "\"\n    root_topic: " + root;
+    haCopy.disabled = !mqttEffectiveRootValue;
+  }
+
+  function setMqttFeedback(message, isError) {
+    mqttFeedback.textContent = message;
+    mqttFeedback.dataset.kind = isError ? "error" : "success";
+  }
+
+  function updateMqttFormState() {
+    mqttFields.classList.toggle("is-disabled", !mqttEnabled.checked);
+    mqttPasswordState.textContent = mqttPasswordSet ? "Hasło zapisane. Puste pole zachowuje obecne hasło." : "";
+    mqttSave.disabled = mqttSaving;
+  }
+
+  async function loadMqttConfig() {
+    try {
+      const response = await fetch("/api/mqtt", { cache: "no-store" });
+      const config = await response.json();
+      if (!response.ok) throw new Error(config.error || ("HTTP " + response.status));
+      mqttEnabled.checked = config.enabled === true;
+      mqttHost.value = typeof config.host === "string" ? config.host : "";
+      mqttPort.value = String(config.port || 1883);
+      mqttUsername.value = typeof config.username === "string" ? config.username : "";
+      mqttPassword.value = "";
+      mqttPasswordSet = config.passwordSet === true;
+      mqttClearPassword.checked = false;
+      const custom = typeof config.rootTopic === "string" && config.rootTopic.length > 0;
+      mqttForm.querySelector('input[name="mqtt-root-mode"][value="' + (custom ? "custom" : "auto") + '"]').checked = true;
+      mqttRootTopic.value = custom ? config.rootTopic : "";
+      mqttEffectiveRootValue = typeof config.effectiveRoot === "string" ? config.effectiveRoot : "";
+      mqttConfigLoaded = true;
+      setMqttFeedback("", false);
+      renderMqttRoot();
+      updateMqttFormState();
+    } catch (error) {
+      setMqttFeedback("Nie udało się pobrać konfiguracji MQTT: " + (error.message || "błąd połączenia"), true);
+    }
+  }
+
+  async function saveMqttConfig(event) {
+    event.preventDefault();
+    if (mqttSaving) return;
+    const body = new URLSearchParams();
+    body.set("enabled", mqttEnabled.checked ? "true" : "false");
+    body.set("host", mqttHost.value);
+    body.set("port", mqttPort.value);
+    body.set("username", mqttUsername.value);
+    body.set("rootTopic", mqttRootMode() === "custom" ? mqttRootTopic.value : "");
+    if (mqttPassword.value) body.set("password", mqttPassword.value);
+    else if (mqttClearPassword.checked) body.set("clearPassword", "true");
+    mqttSaving = true;
+    updateMqttFormState();
+    setMqttFeedback("Zapisywanie konfiguracji…", false);
+    try {
+      const response = await fetch("/api/mqtt", { method: "POST", headers: { "Content-Type": "application/x-www-form-urlencoded;charset=UTF-8" }, body: body.toString(), cache: "no-store" });
+      const result = await response.json();
+      if (!response.ok || result.ok !== true) throw new Error(result.error || ("HTTP " + response.status));
+      mqttPassword.value = "";
+      setMqttFeedback("Konfiguracja zapisana. VoxOne uruchomi się ponownie.", false);
+    } catch (error) {
+      setMqttFeedback("Nie zapisano konfiguracji MQTT: " + (error.message || "błąd połączenia"), true);
+    } finally {
+      mqttSaving = false;
+      updateMqttFormState();
+    }
+  }
+
+  async function copyHaYaml() {
+    const value = haYaml.textContent;
+    try {
+      if (navigator.clipboard && window.isSecureContext) await navigator.clipboard.writeText(value);
+      else {
+        const temporary = document.createElement("textarea");
+        temporary.value = value;
+        temporary.setAttribute("readonly", "");
+        temporary.style.position = "fixed";
+        temporary.style.opacity = "0";
+        document.body.appendChild(temporary);
+        temporary.select();
+        const copied = document.execCommand("copy");
+        temporary.remove();
+        if (!copied) throw new Error("clipboard unavailable");
+      }
+      haCopyStatus.textContent = "Skopiowano";
+    } catch (_) {
+      haCopyStatus.textContent = "Nie udało się skopiować";
+    }
+    setTimeout(() => { haCopyStatus.textContent = ""; }, 2200);
   }
 
   function renderConnection() {
@@ -1041,6 +1175,17 @@
   }
 
   window.addEventListener("hashchange", showTab);
+  mqttForm.addEventListener("submit", saveMqttConfig);
+  mqttEnabled.addEventListener("change", updateMqttFormState);
+  mqttPassword.addEventListener("input", () => {
+    if (mqttPassword.value) mqttClearPassword.checked = false;
+  });
+  mqttClearPassword.addEventListener("change", () => {
+    if (mqttClearPassword.checked) mqttPassword.value = "";
+  });
+  mqttForm.querySelectorAll('input[name="mqtt-root-mode"]').forEach(input => input.addEventListener("change", renderMqttRoot));
+  haName.addEventListener("input", renderHaYaml);
+  haCopy.addEventListener("click", copyHaYaml);
   window.addEventListener("online", () => {
     if (!socket) connect();
   });

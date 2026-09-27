@@ -128,10 +128,41 @@
       </section>
 
       <section id="settings" data-panel aria-labelledby="settings-title" hidden>
-        <div class="section-heading"><div><p class="eyebrow">KONFIGURACJA</p><h2 id="settings-title">Ustawienia</h2></div><span class="badge">W przygotowaniu</span></div>
+        <div class="section-heading"><div><p class="eyebrow">KONFIGURACJA</p><h2 id="settings-title">Ustawienia</h2></div><span class="badge">Urządzenie</span></div>
         <div class="grid">
           <article class="card"><h3>Sieć</h3><dl class="facts"><div><dt>Hostname</dt><dd>—</dd></div><div><dt>Wi-Fi</dt><dd>—</dd></div></dl><p class="hint">Pola tylko poglądowe.</p></article>
           <article class="card"><h3>Sen</h3><dl class="facts"><div><dt>Timer wyłączenia</dt><dd>—</dd></div></dl><p class="hint">Konfiguracja w kolejnym etapie.</p></article>
+        </div>
+        <div class="grid settings-grid">
+          <article class="card mqtt-card" aria-labelledby="mqtt-title">
+            <h3 id="mqtt-title">MQTT</h3>
+            <form id="mqtt-form" novalidate>
+              <label class="mqtt-toggle"><input id="mqtt-enabled" type="checkbox"><span>Włącz MQTT</span></label>
+              <div id="mqtt-fields" class="mqtt-fields">
+                <div class="mqtt-form-grid">
+                  <label>Broker<input id="mqtt-host" name="host" type="text" placeholder="192.168.1.10 lub mqtt.local" autocomplete="off" autocapitalize="off" spellcheck="false"></label>
+                  <label>Port<input id="mqtt-port" name="port" type="number" min="1" max="65535" step="1" value="1883" inputmode="numeric"></label>
+                  <label>Użytkownik<input id="mqtt-username" name="username" type="text" autocomplete="username"></label>
+                  <label>Hasło<input id="mqtt-password" name="password" type="password" autocomplete="new-password"><small id="mqtt-password-state" class="mqtt-help"></small></label>
+                </div>
+                <label class="mqtt-clear-password"><input id="mqtt-clear-password" type="checkbox"><span>Usuń zapisane hasło</span></label>
+                <fieldset class="mqtt-root-choice"><legend>Root topic</legend><label><input type="radio" name="mqtt-root-mode" value="auto" checked> Automatyczny</label><label><input type="radio" name="mqtt-root-mode" value="custom"> Własny</label></fieldset>
+                <label id="mqtt-custom-root-wrap" class="mqtt-custom-root" hidden>Własny root<input id="mqtt-root-topic" name="rootTopic" type="text" placeholder="radio-salon" autocomplete="off" autocapitalize="off" spellcheck="false"></label>
+                <p class="mqtt-effective">Aktualny root: <code id="mqtt-effective-root">—</code><span id="mqtt-root-mode-label">Automatyczny</span></p>
+                <div class="mqtt-topics"><span>Tematy</span><code id="mqtt-topic-list">—</code></div>
+              </div>
+              <p id="mqtt-feedback" class="mqtt-feedback" role="status" aria-live="polite"></p>
+              <button id="mqtt-save" class="mqtt-save" type="submit">ZAPISZ</button>
+            </form>
+          </article>
+          <article class="card ha-card" aria-labelledby="ha-title">
+            <h3 id="ha-title">Home Assistant</h3>
+            <label>Nazwa w Home Assistant<input id="ha-name" type="text" value="VoxOne" autocomplete="off"></label>
+            <label for="ha-yaml">YAML</label>
+            <pre id="ha-yaml" class="ha-yaml" aria-live="polite">Ładowanie konfiguracji…</pre>
+            <button id="ha-copy" type="button" disabled>Kopiuj</button><span id="ha-copy-status" class="mqtt-help" role="status" aria-live="polite"></span>
+            <p class="hint">Jeżeli masz już sekcję media_player: w configuration.yaml, dopisz tylko wpis zaczynający się od - platform: yoradio.</p>
+          </article>
         </div>
       </section>
 

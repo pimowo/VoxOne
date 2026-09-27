@@ -33,9 +33,7 @@ void MyNetwork::WiFiReconnected(WiFiEvent_t event, WiFiEventInfo_t info){
     display.putRequest(NEWMODE, PLAYER);
     if (network.lostPlaying) player.sendCommand({PR_PLAY, config.lastStation()});
   }
-  #ifdef MQTT_ROOT_TOPIC
-    connectToMqtt();
-  #endif
+  mqttWifiConnected();
 }
 
 void MyNetwork::WiFiLostConnection(WiFiEvent_t event, WiFiEventInfo_t info){
@@ -51,6 +49,7 @@ void MyNetwork::WiFiLostConnection(WiFiEvent_t event, WiFiEventInfo_t info){
     }
   }
   network.beginReconnect = true;
+  mqttWifiDisconnected();
   WiFi.reconnect();
 }
 
@@ -104,9 +103,7 @@ void searchWiFi(void * pvParameters){
     netserver.begin(true);
     network.setWifiParams();
     display.putRequest(NEWIP, 0);
-    #ifdef MQTT_ROOT_TOPIC
-      mqttInit();
-    #endif
+    mqttInit();
   }
   vTaskDelete( NULL );
 }
@@ -129,9 +126,7 @@ void MyNetwork::begin() {
     Serial.println(".");
     status = CONNECTED;
     setWifiParams();
-    #ifdef MQTT_ROOT_TOPIC
-      mqttInit();
-    #endif
+    mqttInit();
   }else{
     status = SDREADY;
     xTaskCreatePinnedToCore(searchWiFi, "searchWiFi", 1024 * 4, NULL, 0, NULL, SEARCH_WIFI_CORE_ID);

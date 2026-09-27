@@ -10,6 +10,7 @@
 #include "serialcli.h"
 #include "rtcsupport.h"
 #include "volume_map.h"
+#include "mqtt_config.h"
 #include "../displays/tools/l10n.h"
 #ifdef USE_SD
 #include "sdmanager.h"
@@ -71,6 +72,7 @@ bool Config::_isFSempty() {
 
 void Config::init() {
   EEPROM.begin(EEPROM_SIZE);
+  mqttConfig();
   sdResumePos = 0;
   screensaverTicks = 0;
   screensaverPlayingTicks = 0;
@@ -429,6 +431,10 @@ template <class T> int Config::eepromRead(int ee, T& value) {
 }
 
 void Config::reset(){
+  if (!mqttClearConfig()) {
+    Serial.println("##[ERROR]# MQTT config reset failed; factory reset cancelled");
+    return;
+  }
   setDefaults();
   delay(500);
   ESP.restart();

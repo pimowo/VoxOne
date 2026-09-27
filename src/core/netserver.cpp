@@ -19,6 +19,7 @@
 #include "display.h"
 #include "network.h"
 #include "mqtt.h"
+#include "mqtt_config.h"
 #include "controls.h"
 #include "commandhandler.h"
 #include "volume_map.h"
@@ -88,13 +89,14 @@ void handleStationsExport(AsyncWebServerRequest *request);
 void handleStationsImport(AsyncWebServerRequest *request);
 void handleStationsImportUpload(AsyncWebServerRequest *request, String filename,
                                 size_t index, uint8_t *data, size_t len, bool final);
+void handleMqttConfigRead(AsyncWebServerRequest *request);
+void handleMqttConfigSave(AsyncWebServerRequest *request);
 void handleIndex(AsyncWebServerRequest * request);
 void handleNotFound(AsyncWebServerRequest * request);
 void onWsEvent(AsyncWebSocket *server, AsyncWebSocketClient *client, AwsEventType type, void *arg, uint8_t *data, size_t len);
 
 bool  shouldReboot  = false;
 uint32_t webUpdateRebootAt = 0;
-#ifdef MQTT_ROOT_TOPIC
 //Ticker mqttplaylistticker;
 bool  mqttplaylistblock = false;
 void mqttplaylistSend() {
@@ -103,7 +105,6 @@ void mqttplaylistSend() {
   mqttPublishPlaylist();
   mqttplaylistblock = false;
 }
-#endif
 
 namespace {
 struct WebUpdateFile {
@@ -246,6 +247,8 @@ bool NetServer::begin(bool quiet) {
   webserver.on("/api/stations/edit", HTTP_POST, handleStationsMutation);
   webserver.on("/api/stations/delete", HTTP_POST, handleStationsMutation);
   webserver.on("/api/stations/reorder", HTTP_POST, handleStationsMutation);
+  webserver.on("/api/mqtt", HTTP_GET, handleMqttConfigRead);
+  webserver.on("/api/mqtt", HTTP_POST, handleMqttConfigSave);
   webserver.onNotFound(handleNotFound);
   webserver.onFileUpload(handleUpload);
 
@@ -586,6 +589,121 @@ static void stationsReply(AsyncWebServerRequest* request, int code, const String
       code, "application/json; charset=utf-8", body);
   response->addHeader("Cache-Control", "no-store");
   request->send(response);
+}
+
+static bool mqttApiAuthorized(AsyncWebServerRequest* request) {
+#if defined(HTTP_USER) && defined(HTTP_PASS)
+  if (network.status == CONNECTED && !request->authenticate(HTTP_USER, HTTP_PASS)) {
+    request->requestAuthentication();
+    return false;
+  }
+#endif
+  return true;
+}
+
+static void mqttApiError(AsyncWebServerRequest* request, int code, const char* error) {
+  stationsReply(request, code, String("{\"error\":\"") + error + "\"}");
+}
+
+static bool mqttApiText(AsyncWebServerRequest* request, const char* key, String& value) {
+  if (!request->hasParam(key, true)) return false;
+  value = request->getParam(key, true)->value();
+  for (size_t i = 0; i < value.length(); ++i)
+    if (value[i] == '\0') return false;
+  return true;
+}
+
+static __attribute__((noinline)) String mqttJsonText(const char* value) {
+  char escaped[128 * 6 + 1];
+  size_t used = 0;
+  if (!appendJsonEscaped(escaped, sizeof(escaped), used, value)) return String();
+  return String(escaped);
+}
+
+void handleMqttConfigRead(AsyncWebServerRequest* request) {
+  if (!mqttApiAuthorized(request)) return;
+  char autoRoot[14];
+  char effectiveRoot[64];
+  if (!mqttAutoRoot(autoRoot) || !mqttEffectiveRoot(effectiveRoot, sizeof(effectiveRoot))) {
+    mqttApiError(request, 500, "mac_unavailable");
+    return;
+  }
+  const MqttSettings& settings = mqttConfig();
+  String body = String("{\"enabled\":") + (settings.enabled ? "true" : "false") +
+      ",\"host\":\"" + mqttJsonText(settings.host) +
+      "\",\"port\":" + String(settings.port) +
+      ",\"username\":\"" + mqttJsonText(settings.username) +
+      "\",\"passwordSet\":" + (settings.password[0] ? "true" : "false") +
+      ",\"rootTopic\":\"" + mqttJsonText(settings.rootTopic) +
+      "\",\"effectiveRoot\":\"" + mqttJsonText(effectiveRoot) +
+      "\",\"autoRoot\":\"" + mqttJsonText(autoRoot) + "\"}";
+  stationsReply(request, 200, body);
+}
+
+void handleMqttConfigSave(AsyncWebServerRequest* request) {
+  if (!mqttApiAuthorized(request)) return;
+  if (shouldReboot) { mqttApiError(request, 409, "reboot_pending"); return; }
+  String enabledText, hostText, portText, usernameText, rootText;
+  if (!mqttApiText(request, "enabled", enabledText) ||
+      !mqttApiText(request, "host", hostText) ||
+      !mqttApiText(request, "port", portText) ||
+      !mqttApiText(request, "username", usernameText) ||
+      !mqttApiText(request, "rootTopic", rootText)) {
+    mqttApiError(request, 400, "missing_or_invalid_field");
+    return;
+  }
+  if (enabledText != "true" && enabledText != "false" && enabledText != "1" && enabledText != "0") {
+    mqttApiError(request, 400, "invalid_enabled");
+    return;
+  }
+  if (portText.length() == 0 || portText.length() > 5 ||
+      hostText.length() > 255 || usernameText.length() > 63 || rootText.length() > 255) {
+    mqttApiError(request, 400, "field_too_long");
+    return;
+  }
+  unsigned port = 0;
+  for (char digit : portText) {
+    if (digit < '0' || digit > '9') { mqttApiError(request, 400, "invalid_port"); return; }
+    port = port * 10 + static_cast<unsigned>(digit - '0');
+  }
+  if (port == 0 || port > 65535) { mqttApiError(request, 400, "invalid_port"); return; }
+  String newPassword;
+  if (request->hasParam("password", true) && !mqttApiText(request, "password", newPassword)) {
+    mqttApiError(request, 400, "invalid_password");
+    return;
+  }
+  String clearText;
+  const bool hasClear = request->hasParam("clearPassword", true);
+  if (hasClear && !mqttApiText(request, "clearPassword", clearText)) {
+    mqttApiError(request, 400, "invalid_clear_password");
+    return;
+  }
+  if (hasClear && clearText != "true" && clearText != "false") {
+    mqttApiError(request, 400, "invalid_clear_password");
+    return;
+  }
+  if (newPassword.length() > 127) { mqttApiError(request, 400, "field_too_long"); return; }
+  MqttSettings candidate = mqttConfig();
+  candidate.enabled = enabledText == "true" || enabledText == "1";
+  candidate.port = static_cast<uint16_t>(port);
+  memset(candidate.host, 0, sizeof(candidate.host));
+  memset(candidate.username, 0, sizeof(candidate.username));
+  memset(candidate.rootTopic, 0, sizeof(candidate.rootTopic));
+  if (!mqttNormalizeHost(hostText.c_str(), candidate.host, sizeof(candidate.host)) ||
+      !mqttNormalizeRoot(rootText.c_str(), candidate.rootTopic, sizeof(candidate.rootTopic))) {
+    mqttApiError(request, 400, "invalid_host_or_root");
+    return;
+  }
+  usernameText.toCharArray(candidate.username, sizeof(candidate.username));
+  if (!mqttApplyPassword(candidate, newPassword.c_str(), clearText == "true") ||
+      !mqttValidSettings(candidate)) {
+    mqttApiError(request, 400, "invalid_config");
+    return;
+  }
+  if (!mqttSaveConfig(candidate)) { mqttApiError(request, 500, "storage_failed"); return; }
+  stationsReply(request, 200, "{\"ok\":true,\"rebooting\":true}");
+  shouldReboot = true;
+  webUpdateRebootAt = millis() + 1500;
 }
 
 static void stationsError(AsyncWebServerRequest* request, int code, const char* error) {
@@ -1153,10 +1271,8 @@ void NetServer::processQueue(){
     }
     if (strlen(wsBuf) > 0) {
       if (clientId == 0) { websocket.textAll(wsBuf); }else{ websocket.text(clientId, wsBuf); }
-  #ifdef MQTT_ROOT_TOPIC
       if (clientId == 0 && (request.type == STATION || request.type == ITEM || request.type == TITLE || request.type == MODE)) mqttPublishStatus();
       if (clientId == 0 && request.type == VOLUME) mqttPublishVolume();
-  #endif
     }
   }
 }
@@ -1183,9 +1299,7 @@ void NetServer::processVolumeUpdate(){
   sprintf(wsBuf, "{\"payload\":[{\"id\":\"volume\",\"value\":%d},{\"id\":\"volume100\",\"value\":%d},{\"id\":\"maximumVolume\",\"value\":%d},{\"id\":\"startupMode\",\"value\":%d},{\"id\":\"startupFixedVolume\",\"value\":%d}]}", config.store.volume, config.userVolume, config.store.maximumVolume, config.store.startupMode, config.store.startupFixedVolume);
   if(hasWebClients) websocket.textAll(wsBuf);
   serialCli.printf("##CLI.VOL#: %d\n", config.store.volume);
-#ifdef MQTT_ROOT_TOPIC
   mqttPublishVolume();
-#endif
 }
 
 void NetServer::loop() {
@@ -1252,10 +1366,7 @@ void NetServer::onWsMessage(void *arg, uint8_t *data, size_t len, uint32_t clien
         return;
       }
       if (strcmp(_wscmd, "submitplaylistdone") == 0) {
-#ifdef MQTT_ROOT_TOPIC
-        //mqttplaylistticker.attach(5, mqttplaylistSend);
-        timekeeper.waitAndDo(5, mqttplaylistSend, DelayedActionSlot::MQTT);
-#endif
+        if (mqttActive()) timekeeper.waitAndDo(5, mqttplaylistSend, DelayedActionSlot::MQTT);
         if (player.isRunning()) player.sendCommand({PR_PLAY, -config.lastStation()});
         return;
       }
@@ -1571,9 +1682,7 @@ void handleNotFound(AsyncWebServerRequest * request) {
         strcmp(request->url().c_str(), TMP_PATH) == 0 || 
         strcmp(request->url().c_str(), PLAYLIST_SD_PATH) == 0 || 
         strcmp(request->url().c_str(), INDEX_SD_PATH) == 0) {
-#ifdef MQTT_ROOT_TOPIC
       if (strcmp(request->url().c_str(), PLAYLIST_PATH) == 0) while (mqttplaylistblock) vTaskDelay(5);
-#endif
       if(strcmp(request->url().c_str(), PLAYLIST_PATH) == 0 && config.getMode()==PM_SDCARD){
         netserver.chunkedHtmlPage("application/octet-stream", request, PLAYLIST_SD_PATH);
       }else{

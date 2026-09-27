@@ -46,9 +46,7 @@ class Player: public Audio {
     bool resumeAfterUrl = false;
     volatile bool connproc = true;
     uint32_t sd_min, sd_max;
-    #ifdef MQTT_ROOT_TOPIC
     char      burl[MQTT_BURL_SIZE];  /* buffer for browseUrl  */
-    #endif
   public:
     Player();
     void init();
@@ -59,9 +57,7 @@ class Player: public Audio {
     //bool hasError() { return strlen(_plError)>0; }
     void sendCommand(playerRequestParams_t request);
     void resetQueue();
-    #ifdef MQTT_ROOT_TOPIC
     void browseUrl();
-    #endif
     bool remoteStationName = false;
     plStatus_e status() { return _status; }
     void prev();

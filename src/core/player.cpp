@@ -50,9 +50,7 @@ void Player::init() {
   playerQueue = xQueueCreate( 5, sizeof( playerRequestParams_t ) );
   setOutputPins(false);
   delay(50);
-#ifdef MQTT_ROOT_TOPIC
   memset(burl, 0, MQTT_BURL_SIZE);
-#endif
   if(MUTE_PIN!=255) pinMode(MUTE_PIN, OUTPUT);
   #if I2S_DOUT!=255
     #if !I2S_INTERNAL
@@ -222,11 +220,9 @@ void Player::loop() {
         break;
       }
       case PR_BURL: {
-      #ifdef MQTT_ROOT_TOPIC
         if(strlen(burl)>0){
           browseUrl();
         }
-      #endif
         break;
       }
           
@@ -241,12 +237,6 @@ void Player::loop() {
       _volTimer=false;
     }
   }
-  /*
-#ifdef MQTT_ROOT_TOPIC
-  if(strlen(burl)>0){
-    browseUrl();
-  }
-#endif*/
 }
 
 void Player::setOutputPins(bool isPlaying) {
@@ -288,7 +278,6 @@ void Player::_play(uint16_t stationId) {
   };
 }
 
-#ifdef MQTT_ROOT_TOPIC
 void Player::browseUrl(){
   _hasError=false;
   remoteStationName = true;
@@ -312,7 +301,6 @@ void Player::browseUrl(){
   }
   //memset(burl, 0, MQTT_BURL_SIZE);
 }
-#endif
 
 void Player::prev() {
   uint16_t lastStation = config.lastStation();

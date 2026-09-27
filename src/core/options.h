@@ -17,9 +17,6 @@ STORE YOUR SETTINGS IN THE *** myoptions.h *** FILE.
 #if __has_include("../../mytheme.h")
   #include "../../mytheme.h"            /* <- Theme file */
 #endif
-#if __has_include("../../mqttoptions.h")
-  #include "../../mqttoptions.h"
-#endif
 /*******************************************************
 
 The connection tables are located here https://github.com/e2002/yoradio#connection-tables
