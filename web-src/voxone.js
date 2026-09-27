@@ -17,6 +17,15 @@
     treble: { slider: document.getElementById("audio-treble-slider"), command: "trebble" },
     balance: { slider: document.getElementById("audio-balance-slider"), command: "balance" }
   };
+  const tonePresets = {
+    flat: [0, 0, 0],
+    bass: [6, -2, 0],
+    rock: [5, -2, 4],
+    pop: [3, 2, 3],
+    mowa: [-4, 4, 2]
+  };
+  const tonePresetButtons = [...document.querySelectorAll("[data-tone-preset]")];
+  const tonePresetUser = document.getElementById("audio-preset-user");
   const stationList = document.getElementById("station-list");
   const stationSearch = document.getElementById("station-search");
   const stationClear = document.getElementById("station-search-clear");
@@ -120,6 +129,9 @@
     for (const [key, control] of Object.entries(audioControls)) {
       control.slider.disabled = !connected || state[key] === null;
     }
+    for (const button of tonePresetButtons) {
+      button.disabled = !connected || state.bass === null || state.middle === null || state.treble === null;
+    }
     stationList.querySelectorAll(".station-play").forEach(button => {
       button.disabled = !connected;
     });
@@ -185,6 +197,15 @@
     for (const [key, control] of Object.entries(audioControls)) {
       if (state[key] !== null && !control.dragging) control.slider.value = String(state[key]);
     }
+    const hasTone = state.bass !== null && state.middle !== null && state.treble !== null;
+    const activePreset = hasTone ? Object.keys(tonePresets).find(name => {
+      const [bass, middle, treble] = tonePresets[name];
+      return state.bass === bass && state.middle === middle && state.treble === treble;
+    }) : null;
+    for (const button of tonePresetButtons) {
+      button.setAttribute("aria-pressed", String(button.dataset.tonePreset === activePreset));
+    }
+    tonePresetUser.classList.toggle("is-active", hasTone && !activePreset);
     renderConnection();
   }
 
@@ -598,7 +619,6 @@
         const key = id === "trebble" ? "treble" : id;
         state[key] = setting;
         clearTimeout(audioControls[key].ackTimer);
-        renderAudio();
         break;
       }
       case "rssi": {
@@ -639,7 +659,12 @@
       return;
     }
     if (Array.isArray(message.payload)) {
-      for (const item of message.payload) updatePayload(item.id, item.value);
+      let toneChanged = false;
+      for (const item of message.payload) {
+        updatePayload(item.id, item.value);
+        if (["bass", "middle", "trebble", "balance"].includes(item.id)) toneChanged = true;
+      }
+      if (toneChanged) renderAudio();
     }
     if (typeof message.current === "number") {
       const previousCurrent = state.current;
@@ -874,6 +899,14 @@
         clearTimeout(control.ackTimer);
         control.ackTimer = setTimeout(renderAudio, 1500);
       }
+    });
+  }
+
+  for (const button of tonePresetButtons) {
+    button.addEventListener("click", () => {
+      if (button.disabled) return;
+      const values = tonePresets[button.dataset.tonePreset];
+      if (values) send("tone", values.join(","));
     });
   }
 

@@ -7,6 +7,9 @@
 #include <nvs.h>
 #include <memory>
 #include <algorithm>
+#include <cerrno>
+#include <climits>
+#include <cstdlib>
 #include "config.h"
 #include "playlist_store.h"
 #include "playlist_mapping.h"
@@ -54,6 +57,24 @@
 
 NetServer netserver;
 portMUX_TYPE netserverVolumeMux = portMUX_INITIALIZER_UNLOCKED;
+
+static bool parseToneValue(const char* value, int8_t& bass, int8_t& middle, int8_t& trebble) {
+  int8_t* fields[] = {&bass, &middle, &trebble};
+  const char* cursor = value;
+  for (int index = 0; index < 3; ++index) {
+    const char* digits = cursor;
+    if (*digits == '+' || *digits == '-') ++digits;
+    if (*digits < '0' || *digits > '9') return false;
+    errno = 0;
+    char* end = nullptr;
+    const long parsed = strtol(cursor, &end, 10);
+    if (errno == ERANGE || parsed < INT8_MIN || parsed > INT8_MAX) return false;
+    if (index < 2 ? *end != ',' : *end != '\0') return false;
+    *fields[index] = static_cast<int8_t>(parsed);
+    cursor = end + 1;
+  }
+  return true;
+}
 
 AsyncWebServer webserver(80);
 AsyncWebSocket websocket("/ws");
@@ -1205,6 +1226,13 @@ void NetServer::onWsMessage(void *arg, uint8_t *data, size_t len, uint32_t clien
     if (config.parseWsCommand((const char*)data, _wscmd, _wsval, 65)) {
       if (strcmp(_wscmd, "ping") == 0) {
         websocket.text(clientId, "{\"pong\": 1}");
+        return;
+      }
+      if (strcmp(_wscmd, "tone") == 0) {
+        int8_t bass, middle, trebble;
+        if (len <= 64 && parseToneValue(_wsval, bass, middle, trebble)) {
+          config.setTone(bass, middle, trebble);
+        }
         return;
       }
       if (strcmp(_wscmd, "trebble") == 0) {

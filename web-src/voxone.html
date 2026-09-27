@@ -90,6 +90,14 @@
         <div class="grid">
           <article class="card"><h3>Głośność</h3><div class="audio-control"><div class="audio-control-heading"><label for="audio-volume-slider">Volume</label><output id="audio-volume">—</output></div><input id="audio-volume-slider" class="volume-slider" type="range" min="0" max="254" step="1" value="0" disabled></div></article>
           <article class="card"><h3>Korekcja</h3>
+            <div class="audio-presets" role="group" aria-label="Presety korekcji">
+              <button type="button" data-tone-preset="flat" aria-pressed="false" disabled>FLAT</button>
+              <button type="button" data-tone-preset="bass" aria-pressed="false" disabled>BASS</button>
+              <button type="button" data-tone-preset="rock" aria-pressed="false" disabled>ROCK</button>
+              <button type="button" data-tone-preset="pop" aria-pressed="false" disabled>POP</button>
+              <button type="button" data-tone-preset="mowa" aria-pressed="false" disabled>MOWA</button>
+              <span id="audio-preset-user" class="audio-preset-user" aria-label="Ustawienie ręczne">USER</span>
+            </div>
             <div class="audio-control"><div class="audio-control-heading"><label for="audio-treble-slider">Treble — wysokie tony</label><output id="audio-treble">—</output></div><input id="audio-treble-slider" class="volume-slider" type="range" min="-6" max="6" step="1" value="0" disabled></div>
             <div class="audio-control"><div class="audio-control-heading"><label for="audio-middle-slider">Middle — średnie tony</label><output id="audio-middle">—</output></div><input id="audio-middle-slider" class="volume-slider" type="range" min="-6" max="6" step="1" value="0" disabled></div>
             <div class="audio-control"><div class="audio-control-heading"><label for="audio-bass-slider">Bass — niskie tony</label><output id="audio-bass">—</output></div><input id="audio-bass-slider" class="volume-slider" type="range" min="-6" max="6" step="1" value="0" disabled></div>
