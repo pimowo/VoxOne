@@ -6,6 +6,7 @@
 #include "config.h"
 #include "display.h"
 #include "player.h"
+#include "volume_map.h"
 #include "network.h"
 #include "netserver.h"
 #include "timekeeper.h"
@@ -79,6 +80,14 @@ void Display::_createDspTask(){
 
 #ifndef DUMMYDISPLAY
 //============================================================================================================================
+#if defined(VOXONE_PROFILE_DESK)
+constexpr uint16_t kDisplayVolumeMax = 100;
+static uint8_t displayedVolume() { return volumeRawToUser(config.store.volume); }
+#else
+constexpr uint16_t kDisplayVolumeMax = 254;
+static uint8_t displayedVolume() { return config.store.volume; }
+#endif
+
 DspCore dsp;
 
 Page *pages[] = { new Page(), new Page(), new Page(), new Page() };
@@ -215,7 +224,7 @@ void Display::_buildPager(){
     _vuwidget = new VuWidget(vuConf, bandsConf, config.theme.vumax, config.theme.vumin, config.theme.background);
   #endif
   #ifndef HIDE_VOLBAR
-    _volbar = new SliderWidget(volbarConf, config.theme.volbarin, config.theme.background, 254, config.theme.volbarout);
+    _volbar = new SliderWidget(volbarConf, config.theme.volbarin, config.theme.background, kDisplayVolumeMax, config.theme.volbarout);
   #endif
   #ifndef HIDE_HEAPBAR
     _heapbar = new SliderWidget(heapbarConf, config.theme.buffer, config.theme.background, psramInit()?300000:1600 * config.store.abuff);
@@ -434,7 +443,7 @@ void Display::_swichMode(displayMode_e newmode) {
     #else
       _showDialog(config.ipToStr(WiFi.localIP()));
     #endif
-    _nums->setText(config.store.volume, numtxtFmt);
+    _nums->setText(displayedVolume(), numtxtFmt);
   }
   if (newmode == LOST)      _showDialog(LANG::const_DlgLost);
   if (newmode == UPDATING)  _showDialog(LANG::const_DlgUpdate);
@@ -851,12 +860,12 @@ void Display::_time(bool redraw) {
 }
 
 void Display::_volume() {
-  if(_volbar) _volbar->setValue(config.store.volume);
+  if(_volbar) _volbar->setValue(displayedVolume());
 #if DSP_MODEL==DSP_ST7789_76
-  if(_deskVolume) _deskVolume->setText(config.store.volume, "\023 %d");
+  if(_deskVolume) _deskVolume->setText(displayedVolume(), "\023 %d");
 #endif
   #ifndef HIDE_VOL
-    if(_voltxt) _voltxt->setText(config.store.volume, voltxtFmt);
+    if(_voltxt) _voltxt->setText(displayedVolume(), voltxtFmt);
   #endif
   if(_mode==VOL) {
 #if DSP_MODEL==DSP_ST7789_76
@@ -864,7 +873,7 @@ void Display::_volume() {
 #else
     timekeeper.waitAndReturnPlayer(3);
 #endif
-    _nums->setText(config.store.volume, numtxtFmt);
+    _nums->setText(displayedVolume(), numtxtFmt);
   }
   /*#ifdef USE_NEXTION
     nextion.setVol(config.store.volume, _mode == VOL);

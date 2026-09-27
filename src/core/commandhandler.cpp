@@ -1,4 +1,6 @@
 #include <Arduino.h>
+#include <cerrno>
+#include <cstdlib>
 #include "options.h"
 #include "commandhandler.h"
 #include "player.h"
@@ -7,12 +9,24 @@
 #include "config.h"
 #include "controls.h"
 #include "serialcli.h"
+#include "volume_map.h"
 
 #if DSP_MODEL==DSP_DUMMY
 #define DUMMYDISPLAY
 #endif
 
 CommandHandler cmd;
+
+static bool parseVolumeValue(const char* value, long& parsed) {
+  if (!value) return false;
+  const char* digits = value;
+  if (*digits == '+' || *digits == '-') ++digits;
+  if (*digits < '0' || *digits > '9') return false;
+  errno = 0;
+  char* end = nullptr;
+  parsed = strtol(value, &end, 10);
+  return errno != ERANGE && *end == '\0';
+}
 
 bool CommandHandler::exec(const char *command, const char *value, uint32_t cid) {
   if (strEquals(command, "start"))    { player.sendCommand({PR_PLAY, config.lastStation()}); return true; }
@@ -35,10 +49,19 @@ bool CommandHandler::exec(const char *command, const char *value, uint32_t cid) 
     player.sendCommand({PR_PLAY, id});
     return true;
   }
-  if (strEquals(command, "vol")){
-    int v = atoi(value);
-    config.store.volume = v < 0 ? 0 : (v > 254 ? 254 : v);
-    player.setVol(v);
+  if (strEquals(command, "vol") || strEquals(command, "volume")) {
+    long raw;
+    if (parseVolumeValue(value, raw)) {
+      if (raw < 0) raw = 0;
+      if (raw > 254) raw = 254;
+      player.setVol(static_cast<uint8_t>(raw));
+    }
+    return true;
+  }
+  if (strEquals(command, "vol100")) {
+    long user;
+    if (parseVolumeValue(value, user) && user >= 0 && user <= 100)
+      player.setVol(volumeUserToRaw(static_cast<uint8_t>(user)));
     return true;
   }
   if (strEquals(command, "dspon"))     { config.setDspOn(atoi(value)!=0); return true; }
@@ -86,7 +109,6 @@ bool CommandHandler::exec(const char *command, const char *value, uint32_t cid) 
   if (strEquals(command, "irtlp"))            { setIRTolerance(static_cast<uint8_t>(atoi(value))); return true; }
   if (strEquals(command, "oneclickswitching")){ config.saveValue(&config.store.skipPlaylistUpDown, static_cast<bool>(atoi(value))); return true; }
   
-  if (strEquals(command, "volume"))  { player.setVol(static_cast<uint8_t>(atoi(value))); return true; }
   if (strEquals(command, "sdpos"))   { config.setSDpos(static_cast<uint32_t>(atoi(value))); return true; }
   if (strEquals(command, "snuffle")) { config.setSnuffle(strcmp(value, "true") == 0); return true; }
   if (strEquals(command, "balance")) { config.setBalance(static_cast<uint8_t>(atoi(value))); return true; }

@@ -3,6 +3,7 @@
 #include "controls.h"
 #include "config.h"
 #include "player.h"
+#include "volume_map.h"
 #include "display.h"
 #include "network.h"
 #include "netserver.h"
@@ -496,10 +497,19 @@ void controlsEvent(bool toRight, int8_t volDelta) {
       display.putRequest(NEWMODE, VOL);
     #endif
     if(volDelta!=0){
+#if defined(VOXONE_PROFILE_DESK)
+      int user = volumeRawToUser(config.store.volume);
+      user += volDelta > 0 ? 1 : -1;
+      if (user < 0) user = 0;
+      if (user > 100) user = 100;
+      const uint8_t raw = volumeUserToRaw(static_cast<uint8_t>(user));
+      if (raw != config.store.volume) player.setVol(raw);
+#else
       int nv = config.store.volume+volDelta;
       if(nv<0) nv=0;
       if(nv>254) nv=254;
       player.setVol((uint8_t)nv);
+#endif
     }else{
       player.stepVol(toRight);
     }

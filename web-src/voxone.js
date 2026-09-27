@@ -58,6 +58,7 @@
     bitrate: null,
     rssi: null,
     volume: null,
+    volume100: null,
     bass: null,
     middle: null,
     treble: null,
@@ -125,7 +126,7 @@
     buttons.prev.disabled = !connected;
     buttons.next.disabled = !connected;
     buttons.play.disabled = !connected || state.playing === null;
-    for (const slider of volumeSliders) slider.disabled = !connected || state.volume === null;
+    for (const slider of volumeSliders) slider.disabled = !connected || state.volume100 === null;
     for (const [key, control] of Object.entries(audioControls)) {
       control.slider.disabled = !connected || state[key] === null;
     }
@@ -180,7 +181,7 @@
   }
 
   function renderVolume() {
-    showVolume(state.volume);
+    showVolume(state.volume100);
   }
 
   function signedValue(value) {
@@ -550,7 +551,7 @@
   }
   function resetRuntime() {
     const previousCurrent = state.current;
-    for (const key of ["source", "station", "metadata", "codec", "bitrate", "rssi", "volume", "bass", "middle", "treble", "balance", "playing", "current", "ip"]) {
+    for (const key of ["source", "station", "metadata", "codec", "bitrate", "rssi", "volume", "volume100", "bass", "middle", "treble", "balance", "playing", "current", "ip"]) {
       state[key] = null;
     }
     draggingVolume = false;
@@ -603,6 +604,12 @@
         const volume = Number(value);
         if (!Number.isInteger(volume) || volume < 0 || volume > 254) break;
         state.volume = volume;
+        break;
+      }
+      case "volume100": {
+        const volume = Number(value);
+        if (!Number.isInteger(volume) || volume < 0 || volume > 100) break;
+        state.volume100 = volume;
         if (awaitingVolume === volume) {
           awaitingVolume = null;
           clearTimeout(volumeAckTimer);
@@ -849,13 +856,13 @@
   function sendPendingVolume() {
     clearTimeout(volumeTimer);
     if (pendingVolume === null) return;
-    if (send("vol", pendingVolume)) lastVolumeSentAt = performance.now();
+    if (send("vol100", pendingVolume)) lastVolumeSentAt = performance.now();
     pendingVolume = null;
   }
 
   for (const slider of volumeSliders) {
     slider.addEventListener("input", () => {
-      if (state.volume === null || state.connection !== "connected") return;
+      if (state.volume100 === null || state.connection !== "connected") return;
       draggingVolume = true;
       activeVolumeSlider = slider;
       pendingVolume = Number(slider.value);
