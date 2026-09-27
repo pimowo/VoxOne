@@ -43,7 +43,7 @@
         </article>
         <div class="grid">
           <article class="card"><h3>Sygnał i źródło</h3><dl class="facts"><div><dt>Źródło</dt><dd id="source">—</dd></div><div><dt>Kodek / bitrate</dt><dd id="codec">—</dd></div><div><dt>Wi-Fi RSSI</dt><dd id="rssi">—</dd></div></dl></article>
-          <article class="card"><h3>Głośność</h3><div class="volume"><span id="volume">—</span><span class="muted">/ 254</span></div><div class="meter" aria-hidden="true"><span id="volume-meter"></span></div><label class="sr-only" for="volume-slider">Głośność</label><input id="volume-slider" class="volume-slider" type="range" min="0" max="254" step="1" value="0" disabled hidden><p class="hint">Skala głośności urządzenia: 0–254.</p></article>
+          <article class="card"><h3>Głośność</h3><div class="audio-control"><div class="audio-control-heading"><label for="volume-slider">Volume</label><output id="volume">—</output></div><input id="volume-slider" class="volume-slider" type="range" min="0" max="254" step="1" value="0" disabled></div></article>
         </div>
       </section>
 
@@ -88,13 +88,13 @@
       <section id="audio" data-panel aria-labelledby="audio-title" hidden>
         <div class="section-heading"><div><p class="eyebrow">DŹWIĘK</p><h2 id="audio-title">Audio</h2></div><span class="badge">Sterowanie</span></div>
         <div class="grid">
-          <article class="card"><h3>Głośność</h3><div class="volume"><span id="audio-volume">—</span><span class="muted"> / 254</span></div><div class="meter" aria-hidden="true"><span id="audio-volume-meter"></span></div><p class="hint">Aktualna wartość backendowa. Tylko do odczytu.</p></article>
+          <article class="card"><h3>Głośność</h3><div class="audio-control"><div class="audio-control-heading"><label for="audio-volume-slider">Volume</label><output id="audio-volume">—</output></div><input id="audio-volume-slider" class="volume-slider" type="range" min="0" max="254" step="1" value="0" disabled></div></article>
           <article class="card"><h3>Korekcja</h3>
-            <div class="audio-control"><div class="audio-control-heading"><label for="audio-bass-slider">Bass</label><output id="audio-bass">—</output></div><input id="audio-bass-slider" class="volume-slider" type="range" min="-16" max="16" step="1" value="0" disabled></div>
-            <div class="audio-control"><div class="audio-control-heading"><label for="audio-middle-slider">Middle</label><output id="audio-middle">—</output></div><input id="audio-middle-slider" class="volume-slider" type="range" min="-16" max="16" step="1" value="0" disabled></div>
-            <div class="audio-control"><div class="audio-control-heading"><label for="audio-treble-slider">Treble</label><output id="audio-treble">—</output></div><input id="audio-treble-slider" class="volume-slider" type="range" min="-16" max="16" step="1" value="0" disabled></div>
+            <div class="audio-control"><div class="audio-control-heading"><label for="audio-treble-slider">Treble — wysokie tony</label><output id="audio-treble">—</output></div><input id="audio-treble-slider" class="volume-slider" type="range" min="-6" max="6" step="1" value="0" disabled></div>
+            <div class="audio-control"><div class="audio-control-heading"><label for="audio-middle-slider">Middle — średnie tony</label><output id="audio-middle">—</output></div><input id="audio-middle-slider" class="volume-slider" type="range" min="-6" max="6" step="1" value="0" disabled></div>
+            <div class="audio-control"><div class="audio-control-heading"><label for="audio-bass-slider">Bass — niskie tony</label><output id="audio-bass">—</output></div><input id="audio-bass-slider" class="volume-slider" type="range" min="-6" max="6" step="1" value="0" disabled></div>
             <div class="audio-control"><div class="audio-control-heading"><label for="audio-balance-slider">Balance</label><output id="audio-balance">—</output></div><input id="audio-balance-slider" class="volume-slider" type="range" min="-16" max="16" step="1" value="0" disabled><span id="audio-balance-note" class="balance-note"></span></div>
-            <p class="hint">Zakres sterowania: −16 do +16. Wartości potwierdza urządzenie.</p>
+            <p class="hint">Korekcja: −6 do +6 dB. Balance: −16 do +16. Wartości potwierdza urządzenie.</p>
           </article>
         </div>
       </section>

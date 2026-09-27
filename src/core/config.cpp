@@ -22,6 +22,18 @@ namespace {
 constexpr char WARSAW_TZ[] = "CET-1CEST,M3.5.0/2,M10.5.0/3";
 constexpr char DEFAULT_NTP_1[] = "0.pl.pool.ntp.org";
 constexpr char DEFAULT_NTP_2[] = "1.pl.pool.ntp.org";
+constexpr int8_t TONE_MIN = -6;
+constexpr int8_t TONE_MAX = 6;
+constexpr int8_t BALANCE_MIN = -16;
+constexpr int8_t BALANCE_MAX = 16;
+
+int8_t clampTone(int8_t value) {
+  return constrain(value, TONE_MIN, TONE_MAX);
+}
+
+int8_t clampBalance(int8_t value) {
+  return constrain(value, BALANCE_MIN, BALANCE_MAX);
+}
 }
 
 #if DSP_MODEL==DSP_DUMMY
@@ -94,6 +106,7 @@ void Config::init() {
   if(store.version>CONFIG_VERSION) store.version=1;
   while(store.version!=CONFIG_VERSION) _setupVersion();
   _normalizeProductConfig();
+  _normalizeAudioConfig();
   BOOTLOG("CONFIG_VERSION\t%d", store.version);
   store.play_mode = store.play_mode & 0b11;
   if(store.play_mode>1) store.play_mode=PM_WEB;
@@ -551,6 +564,21 @@ void Config::_normalizeProductConfig() {
   saveValue(&store.watchdog, true);
 }
 
+void Config::_normalizeAudioConfig() {
+  const int8_t bass = clampTone(store.bass);
+  const int8_t middle = clampTone(store.middle);
+  const int8_t trebble = clampTone(store.trebble);
+  const int8_t balance = clampBalance(store.balance);
+  if (store.bass == bass && store.middle == middle &&
+      store.trebble == trebble && store.balance == balance) return;
+
+  saveValue(&store.bass, bass, false);
+  saveValue(&store.middle, middle, false);
+  saveValue(&store.trebble, trebble, false);
+  saveValue(&store.balance, balance, false);
+  EEPROM.commit();
+}
+
 void Config::setDefaults() {
   store.config_set = 4262;
   store.version = CONFIG_VERSION;
@@ -653,9 +681,15 @@ uint8_t Config::setVolume(uint8_t val) {
 }
 
 void Config::setTone(int8_t bass, int8_t middle, int8_t trebble) {
-  saveValue(&store.bass, bass, false);
-  saveValue(&store.middle, middle, false);
-  saveValue(&store.trebble, trebble);
+  bass = clampTone(bass);
+  middle = clampTone(middle);
+  trebble = clampTone(trebble);
+  if (store.bass != bass || store.middle != middle || store.trebble != trebble) {
+    saveValue(&store.bass, bass, false);
+    saveValue(&store.middle, middle, false);
+    saveValue(&store.trebble, trebble, false);
+    EEPROM.commit();
+  }
   player.setTone(store.bass, store.middle, store.trebble);
   netserver.requestOnChange(EQUALIZER, 0);
 }
@@ -665,7 +699,7 @@ void Config::setSmartStart(uint8_t ss) {
 }
 
 void Config::setBalance(int8_t balance) {
-  saveValue(&store.balance, balance);
+  saveValue(&store.balance, clampBalance(balance));
   player.setBalance(store.balance);
   netserver.requestOnChange(BALANCE, 0);
 }

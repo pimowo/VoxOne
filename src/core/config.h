@@ -297,6 +297,7 @@ class Config {
     void _setupVersion();
     void _makeDefaultMdnsName(char *buffer, size_t size);
     void _normalizeProductConfig();
+    void _normalizeAudioConfig();
     void _initHW();
     bool _isFSempty();
     uint16_t _randomStation(){

@@ -7,8 +7,10 @@
     play: document.getElementById("play-button"),
     next: document.getElementById("next-button")
   };
-  const volumeSlider = document.getElementById("volume-slider");
-  const volumeMeter = document.getElementById("volume-meter");
+  const volumeSliders = [
+    document.getElementById("volume-slider"),
+    document.getElementById("audio-volume-slider")
+  ];
   const audioControls = {
     bass: { slider: document.getElementById("audio-bass-slider"), command: "bass" },
     middle: { slider: document.getElementById("audio-middle-slider"), command: "middle" },
@@ -81,6 +83,7 @@
   let pendingVolume = null;
   let awaitingVolume = null;
   let draggingVolume = false;
+  let activeVolumeSlider = null;
   let leaving = false;
   let wsCurrentSequence = 0;
 
@@ -113,7 +116,7 @@
     buttons.prev.disabled = !connected;
     buttons.next.disabled = !connected;
     buttons.play.disabled = !connected || state.playing === null;
-    volumeSlider.disabled = !connected || state.volume === null;
+    for (const slider of volumeSliders) slider.disabled = !connected || state.volume === null;
     for (const [key, control] of Object.entries(audioControls)) {
       control.slider.disabled = !connected || state[key] === null;
     }
@@ -154,14 +157,17 @@
 
   function showVolume(value) {
     text("volume", value === null ? "—" : String(value));
-    volumeMeter.style.width = value === null ? "0%" : (100 * value / 254) + "%";
-    volumeSlider.hidden = value === null;
-    if (value !== null) volumeSlider.value = String(value);
+    text("audio-volume", value === null ? "—" : String(value));
+    if (value !== null) {
+      for (const slider of volumeSliders) {
+        if (draggingVolume && slider === activeVolumeSlider) continue;
+        slider.value = String(value);
+      }
+    }
     renderConnection();
   }
 
   function renderVolume() {
-    if (draggingVolume || awaitingVolume !== null) return;
     showVolume(state.volume);
   }
 
@@ -171,9 +177,6 @@
   }
 
   function renderAudio() {
-    text("audio-volume", state.volume === null ? "—" : String(state.volume));
-    const meter = document.getElementById("audio-volume-meter");
-    meter.style.width = state.volume === null ? "0%" : (100 * state.volume / 254) + "%";
     text("audio-bass", signedValue(state.bass));
     text("audio-middle", signedValue(state.middle));
     text("audio-treble", signedValue(state.treble));
@@ -530,6 +533,7 @@
       state[key] = null;
     }
     draggingVolume = false;
+    activeVolumeSlider = null;
     awaitingVolume = null;
     pendingVolume = null;
     clearTimeout(volumeTimer);
@@ -583,7 +587,6 @@
           clearTimeout(volumeAckTimer);
         }
         renderVolume();
-        renderAudio();
         break;
       }
       case "bass":
@@ -825,32 +828,35 @@
     pendingVolume = null;
   }
 
-  volumeSlider.addEventListener("input", () => {
-    if (state.volume === null || state.connection !== "connected") return;
-    draggingVolume = true;
-    pendingVolume = Number(volumeSlider.value);
-    showVolume(pendingVolume);
-    const wait = 120 - (performance.now() - lastVolumeSentAt);
-    if (wait <= 0) sendPendingVolume();
-    else {
-      clearTimeout(volumeTimer);
-      volumeTimer = setTimeout(sendPendingVolume, wait);
-    }
-  });
+  for (const slider of volumeSliders) {
+    slider.addEventListener("input", () => {
+      if (state.volume === null || state.connection !== "connected") return;
+      draggingVolume = true;
+      activeVolumeSlider = slider;
+      pendingVolume = Number(slider.value);
+      const wait = 120 - (performance.now() - lastVolumeSentAt);
+      if (wait <= 0) sendPendingVolume();
+      else {
+        clearTimeout(volumeTimer);
+        volumeTimer = setTimeout(sendPendingVolume, wait);
+      }
+    });
 
-  volumeSlider.addEventListener("change", () => {
-    if (!draggingVolume) return;
-    const finalVolume = Number(volumeSlider.value);
-    draggingVolume = false;
-    pendingVolume = finalVolume;
-    awaitingVolume = finalVolume;
-    sendPendingVolume();
-    clearTimeout(volumeAckTimer);
-    volumeAckTimer = setTimeout(() => {
-      awaitingVolume = null;
-      renderVolume();
-    }, 1500);
-  });
+    slider.addEventListener("change", () => {
+      if (!draggingVolume || activeVolumeSlider !== slider) return;
+      const finalVolume = Number(slider.value);
+      draggingVolume = false;
+      activeVolumeSlider = null;
+      pendingVolume = finalVolume;
+      awaitingVolume = finalVolume;
+      sendPendingVolume();
+      clearTimeout(volumeAckTimer);
+      volumeAckTimer = setTimeout(() => {
+        awaitingVolume = null;
+        renderVolume();
+      }, 1500);
+    });
+  }
 
   for (const control of Object.values(audioControls)) {
     control.dragging = false;
@@ -861,7 +867,8 @@
       if (control.slider.disabled) return;
       const value = Number(control.slider.value);
       control.dragging = false;
-      if (!Number.isInteger(value) || value < -16 || value > 16 || !send(control.command, value)) {
+      if (!Number.isInteger(value) || value < Number(control.slider.min) ||
+          value > Number(control.slider.max) || !send(control.command, value)) {
         renderAudio();
       } else {
         clearTimeout(control.ackTimer);
