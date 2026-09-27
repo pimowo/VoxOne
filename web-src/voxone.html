@@ -105,6 +105,26 @@
             <p class="hint">Korekcja: −6 do +6 dB. Balance: −16 do +16. Wartości potwierdza urządzenie.</p>
           </article>
         </div>
+        <article class="card volume-settings" aria-labelledby="volume-settings-title">
+          <h3 id="volume-settings-title">Ustawienia głośności</h3>
+          <div class="audio-control">
+            <div class="audio-control-heading"><label for="maximum-volume-slider">Maksymalna głośność</label><output id="maximum-volume-value">—</output></div>
+            <input id="maximum-volume-slider" class="volume-slider" type="range" min="1" max="100" step="1" value="100" disabled>
+            <p class="hint">Główny suwak głośności nadal działa w zakresie 0–100. Wartość 100 odpowiada ustawionemu tutaj maksimum.</p>
+          </div>
+          <div class="audio-control">
+            <label class="setting-label" for="startup-mode-select">Głośność po uruchomieniu</label>
+            <select id="startup-mode-select" class="setting-select" disabled>
+              <option value="0">Ostatnia</option>
+              <option value="1">Ustawiona</option>
+            </select>
+          </div>
+          <div id="startup-fixed-control" class="audio-control" hidden>
+            <div class="audio-control-heading"><label for="startup-fixed-slider">Głośność startowa</label><output id="startup-fixed-value">—</output></div>
+            <input id="startup-fixed-slider" class="volume-slider" type="range" min="0" max="100" step="1" value="20" disabled>
+          </div>
+          <p id="volume-settings-pending" class="hint" role="status" aria-live="polite" hidden>Oczekiwanie na potwierdzenie urządzenia…</p>
+        </article>
       </section>
 
       <section id="settings" data-panel aria-labelledby="settings-title" hidden>

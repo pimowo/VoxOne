@@ -9,6 +9,7 @@
 #include "timekeeper.h"
 #include "serialcli.h"
 #include "rtcsupport.h"
+#include "volume_map.h"
 #include "../displays/tools/l10n.h"
 #ifdef USE_SD
 #include "sdmanager.h"
@@ -104,7 +105,20 @@ void Config::init() {
     setDefaults();
   }
   if(store.version>CONFIG_VERSION) store.version=1;
+  const bool migratingVolume = store.version <= 5;
   while(store.version!=CONFIG_VERSION) _setupVersion();
+  if (store.maximumVolume < 1 || store.maximumVolume > 100) store.maximumVolume = 100;
+  if (store.startupMode != STARTUP_LAST && store.startupMode != STARTUP_FIXED) store.startupMode = STARTUP_LAST;
+  if (store.startupFixedVolume > 100) store.startupFixedVolume = 20;
+  if (store.lastUserVolume > 100) store.lastUserVolume = volumeRawToUser(store.volume, store.maximumVolume);
+  const uint8_t storedRaw = store.volume;
+  const uint8_t storedUser = store.lastUserVolume;
+  const VolumeState bootVolume = volumeStateAtStartup(store.volume, store.lastUserVolume,
+    store.maximumVolume, store.startupMode == STARTUP_FIXED, store.startupFixedVolume, migratingVolume);
+  userVolume = bootVolume.user;
+  store.volume = bootVolume.raw;
+  store.lastUserVolume = bootVolume.user;
+  volumeBootDirty = store.volume != storedRaw || store.lastUserVolume != storedUser;
   _normalizeProductConfig();
   _normalizeAudioConfig();
   BOOTLOG("CONFIG_VERSION\t%d", store.version);
@@ -154,6 +168,14 @@ void Config::_setupVersion(){
       saveValue(&store.watchdog, true);
       saveValue(&store.timeSyncInterval, (uint16_t)60);    //min
       saveValue(&store.timeSyncIntervalRTC, (uint16_t)24); //hours
+      break;
+    case 5:
+      saveValue(&store.maximumVolume, static_cast<uint8_t>(100), false, true);
+      saveValue(&store.startupMode, static_cast<uint8_t>(STARTUP_LAST), false, true);
+      saveValue(&store.startupFixedVolume, static_cast<uint8_t>(20), false, true);
+      saveValue(&store.lastUserVolume, volumeRawToUser(store.volume), false, true);
+      EEPROM.commit();
+      break;
     default:
       break;
   }
@@ -641,6 +663,10 @@ void Config::setDefaults() {
   store.timeSyncInterval = 60;    //min
   store.timeSyncIntervalRTC = 24; //hour
   store.reservedWeatherSyncInterval = 0;
+  store.maximumVolume = 100;
+  store.startupMode = STARTUP_LAST;
+  store.startupFixedVolume = 20;
+  store.lastUserVolume = volumeRawToUser(store.volume);
   eepromWrite(EEPROM_START, store);
 }
 
@@ -670,14 +696,53 @@ void Config::saveIR(){
 #endif
 
 void Config::saveVolume(){
-  saveValue(&store.volume, store.volume, true, true);
+  EEPROM.put(getAddr(&store.volume), store.volume);
+  EEPROM.put(getAddr(&store.lastUserVolume), store.lastUserVolume);
+  EEPROM.commit();
 }
 
 uint8_t Config::setVolume(uint8_t val) {
-  store.volume = val;
+  const VolumeState state = volumeStateFromRaw(val, store.maximumVolume);
+  return setVolumeState(state.raw, state.user);
+}
+
+uint8_t Config::setVolumeState(uint8_t raw, uint8_t user) {
+  store.volume = raw;
+  userVolume = user;
+  store.lastUserVolume = user;
   display.putRequest(DRAWVOL);
   netserver.requestOnChange(VOLUME, 0);
   return store.volume;
+}
+
+void Config::setMaximumVolume(uint8_t maximum) {
+  if (maximum < 1 || maximum > 100 || maximum == store.maximumVolume) return;
+  const uint8_t oldMaximum = store.maximumVolume;
+  const uint8_t oldUser = userVolume;
+  const uint8_t oldRaw = player.pendingRawAtMax(oldMaximum);
+  const uint8_t oldOutput = player.volToI2S(oldRaw);
+  store.maximumVolume = maximum;
+  VolumeState adjusted = volumeStateAfterMaximum({oldRaw, oldUser}, oldMaximum, maximum);
+  if (maximum > oldMaximum) {
+    adjusted.raw = player.rawNotLouderThan(adjusted.raw, maximum, oldOutput);
+    adjusted.user = volumeRawToUser(adjusted.raw, maximum);
+  }
+  setVolumeState(adjusted.raw, adjusted.user);
+  EEPROM.put(getAddr(&store.maximumVolume), store.maximumVolume);
+  EEPROM.put(getAddr(&store.volume), store.volume);
+  EEPROM.put(getAddr(&store.lastUserVolume), store.lastUserVolume);
+  EEPROM.commit();
+  player.applyCurrentVolume();
+}
+
+void Config::setStartupMode(uint8_t mode) {
+  if (mode != STARTUP_LAST && mode != STARTUP_FIXED) return;
+  saveValue(&store.startupMode, mode);
+}
+
+void Config::setStartupFixedVolume(uint8_t user) {
+  if (user > 100) return;
+  saveValue(&store.startupFixedVolume, user);
 }
 
 void Config::setTone(int8_t bass, int8_t middle, int8_t trebble) {

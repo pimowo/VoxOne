@@ -29,7 +29,10 @@ class Player: public Audio {
     uint32_t    _volTicks;   /* delayed volume save  */
     bool        _volTimer;   /* delayed volume save  */
     volatile uint8_t _pendingVolume;
+    volatile uint8_t _pendingMode; // 0 RAW, 1 USER, 2 already committed state
     volatile bool    _volumePending;
+    volatile uint8_t _pendingMaximum;
+    volatile bool _maximumPending;
     uint32_t    _resumeFilePos;
     plStatus_e  _status;
     //char        _plError[PLERR_LN];
@@ -66,6 +69,12 @@ class Player: public Audio {
     void toggle();
     void stepVol(bool up);
     void setVol(uint8_t volume);
+    void setUserVol(uint8_t user);
+    void stepUserVol(int8_t direction);
+    void applyCurrentVolume();
+    uint8_t pendingRawAtMax(uint8_t maximum);
+    uint8_t rawNotLouderThan(uint8_t candidate, uint8_t maximum, uint8_t output);
+    void requestMaximumVolume(uint8_t maximum);
     uint8_t volToI2S(uint8_t volume);
     void stopInfo();
     void setOutputPins(bool isPlaying);

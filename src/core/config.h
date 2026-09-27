@@ -29,8 +29,9 @@
   #define ESP_ARDUINO_3 1
 #endif
 
-#define CONFIG_VERSION  5
+#define CONFIG_VERSION  6
 constexpr uint16_t VOXONE_NO_STATION_MARKER = 0xC302;
+enum StartupVolumeMode : uint8_t { STARTUP_LAST = 0, STARTUP_FIXED = 1 };
 
 enum playMode_e      : uint8_t  { PM_WEB=0, PM_SDCARD=1 };
 
@@ -126,7 +127,12 @@ struct config_t
   uint16_t  timeSyncInterval;
   uint16_t  timeSyncIntervalRTC;
   uint16_t  reservedWeatherSyncInterval;
+  uint8_t   maximumVolume;
+  uint8_t   startupMode;
+  uint8_t   startupFixedVolume;
+  uint8_t   lastUserVolume;
 };
+static_assert(EEPROM_START + sizeof(config_t) <= EEPROM_SIZE, "config_t exceeds EEPROM");
 
 #if IR_PIN!=255
 struct ircodes_t
@@ -154,6 +160,8 @@ struct neworkItem
 class Config {
   public:
     config_t store;
+    uint8_t userVolume = 0;
+    bool volumeBootDirty = false;
     station_t station;
     theme_t   theme;
 #if IR_PIN!=255
@@ -185,7 +193,11 @@ class Config {
     void init();
     void loadTheme();
     uint8_t setVolume(uint8_t val);
+    uint8_t setVolumeState(uint8_t raw, uint8_t user);
     void saveVolume();
+    void setMaximumVolume(uint8_t maximum);
+    void setStartupMode(uint8_t mode);
+    void setStartupFixedVolume(uint8_t user);
     void setTone(int8_t bass, int8_t middle, int8_t trebble);
     void setBalance(int8_t balance);
     uint8_t setLastStation(uint16_t val);

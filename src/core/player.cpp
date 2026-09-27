@@ -6,6 +6,7 @@
 #include "sdmanager.h"
 #include "netserver.h"
 #include "timekeeper.h"
+#include "volume_map.h"
 #include "../displays/tools/l10n.h"
 #include "../pluginsManager/pluginsManager.h"
 #ifdef USE_NEXTION
@@ -43,7 +44,9 @@ void Player::init() {
   _resumeFilePos = 0;
   _hasError=false;
   _pendingVolume = config.store.volume;
+  _pendingMode = 0;
   _volumePending = false;
+  _maximumPending = false;
   playerQueue = xQueueCreate( 5, sizeof( playerRequestParams_t ) );
   setOutputPins(false);
   delay(50);
@@ -64,7 +67,8 @@ void Player::init() {
   setTone(config.store.bass, config.store.middle, config.store.trebble);
   setVolume(0);
   _status = STOPPED;
-  _volTimer=false;
+  _volTimer=config.volumeBootDirty;
+  if (_volTimer) _volTicks = millis();
   //randomSeed(analogRead(0));
   #if PLAYER_FORCE_MONO
     forceMono(true);
@@ -145,18 +149,36 @@ void resetPlayer(){
 #endif
 void Player::loop() {
   if(playerQueue==NULL) return;
+  uint8_t pendingMaximum = 0;
+  bool maximumPending = false;
+  portENTER_CRITICAL(&playerVolumeMux);
+  if (_maximumPending) {
+    pendingMaximum = _pendingMaximum;
+    _maximumPending = false;
+    maximumPending = true;
+  }
+  portEXIT_CRITICAL(&playerVolumeMux);
+  if (maximumPending) config.setMaximumVolume(pendingMaximum);
   uint8_t pendingVolume = 0;
+  uint8_t pendingMode = 0;
   bool volumePending = false;
   portENTER_CRITICAL(&playerVolumeMux);
   if(_volumePending){
     pendingVolume = _pendingVolume;
+    pendingMode = _pendingMode;
     _volumePending = false;
     volumePending = true;
   }
   portEXIT_CRITICAL(&playerVolumeMux);
   if(volumePending){
-    config.setVolume(pendingVolume);
-    Audio::setVolume(volToI2S(pendingVolume));
+    if (pendingMode == 1) {
+      const VolumeState state = volumeStateFromUser(pendingVolume, config.store.maximumVolume);
+      config.setVolumeState(state.raw, state.user);
+    } else if (pendingMode == 0) {
+      const VolumeState state = volumeStateFromRaw(pendingVolume, config.store.maximumVolume);
+      config.setVolumeState(state.raw, state.user);
+    } else config.setVolumeState(config.store.volume, config.userVolume);
+    Audio::setVolume(volToI2S(config.store.volume));
   }
   playerRequestParams_t requestP;
   if(xQueueReceive(playerQueue, &requestP, isRunning()?PL_QUEUE_TICKS:PL_QUEUE_TICKS_ST)){
@@ -176,8 +198,12 @@ void Player::loop() {
         break;
       }
       case PR_VOL: {
-        config.setVolume(requestP.payload);
-        Audio::setVolume(volToI2S(requestP.payload));
+        const uint8_t requested = static_cast<uint8_t>(constrain(requestP.payload, 0, 254));
+        const VolumeState state = volumeStateFromRaw(requested, config.store.maximumVolume);
+        config.setVolumeState(state.raw, state.user);
+        Audio::setVolume(volToI2S(state.raw));
+        _volTicks = millis();
+        _volTimer = true;
         break;
       }
       #ifdef USE_SD
@@ -339,9 +365,7 @@ void Player::stepVol(bool up) {
 
 uint8_t Player::volToI2S(uint8_t volume) {
   int vol = map(volume, 0, 254 - config.station.ovol * 3 , 0, 254);
-  if (vol > 254) vol = 254;
-  if (vol < 0) vol = 0;
-  return vol;
+  return volumeClampOutput(vol, config.store.maximumVolume);
 }
 
 void Player::_loadVol(uint8_t volume) {
@@ -353,6 +377,75 @@ void Player::setVol(uint8_t volume) {
   _volTimer = true;
   portENTER_CRITICAL(&playerVolumeMux);
   _pendingVolume = volume;
+  _pendingMode = 0;
   _volumePending = true;
+  portEXIT_CRITICAL(&playerVolumeMux);
+}
+
+void Player::setUserVol(uint8_t user) {
+  if (user > 100) user = 100;
+  _volTicks = millis();
+  _volTimer = true;
+  portENTER_CRITICAL(&playerVolumeMux);
+  config.userVolume = user;
+  config.store.lastUserVolume = user;
+  _pendingVolume = user;
+  _pendingMode = 1;
+  _volumePending = true;
+  portEXIT_CRITICAL(&playerVolumeMux);
+}
+
+void Player::stepUserVol(int8_t direction) {
+  portENTER_CRITICAL(&playerVolumeMux);
+  int user = static_cast<int>(config.userVolume) + (direction > 0 ? 1 : -1);
+  if (user < 0) user = 0;
+  if (user > 100) user = 100;
+  config.userVolume = static_cast<uint8_t>(user);
+  config.store.lastUserVolume = static_cast<uint8_t>(user);
+  _pendingVolume = static_cast<uint8_t>(user);
+  _pendingMode = 1;
+  _volumePending = true;
+  portEXIT_CRITICAL(&playerVolumeMux);
+  _volTicks = millis();
+  _volTimer = true;
+}
+
+void Player::applyCurrentVolume() {
+  portENTER_CRITICAL(&playerVolumeMux);
+  _pendingVolume = config.userVolume;
+  _pendingMode = 2;
+  _volumePending = true;
+  portEXIT_CRITICAL(&playerVolumeMux);
+}
+
+uint8_t Player::pendingRawAtMax(uint8_t maximum) {
+  uint8_t value;
+  uint8_t mode;
+  bool pending;
+  portENTER_CRITICAL(&playerVolumeMux);
+  value = _pendingVolume;
+  mode = _pendingMode;
+  pending = _volumePending;
+  portEXIT_CRITICAL(&playerVolumeMux);
+  if (!pending || mode == 2) return config.store.volume;
+  if (mode == 1) return volumeUserToRaw(value, maximum);
+  const uint8_t ceiling = volumeRawMaximum(maximum);
+  return value > ceiling ? ceiling : value;
+}
+
+uint8_t Player::rawNotLouderThan(uint8_t candidate, uint8_t maximum, uint8_t output) {
+  while (candidate > 0) {
+    const int adjusted = map(candidate, 0, 254 - config.station.ovol * 3, 0, 254);
+    if (volumeClampOutput(adjusted, maximum) <= output) break;
+    --candidate;
+  }
+  return candidate;
+}
+
+void Player::requestMaximumVolume(uint8_t maximum) {
+  if (maximum < 1 || maximum > 100) return;
+  portENTER_CRITICAL(&playerVolumeMux);
+  _pendingMaximum = maximum;
+  _maximumPending = true;
   portEXIT_CRITICAL(&playerVolumeMux);
 }

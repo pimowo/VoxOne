@@ -1130,7 +1130,7 @@ void NetServer::processQueue(){
       case STATIONNAME:   formatWsTextPayload(wsBuf, sizeof(wsBuf), "nameset", config.station.name); break;
       case ITEM:          sprintf (wsBuf, "{\"current\": %d}", config.lastStation()); break;
       case TITLE:         formatWsTextPayload(wsBuf, sizeof(wsBuf), "meta", config.station.title); serialCli.printf("##CLI.META#: %s\n> ", config.station.title); break;
-      case VOLUME:        sprintf (wsBuf, "{\"payload\":[{\"id\":\"volume\", \"value\": %d}, {\"id\":\"volume100\", \"value\": %d}]}", config.store.volume, volumeRawToUser(config.store.volume)); serialCli.printf("##CLI.VOL#: %d\n", config.store.volume); break;
+      case VOLUME:        sprintf (wsBuf, "{\"payload\":[{\"id\":\"volume\",\"value\":%d},{\"id\":\"volume100\",\"value\":%d},{\"id\":\"maximumVolume\",\"value\":%d},{\"id\":\"startupMode\",\"value\":%d},{\"id\":\"startupFixedVolume\",\"value\":%d}]}", config.store.volume, config.userVolume, config.store.maximumVolume, config.store.startupMode, config.store.startupFixedVolume); serialCli.printf("##CLI.VOL#: %d\n", config.store.volume); break;
       case NRSSI:         rssi = WiFi.RSSI(); sprintf (wsBuf, "{\"payload\":[{\"id\":\"rssi\", \"value\": %d}, {\"id\":\"heap\", \"value\": %d}]}", rssi, (player.isRunning() && config.store.audioinfo)?(int)(100*player.inBufferFilled()/playerBufMax):0); /*rssi = 255;*/ break;
       case SDPOS:         sprintf (wsBuf, "{\"sdpos\": %lu,\"sdend\": %lu,\"sdtpos\": %lu,\"sdtend\": %lu}", 
                                   player.getFilePos(), 
@@ -1180,7 +1180,7 @@ void NetServer::processVolumeUpdate(){
   if(!pending) return;
 
   _lastVolumeUpdate = now;
-  sprintf(wsBuf, "{\"payload\":[{\"id\":\"volume\", \"value\": %d}, {\"id\":\"volume100\", \"value\": %d}]}", config.store.volume, volumeRawToUser(config.store.volume));
+  sprintf(wsBuf, "{\"payload\":[{\"id\":\"volume\",\"value\":%d},{\"id\":\"volume100\",\"value\":%d},{\"id\":\"maximumVolume\",\"value\":%d},{\"id\":\"startupMode\",\"value\":%d},{\"id\":\"startupFixedVolume\",\"value\":%d}]}", config.store.volume, config.userVolume, config.store.maximumVolume, config.store.startupMode, config.store.startupFixedVolume);
   if(hasWebClients) websocket.textAll(wsBuf);
   serialCli.printf("##CLI.VOL#: %d\n", config.store.volume);
 #ifdef MQTT_ROOT_TOPIC

@@ -24,3 +24,56 @@ uint8_t volumeRawToUser(uint8_t raw) {
   const uint8_t lower = low - 1;
   return raw - kUserToRaw[lower] <= kUserToRaw[low] - raw ? lower : low;
 }
+uint8_t volumeRawMaximum(uint8_t maximum) {
+  return volumeUserToRaw(maximum > 100 ? 100 : maximum);
+}
+uint8_t volumeUserToRaw(uint8_t user, uint8_t maximum) {
+  if (user > 100) user = 100;
+  if (maximum > 100) maximum = 100;
+  // Interpolate the existing gamma table at a fractional USER position.
+  // A single final rounding preserves the original table for maximum=100.
+  const uint16_t scaled = static_cast<uint16_t>(user) * maximum;
+  const uint8_t index = scaled / 100;
+  const uint8_t fraction = scaled % 100;
+  if (index >= 100) return kUserToRaw[100];
+  const uint16_t raw100 = static_cast<uint16_t>(kUserToRaw[index]) * (100 - fraction) +
+                          static_cast<uint16_t>(kUserToRaw[index + 1]) * fraction;
+  return (raw100 + 50) / 100;
+}
+uint8_t volumeRawToUser(uint8_t raw, uint8_t maximum) {
+  const uint8_t ceiling = volumeRawMaximum(maximum);
+  if (raw >= ceiling) return 100;
+  uint8_t best = 0;
+  uint8_t distance = 255;
+  for (uint8_t user = 0; user <= 100; ++user) {
+    const uint8_t mapped = volumeUserToRaw(user, maximum);
+    const uint8_t delta = mapped > raw ? mapped - raw : raw - mapped;
+    if (delta < distance) { best = user; distance = delta; }
+  }
+  return best;
+}
+VolumeState volumeStateFromUser(uint8_t user, uint8_t maximum) {
+  if (user > 100) user = 100;
+  return {volumeUserToRaw(user, maximum), user};
+}
+VolumeState volumeStateFromRaw(uint8_t raw, uint8_t maximum) {
+  const uint8_t ceiling = volumeRawMaximum(maximum);
+  if (raw > ceiling) raw = ceiling;
+  return {raw, volumeRawToUser(raw, maximum)};
+}
+VolumeState volumeStateAfterMaximum(VolumeState current, uint8_t oldMaximum, uint8_t newMaximum) {
+  if (newMaximum < oldMaximum) return volumeStateFromUser(current.user, newMaximum);
+  return volumeStateFromRaw(current.raw, newMaximum);
+}
+VolumeState volumeStateAtStartup(uint8_t storedRaw, uint8_t lastUser, uint8_t maximum,
+                                 bool fixed, uint8_t fixedUser, bool justMigrated) {
+  if (fixed) return volumeStateFromUser(fixedUser, maximum);
+  if (justMigrated) return {storedRaw, lastUser};
+  return volumeStateFromUser(lastUser, maximum);
+}
+uint8_t volumeClampOutput(int output, uint8_t maximum) {
+  if (output < 0) return 0;
+  const uint8_t ceiling = volumeRawMaximum(maximum);
+  if (output > ceiling) output = ceiling;
+  return static_cast<uint8_t>(output);
+}

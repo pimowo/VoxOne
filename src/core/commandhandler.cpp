@@ -61,7 +61,29 @@ bool CommandHandler::exec(const char *command, const char *value, uint32_t cid) 
   if (strEquals(command, "vol100")) {
     long user;
     if (parseVolumeValue(value, user) && user >= 0 && user <= 100)
-      player.setVol(volumeUserToRaw(static_cast<uint8_t>(user)));
+      player.setUserVol(static_cast<uint8_t>(user));
+    return true;
+  }
+  if (strEquals(command, "maximumvolume")) {
+    long maximum;
+    if (parseVolumeValue(value, maximum) && maximum >= 1 && maximum <= 100)
+      player.requestMaximumVolume(static_cast<uint8_t>(maximum));
+    return true;
+  }
+  if (strEquals(command, "startupmode")) {
+    long mode;
+    if (parseVolumeValue(value, mode) && mode >= STARTUP_LAST && mode <= STARTUP_FIXED) {
+      config.setStartupMode(static_cast<uint8_t>(mode));
+      netserver.requestOnChange(VOLUME, 0);
+    }
+    return true;
+  }
+  if (strEquals(command, "startupfixedvolume")) {
+    long user;
+    if (parseVolumeValue(value, user) && user >= 0 && user <= 100) {
+      config.setStartupFixedVolume(static_cast<uint8_t>(user));
+      netserver.requestOnChange(VOLUME, 0);
+    }
     return true;
   }
   if (strEquals(command, "dspon"))     { config.setDspOn(atoi(value)!=0); return true; }

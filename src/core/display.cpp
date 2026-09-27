@@ -82,7 +82,7 @@ void Display::_createDspTask(){
 //============================================================================================================================
 #if defined(VOXONE_PROFILE_DESK)
 constexpr uint16_t kDisplayVolumeMax = 100;
-static uint8_t displayedVolume() { return volumeRawToUser(config.store.volume); }
+static uint8_t displayedVolume() { return config.userVolume; }
 #else
 constexpr uint16_t kDisplayVolumeMax = 254;
 static uint8_t displayedVolume() { return config.store.volume; }

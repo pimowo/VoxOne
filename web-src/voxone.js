@@ -11,6 +11,13 @@
     document.getElementById("volume-slider"),
     document.getElementById("audio-volume-slider")
   ];
+  const maximumVolumeSlider = document.getElementById("maximum-volume-slider");
+  const maximumVolumeValue = document.getElementById("maximum-volume-value");
+  const startupModeSelect = document.getElementById("startup-mode-select");
+  const startupFixedControl = document.getElementById("startup-fixed-control");
+  const startupFixedSlider = document.getElementById("startup-fixed-slider");
+  const startupFixedValue = document.getElementById("startup-fixed-value");
+  const volumeSettingsPending = document.getElementById("volume-settings-pending");
   const audioControls = {
     bass: { slider: document.getElementById("audio-bass-slider"), command: "bass" },
     middle: { slider: document.getElementById("audio-middle-slider"), command: "middle" },
@@ -59,6 +66,9 @@
     rssi: null,
     volume: null,
     volume100: null,
+    maximumVolume: null,
+    startupMode: null,
+    startupFixedVolume: null,
     bass: null,
     middle: null,
     treble: null,
@@ -92,6 +102,9 @@
   let lastVolumeSentAt = 0;
   let pendingVolume = null;
   let awaitingVolume = null;
+  const volumeSettingEditing = { maximumVolume: null, startupMode: null, startupFixedVolume: null };
+  const volumeSettingTimers = { maximumVolume: 0, startupMode: 0, startupFixedVolume: 0 };
+  const volumeSettingDragging = { maximumVolume: false, startupFixedVolume: false };
   let draggingVolume = false;
   let activeVolumeSlider = null;
   let leaving = false;
@@ -127,6 +140,9 @@
     buttons.next.disabled = !connected;
     buttons.play.disabled = !connected || state.playing === null;
     for (const slider of volumeSliders) slider.disabled = !connected || state.volume100 === null;
+    maximumVolumeSlider.disabled = !connected || state.maximumVolume === null;
+    startupModeSelect.disabled = !connected || state.startupMode === null;
+    startupFixedSlider.disabled = !connected || state.startupMode !== 1 || state.startupFixedVolume === null;
     for (const [key, control] of Object.entries(audioControls)) {
       control.slider.disabled = !connected || state[key] === null;
     }
@@ -182,6 +198,46 @@
 
   function renderVolume() {
     showVolume(state.volume100);
+  }
+
+  function renderVolumeSettings() {
+    const maxShown = volumeSettingEditing.maximumVolume ?? state.maximumVolume;
+    if (!volumeSettingDragging.maximumVolume && maxShown !== null) maximumVolumeSlider.value = String(maxShown);
+    maximumVolumeValue.textContent = maxShown === null ? "—" : String(maxShown);
+    if (state.startupMode !== null && volumeSettingEditing.startupMode === null) {
+      startupModeSelect.value = String(state.startupMode);
+    }
+    startupFixedControl.hidden = state.startupMode !== 1;
+    const fixedShown = volumeSettingEditing.startupFixedVolume ?? state.startupFixedVolume;
+    if (!volumeSettingDragging.startupFixedVolume && fixedShown !== null) startupFixedSlider.value = String(fixedShown);
+    startupFixedValue.textContent = fixedShown === null ? "—" : String(fixedShown);
+    const pending = Object.values(volumeSettingEditing).some(value => value !== null);
+    volumeSettingsPending.hidden = !pending;
+    renderConnection();
+  }
+
+  function confirmVolumeSetting(key, value) {
+    state[key] = value;
+    if (volumeSettingEditing[key] !== null) {
+      clearTimeout(volumeSettingTimers[key]);
+      volumeSettingEditing[key] = null;
+    }
+    renderVolumeSettings();
+  }
+
+  function sendVolumeSetting(key, command, value) {
+    if (!send(command, value)) {
+      volumeSettingEditing[key] = null;
+      renderVolumeSettings();
+      return;
+    }
+    volumeSettingEditing[key] = value;
+    clearTimeout(volumeSettingTimers[key]);
+    volumeSettingTimers[key] = setTimeout(() => {
+      volumeSettingEditing[key] = null;
+      renderVolumeSettings();
+    }, 2000);
+    renderVolumeSettings();
   }
 
   function signedValue(value) {
@@ -551,9 +607,15 @@
   }
   function resetRuntime() {
     const previousCurrent = state.current;
-    for (const key of ["source", "station", "metadata", "codec", "bitrate", "rssi", "volume", "volume100", "bass", "middle", "treble", "balance", "playing", "current", "ip"]) {
+    for (const key of ["source", "station", "metadata", "codec", "bitrate", "rssi", "volume", "volume100", "maximumVolume", "startupMode", "startupFixedVolume", "bass", "middle", "treble", "balance", "playing", "current", "ip"]) {
       state[key] = null;
     }
+    for (const key of Object.keys(volumeSettingEditing)) {
+      volumeSettingEditing[key] = null;
+      clearTimeout(volumeSettingTimers[key]);
+    }
+    volumeSettingDragging.maximumVolume = false;
+    volumeSettingDragging.startupFixedVolume = false;
     draggingVolume = false;
     activeVolumeSlider = null;
     awaitingVolume = null;
@@ -567,6 +629,7 @@
     renderRssi();
     renderPlaying();
     showVolume(null);
+    renderVolumeSettings();
     for (const control of Object.values(audioControls)) {
       control.dragging = false;
       clearTimeout(control.ackTimer);
@@ -615,6 +678,24 @@
           clearTimeout(volumeAckTimer);
         }
         renderVolume();
+        break;
+      }
+      case "maximumVolume": {
+        const maximum = Number(value);
+        if (!Number.isInteger(maximum) || maximum < 1 || maximum > 100) break;
+        confirmVolumeSetting("maximumVolume", maximum);
+        break;
+      }
+      case "startupMode": {
+        const mode = Number(value);
+        if (!Number.isInteger(mode) || (mode !== 0 && mode !== 1)) break;
+        confirmVolumeSetting("startupMode", mode);
+        break;
+      }
+      case "startupFixedVolume": {
+        const volume = Number(value);
+        if (!Number.isInteger(volume) || volume < 0 || volume > 100) break;
+        confirmVolumeSetting("startupFixedVolume", volume);
         break;
       }
       case "bass":
@@ -889,6 +970,48 @@
       }, 1500);
     });
   }
+
+  maximumVolumeSlider.addEventListener("input", () => {
+    if (maximumVolumeSlider.disabled) return;
+    volumeSettingDragging.maximumVolume = true;
+    maximumVolumeValue.textContent = maximumVolumeSlider.value;
+  });
+  maximumVolumeSlider.addEventListener("change", () => {
+    if (maximumVolumeSlider.disabled) return;
+    const value = Number(maximumVolumeSlider.value);
+    volumeSettingDragging.maximumVolume = false;
+    if (!Number.isInteger(value) || value < 1 || value > 100) {
+      renderVolumeSettings();
+      return;
+    }
+    sendVolumeSetting("maximumVolume", "maximumvolume", value);
+  });
+
+  startupModeSelect.addEventListener("change", () => {
+    if (startupModeSelect.disabled) return;
+    const mode = Number(startupModeSelect.value);
+    if (mode !== 0 && mode !== 1) {
+      renderVolumeSettings();
+      return;
+    }
+    sendVolumeSetting("startupMode", "startupmode", mode);
+  });
+
+  startupFixedSlider.addEventListener("input", () => {
+    if (startupFixedSlider.disabled) return;
+    volumeSettingDragging.startupFixedVolume = true;
+    startupFixedValue.textContent = startupFixedSlider.value;
+  });
+  startupFixedSlider.addEventListener("change", () => {
+    if (startupFixedSlider.disabled) return;
+    const value = Number(startupFixedSlider.value);
+    volumeSettingDragging.startupFixedVolume = false;
+    if (!Number.isInteger(value) || value < 0 || value > 100) {
+      renderVolumeSettings();
+      return;
+    }
+    sendVolumeSetting("startupFixedVolume", "startupfixedvolume", value);
+  });
 
   for (const control of Object.values(audioControls)) {
     control.dragging = false;
