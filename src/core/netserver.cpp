@@ -1477,14 +1477,15 @@ void NetServer::processQueue(){
                                   config.ipToStr(WiFi.localIP()),
                                   config.store.abuff);
                                   break;
-      case GETSCREEN:     sprintf (wsBuf, "{\"flip\":%d,\"canFlip\":%d,\"nump\":%d,\"tsf\":%d,\"tsd\":%d,\"dspon\":%d,\"br\":%d,\"con\":%d,\"scre\":%d,\"scrt\":%d,\"scrb\":%d,\"scrpe\":%d,\"scrpt\":%d,\"scrpb\":%d}",
+      case GETSCREEN:     sprintf (wsBuf, "{\"flip\":%d,\"canFlip\":%d,\"canBrightness\":%d,\"br\":%d,\"nump\":%d,\"tsf\":%d,\"tsd\":%d,\"dspon\":%d,\"con\":%d,\"scre\":%d,\"scrt\":%d,\"scrb\":%d,\"scrpe\":%d,\"scrpt\":%d,\"scrpb\":%d}",
                                   config.store.flipscreen,
                                   voxone::activeProfile.display != voxone::Display::None,
+                                  BRIGHTNESS_PIN != 255,
+                                  config.store.brightness,
                                   config.store.numplaylist, 
                                   config.store.fliptouch, 
                                   config.store.dbgtouch, 
                                   config.store.dspon, 
-                                  config.store.brightness, 
                                   config.store.contrast,
                                   config.store.screensaverEnabled,
                                   config.store.screensaverTimeout,

@@ -40,6 +40,9 @@
   const vuMeterControl = document.getElementById("vu-meter-control");
   const vuMeterToggle = document.getElementById("vu-meter-toggle");
   const vuMeterValue = document.getElementById("vu-meter-value");
+  const brightnessControl = document.getElementById("brightness-control");
+  const brightnessSlider = document.getElementById("brightness-slider");
+  const brightnessValue = document.getElementById("brightness-value");
   const rtcCard = document.getElementById("rtc-card");
   const rtcNtpInterval = document.getElementById("rtc-ntp-interval");
   const rtcWriteInterval = document.getElementById("rtc-write-interval");
@@ -122,6 +125,8 @@
     maximumVolume: null,
     startupMode: null,
     startupFixedVolume: null,
+    brightness: null,
+    canBrightness: false,
     flip: null,
     canFlip: false,
     vu: null,
@@ -171,6 +176,12 @@
   let flipTimer = 0;
   let vuAwaiting = null;
   let vuTimer = 0;
+  let brightnessDragging = false;
+  let brightnessPending = null;
+  let brightnessAwaiting = null;
+  let brightnessTimer = 0;
+  let brightnessAckTimer = 0;
+  let lastBrightnessSentAt = 0;
 
   function text(id, value) {
     const node = document.getElementById(id);
@@ -495,6 +506,7 @@
     maximumVolumeSlider.disabled = !connected || state.maximumVolume === null;
     startupModeSelect.disabled = !connected || state.startupMode === null;
     startupFixedSlider.disabled = !connected || state.startupMode !== 1 || state.startupFixedVolume === null;
+    brightnessSlider.disabled = !connected || !state.canBrightness || state.brightness === null;
     for (const [key, control] of Object.entries(audioControls)) {
       control.slider.disabled = !connected || state[key] === null;
     }
@@ -570,7 +582,7 @@
   }
 
   function renderDisplaySettings() {
-    displaySettingsCard.hidden = !state.canFlip && !state.canVu;
+    displaySettingsCard.hidden = !state.canFlip && !state.canVu && !state.canBrightness;
     flipScreenControl.hidden = !state.canFlip;
     flipScreenToggle.disabled = state.connection !== "connected" ||
       !state.canFlip || state.flip === null || flipPending;
@@ -581,6 +593,17 @@
     if (vuAwaiting === null && state.vu !== null) vuMeterToggle.checked = state.vu;
     vuMeterValue.textContent = vuAwaiting !== null ? "Zapisywanie…" :
       state.vu === null ? "—" : state.vu ? "ON" : "OFF";
+    brightnessControl.hidden = !state.canBrightness;
+    brightnessSlider.disabled = state.connection !== "connected" ||
+      !state.canBrightness || state.brightness === null;
+    const brightnessShown = brightnessDragging && brightnessPending !== null
+      ? brightnessPending : brightnessAwaiting !== null ? brightnessAwaiting : state.brightness;
+    if (!brightnessDragging && brightnessAwaiting === null && state.brightness !== null) {
+      brightnessSlider.value = String(state.brightness);
+    } else if (brightnessDragging && brightnessPending !== null) {
+      brightnessSlider.value = String(brightnessPending);
+    }
+    brightnessValue.textContent = brightnessShown === null ? "—" : brightnessShown + "%";
     flipScreenFeedback.hidden = !state.canFlip;
     flipScreenFeedback.textContent = flipPending
       ? "Oczekiwanie na potwierdzenie urządzenia…"
@@ -996,9 +1019,10 @@
   }
   function resetRuntime() {
     const previousCurrent = state.current;
-    for (const key of ["source", "station", "metadata", "codec", "bitrate", "rssi", "volume", "volume100", "maximumVolume", "startupMode", "startupFixedVolume", "bass", "middle", "treble", "balance", "playing", "current", "ip"]) {
+    for (const key of ["source", "station", "metadata", "codec", "bitrate", "rssi", "volume", "volume100", "maximumVolume", "startupMode", "startupFixedVolume", "brightness", "bass", "middle", "treble", "balance", "playing", "current", "ip"]) {
       state[key] = null;
     }
+    state.canBrightness = false;
     state.flip = null;
     state.canFlip = false;
     state.vu = null;
@@ -1007,6 +1031,11 @@
     clearTimeout(flipTimer);
     vuAwaiting = null;
     clearTimeout(vuTimer);
+    clearTimeout(brightnessTimer);
+    clearTimeout(brightnessAckTimer);
+    brightnessDragging = false;
+    brightnessPending = null;
+    brightnessAwaiting = null;
     for (const key of Object.keys(volumeSettingEditing)) {
       volumeSettingEditing[key] = null;
       clearTimeout(volumeSettingTimers[key]);
@@ -1171,6 +1200,16 @@
     if (message.canFlip === 0 || message.canFlip === 1) {
       state.canFlip = message.canFlip === 1;
     }
+    if (message.canBrightness === 0 || message.canBrightness === 1) {
+      state.canBrightness = message.canBrightness === 1;
+    }
+    if (Number.isInteger(message.br) && message.br >= 0 && message.br <= 100) {
+      state.brightness = message.br;
+      if (brightnessAwaiting === message.br) {
+        brightnessAwaiting = null;
+        clearTimeout(brightnessAckTimer);
+      }
+    }
     if (message.flip === 0 || message.flip === 1) {
       state.flip = message.flip === 1;
       flipPending = false;
@@ -1186,6 +1225,8 @@
     }
     if (message.canFlip === 0 || message.canFlip === 1 ||
         message.flip === 0 || message.flip === 1 ||
+        message.canBrightness === 0 || message.canBrightness === 1 ||
+        Number.isInteger(message.br) ||
         message.canVu === 0 || message.canVu === 1 ||
         message.vu === 0 || message.vu === 1) renderDisplaySettings();
   }
@@ -1443,6 +1484,48 @@
       vuAwaiting = null;
       renderDisplaySettings();
       send("getsystem", 1);
+    }, 2000);
+    renderDisplaySettings();
+  });
+
+  function sendPendingBrightness() {
+    clearTimeout(brightnessTimer);
+    if (brightnessPending === null) return false;
+    const value = brightnessPending;
+    brightnessPending = null;
+    if (!send("dim", value)) return false;
+    lastBrightnessSentAt = performance.now();
+    return true;
+  }
+
+  brightnessSlider.addEventListener("input", () => {
+    if (!state.canBrightness || state.connection !== "connected") return;
+    brightnessDragging = true;
+    brightnessPending = Number(brightnessSlider.value);
+    brightnessValue.textContent = brightnessPending + "%";
+    const wait = 120 - (performance.now() - lastBrightnessSentAt);
+    if (wait <= 0) sendPendingBrightness();
+    else {
+      clearTimeout(brightnessTimer);
+      brightnessTimer = setTimeout(sendPendingBrightness, wait);
+    }
+  });
+
+  brightnessSlider.addEventListener("change", () => {
+    if (!state.canBrightness || state.connection !== "connected") return;
+    brightnessDragging = false;
+    brightnessPending = Number(brightnessSlider.value);
+    brightnessAwaiting = brightnessPending;
+    if (!sendPendingBrightness()) {
+      brightnessAwaiting = null;
+      renderDisplaySettings();
+      return;
+    }
+    clearTimeout(brightnessAckTimer);
+    brightnessAckTimer = setTimeout(() => {
+      brightnessAwaiting = null;
+      renderDisplaySettings();
+      send("getscreen", 1);
     }, 2000);
     renderDisplaySettings();
   });

@@ -71,6 +71,7 @@
 **Priorytet: po uruchomieniu sprzętu; najpierw funkcje, potem grafika.**
 
 - Sprawdzić synchronizację VU meter ON/OFF między klientami WWW i zachowanie ustawienia po restarcie.
+- Fizycznie potwierdzić, że WWW DESK nie pokazuje kontrolki Jasność LCD.
 - Sprawdzić obciążenie SPI względem audio i unikać ciężkich pełnych redrawów.
 - W razie potrzeby wykorzystać stabilne podejście DisplayTask z DESK.
 

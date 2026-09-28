@@ -1133,6 +1133,9 @@ void Config::setBrightness(bool dosave){
     saveValue(&store.dspon, store.dspon, true, true);
   }
 #endif
+#if BRIGHTNESS_PIN != 255 || defined(USE_NEXTION)
+  if (dosave) netserver.requestOnChange(GETSCREEN, 0);
+#endif
 }
 
 void Config::setDspOn(bool dspon, bool saveval){
