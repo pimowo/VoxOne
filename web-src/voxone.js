@@ -1,7 +1,22 @@
 (() => {
   "use strict";
 
-  const tabs = ["status", "stations", "audio", "settings", "system"];
+  const tabs = ["status", "stations", "audio", "settings", "system", "update"];
+  const updateImages = {
+    firmware: {
+      file: document.getElementById("update-firmware-file"),
+      name: document.getElementById("update-firmware-name"),
+      button: document.getElementById("update-firmware-button")
+    },
+    spiffs: {
+      file: document.getElementById("update-spiffs-file"),
+      name: document.getElementById("update-spiffs-name"),
+      button: document.getElementById("update-spiffs-button")
+    }
+  };
+  const updateStatus = document.getElementById("update-status");
+  const updateProgress = document.getElementById("update-progress");
+  let updateBusy = false;
   const buttons = {
     prev: document.getElementById("prev-button"),
     play: document.getElementById("play-button"),
@@ -122,6 +137,7 @@
     stationQuery: "",
     count: 0,
     revision: null,
+    pendingMetadataNumber: null,
     loading: false,
     mutationInProgress: false,
     importing: false,
@@ -159,6 +175,108 @@
   function text(id, value) {
     const node = document.getElementById(id);
     if (node && node.textContent !== value) node.textContent = value;
+  }
+
+  function renderUpdateFiles() {
+    for (const image of Object.values(updateImages)) {
+      const file = image.file.files[0];
+      image.name.textContent = file ? file.name + " · " +
+        (file.size / 1024 / 1024).toFixed(2) + " MB" : "Nie wybrano pliku.";
+      image.file.disabled = updateBusy;
+      image.button.disabled = updateBusy || !file;
+    }
+  }
+
+  function setUpdateStatus(message, error = false) {
+    updateStatus.textContent = message;
+    updateStatus.dataset.kind = error ? "error" : "status";
+  }
+
+  async function waitForUpdateRestart() {
+    setUpdateStatus("Aktualizacja zakończona. Restart urządzenia...");
+    await new Promise(resolve => setTimeout(resolve, 2500));
+    const deadline = Date.now() + 30000;
+    while (Date.now() < deadline) {
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 2500);
+      try {
+        const response = await fetch("/variables.js?update=" + Date.now(), {
+          cache: "no-store", signal: controller.signal
+        });
+        if (response.ok) {
+          location.replace("/voxone.html?updated=" + Date.now() + "#update");
+          return;
+        }
+      } catch (_) { /* The device may still be restarting. */ }
+      finally { clearTimeout(timeout); }
+      await new Promise(resolve => setTimeout(resolve, 1000));
+    }
+    updateBusy = false;
+    renderUpdateFiles();
+    setUpdateStatus("Urządzenie nie wróciło w ciągu 30 s. Sprawdź połączenie i odśwież stronę.", true);
+  }
+
+  function uploadUpdateImage(target) {
+    if (updateBusy) return;
+    const file = updateImages[target].file.files[0];
+    if (!file) return;
+    const lowerName = file.name.toLowerCase();
+    if (!lowerName.endsWith(".bin") || lowerName.endsWith("full.bin")) {
+      setUpdateStatus("Wybierz obraz .bin dla urządzenia. Nie używaj full.bin.", true);
+      return;
+    }
+    if ((target === "firmware" && lowerName.includes("spiffs")) ||
+        (target === "spiffs" && lowerName.includes("firmware"))) {
+      setUpdateStatus("Nazwa pliku nie pasuje do wybranego rodzaju aktualizacji.", true);
+      return;
+    }
+    if (!file.size) {
+      setUpdateStatus("Wybrany plik jest pusty.", true);
+      return;
+    }
+    updateBusy = true;
+    renderUpdateFiles();
+    updateProgress.hidden = false;
+    updateProgress.value = 0;
+    setUpdateStatus("Wysyłanie " + file.name + "...");
+    const body = new FormData();
+    body.append("updatetarget", target);
+    body.append("filesize", String(file.size));
+    body.append("update", file, file.name);
+    const request = new XMLHttpRequest();
+    request.open("POST", "/update");
+    request.upload.addEventListener("progress", event => {
+      if (!event.lengthComputable) return;
+      const percent = Math.min(100, Math.round(event.loaded * 100 / event.total));
+      updateProgress.value = percent;
+      setUpdateStatus("Wysyłanie " + file.name + ": " + percent + "%");
+    });
+    request.upload.addEventListener("load", () => {
+      updateProgress.value = 100;
+      setUpdateStatus("Walidacja obrazu i zapis aktualizacji...");
+    });
+    request.addEventListener("load", () => {
+      if (request.status === 200 && request.responseText.trim() === "OK") {
+        setUpdateStatus("Aktualizacja zakończona.");
+        waitForUpdateRestart();
+        return;
+      }
+      updateBusy = false;
+      renderUpdateFiles();
+      updateProgress.hidden = true;
+      setUpdateStatus(request.responseText.trim() || "Błąd aktualizacji: HTTP " + request.status, true);
+    });
+    request.addEventListener("error", () => {
+      setUpdateStatus("Połączenie zostało przerwane. Sprawdź urządzenie przed ponowną próbą; odśwież stronę, aby odblokować formularz.", true);
+    });
+    try {
+      request.send(body);
+    } catch (error) {
+      updateBusy = false;
+      renderUpdateFiles();
+      updateProgress.hidden = true;
+      setUpdateStatus("Nie udało się rozpocząć wysyłania: " + error.message, true);
+    }
   }
 
   function showTab() {
@@ -526,6 +644,8 @@
     text("header-profile", "Profil " + profile);
     text("system-version", "VoxOne " + version);
     text("system-profile", profile);
+    text("update-version", "VoxOne " + version);
+    text("update-profile", profile);
     text("system-base", "yoRadio " + (state.baseVersion || "—"));
   }
 
@@ -649,6 +769,14 @@
       play.disabled = state.connection !== "connected";
       actions.append(
         play,
+        (() => {
+          const toggle = stationAction("metadata", "A↔T", "Zamień artystę i utwór: " + station.name, station.number);
+          toggle.title = "Zamień artystę i utwór";
+          toggle.classList.toggle("is-on", station.swapArtistTitle);
+          toggle.setAttribute("aria-pressed", String(station.swapArtistTitle));
+          if (state.pendingMetadataNumber === station.number) toggle.textContent = "…";
+          return toggle;
+        })(),
         stationAction("edit", "Edytuj", "Edytuj: " + station.name, station.number),
         stationAction("delete", "Usuń", "Usuń: " + station.name, station.number),
         stationAction("up", "↑", "Przesuń w górę: " + station.name, station.number, station.number === 1),
@@ -684,7 +812,11 @@
           typeof data.revision !== "string" || !/^[0-9a-f]{8}$/i.test(data.revision) ||
           !data.stations.every((station, index) =>
             station.number === index + 1 && typeof station.name === "string" &&
-            typeof station.url === "string" && Number.isInteger(station.ovol))) {
+            typeof station.id === "string" && /^[0-9A-F]{16}$/.test(station.id) &&
+            typeof station.url === "string" && Number.isInteger(station.ovol) &&
+            (station.metadataMode === "normal" || station.metadataMode === "swap") &&
+            typeof station.swapArtistTitle === "boolean" &&
+            station.swapArtistTitle === (station.metadataMode === "swap"))) {
         throw new Error("Niepoprawna odpowiedź listy stacji");
       }
       state.stations = data.stations;
@@ -749,7 +881,10 @@
     if (state.loading || state.mutationInProgress || state.stationsStatus !== "ready" ||
         !state.revision) return;
     state.mutationInProgress = true;
+    state.pendingMetadataNumber = route === "metadata" ?
+      (state.stations.find(station => station.id === fields.id)?.number ?? null) : null;
     setStationFeedback("");
+    if (state.pendingMetadataNumber !== null) renderStationList();
     renderStationActions();
     try {
       const body = new URLSearchParams({ revision: state.revision, ...fields });
@@ -766,7 +901,7 @@
           "Lista stacji została zmieniona w innym oknie. Nie udało się pobrać aktualnych danych.", !refreshed);
         return;
       }
-      if (!response.ok) throw { status: response.status };
+      if (!response.ok) throw { status: response.status, code: result && result.error };
       if (!result || result.ok !== true) throw { status: 500 };
       if (stationDialog.open) stationDialog.close();
       state.editorNumber = null;
@@ -777,7 +912,9 @@
       console.warn("VoxOne: station mutation failed", error);
       setStationFeedback(mutationErrorMessage(error.status), true);
     } finally {
+      state.pendingMetadataNumber = null;
       state.mutationInProgress = false;
+      if (state.stationsStatus === "ready") renderStationList();
       renderStationActions();
     }
   }
@@ -801,7 +938,7 @@
       stationImportDialog.close();
       return;
     }
-    if (file.size > 8192) {
+    if (file.size > 192 * 1024) {
       stationImportDialog.close();
       setStationFeedback(importErrorMessage(413), true);
       return;
@@ -815,8 +952,7 @@
     try {
       const body = new FormData();
       body.append("revision", revision);
-      if (file.size === 0) body.append("empty", "1");
-      else body.append("file", file, file.name);
+      body.append("file", file, file.name);
       const response = await fetch("/api/stations/import", {
         method: "POST", body, cache: "no-store"
       });
@@ -1138,15 +1274,19 @@
       stationImportFile.value = "";
       return;
     }
-    if (file.size > 8192) {
+    if (file.size === 0) {
+      stationImportFile.value = "";
+      setStationFeedback("Plik VoxOne Stations jest pusty.", true);
+      return;
+    }
+    if (file.size > 192 * 1024) {
       stationImportFile.value = "";
       setStationFeedback(importErrorMessage(413), true);
       return;
     }
     stationImportDetails.textContent = file.name + " · " + file.size + " B";
-    stationImportWarning.textContent = file.size === 0 ?
-      "Wybrany plik jest pusty.\nImport usunie wszystkie stacje z listy.\nKontynuować?" :
-      "Import zastąpi obecną listę stacji. Aktualna playlista zostanie zachowana bezpiecznie do czasu zakończenia zapisu.";
+    stationImportWarning.textContent =
+      "Import zastąpi obecną listę stacji. Aktualna lista zostanie zachowana bezpiecznie do czasu zakończenia zapisu.";
     setStationFeedback("");
     stationImportDialog.showModal();
     renderStationActions();
@@ -1180,7 +1320,7 @@
     if (state.editorNumber === null) {
       mutateStation("add", fields, "Dodano stację.");
     } else {
-      mutateStation("edit", { number: String(state.editorNumber), ...fields }, "Zapisano stację.");
+      mutateStation("edit", { id: state.stations[state.editorNumber - 1].id, ...fields }, "Zapisano stację.");
     }
   });
   stationList.addEventListener("click", event => {
@@ -1196,13 +1336,17 @@
     const station = state.stations[number - 1];
     if (!station || station.number !== number) return;
     switch (button.dataset.action) {
+      case "metadata":
+        mutateStation("metadata", { id: station.id, swapArtistTitle: station.swapArtistTitle ? "0" : "1" },
+          station.swapArtistTitle ? "Wyłączono zamianę artysty i utworu." : "Włączono zamianę artysty i utworu.");
+        break;
       case "edit":
         openStationForm(number);
         break;
       case "delete": {
         const activeNote = number === state.current ? "\nTo jest aktualnie odtwarzana stacja." : "";
         if (window.confirm("Usunąć stację „" + station.name + "”?" + activeNote)) {
-          mutateStation("delete", { number: String(number) }, "Usunięto stację.");
+          mutateStation("delete", { id: station.id }, "Usunięto stację.");
         }
         break;
       }
@@ -1210,7 +1354,7 @@
       case "down": {
         const target = number + (button.dataset.action === "up" ? -1 : 1);
         if (target >= 1 && target <= state.count) {
-          mutateStation("reorder", { from: String(number), to: String(target) }, "Zmieniono kolejność stacji.");
+          mutateStation("reorder", { id: station.id, targetPosition: String(target) }, "Zmieniono kolejność stacji.");
         }
         break;
       }
@@ -1361,6 +1505,10 @@
   }
 
   window.addEventListener("hashchange", showTab);
+  for (const [target, image] of Object.entries(updateImages)) {
+    image.file.addEventListener("change", renderUpdateFiles);
+    image.button.addEventListener("click", () => uploadUpdateImage(target));
+  }
   mqttForm.addEventListener("submit", saveMqttConfig);
   mqttEnabled.addEventListener("change", updateMqttFormState);
   mqttPassword.addEventListener("input", () => {
@@ -1381,6 +1529,7 @@
     if (socket) socket.close();
   });
   renderIdentity();
+  renderUpdateFiles();
   renderConnection();
   showTab();
   connect();

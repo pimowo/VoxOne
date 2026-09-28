@@ -26,6 +26,7 @@
       <a href="#audio" data-tab="audio">Audio</a>
       <a href="#settings" data-tab="settings">Ustawienia</a>
       <a href="#system" data-tab="system">System</a>
+      <a href="#update" data-tab="update">Aktualizacja</a>
     </nav>
 
     <main id="main">
@@ -56,9 +57,9 @@
               <div class="station-search-wrap"><input id="station-search" class="station-search" type="search" placeholder="Szukaj stacji..." autocomplete="off"><button id="station-search-clear" type="button" disabled>Wyczyść</button></div>
             </div>
             <button id="station-add" type="button" disabled>+ Dodaj stację</button>
-            <button id="station-import" type="button" disabled>Importuj</button>
-            <a id="station-export" class="station-download" href="/api/stations/export" download="VoxOne-playlist.csv">Eksportuj</a>
-            <input id="station-import-file" type="file" accept=".csv,text/csv,text/plain,text/tab-separated-values" hidden>
+            <button id="station-import" type="button" disabled>Import VoxOne</button>
+            <a id="station-export" class="station-download" href="/api/stations/export" download="VoxOne-stations.tsv">Eksport VoxOne</a>
+            <input id="station-import-file" type="file" accept=".tsv,text/plain,text/tab-separated-values" hidden>
             <span id="stations-saving" role="status" hidden>Zapisywanie…</span>
           </div>
           <div id="stations-feedback" class="stations-feedback" role="status" aria-live="polite"></div>
@@ -78,7 +79,7 @@
           </form>
         </dialog>
         <dialog id="station-import-dialog" aria-labelledby="station-import-title">
-          <h3 id="station-import-title">Importuj playlistę</h3>
+          <h3 id="station-import-title">Import VoxOne Stations</h3>
           <p id="station-import-details"></p>
           <p id="station-import-warning"></p>
           <div class="station-form-actions"><button id="station-import-cancel" type="button">Anuluj</button><button id="station-import-confirm" type="button">Importuj</button></div>
@@ -192,7 +193,35 @@
       <section id="system" data-panel aria-labelledby="system-title" hidden>
         <div class="section-heading"><div><p class="eyebrow">URZĄDZENIE</p><h2 id="system-title">System</h2></div><span class="badge">Podgląd</span></div>
         <article class="card"><h3>Oprogramowanie</h3><dl class="facts"><div><dt>Firmware</dt><dd id="system-version">VoxOne —</dd></div><div><dt>Profil</dt><dd id="system-profile">—</dd></div><div><dt>Baza</dt><dd id="system-base">yoRadio —</dd></div><div><dt>IP</dt><dd id="system-ip">—</dd></div></dl></article>
-        <div class="grid"><article class="card"><h3>Informacje systemowe</h3><p class="muted">Dodatkowe informacje systemowe są w przygotowaniu.</p></article><article class="card"><h3>Aktualizacja</h3><p class="muted">Panel aktualizacji pojawi się później. Obecny Web Update pozostaje dostępny osobno.</p><a class="quiet-link" href="/update.html">Otwórz obecny Web Update ↗</a></article></div>
+        <article class="card"><h3>Informacje systemowe</h3><p class="muted">Dodatkowe informacje systemowe są w przygotowaniu.</p></article>
+      </section>
+
+      <section id="update" data-panel aria-labelledby="update-title" hidden>
+        <div class="section-heading"><div><p class="eyebrow">SYSTEM</p><h2 id="update-title">Aktualizacja</h2></div><span class="badge">Web Update</span></div>
+        <article class="card"><h3>Urządzenie</h3><dl class="facts"><div><dt>Wersja VoxOne</dt><dd id="update-version">VoxOne —</dd></div><div><dt>Profil</dt><dd id="update-profile">—</dd></div></dl></article>
+        <div class="grid update-grid">
+          <article class="card update-card">
+            <h3>Firmware</h3>
+            <label for="update-firmware-file">Plik firmware (.bin)</label>
+            <input id="update-firmware-file" type="file" accept=".bin,application/octet-stream">
+            <p id="update-firmware-name" class="update-file-name">Nie wybrano pliku.</p>
+            <button id="update-firmware-button" type="button" disabled>Aktualizuj firmware</button>
+          </article>
+          <article class="card update-card">
+            <h3>WWW / system plików</h3>
+            <label for="update-spiffs-file">Obraz SPIFFS z buildu (.bin)</label>
+            <input id="update-spiffs-file" type="file" accept=".bin,application/octet-stream">
+            <p id="update-spiffs-name" class="update-file-name">Nie wybrano pliku.</p>
+            <button id="update-spiffs-button" type="button" disabled>Aktualizuj WWW</button>
+          </article>
+        </div>
+        <article class="card update-progress-card" aria-labelledby="update-progress-title">
+          <h3 id="update-progress-title">Przebieg aktualizacji</h3>
+          <p id="update-status" role="status" aria-live="polite">Wybierz właściwy obraz .bin.</p>
+          <progress id="update-progress" max="100" value="0" hidden></progress>
+          <p class="hint">Dane użytkownika są zabezpieczane podczas aktualizacji przez Web Update. Jeśli zabezpieczenie się nie powiedzie, urządzenie zgłosi błąd i przerwie aktualizację.</p>
+          <p class="hint">Nie używaj pliku full.bin. Po zakończeniu urządzenie uruchomi się ponownie.</p>
+        </article>
       </section>
     </main>
     <footer>VoxOne · Status aktualizowany przez WebSocket</footer>

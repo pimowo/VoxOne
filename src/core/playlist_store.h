@@ -5,9 +5,11 @@
 #include <vector>
 
 struct PlaylistRow {
+  uint64_t id = 0;
   String name;
   String url;
   int ovol = 0;
+  uint8_t metadataMode = 0;
 };
 
 enum class PlaylistWriteError : uint8_t { OK, INVALID, NO_SPACE, IO_ERROR };
@@ -24,6 +26,8 @@ class PlaylistStore {
                             String& revision);
   static bool validRecord(const PlaylistRow& row);
   static bool parseInteger(const String& text, int& value);
+  static uint64_t generateId(const std::vector<PlaylistRow>& rows);
+  bool findStationById(uint64_t id, uint16_t& position);
   bool lock();
   void unlock();
 };

@@ -11,8 +11,11 @@
 #include <climits>
 #include <cstdlib>
 #include "config.h"
+#include "ap_wifi_recovery.h"
+#include "web_update_state.h"
 #include "playlist_store.h"
 #include "playlist_mapping.h"
+#include "station_metadata.h"
 #include "netserver.h"
 #include "player.h"
 #include "serialcli.h"
@@ -86,6 +89,7 @@ void handleUpload(AsyncWebServerRequest *request, String filename, size_t index,
 void handleStationsRead(AsyncWebServerRequest *request);
 void handleStationsReadSnapshot(AsyncWebServerRequest *request);
 void handleStationsMutation(AsyncWebServerRequest *request);
+void handleStationMetadata(AsyncWebServerRequest *request);
 void handleStationsExport(AsyncWebServerRequest *request);
 void handleStationsImport(AsyncWebServerRequest *request);
 void handleStationsImportUpload(AsyncWebServerRequest *request, String filename,
@@ -98,7 +102,6 @@ void handleIndex(AsyncWebServerRequest * request);
 void handleNotFound(AsyncWebServerRequest * request);
 void onWsEvent(AsyncWebSocket *server, AsyncWebSocketClient *client, AwsEventType type, void *arg, uint8_t *data, size_t len);
 
-bool  shouldReboot  = false;
 uint32_t webUpdateRebootAt = 0;
 //Ticker mqttplaylistticker;
 bool  mqttplaylistblock = false;
@@ -110,13 +113,55 @@ void mqttplaylistSend() {
 }
 
 namespace {
+WebUpdateState webUpdateState;
+
+void scheduleSystemRestart() {
+  webUpdateRebootAt = millis() + 1500;
+  webUpdateState.restartScheduled();
+  Serial.println("##[UPDATE]# restart pending");
+}
+
+void remountFilesystemAfterFailedUpdate() {
+  if (!webUpdateState.filesystemUnavailable()) return;
+  if (SPIFFS.begin(false)) {
+    webUpdateState.updateFailed();
+    Serial.println("##[UPDATE]# SPIFFS remounted after failed update");
+  } else {
+    Serial.println("##[ERROR]# SPIFFS remount failed after update error");
+  }
+}
+
+class WebUpdateRequestGuard : public AsyncWebHandler {
+public:
+  bool canHandle(AsyncWebServerRequest* request) override {
+    return webUpdateState.blocksRequests() &&
+           !(request->method() == HTTP_POST && request->url() == "/update");
+  }
+
+  void handleRequest(AsyncWebServerRequest* request) override {
+    if (request->method() == HTTP_GET && request->url() == "/emergency") {
+#if defined(HTTP_USER) && defined(HTTP_PASS)
+      if (network.status == CONNECTED && !request->authenticate(HTTP_USER, HTTP_PASS)) {
+        request->requestAuthentication();
+        return;
+      }
+#endif
+      request->send_P(200, "text/html", emergency_form);
+      return;
+    }
+    request->send(503, "text/plain", "Update in progress");
+  }
+};
+
 struct WebUpdateFile {
   const char* path;
   const char* key;
 };
 constexpr WebUpdateFile kWebUpdateFiles[] = {
   {SSIDS_PATH, "wifi"},
-  {PLAYLIST_PATH, "playlist"},
+  {PLAYLIST_PATH, "stations"},
+  {INDEX_PATH, "stidx"},
+  {"/data/playlist.csv", "playlist"}, // Restore backups made by pre-v1 firmware.
   {PLAYLIST_SD_PATH, "playlistsd"}
 };
 constexpr char kWebUpdateNamespace[] = "voxupdate";
@@ -152,6 +197,11 @@ bool backupWebUpdateData(const char*& error) {
     File file = SPIFFS.open(item.path, "r");
     if (!file) continue;
     const size_t size = file.size();
+    if (size == 0 && (strcmp(item.path, "/data/playlist.csv") == 0 ||
+                      strcmp(item.path, PLAYLIST_SD_PATH) == 0)) {
+      file.close();
+      continue;
+    }
     uint8_t* bytes = static_cast<uint8_t*>(malloc(size ? size : 1));
     if (!bytes || file.read(bytes, size) != size ||
         nvs_set_blob(handle, item.key, bytes, size) != ESP_OK) {
@@ -186,6 +236,8 @@ bool backupWebUpdateData(const char*& error) {
   return true;
 }
 }  // namespace
+
+bool systemRestartPending() { return webUpdateState.restartPending(); }
 
 bool restoreWebUpdateData() {
   nvs_handle_t handle;
@@ -231,7 +283,10 @@ char* updateError() {
 }
 
 bool NetServer::begin(bool quiet) {
-  if(network.status==SDREADY) return true;
+  Serial.printf("##[BOOT]# NetServer::begin called: status=%d started=%s caller=%s\n",
+                static_cast<int>(network.status), _started ? "yes" : "no",
+                quiet ? "searchWiFi" : "setup");
+  if (!netServerShouldInitialize(_started, network.status == SDREADY)) return true;
   if(!quiet) Serial.print("##[BOOT]#\tnetserver.begin\t");
   importRequest = IMDONE;
   irRecordEnable = false;
@@ -241,6 +296,8 @@ bool NetServer::begin(bool quiet) {
   nsQueue = xQueueCreate( 20, sizeof( nsRequestParams_t ) );
   while(nsQueue==NULL){;}
 
+  // Must precede static handlers: their canHandle() opens files in SPIFFS.
+  webserver.addHandler(new WebUpdateRequestGuard());
   webserver.on("/", HTTP_ANY, handleIndex);
   webserver.on("/api/stations/export", HTTP_GET, handleStationsExport);
   webserver.on("/api/stations/import", HTTP_POST, handleStationsImport,
@@ -250,6 +307,7 @@ bool NetServer::begin(bool quiet) {
   webserver.on("/api/stations/edit", HTTP_POST, handleStationsMutation);
   webserver.on("/api/stations/delete", HTTP_POST, handleStationsMutation);
   webserver.on("/api/stations/reorder", HTTP_POST, handleStationsMutation);
+  webserver.on("/api/stations/metadata", HTTP_POST, handleStationMetadata);
   webserver.on("/api/mqtt", HTTP_GET, handleMqttConfigRead);
   webserver.on("/api/mqtt", HTTP_POST, handleMqttConfigSave);
   webserver.on("/api/time", HTTP_GET, handleTimeStatus);
@@ -269,11 +327,16 @@ bool NetServer::begin(bool quiet) {
   //  MDNS.begin(config.store.mdnsname);
   websocket.onEvent(onWsEvent);
   webserver.addHandler(&websocket);
+  _started = true;
   if(!quiet) Serial.println("done");
   return true;
 }
 
 size_t NetServer::chunkedHtmlPageCallback(uint8_t* buffer, size_t maxLen, size_t index){
+  if (webUpdateState.blocksRequests()) {
+    display.unlock();
+    return 0;
+  }
   File requiredfile;
   bool sdpl = strcmp(netserver.chunkedPathBuffer, PLAYLIST_SD_PATH) == 0;
   if(sdpl){
@@ -373,6 +436,13 @@ static bool appendJsonEscaped(char *output, size_t capacity, size_t &used, const
   return true;
 }
 
+static size_t jsonEscapedSize(const char* value) {
+  size_t size = 0;
+  for (const unsigned char* p = reinterpret_cast<const unsigned char*>(value); *p; ++p)
+    size += *p < 0x20 ? 6 : (*p == '"' || *p == '\\' ? 2 : 1);
+  return size;
+}
+
 static void formatWsTextPayload(char *output, size_t capacity, const char *id, const char *value) {
   const int prefix = snprintf(output, capacity,
       "{\"payload\":[{\"id\":\"%s\", \"value\":\"", id);
@@ -399,11 +469,13 @@ static bool readIndexedStation(File &playlist, File &index, uint16_t number, sta
   const size_t length = playlist.readBytesUntil('\n', line, sizeof(line) - 1);
   if (length == 0 || length >= sizeof(line) - 1) return false;
   line[length] = '\0';
-  const char *nameEnd = strchr(line, '\t');
-  const char *urlEnd = nameEnd ? strchr(nameEnd + 1, '\t') : nullptr;
-  if (!nameEnd || !urlEnd || nameEnd - line >= BUFLEN ||
-      urlEnd - nameEnd - 1 >= BUFLEN) return false;
-  return config.parseCSV(line, station.name, station.url, station.ovol);
+  char* name = nullptr;
+  char* url = nullptr;
+  if (!stationParseFields(line, station.id, name, url, station.ovol,
+                          station.metadataMode)) return false;
+  strlcpy(station.name, name, sizeof(station.name));
+  strlcpy(station.url, url, sizeof(station.url));
+  return true;
 }
 
 struct StationsJsonStream {
@@ -452,15 +524,20 @@ struct StationsJsonStream {
     if (next <= count) {
       station_t station;
       if (!readIndexedStation(playlist, index, static_cast<uint16_t>(next), station)) return fail();
+      char id[17];
+      stationFormatId(station.id, id);
       const int written = snprintf(pending, sizeof(pending),
-          "%s{\"number\":%u,\"name\":\"", next == 1 ? "" : ",", next);
+          "%s{\"number\":%u,\"id\":\"%s\",\"name\":\"",
+          next == 1 ? "" : ",", next, id);
       if (written < 0 || static_cast<size_t>(written) >= sizeof(pending)) return fail();
       length = static_cast<size_t>(written);
       if (!appendJsonEscaped(pending, sizeof(pending), length, station.name) ||
           !appendLiteral("\",\"url\":\"") ||
           !appendJsonEscaped(pending, sizeof(pending), length, station.url)) return fail();
       const int tail = snprintf(pending + length, sizeof(pending) - length,
-          "\",\"ovol\":%d}", station.ovol);
+          "\",\"ovol\":%d,\"metadataMode\":\"%s\",\"swapArtistTitle\":%s}",
+          station.ovol, station.metadataMode == STATION_META_SWAP ? "swap" : "normal",
+          station.metadataMode == STATION_META_SWAP ? "true" : "false");
       if (tail < 0 || static_cast<size_t>(tail) >= sizeof(pending) - length) return fail();
       length += static_cast<size_t>(tail);
       ++next;
@@ -544,11 +621,15 @@ void handleStationsRead(AsyncWebServerRequest *request) {
   response->addHeader("Cache-Control", "no-store");
   request->send(response);
 }
+static void stationsError(AsyncWebServerRequest* request, int code, const char* error);
+
 void handleStationsReadSnapshot(AsyncWebServerRequest *request) {
   PlaylistGuard guard;
   std::vector<PlaylistRow> rows;
   String revision;
   if (!guard || !playlistStore.snapshot(rows, revision)) {
+    Serial.printf("##[ERROR]# stations GET failed: %s\n",
+                  guard ? "snapshot" : "lock");
     AsyncWebServerResponse* error = request->beginResponse(
         500, "application/json; charset=utf-8", "{\"error\":\"playlist_read_failed\"}");
     error->addHeader("Cache-Control", "no-store");
@@ -557,11 +638,13 @@ void handleStationsReadSnapshot(AsyncWebServerRequest *request) {
   }
   const uint16_t selected = config.lastStation();
   const uint16_t current = selected <= rows.size() ? selected : 0;
-  size_t capacity = 80 + rows.size() * 70;
+  size_t capacity = 80 + rows.size() * 128;
   for (const PlaylistRow& row : rows)
-    capacity += 6 * (row.name.length() + row.url.length());
+    capacity += jsonEscapedSize(row.name.c_str()) + jsonEscapedSize(row.url.c_str());
   String body;
   if (capacity > ESP.getFreeHeap() / 2 || !body.reserve(capacity)) {
+    Serial.printf("##[ERROR]# stations GET response allocation failed: need=%u heap=%u\n",
+                  static_cast<unsigned>(capacity), static_cast<unsigned>(ESP.getFreeHeap()));
     AsyncWebServerResponse* error = request->beginResponse(
         500, "application/json; charset=utf-8", "{\"error\":\"playlist_read_failed\"}");
     error->addHeader("Cache-Control", "no-store");
@@ -572,15 +655,28 @@ void handleStationsReadSnapshot(AsyncWebServerRequest *request) {
          ",\"count\":" + String(rows.size()) + ",\"stations\":[";
   char encoded[BUFLEN * 6 + 1];
   for (size_t i = 0; i < rows.size(); ++i) {
-    body += (i ? "," : "") + String("{\"number\":") + String(i + 1) + ",\"name\":\"";
+    char id[17];
+    stationFormatId(rows[i].id, id);
+    body += (i ? "," : "") + String("{\"number\":") + String(i + 1) +
+            ",\"id\":\"" + id + "\",\"name\":\"";
     size_t used = 0;
-    if (!appendJsonEscaped(encoded, sizeof(encoded), used, rows[i].name.c_str())) return;
+    if (!appendJsonEscaped(encoded, sizeof(encoded), used, rows[i].name.c_str())) {
+      stationsError(request, 500, "playlist_response_failed");
+      return;
+    }
     body += encoded;
     body += "\",\"url\":\"";
     used = 0;
-    if (!appendJsonEscaped(encoded, sizeof(encoded), used, rows[i].url.c_str())) return;
+    if (!appendJsonEscaped(encoded, sizeof(encoded), used, rows[i].url.c_str())) {
+      stationsError(request, 500, "playlist_response_failed");
+      return;
+    }
     body += encoded;
-    body += "\",\"ovol\":" + String(rows[i].ovol) + "}";
+    body += "\",\"ovol\":" + String(rows[i].ovol) +
+            ",\"metadataMode\":\"" +
+            (rows[i].metadataMode == STATION_META_SWAP ? "swap" : "normal") +
+            "\",\"swapArtistTitle\":" +
+            (rows[i].metadataMode == STATION_META_SWAP ? "true" : "false") + "}";
   }
   body += "]}";
   AsyncWebServerResponse* response = request->beginResponse(
@@ -695,7 +791,7 @@ void handleMqttConfigRead(AsyncWebServerRequest* request) {
 
 void handleMqttConfigSave(AsyncWebServerRequest* request) {
   if (!deviceApiAuthorized(request)) return;
-  if (shouldReboot) { mqttApiError(request, 409, "reboot_pending"); return; }
+  if (systemRestartPending()) { mqttApiError(request, 409, "reboot_pending"); return; }
   String enabledText, hostText, portText, usernameText, rootText;
   if (!mqttApiText(request, "enabled", enabledText) ||
       !mqttApiText(request, "host", hostText) ||
@@ -755,8 +851,7 @@ void handleMqttConfigSave(AsyncWebServerRequest* request) {
   }
   if (!mqttSaveConfig(candidate)) { mqttApiError(request, 500, "storage_failed"); return; }
   stationsReply(request, 200, "{\"ok\":true,\"rebooting\":true}");
-  shouldReboot = true;
-  webUpdateRebootAt = millis() + 1500;
+  scheduleSystemRestart();
 }
 
 static void stationsError(AsyncWebServerRequest* request, int code, const char* error) {
@@ -766,8 +861,8 @@ static void stationsError(AsyncWebServerRequest* request, int code, const char* 
 static bool stationParam(AsyncWebServerRequest* request, const char* key, String& value);
 
 namespace {
-constexpr char kPlaylistUploadPath[] = "/data/playlist.upload";
-constexpr size_t kPlaylistUploadLimit = 8192;
+constexpr char kPlaylistUploadPath[] = "/data/stations.upload";
+constexpr size_t kPlaylistUploadLimit = 192 * 1024;
 AsyncWebServerRequest* activePlaylistUpload = nullptr;
 
 struct PlaylistImportSession {
@@ -788,7 +883,7 @@ void finishPlaylistUpload(AsyncWebServerRequest* request) {
   }
   if (activePlaylistUpload == request) {
     activePlaylistUpload = nullptr;
-    SPIFFS.remove(kPlaylistUploadPath);
+    if (SPIFFS.exists(kPlaylistUploadPath)) SPIFFS.remove(kPlaylistUploadPath);
   }
 }
 }  // namespace
@@ -797,9 +892,16 @@ void handleStationsExport(AsyncWebServerRequest* request) {
   PlaylistGuard guard;
   std::vector<PlaylistRow> rows;
   String revision;
-  if (!guard || !SPIFFS.exists(PLAYLIST_PATH) ||
-      !playlistStore.snapshot(rows, revision)) {
+  if (!guard || !playlistStore.snapshot(rows, revision)) {
     stationsError(request, 500, "playlist_read_failed");
+    return;
+  }
+  if (!SPIFFS.exists(PLAYLIST_PATH)) {
+    AsyncWebServerResponse* response = request->beginResponse(
+        200, "text/tab-separated-values; charset=utf-8", kStationsHeader);
+    response->addHeader("Content-Disposition", "attachment; filename=\"VoxOne-stations.tsv\"");
+    response->addHeader("Cache-Control", "no-store");
+    request->send(response);
     return;
   }
   File file = SPIFFS.open(PLAYLIST_PATH, "r");
@@ -808,7 +910,7 @@ void handleStationsExport(AsyncWebServerRequest* request) {
     return;
   }
   AsyncWebServerResponse* response = request->beginResponse(
-      file, "VoxOne-playlist.csv", "text/tab-separated-values; charset=utf-8", true);
+      file, "VoxOne-stations.tsv", "text/tab-separated-values; charset=utf-8", true);
   response->addHeader("Cache-Control", "no-store");
   request->send(response);
 }
@@ -890,6 +992,11 @@ void handleStationsImport(AsyncWebServerRequest* request) {
   }
   const bool hasEmpty = request->hasParam("empty", true);
   const bool empty = hasEmpty && request->getParam("empty", true)->value() == "1";
+  if (hasEmpty) {
+    stationsError(request, 422, "invalid_stations");
+    finishPlaylistUpload(request);
+    return;
+  }
   size_t fileCount = 0;
   for (size_t i = 0; i < request->params(); ++i)
     if (request->getParam(i)->isFile()) ++fileCount;
@@ -957,7 +1064,7 @@ void handleStationsImport(AsyncWebServerRequest* request) {
     if (readResult != PlaylistReadError::OK) {
       stationsError(request, readResult == PlaylistReadError::INVALID ? 422 : 500,
                     readResult == PlaylistReadError::INVALID ?
-                        "invalid_playlist" : "upload_failed");
+                        "invalid_stations" : "upload_failed");
       finishPlaylistUpload(request);
       return;
     }
@@ -982,8 +1089,10 @@ void handleStationsImport(AsyncWebServerRequest* request) {
     finishPlaylistUpload(request);
     return;
   }
-  const uint16_t newCurrent = rows.empty() ? 0 :
-      (oldCurrent > rows.size() ? static_cast<uint16_t>(rows.size()) : oldCurrent);
+  const uint16_t newCurrent = stationImportCurrent(rows, oldCurrent, config.station.id);
+  const uint64_t oldId = config.station.id;
+  const String oldUrl = config.station.url;
+  const uint8_t oldMode = config.station.metadataMode;
   String newRevision;
   const PlaylistWriteError result =
       playlistStore.commit(rows, newCurrent, newRevision);
@@ -991,23 +1100,38 @@ void handleStationsImport(AsyncWebServerRequest* request) {
     if (result == PlaylistWriteError::NO_SPACE)
       stationsError(request, 507, "insufficient_storage");
     else if (result == PlaylistWriteError::INVALID)
-      stationsError(request, 422, "invalid_playlist");
+      stationsError(request, 422, "invalid_stations");
     else
       stationsError(request, 500, "playlist_write_failed");
     finishPlaylistUpload(request);
     return;
   }
   finishPlaylistUpload(request);
-  if (rows.empty()) {
+  if (newCurrent == 0) {
+    config.station.id = 0;
+    config.station.metadataMode = STATION_META_NORMAL;
     config.station.name[0] = '\0';
     config.station.url[0] = '\0';
+    config.station.title[0] = '\0';
     config.station.ovol = 0;
     player.sendCommand({PR_STOP, 0});
     display.putRequest(NEWSTATION);
+    display.putRequest(NEWTITLE);
     netserver.requestOnChange(STATION, 0);
+    netserver.requestOnChange(TITLE, 0);
   } else {
-    // Keep the existing stream; only announce the selected list index.
-    netserver.requestOnChange(ITEM, 0);
+    const PlaylistRow& selected = rows[newCurrent - 1];
+    if (player.isRunning() && (oldId != selected.id || oldUrl != selected.url)) {
+      player.sendCommand({PR_PLAY, newCurrent});
+    } else {
+      config.loadStation(newCurrent);
+      display.putRequest(NEWSTATION);
+      netserver.requestOnChange(STATION, 0);
+    }
+  }
+  if (newCurrent != 0 && oldMode != config.station.metadataMode) {
+    display.putRequest(NEWTITLE);
+    netserver.requestOnChange(TITLE, 0);
   }
   stationsReply(request, 200, String("{\"ok\":true,\"revision\":\"") +
       newRevision + "\",\"current\":" + String(newCurrent) +
@@ -1030,6 +1154,71 @@ static bool stationParam(AsyncWebServerRequest* request, const char* key, String
   if (!request->hasParam(key, true)) return false;
   value = request->getParam(key, true)->value();
   return true;
+}
+
+static bool stationPositionByRequestId(AsyncWebServerRequest* request,
+                                       const std::vector<PlaylistRow>& rows,
+                                       uint16_t& number) {
+  String idText;
+  uint64_t id = 0;
+  if (!stationParam(request, "id", idText) || !stationParseId(idText.c_str(), id)) return false;
+  return stationFindPositionById(rows, id, number);
+}
+
+void handleStationMetadata(AsyncWebServerRequest* request) {
+  String revision, idText, swapText;
+  uint64_t id = 0;
+  if (!stationParam(request, "revision", revision) || revision.length() != 8 ||
+      !stationParam(request, "id", idText) || !stationParseId(idText.c_str(), id) ||
+      !stationParam(request, "swapArtistTitle", swapText) ||
+      (swapText != "0" && swapText != "1")) {
+    stationsError(request, 400, "bad_parameter");
+    return;
+  }
+  revision.toUpperCase();
+  for (char ch : revision) {
+    if (!isxdigit(static_cast<unsigned char>(ch))) {
+      stationsError(request, 400, "bad_revision");
+      return;
+    }
+  }
+  PlaylistGuard guard;
+  std::vector<PlaylistRow> rows;
+  String currentRevision;
+  if (!guard || !playlistStore.recover() ||
+      !playlistStore.snapshot(rows, currentRevision)) {
+    stationsError(request, 500, "playlist_read_failed");
+    return;
+  }
+  if (!stationRevisionMatches(revision.c_str(), currentRevision.c_str())) {
+    stationsError(request, 409, "revision_conflict");
+    return;
+  }
+  size_t index = 0;
+  while (index < rows.size() && rows[index].id != id) ++index;
+  if (index == rows.size()) {
+    stationsError(request, 404, "station_not_found");
+    return;
+  }
+  rows[index].metadataMode = swapText == "1" ? STATION_META_SWAP : STATION_META_NORMAL;
+  String newRevision;
+  const bool active = config.station.id == id;
+  const PlaylistWriteError metadataResult =
+      playlistStore.commit(rows, config.lastStation(), newRevision);
+  if (metadataResult != PlaylistWriteError::OK) {
+    stationsError(request, metadataResult == PlaylistWriteError::NO_SPACE ? 507 : 500,
+                  "station_write_failed");
+    return;
+  }
+  if (active && config.station.metadataMode != rows[index].metadataMode) {
+    config.station.metadataMode = rows[index].metadataMode;
+    display.putRequest(NEWTITLE);
+    netserver.requestOnChange(TITLE, 0);
+  }
+  stationsReply(request, 200, String("{\"ok\":true,\"revision\":\"") +
+      newRevision + "\",\"id\":\"" + idText +
+      "\",\"metadataMode\":\"" + (swapText == "1" ? "swap" : "normal") +
+      "\",\"swapArtistTitle\":" + (swapText == "1" ? "true" : "false") + "}");
 }
 
 void handleStationsMutation(AsyncWebServerRequest *request) {
@@ -1090,57 +1279,56 @@ void handleStationsMutation(AsyncWebServerRequest *request) {
     replacement.name = name;
     replacement.url = url;
     replacement.ovol = ovol;
-    if (!PlaylistStore::validRecord(replacement)) {
-      stationsError(request, 422, "invalid_station");
-      return;
-    }
     if (edit) {
-      String numberText;
-      if (!stationParam(request, "number", numberText) ||
-          !stationNumber(numberText, number)) {
-        stationsError(request, 400, "bad_number");
-        return;
-      }
-      if (number == 0 || number > rows.size()) {
+      if (!stationPositionByRequestId(request, rows, number)) {
         stationsError(request, 404, "station_not_found");
         return;
       }
-      reconnect = number == oldCurrent && rows[number - 1].url != replacement.url;
+      reconnect = number == oldCurrent && player.isRunning() &&
+                  rows[number - 1].url != replacement.url;
       refreshCurrent = number == oldCurrent;
+      replacement.id = rows[number - 1].id;
+      replacement.metadataMode = rows[number - 1].metadataMode;
+      if (!PlaylistStore::validRecord(replacement)) {
+        stationsError(request, 422, "invalid_station");
+        return;
+      }
       rows[number - 1] = replacement;
     } else {
       if (rows.size() >= UINT16_MAX) {
         stationsError(request, 507, "playlist_full");
         return;
       }
+      replacement.id = playlistStore.generateId(rows);
+      if (!replacement.id) { stationsError(request, 500, "id_generation_failed"); return; }
+      if (!PlaylistStore::validRecord(replacement)) {
+        stationsError(request, 422, "invalid_station");
+        return;
+      }
       rows.push_back(replacement);
     }
   }
   if (remove) {
-    String numberText;
-    if (!stationParam(request, "number", numberText) ||
-        !stationNumber(numberText, number)) {
-      stationsError(request, 400, "bad_number");
-      return;
-    }
-    if (number == 0 || number > rows.size()) {
+    if (!stationPositionByRequestId(request, rows, number)) {
       stationsError(request, 404, "station_not_found");
       return;
     }
     rows.erase(rows.begin() + number - 1);
     newCurrent = stationAfterDelete(oldCurrent, number, rows.size());
     if (number == oldCurrent) {
-      reconnect = newCurrent != 0;
+      reconnect = newCurrent != 0 && player.isRunning();
       stop = newCurrent == 0;
     }
     refreshCurrent = number <= oldCurrent;
   }
   if (reorder) {
-    String fromText, toText;
+    String toText;
     uint16_t from = 0, to = 0;
-    if (!stationParam(request, "from", fromText) ||
-        !stationParam(request, "to", toText) ||
-        !stationNumber(fromText, from) || !stationNumber(toText, to)) {
+    if (!stationPositionByRequestId(request, rows, from)) {
+      stationsError(request, 404, "station_not_found");
+      return;
+    }
+    if (!stationParam(request, "targetPosition", toText) || !stationNumber(toText, to)) {
       stationsError(request, 400, "bad_number");
       return;
     }
@@ -1162,26 +1350,42 @@ void handleStationsMutation(AsyncWebServerRequest *request) {
     else stationsError(request, 500, "playlist_write_failed");
     return;
   }
+  const uint8_t previousMode = config.station.metadataMode;
   if (edit && number == oldCurrent && !reconnect) {
     const PlaylistRow& active = rows[number - 1];
     const bool volumeChanged = config.station.ovol != active.ovol;
     strlcpy(config.station.name, active.name.c_str(), sizeof(config.station.name));
     strlcpy(config.station.url, active.url.c_str(), sizeof(config.station.url));
     config.station.ovol = active.ovol;
+    config.station.id = active.id;
+    config.station.metadataMode = active.metadataMode;
     if (volumeChanged) player.setVol(config.store.volume);
     display.putRequest(NEWSTATION);
   }
+  if (remove && number == oldCurrent && newCurrent != 0 && !reconnect) {
+    config.loadStation(newCurrent);
+    display.putRequest(NEWSTATION);
+  }
   if (stop) {
+    config.station.id = 0;
+    config.station.metadataMode = STATION_META_NORMAL;
     config.station.name[0] = '\0';
     config.station.url[0] = '\0';
+    config.station.title[0] = '\0';
     player.sendCommand({PR_STOP, 0});
     display.putRequest(NEWSTATION);
+    display.putRequest(NEWTITLE);
     netserver.requestOnChange(STATION, 0);
+    netserver.requestOnChange(TITLE, 0);
   } else if (reconnect) {
     netserver.requestOnChange(ITEM, 0);
     player.sendCommand({PR_PLAY, newCurrent});
   } else if (refreshCurrent) {
     netserver.requestOnChange(STATION, 0);
+  }
+  if (!reconnect && !stop && previousMode != config.station.metadataMode) {
+    display.putRequest(NEWTITLE);
+    netserver.requestOnChange(TITLE, 0);
   }
   stationsReply(request, 200, String("{\"ok\":true,\"revision\":\"") +
       newRevision + "\",\"current\":" + String(newCurrent) +
@@ -1302,7 +1506,14 @@ void NetServer::processQueue(){
       case STATION:       requestOnChange(STATIONNAME, clientId); requestOnChange(ITEM, clientId); break;
       case STATIONNAME:   formatWsTextPayload(wsBuf, sizeof(wsBuf), "nameset", config.station.name); break;
       case ITEM:          sprintf (wsBuf, "{\"current\": %d}", config.lastStation()); break;
-      case TITLE:         formatWsTextPayload(wsBuf, sizeof(wsBuf), "meta", config.station.title); serialCli.printf("##CLI.META#: %s\n> ", config.station.title); break;
+      case TITLE: {
+        char interpreted[BUFLEN + 1];
+        stationMetaDisplay(config.station.title, config.station.metadataMode == STATION_META_SWAP,
+                           interpreted, sizeof(interpreted));
+        formatWsTextPayload(wsBuf, sizeof(wsBuf), "meta", interpreted);
+        serialCli.printf("##CLI.META#: %s\n> ", interpreted);
+        break;
+      }
       case VOLUME:        sprintf (wsBuf, "{\"payload\":[{\"id\":\"volume\",\"value\":%d},{\"id\":\"volume100\",\"value\":%d},{\"id\":\"maximumVolume\",\"value\":%d},{\"id\":\"startupMode\",\"value\":%d},{\"id\":\"startupFixedVolume\",\"value\":%d}]}", config.store.volume, config.userVolume, config.store.maximumVolume, config.store.startupMode, config.store.startupFixedVolume); serialCli.printf("##CLI.VOL#: %d\n", config.store.volume); break;
       case NRSSI:         rssi = WiFi.RSSI(); sprintf (wsBuf, "{\"payload\":[{\"id\":\"rssi\", \"value\": %d}, {\"id\":\"heap\", \"value\": %d}]}", rssi, (player.isRunning() && config.store.audioinfo)?(int)(100*player.inBufferFilled()/playerBufMax):0); /*rssi = 255;*/ break;
       case SDPOS:         sprintf (wsBuf, "{\"sdpos\": %lu,\"sdend\": %lu,\"sdtpos\": %lu,\"sdtend\": %lu}", 
@@ -1359,11 +1570,11 @@ void NetServer::processVolumeUpdate(){
 
 void NetServer::loop() {
   if(network.status==SDREADY) return;
-  if (shouldReboot && (int32_t)(millis() - webUpdateRebootAt) >= 0) {
+  if (systemRestartPending() && (int32_t)(millis() - webUpdateRebootAt) >= 0) {
     Serial.println("Rebooting...");
-    delay(100);
     ESP.restart();
   }
+  if (webUpdateState.blocksRequests()) return;
   processQueue();
   processVolumeUpdate();
   websocket.cleanupClients();
@@ -1448,41 +1659,7 @@ int NetServer::_readPlaylistLine(File &file, char * line, size_t size){
 }
 
 bool NetServer::importPlaylist() {
-  if(config.getMode()==PM_SDCARD) return false;
-  //player.sendCommand({PR_STOP, 0});
-  File tempfile = SPIFFS.open(TMP_PATH, "r");
-  if (!tempfile) {
-    return false;
-  }
-  char linePl[BUFLEN*3];
-  int sOvol;
-  _readPlaylistLine(tempfile, linePl, sizeof(linePl)-1);
-  if (config.parseCSV(linePl, nsBuf, nsBuf2, sOvol)) {
-    tempfile.close();
-    SPIFFS.rename(TMP_PATH, PLAYLIST_PATH);
-    requestOnChange(PLAYLISTSAVED, 0);
-    return true;
-  }
-  if (config.parseJSON(linePl, nsBuf, nsBuf2, sOvol)) {
-    File playlistfile = SPIFFS.open(PLAYLIST_PATH, "w");
-    snprintf(linePl, sizeof(linePl)-1, "%s\t%s\t%d", nsBuf, nsBuf2, 0);
-    playlistfile.println(linePl);
-    while (tempfile.available()) {
-      _readPlaylistLine(tempfile, linePl, sizeof(linePl)-1);
-      if (config.parseJSON(linePl, nsBuf, nsBuf2, sOvol)) {
-        snprintf(linePl, sizeof(linePl)-1, "%s\t%s\t%d", nsBuf, nsBuf2, 0);
-        playlistfile.println(linePl);
-      }
-    }
-    playlistfile.flush();
-    playlistfile.close();
-    tempfile.close();
-    SPIFFS.remove(TMP_PATH);
-    requestOnChange(PLAYLISTSAVED, 0);
-    return true;
-  }
-  tempfile.close();
-  SPIFFS.remove(TMP_PATH);
+  // Legacy import cannot preserve IDs. Use /api/stations/import.
   return false;
 }
 
@@ -1522,6 +1699,10 @@ void handleWebUpdateUpload(AsyncWebServerRequest *request, const String& filenam
     if (!session) return;
     request->_tempObject = session;
     session->error = nullptr;
+    if (webUpdateState.blocksRequests()) {
+      session->error = "Update or restart already in progress";
+      return;
+    }
     if (activeUpdateRequest && activeUpdateRequest != request) {
       session->error = "Another update is already running";
       return;
@@ -1531,6 +1712,7 @@ void handleWebUpdateUpload(AsyncWebServerRequest *request, const String& filenam
       if (activeUpdateRequest == request) {
         Update.abort();
         activeUpdateRequest = nullptr;
+        remountFilesystemAfterFailedUpdate();
       }
     });
     if (!request->hasParam("updatetarget", true)) {
@@ -1609,13 +1791,15 @@ void handleWebUpdateUpload(AsyncWebServerRequest *request, const String& filenam
     }
     if (session->target == U_SPIFFS) {
       if (!backupWebUpdateData(session->error)) return;
+      webUpdateState.filesystemUnmounting();
       SPIFFS.end();
+      Serial.println("##[UPDATE]# SPIFFS unmounted");
     }
     if (!Update.begin(session->expected ? session->expected : UPDATE_SIZE_UNKNOWN,
                       session->target)) {
       Serial.printf("Web Update begin failed: %s\n", Update.errorString());
       session->error = "Update.begin failed (see Serial)";
-      if (session->target == U_SPIFFS) SPIFFS.begin(false);
+      if (session->target == U_SPIFFS) remountFilesystemAfterFailedUpdate();
       return;
     }
     session->started = true;
@@ -1649,45 +1833,28 @@ void handleWebUpdateUpload(AsyncWebServerRequest *request, const String& filenam
       session->error = "Update.end failed (see Serial)";
     } else {
       session->finished = true;
-      Serial.printf("Web Update success: %u bytes\n", static_cast<unsigned>(index + len));
+      Serial.printf("##[UPDATE]# upload complete: %u bytes\n", static_cast<unsigned>(index + len));
+      scheduleSystemRestart();
     }
     activeUpdateRequest = nullptr;
   }
 }
 
 void handleUpload(AsyncWebServerRequest *request, String filename, size_t index, uint8_t *data, size_t len, bool final) {
-  static int freeSpace = 0;
+  if (webUpdateState.blocksRequests() && request->url() != "/update") return;
   if(request->url()=="/upload"){
-    if (!index) {
-      if(filename!="tempwifi.csv"){
-        //player.sendCommand({PR_STOP, 0});
-        if(SPIFFS.exists(PLAYLIST_PATH)) SPIFFS.remove(PLAYLIST_PATH);
-        if(SPIFFS.exists(INDEX_PATH)) SPIFFS.remove(INDEX_PATH);
-        if(SPIFFS.exists(PLAYLIST_SD_PATH)) SPIFFS.remove(PLAYLIST_SD_PATH);
-        if(SPIFFS.exists(INDEX_SD_PATH)) SPIFFS.remove(INDEX_SD_PATH);
-      }
-      freeSpace = (float)SPIFFS.totalBytes()/100*68-SPIFFS.usedBytes();
-      request->_tempFile = SPIFFS.open(TMP_PATH , "w");
-    }else{
-      
-    }
-    if (len) {
-      if(freeSpace>index+len){
-        request->_tempFile.write(data, len);
-      }
-    }
-    if (final) {
-      request->_tempFile.close();
-      freeSpace = 0;
-    }
+    // Legacy yoRadio upload has no station IDs and must not overwrite v1 files.
+    return;
   }else if(request->url()=="/update"){
     handleWebUpdateUpload(request, filename, index, data, len, final);
   }else{ // "/webboard"
+    if (filename == "playlist.csv" || filename == "stations.tsv" ||
+        filename == "stations.idx") return;
     DBGVB("File: %s, size:%u bytes, index: %u, final: %s\n", filename.c_str(), len, index, final?"true":"false");
     if (!index) {
       player.sendCommand({PR_STOP, 0});
       String spath = "/www/";
-      if(filename=="playlist.csv" || filename=="wifi.csv") spath = "/data/";
+      if(filename=="wifi.csv") spath = "/data/";
       request->_tempFile = SPIFFS.open(spath + filename , "w");
     }
     if (len) {
@@ -1695,7 +1862,6 @@ void handleUpload(AsyncWebServerRequest *request, String filename, size_t index,
     }
     if (final) {
       request->_tempFile.close();
-      if(filename=="playlist.csv") config.indexPlaylist();
     }
   }
 }
@@ -1704,13 +1870,18 @@ void onWsEvent(AsyncWebSocket *server, AsyncWebSocketClient *client, AwsEventTyp
   switch (type) {
     case WS_EVT_CONNECT: /*netserver.requestOnChange(STARTUP, client->id()); */if (config.store.audioinfo) Serial.printf("[WEBSOCKET] client #%lu connected from %s\n", client->id(), config.ipToStr(client->remoteIP())); break;
     case WS_EVT_DISCONNECT: if (config.store.audioinfo) Serial.printf("[WEBSOCKET] client #%lu disconnected\n", client->id()); break;
-    case WS_EVT_DATA: netserver.onWsMessage(arg, data, len, client->id()); break;
+    case WS_EVT_DATA: if (!webUpdateState.blocksRequests()) netserver.onWsMessage(arg, data, len, client->id()); break;
     case WS_EVT_PONG:
     case WS_EVT_ERROR:
       break;
   }
 }
 void handleNotFound(AsyncWebServerRequest * request) {
+  if (webUpdateState.blocksRequests() &&
+      !(request->method() == HTTP_POST && request->url() == "/update")) {
+    request->send(503, "text/plain", "Update in progress");
+    return;
+  }
 #if defined(HTTP_USER) && defined(HTTP_PASS)
   if(network.status == CONNECTED)
     if (request->url() == "/logout") {
@@ -1722,6 +1893,10 @@ void handleNotFound(AsyncWebServerRequest * request) {
     }
 #endif
   if(request->url()=="/emergency") { request->send_P(200, "text/html", emergency_form); return; }
+  if (request->method() == HTTP_GET && request->url() == "/update.html") {
+    request->redirect("/#update");
+    return;
+  }
   if (request->method() == HTTP_GET && request->url() == "/legacy.html") {
     AsyncWebServerResponse *response = request->beginResponse_P(200, "text/html", index_html);
     response->addHeader("Cache-Control", "max-age=31536000");
@@ -1749,16 +1924,8 @@ void handleNotFound(AsyncWebServerRequest * request) {
   
   if (request->method() == HTTP_POST) {
     if(request->url()=="/webboard"){ request->redirect("/"); return; } // <--post files from /data/www
-    if(request->url()=="/upload"){ // <--upload playlist.csv or wifi.csv
-      if (request->hasParam("plfile", true, true)) {
-        netserver.importRequest = IMPL;
-        request->send(200);
-      } else if (request->hasParam("wifile", true, true)) {
-        netserver.importRequest = IMWIFI;
-        request->send(200);
-      } else {
-        request->send(404);
-      }
+    if(request->url()=="/upload"){
+      request->send(410, "text/plain", "Use VoxOne Stations import");
       return;
     }
     if(request->url()=="/update"){
@@ -1771,8 +1938,13 @@ void handleNotFound(AsyncWebServerRequest * request) {
 #endif
       WebUpdateSession* session = static_cast<WebUpdateSession*>(request->_tempObject);
       const bool success = session && session->finished && !session->error;
-      shouldReboot = success;
-      if (success) webUpdateRebootAt = millis() + 1500;
+      if (!success) {
+        if (activeUpdateRequest == request) {
+          Update.abort();
+          activeUpdateRequest = nullptr;
+        }
+        remountFilesystemAfterFailedUpdate();
+      }
       const char* message = success ? "OK" :
           (session && session->error ? session->error : "No valid update image received");
       AsyncWebServerResponse *response = request->beginResponse(
@@ -1780,10 +1952,6 @@ void handleNotFound(AsyncWebServerRequest * request) {
       response->addHeader("Connection", "close");
       response->addHeader("Cache-Control", "no-store");
       request->send(response);
-      if (!success && activeUpdateRequest == request) {
-        Update.abort();
-        activeUpdateRequest = nullptr;
-      }
       return;
     }
   }// if (request->method() == HTTP_POST)
@@ -1797,7 +1965,7 @@ void handleNotFound(AsyncWebServerRequest * request) {
     request->send(200, "text/html", netserver.nsBuf);
     return;
   }
-  if (strcmp(request->url().c_str(), "/settings.html") == 0 || strcmp(request->url().c_str(), "/update.html") == 0 || strcmp(request->url().c_str(), "/ir.html") == 0){
+  if (strcmp(request->url().c_str(), "/settings.html") == 0 || strcmp(request->url().c_str(), "/ir.html") == 0){
     //request->send_P(200, "text/html", index_html);
     AsyncWebServerResponse *response = request->beginResponse_P(200, "text/html", index_html);
     response->addHeader("Cache-Control","max-age=31536000");
@@ -1814,20 +1982,33 @@ void handleNotFound(AsyncWebServerRequest * request) {
 }
 
 void handleIndex(AsyncWebServerRequest * request) {
-  if(config.emptyFS){
-    if(request->url()=="/" && request->method() == HTTP_GET ) { request->send_P(200, "text/html", emptyfs_html); return; }
-    if(request->url()=="/" && request->method() == HTTP_POST) {
-      if(request->arg("ssid")!="" && request->arg("pass")!=""){
-        netserver.nsBuf[0]='\0';
-        snprintf(netserver.nsBuf, sizeof(netserver.nsBuf), "%s\t%s", request->arg("ssid").c_str(), request->arg("pass").c_str());
-        request->redirect("/");
-        config.saveWifiFromNextion(netserver.nsBuf);
-        return;
-      }
-      request->redirect("/"); 
-      ESP.restart();
+  if (webUpdateState.blocksRequests()) {
+    request->send(503, "text/plain", "Update in progress");
+    return;
+  }
+  if (request->url() == "/" && apWifiRecoveryAllowed(network.status == CONNECTED)) {
+    if (request->method() == HTTP_GET) {
+      request->send_P(200, "text/html", emptyfs_html);
       return;
     }
+    if (request->method() == HTTP_POST) {
+      const String ssid = request->arg("ssid");
+      const String password = request->arg("pass");
+      if (!apWifiCredentialsValid(ssid.c_str(), password.c_str())) {
+        request->send(400, "text/plain", "Invalid Wi-Fi credentials");
+        return;
+      }
+      if (!config.saveWifiCredentials(ssid.c_str(), password.c_str())) {
+        request->send(500, "text/plain", "Could not save Wi-Fi credentials");
+        return;
+      }
+      request->send(200, "text/plain", "Wi-Fi credentials saved. Restarting.");
+      scheduleSystemRestart();
+      Serial.println("##[BOOT]# AP Wi-Fi credentials saved; restart scheduled");
+      return;
+    }
+  }
+  if(config.emptyFS){
     Serial.print("Not Found: ");
     Serial.println(request->url());
     request->send(404, "text/plain", "Not found");

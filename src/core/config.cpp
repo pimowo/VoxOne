@@ -1,6 +1,7 @@
 #include "options.h"
 #include "config.h"
 #include "playlist_store.h"
+#include "station_format.h"
 #include "display.h"
 #include "player.h"
 #include "network.h"
@@ -11,6 +12,7 @@
 #include "rtcsupport.h"
 #include "volume_map.h"
 #include "mqtt_config.h"
+#include "ap_wifi_recovery.h"
 #include "../displays/tools/l10n.h"
 #ifdef USE_SD
 #include "sdmanager.h"
@@ -825,18 +827,8 @@ void Config::setStation(const char* station) {
 }
 
 void Config::indexPlaylist() {
-  File playlist = SPIFFS.open(PLAYLIST_PATH, "r");
-  if (!playlist) return;
-  int sOvol;
-  File index = SPIFFS.open(INDEX_PATH, "w");
-  while (playlist.available()) {
-    uint32_t pos = playlist.position();
-    if (parseCSV(playlist.readStringUntil('\n').c_str(), tmpBuf, tmpBuf2, sOvol)) {
-      index.write((uint8_t *) &pos, 4);
-    }
-  }
-  index.close();
-  playlist.close();
+  if (!playlistStore.rebuildIndex())
+    Serial.println("##[ERROR]# Station index rebuild failed");
 }
 
 void Config::initPlaylist() {
@@ -865,12 +857,15 @@ uint16_t Config::playlistLength(){
 bool Config::loadStation(uint16_t ls) {
   PlaylistGuard guard;
   if (getMode() == PM_WEB && !guard) return false;
+  station.id = 0;
+  station.metadataMode = STATION_META_NORMAL;
   if (ls == 0 && store._reserved == VOXONE_NO_STATION_MARKER) {
     station.name[0] = '\0';
     station.url[0] = '\0';
     station.ovol = 0;
     return false;
   }
+  if (ls == 0) return false;
   int sOvol;
   uint16_t cs = playlistLength();
   if (cs == 0) {
@@ -885,21 +880,40 @@ bool Config::loadStation(uint16_t ls) {
   }
   File playlist = SDPLFS()->open(REAL_PLAYL, "r");
   File index = SDPLFS()->open(REAL_INDEX, "r");
-  index.seek((ls - 1) * 4, SeekSet);
-  uint32_t pos;
-  index.readBytes((char *) &pos, 4);
+  if (!playlist || !index || !index.seek((ls - 1) * 4, SeekSet)) return false;
+  uint32_t pos = 0;
+  if (index.readBytes((char *) &pos, 4) != 4 || pos >= playlist.size() ||
+      !playlist.seek(pos, SeekSet)) return false;
   index.close();
-  playlist.seek(pos, SeekSet);
-  if (parseCSV(playlist.readStringUntil('\n').c_str(), tmpBuf, tmpBuf2, sOvol)) {
+  String loadedLine = playlist.readStringUntil('\n');
+  bool parsed = false;
+  if (getMode() == PM_WEB) {
+    if (loadedLine.endsWith("\r")) loadedLine.remove(loadedLine.length() - 1);
+    static char nativeLine[BUFLEN * 3]; // WEB loads are serialized by PlaylistGuard.
+    loadedLine.toCharArray(nativeLine, sizeof(nativeLine));
+    char* name = nullptr;
+    char* url = nullptr;
+    parsed = loadedLine.length() < sizeof(nativeLine) &&
+             stationParseFields(nativeLine, station.id, name, url,
+                                sOvol, station.metadataMode);
+    if (parsed) {
+      strlcpy(tmpBuf, name, BUFLEN);
+      strlcpy(tmpBuf2, url, BUFLEN);
+    }
+  } else parsed = parseCSV(loadedLine.c_str(), tmpBuf, tmpBuf2, sOvol);
+  if (parsed) {
     memset(station.url, 0, BUFLEN);
     memset(station.name, 0, BUFLEN);
     strncpy(station.name, tmpBuf, BUFLEN);
     strncpy(station.url, tmpBuf2, BUFLEN);
     station.ovol = sOvol;
     setLastStation(ls);
+  } else {
+    station.id = 0;
+    station.metadataMode = STATION_META_NORMAL;
   }
   playlist.close();
-  return true;
+  return parsed;
 }
 
 char * Config::stationByNum(uint16_t num){
@@ -916,6 +930,7 @@ char * Config::stationByNum(uint16_t num){
   index.readBytes((char *) &pos, 4);
   index.close();
   playlist.seek(pos, SeekSet);
+  if (getMode() == PM_WEB) playlist.readStringUntil('\t'); // Skip immutable station ID.
   strncpy(_stationBuf, playlist.readStringUntil('\t').c_str(), sizeof(_stationBuf));
   playlist.close();
   return _stationBuf;
@@ -1038,6 +1053,25 @@ bool Config::saveWifiFromNextion(const char* post){
     ESP.restart();
     return true;
   }
+}
+
+bool Config::saveWifiCredentials(const char* ssid, const char* password) {
+  if (!apWifiCredentialsValid(ssid, password)) return false;
+  constexpr char wifiTempPath[] = "/data/wifi.csv.tmp";
+  File file = SPIFFS.open(wifiTempPath, "w");
+  if (!file) return false;
+  const size_t ssidLength = strlen(ssid);
+  const size_t passwordLength = strlen(password);
+  const bool written = file.write(reinterpret_cast<const uint8_t*>(ssid), ssidLength) == ssidLength &&
+                       file.write(static_cast<uint8_t>('\t')) == 1 &&
+                       file.write(reinterpret_cast<const uint8_t*>(password), passwordLength) == passwordLength &&
+                       file.write(static_cast<uint8_t>('\n')) == 1;
+  file.close();
+  if (!written || !SPIFFS.rename(wifiTempPath, SSIDS_PATH)) {
+    SPIFFS.remove(wifiTempPath);
+    return false;
+  }
+  return true;
 }
 
 bool Config::saveWifi() {

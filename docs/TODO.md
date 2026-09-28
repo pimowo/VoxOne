@@ -71,7 +71,6 @@
 **Priorytet: po uruchomieniu sprzętu; najpierw funkcje, potem grafika.**
 
 - Sprawdzić synchronizację VU meter ON/OFF między klientami WWW i zachowanie ustawienia po restarcie.
-- Po uruchomieniu Source Managera dodać i przetestować ekran wyboru źródła na ST7796.
 - Sprawdzić obciążenie SPI względem audio i unikać ciężkich pełnych redrawów.
 - W razie potrzeby wykorzystać stabilne podejście DisplayTask z DESK.
 
@@ -92,6 +91,7 @@
 - Obsłużyć RADIO ↔ BT, wspólne PLAY/STOP i Volume, poprzednie źródło oraz tymczasowe PLAY_MEDIA/TTS.
 - Po PLAY_MEDIA przywracać źródło; obsłużyć pending source podczas PLAY_MEDIA.
 - Podłączyć double-click enkodera do `cycleNextSource()` po uruchomieniu Source Managera; zasilić wiersze LCD stanem aktywnego źródła i nazwą peer BT.
+- Przełączać dostępne źródła bezpośrednio double-clickiem w pętli według capabilities i dostępności runtime; bez osobnego ekranu wyboru źródła.
 - Oprzeć zachowanie startowe urządzenia na Source Managerze.
 
 ## 9. PLAY_MEDIA / TTS
@@ -128,17 +128,27 @@
 - Sprawdzić metadata, brak metadata, reconnect, dead stream, server close i stall.
 - Zweryfikować semantykę `status.on = config.store.dspon` w `ha_yoradio`.
 
-## 13. StationStore i import/export playlist
+## 13. VoxOne Stations v1 i import/export
 
-**Priorytet: nie blokuje SALON. Limit 16 stacji pozostaje.**
+**Priorytet: fizyczna weryfikacja po wdrożeniu formatu.**
 
-- Zweryfikować eksport i import playlist yoRadio oraz podgląd przed zapisem.
-- Dodać walidację nazwy i URL, kompatybilnościowe OVOL oraz raport pominiętych/błędnych rekordów.
-- Rozważyć import playlisty po URL z działającego yoRadio.
+- Sprawdzić migrację przy Web Update firmware i SPIFFS, w tym odtworzenie starego `playlist.csv` z kopii NVS oraz ponowny start po przerwaniu zapisu.
+- Zweryfikować eksport/import VoxOne między DESK i SALON, zachowanie ID, kolejności, OVOL i A↔T oraz podgląd przed zapisem.
+- Po imporcie sprawdzić natychmiastowe odświeżenie WWW bez „Ponów”, zachowanie `current=0` bez autoplay oraz ID po restarcie.
+- Ponownie sprawdzić cold boot SALON pod kątem pojedynczego panic `Stack canary watchpoint triggered (ipc1)`; zebrać pełny log i pomiary wolnego stosu z firmware diagnostycznego.
+- Dodać raport błędnych rekordów przy imporcie natywnego pliku VoxOne.
+- Przetestować duże listy 50 / 100 / 250 stacji.
+- Rozważyć strumieniową odpowiedź `GET /api/stations` po zapewnieniu spójnego snapshotu przy równoległych mutacjach; obecny GET buduje odpowiedź z wektora.
 - Sprawdzić power-loss recovery, brak miejsca SPIFFS, `current/lastStation` i politykę po usunięciu aktualnej stacji.
+- Sprawdzić prezentację reguły A↔T na LCD DESK/SALON, WWW, Nextion i MQTT oraz zmianę podczas PLAY bez restartu streamu.
 - Zbadać lekkie pstryknięcie audio przy reorder/mutacji.
-- Przebudować albo usunąć legacy `/upload`.
-- Nie zwiększać limitu bez realnej potrzeby.
+- Sprawdzić wyłączenie legacy `/upload` na urządzeniu.
+
+## 13a. Wyszukiwarka stacji internetowych
+
+**Priorytet: przyszły etap, po stabilizacji VoxOne Stations v1.**
+
+- Zintegrować wyszukiwarkę Radio Browser; wynik dodawać przez zwykłe ADD, z ID generowanym przez VoxOne.
 
 ## 14. WWW — auto-reload po restartach
 
@@ -146,7 +156,6 @@
 
 - Po `ZAPISZ` pokazać restarting, odpytywać urządzenie co około 1 s przez 20–30 s i automatycznie przeładować stronę po jego powrocie.
 - Dodać fallback, gdy urządzenie nie wróci.
-- Wykorzystać mechanizm także przy Web Update.
 
 ## 15. WWW — Wi-Fi
 
@@ -160,15 +169,18 @@
 **Priorytet: przed stable.**
 
 - Pokazać firmware version, hardware profile, IP, RSSI, uptime, free heap i MAC.
-- Dodać restart, Web Update w aktualnym UI, backup, restore i factory reset.
+- Dodać restart, backup, restore i factory reset.
 
 ## 17. Web Update — UX
 
 **Priorytet: poprawić bez niepotrzebnej przebudowy działającego mechanizmu.**
 
-- Zintegrować z zakładką System; pokazać progress, typ obrazu firmware/SPIFFS, auto reconnect, wersję firmware i czytelne błędy.
+- Fizycznie zweryfikować Web Update firmware na SALON oraz firmware/SPIFFS na DESK, postęp wysyłania, błędy backendu, nieudany backup i automatyczny powrót WWW.
+- Fizycznie sprawdzić przekierowanie `/update.html` i awaryjny `/emergency` także przy niedostępnym SPIFFS.
 - Później rozważyć LCD `AKTUALIZACJA` i rollback, jeśli będzie potrzebny.
 - Nie przebudowywać partition table wyłącznie dla porządku.
+- Przetestować odrzucanie błędnych danych formularza AP, odzyskiwanie przez Serial CLI i wygląd ekranu AP na telefonie.
+- Fizycznie potwierdzić nową paletę kolorów wbudowanego ekranu AP na SALON.
 
 ## 18. LCD DESK — ekran AKTUALIZACJA
 
@@ -259,7 +271,7 @@
 **Priorytet: przed stabilnym/publicznym release.**
 
 - Dodać backup i restore całej konfiguracji, walidację schema/version i recovery po nieudanym restore.
-- Uwzględnić główny config, MQTT NVS, playlistę i bezpiecznie Wi-Fi.
+- Uwzględnić główny config, MQTT NVS, `stations.tsv` i `stations.idx` oraz bezpiecznie Wi-Fi.
 - Zapewnić czytelny UX.
 
 ## 30. Bezpieczeństwo WWW
@@ -322,7 +334,6 @@
 - SD card, SD-WEB, IR remote, pogoda i Telnet tylko dlatego, że występuje w yoRadio.
 - Kopiowanie yoRadio 1:1 oraz agresywny cleanup przed stabilnością.
 - Przenoszenie audio na osobny task/core bez pomiarów.
-- Zwiększanie StationStore ponad 16 bez realnej potrzeby.
 - TDA7719 w pierwszym SALON; AUX/SPDIF przed działającym RADIO+BT; DLNA przed Source Managerem.
 - Deep sleep bez konkretnego zastosowania.
 - Refaktor ScrollWidget/HOLD bez problemu, powrót do starego redesignu WWW ani przebudowa działającego Web Update dla porządku.

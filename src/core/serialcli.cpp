@@ -1,6 +1,8 @@
 #include "options.h"
 #include <stdarg.h>
 #include "config.h"
+#include "playlist_store.h"
+#include "station_metadata.h"
 #include "player.h"
 #include "network.h"
 #include "serialcli.h"
@@ -43,7 +45,10 @@ void SerialCli::info() {
   printf("##SYS.DATE#: %s\n", config.tmpBuf);
   printf("##CLI.NAMESET#: %d %s\n", config.lastStation(), config.station.name);
   if (player.status() == PLAYING) {
-    printf("##CLI.META#: %s\n",  config.station.title);
+    char interpreted[BUFLEN + 1];
+    stationMetaDisplay(config.station.title, config.station.metadataMode == STATION_META_SWAP,
+                       interpreted, sizeof(interpreted));
+    printf("##CLI.META#: %s\n", interpreted);
   }
   printf("##CLI.VOL#: %d\n", config.store.volume);
   if (player.status() == PLAYING) {
@@ -133,18 +138,13 @@ void SerialCli::on_input(const char* str, uint8_t clientId) {
     }
     if (strcmp(str, "cli.list") == 0 || strcmp(str, "list") == 0) {
       printf(clientId, "#CLI.LIST#\n");
-      File file = SPIFFS.open(PLAYLIST_PATH, "r");
-      if (!file || file.isDirectory()) {
-        return;
-      }
-      int sOvol;
-      uint8_t c = 1;
-      while (file.available()) {
-        if (config.parseCSV(file.readStringUntil('\n').c_str(), config.tmpBuf, config.tmpBuf2, sOvol)) {
-          printf(clientId, "#CLI.LISTNUM#: %*d: %s, %s\n", 3, c, config.tmpBuf, config.tmpBuf2);
-          c++;
-        }
-      }
+      PlaylistGuard guard;
+      std::vector<PlaylistRow> rows;
+      String revision;
+      if (guard && playlistStore.snapshot(rows, revision))
+        for (size_t i = 0; i < rows.size(); ++i)
+          printf(clientId, "#CLI.LISTNUM#: %*u: %s, %s\n", 3,
+                 static_cast<unsigned>(i + 1), rows[i].name.c_str(), rows[i].url.c_str());
       printf(clientId, "##CLI.LIST#\n");
       printf(clientId, "> ");
       return;
@@ -155,7 +155,10 @@ void SerialCli::on_input(const char* str, uint8_t clientId) {
       printf(clientId, "##SYS.DATE#: %s\n", config.tmpBuf);
       printf(clientId, "##CLI.NAMESET#: %d %s\n", config.lastStation(), config.station.name);
       if (player.status() == PLAYING) {
-        printf(clientId, "##CLI.META#: %s\n", config.station.title);
+        char interpreted[BUFLEN + 1];
+        stationMetaDisplay(config.station.title, config.station.metadataMode == STATION_META_SWAP,
+                           interpreted, sizeof(interpreted));
+        printf(clientId, "##CLI.META#: %s\n", interpreted);
       }
       printf(clientId, "##CLI.VOL#: %d\n", config.store.volume);
       if (player.status() == PLAYING) {
@@ -311,16 +314,17 @@ void SerialCli::on_input(const char* str, uint8_t clientId) {
     return;
   }
   char ssidbuf[50], passbuff[50];
-  if (sscanf(str, "wifi.con(\"%[^\"]\",\"%[^\"]\")", ssidbuf, passbuff) == 2 ||
-      sscanf(str, "wifi.con(%[^,],%[^)])", ssidbuf, passbuff) == 2 ||
-      sscanf(str, "wifi.con(%[^ ] %[^)])", ssidbuf, passbuff) == 2 ||
-      sscanf(str, "wifi %[^ ] %s", ssidbuf, passbuff) == 2) {
-    snprintf(cmBuf, sizeof(cmBuf), "New SSID: \"%s\" with PASS: \"%s\" for next boot\n> ", ssidbuf, passbuff);
-    printf(clientId, cmBuf);
-    printf(clientId, "...REBOOTING...\n> ");
-    memset(cmBuf, 0, sizeof(cmBuf));
-    snprintf(cmBuf, sizeof(cmBuf), "%s\t%s", ssidbuf, passbuff);
-    config.saveWifiFromNextion(cmBuf);
+  if (sscanf(str, "wifi.con(\"%49[^\"]\",\"%49[^\"]\")", ssidbuf, passbuff) == 2 ||
+      sscanf(str, "wifi.con(%49[^,],%49[^)])", ssidbuf, passbuff) == 2 ||
+      sscanf(str, "wifi.con(%49[^ ] %49[^)])", ssidbuf, passbuff) == 2 ||
+      sscanf(str, "wifi %49[^ ] %49s", ssidbuf, passbuff) == 2) {
+    if (!config.saveWifiCredentials(ssidbuf, passbuff)) {
+      printf(clientId, "Wi-Fi credentials invalid or save failed\n> ");
+      return;
+    }
+    printf(clientId, "Wi-Fi credentials saved; rebooting\n> ");
+    Serial.flush();
+    ESP.restart();
     return;
   }
   if (strcmp(str, "wifi.status") == 0 || strcmp(str, "status") == 0) {

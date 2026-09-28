@@ -11,10 +11,10 @@
 #define EEPROM_START      500
 #define EEPROM_START_IR   0
 #define EEPROM_START_2    10
-#define PLAYLIST_PATH     "/data/playlist.csv"
+#define PLAYLIST_PATH     "/data/stations.tsv"
 #define SSIDS_PATH        "/data/wifi.csv"
 #define TMP_PATH          "/data/tmpfile.txt"
-#define INDEX_PATH        "/data/index.dat"
+#define INDEX_PATH        "/data/stations.idx"
 
 #define PLAYLIST_SD_PATH     "/data/playlistsd.csv"
 #define INDEX_SD_PATH        "/data/indexsd.dat"
@@ -144,6 +144,8 @@ struct ircodes_t
 
 struct station_t
 {
+  uint64_t id = 0;
+  uint8_t metadataMode = 0;
   char name[BUFLEN];
   char url[BUFLEN];
   char title[BUFLEN];
@@ -216,6 +218,7 @@ class Config {
     bool saveWifi();
     void setTimeConf();
     bool saveWifiFromNextion(const char* post);
+    bool saveWifiCredentials(const char* ssid, const char* password);
     void setSmartStart(uint8_t ss);
     void setBitrateFormat(BitrateFormat fmt) { configFmt = fmt; }
     void initPlaylist();

@@ -2,6 +2,7 @@
 #include "config.h"
 #include "mqtt.h"
 #include "mqtt_config.h"
+#include "station_metadata.h"
 #include "WiFi.h"
 #include "player.h"
 #include "commandhandler.h"
@@ -90,8 +91,11 @@ void mqttPublishStatus() {
   if (!makeTopic("status")) return;
   char name[BUFLEN / 2];
   char title[BUFLEN / 2];
+  char interpreted[BUFLEN + 1];
+  stationMetaDisplay(config.station.title, config.station.metadataMode == STATION_META_SWAP,
+                     interpreted, sizeof(interpreted));
   config.escapeQuotes(config.station.name, name, sizeof(name) - 10);
-  config.escapeQuotes(config.station.title, title, sizeof(title) - 10);
+  config.escapeQuotes(interpreted, title, sizeof(title) - 10);
   sprintf(status, "{\"status\": %d, \"station\": %d, \"name\": \"%s\", \"title\": \"%s\", \"on\": %d}",
       player.status() == PLAYING ? 1 : 0, config.lastStation(), name, title, config.store.dspon);
   mqttClient.publish(topic, 0, true, status);

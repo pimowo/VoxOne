@@ -5,6 +5,7 @@
 #if NEXTION_RX!=255 && NEXTION_TX!=255
 #include "nextion.h"
 #include "../core/config.h"
+#include "../core/station_metadata.h"
 
 #include "../core/player.h"
 #include "../core/controls.h"
@@ -98,7 +99,13 @@ void Nextion::processQueue(){
       case NEWMODE: swichMode((displayMode_e)request.payload); break;
       case CLOCK: printClock(network.timeinfo); break;
       case DSPRSSI: rssi(); break;
-      case NEWTITLE: newTitle(config.station.title); break;
+      case NEWTITLE: {
+        char title[BUFLEN + 1];
+        stationMetaDisplay(config.station.title, config.station.metadataMode == STATION_META_SWAP,
+                           title, sizeof(title));
+        newTitle(title);
+        break;
+      }
       case BOOTSTRING: {
         char buf[50];
         snprintf(buf, 50, LANG::bootstrFmt, config.ssids[request.payload].ssid);

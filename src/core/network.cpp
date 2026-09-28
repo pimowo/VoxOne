@@ -25,6 +25,7 @@ MyNetwork network;
 char apSsid[14] = "VoxOne-Setup";
 
 void MyNetwork::WiFiReconnected(WiFiEvent_t event, WiFiEventInfo_t info){
+  if (systemRestartPending()) return;
   network.beginReconnect = false;
   player.lockOutput = false;
   delay(100);
@@ -40,6 +41,10 @@ void MyNetwork::WiFiReconnected(WiFiEvent_t event, WiFiEventInfo_t info){
 }
 
 void MyNetwork::WiFiLostConnection(WiFiEvent_t event, WiFiEventInfo_t info){
+  if (systemRestartPending()) {
+    Serial.println("##[UPDATE]# WiFi disconnect ignored during restart");
+    return;
+  }
   if(!network.beginReconnect){
     Serial.printf("Lost connection, reconnecting to %s...\n", config.ssids[config.store.lastSSID-1].ssid);
     if(config.getMode()==PM_SDCARD) {

@@ -7,6 +7,7 @@
 #include "display.h"
 #include "player.h"
 #include "volume_map.h"
+#include "station_metadata.h"
 #include "network.h"
 #include "netserver.h"
 #include "timekeeper.h"
@@ -849,21 +850,27 @@ void Display::_title() {
   }
 #endif
   if (strlen(config.station.title) > 0) {
-    char tmpbuf[strlen(config.station.title)+1];
-    strlcpy(tmpbuf, config.station.title, strlen(config.station.title)+1);
-    char *stitle = split(tmpbuf, " - ");
-    if(stitle && _title2){
+    const StationMetadataParts parts = parseStationMetadata(
+        config.station.title, config.station.metadataMode == STATION_META_SWAP);
+    char artist[BUFLEN];
+    char title[BUFLEN];
+    stationMetaCopy(artist, sizeof(artist), parts.artist, parts.artistLength);
+    stationMetaCopy(title, sizeof(title), parts.title, parts.titleLength);
+    if(parts.split && _title2){
 #if DSP_MODEL==DSP_ST7789_76 || DSP_MODEL==DSP_ST7796
-      _title1->setText(deskArtistIsStation(tmpbuf, config.station.name) ? "" : tmpbuf);
+      _title1->setText(deskArtistIsStation(artist, config.station.name) ? "" : artist);
 #else
-      _title1->setText(tmpbuf);
+      _title1->setText(artist);
 #endif
-      _title2->setText(stitle);
+      _title2->setText(title);
     }else{
+      char whole[BUFLEN + 1];
+      stationMetaDisplay(config.station.title, config.station.metadataMode == STATION_META_SWAP,
+                         whole, sizeof(whole));
 #if DSP_MODEL==DSP_ST7789_76 || DSP_MODEL==DSP_ST7796
-      _title1->setText(deskArtistIsStation(config.station.title, config.station.name) ? "" : config.station.title);
+      _title1->setText(deskArtistIsStation(whole, config.station.name) ? "" : whole);
 #else
-      _title1->setText(config.station.title);
+      _title1->setText(whole);
 #endif
       if(_title2) _title2->setText("");
     }
