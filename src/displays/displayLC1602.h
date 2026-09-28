@@ -58,7 +58,7 @@
 #define bootLogoTop     0
 const char           rssiFmt[]    PROGMEM = "";
 const MoveConfig    clockMove     PROGMEM = { 0, 0, -1 };
-const char  const_lcdApMode[]    PROGMEM = "YORADIO AP MODE";
+const char  const_lcdApMode[]    PROGMEM = "VoxOne AP Mode";
 const char  const_lcdApName[]    PROGMEM = "AP NAME: ";
 const char  const_lcdApPass[]    PROGMEM = "PASSWORD: ";
 

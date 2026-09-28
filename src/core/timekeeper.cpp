@@ -7,16 +7,10 @@
 #include "player.h"
 #include "netserver.h"
 #include "rtcsupport.h"
+#include <esp_sntp.h>
 #include "../pluginsManager/pluginsManager.h"
 #if DSP_MODEL==DSP_DUMMY
 #define DUMMYDISPLAY
-#endif
-
-#if RTCSUPPORTED
-  //#define TIME_SYNC_INTERVAL  24*60*60*1000
-  #define TIME_SYNC_INTERVAL  config.store.timeSyncIntervalRTC*60*60*1000
-#else
-  #define TIME_SYNC_INTERVAL  config.store.timeSyncInterval*60*1000
 #endif
 
 #define SYNC_STACK_SIZE       1024 * 4
@@ -54,6 +48,16 @@ static_assert(!timeoutElapsed(0x0000001FUL, 0xFFFFFFF0UL, 0x30UL), "timeout must
 #endif
 
 TimeKeeper timekeeper;
+static volatile uint32_t ntpSyncCount = 0;
+
+static void onNtpSync(timeval*) {
+  ++ntpSyncCount;
+  timekeeper.forceTimeSync = true;
+}
+
+void TimeKeeper::watchNtp() {
+  sntp_set_time_sync_notification_cb(onNtpSync);
+}
 
 void _syncTask(void *pvParameters) {
   if (timekeeper.forceTimeSync) timekeeper.timeTask();
@@ -64,6 +68,9 @@ void _syncTask(void *pvParameters) {
 TimeKeeper::TimeKeeper(){
   busy          = false;
   forceTimeSync = true;
+  successfulSyncCount = 0;
+  forceRtcSync = true;
+  restartNtp = false;
   _returnPlayerStartedAt = 0;
   _returnPlayerDelayMs = 0;
   _returnPlayerPending = false;
@@ -73,7 +80,11 @@ TimeKeeper::TimeKeeper(){
 }
 
 bool TimeKeeper::loop0(){ // core0 (display)
-  if (network.status != CONNECTED) return true;
+  if (network.status != CONNECTED
+#if RTCSUPPORTED
+      && !config.isRTCFound()
+#endif
+      ) return true;
   uint32_t currentTime = millis();
   static uint32_t _last1s = 0;
   static uint32_t _last2s = 0;
@@ -123,7 +134,8 @@ bool TimeKeeper::loop1(){ // core1 (player)
 
 
   static uint32_t lastTimeTime = 0;
-  if (currentTime - lastTimeTime >= TIME_SYNC_INTERVAL) {
+  const uint32_t ntpInterval = static_cast<uint32_t>(constrain(config.store.timeSyncInterval, 1, 10080)) * 60000UL;
+  if (currentTime - lastTimeTime >= ntpInterval) {
     lastTimeTime = currentTime;
     forceTimeSync = true;
   }
@@ -179,7 +191,11 @@ void TimeKeeper::_doAfterWait(){
 
 void TimeKeeper::_upClock(){
 #if RTCSUPPORTED
-  if(config.isRTCFound()) rtc.getTime(&network.timeinfo);
+  if(config.isRTCFound() && rtc.isRunning()) rtc.getTime(&network.timeinfo);
+  else if(network.timeinfo.tm_year>100) {
+    network.timeinfo.tm_sec++;
+    mktime(&network.timeinfo);
+  }
 #else
   if(network.timeinfo.tm_year>100 || network.status == SDREADY) {
     network.timeinfo.tm_sec++;
@@ -234,25 +250,41 @@ void TimeKeeper::_upSDPos(){
 }
 
 void TimeKeeper::timeTask(){
-  static uint8_t tsFailCnt = 0;
+  static uint32_t handledSyncCount = 0;
+#if RTCSUPPORTED
+  static uint32_t lastRtcSyncAt = 0;
+#endif
   config.waitConnection();
-  if(getLocalTime(&network.timeinfo)){
-    tsFailCnt = 0;
+  if (restartNtp) {
+    restartNtp = false;
+    handledSyncCount = ntpSyncCount;
+    forceTimeSync = false;
+    config.setTimeConf();
+    return;
+  }
+  const uint32_t receivedSyncCount = ntpSyncCount;
+  if (receivedSyncCount == handledSyncCount) {
+    forceTimeSync = false;
+    config.setTimeConf(); // Restart SNTP; its callback will schedule the RTC update.
+    return;
+  }
+  if(getLocalTime(&network.timeinfo, 1000)){
+    handledSyncCount = receivedSyncCount;
     forceTimeSync = false;
     mktime(&network.timeinfo);
     display.putRequest(CLOCK, 1);
-    network.requestTimeSync(true);
     #if RTCSUPPORTED
-      if (config.isRTCFound()) rtc.setTime(&network.timeinfo);
+      const uint32_t rtcInterval = static_cast<uint32_t>(constrain(config.store.timeSyncIntervalRTC, 1, 1000)) * 3600000UL;
+      if (config.isRTCFound() && (forceRtcSync || lastRtcSyncAt == 0 || millis() - lastRtcSyncAt >= rtcInterval)) {
+        rtc.setTime(&network.timeinfo);
+        lastRtcSyncAt = millis();
+        forceRtcSync = false;
+      }
     #endif
+    ++successfulSyncCount;
+    network.requestTimeSync(true);
   }else{
-    if(tsFailCnt<4){
-      forceTimeSync = true;
-      tsFailCnt++;
-    }else{
-      forceTimeSync = false;
-      tsFailCnt=0;
-    }
+    forceTimeSync = true;
   }
 }
 //******************

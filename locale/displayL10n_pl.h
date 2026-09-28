@@ -2,13 +2,13 @@
 #define dsp_full_loc
 #include <pgmspace.h>
 
-const char mon[] PROGMEM = "pon";
-const char tue[] PROGMEM = "wto";
-const char wed[] PROGMEM = "śro";
-const char thu[] PROGMEM = "czw";
-const char fri[] PROGMEM = "pią";
-const char sat[] PROGMEM = "sob";
-const char sun[] PROGMEM = "nie";
+const char mon[] PROGMEM = "Pn";
+const char tue[] PROGMEM = "Wt";
+const char wed[] PROGMEM = "Śr";
+const char thu[] PROGMEM = "Cz";
+const char fri[] PROGMEM = "Pt";
+const char sat[] PROGMEM = "So";
+const char sun[] PROGMEM = "Nd";
 
 const char monf[] PROGMEM = "poniedziałek";
 const char tuef[] PROGMEM = "wtorek";

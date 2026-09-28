@@ -58,19 +58,20 @@
 - Ustawić `USE_BUILTIN_LED = false`.
 - VoxOneBT przez `NEXTION`: SALON RX GPIO15, SALON TX GPIO16.
 - VoxOneBT audio I2S przez `ENCODER_1`: BCLK GPIO41, WS/LRCLK GPIO40, DATA IN GPIO39.
-- Zachować I²C GPIO7/8 dla przyszłego SALON_DSP/TDA7719.
+- W przyszłym SALON_DSP współdzielić I²C GPIO7/8 przez jedną instancję magistrali z DS3231 i TDA7719.
 
 ### Profil i uruchomienie
 
-- Uzupełnić `profiles/salon.h`; ustawić BT=1, AUX=0, SPDIF=0, TDA7719=false.
-- Ustawić `VOXONE_PIN_MAP_COMPLETE = 1` dopiero po potwierdzeniu sprzętu.
-- Wykonać `pio run -e salon`, pierwszy boot, Wi-Fi, WWW, MQTT/HA, PCM5102A, enkoder i LCD.
+- Zweryfikować współdzielenie GPIO48 z RGB LED.
+- Sprawdzić PCM5102A i tor audio podczas odtwarzania na SALON.
+- Sprawdzić MQTT/HA na SALON.
 
 ## 6. LCD SALON
 
 **Priorytet: po uruchomieniu sprzętu; najpierw funkcje, potem grafika.**
 
-- Zbudować renderer ST7796S 480×320: ekran główny (stacja, artysta, utwór, Volume, źródło, RSSI/status, VU), ekran Volume i ekran wyboru źródła.
+- Sprawdzić synchronizację VU meter ON/OFF między klientami WWW i zachowanie ustawienia po restarcie.
+- Po uruchomieniu Source Managera dodać i przetestować ekran wyboru źródła na ST7796.
 - Sprawdzić obciążenie SPI względem audio i unikać ciężkich pełnych redrawów.
 - W razie potrzeby wykorzystać stabilne podejście DisplayTask z DESK.
 
@@ -90,7 +91,7 @@
 - Zapewnić dokładnie jedno aktywne źródło i jawny active source.
 - Obsłużyć RADIO ↔ BT, wspólne PLAY/STOP i Volume, poprzednie źródło oraz tymczasowe PLAY_MEDIA/TTS.
 - Po PLAY_MEDIA przywracać źródło; obsłużyć pending source podczas PLAY_MEDIA.
-- Dodać zmianę źródła przez double-click enkodera.
+- Podłączyć double-click enkodera do `cycleNextSource()` po uruchomieniu Source Managera; zasilić wiersze LCD stanem aktywnego źródła i nazwą peer BT.
 - Oprzeć zachowanie startowe urządzenia na Source Managerze.
 
 ## 9. PLAY_MEDIA / TTS

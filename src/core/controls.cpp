@@ -13,6 +13,11 @@ long encOldPosition  = 0;
 long enc2OldPosition  = 0;
 int lpId = -1;
 
+#if VOXONE_HAS_BT && VOXONE_HAS_ENCODER
+// Implemented by Source Manager when the Bluetooth runtime is available.
+extern void cycleNextSource() __attribute__((weak));
+#endif
+
 #if DSP_MODEL==DSP_DUMMY
 #define DUMMYDISPLAY
 #endif
@@ -497,7 +502,7 @@ void controlsEvent(bool toRight, int8_t volDelta) {
       display.putRequest(NEWMODE, VOL);
     #endif
     if(volDelta!=0){
-#if defined(VOXONE_PROFILE_DESK)
+#if defined(VOXONE_PROFILE_DESK) || defined(VOXONE_PROFILE_SALON)
       player.stepUserVol(volDelta);
 #else
       int nv = config.store.volume+volDelta;
@@ -602,6 +607,13 @@ void onBtnClick(int id) {
 }
 
 void onBtnDoubleClick(int id) {
+#if VOXONE_HAS_BT && VOXONE_HAS_ENCODER
+  if ((controlEvt_e)id == EVT_ENCBTNB && cycleNextSource) {
+    cycleNextSource();
+    display.putRequest(NEWMODE, PLAYER);
+    return;
+  }
+#endif
   if (display.mode() == SCREENSAVER || display.mode() == SCREENBLANK) {
     display.putRequest(NEWMODE, PLAYER);
     return;
@@ -614,12 +626,20 @@ void onBtnDoubleClick(int id) {
         break;
       }
     case EVT_BTNCENTER:
+#if !(VOXONE_HAS_BT && VOXONE_HAS_ENCODER)
     case EVT_ENCBTNB:
+#endif
     case EVT_ENC2BTNB: {
         //display.putRequest(NEWMODE, display.mode() == PLAYER ? VOL : PLAYER);
         onBtnClick(EVT_BTNMODE);
         break;
       }
+#if VOXONE_HAS_BT && VOXONE_HAS_ENCODER
+    case EVT_ENCBTNB: {
+        // Source Manager is not active yet; keep the radio state unchanged.
+        break;
+      }
+#endif
     case EVT_BTNRIGHT: {
         if (display.mode() != PLAYER) return;
         if (network.status != CONNECTED && network.status!=SDREADY) return;

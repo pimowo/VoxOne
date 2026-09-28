@@ -1054,6 +1054,7 @@ void Config::setTimeConf(){
   }else if(strlen(store.sntp1)>0){
     configTzTime(WARSAW_TZ, store.sntp1);
   }
+  timekeeper.watchNtp();
 }
 
 bool Config::initNetwork() {

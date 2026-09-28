@@ -50,9 +50,15 @@
 #define TS_MODEL TS_MODEL_UNDEFINED
 #define SDC_CS 255
 #define IR_PIN 255
+#ifndef RTC_MODULE
 #define RTC_MODULE RTC_MODULE_UNDEFINED
+#endif
+#ifndef RTC_SDA
 #define RTC_SDA 255
+#endif
+#ifndef RTC_SCL
 #define RTC_SCL 255
+#endif
 #define NEXTION_RX 255
 #define NEXTION_TX 255
 

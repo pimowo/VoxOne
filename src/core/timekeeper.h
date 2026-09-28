@@ -15,11 +15,15 @@ class TimeKeeper {
   public:
     volatile bool forceTimeSync;
     volatile bool busy;
+    volatile uint32_t successfulSyncCount;
+    volatile bool forceRtcSync;
+    volatile bool restartNtp;
   public:
     TimeKeeper();
     bool loop0();
     bool loop1();
     void timeTask();
+    void watchNtp();
     void waitAndReturnPlayer(uint32_t time_s);
     void waitAndDo(uint32_t time_s, void (*callback)(), DelayedActionSlot slot);
   private:

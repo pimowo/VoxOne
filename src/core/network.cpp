@@ -9,7 +9,9 @@
 #include "netserver.h"
 #include "player.h"
 #include "mqtt.h"
+#include "mqtt_config.h"
 #include "timekeeper.h"
+#include <sys/time.h>
 #include "../pluginsManager/pluginsManager.h"
 
 #ifndef WIFI_ATTEMPTS
@@ -20,6 +22,7 @@
   #define SEARCH_WIFI_CORE_ID  0
 #endif
 MyNetwork network;
+char apSsid[14] = "VoxOne-Setup";
 
 void MyNetwork::WiFiReconnected(WiFiEvent_t event, WiFiEventInfo_t info){
   network.beginReconnect = false;
@@ -112,6 +115,20 @@ void searchWiFi(void * pvParameters){
 
 void MyNetwork::begin() {
   BOOTLOG("network.begin");
+#if RTCSUPPORTED
+  if (config.isRTCFound() && rtc.isRunning()) {
+    rtc.getTime(&timeinfo);
+    timeinfo.tm_isdst = -1;
+    if (timeinfo.tm_year >= 120) {
+      const time_t rtcEpoch = mktime(&timeinfo);
+      if (rtcEpoch > 0) {
+        const timeval systemTime = {rtcEpoch, 0};
+        settimeofday(&systemTime, nullptr);
+        display.putRequest(CLOCK);
+      }
+    }
+  }
+#endif
   config.initNetwork();
   if (config.ssidsCount == 0 || DBGAP) {
     raiseSoftAP();
@@ -135,13 +152,6 @@ void MyNetwork::begin() {
   Serial.println("##[BOOT]#\tdone");
   if(REAL_LEDBUILTIN!=255) digitalWrite(REAL_LEDBUILTIN, LOW);
   
-#if RTCSUPPORTED
-  if(config.isRTCFound()){
-    rtc.getTime(&network.timeinfo);
-    mktime(&network.timeinfo);
-    display.putRequest(CLOCK);
-  }
-#endif
   if (network_on_connect) network_on_connect();
   pm.on_connect();
 }
@@ -156,6 +166,12 @@ void MyNetwork::setWifiParams(){
 }
 
 void MyNetwork::requestTimeSync(bool withSerialOutput) {
+  if (!withSerialOutput) {
+    timekeeper.forceRtcSync = true;
+    timekeeper.restartNtp = true;
+    timekeeper.forceTimeSync = true;
+    return;
+  }
   if (withSerialOutput) {
     char timeStringBuff[50];
     strftime(timeStringBuff, sizeof(timeStringBuff), "%Y-%m-%dT%H:%M:%S%z", &timeinfo);
@@ -168,16 +184,32 @@ void rebootTime() {
 }
 
 void MyNetwork::raiseSoftAP() {
-  WiFi.mode(WIFI_AP);
-  if(strlen(config.store.mdnsname)>0) WiFi.softAPsetHostname(config.store.mdnsname);
-  WiFi.softAP(apSsid, apPassword);
+  char autoRoot[14];
+  if (mqttAutoRoot(autoRoot)) {
+    std::memcpy(apSsid + 7, autoRoot + 7, 7); // MAC6 plus terminator.
+  } else {
+    BOOTLOG("AP MAC read failed; using fallback SSID");
+  }
+
+  const bool modeReady = WiFi.mode(WIFI_AP);
+  if (modeReady && strlen(config.store.mdnsname) > 0)
+    WiFi.softAPsetHostname(config.store.mdnsname);
+  const bool apReady = modeReady && WiFi.softAP(apSsid, apPassword);
+  status = apReady ? SOFT_AP : FAILED;
+
   Serial.println("##[BOOT]#");
   BOOTLOG("************************************************");
-  BOOTLOG("Running in AP mode");
-  BOOTLOG("Connect to AP %s with password %s", apSsid, apPassword);
-  BOOTLOG("and go to http:/192.168.4.1/ to configure");
+  BOOTLOG("AP Wi-Fi mode: %d (%s)", static_cast<int>(WiFi.getMode()), modeReady ? "ready" : "failed");
+  BOOTLOG("AP softAP: %s", apReady ? "success" : "failed");
+  if (apReady) {
+    const String apIp = WiFi.softAPIP().toString();
+    BOOTLOG("AP SSID: %s", apSsid);
+    BOOTLOG("AP IP: %s", apIp.c_str());
+    BOOTLOG("AP channel: %d", WiFi.channel());
+    BOOTLOG("Connect to AP %s with password %s", apSsid, apPassword);
+    BOOTLOG("and go to http://%s/ to configure", apIp.c_str());
+  }
   BOOTLOG("************************************************");
-  status = SOFT_AP;
-  if(config.store.softapdelay>0)
+  if (apReady && config.store.softapdelay > 0)
     timekeeper.waitAndDo(static_cast<uint32_t>(config.store.softapdelay) * 60UL, rebootTime, DelayedActionSlot::REBOOT);
 }

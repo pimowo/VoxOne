@@ -2,6 +2,17 @@
 #define display_h
 #include "common.h"
 
+enum class DisplaySourceKind : uint8_t { Radio, Bluetooth };
+struct DisplaySourceView {
+    DisplaySourceKind kind;
+    bool connected;
+    const char* peerName;
+    const char* artist;
+    const char* title;
+};
+// Optional Source Manager view. Strings must stay valid until this call returns.
+extern bool getDisplaySourceView(DisplaySourceView& view) __attribute__((weak));
+
 #if DSP_MODEL==DSP_DUMMY
 #define DUMMYDISPLAY
 #endif
@@ -57,8 +68,13 @@ class Display {
     ClockWidget *_clock;
     Page *_boot;
     TextWidget *_bootstring, *_volip, *_voltxt, *_rssi, *_bitrate;
-#if DSP_MODEL==DSP_ST7789_76
+#if DSP_MODEL==DSP_ST7796
+    TextWidget *_salonRssiLabel;
+#endif
+#if DSP_MODEL==DSP_ST7789_76 || DSP_MODEL==DSP_ST7796
     TextWidget *_plheader, *_plcounter, *_plplaying;
+#endif
+#if DSP_MODEL==DSP_ST7789_76
     ScrollWidget *_deskStation;
     TextWidget *_deskRssi, *_deskVolume, *_deskClock;
 #endif

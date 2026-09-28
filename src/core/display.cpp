@@ -49,7 +49,7 @@ Nextion nextion;
 QueueHandle_t displayQueue;
 portMUX_TYPE displayVolumeMux = portMUX_INITIALIZER_UNLOCKED;
 
-#if DSP_MODEL==DSP_ST7789_76
+#if DSP_MODEL==DSP_ST7789_76 || DSP_MODEL==DSP_ST7796
 constexpr uint32_t DESK_UI_RETURN_TIMEOUT_S = 10;
 #endif
 
@@ -80,7 +80,7 @@ void Display::_createDspTask(){
 
 #ifndef DUMMYDISPLAY
 //============================================================================================================================
-#if defined(VOXONE_PROFILE_DESK)
+#if defined(VOXONE_PROFILE_DESK) || defined(VOXONE_PROFILE_SALON)
 constexpr uint16_t kDisplayVolumeMax = 100;
 static uint8_t displayedVolume() { return config.userVolume; }
 #else
@@ -137,7 +137,7 @@ void Display::init() {
   //_bootScreen();
   _pager = new Pager();
   _footer = new Page();
-#if DSP_MODEL==DSP_ST7789_76
+#if DSP_MODEL==DSP_ST7789_76 || DSP_MODEL==DSP_ST7796
   _plwidget = nullptr;
 #else
   _plwidget = new PlayListWidget();
@@ -180,12 +180,14 @@ void Display::_bootScreen(){
 
 void Display::_buildPager(){
   _meta->init("*", metaConf, config.theme.meta, config.theme.metabg);
-#if DSP_MODEL==DSP_ST7789_76
+  #if DSP_MODEL==DSP_ST7789_76
   _deskStation = new ScrollWidget("*", deskStationConf, config.theme.meta, config.theme.metabg);
 #endif
   _title1->init("*", title1Conf, config.theme.title1, config.theme.background);
   _clock->init(clockConf, 0, 0);
-  #if DSP_MODEL==DSP_NOKIA5110
+#if DSP_MODEL==DSP_ST7796
+  _plcurrent->init("*", salonStationConf, config.theme.plcurrent, config.theme.plcurrentbg);
+#elif DSP_MODEL==DSP_NOKIA5110
     _plcurrent->init("*", playlistConf, 0, 1);
   #else
     _plcurrent->init("*", playlistConf, config.theme.plcurrent, config.theme.plcurrentbg);
@@ -194,6 +196,11 @@ void Display::_buildPager(){
   _plheader = new TextWidget(playlistHeaderConf, 30, config.theme.meta, config.theme.metabg);
   _plcounter = new TextWidget(playlistCounterConf, 16, config.theme.meta, config.theme.background);
   _plplaying = new TextWidget(playlistPlayingConf, 8, config.theme.meta, config.theme.background);
+  _plheader->setText("WEB - STACJA");
+#elif DSP_MODEL==DSP_ST7796
+  _plheader = new TextWidget(salonPlaylistHeaderConf, 30, config.theme.meta, config.theme.metabg);
+  _plcounter = new TextWidget(salonPlaylistCounterConf, 16, config.theme.meta, config.theme.background);
+  _plplaying = new TextWidget(salonPlaylistPlayingConf, 8, config.theme.meta, config.theme.background);
   _plheader->setText("WEB - STACJA");
 #else
   _plwidget->init(_plcurrent);
@@ -238,6 +245,10 @@ void Display::_buildPager(){
   #ifndef HIDE_RSSI
     _rssi = new TextWidget(rssiConf, 20, config.theme.rssi, config.theme.background);
   #endif
+#if DSP_MODEL==DSP_ST7796
+  _salonRssiLabel = new TextWidget(rssiLabelConf, 8, config.theme.rssi, config.theme.background);
+  _salonRssiLabel->setText("RSSI");
+#endif
 #if DSP_MODEL==DSP_ST7789_76
   _deskRssi = new TextWidget(deskRssiConf, 16, config.theme.rssi, config.theme.background);
   _deskVolume = new TextWidget(deskVolumeConf, 12, config.theme.vol, config.theme.background);
@@ -245,11 +256,13 @@ void Display::_buildPager(){
 #endif
   _nums->init(numConf, 10, config.theme.digit, config.theme.background);
   
+#if DSP_MODEL!=DSP_ST7796
   if(_volbar)   _footer->addWidget( _volbar);
   if(_voltxt)   _footer->addWidget( _voltxt);
   if(_volip)    _footer->addWidget( _volip);
   if(_rssi)     _footer->addWidget( _rssi);
   if(_heapbar)  _footer->addWidget( _heapbar);
+#endif
   
 #if DSP_MODEL==DSP_ST7789_76
   pages[PG_PLAYER]->addWidget(new FillWidget(deskStationBandConf, config.theme.metabg));
@@ -275,19 +288,32 @@ void Display::_buildPager(){
   pages[PG_PLAYER]->addWidget(_deskClock);
 #else
   pages[PG_PLAYER]->addWidget(_clock);
+#if DSP_MODEL==DSP_ST7796
+  if(_voltxt) pages[PG_PLAYER]->addWidget(_voltxt);
+  if(_salonRssiLabel) pages[PG_PLAYER]->addWidget(_salonRssiLabel);
+  if(_rssi) pages[PG_PLAYER]->addWidget(_rssi);
+  if(_heapbar) pages[PG_PLAYER]->addWidget(_heapbar);
+#else
   pages[PG_PLAYER]->addPage(_footer);
+#endif
 #endif
   pages[PG_SCREENSAVER]->addWidget(_clock);
 
   if(_metabackground) pages[PG_DIALOG]->addWidget( _metabackground);
   pages[PG_DIALOG]->addWidget(_meta);
   pages[PG_DIALOG]->addWidget(_nums);
+#if DSP_MODEL==DSP_ST7796
+  if(_volip) pages[PG_DIALOG]->addWidget(_volip);
+  if(_volip) _volip->lock();
+#endif
   
-  #if !defined(DSP_LCD) && DSP_MODEL!=DSP_NOKIA5110
+  #if !defined(DSP_LCD) && DSP_MODEL!=DSP_NOKIA5110 && DSP_MODEL!=DSP_ST7796
     pages[PG_DIALOG]->addPage(_footer);
   #endif
+#if DSP_MODEL==DSP_ST7789_76 || DSP_MODEL==DSP_ST7796
 #if DSP_MODEL==DSP_ST7789_76
   if(_plbackground) pages[PG_PLAYLIST]->addWidget(_plbackground);
+#endif
   pages[PG_PLAYLIST]->addWidget(_plheader);
   pages[PG_PLAYLIST]->addWidget(_plcurrent);
   pages[PG_PLAYLIST]->addWidget(_plcounter);
@@ -318,7 +344,7 @@ void Display::_apScreen() {
       #endif
     #endif
     ScrollWidget *bootTitle = (ScrollWidget*) &_boot->addWidget(new ScrollWidget("*", apTitleConf, config.theme.meta, config.theme.metabg));
-    bootTitle->setText("ёRadio AP Mode");
+    bootTitle->setText("VoxOne tryb AP");
     TextWidget *apname = (TextWidget*) &_boot->addWidget(new TextWidget(apNameConf, 30, config.theme.title1, config.theme.background));
     apname->setText(LANG::apNameTxt);
     TextWidget *apname2 = (TextWidget*) &_boot->addWidget(new TextWidget(apName2Conf, 30, config.theme.clock, config.theme.background));
@@ -397,6 +423,9 @@ void Display::_swichMode(displayMode_e newmode) {
   if(_volip) _volip->lock(newmode == PLAYER);
   if(_rssi) _rssi->lock(newmode == VOL);
 #endif
+#if DSP_MODEL==DSP_ST7796
+  if(_volip) _volip->lock(newmode != VOL);
+#endif
   dsp.setScrollId(NULL);
   if (newmode == PLAYER) {
     if(player.isRunning())
@@ -411,7 +440,7 @@ void Display::_swichMode(displayMode_e newmode) {
       _meta->moveBack();
     #endif
     _meta->setAlign(metaConf.widget.align);
-    _meta->setText(config.station.name);
+    _station();
 #if DSP_MODEL==DSP_ST7789_76
     _deskStation->setText(config.station.name);
 #endif
@@ -465,7 +494,7 @@ void Display::resetQueue(){
 }
 
 void Display::_drawPlaylist() {
-#if DSP_MODEL==DSP_ST7789_76
+#if DSP_MODEL==DSP_ST7789_76 || DSP_MODEL==DSP_ST7796
   const uint16_t total = config.playlistLength();
   if(total == 0) {
     _plcurrent->setText("BRAK STACJI");
@@ -482,7 +511,7 @@ void Display::_drawPlaylist() {
 #else
   _plwidget->drawPlaylist(currentPlItem);
 #endif
-#if DSP_MODEL==DSP_ST7789_76
+#if DSP_MODEL==DSP_ST7789_76 || DSP_MODEL==DSP_ST7796
   timekeeper.waitAndReturnPlayer(DESK_UI_RETURN_TIMEOUT_S);
 #else
   timekeeper.waitAndReturnPlayer(30);
@@ -590,7 +619,7 @@ void Display::loop() {
         case NEWTITLE: _title(); break;
         case NEWSTATION:
           _station();
-#if DSP_MODEL==DSP_ST7789_76
+#if DSP_MODEL==DSP_ST7789_76 || DSP_MODEL==DSP_ST7796
           if(_mode==STATIONS && _plplaying) _plplaying->setText(player.isRunning() && currentPlItem == config.lastStation() ? "GRA" : "");
 #endif
           break;
@@ -648,13 +677,19 @@ void Display::loop() {
         case DSPRSSI: if(_rssi){ _setRSSI(request.payload); } if (_heapbar && config.store.audioinfo) _heapbar->setValue(player.isRunning()?player.inBufferFilled():0); break;
         case PSTART:
           _layoutChange(true);
-#if DSP_MODEL==DSP_ST7789_76
+#if DSP_MODEL==DSP_ST7796
+          _station();
+#endif
+#if DSP_MODEL==DSP_ST7789_76 || DSP_MODEL==DSP_ST7796
           if(_mode==STATIONS && _plplaying) _plplaying->setText(currentPlItem == config.lastStation() ? "GRA" : "");
 #endif
           break;
         case PSTOP:
           _layoutChange(false);
-#if DSP_MODEL==DSP_ST7789_76
+#if DSP_MODEL==DSP_ST7796
+          _station();
+#endif
+#if DSP_MODEL==DSP_ST7789_76 || DSP_MODEL==DSP_ST7796
           if(_mode==STATIONS && _plplaying) _plplaying->setText("");
 #endif
           break;
@@ -731,7 +766,16 @@ void Display::_setRSSI(int rssi) {
 
 void Display::_station() {
   _meta->setAlign(metaConf.widget.align);
+#if DSP_MODEL==DSP_ST7796
+  DisplaySourceView source{};
+  if(getDisplaySourceView && getDisplaySourceView(source) && source.kind == DisplaySourceKind::Bluetooth) {
+    _meta->setText(source.connected && source.peerName && source.peerName[0] ? source.peerName : "Bluetooth");
+  } else {
+    _meta->setText(player.isRunning() ? config.station.name : "WEB Radio");
+  }
+#else
   _meta->setText(config.station.name);
+#endif
 #if DSP_MODEL==DSP_ST7789_76
   if(_deskStation) _deskStation->setText(config.station.name);
 #endif
@@ -749,7 +793,7 @@ char *split(char *str, const char *delim) {
   return dmp + strlen(delim);
 }
 
-#if DSP_MODEL==DSP_ST7789_76
+#if DSP_MODEL==DSP_ST7789_76 || DSP_MODEL==DSP_ST7796
 static uint32_t deskNextCodepoint(const char*& text, const char* end) {
   const uint8_t first = static_cast<uint8_t>(*text++);
   if(first < 0x80) return first;
@@ -796,19 +840,27 @@ static bool deskArtistIsStation(const char* artist, const char* station) {
 #endif
 
 void Display::_title() {
+#if DSP_MODEL==DSP_ST7796
+  DisplaySourceView source{};
+  if(getDisplaySourceView && getDisplaySourceView(source) && source.kind == DisplaySourceKind::Bluetooth) {
+    _title1->setText(source.connected ? (source.artist ? source.artist : "") : "Oczekuję na połączenie");
+    if(_title2) _title2->setText(source.connected && source.title ? source.title : "");
+    return;
+  }
+#endif
   if (strlen(config.station.title) > 0) {
     char tmpbuf[strlen(config.station.title)+1];
     strlcpy(tmpbuf, config.station.title, strlen(config.station.title)+1);
     char *stitle = split(tmpbuf, " - ");
     if(stitle && _title2){
-#if DSP_MODEL==DSP_ST7789_76
+#if DSP_MODEL==DSP_ST7789_76 || DSP_MODEL==DSP_ST7796
       _title1->setText(deskArtistIsStation(tmpbuf, config.station.name) ? "" : tmpbuf);
 #else
       _title1->setText(tmpbuf);
 #endif
       _title2->setText(stitle);
     }else{
-#if DSP_MODEL==DSP_ST7789_76
+#if DSP_MODEL==DSP_ST7789_76 || DSP_MODEL==DSP_ST7796
       _title1->setText(deskArtistIsStation(config.station.title, config.station.name) ? "" : config.station.title);
 #else
       _title1->setText(config.station.title);

@@ -24,6 +24,7 @@
 #include "commandhandler.h"
 #include "volume_map.h"
 #include "timekeeper.h"
+#include "rtcsupport.h"
 #include "../displays/dspcore.h"
 #include "../displays/widgets/widgetsconfig.h" //BitrateFormat
 
@@ -91,6 +92,8 @@ void handleStationsImportUpload(AsyncWebServerRequest *request, String filename,
                                 size_t index, uint8_t *data, size_t len, bool final);
 void handleMqttConfigRead(AsyncWebServerRequest *request);
 void handleMqttConfigSave(AsyncWebServerRequest *request);
+void handleTimeStatus(AsyncWebServerRequest *request);
+void handleTimeSync(AsyncWebServerRequest *request);
 void handleIndex(AsyncWebServerRequest * request);
 void handleNotFound(AsyncWebServerRequest * request);
 void onWsEvent(AsyncWebSocket *server, AsyncWebSocketClient *client, AwsEventType type, void *arg, uint8_t *data, size_t len);
@@ -249,6 +252,8 @@ bool NetServer::begin(bool quiet) {
   webserver.on("/api/stations/reorder", HTTP_POST, handleStationsMutation);
   webserver.on("/api/mqtt", HTTP_GET, handleMqttConfigRead);
   webserver.on("/api/mqtt", HTTP_POST, handleMqttConfigSave);
+  webserver.on("/api/time", HTTP_GET, handleTimeStatus);
+  webserver.on("/api/time/sync", HTTP_POST, handleTimeSync);
   webserver.onNotFound(handleNotFound);
   webserver.onFileUpload(handleUpload);
 
@@ -591,7 +596,7 @@ static void stationsReply(AsyncWebServerRequest* request, int code, const String
   request->send(response);
 }
 
-static bool mqttApiAuthorized(AsyncWebServerRequest* request) {
+static bool deviceApiAuthorized(AsyncWebServerRequest* request) {
 #if defined(HTTP_USER) && defined(HTTP_PASS)
   if (network.status == CONNECTED && !request->authenticate(HTTP_USER, HTTP_PASS)) {
     request->requestAuthentication();
@@ -603,6 +608,54 @@ static bool mqttApiAuthorized(AsyncWebServerRequest* request) {
 
 static void mqttApiError(AsyncWebServerRequest* request, int code, const char* error) {
   stationsReply(request, code, String("{\"error\":\"") + error + "\"}");
+}
+
+void handleTimeStatus(AsyncWebServerRequest* request) {
+  if (!deviceApiAuthorized(request)) return;
+  char systemTime[20] = "";
+  char rtcTime[20] = "";
+  char systemJson[24] = "null";
+  char rtcJson[24] = "null";
+  const time_t now = time(nullptr);
+  tm localTime = {};
+  if (localtime_r(&now, &localTime) && localTime.tm_year >= 120)
+    strftime(systemTime, sizeof(systemTime), "%Y-%m-%d %H:%M:%S", &localTime);
+  if (systemTime[0]) snprintf(systemJson, sizeof(systemJson), "\"%s\"", systemTime);
+#if RTCSUPPORTED
+  if (config.isRTCFound() && rtc.isRunning()) {
+    tm rtcLocalTime = {};
+    rtc.getTime(&rtcLocalTime);
+    strftime(rtcTime, sizeof(rtcTime), "%Y-%m-%d %H:%M:%S", &rtcLocalTime);
+    if (rtcTime[0]) snprintf(rtcJson, sizeof(rtcJson), "\"%s\"", rtcTime);
+  }
+#endif
+  char body[256];
+  const int length = snprintf(body, sizeof(body),
+      "{\"rtcSupported\":%s,\"rtcFound\":%s,\"systemTime\":%s,\"rtcTime\":%s,"
+      "\"timeSyncInterval\":%u,\"timeSyncIntervalRTC\":%u,\"syncCount\":%lu}",
+      RTCSUPPORTED ? "true" : "false",
+#if RTCSUPPORTED
+      config.isRTCFound() ? "true" : "false",
+#else
+      "false",
+#endif
+      systemJson, rtcJson,
+      config.store.timeSyncInterval, config.store.timeSyncIntervalRTC,
+      static_cast<unsigned long>(timekeeper.successfulSyncCount));
+  if (length < 0 || static_cast<size_t>(length) >= sizeof(body)) {
+    mqttApiError(request, 500, "time_status_failed");
+    return;
+  }
+  stationsReply(request, 200, body);
+}
+
+void handleTimeSync(AsyncWebServerRequest* request) {
+  if (!deviceApiAuthorized(request)) return;
+  if (!RTCSUPPORTED) { mqttApiError(request, 404, "rtc_unsupported"); return; }
+  if (network.status != CONNECTED) { mqttApiError(request, 503, "network_unavailable"); return; }
+  const uint32_t beforeSync = timekeeper.successfulSyncCount;
+  network.requestTimeSync(false);
+  stationsReply(request, 202, String("{\"ok\":true,\"syncCount\":") + beforeSync + "}");
 }
 
 static bool mqttApiText(AsyncWebServerRequest* request, const char* key, String& value) {
@@ -621,7 +674,7 @@ static __attribute__((noinline)) String mqttJsonText(const char* value) {
 }
 
 void handleMqttConfigRead(AsyncWebServerRequest* request) {
-  if (!mqttApiAuthorized(request)) return;
+  if (!deviceApiAuthorized(request)) return;
   char autoRoot[14];
   char effectiveRoot[64];
   if (!mqttAutoRoot(autoRoot) || !mqttEffectiveRoot(effectiveRoot, sizeof(effectiveRoot))) {
@@ -641,7 +694,7 @@ void handleMqttConfigRead(AsyncWebServerRequest* request) {
 }
 
 void handleMqttConfigSave(AsyncWebServerRequest* request) {
-  if (!mqttApiAuthorized(request)) return;
+  if (!deviceApiAuthorized(request)) return;
   if (shouldReboot) { mqttApiError(request, 409, "reboot_pending"); return; }
   String enabledText, hostText, portText, usernameText, rootText;
   if (!mqttApiText(request, "enabled", enabledText) ||
@@ -1210,17 +1263,19 @@ void NetServer::processQueue(){
           return; 
           break;
         }
-      case GETSYSTEM:     sprintf (wsBuf, "{\"sst\":%d,\"vu\":%d,\"softr\":%d,\"vut\":%d,\"mdns\":\"%s\",\"ipaddr\":\"%s\", \"abuff\": %d }",
+      case GETSYSTEM:     sprintf (wsBuf, "{\"sst\":%d,\"vu\":%d,\"canVu\":%d,\"softr\":%d,\"vut\":%d,\"mdns\":\"%s\",\"ipaddr\":\"%s\", \"abuff\": %d }",
                                   config.store.smartstart != 2, 
                                   config.store.vumeter, 
+                                  voxone::activeProfile.capabilities.hasVu,
                                   config.store.softapdelay,
                                   config.vuThreshold,
                                   config.store.mdnsname,
                                   config.ipToStr(WiFi.localIP()),
                                   config.store.abuff);
                                   break;
-      case GETSCREEN:     sprintf (wsBuf, "{\"flip\":%d,\"nump\":%d,\"tsf\":%d,\"tsd\":%d,\"dspon\":%d,\"br\":%d,\"con\":%d,\"scre\":%d,\"scrt\":%d,\"scrb\":%d,\"scrpe\":%d,\"scrpt\":%d,\"scrpb\":%d}",
-                                  config.store.flipscreen, 
+      case GETSCREEN:     sprintf (wsBuf, "{\"flip\":%d,\"canFlip\":%d,\"nump\":%d,\"tsf\":%d,\"tsd\":%d,\"dspon\":%d,\"br\":%d,\"con\":%d,\"scre\":%d,\"scrt\":%d,\"scrb\":%d,\"scrpe\":%d,\"scrpt\":%d,\"scrpb\":%d}",
+                                  config.store.flipscreen,
+                                  voxone::activeProfile.display != voxone::Display::None,
                                   config.store.numplaylist, 
                                   config.store.fliptouch, 
                                   config.store.dbgtouch, 

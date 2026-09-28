@@ -18,6 +18,18 @@
   const startupFixedSlider = document.getElementById("startup-fixed-slider");
   const startupFixedValue = document.getElementById("startup-fixed-value");
   const volumeSettingsPending = document.getElementById("volume-settings-pending");
+  const displaySettingsCard = document.getElementById("display-settings-card");
+  const flipScreenControl = document.getElementById("flip-screen-control");
+  const flipScreenToggle = document.getElementById("flip-screen-toggle");
+  const flipScreenFeedback = document.getElementById("flip-screen-feedback");
+  const vuMeterControl = document.getElementById("vu-meter-control");
+  const vuMeterToggle = document.getElementById("vu-meter-toggle");
+  const vuMeterValue = document.getElementById("vu-meter-value");
+  const rtcCard = document.getElementById("rtc-card");
+  const rtcNtpInterval = document.getElementById("rtc-ntp-interval");
+  const rtcWriteInterval = document.getElementById("rtc-write-interval");
+  const rtcSyncNow = document.getElementById("rtc-sync-now");
+  const rtcFeedback = document.getElementById("rtc-feedback");
   const audioControls = {
     bass: { slider: document.getElementById("audio-bass-slider"), command: "bass" },
     middle: { slider: document.getElementById("audio-middle-slider"), command: "middle" },
@@ -80,6 +92,8 @@
   let mqttPasswordSet = false;
   let mqttEffectiveRootValue = "";
   let mqttSaving = false;
+  let rtcSyncing = false;
+  let rtcStatusLoading = false;
   const state = {
     connection: "connecting",
     source: null,
@@ -93,6 +107,10 @@
     maximumVolume: null,
     startupMode: null,
     startupFixedVolume: null,
+    flip: null,
+    canFlip: false,
+    vu: null,
+    canVu: false,
     bass: null,
     middle: null,
     treble: null,
@@ -133,6 +151,10 @@
   let activeVolumeSlider = null;
   let leaving = false;
   let wsCurrentSequence = 0;
+  let flipPending = false;
+  let flipTimer = 0;
+  let vuAwaiting = null;
+  let vuTimer = 0;
 
   function text(id, value) {
     const node = document.getElementById(id);
@@ -150,6 +172,84 @@
     }
     if (selected === "stations" && state.stationsStatus === "idle") loadStations();
     if (selected === "settings" && !mqttConfigLoaded) loadMqttConfig();
+    if (selected === "settings") loadTimeStatus();
+  }
+
+  function setRtcFeedback(message, error = false) {
+    rtcFeedback.textContent = message;
+    rtcFeedback.dataset.kind = error ? "error" : "status";
+  }
+
+  async function loadTimeStatus() {
+    if (rtcStatusLoading) return null;
+    rtcStatusLoading = true;
+    try {
+      const response = await fetch("/api/time", { cache: "no-store" });
+      if (!response.ok) throw new Error("HTTP " + response.status);
+      const status = await response.json();
+      rtcCard.hidden = status.rtcSupported !== true;
+      if (rtcCard.hidden) return status;
+      text("rtc-found", status.rtcFound ? "Wykryty" : "Brak");
+      text("rtc-system-time", status.systemTime || "—");
+      text("rtc-time", status.rtcTime || "—");
+      rtcNtpInterval.value = String(status.timeSyncInterval);
+      rtcWriteInterval.value = String(status.timeSyncIntervalRTC);
+      rtcNtpInterval.disabled = false;
+      rtcWriteInterval.disabled = false;
+      rtcSyncNow.disabled = rtcSyncing;
+      return status;
+    } catch (error) {
+      if (!rtcCard.hidden) setRtcFeedback("Nie udało się pobrać stanu RTC: " + (error.message || "błąd połączenia"), true);
+      return null;
+    } finally {
+      rtcStatusLoading = false;
+    }
+  }
+
+  async function saveTimeInterval(input, command, minimum, maximum) {
+    const value = Number(input.value);
+    if (!Number.isInteger(value) || value < minimum || value > maximum) {
+      setRtcFeedback("Podaj liczbę z dozwolonego zakresu.", true);
+      loadTimeStatus();
+      return;
+    }
+    if (!send(command, value)) {
+      setRtcFeedback("Brak połączenia z urządzeniem.", true);
+      return;
+    }
+    setRtcFeedback("Oczekiwanie na potwierdzenie urządzenia…");
+    await new Promise(resolve => setTimeout(resolve, 500));
+    const status = await loadTimeStatus();
+    if (status && status[command === "timeint" ? "timeSyncInterval" : "timeSyncIntervalRTC"] === value)
+      setRtcFeedback("Ustawienie zapisane.");
+    else setRtcFeedback("Nie potwierdzono zapisu. Sprawdź połączenie.", true);
+  }
+
+  async function syncTimeNow() {
+    if (rtcSyncing) return;
+    rtcSyncing = true;
+    rtcSyncNow.disabled = true;
+    setRtcFeedback("Oczekiwanie na synchronizację NTP…");
+    try {
+      const response = await fetch("/api/time/sync", { method: "POST", cache: "no-store" });
+      const result = await response.json();
+      if (!response.ok || result.ok !== true) throw new Error(result.error || ("HTTP " + response.status));
+      for (let attempt = 0; attempt < 15; attempt++) {
+        await new Promise(resolve => setTimeout(resolve, 2000));
+        const status = await loadTimeStatus();
+        if (status && status.syncCount > result.syncCount) {
+          setRtcFeedback(status.rtcFound ? "Ręczna synchronizacja NTP zakończona; czas przekazano do RTC." : "Ręczna synchronizacja NTP zakończona; RTC nie został wykryty.");
+          return;
+        }
+      }
+      setRtcFeedback("Brak potwierdzenia synchronizacji NTP. Sprawdź połączenie i spróbuj ponownie.", true);
+    } catch (error) {
+      setRtcFeedback("Nie udało się rozpocząć synchronizacji: " + (error.message || "błąd połączenia"), true);
+    } finally {
+      rtcSyncing = false;
+      rtcSyncNow.disabled = false;
+      loadTimeStatus();
+    }
   }
 
   function mqttRootMode() {
@@ -287,6 +387,7 @@
       button.disabled = !connected;
     });
     renderStationActions();
+    renderDisplaySettings();
   }
 
   function renderStation() {
@@ -348,6 +449,24 @@
     const pending = Object.values(volumeSettingEditing).some(value => value !== null);
     volumeSettingsPending.hidden = !pending;
     renderConnection();
+  }
+
+  function renderDisplaySettings() {
+    displaySettingsCard.hidden = !state.canFlip && !state.canVu;
+    flipScreenControl.hidden = !state.canFlip;
+    flipScreenToggle.disabled = state.connection !== "connected" ||
+      !state.canFlip || state.flip === null || flipPending;
+    if (!flipPending && state.flip !== null) flipScreenToggle.checked = state.flip;
+    vuMeterControl.hidden = !state.canVu;
+    vuMeterToggle.disabled = state.connection !== "connected" ||
+      !state.canVu || state.vu === null || vuAwaiting !== null;
+    if (vuAwaiting === null && state.vu !== null) vuMeterToggle.checked = state.vu;
+    vuMeterValue.textContent = vuAwaiting !== null ? "Zapisywanie…" :
+      state.vu === null ? "—" : state.vu ? "ON" : "OFF";
+    flipScreenFeedback.hidden = !state.canFlip;
+    flipScreenFeedback.textContent = flipPending
+      ? "Oczekiwanie na potwierdzenie urządzenia…"
+      : "Zmiana działa od razu, bez restartu.";
   }
 
   function confirmVolumeSetting(key, value) {
@@ -744,6 +863,14 @@
     for (const key of ["source", "station", "metadata", "codec", "bitrate", "rssi", "volume", "volume100", "maximumVolume", "startupMode", "startupFixedVolume", "bass", "middle", "treble", "balance", "playing", "current", "ip"]) {
       state[key] = null;
     }
+    state.flip = null;
+    state.canFlip = false;
+    state.vu = null;
+    state.canVu = false;
+    flipPending = false;
+    clearTimeout(flipTimer);
+    vuAwaiting = null;
+    clearTimeout(vuTimer);
     for (const key of Object.keys(volumeSettingEditing)) {
       volumeSettingEditing[key] = null;
       clearTimeout(volumeSettingTimers[key]);
@@ -764,6 +891,7 @@
     renderPlaying();
     showVolume(null);
     renderVolumeSettings();
+    renderDisplaySettings();
     for (const control of Object.values(audioControls)) {
       control.dragging = false;
       clearTimeout(control.ackTimer);
@@ -904,6 +1032,26 @@
       state.ip = message.ipaddr;
       text("system-ip", state.ip || "—");
     }
+    if (message.canFlip === 0 || message.canFlip === 1) {
+      state.canFlip = message.canFlip === 1;
+    }
+    if (message.flip === 0 || message.flip === 1) {
+      state.flip = message.flip === 1;
+      flipPending = false;
+      clearTimeout(flipTimer);
+    }
+    if (message.canVu === 0 || message.canVu === 1) state.canVu = message.canVu === 1;
+    if (message.vu === 0 || message.vu === 1) {
+      state.vu = message.vu === 1;
+      if (vuAwaiting === state.vu) {
+        vuAwaiting = null;
+        clearTimeout(vuTimer);
+      }
+    }
+    if (message.canFlip === 0 || message.canFlip === 1 ||
+        message.flip === 0 || message.flip === 1 ||
+        message.canVu === 0 || message.canVu === 1 ||
+        message.vu === 0 || message.vu === 1) renderDisplaySettings();
   }
 
   function connect() {
@@ -922,6 +1070,7 @@
       state.connection = "connected";
       renderConnection();
       send("getindex", 1);
+      send("getscreen", 1);
       extraSyncTimer = setTimeout(requestExtraSync, 1500);
     };
     ws.onmessage = event => {
@@ -940,6 +1089,7 @@
         clearTimeout(control.ackTimer);
       }
       renderAudio();
+      renderDisplaySettings();
       if (!leaving) {
         reconnectTimer = setTimeout(connect, reconnectDelay);
         reconnectDelay = Math.min(reconnectDelay * 2, 15000);
@@ -1120,6 +1270,42 @@
     }
     sendVolumeSetting("maximumVolume", "maximumvolume", value);
   });
+
+  flipScreenToggle.addEventListener("change", () => {
+    if (!state.canFlip || state.flip === null ||
+        !send("flipscreen", flipScreenToggle.checked ? 1 : 0)) {
+      renderDisplaySettings();
+      return;
+    }
+    flipPending = true;
+    clearTimeout(flipTimer);
+    flipTimer = setTimeout(() => {
+      flipPending = false;
+      renderDisplaySettings();
+      send("getscreen", 1);
+    }, 2000);
+    renderDisplaySettings();
+  });
+
+  vuMeterToggle.addEventListener("change", () => {
+    const requested = vuMeterToggle.checked;
+    if (!state.canVu || state.vu === null || !send("vumeter", requested ? 1 : 0)) {
+      renderDisplaySettings();
+      return;
+    }
+    vuAwaiting = requested;
+    clearTimeout(vuTimer);
+    vuTimer = setTimeout(() => {
+      vuAwaiting = null;
+      renderDisplaySettings();
+      send("getsystem", 1);
+    }, 2000);
+    renderDisplaySettings();
+  });
+
+  rtcNtpInterval.addEventListener("change", () => saveTimeInterval(rtcNtpInterval, "timeint", 1, 10080));
+  rtcWriteInterval.addEventListener("change", () => saveTimeInterval(rtcWriteInterval, "timeintrtc", 1, 1000));
+  rtcSyncNow.addEventListener("click", syncTimeNow);
 
   startupModeSelect.addEventListener("change", () => {
     if (startupModeSelect.disabled) return;

@@ -131,6 +131,29 @@
         <div class="section-heading"><div><p class="eyebrow">KONFIGURACJA</p><h2 id="settings-title">Ustawienia</h2></div><span class="badge">Urządzenie</span></div>
         <div class="grid">
           <article class="card"><h3>Sieć</h3><dl class="facts"><div><dt>Hostname</dt><dd>—</dd></div><div><dt>Wi-Fi</dt><dd>—</dd></div></dl><p class="hint">Pola tylko poglądowe.</p></article>
+          <article id="display-settings-card" class="card" hidden>
+            <h3>Wyświetlacz</h3>
+            <label id="flip-screen-control" class="display-setting-toggle"><input id="flip-screen-toggle" type="checkbox" disabled><span>Odwróć ekran</span></label>
+            <label id="vu-meter-control" class="display-setting-toggle" hidden><input id="vu-meter-toggle" type="checkbox" disabled><span>VU meter</span><strong id="vu-meter-value">—</strong></label>
+            <p id="flip-screen-feedback" class="hint" role="status" aria-live="polite">Zmiana działa od razu, bez restartu.</p>
+          </article>
+          <article id="rtc-card" class="card rtc-card" aria-labelledby="rtc-title" hidden>
+            <h3 id="rtc-title">Czas / RTC</h3>
+            <dl class="facts">
+              <div><dt>RTC</dt><dd>DS3231</dd></div>
+              <div><dt>Status</dt><dd id="rtc-found">—</dd></div>
+              <div><dt>Czas systemowy</dt><dd id="rtc-system-time">—</dd></div>
+              <div><dt>Czas RTC</dt><dd id="rtc-time">—</dd></div>
+              <div><dt>Strefa czasowa</dt><dd>Europe/Warsaw</dd></div>
+              <div><dt>Zmiana lato/zima</dt><dd>Automatyczna</dd></div>
+              <div><dt>Synchronizacja</dt><dd>Automatyczna</dd></div>
+            </dl>
+            <label class="rtc-setting" for="rtc-ntp-interval">Synchronizacja NTP <span>(minuty)</span><input id="rtc-ntp-interval" type="number" min="1" max="10080" step="1" inputmode="numeric" disabled></label>
+            <label class="rtc-setting" for="rtc-write-interval">Aktualizacja RTC z NTP <span>(godziny)</span><input id="rtc-write-interval" type="number" min="1" max="1000" step="1" inputmode="numeric" disabled></label>
+            <p class="hint">Synchronizacja działa automatycznie. Ręczne uruchomienie jest funkcją serwisową.</p>
+            <button id="rtc-sync-now" type="button" disabled>Synchronizuj teraz</button>
+            <p id="rtc-feedback" class="hint" role="status" aria-live="polite"></p>
+          </article>
           <article class="card"><h3>Sen</h3><dl class="facts"><div><dt>Timer wyłączenia</dt><dd>—</dd></div></dl><p class="hint">Konfiguracja w kolejnym etapie.</p></article>
         </div>
         <div class="grid settings-grid">
