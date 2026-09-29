@@ -257,7 +257,7 @@
 
 **Priorytet: po SALON.**
 
-- Ustalić finalny MCU i pinout; odblokować profil.
+- Zastąpić tymczasowy target `esp32-s3-devkitc-1` właściwą definicją board dla ESP32-S3 Zero, jeśli zostanie ustalona; potwierdzić fizycznie audio PCM5102A na GPIO1/2/3.
 - Uruchomić PCM5102A, VoxOneBT, WWW, MQTT/HA i NoDisplay bez enkodera.
 - Zbudować fizyczny prototyp.
 
@@ -304,7 +304,7 @@
 
 **Priorytet: po osiągnięciu stabilności; bez agresywnego cleanupu.**
 
-- Przeanalizować, czy niepotrzebne są: Adafruit seesaw, IR, VS1053, Nextion, SD, nieużywane sterowniki LCD, stare WWW/routes, legacy config fields i inne elementy yoRadio.
+- Dokończyć audit legacy IR runtime/stron i zachować pola EEPROM bez zmiany layoutu; kompilacja `src/IRremoteESP8266/` jest wyłączona dla obecnych profili. Przeanalizować też Adafruit seesaw, VS1053, Nextion, SD, nieużywane sterowniki LCD, stare WWW/routes, legacy config fields i inne elementy yoRadio.
 - Usuwać tylko elementy rzeczywiście niepotrzebne; zachować stabilne używane komponenty.
 
 ## 34. Dokumentacja

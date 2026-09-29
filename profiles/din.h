@@ -14,10 +14,19 @@
 #define VOXONE_HAS_SPDIF 0
 #define VOXONE_HAS_TDA7719 false
 #define VOXONE_HAS_LOCAL_UI 0
-#define VOXONE_PIN_MAP_COMPLETE 0
+#define VOXONE_PIN_MAP_COMPLETE 1
 
 #define DSP_MODEL DSP_DUMMY
 
-// The PCM5102A pins remain intentionally undefined until the DIN schematic is fixed.
+#define I2S_BCLK 1
+#define I2S_DOUT 2
+#define I2S_LRC 3
+
+// Reserved for future VoxOneBT input; no UART or I2S RX runtime is active yet.
+#define VOXONE_BT_I2S_BCLK_IN_PIN 4
+#define VOXONE_BT_I2S_WS_IN_PIN 5
+#define VOXONE_BT_I2S_DATA_IN_PIN 6
+#define VOXONE_BT_UART_RX_PIN 7
+#define VOXONE_BT_UART_TX_PIN 8
 
 #endif

@@ -81,7 +81,7 @@ static constexpr HardwareProfile activeProfile = {
 
 #if !VOXONE_PIN_MAP_COMPLETE
   #if defined(VOXONE_PROFILE_DIN)
-    #error "DIN profile is not buildable: PCM5102A I2S pin map is not documented"
+    #error "DIN profile is not buildable: pin map incomplete"
   #elif defined(VOXONE_PROFILE_SALON)
     #error "SALON profile is not buildable: ST7796S, encoder and PCM5102A pin maps are not documented"
   #elif defined(VOXONE_PROFILE_SALON_DSP)
