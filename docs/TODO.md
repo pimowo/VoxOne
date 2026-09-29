@@ -56,7 +56,7 @@
 - PCM5102A: DOUT GPIO4, BCLK GPIO5, LRCK GPIO6.
 - Enkoder na `ENCODER_2`: S2 GPIO47, S1 GPIO48, KEY GPIO21.
 - Ustawić `USE_BUILTIN_LED = false`.
-- VoxOneBT przez `NEXTION`: SALON RX GPIO15, SALON TX GPIO16.
+- VoxOneBT przez osobny UART na złączu `NEXTION`: SALON RX GPIO15, SALON TX GPIO16.
 - VoxOneBT audio I2S przez `ENCODER_1`: BCLK GPIO41, WS/LRCLK GPIO40, DATA IN GPIO39.
 - W przyszłym SALON_DSP współdzielić I²C GPIO7/8 przez jedną instancję magistrali z DS3231 i TDA7719.
 
@@ -79,7 +79,7 @@
 
 **Priorytet: główne drugie źródło SALON.**
 
-- Połączyć UART MAIN ↔ VoxOneBT oraz I2S PCM VoxOneBT → MAIN; uruchomić I2S RX w SALON i osobny I2S TX SALON → PCM5102A.
+- Połączyć I2S PCM VoxOneBT → MAIN; uruchomić I2S RX w SALON i osobny I2S TX SALON → PCM5102A.
 - Sprawdzić stany READY, CONNECTED, DISCONNECTED, PLAYING, PAUSED oraz metadata ARTIST, TITLE, ALBUM, SAMPLE_RATE i VOLUME.
 - Sprawdzić PLAY, PAUSE, NEXT, PREV, GET_STATUS i SET_VOLUME.
 - Sprawdzić wielokrotne connect/disconnect, reconnect, wcześniejszy HCI allocation assert, synchronizację Volume telefonu z VoxOne oraz metadata peer/AVRCP.

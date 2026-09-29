@@ -11,6 +11,7 @@
 //#include "core/mqtt.h"
 #include "core/optionschecker.h"
 #include "core/timekeeper.h"
+#include "core/bt_link.h"
 #ifdef USE_NEXTION
 #include "displays/nextion.h"
 #endif
@@ -77,6 +78,9 @@ void setup() {
   display.init();
   player.init();
   network.begin();
+  #if VOXONE_HAS_BT && VOXONE_PIN_MAP_COMPLETE
+    btLink.begin();
+  #endif
   if (network.status != CONNECTED && network.status!=SDREADY) {
     netserver.begin();
     initControls();
@@ -107,6 +111,9 @@ void setup() {
 void loop() {
   timekeeper.loop1();
   serialCli.loop();
+  #if VOXONE_HAS_BT && VOXONE_PIN_MAP_COMPLETE
+    btLink.loop();
+  #endif
   if (network.status == CONNECTED || network.status==SDREADY) {
     player.loop();
 #if USE_OTA

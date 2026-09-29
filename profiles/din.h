@@ -22,7 +22,7 @@
 #define I2S_DOUT 2
 #define I2S_LRC 3
 
-// Reserved for future VoxOneBT input; no UART or I2S RX runtime is active yet.
+// VoxOneBT I2S RX remains reserved; its UART pins are active in BtLink.
 #define VOXONE_BT_I2S_BCLK_IN_PIN 4
 #define VOXONE_BT_I2S_WS_IN_PIN 5
 #define VOXONE_BT_I2S_DATA_IN_PIN 6

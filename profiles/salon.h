@@ -43,8 +43,11 @@
 #define RTC_SDA 8
 #define RTC_SCL 7
 
-// Reserved for later stages; no runtime peripheral is enabled here.
-// VoxOneBT UART (NEXTION connector): RX 15, TX 16.
+// VoxOneBT UART uses the NEXTION connector, independently of legacy Nextion.
+#define VOXONE_BT_UART_RX_PIN 15
+#define VOXONE_BT_UART_TX_PIN 16
+
+// Reserved for later stages; no I2S RX runtime is enabled here.
 // VoxOneBT I2S input (ENCODER_1 connector): BCLK 41, WS 40, DATA IN 39.
 // Future TDA7719 shares the RTC I2C pins: SCL 7, SDA 8.
 
