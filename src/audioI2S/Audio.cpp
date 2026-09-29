@@ -15,6 +15,12 @@
 #include "aac_decoder/aac_decoder.h"
 #include "flac_decoder/flac_decoder.h"
 #include "../core/config.h"
+#if VOXONE_HAS_BT && VOXONE_PIN_MAP_COMPLETE && VOXONE_BT_I2S_RX_ENABLED
+#include "../core/source_manager.h"
+static inline bool radioCanUseI2S() { return radioI2SOutputEnabled(); }
+#else
+static inline bool radioCanUseI2S() { return true; }
+#endif
 
 #ifdef SDFATFS_USED
 fs::SDFATFS SD_SDFAT;
@@ -2340,11 +2346,12 @@ uint32_t Audio::stopSong() {
         log_w("Closing audio file");  // for debug
     }
     memset(m_outBuff, 0, sizeof(m_outBuff));     //Clear OutputBuffer
-    i2s_zero_dma_buffer((i2s_port_t) m_i2s_num);
+    if (radioCanUseI2S()) i2s_zero_dma_buffer((i2s_port_t) m_i2s_num);
     return pos;
 }
 //---------------------------------------------------------------------------------------------------------------------
 void Audio::playI2Sremains() { // returns true if all dma_buffs flushed
+    if (!radioCanUseI2S()) return;
     if(!getSampleRate()) setSampleRate(96000);
     if(!getChannels()) setChannels(2);
     if(getBitsPerSample() > 8) memset(m_outBuff,   0, sizeof(m_outBuff));     //Clear OutputBuffer (signed)
@@ -2364,7 +2371,7 @@ bool Audio::pauseResume() {
         retVal = true;
         if(!m_f_running) {
             memset(m_outBuff, 0, sizeof(m_outBuff));               //Clear OutputBuffer
-            i2s_zero_dma_buffer((i2s_port_t) m_i2s_num);
+            if (radioCanUseI2S()) i2s_zero_dma_buffer((i2s_port_t) m_i2s_num);
         }
     }
     return retVal;
@@ -4109,7 +4116,7 @@ int Audio::sendBytes(uint8_t* data, size_t len) {
     }
     if(ret < 0) { // Error, skip the frame...
         if(m_f_Log) if(m_codec == CODEC_M4A){log_i("begin not found"); return 1;}
-        i2s_zero_dma_buffer((i2s_port_t)m_i2s_num);
+        if (radioCanUseI2S()) i2s_zero_dma_buffer((i2s_port_t)m_i2s_num);
         if(!getChannels() && (ret == -2)) {
              ; // suppress errorcode MAINDATA_UNDERFLOW
         }
@@ -4401,13 +4408,13 @@ bool Audio::audioFileSeek(const float speed) {
     if((speed > 1.5f) || (speed < 0.25f)) return false;
 
     uint32_t srate = getSampleRate() * speed;
-    i2s_set_sample_rates((i2s_port_t)m_i2s_num, srate);
+    if (radioCanUseI2S()) i2s_set_sample_rates((i2s_port_t)m_i2s_num, srate);
     return true;
 }
 //---------------------------------------------------------------------------------------------------------------------
 bool Audio::setSampleRate(uint32_t sampRate) {
     if(!sampRate) sampRate = 16000; // fuse, if there is no value -> set default #209
-    i2s_set_sample_rates((i2s_port_t)m_i2s_num, sampRate);
+    if (radioCanUseI2S()) i2s_set_sample_rates((i2s_port_t)m_i2s_num, sampRate);
     m_sampleRate = sampRate;
     IIR_calculateCoefficients(m_gain0, m_gain1, m_gain2); // must be recalculated after each samplerate change
     return true;

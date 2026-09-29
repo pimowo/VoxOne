@@ -125,7 +125,8 @@ void loop() {
   #endif
   #if VOXONE_HAS_BT && VOXONE_PIN_MAP_COMPLETE && VOXONE_BT_I2S_RX_ENABLED
     if (!btLink.hasIncompleteOnlineSnapshot())
-      btAudioInput.loop(btLink.state(), millis());
+      btAudioInput.loop(btLink.state(), bluetoothSourceSelected(),
+                        player.getSampleRate(), millis());
   #endif
   if (network.status == CONNECTED || network.status==SDREADY) {
     player.loop();

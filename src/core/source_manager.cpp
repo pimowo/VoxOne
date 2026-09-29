@@ -3,6 +3,7 @@
 #if VOXONE_HAS_BT && VOXONE_PIN_MAP_COMPLETE
 
 #include "bt_link.h"
+#include "bt_audio_input.h"
 #include "bt_volume.h"
 #include "config.h"
 #include "display.h"
@@ -93,6 +94,20 @@ bool bluetoothSourceSelected() {
   portEXIT_CRITICAL(&sourceMux);
   return selected;
 }
+
+bool radioI2SOutputEnabled() {
+#if VOXONE_BT_I2S_RX_ENABLED
+  return !bluetoothSourceSelected() && btAudioInput.radioOutputReady();
+#else
+  return true;
+#endif
+}
+
+#if VOXONE_BT_I2S_RX_ENABLED
+void audio_process_extern(int16_t*, uint16_t, bool* continueI2S) {
+  *continueI2S = radioI2SOutputEnabled();
+}
+#endif
 
 bool bluetoothTransportAvailable() {
   portENTER_CRITICAL(&sourceMux);

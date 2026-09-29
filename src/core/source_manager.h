@@ -10,6 +10,7 @@ void sourceManagerBegin();
 void sourceManagerLoop();
 void cycleNextSource();
 bool bluetoothSourceSelected();
+bool radioI2SOutputEnabled();
 bool bluetoothTransportAvailable();
 bool sourceManagerStepBluetoothVolume(int8_t delta);
 void sourceManagerTransport(BtTransportInput input);
