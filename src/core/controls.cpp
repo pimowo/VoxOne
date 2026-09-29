@@ -561,10 +561,18 @@ void controlsEvent(bool toRight, int8_t volDelta) {
 
 void onBtnClick(int id) {
 #if VOXONE_HAS_BT && VOXONE_HAS_ENCODER && VOXONE_PIN_MAP_COMPLETE
-  if ((controlEvt_e)id == EVT_ENCBTNB && display.mode() == BT_TRANSPORT) {
-    display.putRequest(RESETIDLE);
-    sourceManagerTransport(BtTransportInput::Toggle);
-    return;
+  if ((controlEvt_e)id == EVT_ENCBTNB) {
+    switch (btEncoderClickAction(display.mode(), bluetoothSourceSelected())) {
+      case BtEncoderClickAction::BluetoothToggle:
+        if (display.mode() == BT_TRANSPORT) display.putRequest(RESETIDLE);
+        sourceManagerTransport(BtTransportInput::Toggle);
+        return;
+      case BtEncoderClickAction::None:
+        return;
+      case BtEncoderClickAction::RadioToggle:
+      case BtEncoderClickAction::Legacy:
+        break;
+    }
   }
 #endif
   bool passBnCenter = (controlEvt_e)id==EVT_BTNCENTER || (controlEvt_e)id==EVT_ENCBTNB || (controlEvt_e)id==EVT_ENC2BTNB;

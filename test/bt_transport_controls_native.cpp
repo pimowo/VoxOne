@@ -23,6 +23,33 @@ static displayMode_e doubleClick(displayMode_e mode, SourceManagerState& sources
   return PLAYER;
 }
 
+struct ClickCalls {
+  unsigned radioToggle = 0;
+  unsigned btPlay = 0;
+  unsigned btPause = 0;
+};
+
+static void click(displayMode_e mode, const SourceManagerState& sources,
+                  ClickCalls& calls) {
+  const bool bluetoothSelected = sources.active() == ActiveSource::Bluetooth;
+  switch (btEncoderClickAction(mode, bluetoothSelected)) {
+    case BtEncoderClickAction::RadioToggle:
+      ++calls.radioToggle;
+      break;
+    case BtEncoderClickAction::BluetoothToggle: {
+      DisplaySourceView view{};
+      sources.displayView(view);
+      switch (btTransportAction(BtTransportInput::Toggle, view)) {
+        case BtTransportAction::Play: ++calls.btPlay; break;
+        case BtTransportAction::Pause: ++calls.btPause; break;
+        default: break;
+      }
+      break;
+    }
+    default: break;
+  }
+}
+
 int main() {
   SourceManagerState sources;
   BtLinkState bt{};
@@ -74,4 +101,36 @@ int main() {
   assert(cycleCalls == 2 && sources.active() == ActiveSource::Bluetooth);
   assert(doubleClick(PLAYER, sources, bt, cycleCalls) == PLAYER);
   assert(cycleCalls == 3 && sources.active() == ActiveSource::Radio);
+
+  // Main encoder click controls only the active source on PLAYER.
+  ClickCalls calls;
+  click(PLAYER, sources, calls);
+  assert(calls.radioToggle == 1 && calls.btPlay == 0 && calls.btPause == 0);
+
+  sources.cycle(bt);
+  assert(sources.active() == ActiveSource::Bluetooth);
+  bt.playback = BtPlayback::Playing;
+  sources.observe(bt);
+  click(PLAYER, sources, calls);
+  assert(calls.radioToggle == 1 && calls.btPause == 1 && calls.btPlay == 0);
+
+  bt.playback = BtPlayback::Paused;
+  sources.observe(bt);
+  click(PLAYER, sources, calls);
+  assert(calls.radioToggle == 1 && calls.btPause == 1 && calls.btPlay == 1);
+
+  bt.playback = BtPlayback::Stopped;
+  sources.observe(bt);
+  click(PLAYER, sources, calls);
+  assert(calls.radioToggle == 1 && calls.btPause == 1 && calls.btPlay == 2);
+
+  click(BT_TRANSPORT, sources, calls);
+  assert(calls.radioToggle == 1 && calls.btPause == 1 && calls.btPlay == 3);
+
+  bt.connected = false;
+  sources.observe(bt);
+  sources.cycle(bt);  // Manually select BT while the phone is disconnected.
+  assert(sources.active() == ActiveSource::Bluetooth);
+  click(PLAYER, sources, calls);
+  assert(calls.radioToggle == 1 && calls.btPause == 1 && calls.btPlay == 3);
 }

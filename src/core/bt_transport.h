@@ -6,6 +6,18 @@
 enum class BtTransportInput : uint8_t { Previous, Next, Toggle };
 enum class BtTransportAction : uint8_t { None, Previous, Next, Play, Pause };
 enum class BtEncoderLongPressAction : uint8_t { None, Stations, Transport, Player };
+enum class BtEncoderClickAction : uint8_t { Legacy, RadioToggle, BluetoothToggle, None };
+
+inline BtEncoderClickAction btEncoderClickAction(displayMode_e mode,
+                                                 bool bluetoothSelected) {
+  if (mode == BT_TRANSPORT)
+    return bluetoothSelected ? BtEncoderClickAction::BluetoothToggle
+                             : BtEncoderClickAction::None;
+  if (mode == PLAYER)
+    return bluetoothSelected ? BtEncoderClickAction::BluetoothToggle
+                             : BtEncoderClickAction::RadioToggle;
+  return BtEncoderClickAction::Legacy;
+}
 
 inline bool btTransportDoubleClickCyclesSource(displayMode_e mode) {
   return mode == PLAYER;
