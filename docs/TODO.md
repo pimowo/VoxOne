@@ -79,7 +79,7 @@
 
 **Priorytet: główne drugie źródło SALON.**
 
-- Połączyć I2S PCM VoxOneBT → MAIN; uruchomić I2S RX w SALON i osobny I2S TX SALON → PCM5102A.
+- Fizycznie sprawdzić zachowanie diagnostycznego odbioru PCM VoxOneBT przy PAUSE/DISCONNECT oraz brak wpływu na WEB Radio przez I2S0; później skierować BT PCM do osobnego I2S TX SALON → PCM5102A.
 - Sprawdzić stany READY, CONNECTED, DISCONNECTED, PLAYING, PAUSED oraz metadata ARTIST, TITLE, ALBUM, SAMPLE_RATE i VOLUME.
 - Sprawdzić PLAY, PAUSE, NEXT, PREV, GET_STATUS i SET_VOLUME.
 - Sprawdzić wielokrotne connect/disconnect, reconnect, wcześniejszy HCI allocation assert, synchronizację Volume telefonu z VoxOne oraz metadata peer/AVRCP.

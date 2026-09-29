@@ -12,6 +12,7 @@
 #include "core/optionschecker.h"
 #include "core/timekeeper.h"
 #include "core/bt_link.h"
+#include "core/bt_audio_input.h"
 #ifdef USE_NEXTION
 #include "displays/nextion.h"
 #endif
@@ -81,6 +82,9 @@ void setup() {
   #if VOXONE_HAS_BT && VOXONE_PIN_MAP_COMPLETE
     btLink.begin();
   #endif
+  #if VOXONE_HAS_BT && VOXONE_PIN_MAP_COMPLETE && VOXONE_BT_I2S_RX_ENABLED
+    btAudioInput.begin();
+  #endif
   if (network.status != CONNECTED && network.status!=SDREADY) {
     netserver.begin();
     initControls();
@@ -113,6 +117,9 @@ void loop() {
   serialCli.loop();
   #if VOXONE_HAS_BT && VOXONE_PIN_MAP_COMPLETE
     btLink.loop();
+  #endif
+  #if VOXONE_HAS_BT && VOXONE_PIN_MAP_COMPLETE && VOXONE_BT_I2S_RX_ENABLED
+    btAudioInput.loop(btLink.state(), millis());
   #endif
   if (network.status == CONNECTED || network.status==SDREADY) {
     player.loop();

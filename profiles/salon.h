@@ -47,8 +47,11 @@
 #define VOXONE_BT_UART_RX_PIN 15
 #define VOXONE_BT_UART_TX_PIN 16
 
-// Reserved for later stages; no I2S RX runtime is enabled here.
 // VoxOneBT I2S input (ENCODER_1 connector): BCLK 41, WS 40, DATA IN 39.
+#define VOXONE_BT_I2S_RX_ENABLED 1
+#define VOXONE_BT_I2S_BCLK_PIN 41
+#define VOXONE_BT_I2S_WS_PIN 40
+#define VOXONE_BT_I2S_DATA_PIN 39
 // Future TDA7719 shares the RTC I2C pins: SCL 7, SDA 8.
 
 #endif

@@ -467,6 +467,8 @@ void Display::_swichMode(displayMode_e newmode) {
   if (newmode == VOL) {
 #if DSP_MODEL==DSP_ST7789_76
     timekeeper.waitAndReturnPlayer(DESK_UI_RETURN_TIMEOUT_S);
+#elif DSP_MODEL==DSP_ST7796
+    timekeeper.waitAndReturnPlayer(3);
 #endif
     #ifndef HIDE_IP
       _showDialog(LANG::const_DlgVolume);

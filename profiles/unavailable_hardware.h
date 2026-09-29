@@ -27,6 +27,18 @@
 #ifndef I2S_INTERNAL
 #define I2S_INTERNAL false
 #endif
+#ifndef VOXONE_BT_I2S_RX_ENABLED
+#define VOXONE_BT_I2S_RX_ENABLED 0
+#endif
+#ifndef VOXONE_BT_I2S_BCLK_PIN
+#define VOXONE_BT_I2S_BCLK_PIN 255
+#endif
+#ifndef VOXONE_BT_I2S_WS_PIN
+#define VOXONE_BT_I2S_WS_PIN 255
+#endif
+#ifndef VOXONE_BT_I2S_DATA_PIN
+#define VOXONE_BT_I2S_DATA_PIN 255
+#endif
 #ifndef VS1053_CS
 #define VS1053_CS 255
 #endif
