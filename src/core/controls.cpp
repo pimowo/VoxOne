@@ -532,6 +532,15 @@ void controlsEvent(bool toRight, int8_t volDelta) {
     display.putRequest(NEWMODE, PLAYER);
   }
   if (display.mode() != STATIONS) {
+#if VOXONE_HAS_BT && VOXONE_HAS_ENCODER && VOXONE_PIN_MAP_COMPLETE
+    if (bluetoothSourceSelected()) {
+      if (sourceManagerStepBluetoothVolume(volDelta != 0 ? volDelta : (toRight ? 1 : -1))) {
+        display.putRequest(NEWMODE, VOL);
+        display.putRequest(DRAWVOL);
+      }
+      return;
+    }
+#endif
     #if !defined(DUMMYDISPLAY) || defined(USE_NEXTION)
       display.putRequest(NEWMODE, VOL);
     #endif

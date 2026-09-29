@@ -1,6 +1,7 @@
 #include "bt_link_protocol.h"
 
 #include <string.h>
+#include <stdio.h>
 
 namespace {
 
@@ -78,6 +79,15 @@ bool BtLinkProtocol::play() { return sendTransport("PLAY"); }
 bool BtLinkProtocol::pause() { return sendTransport("PAUSE"); }
 bool BtLinkProtocol::next() { return sendTransport("NEXT"); }
 bool BtLinkProtocol::prev() { return sendTransport("PREV"); }
+
+bool BtLinkProtocol::setVolume(uint8_t absoluteVolume) {
+  if (absoluteVolume > 127 || !state_.runtimeAvailable ||
+      !state_.connected || statusOpen_) return false;
+  char command[16];
+  snprintf(command, sizeof(command), "SET_VOLUME %u", absoluteVolume);
+  send(command);
+  return true;
+}
 
 void BtLinkProtocol::ping(uint32_t nowMs) {
   send("PING");
@@ -242,6 +252,7 @@ bool BtLinkProtocol::handleLine(uint32_t nowMs) {
   if ((value = fieldValue(line_, "VOLUME ")) != nullptr) {
     if (!parseUnsigned(value, 127, number)) return false;
     state_.volume = static_cast<int16_t>(number);
+    ++state_.volumeRevision;
     return true;
   }
   if ((value = fieldValue(line_, "SAMPLE_RATE ")) != nullptr) {

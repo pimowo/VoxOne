@@ -20,6 +20,7 @@ struct BtLinkState {
   char title[193]{};
   char album[193]{};
   int16_t volume = -1;
+  uint32_t volumeRevision = 0;
   uint32_t sampleRate = 0;
 };
 
@@ -53,6 +54,7 @@ class BtLinkProtocol {
   bool pause();
   bool next();
   bool prev();
+  bool setVolume(uint8_t absoluteVolume);
 
   const BtLinkState& state() const { return state_; }
   const BtLinkDiagnostics& diagnostics() const { return diagnostics_; }

@@ -11,6 +11,7 @@ void sourceManagerLoop();
 void cycleNextSource();
 bool bluetoothSourceSelected();
 bool bluetoothTransportAvailable();
+bool sourceManagerStepBluetoothVolume(int8_t delta);
 void sourceManagerTransport(BtTransportInput input);
 #endif
 

@@ -75,6 +75,17 @@ int main() {
   assert(link.sent.size() == 6);
   assert(link.sent[2] == "PLAY" && link.sent[3] == "PAUSE");
   assert(link.sent[4] == "NEXT" && link.sent[5] == "PREV");
+  assert(!link.link.setVolume(128));
+  assert(link.link.setVolume(0));
+  assert(link.sent.back() == "SET_VOLUME 0");
+  assert(link.link.setVolume(127));
+  assert(link.sent.back() == "SET_VOLUME 127");
+  assert(link.link.state().volume == 73);  // Only a phone callback changes state.
+  const size_t sentBeforeVolumeCallback = link.sent.size();
+  const uint32_t revisionBeforeVolumeCallback = link.link.state().volumeRevision;
+  link.line("VOLUME 73", 39);
+  assert(link.link.state().volumeRevision == revisionBeforeVolumeCallback + 1);
+  assert(link.sent.size() == sentBeforeVolumeCallback);
 
   link.line("PAUSED", 40);
   assert(link.link.state().playback == BtPlayback::Paused);
@@ -132,6 +143,7 @@ int main() {
   assert(link.link.state().volume == -1);
   const size_t sentBeforeDisconnected = link.sent.size();
   assert(!link.link.play() && !link.link.pause());
+  assert(!link.link.setVolume(50));
   assert(!link.link.next() && !link.link.prev());
   assert(link.sent.size() == sentBeforeDisconnected);
   assert(link.link.state().sampleRate == 0);
@@ -163,6 +175,7 @@ int main() {
   fragmented.line("STATUS_BEGIN", 6);
   assert(fragmented.link.hasIncompleteOnlineSnapshot());
   assert(!fragmented.link.play());
+  assert(!fragmented.link.setVolume(50));
   assert(!fragmented.link.state().connected);
   assert(fragmented.link.state().sampleRate == 0);
   fragmented.line("CONNECTED", 7);

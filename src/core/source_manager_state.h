@@ -16,6 +16,11 @@ struct SourceUpdate {
   bool activeChanged = false;
   bool stationChanged = false;
   bool titleChanged = false;
+  bool volumeChanged = false;
+  bool btConnected = false;
+  bool btDisconnected = false;
+  bool volumeCallback = false;
+  uint8_t absoluteVolume = 0;
   SourceChangeReason reason = SourceChangeReason::None;
 };
 
@@ -45,6 +50,15 @@ class SourceManagerState {
     const bool connectedNow = bt.runtimeAvailable && bt.connected;
     const bool wasConnected = observedConnected_;
     observedConnected_ = connectedNow;
+
+    update.btConnected = !wasConnected && connectedNow;
+    update.btDisconnected = wasConnected && !connectedNow;
+    update.volumeCallback = wasConnected && connectedNow &&
+        bt.volume >= 0 && bt.volumeRevision != observedVolumeRevision_;
+    if (update.volumeCallback)
+      update.absoluteVolume = static_cast<uint8_t>(bt.volume);
+    observedVolumeRevision_ = bt.volumeRevision;
+    update.volumeChanged = update.volumeCallback;
 
     if (active_ == ActiveSource::Bluetooth && !bt.runtimeAvailable) {
       active_ = ActiveSource::Radio;
@@ -122,6 +136,7 @@ class SourceManagerState {
   bool observedConnected_ = false;
   bool connected_ = false;
   BtPlayback playback_ = BtPlayback::Stopped;
+  uint32_t observedVolumeRevision_ = 0;
   char peerName_[sizeof(BtLinkState::peerName)]{};
   char artist_[sizeof(BtLinkState::artist)]{};
   char title_[sizeof(BtLinkState::title)]{};

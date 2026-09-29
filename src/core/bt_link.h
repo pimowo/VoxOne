@@ -22,6 +22,7 @@ class BtLink {
   bool pause();
   bool next();
   bool prev();
+  bool setVolume(uint8_t absoluteVolume);
 
   const BtLinkState& state() const { return protocol_.state(); }
   const BtLinkDiagnostics& diagnostics() const { return protocol_.diagnostics(); }

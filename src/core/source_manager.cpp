@@ -3,6 +3,8 @@
 #if VOXONE_HAS_BT && VOXONE_PIN_MAP_COMPLETE
 
 #include "bt_link.h"
+#include "bt_volume.h"
+#include "config.h"
 #include "display.h"
 #include "player.h"
 #include "serialcli.h"
@@ -10,6 +12,7 @@
 
 namespace {
 SourceManagerState sourceState;
+BtVolumeSync volumeSync;
 portMUX_TYPE sourceMux = portMUX_INITIALIZER_UNLOCKED;
 
 // Only the display task writes this copy. Widgets copy its text in setText().
@@ -38,6 +41,7 @@ void refreshDisplay(const SourceUpdate& update) {
 #if VOXONE_HAS_DISPLAY
   if (update.stationChanged) display.putRequest(NEWSTATION);
   if (update.titleChanged) display.putRequest(NEWTITLE);
+  if (update.activeChanged || update.volumeChanged) display.putRequest(DRAWVOL);
 #else
   (void)update;
 #endif
@@ -53,6 +57,25 @@ void sourceManagerLoop() {
   const SourceUpdate update = sourceState.observe(btLink.state());
   const ActiveSource active = sourceState.active();
   portEXIT_CRITICAL(&sourceMux);
+  if (update.btDisconnected) volumeSync.disconnect();
+  if (update.btConnected) {
+    const uint8_t user = config.userVolume;
+    if (btLink.setVolume(btUserToAbsolute(user)))
+      volumeSync.connect(user, millis());
+  }
+  if (update.volumeCallback &&
+      volumeSync.acceptPhoneVolume(update.absoluteVolume, millis())) {
+    const uint8_t user = btAbsoluteToUser(update.absoluteVolume);
+    if (user != config.userVolume) player.setUserVol(user);
+  }
+  if (volumeSync.needsUserCommand(config.userVolume)) {
+    const uint8_t user = config.userVolume;
+    if (btLink.setVolume(btUserToAbsolute(user)))
+      volumeSync.sentUserCommand(user);
+  }
+  uint8_t retryAbsolute = 0;
+  if (volumeSync.retryDue(millis(), retryAbsolute))
+    btLink.setVolume(retryAbsolute);
   if (update.activeChanged)
     serialCli.printf("##[SOURCE]# active=%s reason=%s\n",
                      sourceName(active), sourceReason(update.reason));
@@ -76,6 +99,21 @@ bool bluetoothTransportAvailable() {
   const bool available = sourceState.canControlBluetooth();
   portEXIT_CRITICAL(&sourceMux);
   return available;
+}
+
+bool sourceManagerStepBluetoothVolume(int8_t delta) {
+  portENTER_CRITICAL(&sourceMux);
+  const bool available = sourceState.canControlBluetooth();
+  portEXIT_CRITICAL(&sourceMux);
+  if (!available || delta == 0) return false;
+  int next = static_cast<int>(config.userVolume) + delta;
+  if (next < 0) next = 0;
+  if (next > 100) next = 100;
+  if (next == config.userVolume) return false;
+  if (!btLink.setVolume(btUserToAbsolute(static_cast<uint8_t>(next)))) return false;
+  player.setUserVol(static_cast<uint8_t>(next));
+  volumeSync.sentUserCommand(static_cast<uint8_t>(next));
+  return true;
 }
 
 void sourceManagerTransport(BtTransportInput input) {
