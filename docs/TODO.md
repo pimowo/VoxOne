@@ -79,9 +79,11 @@
 
 **Priorytet: główne drugie źródło SALON.**
 
-- Fizycznie sprawdzić zachowanie diagnostycznego odbioru PCM VoxOneBT przy PAUSE/DISCONNECT oraz brak wpływu na WEB Radio przez I2S0; później skierować BT PCM do osobnego I2S TX SALON → PCM5102A.
-- Sprawdzić stany READY, CONNECTED, DISCONNECTED, PLAYING, PAUSED oraz metadata ARTIST, TITLE, ALBUM, SAMPLE_RATE i VOLUME.
-- Sprawdzić PLAY, PAUSE, NEXT, PREV, GET_STATUS i SET_VOLUME.
+- Przekierować BT PCM z I2S1 RX do I2S0 TX / PCM5102A i sprawdzić brak zakłóceń RADIO.
+- Dodać wspólne BT Volume oraz synchronizację Volume telefonu, VoxOne i audio output.
+- Dodać WWW/HA dla BT: status źródła, transport i Volume.
+- Dodać bezpieczne zarządzanie VoxOneBT: reset/recovery i aktualizację firmware.
+- Sprawdzić wielokrotne connect/disconnect, reconnect i wcześniejszy HCI allocation assert.
 - Sprawdzić wielokrotne connect/disconnect, reconnect, wcześniejszy HCI allocation assert, synchronizację Volume telefonu z VoxOne oraz metadata peer/AVRCP.
 
 ## 8. Source Manager

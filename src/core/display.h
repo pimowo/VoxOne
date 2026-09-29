@@ -1,11 +1,22 @@
 #ifndef display_h
 #define display_h
+#include <stdint.h>
 #include "common.h"
 
 enum class DisplaySourceKind : uint8_t { Radio, Bluetooth };
+enum class DisplayPlaybackState : uint8_t { Stopped, Playing, Paused };
+inline const char* displayPlaybackLabel(DisplayPlaybackState state) {
+    switch (state) {
+        case DisplayPlaybackState::Playing: return "PLAY";
+        case DisplayPlaybackState::Paused: return "PAUZA";
+        case DisplayPlaybackState::Stopped: return "STOP";
+    }
+    return "STOP";
+}
 struct DisplaySourceView {
     DisplaySourceKind kind;
     bool connected;
+    DisplayPlaybackState playback;
     const char* peerName;
     const char* artist;
     const char* title;
@@ -70,6 +81,9 @@ class Display {
     TextWidget *_bootstring, *_volip, *_voltxt, *_rssi, *_bitrate;
 #if DSP_MODEL==DSP_ST7796
     TextWidget *_salonRssiLabel;
+    TextWidget *_salonPlayback, *_btTransportPlayback;
+    ScrollWidget *_btTransportArtist, *_btTransportTitle;
+    Page *_btTransportPage;
 #endif
 #if DSP_MODEL==DSP_ST7789_76 || DSP_MODEL==DSP_ST7796
     TextWidget *_plheader, *_plcounter, *_plplaying;
@@ -97,6 +111,9 @@ class Display {
     void _bootScreen();
     void _layoutChange(bool played);
     void _setRSSI(int rssi);
+#if DSP_MODEL==DSP_ST7796
+    void _updatePlaybackStatus();
+#endif
 };
 
 #else

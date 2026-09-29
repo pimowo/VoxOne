@@ -13,9 +13,8 @@ long encOldPosition  = 0;
 long enc2OldPosition  = 0;
 int lpId = -1;
 
-#if VOXONE_HAS_BT && VOXONE_HAS_ENCODER
-// Implemented by Source Manager when the Bluetooth runtime is available.
-extern void cycleNextSource() __attribute__((weak));
+#if VOXONE_HAS_BT && VOXONE_HAS_ENCODER && VOXONE_PIN_MAP_COMPLETE
+#include "source_manager.h"
 #endif
 
 #if DSP_MODEL==DSP_DUMMY
@@ -204,6 +203,13 @@ void encodersLoop(yoEncoder *enc, bool first){
   int8_t encoderDelta = enc->encoderChanged();
   if (encoderDelta!=0)
   {
+#if VOXONE_HAS_BT && VOXONE_HAS_ENCODER && VOXONE_PIN_MAP_COMPLETE
+    if (first && display.mode() == BT_TRANSPORT) {
+      display.putRequest(RESETIDLE);
+      sourceManagerTransport(btTransportInputForRotation(encoderDelta));
+      return;
+    }
+#endif
     uint8_t encBtnState = HIGH;
     if(first){
 #if ENC_BTNB!=255
@@ -412,8 +418,33 @@ void onBtnLongPressStart(int id) {
         lpId = id;
         break;
       }
-    case EVT_BTNCENTER:
+    case EVT_BTNCENTER: {
+#       if defined(DUMMYDISPLAY) && !defined(USE_NEXTION)
+        break;
+#       endif
+        display.putRequest(NEWMODE, display.mode() == PLAYER ? STATIONS : PLAYER);
+        break;
+      }
     case EVT_ENCBTNB: {
+#if VOXONE_HAS_BT && VOXONE_HAS_ENCODER && VOXONE_PIN_MAP_COMPLETE && DSP_MODEL==DSP_ST7796
+        if (display.mode() == PLAYER || display.mode() == BT_TRANSPORT) {
+          DisplaySourceView source{};
+          if (!getDisplaySourceView || !getDisplaySourceView(source)) break;
+          switch (btEncoderLongPressAction(display.mode(), source)) {
+            case BtEncoderLongPressAction::Stations:
+              display.putRequest(NEWMODE, STATIONS);
+              break;
+            case BtEncoderLongPressAction::Transport:
+              display.putRequest(NEWMODE, BT_TRANSPORT);
+              break;
+            case BtEncoderLongPressAction::Player:
+              display.putRequest(NEWMODE, PLAYER);
+              break;
+            case BtEncoderLongPressAction::None: break;
+          }
+          break;
+        }
+#endif
 #       if defined(DUMMYDISPLAY) && !defined(USE_NEXTION)
         break;
 #       endif
@@ -493,6 +524,9 @@ void onBtnDuringLongPress(int id) {
 }
 
 void controlsEvent(bool toRight, int8_t volDelta) {
+#if VOXONE_HAS_BT && VOXONE_HAS_ENCODER && VOXONE_PIN_MAP_COMPLETE
+  if (display.mode() == BT_TRANSPORT) return;
+#endif
   if (display.mode() == NUMBERS) {
     display.numOfNextStation = 0;
     display.putRequest(NEWMODE, PLAYER);
@@ -526,6 +560,13 @@ void controlsEvent(bool toRight, int8_t volDelta) {
 }
 
 void onBtnClick(int id) {
+#if VOXONE_HAS_BT && VOXONE_HAS_ENCODER && VOXONE_PIN_MAP_COMPLETE
+  if ((controlEvt_e)id == EVT_ENCBTNB && display.mode() == BT_TRANSPORT) {
+    display.putRequest(RESETIDLE);
+    sourceManagerTransport(BtTransportInput::Toggle);
+    return;
+  }
+#endif
   bool passBnCenter = (controlEvt_e)id==EVT_BTNCENTER || (controlEvt_e)id==EVT_ENCBTNB || (controlEvt_e)id==EVT_ENC2BTNB;
   controlEvt_e btnid = static_cast<controlEvt_e>(id);
   pm.on_btn_click(btnid);
@@ -607,8 +648,9 @@ void onBtnClick(int id) {
 }
 
 void onBtnDoubleClick(int id) {
-#if VOXONE_HAS_BT && VOXONE_HAS_ENCODER
-  if ((controlEvt_e)id == EVT_ENCBTNB && cycleNextSource) {
+#if VOXONE_HAS_BT && VOXONE_HAS_ENCODER && VOXONE_PIN_MAP_COMPLETE
+  if ((controlEvt_e)id == EVT_ENCBTNB) {
+    if (!btTransportDoubleClickCyclesSource(display.mode())) return;
     cycleNextSource();
     display.putRequest(NEWMODE, PLAYER);
     return;
@@ -626,7 +668,7 @@ void onBtnDoubleClick(int id) {
         break;
       }
     case EVT_BTNCENTER:
-#if !(VOXONE_HAS_BT && VOXONE_HAS_ENCODER)
+#if !(VOXONE_HAS_BT && VOXONE_HAS_ENCODER && VOXONE_PIN_MAP_COMPLETE)
     case EVT_ENCBTNB:
 #endif
     case EVT_ENC2BTNB: {
@@ -634,9 +676,8 @@ void onBtnDoubleClick(int id) {
         onBtnClick(EVT_BTNMODE);
         break;
       }
-#if VOXONE_HAS_BT && VOXONE_HAS_ENCODER
+#if VOXONE_HAS_BT && VOXONE_HAS_ENCODER && VOXONE_PIN_MAP_COMPLETE
     case EVT_ENCBTNB: {
-        // Source Manager is not active yet; keep the radio state unchanged.
         break;
       }
 #endif

@@ -12,6 +12,7 @@
 #include "rtcsupport.h"
 #include "volume_map.h"
 #include "mqtt_config.h"
+#include "ui_timeout_config.h"
 #include "ap_wifi_recovery.h"
 #include "../displays/tools/l10n.h"
 #ifdef USE_SD
@@ -75,6 +76,7 @@ bool Config::_isFSempty() {
 void Config::init() {
   EEPROM.begin(EEPROM_SIZE);
   mqttConfig();
+  uiTimeoutConfig();
   sdResumePos = 0;
   screensaverTicks = 0;
   screensaverPlayingTicks = 0;
@@ -535,6 +537,7 @@ void Config::resetSystem(const char *val, uint8_t clientId){
     saveValue(&store.screensaverPlayingTimeout, (uint16_t)5);
     saveValue(&store.screensaverPlayingBlank, false);
     display.putRequest(NEWMODE, CLEAR); display.putRequest(NEWMODE, PLAYER);
+    uiTimeoutReset();
     netserver.requestOnChange(GETSCREEN, clientId);
     return;
   }

@@ -85,13 +85,28 @@ class SourceManagerState {
     return update;
   }
 
-  void displayView(DisplaySourceView& view) const {
+  void displayView(DisplaySourceView& view, bool radioPlaying = false) const {
     view.kind = active_ == ActiveSource::Bluetooth
                     ? DisplaySourceKind::Bluetooth : DisplaySourceKind::Radio;
     view.connected = active_ == ActiveSource::Bluetooth && connected_;
+    if (active_ == ActiveSource::Radio)
+      view.playback = radioPlaying ? DisplayPlaybackState::Playing
+                                   : DisplayPlaybackState::Stopped;
+    else if (!connected_)
+      view.playback = DisplayPlaybackState::Stopped;
+    else if (playback_ == BtPlayback::Playing)
+      view.playback = DisplayPlaybackState::Playing;
+    else if (playback_ == BtPlayback::Paused)
+      view.playback = DisplayPlaybackState::Paused;
+    else
+      view.playback = DisplayPlaybackState::Stopped;
     view.peerName = active_ == ActiveSource::Bluetooth ? peerName_ : "";
     view.artist = active_ == ActiveSource::Bluetooth ? artist_ : "";
     view.title = active_ == ActiveSource::Bluetooth ? title_ : "";
+  }
+
+  bool canControlBluetooth() const {
+    return active_ == ActiveSource::Bluetooth && connected_;
   }
 
  private:

@@ -30,6 +30,7 @@
 #include "commandhandler.h"
 #include "volume_map.h"
 #include "timekeeper.h"
+#include "ui_timeout_config.h"
 #include "rtcsupport.h"
 #include "../displays/dspcore.h"
 #include "../displays/widgets/widgetsconfig.h" //BitrateFormat
@@ -1545,7 +1546,7 @@ void NetServer::processQueue(){
                                   config.ipToStr(WiFi.localIP()),
                                   config.store.abuff);
                                   break;
-      case GETSCREEN:     sprintf (wsBuf, "{\"flip\":%d,\"canFlip\":%d,\"canBrightness\":%d,\"br\":%d,\"nump\":%d,\"tsf\":%d,\"tsd\":%d,\"dspon\":%d,\"con\":%d,\"scre\":%d,\"scrt\":%d,\"scrb\":%d,\"scrpe\":%d,\"scrpt\":%d,\"scrpb\":%d}",
+      case GETSCREEN:     snprintf (wsBuf, sizeof(wsBuf), "{\"flip\":%d,\"canFlip\":%d,\"canBrightness\":%d,\"br\":%d,\"nump\":%d,\"tsf\":%d,\"tsd\":%d,\"dspon\":%d,\"con\":%d,\"scre\":%d,\"scrt\":%d,\"scrb\":%d,\"scrpe\":%d,\"scrpt\":%d,\"scrpb\":%d,\"stationListTimeout\":%u,\"btTransportTimeout\":%u,\"canBtTransport\":%d}",
                                   config.store.flipscreen,
                                   voxone::activeProfile.display != voxone::Display::None,
                                   BRIGHTNESS_PIN != 255,
@@ -1560,7 +1561,10 @@ void NetServer::processQueue(){
                                   config.store.screensaverBlank,
                                   config.store.screensaverPlayingEnabled,
                                   config.store.screensaverPlayingTimeout,
-                                  config.store.screensaverPlayingBlank);
+                                  config.store.screensaverPlayingBlank,
+                                  uiTimeoutConfig().stationListSeconds,
+                                  uiTimeoutConfig().btTransportSeconds,
+                                  VOXONE_HAS_BT && DSP_MODEL == DSP_ST7796);
                                   break;
       case GETTIMEZONE:   sprintf (wsBuf, "{\"sntp1\":\"%s\",\"sntp2\":\"%s\", \"timeint\":%d,\"timeintrtc\":%d}",
                                   config.store.sntp1, 

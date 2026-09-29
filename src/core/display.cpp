@@ -11,6 +11,7 @@
 #include "network.h"
 #include "netserver.h"
 #include "timekeeper.h"
+#include "ui_timeout_config.h"
 #include "../pluginsManager/pluginsManager.h"
 #include "../displays/dspcore.h"
 #include "../displays/widgets/widgets.h"
@@ -249,6 +250,7 @@ void Display::_buildPager(){
 #if DSP_MODEL==DSP_ST7796
   _salonRssiLabel = new TextWidget(rssiLabelConf, 8, config.theme.rssi, config.theme.background);
   _salonRssiLabel->setText("RSSI");
+  _salonPlayback = new TextWidget(salonPlaybackConf, 8, config.theme.meta, config.theme.background);
 #endif
 #if DSP_MODEL==DSP_ST7789_76
   _deskRssi = new TextWidget(deskRssiConf, 16, config.theme.rssi, config.theme.background);
@@ -291,6 +293,7 @@ void Display::_buildPager(){
   pages[PG_PLAYER]->addWidget(_clock);
 #if DSP_MODEL==DSP_ST7796
   if(_voltxt) pages[PG_PLAYER]->addWidget(_voltxt);
+  pages[PG_PLAYER]->addWidget(_salonPlayback);
   if(_salonRssiLabel) pages[PG_PLAYER]->addWidget(_salonRssiLabel);
   if(_rssi) pages[PG_PLAYER]->addWidget(_rssi);
   if(_heapbar) pages[PG_PLAYER]->addWidget(_heapbar);
@@ -330,7 +333,29 @@ void Display::_buildPager(){
   pages[PG_PLAYLIST]->addWidget(_plcurrent);
   pages[PG_PLAYLIST]->addWidget(_plwidget);
 #endif
+  #if DSP_MODEL==DSP_ST7796
+  _btTransportPage = new Page();
+  _btTransportArtist = new ScrollWidget("*", metaConf, config.theme.meta, config.theme.background);
+  _btTransportTitle = new ScrollWidget("*", title1Conf, config.theme.title1, config.theme.background);
+  _btTransportPage->addWidget(_btTransportArtist);
+  _btTransportPage->addWidget(_btTransportTitle);
+  TextWidget* btPrev = new TextWidget(btTransportPrevConf, 4, config.theme.meta, config.theme.background);
+  btPrev->setText("<");
+  _btTransportPage->addWidget(btPrev);
+  _btTransportPage->addWidget(new FillWidget(btNoteHeadConf, config.theme.meta));
+  _btTransportPage->addWidget(new FillWidget(btNoteStemConf, config.theme.meta));
+  _btTransportPage->addWidget(new FillWidget(btNoteFlagConf, config.theme.meta));
+  _btTransportPage->addWidget(new FillWidget(btNoteFlagEndConf, config.theme.meta));
+  TextWidget* btNext = new TextWidget(btTransportNextConf, 4, config.theme.meta, config.theme.background);
+  btNext->setText(">");
+  _btTransportPage->addWidget(btNext);
+  _btTransportPlayback = new TextWidget(btTransportPlaybackConf, 8, config.theme.meta, config.theme.background);
+  _btTransportPage->addWidget(_btTransportPlayback);
+  #endif
   for(const auto& p: pages) _pager->addPage(p);
+  #if DSP_MODEL==DSP_ST7796
+  _pager->addPage(_btTransportPage);
+  #endif
 }
 
 void Display::_apScreen() {
@@ -398,6 +423,9 @@ void Display::_start() {
   _pager->setPage(pages[PG_PLAYER]);
   _volume();
   _station();
+#if DSP_MODEL==DSP_ST7796
+  _updatePlaybackStatus();
+#endif
   _time(false);
   _bootStep = 2;
   pm.on_display_player();
@@ -419,6 +447,14 @@ void Display::_swichMode(displayMode_e newmode) {
     nextion.putRequest({NEWMODE, newmode});
   #endif
   if (newmode == _mode || (network.status != CONNECTED && network.status != SDREADY)) return;
+#if DSP_MODEL==DSP_ST7796
+  if (newmode == BT_TRANSPORT) {
+    DisplaySourceView source{};
+    if (!getDisplaySourceView || !getDisplaySourceView(source) ||
+        source.kind != DisplaySourceKind::Bluetooth || !source.connected) return;
+  }
+#endif
+  if (_mode == STATIONS || _mode == BT_TRANSPORT) timekeeper.cancelReturnPlayer();
   _mode = newmode;
 #if DSP_MODEL==DSP_ST7789_76
   if(_volip) _volip->lock(newmode == PLAYER);
@@ -448,6 +484,9 @@ void Display::_swichMode(displayMode_e newmode) {
     _nums->setText("");
     config.isScreensaver = false;
     _pager->setPage(pages[PG_PLAYER]);
+#if DSP_MODEL==DSP_ST7796
+    _updatePlaybackStatus();
+#endif
     config.setDspOn(config.store.dspon, false);
     pm.on_display_player();
   }
@@ -489,6 +528,13 @@ void Display::_swichMode(displayMode_e newmode) {
     currentPlItem = config.lastStation();
     _drawPlaylist();
   }
+#if DSP_MODEL==DSP_ST7796
+  if (newmode == BT_TRANSPORT) {
+    timekeeper.waitAndReturnPlayerForMode(BT_TRANSPORT, uiTimeoutConfig().btTransportSeconds);
+    _title();
+    _pager->setPage(_btTransportPage);
+  }
+#endif
   
 }
 
@@ -515,7 +561,7 @@ void Display::_drawPlaylist() {
   _plwidget->drawPlaylist(currentPlItem);
 #endif
 #if DSP_MODEL==DSP_ST7789_76 || DSP_MODEL==DSP_ST7796
-  timekeeper.waitAndReturnPlayer(DESK_UI_RETURN_TIMEOUT_S);
+  timekeeper.waitAndReturnPlayerForMode(STATIONS, uiTimeoutConfig().stationListSeconds);
 #else
   timekeeper.waitAndReturnPlayer(30);
 #endif
@@ -582,6 +628,20 @@ void Display::_layoutChange(bool played){
   }
 }
 
+#if DSP_MODEL==DSP_ST7796
+void Display::_updatePlaybackStatus() {
+  DisplaySourceView source{};
+  const DisplayPlaybackState playback =
+      getDisplaySourceView && getDisplaySourceView(source)
+          ? source.playback
+          : (player.isRunning() ? DisplayPlaybackState::Playing
+                                : DisplayPlaybackState::Stopped);
+  const char* label = displayPlaybackLabel(playback);
+  _salonPlayback->setText(label);
+  _btTransportPlayback->setText(label);
+}
+#endif
+
 void Display::loop() {
   if(_bootStep==0) {
     _pager->begin();
@@ -611,6 +671,12 @@ void Display::loop() {
           }
           break;
         }
+        case RESETIDLE:
+          if (_mode == BT_TRANSPORT)
+            timekeeper.waitAndReturnPlayerForMode(BT_TRANSPORT, uiTimeoutConfig().btTransportSeconds);
+          else if (_mode == STATIONS)
+            timekeeper.waitAndReturnPlayerForMode(STATIONS, uiTimeoutConfig().stationListSeconds);
+          break;
         case CLOSEPLAYLIST: player.sendCommand({PR_PLAY, request.payload}); break;
         case CLOCK: 
           if(_mode==PLAYER || _mode==SCREENSAVER) _time(request.payload==1); 
@@ -682,6 +748,7 @@ void Display::loop() {
           _layoutChange(true);
 #if DSP_MODEL==DSP_ST7796
           _station();
+          _updatePlaybackStatus();
 #endif
 #if DSP_MODEL==DSP_ST7789_76 || DSP_MODEL==DSP_ST7796
           if(_mode==STATIONS && _plplaying) _plplaying->setText(currentPlItem == config.lastStation() ? "GRA" : "");
@@ -691,6 +758,7 @@ void Display::loop() {
           _layoutChange(false);
 #if DSP_MODEL==DSP_ST7796
           _station();
+          _updatePlaybackStatus();
 #endif
 #if DSP_MODEL==DSP_ST7789_76 || DSP_MODEL==DSP_ST7796
           if(_mode==STATIONS && _plplaying) _plplaying->setText("");
@@ -844,10 +912,13 @@ static bool deskArtistIsStation(const char* artist, const char* station) {
 
 void Display::_title() {
 #if DSP_MODEL==DSP_ST7796
+  _updatePlaybackStatus();
   DisplaySourceView source{};
   if(getDisplaySourceView && getDisplaySourceView(source) && source.kind == DisplaySourceKind::Bluetooth) {
     _title1->setText(source.connected ? (source.artist ? source.artist : "") : "Oczekuję na połączenie");
     if(_title2) _title2->setText(source.connected && source.title ? source.title : "");
+    _btTransportArtist->setText(source.connected && source.artist ? source.artist : "");
+    _btTransportTitle->setText(source.connected && source.title ? source.title : "");
     return;
   }
 #endif

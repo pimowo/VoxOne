@@ -10,6 +10,7 @@
 #include "controls.h"
 #include "serialcli.h"
 #include "volume_map.h"
+#include "ui_timeout_config.h"
 
 #if DSP_MODEL==DSP_DUMMY
 #define DUMMYDISPLAY
@@ -104,6 +105,17 @@ bool CommandHandler::exec(const char *command, const char *value, uint32_t cid) 
   
   if (strEquals(command, "getsystem"))  { netserver.requestOnChange(GETSYSTEM, cid); return true; }
   if (strEquals(command, "getscreen"))  { netserver.requestOnChange(GETSCREEN, cid); return true; }
+  if (strEquals(command, "stationlisttimeout") || strEquals(command, "bttransporttimeout")) {
+    uint8_t seconds;
+    if (!parseUiTimeout(value, seconds)) return false;
+    UiTimeoutSettings settings = uiTimeoutConfig();
+    if (strEquals(command, "stationlisttimeout")) settings.stationListSeconds = seconds;
+    else settings.btTransportSeconds = seconds;
+    if (!uiTimeoutSave(settings)) return false;
+    display.putRequest(RESETIDLE);
+    netserver.requestOnChange(GETSCREEN, 0);
+    return true;
+  }
   if (strEquals(command, "gettimezone")){ netserver.requestOnChange(GETTIMEZONE, cid); return true; }
   if (strEquals(command, "getcontrols")){ netserver.requestOnChange(GETCONTROLS, cid); return true; }
   if (strEquals(command, "getactive"))  { netserver.requestOnChange(GETACTIVE, cid); return true; }

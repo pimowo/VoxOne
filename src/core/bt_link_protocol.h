@@ -49,6 +49,10 @@ class BtLinkProtocol {
   void requestStatus(uint32_t nowMs);
   void requestDiag();
   void ping(uint32_t nowMs);
+  bool play();
+  bool pause();
+  bool next();
+  bool prev();
 
   const BtLinkState& state() const { return state_; }
   const BtLinkDiagnostics& diagnostics() const { return diagnostics_; }
@@ -61,6 +65,7 @@ class BtLinkProtocol {
   void clearSession();
   void goOffline();
   void send(const char* command);
+  bool sendTransport(const char* command);
   void notify(BtLinkEvent event);
 
   SendCommand sendCommand_;

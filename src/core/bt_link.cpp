@@ -51,6 +51,11 @@ void BtLink::ping() {
   if (started_) protocol_.ping(millis());
 }
 
+bool BtLink::play() { return started_ && protocol_.play(); }
+bool BtLink::pause() { return started_ && protocol_.pause(); }
+bool BtLink::next() { return started_ && protocol_.next(); }
+bool BtLink::prev() { return started_ && protocol_.prev(); }
+
 void BtLink::sendCommand(void* context, const char* command) {
   BtLink* link = static_cast<BtLink*>(context);
   link->serial_.println(command);

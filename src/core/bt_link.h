@@ -18,6 +18,10 @@ class BtLink {
   void requestStatus();
   void requestDiag();
   void ping();
+  bool play();
+  bool pause();
+  bool next();
+  bool prev();
 
   const BtLinkState& state() const { return protocol_.state(); }
   const BtLinkDiagnostics& diagnostics() const { return protocol_.diagnostics(); }

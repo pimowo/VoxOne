@@ -68,6 +68,17 @@ void BtLinkProtocol::requestStatus(uint32_t nowMs) {
 
 void BtLinkProtocol::requestDiag() { send("GET_DIAG"); }
 
+bool BtLinkProtocol::sendTransport(const char* command) {
+  if (!state_.runtimeAvailable || !state_.connected || statusOpen_) return false;
+  send(command);
+  return true;
+}
+
+bool BtLinkProtocol::play() { return sendTransport("PLAY"); }
+bool BtLinkProtocol::pause() { return sendTransport("PAUSE"); }
+bool BtLinkProtocol::next() { return sendTransport("NEXT"); }
+bool BtLinkProtocol::prev() { return sendTransport("PREV"); }
+
 void BtLinkProtocol::ping(uint32_t nowMs) {
   send("PING");
   lastPingMs_ = nowMs;

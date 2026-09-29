@@ -68,6 +68,13 @@ int main() {
   assert(link.link.state().sampleRate == 44100);
   assert(link.events.size() == 1 && link.events[0] == BtLinkEvent::Online);
   assert(link.sent.size() == 2 && link.sent[1] == "GET_DIAG");
+  assert(link.link.play());
+  assert(link.link.pause());
+  assert(link.link.next());
+  assert(link.link.prev());
+  assert(link.sent.size() == 6);
+  assert(link.sent[2] == "PLAY" && link.sent[3] == "PAUSE");
+  assert(link.sent[4] == "NEXT" && link.sent[5] == "PREV");
 
   link.line("PAUSED", 40);
   assert(link.link.state().playback == BtPlayback::Paused);
@@ -123,6 +130,10 @@ int main() {
   assert(link.link.state().peerName[0] == '\0');
   assert(link.link.state().artist[0] == '\0');
   assert(link.link.state().volume == -1);
+  const size_t sentBeforeDisconnected = link.sent.size();
+  assert(!link.link.play() && !link.link.pause());
+  assert(!link.link.next() && !link.link.prev());
+  assert(link.sent.size() == sentBeforeDisconnected);
   assert(link.link.state().sampleRate == 0);
   assert(link.events.back() == BtLinkEvent::Online);
 
@@ -151,6 +162,7 @@ int main() {
   assert(!fragmented.link.hasIncompleteOnlineSnapshot());
   fragmented.line("STATUS_BEGIN", 6);
   assert(fragmented.link.hasIncompleteOnlineSnapshot());
+  assert(!fragmented.link.play());
   assert(!fragmented.link.state().connected);
   assert(fragmented.link.state().sampleRate == 0);
   fragmented.line("CONNECTED", 7);

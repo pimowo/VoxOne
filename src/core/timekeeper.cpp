@@ -18,6 +18,7 @@
 #define SYNC_TASK_PRIORITY    3
 
 namespace {
+portMUX_TYPE returnPlayerMux = portMUX_INITIALIZER_UNLOCKED;
 constexpr uint32_t secondsToMillis(uint32_t seconds) {
   return seconds > UINT32_MAX / 1000UL ? UINT32_MAX : seconds * 1000UL;
 }
@@ -87,9 +88,6 @@ TimeKeeper::TimeKeeper(){
   successfulSyncCount = 0;
   forceRtcSync = true;
   restartNtp = false;
-  _returnPlayerStartedAt = 0;
-  _returnPlayerDelayMs = 0;
-  _returnPlayerPending = false;
   for(uint8_t i = 0; i < static_cast<uint8_t>(DelayedActionSlot::COUNT); i++){
     _delayedActions[i] = {0, 0, nullptr};
   }
@@ -177,13 +175,25 @@ bool TimeKeeper::loop1(){ // core1 (player)
 }
 
 void TimeKeeper::waitAndReturnPlayer(uint32_t time_s){
-  _returnPlayerStartedAt = millis();
-  _returnPlayerDelayMs = secondsToMillis(time_s);
-  _returnPlayerPending = true;
+  portENTER_CRITICAL(&returnPlayerMux);
+  _returnPlayerTimer.arm(millis(), time_s);
+  portEXIT_CRITICAL(&returnPlayerMux);
+}
+void TimeKeeper::waitAndReturnPlayerForMode(displayMode_e mode, uint32_t time_s){
+  portENTER_CRITICAL(&returnPlayerMux);
+  _returnPlayerTimer.armForMode(millis(), time_s, mode);
+  portEXIT_CRITICAL(&returnPlayerMux);
+}
+void TimeKeeper::cancelReturnPlayer(){
+  portENTER_CRITICAL(&returnPlayerMux);
+  _returnPlayerTimer.cancel();
+  portEXIT_CRITICAL(&returnPlayerMux);
 }
 void TimeKeeper::_returnPlayer(){
-  if(_returnPlayerPending && timeoutElapsed(millis(), _returnPlayerStartedAt, _returnPlayerDelayMs)){
-    _returnPlayerPending = false;
+  portENTER_CRITICAL(&returnPlayerMux);
+  const bool due = _returnPlayerTimer.poll(millis(), display.mode());
+  portEXIT_CRITICAL(&returnPlayerMux);
+  if(due){
     display.putRequest(NEWMODE, PLAYER);
   }
 }

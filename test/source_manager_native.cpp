@@ -1,4 +1,5 @@
 #include "../src/core/source_manager_state.h"
+#include "../src/core/bt_transport.h"
 
 #include <cassert>
 #include <cstring>
@@ -12,6 +13,12 @@ int main() {
   assert(sources.active() == ActiveSource::Radio);
   sources.displayView(view);
   assert(view.kind == DisplaySourceKind::Radio);
+  assert(view.playback == DisplayPlaybackState::Stopped);
+  assert(std::strcmp(displayPlaybackLabel(view.playback), "STOP") == 0);
+  sources.displayView(view, true);
+  assert(view.playback == DisplayPlaybackState::Playing);
+  assert(std::strcmp(displayPlaybackLabel(view.playback), "PLAY") == 0);
+  assert(btTransportAction(BtTransportInput::Toggle, view) == BtTransportAction::None);
 
   // B: an online module without a phone does not auto-select BT.
   assert(!sources.cycle(bt).activeChanged);
@@ -34,6 +41,13 @@ int main() {
   assert(std::strcmp(view.peerName, "Telefon") == 0);
   assert(std::strcmp(view.artist, "Żółć") == 0);
   assert(std::strcmp(view.title, "Utwór") == 0);
+  assert(view.playback == DisplayPlaybackState::Playing);
+  assert(std::strcmp(displayPlaybackLabel(view.playback), "PLAY") == 0);
+  assert(btTransportInputForRotation(-1) == BtTransportInput::Previous);
+  assert(btTransportInputForRotation(1) == BtTransportInput::Next);
+  assert(btTransportAction(BtTransportInput::Previous, view) == BtTransportAction::Previous);
+  assert(btTransportAction(BtTransportInput::Next, view) == BtTransportAction::Next);
+  assert(btTransportAction(BtTransportInput::Toggle, view) == BtTransportAction::Pause);
 
   // D: manual BT -> RADIO stays RADIO while the phone remains connected.
   update = sources.cycle(bt);
@@ -71,6 +85,16 @@ int main() {
   bt.playback = BtPlayback::Paused;
   update = sources.observe(bt);
   assert(!update.stationChanged && update.titleChanged);
+  sources.displayView(view);
+  assert(view.playback == DisplayPlaybackState::Paused);
+  assert(std::strcmp(displayPlaybackLabel(view.playback), "PAUZA") == 0);
+  assert(btTransportAction(BtTransportInput::Toggle, view) == BtTransportAction::Play);
+  bt.playback = BtPlayback::Stopped;
+  update = sources.observe(bt);
+  assert(update.titleChanged);
+  sources.displayView(view);
+  assert(view.playback == DisplayPlaybackState::Stopped);
+  assert(btTransportAction(BtTransportInput::Toggle, view) == BtTransportAction::Play);
 
   // G: disconnect while BT is active returns to RADIO.
   bt.connected = false;
@@ -95,6 +119,9 @@ int main() {
   }
   sources.displayView(view);
   assert(view.kind == DisplaySourceKind::Bluetooth && !view.connected);
+  assert(view.playback == DisplayPlaybackState::Stopped);
+  assert(btTransportAction(BtTransportInput::Toggle, view) == BtTransportAction::None);
+  assert(btTransportAction(BtTransportInput::Next, view) == BtTransportAction::None);
 
   // I: loss of the module has priority over phone disconnect.
   bt.runtimeAvailable = false;

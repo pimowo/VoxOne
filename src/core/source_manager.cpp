@@ -4,6 +4,7 @@
 
 #include "bt_link.h"
 #include "display.h"
+#include "player.h"
 #include "serialcli.h"
 #include "source_manager_state.h"
 
@@ -55,7 +56,41 @@ void sourceManagerLoop() {
   if (update.activeChanged)
     serialCli.printf("##[SOURCE]# active=%s reason=%s\n",
                      sourceName(active), sourceReason(update.reason));
+#if VOXONE_HAS_DISPLAY
+  if (update.activeChanged && active == ActiveSource::Radio &&
+      display.mode() == BT_TRANSPORT)
+    display.putRequest(NEWMODE, PLAYER);
+#endif
   refreshDisplay(update);
+}
+
+bool bluetoothSourceSelected() {
+  portENTER_CRITICAL(&sourceMux);
+  const bool selected = sourceState.active() == ActiveSource::Bluetooth;
+  portEXIT_CRITICAL(&sourceMux);
+  return selected;
+}
+
+bool bluetoothTransportAvailable() {
+  portENTER_CRITICAL(&sourceMux);
+  const bool available = sourceState.canControlBluetooth();
+  portEXIT_CRITICAL(&sourceMux);
+  return available;
+}
+
+void sourceManagerTransport(BtTransportInput input) {
+  DisplaySourceView source{};
+  portENTER_CRITICAL(&sourceMux);
+  sourceState.displayView(source);
+  const BtTransportAction action = btTransportAction(input, source);
+  portEXIT_CRITICAL(&sourceMux);
+  switch (action) {
+    case BtTransportAction::Previous: btLink.prev(); break;
+    case BtTransportAction::Next: btLink.next(); break;
+    case BtTransportAction::Play: btLink.play(); break;
+    case BtTransportAction::Pause: btLink.pause(); break;
+    case BtTransportAction::None: break;
+  }
 }
 
 void cycleNextSource() {
@@ -69,8 +104,9 @@ void cycleNextSource() {
 }
 
 bool getDisplaySourceView(DisplaySourceView& view) {
+  const bool radioPlaying = player.isRunning();
   portENTER_CRITICAL(&sourceMux);
-  sourceState.displayView(view);
+  sourceState.displayView(view, radioPlaying);
   if (view.kind == DisplaySourceKind::Bluetooth) {
     memcpy(displayText.peerName, view.peerName, sizeof(displayText.peerName));
     memcpy(displayText.artist, view.artist, sizeof(displayText.artist));

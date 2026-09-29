@@ -156,6 +156,12 @@
               <div class="audio-control-heading"><label for="brightness-slider">Jasność LCD</label><output id="brightness-value">—</output></div>
               <input id="brightness-slider" class="volume-slider" type="range" min="0" max="100" step="1" value="75" disabled>
             </div>
+            <div id="auto-return-control" class="audio-control" hidden>
+              <h4>Automatyczny powrót</h4>
+              <label class="idle-setting" for="station-list-timeout">Lista stacji <span>(sekundy)</span><input id="station-list-timeout" type="number" min="0" max="120" step="1" inputmode="numeric" disabled></label>
+              <label id="bt-timeout-control" class="idle-setting" for="bt-transport-timeout" hidden>Sterowanie Bluetooth <span>(sekundy)</span><input id="bt-transport-timeout" type="number" min="0" max="120" step="1" inputmode="numeric" disabled></label>
+              <p class="hint">0 wyłącza automatyczny powrót dla danego ekranu.</p>
+            </div>
             <p id="flip-screen-feedback" class="hint" role="status" aria-live="polite">Zmiana działa od razu, bez restartu.</p>
           </article>
           <article id="rtc-card" class="card rtc-card" aria-labelledby="rtc-title" hidden>

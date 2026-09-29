@@ -49,6 +49,10 @@
   const brightnessControl = document.getElementById("brightness-control");
   const brightnessSlider = document.getElementById("brightness-slider");
   const brightnessValue = document.getElementById("brightness-value");
+  const autoReturnControl = document.getElementById("auto-return-control");
+  const stationListTimeoutInput = document.getElementById("station-list-timeout");
+  const btTimeoutControl = document.getElementById("bt-timeout-control");
+  const btTransportTimeoutInput = document.getElementById("bt-transport-timeout");
   const rtcCard = document.getElementById("rtc-card");
   const rtcNtpInterval = document.getElementById("rtc-ntp-interval");
   const rtcWriteInterval = document.getElementById("rtc-write-interval");
@@ -145,6 +149,9 @@
     startupFixedVolume: null,
     brightness: null,
     canBrightness: false,
+    stationListTimeout: null,
+    btTransportTimeout: null,
+    canBtTransport: false,
     flip: null,
     canFlip: false,
     vu: null,
@@ -660,6 +667,16 @@
       brightnessSlider.value = String(brightnessPending);
     }
     brightnessValue.textContent = brightnessShown === null ? "—" : brightnessShown + "%";
+    autoReturnControl.hidden = !state.canFlip;
+    stationListTimeoutInput.disabled = state.connection !== "connected" ||
+      !state.canFlip || state.stationListTimeout === null;
+    btTimeoutControl.hidden = !state.canBtTransport;
+    btTransportTimeoutInput.disabled = state.connection !== "connected" ||
+      !state.canBtTransport || state.btTransportTimeout === null;
+    if (document.activeElement !== stationListTimeoutInput && state.stationListTimeout !== null)
+      stationListTimeoutInput.value = String(state.stationListTimeout);
+    if (document.activeElement !== btTransportTimeoutInput && state.btTransportTimeout !== null)
+      btTransportTimeoutInput.value = String(state.btTransportTimeout);
     flipScreenFeedback.hidden = !state.canFlip;
     flipScreenFeedback.textContent = flipPending
       ? "Oczekiwanie na potwierdzenie urządzenia…"
@@ -1187,10 +1204,11 @@
   }
   function resetRuntime() {
     const previousCurrent = state.current;
-    for (const key of ["source", "station", "metadata", "codec", "bitrate", "rssi", "volume", "volume100", "maximumVolume", "startupMode", "startupFixedVolume", "brightness", "bass", "middle", "treble", "balance", "playing", "current", "ip"]) {
+    for (const key of ["source", "station", "metadata", "codec", "bitrate", "rssi", "volume", "volume100", "maximumVolume", "startupMode", "startupFixedVolume", "brightness", "stationListTimeout", "btTransportTimeout", "bass", "middle", "treble", "balance", "playing", "current", "ip"]) {
       state[key] = null;
     }
     state.canBrightness = false;
+    state.canBtTransport = false;
     state.flip = null;
     state.canFlip = false;
     state.vu = null;
@@ -1371,6 +1389,12 @@
     if (message.canBrightness === 0 || message.canBrightness === 1) {
       state.canBrightness = message.canBrightness === 1;
     }
+    if (message.canBtTransport === 0 || message.canBtTransport === 1)
+      state.canBtTransport = message.canBtTransport === 1;
+    if (Number.isInteger(message.stationListTimeout) && message.stationListTimeout >= 0 && message.stationListTimeout <= 120)
+      state.stationListTimeout = message.stationListTimeout;
+    if (Number.isInteger(message.btTransportTimeout) && message.btTransportTimeout >= 0 && message.btTransportTimeout <= 120)
+      state.btTransportTimeout = message.btTransportTimeout;
     if (Number.isInteger(message.br) && message.br >= 0 && message.br <= 100) {
       state.brightness = message.br;
       if (brightnessAwaiting === message.br) {
@@ -1396,7 +1420,10 @@
         message.canBrightness === 0 || message.canBrightness === 1 ||
         Number.isInteger(message.br) ||
         message.canVu === 0 || message.canVu === 1 ||
-        message.vu === 0 || message.vu === 1) renderDisplaySettings();
+        message.vu === 0 || message.vu === 1 ||
+        Number.isInteger(message.stationListTimeout) ||
+        Number.isInteger(message.btTransportTimeout) ||
+        message.canBtTransport === 0 || message.canBtTransport === 1) renderDisplaySettings();
   }
 
   function connect() {
@@ -1727,6 +1754,22 @@
     }, 2000);
     renderDisplaySettings();
   });
+
+  function saveIdleTimeout(input, key, command) {
+    const value = Number(input.value);
+    if (input.value.trim() === "" || !Number.isInteger(value) || value < 0 || value > 120 ||
+        !send(command, value)) {
+      input.value = state[key] === null ? "" : String(state[key]);
+      return;
+    }
+    input.blur();
+    setTimeout(() => send("getscreen", 1), 500);
+  }
+
+  stationListTimeoutInput.addEventListener("change", () =>
+    saveIdleTimeout(stationListTimeoutInput, "stationListTimeout", "stationlisttimeout"));
+  btTransportTimeoutInput.addEventListener("change", () =>
+    saveIdleTimeout(btTransportTimeoutInput, "btTransportTimeout", "bttransporttimeout"));
 
   rtcNtpInterval.addEventListener("change", () => saveTimeInterval(rtcNtpInterval, "timeint", 1, 10080));
   rtcWriteInterval.addEventListener("change", () => saveTimeInterval(rtcWriteInterval, "timeintrtc", 1, 1000));
