@@ -17,6 +17,12 @@
   const updateStatus = document.getElementById("update-status");
   const updateProgress = document.getElementById("update-progress");
   let updateBusy = false;
+  const rebootButton = document.getElementById("reboot-button");
+  const rebootDialog = document.getElementById("reboot-dialog");
+  const rebootCancel = document.getElementById("reboot-cancel");
+  const rebootConfirm = document.getElementById("reboot-confirm");
+  const rebootStatus = document.getElementById("reboot-status");
+  let rebootStarted = false;
   const buttons = {
     prev: document.getElementById("prev-button"),
     play: document.getElementById("play-button"),
@@ -63,6 +69,18 @@
   };
   const tonePresetButtons = [...document.querySelectorAll("[data-tone-preset]")];
   const tonePresetUser = document.getElementById("audio-preset-user");
+  const myStationsTab = document.getElementById("my-stations-tab");
+  const directoryTab = document.getElementById("directory-tab");
+  const myStationsView = document.getElementById("my-stations-view");
+  const directoryView = document.getElementById("directory-view");
+  const directoryForm = document.getElementById("directory-form");
+  const directoryQuery = document.getElementById("directory-query");
+  const directoryCountry = document.getElementById("directory-country");
+  const directorySearchButton = document.getElementById("directory-search");
+  const directoryStatus = document.getElementById("directory-status");
+  const directoryResults = document.getElementById("directory-results");
+  let directoryBusy = false;
+  let directoryStations = [];
   const stationList = document.getElementById("station-list");
   const stationSearch = document.getElementById("station-search");
   const stationClear = document.getElementById("station-search-clear");
@@ -203,28 +221,66 @@
     updateStatus.dataset.kind = error ? "error" : "status";
   }
 
-  async function waitForUpdateRestart() {
-    setUpdateStatus("Aktualizacja zakończona. Restart urządzenia...");
-    await new Promise(resolve => setTimeout(resolve, 2500));
-    const deadline = Date.now() + 30000;
+  async function waitForDeviceRestart({ delay = 2500, timeout = 30000, onReturn, onTimeout }) {
+    await new Promise(resolve => setTimeout(resolve, delay));
+    const deadline = Date.now() + timeout;
     while (Date.now() < deadline) {
       const controller = new AbortController();
-      const timeout = setTimeout(() => controller.abort(), 2500);
+      const requestTimeout = setTimeout(() => controller.abort(), 2500);
       try {
         const response = await fetch("/variables.js?update=" + Date.now(), {
           cache: "no-store", signal: controller.signal
         });
         if (response.ok) {
-          location.replace("/voxone.html?updated=" + Date.now() + "#update");
+          onReturn();
           return;
         }
       } catch (_) { /* The device may still be restarting. */ }
-      finally { clearTimeout(timeout); }
+      finally { clearTimeout(requestTimeout); }
       await new Promise(resolve => setTimeout(resolve, 1000));
     }
-    updateBusy = false;
-    renderUpdateFiles();
-    setUpdateStatus("Urządzenie nie wróciło w ciągu 30 s. Sprawdź połączenie i odśwież stronę.", true);
+    onTimeout();
+  }
+
+  async function waitForUpdateRestart() {
+    setUpdateStatus("Aktualizacja zakończona. Restart urządzenia...");
+    await waitForDeviceRestart({
+      onReturn: () => location.replace("/voxone.html?updated=" + Date.now() + "#update"),
+      onTimeout: () => {
+        updateBusy = false;
+        renderUpdateFiles();
+        setUpdateStatus("Urządzenie nie wróciło w ciągu 30 s. Sprawdź połączenie i odśwież stronę.", true);
+      }
+    });
+  }
+
+  function setRebootStatus(message, error = false) {
+    rebootStatus.textContent = message;
+    rebootStatus.dataset.kind = error ? "error" : "status";
+  }
+
+  async function rebootDevice() {
+    if (rebootStarted) return;
+    rebootStarted = true;
+    rebootButton.disabled = true;
+    rebootConfirm.disabled = true;
+    rebootDialog.close();
+    setRebootStatus("Restartowanie urządzenia...");
+    if (!send("reboot", 1)) {
+      rebootStarted = false;
+      rebootButton.disabled = false;
+      rebootConfirm.disabled = false;
+      setRebootStatus("Brak połączenia z urządzeniem.", true);
+      return;
+    }
+    await waitForDeviceRestart({
+      delay: 1200,
+      onReturn: () => {
+        setRebootStatus("VoxOne uruchomiony");
+        setTimeout(() => location.reload(), 700);
+      },
+      onTimeout: () => setRebootStatus("Nie udało się ponownie połączyć z VoxOne.", true)
+    });
   }
 
   function uploadUpdateImage(target) {
@@ -889,6 +945,116 @@
     return { name, url, ovol: String(Number(ovolText)) };
   }
 
+  function showStationView(directory) {
+    myStationsView.hidden = directory;
+    directoryView.hidden = !directory;
+    myStationsTab.setAttribute("aria-selected", String(!directory));
+    directoryTab.setAttribute("aria-selected", String(directory));
+    if (directory) directoryQuery.focus();
+  }
+
+  function directoryMessage(message, error = false) {
+    directoryStatus.textContent = message;
+    directoryStatus.dataset.kind = error ? "error" : "notice";
+  }
+
+  function directoryError(status, code, phase) {
+    if (code === "offline") return "VoxOne nie ma połączenia z internetem.";
+    if (code === "insufficient_memory") return "Brak pamięci na wyszukiwanie. Spróbuj później.";
+    if (code === "upstream_response_too_large") return "Katalog zwrócił zbyt dużą odpowiedź.";
+    if (code === "upstream_invalid_json") return "Katalog zwrócił nieprawidłowe dane.";
+    if (status === 504) return "Upłynął czas oczekiwania na katalog.";
+    if (status === 429) return "Trwa inne wyszukiwanie. Spróbuj za chwilę.";
+    if (status === 400 && phase === "start") return "Sprawdź nazwę stacji i kraj.";
+    if (code === "bad_job") return "Nieprawidłowy identyfikator wyszukiwania.";
+    if (status === 404 && phase === "poll") return "Wynik wyszukiwania nie jest już dostępny.";
+    return "Nie udało się pobrać katalogu stacji.";
+  }
+
+  function renderDirectoryResults() {
+    const fragment = document.createDocumentFragment();
+    directoryStations.forEach((station, index) => {
+      const row = document.createElement("li");
+      row.className = "directory-result";
+      const details = document.createElement("div");
+      details.className = "directory-result-main";
+      const name = document.createElement("strong");
+      name.textContent = station.name;
+      const meta = document.createElement("span");
+      const country = station.countryCode === "PL" ? "Polska" :
+        (station.country || station.countryCode || "Kraj nieznany");
+      const fields = [country];
+      if (station.codec) fields.push(station.codec);
+      fields.push(station.bitrate > 0 ? station.bitrate + " kbps" : "bitrate nieznany");
+      meta.textContent = fields.join(" · ");
+      details.append(name, meta);
+      const add = document.createElement("button");
+      add.type = "button";
+      add.textContent = "Dodaj";
+      add.dataset.directoryIndex = String(index);
+      row.append(details, add);
+      fragment.append(row);
+    });
+    directoryResults.replaceChildren(fragment);
+  }
+
+  async function searchDirectory() {
+    if (directoryBusy) return;
+    const query = directoryQuery.value.trim();
+    if (!query || utf8Length(query) > 80) {
+      directoryMessage("Podaj nazwę stacji (najwyżej 80 bajtów).", true);
+      return;
+    }
+    directoryBusy = true;
+    directorySearchButton.disabled = true;
+    directoryResults.replaceChildren();
+    directoryStations = [];
+    directoryMessage("Wyszukiwanie stacji...");
+    let phase = "start";
+    try {
+      const parameters = new URLSearchParams({
+        q: query, country: directoryCountry.value, limit: "20"
+      });
+      let response = await fetch("/api/directory/search?" + parameters, { cache: "no-store" });
+      let payload = await response.json().catch(() => null);
+      if (response.status === 202) {
+        if (!payload || !Number.isSafeInteger(payload.job) || payload.job <= 0)
+          throw { status: 502, code: "invalid_job_response" };
+        const jobId = payload.job;
+        phase = "poll";
+        let done = false;
+        for (let attempt = 0; attempt < 80; attempt++) {
+          await new Promise(resolve => setTimeout(resolve, 250));
+          response = await fetch("/api/directory/search?job=" + jobId, { cache: "no-store" });
+          payload = await response.json().catch(() => null);
+          if (response.status === 202) {
+            if (!payload || payload.status !== "pending")
+              throw { status: 502, code: "invalid_pending_response" };
+            continue;
+          }
+          done = true;
+          break;
+        }
+        if (!done) throw { status: 504 };
+      }
+      if (!response.ok) throw { status: response.status, code: payload && payload.error };
+      if (!payload || !Array.isArray(payload.results) || payload.results.length > 20 ||
+          !payload.results.every(station => station && typeof station.name === "string" &&
+            typeof station.url === "string" && typeof station.country === "string" &&
+            typeof station.countryCode === "string" && typeof station.codec === "string" &&
+            Number.isInteger(station.bitrate))) throw { status: 502 };
+      directoryStations = payload.results;
+      renderDirectoryResults();
+      directoryMessage(directoryStations.length ?
+        "Znaleziono " + directoryStations.length + " stacji." : "Nie znaleziono stacji.");
+    } catch (error) {
+      console.warn("VoxOne: directory search failed", error);
+      directoryMessage(directoryError(error.status, error.code, phase), true);
+    } finally {
+      directoryBusy = false;
+      directorySearchButton.disabled = false;
+    }
+  }
   function mutationErrorMessage(status) {
     return ({
       400: "Nieprawidłowe dane.",
@@ -902,7 +1068,7 @@
 
   async function mutateStation(route, fields, successMessage) {
     if (state.loading || state.mutationInProgress || state.stationsStatus !== "ready" ||
-        !state.revision) return;
+        !state.revision) return false;
     state.mutationInProgress = true;
     state.pendingMetadataNumber = route === "metadata" ?
       (state.stations.find(station => station.id === fields.id)?.number ?? null) : null;
@@ -922,7 +1088,7 @@
         setStationFeedback(refreshed ?
           "Lista stacji została zmieniona w innym oknie. Odświeżono aktualne dane." :
           "Lista stacji została zmieniona w innym oknie. Nie udało się pobrać aktualnych danych.", !refreshed);
-        return;
+        return false;
       }
       if (!response.ok) throw { status: response.status, code: result && result.error };
       if (!result || result.ok !== true) throw { status: 500 };
@@ -931,9 +1097,11 @@
       const refreshed = await loadStations();
       setStationFeedback(refreshed ? successMessage :
         "Zmiana została zapisana, ale nie udało się odświeżyć listy. Użyj przycisku Ponów.", !refreshed);
+      return true;
     } catch (error) {
       console.warn("VoxOne: station mutation failed", error);
       setStationFeedback(mutationErrorMessage(error.status), true);
+      return false;
     } finally {
       state.pendingMetadataNumber = null;
       state.mutationInProgress = false;
@@ -1289,6 +1457,36 @@
     if (send("next", 1)) flashButton(buttons.next);
   });
 
+  myStationsTab.addEventListener("click", () => showStationView(false));
+  directoryTab.addEventListener("click", () => showStationView(true));
+  directoryForm.addEventListener("submit", event => {
+    event.preventDefault();
+    searchDirectory();
+  });
+  directoryResults.addEventListener("click", async event => {
+    const button = event.target.closest("button[data-directory-index]");
+    if (!button || button.disabled || state.mutationInProgress) return;
+    const station = directoryStations[Number(button.dataset.directoryIndex)];
+    if (!station) return;
+    button.disabled = true;
+    button.textContent = "Dodawanie...";
+    if (state.stationsStatus !== "ready" && !await loadStations()) {
+      directoryMessage("Nie udało się pobrać listy własnych stacji.", true);
+      button.disabled = false;
+      button.textContent = "Dodaj";
+      return;
+    }
+    const added = await mutateStation("add",
+      { name: station.name, url: station.url, ovol: "0" }, "Dodano stację.");
+    if (added) {
+      button.textContent = "Dodano";
+      directoryMessage("Dodano „" + station.name + "” do Moje stacje.");
+    } else {
+      button.disabled = false;
+      button.textContent = "Dodaj";
+      directoryMessage("Nie udało się dodać stacji. Sprawdź komunikat w Moje stacje.", true);
+    }
+  });
   stationSearch.addEventListener("input", () => {
     state.stationQuery = stationSearch.value;
     stationClear.disabled = state.stationQuery.length === 0;
@@ -1592,6 +1790,11 @@
     image.file.addEventListener("change", renderUpdateFiles);
     image.button.addEventListener("click", () => uploadUpdateImage(target));
   }
+  rebootButton.addEventListener("click", () => {
+    if (!rebootStarted) rebootDialog.showModal();
+  });
+  rebootCancel.addEventListener("click", () => rebootDialog.close());
+  rebootConfirm.addEventListener("click", rebootDevice);
   mqttForm.addEventListener("submit", saveMqttConfig);
   mqttEnabled.addEventListener("change", updateMqttFormState);
   mqttPassword.addEventListener("input", () => {

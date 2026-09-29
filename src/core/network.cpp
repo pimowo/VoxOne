@@ -7,11 +7,14 @@
 #include "config.h"
 #include "serialcli.h"
 #include "netserver.h"
+#include "system_operation_state.h"
 #include "player.h"
 #include "mqtt.h"
 #include "mqtt_config.h"
 #include "timekeeper.h"
 #include <sys/time.h>
+#include <atomic>
+#include <freertos/task.h>
 #include "../pluginsManager/pluginsManager.h"
 
 #ifndef WIFI_ATTEMPTS
@@ -41,8 +44,8 @@ void MyNetwork::WiFiReconnected(WiFiEvent_t event, WiFiEventInfo_t info){
 }
 
 void MyNetwork::WiFiLostConnection(WiFiEvent_t event, WiFiEventInfo_t info){
-  if (systemRestartPending()) {
-    Serial.println("##[UPDATE]# WiFi disconnect ignored during restart");
+  if (!wifiRecoveryAllowed(systemRestartPending())) {
+    Serial.println("##[SYSTEM]# WiFi disconnect ignored during restart");
     return;
   }
   if(!network.beginReconnect){
@@ -178,6 +181,12 @@ void MyNetwork::requestTimeSync(bool withSerialOutput) {
     return;
   }
   if (withSerialOutput) {
+    static std::atomic<uint32_t> outputSequence{0};
+    const uint32_t sequence = outputSequence.fetch_add(1) + 1;
+    if (sequence <= 10 || sequence % 100 == 0) {
+      Serial.printf("##[TIME]# requestTimeSync output seq=%lu task=%s\n",
+                    static_cast<unsigned long>(sequence), pcTaskGetName(nullptr));
+    }
     char timeStringBuff[50];
     strftime(timeStringBuff, sizeof(timeStringBuff), "%Y-%m-%dT%H:%M:%S%z", &timeinfo);
     serialCli.printf("##SYS.DATE#: %s\n> ", timeStringBuff);

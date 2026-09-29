@@ -147,9 +147,10 @@
 
 ## 13a. Wyszukiwarka stacji internetowych
 
-**Priorytet: przyszły etap, po stabilizacji VoxOne Stations v1.**
+**Priorytet: fizyczna weryfikacja na SALON i DESK.**
 
-- Zintegrować wyszukiwarkę Radio Browser; wynik dodawać przez zwykłe ADD, z ID generowanym przez VoxOne.
+- Fizycznie sprawdzić na SALON: wyszukanie „Radio 357” z krajem Polska, wyniki, DODAJ, nową stację w Moje stacje, zachowanie po restarcie i odtwarzanie po wybraniu.
+- Fizycznie sprawdzić na DESK: wyszukiwanie i dodawanie, wolną pamięć, brak resetów oraz brak zakłóceń audio podczas żądania katalogu.
 
 ## 14. WWW — auto-reload po restartach
 
@@ -171,6 +172,7 @@
 
 - Pokazać firmware version, hardware profile, IP, RSSI, uptime, free heap i MAC.
 - Dodać restart, backup, restore i factory reset.
+- Fizycznie potwierdzić, że kontrolowany restart WWW pomija zwykły komunikat reconnect Wi-Fi i zachowuje stacje oraz konfigurację.
 
 ## 17. Web Update — UX
 
@@ -289,6 +291,8 @@
 
 - Dodać lekką diagnostykę na żądanie: reset reason, uptime, heap, RSSI, audio buffer, codec, bitrate, reconnect/underflow counters, decoder errors, Git SHA development build, profile i capabilities.
 - Nie uruchamiać ciężkiego debugowania stale.
+- Fizycznie odtworzyć serię `##SYS.DATE#` z diagnostyką liczników `requestTimeSync` i `syncTask`; ustalić, czy przyczyną jest wiele wywołań, callback NTP czy nakładanie logów.
+- Po analizie logu sprawdzić osobno ograniczenie ponawiania `syncTask`, gdy `getLocalTime()` nie powiedzie się i `forceTimeSync` pozostaje ustawione.
 
 ## 32. Alarm
 

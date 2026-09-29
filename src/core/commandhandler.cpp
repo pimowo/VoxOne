@@ -148,8 +148,8 @@ bool CommandHandler::exec(const char *command, const char *value, uint32_t cid) 
   if (strEquals(command, "sdpos"))   { config.setSDpos(static_cast<uint32_t>(atoi(value))); return true; }
   if (strEquals(command, "snuffle")) { config.setSnuffle(strcmp(value, "true") == 0); return true; }
   if (strEquals(command, "balance")) { config.setBalance(static_cast<uint8_t>(atoi(value))); return true; }
-  if (strEquals(command, "reboot"))  { ESP.restart(); return true; }
-  if (strEquals(command, "boot"))    { ESP.restart(); return true; }
+  if (strEquals(command, "reboot"))  { requestSystemRestart(); return true; }
+  if (strEquals(command, "boot"))    { requestSystemRestart(); return true; }
   if (strEquals(command, "format"))  { SPIFFS.format(); ESP.restart(); return true; }
   if (strEquals(command, "submitplaylist"))  { player.sendCommand({PR_STOP, 0}); return true; }
 

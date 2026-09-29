@@ -50,11 +50,16 @@
 
       <section id="stations" data-panel aria-labelledby="stations-title" hidden>
         <div class="section-heading"><div><p class="eyebrow">BIBLIOTEKA</p><h2 id="stations-title">Stacje</h2></div><span class="badge" id="stations-count" aria-live="polite">Ładowanie...</span></div>
+        <div class="station-views" role="tablist" aria-label="Widok stacji">
+          <button id="my-stations-tab" type="button" role="tab" aria-selected="true" aria-controls="my-stations-view">Moje stacje</button>
+          <button id="directory-tab" type="button" role="tab" aria-selected="false" aria-controls="directory-view">Szukaj stacji</button>
+        </div>
+        <div id="my-stations-view" role="tabpanel" aria-labelledby="my-stations-tab">
         <article class="card">
           <div class="station-toolbar">
             <div class="station-search-group">
               <label class="sr-only" for="station-search">Szukaj stacji</label>
-              <div class="station-search-wrap"><input id="station-search" class="station-search" type="search" placeholder="Szukaj stacji..." autocomplete="off"><button id="station-search-clear" type="button" disabled>Wyczyść</button></div>
+              <div class="station-search-wrap"><input id="station-search" class="station-search" type="search" placeholder="Filtruj moje stacje..." autocomplete="off"><button id="station-search-clear" type="button" disabled>Wyczyść</button></div>
             </div>
             <button id="station-add" type="button" disabled>+ Dodaj stację</button>
             <button id="station-import" type="button" disabled>Import VoxOne</button>
@@ -67,6 +72,17 @@
           <button id="stations-retry" type="button" hidden>Ponów</button>
           <div class="station-list-heading" aria-hidden="true" hidden><span>Nr</span><span>Stacja / URL</span><span>OVol</span><span>Akcje</span></div>
           <ul id="station-list" class="station-list" aria-label="Zapisane stacje"></ul>
+        </article>
+        </div>
+        <article id="directory-view" class="card" role="tabpanel" aria-labelledby="directory-tab" hidden>
+          <h3>Katalog stacji internetowych</h3>
+          <form id="directory-form" class="directory-form">
+            <label for="directory-query">Nazwa stacji<input id="directory-query" type="search" maxlength="80" placeholder="Szukaj stacji..." autocomplete="off" required></label>
+            <label for="directory-country">Kraj<select id="directory-country"><option value="PL">Polska</option><option value="ALL">Wszystkie</option></select></label>
+            <button id="directory-search" type="submit">Szukaj</button>
+          </form>
+          <p id="directory-status" class="stations-message" role="status" aria-live="polite">Wpisz nazwę stacji i wybierz kraj.</p>
+          <ul id="directory-results" class="directory-results" aria-label="Wyniki wyszukiwania"></ul>
         </article>
         <dialog id="station-dialog" aria-labelledby="station-dialog-title">
           <form id="station-form" novalidate>
@@ -197,6 +213,7 @@
       <section id="system" data-panel aria-labelledby="system-title" hidden>
         <div class="section-heading"><div><p class="eyebrow">URZĄDZENIE</p><h2 id="system-title">System</h2></div><span class="badge">Podgląd</span></div>
         <article class="card"><h3>Oprogramowanie</h3><dl class="facts"><div><dt>Firmware</dt><dd id="system-version">VoxOne —</dd></div><div><dt>Profil</dt><dd id="system-profile">—</dd></div><div><dt>Baza</dt><dd id="system-base">yoRadio —</dd></div><div><dt>IP</dt><dd id="system-ip">—</dd></div></dl></article>
+        <article class="card reboot-card"><h3>Urządzenie</h3><p class="muted">Uruchamia urządzenie ponownie bez zmiany zapisanych ustawień.</p><button id="reboot-button" type="button">Restart VoxOne</button><p id="reboot-status" class="reboot-status" role="status" aria-live="polite"></p></article>
         <article class="card"><h3>Informacje systemowe</h3><p class="muted">Dodatkowe informacje systemowe są w przygotowaniu.</p></article>
       </section>
 
@@ -228,6 +245,11 @@
         </article>
       </section>
     </main>
+    <dialog id="reboot-dialog" aria-labelledby="reboot-dialog-title">
+      <h3 id="reboot-dialog-title">Uruchomić VoxOne ponownie?</h3>
+      <p class="muted">Zapisane ustawienia pozostaną bez zmian.</p>
+      <div class="station-form-actions"><button id="reboot-cancel" type="button">Anuluj</button><button id="reboot-confirm" class="primary" type="button">Restart</button></div>
+    </dialog>
     <footer>VoxOne · Status aktualizowany przez WebSocket</footer>
   </div>
 </body>

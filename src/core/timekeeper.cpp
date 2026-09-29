@@ -48,7 +48,12 @@ static_assert(!timeoutElapsed(0x0000001FUL, 0xFFFFFFF0UL, 0x30UL), "timeout must
 #endif
 
 TimeKeeper timekeeper;
-static volatile uint32_t ntpSyncCount = 0;
+static std::atomic<uint32_t> ntpSyncCount{0};
+static std::atomic<uint32_t> syncTaskSequence{0};
+
+static bool logTimeSequence(uint32_t sequence) {
+  return sequence <= 10 || sequence % 100 == 0;
+}
 
 static void onNtpSync(timeval*) {
   ++ntpSyncCount;
@@ -60,7 +65,18 @@ void TimeKeeper::watchNtp() {
 }
 
 void _syncTask(void *pvParameters) {
+  const uint32_t sequence = syncTaskSequence.fetch_add(1) + 1;
+  if (logTimeSequence(sequence)) {
+    Serial.printf("##[TIME]# syncTask start seq=%lu force=%u count=%lu restart=%u\n",
+                  static_cast<unsigned long>(sequence), timekeeper.forceTimeSync.load(),
+                  static_cast<unsigned long>(ntpSyncCount.load()), timekeeper.restartNtp.load());
+  }
   if (timekeeper.forceTimeSync) timekeeper.timeTask();
+  if (logTimeSequence(sequence)) {
+    Serial.printf("##[TIME]# syncTask done seq=%lu force=%u count=%lu restart=%u\n",
+                  static_cast<unsigned long>(sequence), timekeeper.forceTimeSync.load(),
+                  static_cast<unsigned long>(ntpSyncCount.load()), timekeeper.restartNtp.load());
+  }
   timekeeper.busy = false;
   vTaskDelete(NULL);
 }

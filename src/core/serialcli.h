@@ -13,7 +13,6 @@ class SerialCli {
     void printf(const char *format, ...);
     void info();
   private:
-    char cmBuf[220];
     void handleSerial();
     void on_input(const char* str, uint8_t clientId);
     void printHeapFragmentationInfo(uint8_t id);

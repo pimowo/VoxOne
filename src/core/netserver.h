@@ -163,6 +163,7 @@ class NetServer {
 
 bool restoreWebUpdateData();
 bool systemRestartPending();
+void requestSystemRestart();
 extern NetServer netserver;
 extern AsyncWebSocket websocket;
 

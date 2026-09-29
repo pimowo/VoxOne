@@ -1,4 +1,5 @@
 #include "options.h"
+#include "system_operation_state.h"
 #include "Arduino.h"
 #include <SPIFFS.h>
 #include <Update.h>
@@ -12,10 +13,12 @@
 #include <cstdlib>
 #include "config.h"
 #include "ap_wifi_recovery.h"
-#include "web_update_state.h"
 #include "playlist_store.h"
 #include "playlist_mapping.h"
 #include "station_metadata.h"
+#include "station_directory.h"
+#include "station_directory_format.h"
+#include "station_directory_routes.h"
 #include "netserver.h"
 #include "player.h"
 #include "serialcli.h"
@@ -88,6 +91,7 @@ AsyncWebSocket websocket("/ws");
 void handleUpload(AsyncWebServerRequest *request, String filename, size_t index, uint8_t *data, size_t len, bool final);
 void handleStationsRead(AsyncWebServerRequest *request);
 void handleStationsReadSnapshot(AsyncWebServerRequest *request);
+void handleStationDirectorySearch(AsyncWebServerRequest *request);
 void handleStationsMutation(AsyncWebServerRequest *request);
 void handleStationMetadata(AsyncWebServerRequest *request);
 void handleStationsExport(AsyncWebServerRequest *request);
@@ -113,18 +117,19 @@ void mqttplaylistSend() {
 }
 
 namespace {
-WebUpdateState webUpdateState;
+SystemOperationState systemOperationState;
 
-void scheduleSystemRestart() {
+void scheduleSystemRestart(const char* source) {
+  if (systemOperationState.restartPending()) return;
   webUpdateRebootAt = millis() + 1500;
-  webUpdateState.restartScheduled();
-  Serial.println("##[UPDATE]# restart pending");
+  systemOperationState.restartRequested();
+  Serial.printf("##[%s]# restart pending\n", source);
 }
 
 void remountFilesystemAfterFailedUpdate() {
-  if (!webUpdateState.filesystemUnavailable()) return;
+  if (!systemOperationState.filesystemUnavailable()) return;
   if (SPIFFS.begin(false)) {
-    webUpdateState.updateFailed();
+    systemOperationState.updateFailed();
     Serial.println("##[UPDATE]# SPIFFS remounted after failed update");
   } else {
     Serial.println("##[ERROR]# SPIFFS remount failed after update error");
@@ -134,7 +139,7 @@ void remountFilesystemAfterFailedUpdate() {
 class WebUpdateRequestGuard : public AsyncWebHandler {
 public:
   bool canHandle(AsyncWebServerRequest* request) override {
-    return webUpdateState.blocksRequests() &&
+    return systemOperationState.blocksRequests() &&
            !(request->method() == HTTP_POST && request->url() == "/update");
   }
 
@@ -237,7 +242,9 @@ bool backupWebUpdateData(const char*& error) {
 }
 }  // namespace
 
-bool systemRestartPending() { return webUpdateState.restartPending(); }
+bool systemRestartPending() { return systemOperationState.restartPending(); }
+
+void requestSystemRestart() { scheduleSystemRestart("SYSTEM"); }
 
 bool restoreWebUpdateData() {
   nvs_handle_t handle;
@@ -302,7 +309,8 @@ bool NetServer::begin(bool quiet) {
   webserver.on("/api/stations/export", HTTP_GET, handleStationsExport);
   webserver.on("/api/stations/import", HTTP_POST, handleStationsImport,
                handleStationsImportUpload);
-  webserver.on("/api/stations", HTTP_GET, handleStationsReadSnapshot);
+  webserver.on(stationDirectory::kStationsSnapshotRoute, HTTP_GET, handleStationsReadSnapshot);
+  webserver.on(stationDirectory::kDirectorySearchRoute, HTTP_GET, handleStationDirectorySearch);
   webserver.on("/api/stations/add", HTTP_POST, handleStationsMutation);
   webserver.on("/api/stations/edit", HTTP_POST, handleStationsMutation);
   webserver.on("/api/stations/delete", HTTP_POST, handleStationsMutation);
@@ -333,7 +341,7 @@ bool NetServer::begin(bool quiet) {
 }
 
 size_t NetServer::chunkedHtmlPageCallback(uint8_t* buffer, size_t maxLen, size_t index){
-  if (webUpdateState.blocksRequests()) {
+  if (systemOperationState.blocksRequests()) {
     display.unlock();
     return 0;
   }
@@ -692,6 +700,66 @@ static void stationsReply(AsyncWebServerRequest* request, int code, const String
   request->send(response);
 }
 
+void handleStationDirectorySearch(AsyncWebServerRequest* request) {
+  const stationDirectory::SearchRequest kind = stationDirectory::classifySearchRequest(
+      request->hasParam("job"), request->hasParam("q"));
+  if (kind == stationDirectory::SearchRequest::POLL) {
+    const String jobText = request->getParam("job")->value();
+    char* end = nullptr;
+    const unsigned long parsed = strtoul(jobText.c_str(), &end, 10);
+    if (!jobText.length() || !end || *end || !parsed || parsed > UINT32_MAX) {
+      stationsReply(request, 400, R"({"error":"bad_job"})");
+      return;
+    }
+    int status = 0;
+    String body;
+    bool ready = false;
+    if (!stationDirectoryPoll(static_cast<uint32_t>(parsed), status, body, ready)) {
+      stationsReply(request, 404, R"({"error":"job_not_found"})");
+      return;
+    }
+    stationsReply(request, status, body);
+    return;
+  }
+  if (kind == stationDirectory::SearchRequest::MISSING_QUERY) {
+    stationsReply(request, 400, R"({"error":"missing_query"})");
+    return;
+  }
+  const String query = request->getParam("q")->value();
+  const String country = request->hasParam("country") ?
+      request->getParam("country")->value() : String("PL");
+  unsigned limit = stationDirectory::kDefaultLimit;
+  if (request->hasParam("limit")) {
+    const String limitText = request->getParam("limit")->value();
+    char* end = nullptr;
+    const unsigned long parsed = strtoul(limitText.c_str(), &end, 10);
+    if (!limitText.length() || !end || *end || parsed > UINT_MAX) {
+      stationsReply(request, 400, R"({"error":"bad_limit"})");
+      return;
+    }
+    limit = static_cast<unsigned>(parsed);
+  }
+  if (!stationDirectory::validQuery(std::string(query.c_str())) ||
+      !stationDirectory::validCountry(std::string(country.c_str())) ||
+      !stationDirectory::validLimit(limit)) {
+    stationsReply(request, 400, R"({"error":"bad_search_parameter"})");
+    return;
+  }
+  uint32_t job = 0;
+  const DirectoryStartResult result = stationDirectoryStart(query, country, limit, job);
+  if (result == DirectoryStartResult::BUSY) {
+    stationsReply(request, 429, R"({"error":"directory_busy"})");
+  } else if (result == DirectoryStartResult::OFFLINE) {
+    stationsReply(request, 503, R"({"error":"offline"})");
+  } else if (result == DirectoryStartResult::NO_MEMORY) {
+    stationsReply(request, 503, R"({"error":"insufficient_memory"})");
+  } else {
+    Serial.printf("##[DIRECTORY]# search q=%s country=%s limit=%u\n",
+                  query.c_str(), country.c_str(), limit);
+    stationsReply(request, 202,
+                  String(R"({"status":"pending","job":)") + job + "}");
+  }
+}
 static bool deviceApiAuthorized(AsyncWebServerRequest* request) {
 #if defined(HTTP_USER) && defined(HTTP_PASS)
   if (network.status == CONNECTED && !request->authenticate(HTTP_USER, HTTP_PASS)) {
@@ -851,7 +919,7 @@ void handleMqttConfigSave(AsyncWebServerRequest* request) {
   }
   if (!mqttSaveConfig(candidate)) { mqttApiError(request, 500, "storage_failed"); return; }
   stationsReply(request, 200, "{\"ok\":true,\"rebooting\":true}");
-  scheduleSystemRestart();
+  scheduleSystemRestart("SYSTEM");
 }
 
 static void stationsError(AsyncWebServerRequest* request, int code, const char* error) {
@@ -1575,7 +1643,7 @@ void NetServer::loop() {
     Serial.println("Rebooting...");
     ESP.restart();
   }
-  if (webUpdateState.blocksRequests()) return;
+  if (systemOperationState.blocksRequests()) return;
   processQueue();
   processVolumeUpdate();
   websocket.cleanupClients();
@@ -1700,7 +1768,7 @@ void handleWebUpdateUpload(AsyncWebServerRequest *request, const String& filenam
     if (!session) return;
     request->_tempObject = session;
     session->error = nullptr;
-    if (webUpdateState.blocksRequests()) {
+    if (systemOperationState.blocksRequests()) {
       session->error = "Update or restart already in progress";
       return;
     }
@@ -1792,7 +1860,7 @@ void handleWebUpdateUpload(AsyncWebServerRequest *request, const String& filenam
     }
     if (session->target == U_SPIFFS) {
       if (!backupWebUpdateData(session->error)) return;
-      webUpdateState.filesystemUnmounting();
+      systemOperationState.filesystemUnmounting();
       SPIFFS.end();
       Serial.println("##[UPDATE]# SPIFFS unmounted");
     }
@@ -1835,14 +1903,14 @@ void handleWebUpdateUpload(AsyncWebServerRequest *request, const String& filenam
     } else {
       session->finished = true;
       Serial.printf("##[UPDATE]# upload complete: %u bytes\n", static_cast<unsigned>(index + len));
-      scheduleSystemRestart();
+      scheduleSystemRestart("UPDATE");
     }
     activeUpdateRequest = nullptr;
   }
 }
 
 void handleUpload(AsyncWebServerRequest *request, String filename, size_t index, uint8_t *data, size_t len, bool final) {
-  if (webUpdateState.blocksRequests() && request->url() != "/update") return;
+  if (systemOperationState.blocksRequests() && request->url() != "/update") return;
   if(request->url()=="/upload"){
     // Legacy yoRadio upload has no station IDs and must not overwrite v1 files.
     return;
@@ -1871,14 +1939,14 @@ void onWsEvent(AsyncWebSocket *server, AsyncWebSocketClient *client, AwsEventTyp
   switch (type) {
     case WS_EVT_CONNECT: /*netserver.requestOnChange(STARTUP, client->id()); */if (config.store.audioinfo) Serial.printf("[WEBSOCKET] client #%lu connected from %s\n", client->id(), config.ipToStr(client->remoteIP())); break;
     case WS_EVT_DISCONNECT: if (config.store.audioinfo) Serial.printf("[WEBSOCKET] client #%lu disconnected\n", client->id()); break;
-    case WS_EVT_DATA: if (!webUpdateState.blocksRequests()) netserver.onWsMessage(arg, data, len, client->id()); break;
+    case WS_EVT_DATA: if (!systemOperationState.blocksRequests()) netserver.onWsMessage(arg, data, len, client->id()); break;
     case WS_EVT_PONG:
     case WS_EVT_ERROR:
       break;
   }
 }
 void handleNotFound(AsyncWebServerRequest * request) {
-  if (webUpdateState.blocksRequests() &&
+  if (systemOperationState.blocksRequests() &&
       !(request->method() == HTTP_POST && request->url() == "/update")) {
     request->send(503, "text/plain", "Update in progress");
     return;
@@ -1983,7 +2051,7 @@ void handleNotFound(AsyncWebServerRequest * request) {
 }
 
 void handleIndex(AsyncWebServerRequest * request) {
-  if (webUpdateState.blocksRequests()) {
+  if (systemOperationState.blocksRequests()) {
     request->send(503, "text/plain", "Update in progress");
     return;
   }
@@ -2004,7 +2072,7 @@ void handleIndex(AsyncWebServerRequest * request) {
         return;
       }
       request->send(200, "text/plain", "Wi-Fi credentials saved. Restarting.");
-      scheduleSystemRestart();
+      scheduleSystemRestart("SYSTEM");
       Serial.println("##[BOOT]# AP Wi-Fi credentials saved; restart scheduled");
       return;
     }

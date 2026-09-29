@@ -1,6 +1,7 @@
 #ifndef timekeeper_h
 #define timekeeper_h
 #pragma once
+#include <atomic>
 
 void _syncTask(void * pvParameters);
 
@@ -13,11 +14,11 @@ enum class DelayedActionSlot : uint8_t {
 
 class TimeKeeper {
   public:
-    volatile bool forceTimeSync;
-    volatile bool busy;
-    volatile uint32_t successfulSyncCount;
-    volatile bool forceRtcSync;
-    volatile bool restartNtp;
+    std::atomic<bool> forceTimeSync;
+    std::atomic<bool> busy;
+    std::atomic<uint32_t> successfulSyncCount;
+    std::atomic<bool> forceRtcSync;
+    std::atomic<bool> restartNtp;
   public:
     TimeKeeper();
     bool loop0();

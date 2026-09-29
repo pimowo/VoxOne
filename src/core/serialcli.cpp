@@ -21,23 +21,25 @@ void SerialCli::loop() {
 }
 
 void SerialCli::printf(const char *format, ...) {
+  char message[220];
   va_list args;
   va_start(args, format);
-  vsnprintf(cmBuf, sizeof(cmBuf), format, args);
+  vsnprintf(message, sizeof(message), format, args);
   va_end(args);
-  if (strcmp(cmBuf, "> ") == 0) return;
-  char *prompt = strstr(cmBuf, "\n> ");
+  if (strcmp(message, "> ") == 0) return;
+  char *prompt = strstr(message, "\n> ");
   if (prompt != NULL) prompt[1] = '\0';
-  Serial.print(cmBuf);
+  Serial.print(message);
 }
 
 void SerialCli::printf(uint8_t id, const char *format, ...) {
   (void)id;
+  char message[220];
   va_list args;
   va_start(args, format);
-  vsnprintf(cmBuf, sizeof(cmBuf), format, args);
+  vsnprintf(message, sizeof(message), format, args);
   va_end(args);
-  Serial.print(cmBuf);
+  Serial.print(message);
 }
 void SerialCli::info() {
   printf("##CLI.INFO#\n");
