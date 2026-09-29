@@ -21,6 +21,9 @@ class BtLink {
 
   const BtLinkState& state() const { return protocol_.state(); }
   const BtLinkDiagnostics& diagnostics() const { return protocol_.diagnostics(); }
+  bool hasIncompleteOnlineSnapshot() const {
+    return protocol_.hasIncompleteOnlineSnapshot();
+  }
 
  private:
   static void sendCommand(void* context, const char* command);

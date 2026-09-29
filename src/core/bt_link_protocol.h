@@ -52,6 +52,9 @@ class BtLinkProtocol {
 
   const BtLinkState& state() const { return state_; }
   const BtLinkDiagnostics& diagnostics() const { return diagnostics_; }
+  bool hasIncompleteOnlineSnapshot() const {
+    return statusOpen_ && state_.runtimeAvailable;
+  }
 
  private:
   bool handleLine(uint32_t nowMs);

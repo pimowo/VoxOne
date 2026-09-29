@@ -88,11 +88,9 @@
 
 **Priorytet: razem z BT. Pierwszy zakres RADIO | BT; docelowo RADIO | BT | DLNA | AUX | SPDIF.**
 
-- Zapewnić dokładnie jedno aktywne źródło i jawny active source.
 - Obsłużyć RADIO ↔ BT, wspólne PLAY/STOP i Volume, poprzednie źródło oraz tymczasowe PLAY_MEDIA/TTS.
-- Po PLAY_MEDIA przywracać źródło; obsłużyć pending source podczas PLAY_MEDIA.
-- Podłączyć double-click enkodera do `cycleNextSource()` po uruchomieniu Source Managera; zasilić wiersze LCD stanem aktywnego źródła i nazwą peer BT.
-- Przełączać dostępne źródła bezpośrednio double-clickiem w pętli według capabilities i dostępności runtime; bez osobnego ekranu wyboru źródła.
+- Przyszły TTS/PLAY_MEDIA traktować jako chwilowe źródło o najwyższym priorytecie: potem przywracać RADIO PLAY/STOP lub BT PLAY/PAUSE i obsłużyć pending source. Jeśli źródło zniknie podczas TTS (np. BT DISCONNECT), zakończyć w RADIO STOP bez autoplay.
+- Po dodaniu kolejnych źródeł rozszerzyć cykl double-click według capabilities i dostępności runtime, bez osobnego ekranu wyboru.
 - Oprzeć zachowanie startowe urządzenia na Source Managerze.
 
 ## 9. PLAY_MEDIA / TTS

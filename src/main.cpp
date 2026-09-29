@@ -13,6 +13,7 @@
 #include "core/timekeeper.h"
 #include "core/bt_link.h"
 #include "core/bt_audio_input.h"
+#include "core/source_manager.h"
 #ifdef USE_NEXTION
 #include "displays/nextion.h"
 #endif
@@ -81,6 +82,7 @@ void setup() {
   network.begin();
   #if VOXONE_HAS_BT && VOXONE_PIN_MAP_COMPLETE
     btLink.begin();
+    sourceManagerBegin();
   #endif
   #if VOXONE_HAS_BT && VOXONE_PIN_MAP_COMPLETE && VOXONE_BT_I2S_RX_ENABLED
     btAudioInput.begin();
@@ -117,9 +119,13 @@ void loop() {
   serialCli.loop();
   #if VOXONE_HAS_BT && VOXONE_PIN_MAP_COMPLETE
     btLink.loop();
+    // STATUS_BEGIN clears session fields before STATUS_END completes them.
+    // Do not let consumers treat that partial snapshot as a disconnect.
+    if (!btLink.hasIncompleteOnlineSnapshot()) sourceManagerLoop();
   #endif
   #if VOXONE_HAS_BT && VOXONE_PIN_MAP_COMPLETE && VOXONE_BT_I2S_RX_ENABLED
-    btAudioInput.loop(btLink.state(), millis());
+    if (!btLink.hasIncompleteOnlineSnapshot())
+      btAudioInput.loop(btLink.state(), millis());
   #endif
   if (network.status == CONNECTED || network.status==SDREADY) {
     player.loop();

@@ -137,6 +137,30 @@ int main() {
   assert(link.link.state().playback == BtPlayback::Stopped);
   assert(link.link.state().volume == -1);
 
+  // A later snapshot can span several main-loop iterations. Its cleared
+  // session fields must not be consumed until STATUS_END arrives.
+  LinkHarness fragmented;
+  fragmented.link.begin(0);
+  fragmented.line("PROTO 2", 1);
+  fragmented.line("STATUS_BEGIN", 2);
+  fragmented.line("CONNECTED", 3);
+  fragmented.line("SAMPLE_RATE 44100", 4);
+  fragmented.line("STATUS_END", 5);
+  assert(fragmented.link.state().runtimeAvailable);
+  assert(fragmented.link.state().connected);
+  assert(!fragmented.link.hasIncompleteOnlineSnapshot());
+  fragmented.line("STATUS_BEGIN", 6);
+  assert(fragmented.link.hasIncompleteOnlineSnapshot());
+  assert(!fragmented.link.state().connected);
+  assert(fragmented.link.state().sampleRate == 0);
+  fragmented.line("CONNECTED", 7);
+  fragmented.line("SAMPLE_RATE 44100", 8);
+  assert(fragmented.link.hasIncompleteOnlineSnapshot());
+  fragmented.line("STATUS_END", 9);
+  assert(!fragmented.link.hasIncompleteOnlineSnapshot());
+  assert(fragmented.link.state().connected);
+  assert(fragmented.link.state().sampleRate == 44100);
+
   // The currently checked-out VoxOneBT source is protocol v1. Its repeated
   // READY must neither mark v2 available nor flood GET_STATUS requests.
   LinkHarness v1;
