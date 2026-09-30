@@ -15,11 +15,12 @@
 #include "aac_decoder/aac_decoder.h"
 #include "flac_decoder/flac_decoder.h"
 #include "../core/config.h"
+#include "../core/system_operation_state.h"
 #if VOXONE_HAS_BT && VOXONE_PIN_MAP_COMPLETE && VOXONE_BT_I2S_RX_ENABLED
 #include "../core/source_manager.h"
 static inline bool radioCanUseI2S() { return radioI2SOutputEnabled(); }
 #else
-static inline bool radioCanUseI2S() { return true; }
+static inline bool radioCanUseI2S() { return !systemUpdateAudioBlocked(); }
 #endif
 
 #ifdef SDFATFS_USED
@@ -4486,6 +4487,7 @@ void Audio::setI2SCommFMT_LSB(bool commFMT) {
 }
 //---------------------------------------------------------------------------------------------------------------------
 bool Audio::playSample(int16_t sample[2]) {
+    if (!radioCanUseI2S()) return true;
 
     if (getBitsPerSample() == 8) { // Upsample from unsigned 8 bits to signed 16 bits
         sample[LEFTCHANNEL]  = ((sample[LEFTCHANNEL]  & 0xff) -128) << 8;

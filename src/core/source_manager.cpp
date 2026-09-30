@@ -11,6 +11,7 @@
 #include "serialcli.h"
 #include "source_manager_state.h"
 #include "source_vu_state.h"
+#include "system_operation_state.h"
 
 namespace {
 SourceManagerState sourceState;
@@ -57,6 +58,10 @@ void sourceManagerBegin() {
 }
 
 void sourceManagerLoop() {
+  if (systemUpdateAudioBlocked()) {
+    sourceManagerStopForUpdate();
+    return;
+  }
   portENTER_CRITICAL(&sourceMux);
   const SourceUpdate update = sourceState.observe(btLink.state());
   const ActiveSource active = sourceState.active();
@@ -89,6 +94,13 @@ void sourceManagerLoop() {
     display.putRequest(NEWMODE, PLAYER);
 #endif
   refreshDisplay(update);
+}
+
+void sourceManagerStopForUpdate() {
+  portENTER_CRITICAL(&sourceMux);
+  sourceState.stopForUpdate(btLink.state());
+  portEXIT_CRITICAL(&sourceMux);
+  volumeSync.disconnect();
 }
 
 bool bluetoothSourceSelected() {
@@ -135,6 +147,7 @@ uint16_t sourceManagerGetVuLevel(uint16_t dimension, bool& playing) {
 #endif
 
 bool radioI2SOutputEnabled() {
+  if (systemUpdateAudioBlocked()) return false;
 #if VOXONE_BT_I2S_RX_ENABLED
   return !bluetoothSourceSelected() && btAudioInput.radioOutputReady();
 #else

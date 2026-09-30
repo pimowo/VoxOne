@@ -15,6 +15,17 @@ int main() {
   assert(!sources.bluetoothPhysicallyConnected());
   sources.displayView(view);
   assert(view.kind == DisplaySourceKind::Radio);
+  // An update stops source selection without treating a still-connected phone
+  // as a fresh connect when normal observation resumes.
+  SourceManagerState updating;
+  BtLinkState connected{};
+  connected.runtimeAvailable = true;
+  connected.connected = true;
+  assert(updating.observe(connected).activeChanged);
+  updating.stopForUpdate(connected);
+  assert(updating.active() == ActiveSource::Radio);
+  assert(!updating.observe(connected).activeChanged);
+  assert(updating.active() == ActiveSource::Radio);
   assert(view.playback == DisplayPlaybackState::Stopped);
   assert(!displaySourceVuVisible(view));
   assert(!displayVuUnlocked(true, displaySourceVuVisible(view), 50));

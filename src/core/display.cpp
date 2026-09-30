@@ -510,6 +510,11 @@ void Display::_buildPager(){
   for(const auto& p: pages) _pager->addPage(p);
   #if DSP_MODEL==DSP_ST7796
   _pager->addPage(_btTransportPage);
+  _salonUpdatePage = new Page();
+  TextWidget* updateTitle = new TextWidget({0, 144, 4, WA_CENTER}, 32, 0xF800, 0x0000);
+  updateTitle->setText("AKTUALIZACJA");
+  _salonUpdatePage->addWidget(updateTitle);
+  _pager->addPage(_salonUpdatePage);
   #endif
 }
 
@@ -685,7 +690,13 @@ void Display::_swichMode(displayMode_e newmode) {
     _nums->setText(displayedVolume(), numtxtFmt);
   }
   if (newmode == LOST)      _showDialog(LANG::const_DlgLost);
-  if (newmode == UPDATING)  _showDialog(LANG::const_DlgUpdate);
+  if (newmode == UPDATING) {
+#if DSP_MODEL==DSP_ST7796
+    _pager->setPage(_salonUpdatePage, true);
+#else
+    _showDialog(LANG::const_DlgUpdate);
+#endif
+  }
   if (newmode == SLEEPING)  _showDialog("SLEEPING");
   if (newmode == SDCHANGE)  _showDialog(LANG::const_waitForSD);
   if (newmode == INFO || newmode == SETTINGS || newmode == TIMEZONE || newmode == WIFI) _showDialog(LANG::const_DlgNextion);

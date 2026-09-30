@@ -1,5 +1,7 @@
 #include "options.h"
 #include "system_operation_state.h"
+#include "source_manager.h"
+#include "bt_audio_input.h"
 #include "Arduino.h"
 #include <SPIFFS.h>
 #include <Update.h>
@@ -120,6 +122,19 @@ void mqttplaylistSend() {
 namespace {
 SystemOperationState systemOperationState;
 
+void finishFailedUpdateAudio() {
+  if (!systemOperationState.audioBlocked() || systemOperationState.restartPending() ||
+      !systemOperationState.blocksRequests()) return;
+  systemOperationState.awaitRadioStop();
+  player.resetQueue();
+  player.sendCommand({PR_STOP, 0});
+#if VOXONE_HAS_BT && VOXONE_PIN_MAP_COMPLETE
+  sourceManagerStopForUpdate();
+#endif
+  display.putRequest(NEWMODE, PLAYER);
+  systemOperationState.updateFailed();
+}
+
 void scheduleSystemRestart(const char* source) {
   if (systemOperationState.restartPending()) return;
   webUpdateRebootAt = millis() + 1500;
@@ -130,7 +145,6 @@ void scheduleSystemRestart(const char* source) {
 void remountFilesystemAfterFailedUpdate() {
   if (!systemOperationState.filesystemUnavailable()) return;
   if (SPIFFS.begin(false)) {
-    systemOperationState.updateFailed();
     Serial.println("##[UPDATE]# SPIFFS remounted after failed update");
   } else {
     Serial.println("##[ERROR]# SPIFFS remount failed after update error");
@@ -179,6 +193,7 @@ struct WebUpdateSession {
   int target;
   bool started;
   bool finished;
+  bool audioBlocked;
   const char* error;
 };
 
@@ -244,6 +259,8 @@ bool backupWebUpdateData(const char*& error) {
 }  // namespace
 
 bool systemRestartPending() { return systemOperationState.restartPending(); }
+bool systemUpdateAudioBlocked() { return systemOperationState.audioBlocked(); }
+void systemUpdateRadioStopped() { systemOperationState.radioStopped(); }
 
 void requestSystemRestart() { scheduleSystemRestart("SYSTEM"); }
 
@@ -1642,6 +1659,9 @@ void NetServer::processVolumeUpdate(){
 }
 
 void NetServer::loop() {
+  if (systemOperationState.audioBlocked() && !systemOperationState.blocksRequests() &&
+      systemOperationState.isRadioStopped())
+    systemOperationState.releaseFailedUpdateAudio();
   if(network.status==SDREADY) return;
   if (systemRestartPending() && (int32_t)(millis() - webUpdateRebootAt) >= 0) {
     Serial.println("Rebooting...");
@@ -1783,9 +1803,11 @@ void handleWebUpdateUpload(AsyncWebServerRequest *request, const String& filenam
     activeUpdateRequest = request;
     request->onDisconnect([request]() {
       if (activeUpdateRequest == request) {
+        WebUpdateSession* abandoned = static_cast<WebUpdateSession*>(request->_tempObject);
         Update.abort();
         activeUpdateRequest = nullptr;
         remountFilesystemAfterFailedUpdate();
+        if (abandoned && abandoned->audioBlocked) finishFailedUpdateAudio();
       }
     });
     if (!request->hasParam("updatetarget", true)) {
@@ -1862,6 +1884,31 @@ void handleWebUpdateUpload(AsyncWebServerRequest *request, const String& filenam
       session->error = "Declared image size exceeds upload size";
       return;
     }
+    if (!systemOperationState.updateStarted()) {
+      session->error = "Update already in progress";
+      return;
+    }
+    session->audioBlocked = true;
+    network.lostPlaying = false;
+#if VOXONE_HAS_BT && VOXONE_PIN_MAP_COMPLETE
+    sourceManagerStopForUpdate();
+#if VOXONE_BT_I2S_RX_ENABLED
+    if (!btAudioInput.blockForUpdate()) {
+      session->error = "Could not stop Bluetooth audio output";
+      return;
+    }
+#endif
+#endif
+    player.resetQueue();
+    player.sendCommand({PR_STOP, 0});
+    display.putRequest(NEWMODE, UPDATING);
+    const uint32_t stopStarted = millis();
+    while (!systemOperationState.isRadioStopped() && millis() - stopStarted < 2000)
+      delay(1);
+    if (!systemOperationState.isRadioStopped()) {
+      session->error = "Radio did not stop before update";
+      return;
+    }
     if (session->target == U_SPIFFS) {
       if (!backupWebUpdateData(session->error)) return;
       systemOperationState.filesystemUnmounting();
@@ -1872,7 +1919,6 @@ void handleWebUpdateUpload(AsyncWebServerRequest *request, const String& filenam
                       session->target)) {
       Serial.printf("Web Update begin failed: %s\n", Update.errorString());
       session->error = "Update.begin failed (see Serial)";
-      if (session->target == U_SPIFFS) remountFilesystemAfterFailedUpdate();
       return;
     }
     session->started = true;
@@ -1880,8 +1926,6 @@ void handleWebUpdateUpload(AsyncWebServerRequest *request, const String& filenam
                   session->target == U_FLASH ? "firmware" : "SPIFFS",
                   static_cast<unsigned>(session->expected),
                   static_cast<unsigned>(session->limit));
-    player.sendCommand({PR_STOP, 0});
-    display.putRequest(NEWMODE, UPDATING);
   }
   if (!session || session->error || !session->started) return;
   if (index > session->limit || len > session->limit - index ||
@@ -1909,7 +1953,7 @@ void handleWebUpdateUpload(AsyncWebServerRequest *request, const String& filenam
       Serial.printf("##[UPDATE]# upload complete: %u bytes\n", static_cast<unsigned>(index + len));
       scheduleSystemRestart("UPDATE");
     }
-    activeUpdateRequest = nullptr;
+    if (session->finished) activeUpdateRequest = nullptr;
   }
 }
 
@@ -2004,7 +2048,13 @@ void handleNotFound(AsyncWebServerRequest * request) {
     if(request->url()=="/update"){
 #if defined(HTTP_USER) && defined(HTTP_PASS)
       if (network.status == CONNECTED && !request->authenticate(HTTP_USER, HTTP_PASS)) {
-        activeUpdateRequest = nullptr;
+        if (activeUpdateRequest == request) {
+          Update.abort();
+          activeUpdateRequest = nullptr;
+          remountFilesystemAfterFailedUpdate();
+          WebUpdateSession* session = static_cast<WebUpdateSession*>(request->_tempObject);
+          if (session && session->audioBlocked) finishFailedUpdateAudio();
+        }
         request->requestAuthentication();
         return;
       }
@@ -2015,8 +2065,9 @@ void handleNotFound(AsyncWebServerRequest * request) {
         if (activeUpdateRequest == request) {
           Update.abort();
           activeUpdateRequest = nullptr;
+          remountFilesystemAfterFailedUpdate();
+          if (session && session->audioBlocked) finishFailedUpdateAudio();
         }
-        remountFilesystemAfterFailedUpdate();
       }
       const char* message = success ? "OK" :
           (session && session->error ? session->error : "No valid update image received");

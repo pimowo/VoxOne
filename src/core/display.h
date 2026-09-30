@@ -106,6 +106,7 @@ class Display {
     SalonEqWidget *_salonEq = nullptr;
     ScrollWidget *_btTransportArtist, *_btTransportTitle;
     Page *_btTransportPage;
+    Page *_salonUpdatePage = nullptr;
 #endif
 #if DSP_MODEL==DSP_ST7789_76 || DSP_MODEL==DSP_ST7796
     TextWidget *_plheader, *_plcounter, *_plplaying;

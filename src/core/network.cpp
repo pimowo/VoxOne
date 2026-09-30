@@ -29,6 +29,12 @@ char apSsid[14] = "VoxOne-Setup";
 
 void MyNetwork::WiFiReconnected(WiFiEvent_t event, WiFiEventInfo_t info){
   if (systemRestartPending()) return;
+  if (systemUpdateAudioBlocked()) {
+    network.beginReconnect = false;
+    network.lostPlaying = false;
+    mqttWifiConnected();
+    return;
+  }
   network.beginReconnect = false;
   player.lockOutput = false;
   delay(100);
@@ -46,6 +52,13 @@ void MyNetwork::WiFiReconnected(WiFiEvent_t event, WiFiEventInfo_t info){
 void MyNetwork::WiFiLostConnection(WiFiEvent_t event, WiFiEventInfo_t info){
   if (!wifiRecoveryAllowed(systemRestartPending())) {
     Serial.println("##[SYSTEM]# WiFi disconnect ignored during restart");
+    return;
+  }
+  if (systemUpdateAudioBlocked()) {
+    network.lostPlaying = false;
+    network.beginReconnect = true;
+    mqttWifiDisconnected();
+    WiFi.reconnect();
     return;
   }
   if(!network.beginReconnect){

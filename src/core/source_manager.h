@@ -8,6 +8,7 @@
 
 void sourceManagerBegin();
 void sourceManagerLoop();
+void sourceManagerStopForUpdate();
 void cycleNextSource();
 bool bluetoothSourceSelected();
 bool bluetoothPhysicallyConnected();

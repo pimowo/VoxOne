@@ -36,4 +36,24 @@ int main() {
   assert(state.restartPending());
   assert(state.blocksRequests());
   assert(!wifiRecoveryAllowed(state.restartPending()));
+
+  // A valid update gates both outputs once and stays silent through restart.
+  SystemOperationState update;
+  assert(update.updateStarted());
+  assert(!update.updateStarted());
+  assert(update.audioBlocked());
+  assert(!update.releaseFailedUpdateAudio());
+  update.radioStopped();
+  assert(update.isRadioStopped());
+  update.awaitRadioStop();
+  update.updateFailed();
+  assert(update.audioBlocked());
+  assert(!update.updateStarted());
+  assert(!update.releaseFailedUpdateAudio());
+  update.radioStopped();
+  assert(update.releaseFailedUpdateAudio());
+  assert(!update.audioBlocked());
+  assert(update.updateStarted());
+  update.restartRequested();
+  assert(update.audioBlocked());
 }

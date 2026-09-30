@@ -7,6 +7,10 @@
 #include "netserver.h"
 #include "timekeeper.h"
 #include "volume_map.h"
+#include "system_operation_state.h"
+#if I2S_DOUT!=255 && VS1053_CS==255
+#include <driver/i2s.h>
+#endif
 #include "../displays/tools/l10n.h"
 #include "../pluginsManager/pluginsManager.h"
 #ifdef USE_NEXTION
@@ -78,6 +82,7 @@ void Player::init() {
 
 void Player::sendCommand(playerRequestParams_t request){
   if(playerQueue==NULL) return;
+  if(systemUpdateAudioBlocked() && request.type != PR_STOP) return;
   xQueueSend(playerQueue, &request, PLQ_SEND_DELAY);
 }
 
@@ -114,6 +119,12 @@ void Player::_stop(bool alreadyStopped){
   #endif
   setDefaults();
   if(!alreadyStopped) stopSong();
+  if (systemUpdateAudioBlocked()) {
+#if I2S_DOUT!=255 && VS1053_CS==255
+    i2s_zero_dma_buffer(I2S_NUM_0);
+#endif
+    systemUpdateRadioStopped();
+  }
   netserver.requestOnChange(BITRATE, 0);
   display.putRequest(DBITRATE);
   display.putRequest(PSTOP);
@@ -180,6 +191,7 @@ void Player::loop() {
   }
   playerRequestParams_t requestP;
   if(xQueueReceive(playerQueue, &requestP, isRunning()?PL_QUEUE_TICKS:PL_QUEUE_TICKS_ST)){
+    if (systemUpdateAudioBlocked() && requestP.type != PR_STOP) return;
     switch (requestP.type){
       case PR_STOP: _stop(); break;
       case PR_PLAY: {

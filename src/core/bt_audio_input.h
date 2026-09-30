@@ -18,6 +18,7 @@ class BtAudioInput {
   void loop(const BtLinkState& link, bool bluetoothSelected,
             uint32_t radioRate, uint32_t nowMs);
   bool radioOutputReady() const { return radioReady_.load(); }
+  bool blockForUpdate();
 
  private:
   struct Stats {

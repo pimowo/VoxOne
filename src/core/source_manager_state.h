@@ -168,6 +168,12 @@ class SourceManagerState {
     return active_ == ActiveSource::Bluetooth && connected_;
   }
 
+  void stopForUpdate(const BtLinkState& bt) {
+    active_ = ActiveSource::Radio;
+    observedConnected_ = bt.runtimeAvailable && bt.connected;
+    observedVolumeRevision_ = bt.volumeRevision;
+  }
+
  private:
   void remember(const BtLinkState& bt) {
     connected_ = bt.connected;

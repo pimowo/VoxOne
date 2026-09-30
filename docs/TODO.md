@@ -12,8 +12,7 @@
 
 ## 6. LCD AKTUALIZACJA
 
-- Po rozpoczęciu aktualizacji firmware lub filesystem zatrzymać całe audio: RADIO ma przejść do STOP, BT nie może podawać PCM do I2S0, a bridge i ownership audio trzeba bezpiecznie wyłączyć na czas aktualizacji. Zapewnić pełną ciszę; obecne szatkowanie BT podczas aktualizacji jest niedopuszczalne.
-- Pokazać czarne tło oraz wycentrowany pionowo i poziomo czerwony napis „AKTUALIZACJA” czcionką jak nazwa stacji, bez elementów PLAYER.
+- Fizycznie sprawdzić cleanup Web Update po błędzie/przerwaniu oraz brak samoczynnego wznowienia audio.
 - Zweryfikować osobno ekran aktualizacji DESK i nie naruszyć stabilnego ScrollWidget/HOLD.
 
 ## 7. Branding

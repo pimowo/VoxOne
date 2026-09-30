@@ -8,6 +8,7 @@
 #include "bt_audio_input_state.h"
 #include "bt_audio_route_state.h"
 #include "serialcli.h"
+#include "system_operation_state.h"
 
 static_assert(VOXONE_BT_I2S_BCLK_PIN != 255 &&
                   VOXONE_BT_I2S_WS_PIN != 255 &&
@@ -35,7 +36,22 @@ void BtAudioInput::begin() {
   lastReportMs_ = millis();
 }
 
+bool BtAudioInput::blockForUpdate() {
+  routeEnabled_.store(false);
+  radioReady_.store(false);
+  if (!outputMutex_ || xSemaphoreTake(outputMutex_, pdMS_TO_TICKS(100)) != pdTRUE)
+    return false;
+  const esp_err_t error = i2s_zero_dma_buffer(I2S_NUM_0);
+  xSemaphoreGive(outputMutex_);
+  return error == ESP_OK;
+}
+
 void BtAudioInput::route(bool bluetoothSelected, uint32_t radioRate) {
+  if (systemUpdateAudioBlocked()) {
+    routeEnabled_.store(false);
+    radioReady_.store(false);
+    return;
+  }
   // While RADIO owns I2S0, Audio::setSampleRate() already manages its clock.
   if (!bluetoothSelected && !bluetoothSelected_ && radioReady_.load()) {
     outputRate_ = radioRate;
@@ -207,9 +223,9 @@ void BtAudioInput::readContinuously() {
     stats_.lastDataMs = dataMs;
     if (blockPeak > stats_.peak16) stats_.peak16 = blockPeak;
     portEXIT_CRITICAL(&statsMux_);
-    if (routeEnabled_.load() && outputMutex_ &&
+    if (routeEnabled_.load() && !systemUpdateAudioBlocked() && outputMutex_ &&
         xSemaphoreTake(outputMutex_, pdMS_TO_TICKS(kWriteWaitMs)) == pdTRUE) {
-      if (routeEnabled_.load()) {
+      if (routeEnabled_.load() && !systemUpdateAudioBlocked()) {
         size_t bytesWritten = 0;
         const esp_err_t writeError = i2s_write(I2S_NUM_0, pcm, bytesRead,
                                                &bytesWritten,
