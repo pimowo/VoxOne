@@ -66,8 +66,33 @@ struct VolumeHarness {
 int main() {
   assert(btUserToAbsolute(0) == 0 && btUserToAbsolute(100) == 127);
   assert(btAbsoluteToUser(0) == 0 && btAbsoluteToUser(127) == 100);
-  for (int user = 0; user <= 100; ++user)
-    assert(btAbsoluteToUser(btUserToAbsolute(static_cast<uint8_t>(user))) == user);
+  assert(btUserToAbsolute(255) == 127 && btAbsoluteToUser(255) == 100);
+  const uint8_t expectedAbsolute[] = {0, 10, 18, 32, 46, 58, 70, 82, 94, 105, 116, 127};
+  const uint8_t expectedUser[] = {0, 5, 10, 20, 30, 40, 50, 60, 70, 80, 90, 100};
+  for (size_t i = 0; i < sizeof(expectedUser); ++i)
+    assert(btUserToAbsolute(expectedUser[i]) == expectedAbsolute[i]);
+
+  int maxUserRoundTripError = 0;
+  for (int user = 0; user <= 100; ++user) {
+    const uint8_t absolute = btUserToAbsolute(static_cast<uint8_t>(user));
+    if (user > 0)
+      assert(absolute >= btUserToAbsolute(static_cast<uint8_t>(user - 1)));
+    const int error = static_cast<int>(btAbsoluteToUser(absolute)) - user;
+    const int distance = error < 0 ? -error : error;
+    if (distance > maxUserRoundTripError) maxUserRoundTripError = distance;
+  }
+  assert(maxUserRoundTripError == 0);
+
+  int maxAbsoluteRoundTripError = 0;
+  for (int absolute = 0; absolute <= 127; ++absolute) {
+    const uint8_t user = btAbsoluteToUser(static_cast<uint8_t>(absolute));
+    if (absolute > 0)
+      assert(user >= btAbsoluteToUser(static_cast<uint8_t>(absolute - 1)));
+    const int error = static_cast<int>(btUserToAbsolute(user)) - absolute;
+    const int distance = error < 0 ? -error : error;
+    if (distance > maxAbsoluteRoundTripError) maxAbsoluteRoundTripError = distance;
+  }
+  assert(maxAbsoluteRoundTripError <= 1);
 
   VolumeHarness vox;
   vox.link.begin(0);
@@ -79,7 +104,7 @@ int main() {
   const SourceUpdate connected = vox.observe(5);
   assert(connected.btConnected && connected.activeChanged);
   assert(!connected.volumeCallback && vox.userVolume == 25);
-  assert(vox.sent.back() == "SET_VOLUME 32");
+  assert(vox.sent.back() == "SET_VOLUME 39");
   assert(vox.volumeSaves == 0);
 
   // A late initial phone value in the next loop is not the new master.
@@ -94,21 +119,21 @@ int main() {
   assert(vox.turnBt(1) && vox.userVolume == 26);
   assert(vox.turnBt(1) && vox.userVolume == 27);
   assert(vox.turnBt(1) && vox.userVolume == 28);
-  assert(vox.sent[vox.sent.size() - 3] == "SET_VOLUME 33");
-  assert(vox.sent[vox.sent.size() - 2] == "SET_VOLUME 34");
-  assert(vox.sent.back() == "SET_VOLUME 36");
+  assert(vox.sent[vox.sent.size() - 3] == "SET_VOLUME 40");
+  assert(vox.sent[vox.sent.size() - 2] == "SET_VOLUME 42");
+  assert(vox.sent.back() == "SET_VOLUME 43");
   assert(vox.volumeSaves == 3);
   vox.observe(9);
   assert(vox.userVolume == 28 && vox.volumeSaves == 3);
 
-  vox.line("VOLUME 36", 10);  // Confirmation of the last local target.
+  vox.line("VOLUME 43", 10);  // Confirmation of the last local target.
   vox.observe(10);
   assert(vox.userVolume == 28 && !vox.sync.pending());
 
   const size_t sentBeforePhoneCallback = vox.sent.size();
-  vox.line("VOLUME 51", 11);  // Phone volume maps to VoxOne user 40.
+  vox.line("VOLUME 58", 11);  // Phone volume maps to VoxOne user 40.
   const SourceUpdate phone = vox.observe(11);
-  assert(phone.volumeCallback && phone.absoluteVolume == 51);
+  assert(phone.volumeCallback && phone.absoluteVolume == 58);
   assert(vox.userVolume == 40 && vox.volumeSaves == 4);
   assert(vox.sent.size() == sentBeforePhoneCallback);
 
@@ -118,7 +143,7 @@ int main() {
   vox.userVolume = 20;  // Existing radio Player path changes shared volume.
   ++vox.volumeSaves;
   vox.observe(12);
-  assert(vox.sent.back() == "SET_VOLUME 25");
+  assert(vox.sent.back() == "SET_VOLUME 32");
   const size_t sentAfterRadioChange = vox.sent.size();
   vox.observe(13);
   assert(vox.sent.size() == sentAfterRadioChange);
@@ -135,28 +160,28 @@ int main() {
   const SourceUpdate reconnected = vox.observe(16);
   assert(reconnected.btConnected && !reconnected.volumeCallback);
   assert(vox.userVolume == 20);
-  assert(vox.sent.back() == "SET_VOLUME 25");
+  assert(vox.sent.back() == "SET_VOLUME 32");
 
   // No confirmation: scheduled retries at +300, +800 and +1500 ms only.
   const size_t sentOnReconnect = vox.sent.size();
   vox.observe(315);
   assert(vox.sent.size() == sentOnReconnect);
   vox.observe(316);
-  assert(vox.sent.size() == sentOnReconnect + 1 && vox.sent.back() == "SET_VOLUME 25");
+  assert(vox.sent.size() == sentOnReconnect + 1 && vox.sent.back() == "SET_VOLUME 32");
   vox.observe(815);
   assert(vox.sent.size() == sentOnReconnect + 1);
   vox.observe(816);
-  assert(vox.sent.size() == sentOnReconnect + 2 && vox.sent.back() == "SET_VOLUME 25");
+  assert(vox.sent.size() == sentOnReconnect + 2 && vox.sent.back() == "SET_VOLUME 32");
   vox.observe(1515);
   assert(vox.sent.size() == sentOnReconnect + 2);
   vox.observe(1516);
-  assert(vox.sent.size() == sentOnReconnect + 3 && vox.sent.back() == "SET_VOLUME 25");
+  assert(vox.sent.size() == sentOnReconnect + 3 && vox.sent.back() == "SET_VOLUME 32");
   assert(vox.sync.pending());
   vox.observe(1816);  // Finite confirmation window after the fourth send.
   assert(!vox.sync.pending() && vox.sent.size() == sentOnReconnect + 3);
   vox.observe(10000);
   assert(vox.sent.size() == sentOnReconnect + 3);
-  vox.line("VOLUME 51", 10001);
+  vox.line("VOLUME 58", 10001);
   vox.observe(10001);
   assert(vox.userVolume == 40 && vox.sent.size() == sentOnReconnect + 3);
 
@@ -175,8 +200,8 @@ int main() {
   assert(stale.sent.size() == staleInitialSend);
   stale.observe(305);
   assert(stale.sent.size() == staleInitialSend + 1);
-  assert(stale.sent.back() == "SET_VOLUME 32");
-  stale.line("VOLUME 32", 400);
+  assert(stale.sent.back() == "SET_VOLUME 39");
+  stale.line("VOLUME 39", 400);
   stale.observe(400);
   assert(!stale.sync.pending() && stale.userVolume == 25);
   stale.observe(2000);
@@ -193,7 +218,7 @@ int main() {
   assert(turns.turnBt(1) && turns.turnBt(1) && turns.turnBt(1));
   assert(turns.userVolume == 28);
   turns.observe(305);
-  assert(turns.sent.back() == "SET_VOLUME 36");
+  assert(turns.sent.back() == "SET_VOLUME 43");
   turns.observe(805);
   turns.observe(1505);
   const size_t turnSends = turns.sent.size();

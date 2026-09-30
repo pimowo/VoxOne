@@ -2,15 +2,16 @@
 #define VOXONE_BT_VOLUME_H
 
 #include <stdint.h>
+#include <math.h>
 
 inline uint8_t btUserToAbsolute(uint8_t user) {
   if (user > 100) user = 100;
-  return static_cast<uint8_t>((static_cast<uint16_t>(user) * 127 + 50) / 100);
+  return static_cast<uint8_t>(lroundf(127.0f * powf(user / 100.0f, 0.85f)));
 }
 
 inline uint8_t btAbsoluteToUser(uint8_t absolute) {
   if (absolute > 127) absolute = 127;
-  return static_cast<uint8_t>((static_cast<uint16_t>(absolute) * 100 + 63) / 127);
+  return static_cast<uint8_t>(lroundf(100.0f * powf(absolute / 127.0f, 1.0f / 0.85f)));
 }
 
 // Tracks one outstanding master command, not a separate BT user volume.
