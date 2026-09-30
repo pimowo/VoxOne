@@ -28,6 +28,16 @@ struct SourceUpdate {
 class SourceManagerState {
  public:
   ActiveSource active() const { return active_; }
+  bool bluetoothPlaying() const {
+    return active_ == ActiveSource::Bluetooth && connected_ &&
+           playback_ == BtPlayback::Playing;
+  }
+  void bluetoothRawVu(uint16_t& left, uint16_t& right,
+                      uint32_t& lastDataMs) const {
+    left = rawVuLeft_;
+    right = rawVuRight_;
+    lastDataMs = rawVuLastMs_;
+  }
 
   SourceUpdate cycle(const BtLinkState& bt) {
     SourceUpdate update;
@@ -47,6 +57,9 @@ class SourceManagerState {
 
   SourceUpdate observe(const BtLinkState& bt) {
     SourceUpdate update;
+    rawVuLeft_ = bt.rawVuLeft;
+    rawVuRight_ = bt.rawVuRight;
+    rawVuLastMs_ = bt.rawVuLastMs;
     const bool connectedNow = bt.runtimeAvailable && bt.connected;
     const bool wasConnected = observedConnected_;
     observedConnected_ = connectedNow;
@@ -137,6 +150,9 @@ class SourceManagerState {
   bool connected_ = false;
   BtPlayback playback_ = BtPlayback::Stopped;
   uint32_t observedVolumeRevision_ = 0;
+  uint16_t rawVuLeft_ = 0;
+  uint16_t rawVuRight_ = 0;
+  uint32_t rawVuLastMs_ = 0;
   char peerName_[sizeof(BtLinkState::peerName)]{};
   char artist_[sizeof(BtLinkState::artist)]{};
   char title_[sizeof(BtLinkState::title)]{};

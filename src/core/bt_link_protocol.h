@@ -22,6 +22,9 @@ struct BtLinkState {
   int16_t volume = -1;
   uint32_t volumeRevision = 0;
   uint32_t sampleRate = 0;
+  uint16_t rawVuLeft = 0;
+  uint16_t rawVuRight = 0;
+  uint32_t rawVuLastMs = 0;
 };
 
 struct BtLinkDiagnostics {

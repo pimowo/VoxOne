@@ -441,6 +441,12 @@ void Display::_showDialog(const char *title){
   _meta->setText(title);
 }
 
+static bool activeSourceVuVisible() {
+  DisplaySourceView source{};
+  return getDisplaySourceView && getDisplaySourceView(source)
+      ? displaySourceVuVisible(source) : player.isRunning();
+}
+
 void Display::_swichMode(displayMode_e newmode) {
   #ifdef USE_NEXTION
     //nextion.swichMode(newmode);
@@ -465,7 +471,7 @@ void Display::_swichMode(displayMode_e newmode) {
 #endif
   dsp.setScrollId(NULL);
   if (newmode == PLAYER) {
-    if(player.isRunning())
+    if(activeSourceVuVisible())
       if(clockMove.width<0) _clock->moveBack(); else _clock->moveTo(clockMove);
     else
       _clock->moveBack();
@@ -608,23 +614,18 @@ void Display::putRequest(displayRequestType_e type, int payload){
   #endif
 }
 
+void Display::_setVuVisibility(bool sourceVisible) {
+  const bool lockVu = !displayVuUnlocked(
+      config.store.vumeter, sourceVisible, config.userVolume);
+  if(_vuwidget && _vuwidget->locked() != lockVu) _vuwidget->lock(lockVu);
+}
+
 void Display::_layoutChange(bool played){
-  if(config.store.vumeter && _vuwidget){
-    if(played){
-      if(_vuwidget) _vuwidget->unlock();
-      //_clock->moveTo(clockMove);
-      if(clockMove.width<0) _clock->moveBack(); else _clock->moveTo(clockMove);
-    }else{
-      if(_vuwidget) if(!_vuwidget->locked()) _vuwidget->lock();
-      _clock->moveBack();
-    }
+  _setVuVisibility(played);
+  if(played){
+    if(clockMove.width<0) _clock->moveBack(); else _clock->moveTo(clockMove);
   }else{
-    if(played){
-      if(clockMove.width<0) _clock->moveBack(); else _clock->moveTo(clockMove);
-      //_clock->moveBack();
-    }else{
-      _clock->moveBack();
-    }
+    _clock->moveBack();
   }
 }
 
@@ -685,7 +686,7 @@ void Display::loop() {
             if(_mode==INFO)     nextion.rssi();
           #endif*/
           break;
-        case NEWTITLE: _title(); break;
+        case NEWTITLE: _title(); _layoutChange(activeSourceVuVisible()); break;
         case NEWSTATION:
           _station();
 #if DSP_MODEL==DSP_ST7789_76 || DSP_MODEL==DSP_ST7796
@@ -721,8 +722,7 @@ void Display::loop() {
         case AUDIOINFO: if(_heapbar)  { _heapbar->lock(!config.store.audioinfo); _heapbar->setValue(player.inBufferFilled()); } break;
         case SHOWVUMETER: {
           if(_vuwidget){
-            _vuwidget->lock(!config.store.vumeter); 
-            _layoutChange(player.isRunning());
+            _layoutChange(activeSourceVuVisible());
           }
           break;
         }
@@ -745,7 +745,7 @@ void Display::loop() {
         }
         case DSPRSSI: if(_rssi){ _setRSSI(request.payload); } if (_heapbar && config.store.audioinfo) _heapbar->setValue(player.isRunning()?player.inBufferFilled():0); break;
         case PSTART:
-          _layoutChange(true);
+          _layoutChange(activeSourceVuVisible());
 #if DSP_MODEL==DSP_ST7796
           _station();
           _updatePlaybackStatus();
@@ -755,7 +755,7 @@ void Display::loop() {
 #endif
           break;
         case PSTOP:
-          _layoutChange(false);
+          _layoutChange(activeSourceVuVisible());
 #if DSP_MODEL==DSP_ST7796
           _station();
           _updatePlaybackStatus();
@@ -992,6 +992,7 @@ void Display::_time(bool redraw) {
 }
 
 void Display::_volume() {
+  _setVuVisibility(activeSourceVuVisible());
   if(_volbar) _volbar->setValue(displayedVolume());
 #if DSP_MODEL==DSP_ST7789_76
   if(_deskVolume) _deskVolume->setText(displayedVolume(), "\023 %d");

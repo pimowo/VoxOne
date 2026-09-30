@@ -4,8 +4,12 @@
 #include "Arduino.h"
 #include "widgets.h"
 #include "../../core/player.h"    //  for VU widget
+#if VOXONE_HAS_BT && VOXONE_PIN_MAP_COMPLETE && VOXONE_BT_I2S_RX_ENABLED
+#include "../../core/source_manager.h"
+#endif
 #include "../../core/network.h"   //  for Clock widget
 #include "../../core/config.h"
+#include "../../core/source_vu_state.h"
 #include "../tools/l10n.h"
 #include "../tools/psframebuffer.h"
 
@@ -407,12 +411,23 @@ void VuWidget::_draw(){
   static uint16_t measL, measR;
   uint16_t bandColor;
   uint16_t dimension = _config.align?_bands.width:_bands.height;
-  uint16_t vulevel = player.get_VUlevel(dimension);
+  uint16_t vulevel;
+  bool played;
+#if VOXONE_HAS_BT && VOXONE_PIN_MAP_COMPLETE && VOXONE_BT_I2S_RX_ENABLED
+  vulevel = sourceManagerGetVuLevel(dimension, played);
+#else
+  const SourceVuResult radioVu = sourceVuSelect(
+      false, player.isRunning(), player.get_VUlevel(dimension), false,
+      0, 0, 0, millis(), dimension);
+  vulevel = radioVu.levels;
+  played = radioVu.playing;
+#endif
   
-  uint8_t L = (vulevel >> 8) & 0xFF;
-  uint8_t R = vulevel & 0xFF;
+  const uint8_t levelL = (vulevel >> 8) & 0xFF;
+  const uint8_t levelR = vulevel & 0xFF;
+  const uint8_t L = levelL >= dimension ? 0 : dimension - levelL;
+  const uint8_t R = levelR >= dimension ? 0 : dimension - levelR;
   
-  bool played = player.isRunning();
   if(played){
     measL=(L>=measL)?measL + _bands.fadespeed:L;
     measR=(R>=measR)?measR + _bands.fadespeed:R;

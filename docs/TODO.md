@@ -1,362 +1,142 @@
 # VoxOne — aktualne zadania
 
-> Jedyna kanoniczna lista bieżących prac projektu. Zakończone i zweryfikowane zadania usuwamy; nie prowadzimy sekcji DONE.
+> Jedyna kanoniczna lista bieżących prac. Po zakończeniu i odpowiedniej weryfikacji usuwamy zadanie; nie prowadzimy sekcji DONE.
 
-## 1. Zachowanie uruchomieniowe urządzenia
+## 1. LCD SALON — poprawki BT
 
-**Priorytet: przed SALON. Wspólne dla DESK, SALON i DIN.**
+- Zmienić „Oczekuję na połączenie” na „Oczekuję na połączenie...”; przy rozłączonym BT nie pokazywać STOP.
+- Ukrywać tekst „Not Provided”; stacja ma pokazywać nazwę urządzenia, a artysta i utwór pozostawać puste bez prawdziwych metadata.
 
-- Ustalić konfigurację startową: `GRAJ` albo `POZOSTAŁ STOP`.
-- Ustalić źródło startowe: ostatnie źródło, RADIO, a później inne źródła według capabilities.
-- Dla RADIO obsłużyć ostatnią stację albo konkretną skonfigurowaną stację.
-- Określić zachowanie, gdy zapisane źródło nie istnieje w profilu.
-- Dodać konfigurację w WWW i persistence.
-- Wykonać test cold boot.
-- Nie łączyć tej funkcji ze Startup Volume.
+## 2. LCD SALON — dolna część PLAYER
 
-## 2. Krótki audit DESK
+- Zastąpić „VOL” ikoną głośnika; pokazać „WiFi” bliżej słupków RSSI.
+- Wyśrodkować bitrate/audio info między VU a zegarem, ikonę BT nad nim i Volume względem VU.
+- Umieścić PLAY/PAUZA/STOP oraz ROCK/POP/USER/LOUDNESS w cienkich ramkach; zachować symetrię i odstępy.
 
-**Priorytet: przed przeniesieniem głównych prac na SALON.**
+## 3. BT-AUDIO-INFO-1
 
-- Sprawdzić dłuższe odtwarzanie 128/256/320 kbps i kilka restartów.
-- Sprawdzić szybki enkoder, dwóch klientów WWW i Wi-Fi reconnect.
-- Sprawdzić Web Update firmware oraz SPIFFS.
-- Sprawdzić trzaski i heap po dłuższym działaniu.
-- Nie rozpoczynać kolejnego dużego refaktoru DESK bez konkretnego problemu.
+- Przy aktywnym BT pokazywać sample rate 44.1/48 kHz zamiast starego bitrate RADIO.
+- Później rozważyć codec i rzeczywisty bitrate A2DP.
 
-## 3. Audio — `Truncated MP3 frame`
+## 4. Ikona BT
 
-**Priorytet: jeśli problem nadal występuje; stabilne audio nie blokuje SALON.**
+- Na wszystkich ekranach LCD pokazywać ikonę BT, gdy telefon jest fizycznie połączony, niezależnie od aktywnego źródła.
 
-- Nie traktować niepełnej ramki MP3 od razu jako fatal error; zachować jej początek, doczytać dane i dopiero wtedy dekodować.
-- Sprawdzić ICY stripping, `memmove`, MP3 sync, frame length i Helix.
-- Testować szczególnie Muzyczne Radio DAB+ oraz reconnecty około 66–71 s.
+## 5. Scroll tekstu
 
-## 4. Audio — mikroprzycięcia i wydajność
+- Przeanalizować scroll stacji, artysty i utworu na podstawie `reference/yoPilot/`; katalog `reference/` pozostawić tylko do odczytu.
 
-**Priorytet: diagnostyka; nie optymalizować bez pomiarów.**
+## 6. LCD AKTUALIZACJA
 
-- Po finalnym MQTT wykonać ponownie `voxone_debug`.
-- Sprawdzić `loopMax`, `mqtt_us`, UI, logger, web, starvation, `need`, buffer minimum i I2S maximum.
-- Na podstawie pomiarów zdecydować, czy optymalizować MQTT, logger, UI, WebServer lub audio task/core.
-- Nie przenosić audio do osobnego FreeRTOS task/core bez pomiarów uzasadniających zmianę.
+- Pokazać czarne tło oraz wycentrowany pionowo i poziomo czerwony napis „AKTUALIZACJA” czcionką jak nazwa stacji, bez elementów PLAYER.
+- Zweryfikować osobno ekran aktualizacji DESK i nie naruszyć stabilnego ScrollWidget/HOLD.
 
-## 5. SALON-HW-1 — pierwszy SALON bez TDA
+## 7. Branding
 
-**Priorytet: następny duży etap.**
+- Przygotować logo VoxOne do ekranu startowego LCD i WWW, favicon, a później do README/GitHub.
+- Trzymać źródłowe SVG i warianty PNG w jednym miejscu, np. `assets/branding/`; nie obciążać LCD dużą grafiką.
 
-### Sprzęt
+## 8. PLAY_MEDIA / TTS
 
-- ESP32-S3 DevKitC-1 N16R8, ST7796S 480×320, PCM5102A, główny enkoder i VoxOneBT jako osobny klasyczny ESP32.
-- Pierwszy etap bez TDA7719, AUX i SPDIF.
+- RADIO PLAY → TTS → RADIO PLAY i RADIO STOP → TTS → RADIO STOP działają; poprawić BT PLAY → TTS → BT PLAY oraz BT STOP → TTS → BT STOP.
+- Uporządkować ownership I2S0, przywracanie sample rate, źródła i playback oraz cleanup po błędzie, przerwaniu i timeout. Gdy BT zniknie podczas TTS, zakończyć w RADIO STOP bez autoplay.
+- Podczas TTS pokazać na LCD: stacja „KOMUNIKAT TTS”, artysta „Powiadomienie głosowe”, utwór pusty.
+- Później rozważyć HTTPS, redirecty i opcjonalną Volume TTS.
 
-### Połączenia
+## 9. Zachowanie startowe / zmiana źródła
 
-- LCD: DC GPIO9, CS GPIO10, MOSI GPIO11, SCK GPIO12, BL GPIO14, RST `-1`; MISO GPIO13 nie podłączać.
-- PCM5102A: DOUT GPIO4, BCLK GPIO5, LRCK GPIO6.
-- Enkoder na `ENCODER_2`: S2 GPIO47, S1 GPIO48, KEY GPIO21.
-- Ustawić `USE_BUILTIN_LED = false`.
-- VoxOneBT przez osobny UART na złączu `NEXTION`: SALON RX GPIO15, SALON TX GPIO16.
-- VoxOneBT audio I2S przez `ENCODER_1`: BCLK GPIO41, WS/LRCLK GPIO40, DATA IN GPIO39.
-- W przyszłym SALON_DSP współdzielić I²C GPIO7/8 przez jedną instancję magistrali z DS3231 i TDA7719.
+- Docelowo start urządzenia i każda zmiana źródła mają pozostawiać odtwarzanie w STOP: RADIO → BT → STOP oraz BT → RADIO → STOP.
+- Sprawdzić automatyczny wybór BT po nowym połączeniu telefonu, fallbacki niedostępnego źródła oraz cold boot.
+- Oddzielić tę semantykę od istniejącego Startup Volume. Konfigurację startowej stacji/źródła wprowadzać tylko w zgodzie z powyższą zasadą.
 
-### Profil i uruchomienie
+## 10. WWW — aktywne źródło
 
-- Zweryfikować współdzielenie GPIO48 z RGB LED.
-- Sprawdzić PCM5102A i tor audio podczas odtwarzania na SALON.
-- Sprawdzić MQTT/HA na SALON.
+- Dane PLAYER pobierać z Source Managera. RADIO: stacja, artysta, utwór, codec, bitrate. BT: nazwa urządzenia, artysta, utwór, playback, sample rate.
+- Przy aktywnym BT nie pokazywać poprzednich danych RADIO; dodać sterowanie/status BT w WWW i HA.
 
-## 6. LCD SALON
+## 11. WWW — STATUS jako ekran startowy
 
-**Priorytet: po uruchomieniu sprzętu; najpierw funkcje, potem grafika.**
+- Po otwarciu WWW i po refresh/F5 otwierać STATUS, bez przywracania poprzedniej zakładki jako startowej.
 
-- Sprawdzić synchronizację VU meter ON/OFF między klientami WWW i zachowanie ustawienia po restarcie.
-- Fizycznie potwierdzić, że WWW DESK nie pokazuje kontrolki Jasność LCD.
-- Sprawdzić obciążenie SPI względem audio i unikać ciężkich pełnych redrawów.
-- W razie potrzeby wykorzystać stabilne podejście DisplayTask z DESK.
+## 12. WWW — stopka
 
-## 7. VoxOneBT — integracja
+- Na podstawie `reference/yoPilot/` zaprojektować własną, schludną stopkę z nazwą projektu, wersją i informacjami systemowymi; nie kopiować 1:1 i nie zmieniać `reference/`.
 
-**Priorytet: główne drugie źródło SALON.**
+## 13. WWW — porządki
 
-- Przekierować BT PCM z I2S1 RX do I2S0 TX / PCM5102A i sprawdzić brak zakłóceń RADIO.
-- Dodać wspólne BT Volume oraz synchronizację Volume telefonu, VoxOne i audio output.
-- Dodać WWW/HA dla BT: status źródła, transport i Volume.
-- Dodać bezpieczne zarządzanie VoxOneBT: reset/recovery i aktualizację firmware.
-- Sprawdzić wielokrotne connect/disconnect, reconnect i wcześniejszy HCI allocation assert.
-- Sprawdzić wielokrotne connect/disconnect, reconnect, wcześniejszy HCI allocation assert, synchronizację Volume telefonu z VoxOne oraz metadata peer/AVRCP.
+- STATUS: sygnał i źródło zgodne z aktywnym RADIO/BT.
+- USTAWIENIA → Sieć: uporządkować profile Wi-Fi, enabled, SSID, hasło, clear i priority.
+- USTAWIENIA → Sen: screensaver, wygaszanie i sleep timer.
+- SYSTEM → Informacje systemowe: firmware, profil, IP, RSSI, uptime, heap, MAC, capabilities i dane VoxOneBT.
+- AKTUALIZACJA → Urządzenie: online/offline, firmware, protocol, BT name i capabilities VoxOneBT; dodać przyszłą aktualizację VoxOneBT.
+- Zmienić nazwy „Firmware” na „VoxOne Firmware” i „WWW/system plików” na „VoxOne system plików”.
+- Fizycznie sprawdzić na DESK ukrycie suwaka jasności LCD oraz restart WWW i powrót Wi-Fi bez utraty stacji/config.
 
-## 8. Source Manager
+## 14. WWW — auto reload
 
-**Priorytet: razem z BT. Pierwszy zakres RADIO | BT; docelowo RADIO | BT | DLNA | AUX | SPDIF.**
+- Po ZAPISZ, restarcie, aktualizacji firmware i filesystem pokazywać „Restartowanie”, odpytywać urządzenie co około 1 s, a po powrocie otwierać STATUS.
+- Dodać rozsądny timeout i komunikat, gdy urządzenie nie wróci; przetestować błędy backendu i nieudany backup.
 
-- Obsłużyć RADIO ↔ BT, wspólne PLAY/STOP i Volume, poprzednie źródło oraz tymczasowe PLAY_MEDIA/TTS.
-- Przyszły TTS/PLAY_MEDIA traktować jako chwilowe źródło o najwyższym priorytecie: potem przywracać RADIO PLAY/STOP lub BT PLAY/PAUSE i obsłużyć pending source. Jeśli źródło zniknie podczas TTS (np. BT DISCONNECT), zakończyć w RADIO STOP bez autoplay.
-- Po dodaniu kolejnych źródeł rozszerzyć cykl double-click według capabilities i dostępności runtime, bez osobnego ekranu wyboru.
-- Oprzeć zachowanie startowe urządzenia na Source Managerze.
+## 15. AAC / AAC+
 
-## 9. PLAY_MEDIA / TTS
+- Obsłużyć AAC, AAC+ i `audio/aacp` z poprawną detekcją kodeka; nie przekazywać AAC do dekodera MP3.
+- Sprawdzić rzeczywiste stacje AAC+, w tym RMF DLA DZIECI.
 
-**Priorytet: po RADIO+BT.**
+## 16. M3U / PLS
 
-- Sprawdzić sekwencje RADIO → TTS → RADIO, STOP → TTS → STOP, BT → TTS → BT i kilka TTS pod rząd.
-- Sprawdzić długi i przerwany TTS, błędny URL, timeout i brak Wi-Fi.
-- Zapewnić deterministyczny cleanup i restore bez heap leaków.
-- Później dodać HTTPS, redirecty i opcjonalne Volume `CURRENT/FIXED`.
+- Obsłużyć M3U, PLS, redirect i końcowy URL streamu; ograniczyć rekurencję i chronić przed pętlą.
+- Później rozważyć ASX/M3U8.
 
-## 10. AAC / AAC+
+## 17. Audio / kompatybilność
 
-**Priorytet: poprawa zgodności z rzeczywistymi stacjami.**
-
-- Obsłużyć AAC, AAC+ i `audio/aacp` z poprawną detekcją kodeka.
-- Nie przekazywać AAC do dekodera MP3.
-- Przetestować RMF DLA DZIECI i inne rzeczywiste stacje AAC+.
-
-## 11. M3U / PLS i kolejne formaty playlist streamów
-
-**Priorytet: po AAC.**
-
-- Obsłużyć `.m3u`, `.pls`, rozwiązywanie końcowego URL streamu i redirect playlist.
-- Dodać limit rekurencji i ochronę przed pętlą.
-- Później rozważyć ASX i M3U8.
-
-## 12. Radio compatibility audit
-
-**Priorytet: przed release; bez osobnego dużego refaktoru.**
-
-- Przetestować starsze SHOUTcast/Icecast, `ICY 200 OK`, nietypowe MIME, HTTP/1.0 i HTTP/1.1.
-- Sprawdzić przejścia HTTP → HTTPS, HTTPS → HTTPS i HTTPS → HTTP.
-- Sprawdzić metadata, brak metadata, reconnect, dead stream, server close i stall.
+- Tylko jeśli nadal występuje `Truncated MP3 frame`: przeanalizować ICY stripping, buforowanie, MP3 sync/frame length i Helix przed zmianą dekodowania.
+- Przed stable przetestować SHOUTcast/Icecast, `ICY 200`, MIME, HTTP/HTTPS, reconnect, dead stream oraz stream z metadata i bez.
 - Zweryfikować semantykę `status.on = config.store.dspon` w `ha_yoradio`.
 
-## 13. VoxOne Stations v1 i import/export
-
-**Priorytet: fizyczna weryfikacja po wdrożeniu formatu.**
-
-- Sprawdzić migrację przy Web Update firmware i SPIFFS, w tym odtworzenie starego `playlist.csv` z kopii NVS oraz ponowny start po przerwaniu zapisu.
-- Zweryfikować eksport/import VoxOne między DESK i SALON, zachowanie ID, kolejności, OVOL i A↔T oraz podgląd przed zapisem.
-- Po imporcie sprawdzić natychmiastowe odświeżenie WWW bez „Ponów”, zachowanie `current=0` bez autoplay oraz ID po restarcie.
-- Ponownie sprawdzić cold boot SALON pod kątem pojedynczego panic `Stack canary watchpoint triggered (ipc1)`; zebrać pełny log i pomiary wolnego stosu z firmware diagnostycznego.
-- Dodać raport błędnych rekordów przy imporcie natywnego pliku VoxOne.
-- Przetestować duże listy 50 / 100 / 250 stacji.
-- Rozważyć strumieniową odpowiedź `GET /api/stations` po zapewnieniu spójnego snapshotu przy równoległych mutacjach; obecny GET buduje odpowiedź z wektora.
-- Sprawdzić power-loss recovery, brak miejsca SPIFFS, `current/lastStation` i politykę po usunięciu aktualnej stacji.
-- Sprawdzić prezentację reguły A↔T na LCD DESK/SALON, WWW, Nextion i MQTT oraz zmianę podczas PLAY bez restartu streamu.
-- Zbadać lekkie pstryknięcie audio przy reorder/mutacji.
-- Sprawdzić wyłączenie legacy `/upload` na urządzeniu.
-
-## 13a. Wyszukiwarka stacji internetowych
-
-**Priorytet: fizyczna weryfikacja na SALON i DESK.**
-
-- Fizycznie sprawdzić na SALON: wyszukanie „Radio 357” z krajem Polska, wyniki, DODAJ, nową stację w Moje stacje, zachowanie po restarcie i odtwarzanie po wybraniu.
-- Fizycznie sprawdzić na DESK: wyszukiwanie i dodawanie, wolną pamięć, brak resetów oraz brak zakłóceń audio podczas żądania katalogu.
-
-## 14. WWW — auto-reload po restartach
-
-**Priorytet: mały koszt, duża poprawa UX.**
-
-- Po `ZAPISZ` pokazać restarting, odpytywać urządzenie co około 1 s przez 20–30 s i automatycznie przeładować stronę po jego powrocie.
-- Dodać fallback, gdy urządzenie nie wróci.
-
-## 15. WWW — Wi-Fi
-
-**Priorytet: nie blokuje SALON.**
-
-- Domyślnie zwijać profile; rozwijać pojedynczy profil.
-- Obsłużyć enabled, SSID, password, clear i priority; opcjonalnie oznaczyć aktywny profil.
-
-## 16. WWW — System
-
-**Priorytet: przed stable.**
-
-- Pokazać firmware version, hardware profile, IP, RSSI, uptime, free heap i MAC.
-- Dodać restart, backup, restore i factory reset.
-- Fizycznie potwierdzić, że kontrolowany restart WWW pomija zwykły komunikat reconnect Wi-Fi i zachowuje stacje oraz konfigurację.
-
-## 17. Web Update — UX
-
-**Priorytet: poprawić bez niepotrzebnej przebudowy działającego mechanizmu.**
-
-- Fizycznie zweryfikować Web Update firmware na SALON oraz firmware/SPIFFS na DESK, postęp wysyłania, błędy backendu, nieudany backup i automatyczny powrót WWW.
-- Fizycznie sprawdzić przekierowanie `/update.html` i awaryjny `/emergency` także przy niedostępnym SPIFFS.
-- Później rozważyć LCD `AKTUALIZACJA` i rollback, jeśli będzie potrzebny.
-- Nie przebudowywać partition table wyłącznie dla porządku.
-- Przetestować odrzucanie błędnych danych formularza AP, odzyskiwanie przez Serial CLI i wygląd ekranu AP na telefonie.
-- Fizycznie potwierdzić nową paletę kolorów wbudowanego ekranu AP na SALON.
-
-## 18. LCD DESK — ekran AKTUALIZACJA
-
-**Priorytet: później; nie blokuje SALON/stable.**
-
-- Ustalić przyczynę wcześniejszej regresji.
-- Pokazać czarne tło i wycentrowany czerwony napis `* AKTUALIZACJA *`, bez RSSI/IP/footer/Volume, bez wpływu na audio.
-- Nie ruszać stabilnego ScrollWidget/HOLD bez konkretnego powodu.
-
-## 19. Dodatkowe wyświetlacze
-
-**Priorytet: później.**
-
-- SSD1306 128×32: stacja, PLAY/STOP, ikona głośnika, Volume i RSSI.
-- SSD1306 128×64: stacja, artysta, utwór i dolna belka.
-- ST7789 320×240: osobny layout wykorzystujący większy ekran.
-- Zaprojektować wspólny Display interface, `NoDisplay` i capabilities; nie kopiować UI między ekranami 1:1.
-
-## 20. Light sensor / autobrightness
-
-**Priorytet: opcjonalnie, szczególnie dla SALON.**
-
-- Dodać czujnik światła, filtrację i histerezę.
-- Dodać auto brightness ON/OFF, minimum, maximum i ewentualny tryb dzień/noc.
-
-## 21. Display / screensaver / sleep
-
-**Priorytet: screensaver i sleep timer; deep sleep tylko przy realnej potrzebie.**
-
-- Obsłużyć display ON/OFF, screensaver, idle przy STOP i PLAY, blank/nonblank, sleep timer, wake oraz audio podczas sleep.
-- Deep sleep wdrożyć tylko, jeśli będzie rzeczywiście potrzebny.
-
-## 22. MUTE / AMP_POWER
-
-**Priorytet: szczególnie dla SALON.**
-
-- Ustalić mute dla STOP, Volume 0 i sleep oraz unmute dla PLAY przy Volume > 0.
-- Wprowadzić wspólny `AudioOutputState` i przyszły `AMP_POWER`.
-- Ustalić kolejność AMP POWER/MUTE i opóźnienia eliminujące pyknięcia.
-
-## 23. AUX
-
-**Priorytet: później, jeśli wejście RCA będzie używane.**
-
-- Rozważyć ADC I2S (np. PCM1808), I2S input, Source Manager, `has_aux` i gain/input level.
-- Sprawdzić szumy.
-
-## 24. SPDIF
-
-**Priorytet: później, po BT.**
-
-- Dodać SPDIF receiver, I2S input, source detection, Source Manager i `has_spdif`.
-
-## 25. DLNA
-
-**Priorytet: zdecydowanie później.**
-
-- Przeanalizować istniejące `USE_DLNA`, SSDP/UPnP, ContentDirectory, wykrywanie serwera, browsing katalogów i pagination.
-- Bibliotekę pobierać on-demand, nie przechowywać całości w RAM.
-- Odtwarzać przez istniejący audio output; dodać WWW, LCD i Source Manager.
-
-## 26. SALON_DSP / TDA7719
-
-**Priorytet: po stabilnym SALON bez TDA.**
-
-- Dodać profil `salon_dsp`, tor PCM5102A → TDA7719 → wzmacniacz, driver TDA7719 przez I²C GPIO7/8 i capability `has_tda`.
-- Obsłużyć master Volume, EQ, Loudness, Balance, Fader, Subwoofer ON/OFF i level, tryb 2.0/2.1, presety i storage.
-- Dodać WWW i LCD oraz przetestować analogowy tor audio.
-
-## 27. DIN
-
-**Priorytet: po SALON.**
-
-- Zastąpić tymczasowy target `esp32-s3-devkitc-1` właściwą definicją board dla ESP32-S3 Zero, jeśli zostanie ustalona; potwierdzić fizycznie audio PCM5102A na GPIO1/2/3.
-- Uruchomić PCM5102A, VoxOneBT, WWW, MQTT/HA i NoDisplay bez enkodera.
-- Zbudować fizyczny prototyp.
-
-## 28. Capabilities / architektura profili
-
-**Priorytet: zasada obowiązująca w projekcie.**
-
-- Utrzymywać jeden wspólny projekt dla DESK, DIN, SALON i SALON_DSP.
-- Uzależniać UI i runtime od capabilities: display, encoder, VU, BT, AUX, SPDIF, TDA i local UI.
-- Nie dodawać warunków `if profile == salon`, gdy decyzję można oprzeć na capability.
-
-## 29. Backup / restore / recovery
-
-**Priorytet: przed stabilnym/publicznym release.**
-
-- Dodać backup i restore całej konfiguracji, walidację schema/version i recovery po nieudanym restore.
-- Uwzględnić główny config, MQTT NVS, `stations.tsv` i `stations.idx` oraz bezpiecznie Wi-Fi.
-- Zapewnić czytelny UX.
-
-## 30. Bezpieczeństwo WWW
-
-**Priorytet: przed publicznym stable.**
-
-- Dodać admin authentication i zabezpieczyć Web Update, restart, Wi-Fi, factory reset, backup/restore oraz mutujące REST i WS.
-- Sprawdzić CSRF, ekspozycję `wifi.csv`, legacy routes, `/upload`, emergency/WebBoard i logowanie haseł/API/WS.
-- Nie wystawiać VoxOne bezpośrednio do Internetu.
-
-## 31. Diagnostyka
-
-**Priorytet: szczególnie przed diagnozowaniem SALON.**
-
-- Dodać lekką diagnostykę na żądanie: reset reason, uptime, heap, RSSI, audio buffer, codec, bitrate, reconnect/underflow counters, decoder errors, Git SHA development build, profile i capabilities.
-- Nie uruchamiać ciężkiego debugowania stale.
-- Fizycznie odtworzyć serię `##SYS.DATE#` z diagnostyką liczników `requestTimeSync` i `syncTask`; ustalić, czy przyczyną jest wiele wywołań, callback NTP czy nakładanie logów.
-- Po analizie logu sprawdzić osobno ograniczenie ponawiania `syncTask`, gdy `getLocalTime()` nie powiedzie się i `forceTimeSync` pozostaje ustawione.
-
-## 32. Alarm
-
-**Priorytet: późniejsza funkcja użytkowa.**
-
-- Dodać ON/OFF, HH:MM, dni tygodnia, wybór stacji, osobną Volume, fade-in, czas odtwarzania i integrację sleep/wake.
-
-## 33. Cleanup yoRadio
-
-**Priorytet: po osiągnięciu stabilności; bez agresywnego cleanupu.**
-
-- Dokończyć audit legacy IR runtime/stron i zachować pola EEPROM bez zmiany layoutu; kompilacja `src/IRremoteESP8266/` jest wyłączona dla obecnych profili. Przeanalizować też Adafruit seesaw, VS1053, Nextion, SD, nieużywane sterowniki LCD, stare WWW/routes, legacy config fields i inne elementy yoRadio.
-- Usuwać tylko elementy rzeczywiście niepotrzebne; zachować stabilne używane komponenty.
-
-## 34. Dokumentacja
-
-**Priorytet: sukcesywnie po większych etapach.**
-
-- Aktualizować README, hardware profiles, pinout, capabilities, MQTT/HA, Web/API, Source Manager, VoxOneBT protocol, audio architecture, SALON, SALON_DSP oraz update/recovery.
-- Nie organizować osobnego ogromnego documentation sprint bez potrzeby.
-
-## 35. Branding / logo
-
-**Priorytet: po uruchomieniu SALON i przed finalnym `v0.3.0`.**
-
-- Zaprojektować finalne logo VoxOne w wersji pełnej, uproszczonej/ikony i monochromatycznej.
-- Przygotować źródłowe SVG oraz PNG w kilku rozmiarach.
-- Przygotować favicon/ikonę WWW i logo do README/GitHub.
-- Sprawdzić logo w WWW, na ekranie startowym LCD, na SALON 480×320 i ewentualnie innych wyświetlaczach.
-- Nie obciążać renderowania LCD dużą grafiką.
-- Przechowywać wszystkie źródła brandingu w jednym miejscu, np. `assets/branding/`.
-
-## 36. Release / stable
-
-**Priorytet: przed właściwym `v0.3.0`.**
-
-- Wykonać regression DESK, długie testy audio, MQTT/HA, playlisty, restarty, Wi-Fi i Web Update.
-- Zweryfikować backup/restore, security, wspólny core także na SALON oraz czysty Git i aktualną dokumentację.
-- Dopiero po tych kontrolach zmienić `VOXONE_VERSION` i przygotować `v0.3.0`.
-
-## Poza bieżącym planem
-
-- Native HA Discovery i własna integracja HA.
-- SD card, SD-WEB, IR remote, pogoda i Telnet tylko dlatego, że występuje w yoRadio.
-- Kopiowanie yoRadio 1:1 oraz agresywny cleanup przed stabilnością.
-- Przenoszenie audio na osobny task/core bez pomiarów.
-- TDA7719 w pierwszym SALON; AUX/SPDIF przed działającym RADIO+BT; DLNA przed Source Managerem.
-- Deep sleep bez konkretnego zastosowania.
-- Refaktor ScrollWidget/HOLD bez problemu, powrót do starego redesignu WWW ani przebudowa działającego Web Update dla porządku.
-
-## Kolejność prac
-
-1. Ustalić zachowanie startowe: źródło, stacja oraz GRAJ/STOP.
-2. Wykonać krótki audit DESK.
-3. Zrealizować SALON-HW-1.
-4. Uruchomić RADIO, LCD, enkoder i PCM5102A na SALON.
-5. Zintegrować VoxOneBT.
-6. Dodać Source Manager RADIO/BT.
-7. Dodać PLAY_MEDIA/TTS z BT.
-8. Dodać AAC/AAC+.
-9. Dodać M3U/PLS.
-10. Dodać dalsze źródła według potrzeby: AUX/SPDIF/DLNA.
-11. Dodać SALON_DSP/TDA7719.
-12. Wykonać radio compatibility audit.
-13. Zrealizować backup/security/hardening.
-14. Przygotować branding po uruchomieniu SALON.
-15. Przygotować finalny release.
+## 18. Playlisty
+
+- Dopracować import/export yoRadio: walidacja, preview, raport błędnych rekordów i ewentualny import URL.
+- Sprawdzić duże listy 50/100/250 stacji, power-loss recovery, brak miejsca SPIFFS, `current/lastStation` i zachowanie po usunięciu bieżącej stacji.
+- Zweryfikować eksport/import między DESK i SALON, ID, kolejność, OVOL, A↔T, odświeżenie WWW oraz migrację/restore przy Web Update.
+- Fizycznie przetestować Radio Directory na SALON i DESK, w tym dodanie, odtwarzanie, restart, pamięć i brak zakłóceń audio.
+- Sprawdzić prezentację A↔T na LCD/WWW/Nextion/MQTT, zachowanie po reorder i usunięciu stacji, pstryknięcie audio przy mutacji oraz wyłączenie legacy `/upload`.
+
+## 19. DLNA
+
+- Docelowy cykl źródeł: RADIO | BT | DLNA według capabilities i dostępności.
+- Sterowanie: double click na PLAYER zmienia źródło; long click na DLNA otwiera katalogi; obrót wybiera pozycję; click wchodzi/odtwarza; double click wraca; triple click zmienia tryb odtwarzania.
+- Tryby: jeden utwór w pętli, folder kolejno w pętli, folder losowo w pętli.
+- Ustalić IP serwera, skanowanie, ContentDirectory, browsing, pagination, kolejny utwór, repeat/random oraz integrację Source Manager, LCD i WWW.
+
+## 20. Późniejsze
+
+- Sleep/screensaver, MUTE/AMP_POWER, SALON_DSP/TDA7719, AUX, SPDIF i Alarm.
+- SALON_DSP: EQ, Loudness, Balance, Fader, Subwoofer, 2.0/2.1, presety, storage oraz WWW/LCD. DS3231 i TDA7719 mają współdzielić jedną magistralę I²C GPIO7/8.
+- DIN: fizycznie sprawdzić PCM5102A GPIO1/2/3, VoxOneBT, WWW, MQTT/HA i NoDisplay; ustalić docelową definicję ESP32-S3 Zero.
+- Dodatkowe wyświetlacze i opcjonalny czujnik światła rozwijać po podstawowych funkcjach.
+
+## 21. Stabilność / release
+
+- Wykonać audit DESK, testy regresyjne DESK/SALON, długie testy audio i diagnostykę problemów występujących na sprzęcie, w tym logów czasu i wcześniejszego `ipc1` panic.
+- Fizycznie sprawdzić MQTT/HA SALON, Web Update firmware SALON oraz firmware/SPIFFS DESK, w tym postęp, błędy, backup i powrót WWW.
+- Sprawdzić recovery AP przy błędnych danych Wi-Fi, Serial CLI, ekran AP na telefonie i jego kolory oraz `/update.html` i `/emergency` przy niedostępnym SPIFFS.
+- Dopracować backup/restore całej konfiguracji z walidacją schematu oraz bezpieczeństwo WWW: uwierzytelnianie, CSRF, mutujące REST/WS i ekspozycję danych.
+- Sprawdzić wielokrotne BT connect/disconnect, reconnect i wcześniejszy HCI allocation assert.
+- Uzupełnić fizyczną kontrolę BT VU przy STOP/disconnect, niezależności L/R oraz synchronizacji VU ON/OFF między klientami WWW i po restarcie.
+- Dokończyć dokumentację profili, API, MQTT/HA, Source Managera, VoxOneBT i update/recovery; cleanup yoRadio wykonywać dopiero po potwierdzeniu stabilności.
+- Po potwierdzeniu wszystkich wymagań przygotować finalny release; checkpointy techniczne nie zmieniają `VOXONE_VERSION`.
+
+## Kolejność najbliższych prac
+
+1. BT-AUDIO-INFO-1.
+2. Drobne poprawki LCD BT.
+3. Dolna część LCD PLAYER.
+4. Ikona BT.
+5. Scroll na podstawie yoPILOT.
+6. TTS BT i LCD TTS.
+7. WWW zależne od aktywnego źródła.
+8. Porządki WWW.
+9. Stopka i logo WWW.
+10. Start i zmiana źródła → STOP.
+11. DLNA.
+12. AAC, M3U i dalsza zgodność.

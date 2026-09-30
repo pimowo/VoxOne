@@ -103,6 +103,9 @@ void BtLinkProtocol::clearSession() {
   state_.album[0] = '\0';
   state_.volume = -1;
   state_.sampleRate = 0;
+  state_.rawVuLeft = 0;
+  state_.rawVuRight = 0;
+  state_.rawVuLastMs = 0;
 }
 
 void BtLinkProtocol::goOffline() {
@@ -208,10 +211,14 @@ bool BtLinkProtocol::handleLine(uint32_t nowMs) {
   }
   if (strcmp(line_, "PAUSED") == 0) {
     state_.playback = BtPlayback::Paused;
+    state_.rawVuLeft = 0;
+    state_.rawVuRight = 0;
     return true;
   }
   if (strcmp(line_, "STOPPED") == 0) {
     state_.playback = BtPlayback::Stopped;
+    state_.rawVuLeft = 0;
+    state_.rawVuRight = 0;
     return true;
   }
   if (strcmp(line_, "PONG") == 0) return true;
@@ -253,6 +260,24 @@ bool BtLinkProtocol::handleLine(uint32_t nowMs) {
     if (!parseUnsigned(value, 127, number)) return false;
     state_.volume = static_cast<int16_t>(number);
     ++state_.volumeRevision;
+    return true;
+  }
+  if ((value = fieldValue(line_, "VU ")) != nullptr) {
+    uint32_t left = 0;
+    uint32_t right = 0;
+    const char* separator = strchr(value, ' ');
+    if (separator == nullptr || separator == value ||
+        separator - value > 5 || separator[1] == '\0') return false;
+    char leftText[6];
+    memcpy(leftText, value, separator - value);
+    leftText[separator - value] = '\0';
+    if (!parseUnsigned(leftText, 32768, left) ||
+        !parseUnsigned(separator + 1, 32768, right)) return false;
+    if (state_.connected) {
+      state_.rawVuLeft = static_cast<uint16_t>(left);
+      state_.rawVuRight = static_cast<uint16_t>(right);
+      state_.rawVuLastMs = nowMs;
+    }
     return true;
   }
   if ((value = fieldValue(line_, "SAMPLE_RATE ")) != nullptr) {

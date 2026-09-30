@@ -21,6 +21,15 @@ struct DisplaySourceView {
     const char* artist;
     const char* title;
 };
+inline bool displaySourceVuVisible(const DisplaySourceView& source) {
+    return source.playback == DisplayPlaybackState::Playing ||
+           (source.kind == DisplaySourceKind::Bluetooth &&
+            source.playback == DisplayPlaybackState::Paused);
+}
+inline bool displayVuUnlocked(bool enabled, bool sourceVisible,
+                              uint8_t userVolume) {
+    return enabled && sourceVisible && userVolume > 0;
+}
 // Optional Source Manager view. Strings must stay valid until this call returns.
 extern bool getDisplaySourceView(DisplaySourceView& view) __attribute__((weak));
 
@@ -110,6 +119,7 @@ class Display {
     void _buildPager();
     void _bootScreen();
     void _layoutChange(bool played);
+    void _setVuVisibility(bool sourceVisible);
     void _setRSSI(int rssi);
 #if DSP_MODEL==DSP_ST7796
     void _updatePlaybackStatus();

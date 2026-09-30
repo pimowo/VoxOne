@@ -66,6 +66,15 @@ int main() {
   assert(std::strcmp(link.link.state().artist, polish.c_str()) == 0);
   assert(link.link.state().volume == 73);
   assert(link.link.state().sampleRate == 44100);
+  link.line("VU 12000 3000", 31);
+  assert(link.link.state().rawVuLeft == 12000);
+  assert(link.link.state().rawVuRight == 3000);
+  assert(link.link.state().rawVuLastMs == 31);
+  link.line("VU 32769 1", 32);
+  link.line("VU 1 -1", 33);
+  link.line("VU 1 2 3", 34);
+  assert(link.link.state().rawVuLeft == 12000);
+  assert(link.link.state().rawVuLastMs == 31);
   assert(link.events.size() == 1 && link.events[0] == BtLinkEvent::Online);
   assert(link.sent.size() == 2 && link.sent[1] == "GET_DIAG");
   assert(link.link.play());
@@ -89,6 +98,7 @@ int main() {
 
   link.line("PAUSED", 40);
   assert(link.link.state().playback == BtPlayback::Paused);
+  assert(link.link.state().rawVuLeft == 0);
   const std::string longMetadata(192, 'A');
   link.line("ARTIST " + longMetadata, 41);
   assert(std::strcmp(link.link.state().artist, longMetadata.c_str()) == 0);
@@ -141,6 +151,7 @@ int main() {
   assert(link.link.state().peerName[0] == '\0');
   assert(link.link.state().artist[0] == '\0');
   assert(link.link.state().volume == -1);
+  assert(link.link.state().rawVuLeft == 0);
   const size_t sentBeforeDisconnected = link.sent.size();
   assert(!link.link.play() && !link.link.pause());
   assert(!link.link.setVolume(50));

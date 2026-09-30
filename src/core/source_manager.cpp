@@ -10,6 +10,7 @@
 #include "player.h"
 #include "serialcli.h"
 #include "source_manager_state.h"
+#include "source_vu_state.h"
 
 namespace {
 SourceManagerState sourceState;
@@ -94,6 +95,35 @@ bool bluetoothSourceSelected() {
   portEXIT_CRITICAL(&sourceMux);
   return selected;
 }
+
+#if VOXONE_BT_I2S_RX_ENABLED
+uint16_t sourceManagerGetVuLevel(uint16_t dimension, bool& playing) {
+  bool bluetoothActive = false;
+  bool bluetoothPlaying = false;
+  uint16_t vuLeft = 0;
+  uint16_t vuRight = 0;
+  uint32_t lastDataMs = 0;
+  portENTER_CRITICAL(&sourceMux);
+  bluetoothActive = sourceState.active() == ActiveSource::Bluetooth;
+  bluetoothPlaying = sourceState.bluetoothPlaying();
+  sourceState.bluetoothRawVu(vuLeft, vuRight, lastDataMs);
+  portEXIT_CRITICAL(&sourceMux);
+
+  if (!bluetoothActive) {
+    const uint16_t legacy = player.get_VUlevel(dimension);
+    const SourceVuResult result = sourceVuSelect(
+        false, player.isRunning(), legacy, false, 0, 0, 0, millis(), dimension);
+    playing = result.playing;
+    return result.levels;
+  }
+
+  const SourceVuResult result = sourceVuSelect(
+      true, player.isRunning(), 0, bluetoothPlaying, vuLeft, vuRight,
+      lastDataMs, millis(), dimension);
+  playing = result.playing;
+  return result.levels;
+}
+#endif
 
 bool radioI2SOutputEnabled() {
 #if VOXONE_BT_I2S_RX_ENABLED

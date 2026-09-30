@@ -11,6 +11,9 @@ void sourceManagerLoop();
 void cycleNextSource();
 bool bluetoothSourceSelected();
 bool radioI2SOutputEnabled();
+#if VOXONE_BT_I2S_RX_ENABLED
+uint16_t sourceManagerGetVuLevel(uint16_t dimension, bool& playing);
+#endif
 bool bluetoothTransportAvailable();
 bool sourceManagerStepBluetoothVolume(int8_t delta);
 void sourceManagerTransport(BtTransportInput input);

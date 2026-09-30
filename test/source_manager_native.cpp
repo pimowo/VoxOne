@@ -3,6 +3,7 @@
 
 #include <cassert>
 #include <cstring>
+#include <initializer_list>
 
 int main() {
   SourceManagerState sources;
@@ -14,9 +15,17 @@ int main() {
   sources.displayView(view);
   assert(view.kind == DisplaySourceKind::Radio);
   assert(view.playback == DisplayPlaybackState::Stopped);
+  assert(!displaySourceVuVisible(view));
+  assert(!displayVuUnlocked(true, displaySourceVuVisible(view), 50));
   assert(std::strcmp(displayPlaybackLabel(view.playback), "STOP") == 0);
   sources.displayView(view, true);
   assert(view.playback == DisplayPlaybackState::Playing);
+  assert(displaySourceVuVisible(view));
+  for (uint8_t volume : {0, 1, 50}) {
+    assert(displayVuUnlocked(true, displaySourceVuVisible(view), volume) ==
+           (volume > 0));
+    assert(!displayVuUnlocked(false, displaySourceVuVisible(view), volume));
+  }
   assert(std::strcmp(displayPlaybackLabel(view.playback), "PLAY") == 0);
   assert(btTransportAction(BtTransportInput::Toggle, view) == BtTransportAction::None);
 
@@ -32,6 +41,9 @@ int main() {
   std::strcpy(bt.artist, "Żółć");
   std::strcpy(bt.title, "Utwór");
   bt.playback = BtPlayback::Playing;
+  bt.rawVuLeft = 12000;
+  bt.rawVuRight = 3000;
+  bt.rawVuLastMs = 100;
   SourceUpdate update = sources.observe(bt);
   assert(update.activeChanged && update.reason == SourceChangeReason::BtConnect);
   assert(update.stationChanged && update.titleChanged);
@@ -42,6 +54,16 @@ int main() {
   assert(std::strcmp(view.artist, "Żółć") == 0);
   assert(std::strcmp(view.title, "Utwór") == 0);
   assert(view.playback == DisplayPlaybackState::Playing);
+  assert(displaySourceVuVisible(view));
+  for (uint8_t volume : {0, 1, 50}) {
+    assert(displayVuUnlocked(true, displaySourceVuVisible(view), volume) ==
+           (volume > 0));
+    assert(!displayVuUnlocked(false, displaySourceVuVisible(view), volume));
+  }
+  uint16_t rawLeft = 0, rawRight = 0;
+  uint32_t rawMs = 0;
+  sources.bluetoothRawVu(rawLeft, rawRight, rawMs);
+  assert(rawLeft == 12000 && rawRight == 3000 && rawMs == 100);
   assert(std::strcmp(displayPlaybackLabel(view.playback), "PLAY") == 0);
   assert(btTransportInputForRotation(-1) == BtTransportInput::Previous);
   assert(btTransportInputForRotation(1) == BtTransportInput::Next);
@@ -87,6 +109,7 @@ int main() {
   assert(!update.stationChanged && update.titleChanged);
   sources.displayView(view);
   assert(view.playback == DisplayPlaybackState::Paused);
+  assert(displaySourceVuVisible(view));
   assert(std::strcmp(displayPlaybackLabel(view.playback), "PAUZA") == 0);
   assert(btTransportAction(BtTransportInput::Toggle, view) == BtTransportAction::Play);
   bt.playback = BtPlayback::Stopped;
@@ -94,6 +117,7 @@ int main() {
   assert(update.titleChanged);
   sources.displayView(view);
   assert(view.playback == DisplayPlaybackState::Stopped);
+  assert(!displaySourceVuVisible(view));
   assert(btTransportAction(BtTransportInput::Toggle, view) == BtTransportAction::Play);
 
   // G: disconnect while BT is active returns to RADIO.
