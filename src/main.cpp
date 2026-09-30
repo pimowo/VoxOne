@@ -73,6 +73,10 @@ void setupOTA(){
 
 void setup() {
   Serial.begin(115200);
+#if defined(VOXONE_PROFILE_SALON) && defined(RGB_BUILTIN) && \
+    defined(PIN_NEOPIXEL) && PIN_NEOPIXEL == 48
+  neopixelWrite(RGB_BUILTIN, 0, 0, 0);
+#endif
   if(REAL_LEDBUILTIN!=255) pinMode(REAL_LEDBUILTIN, OUTPUT);
   if (yoradio_on_setup) yoradio_on_setup();
   pm.on_setup();

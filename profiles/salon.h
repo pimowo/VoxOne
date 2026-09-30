@@ -25,12 +25,11 @@
 #define TFT_RST -1
 #define BRIGHTNESS_PIN 14
 
-// The PCB's ENCODER_2 connector is VoxOne's primary encoder.
-// S2 = 47, S1 = 48, KEY = 21. Verify direction and detents on hardware.
-#define ENC_BTNR 47
-#define ENC_BTNL 48
-#define ENC_BTNB 21
-#define ENC_INTERNALPULLUP true
+// ENCODER_1: S2 = GPIO41, S1 = GPIO40, KEY = GPIO39.
+#define ENC_BTNR 40
+#define ENC_BTNL 41
+#define ENC_BTNB 39
+#define ENC_INTERNALPULLUP false
 #define ENC_HALFQUARD false
 #define USE_BUILTIN_LED false
 
@@ -47,11 +46,12 @@
 #define VOXONE_BT_UART_RX_PIN 15
 #define VOXONE_BT_UART_TX_PIN 16
 
-// VoxOneBT I2S input (ENCODER_1 connector): BCLK 41, WS 40, DATA IN 39.
+// VoxOneBT I2S RX: GPIO1 BCLK, GPIO2 WS, GPIO17 DATA IN; GPIO42 free.
+// VoxOneBT TX BCLK/WS/DATA use 22-ohm series resistors at the transmitter.
 #define VOXONE_BT_I2S_RX_ENABLED 1
-#define VOXONE_BT_I2S_BCLK_PIN 41
-#define VOXONE_BT_I2S_WS_PIN 40
-#define VOXONE_BT_I2S_DATA_PIN 39
+#define VOXONE_BT_I2S_BCLK_PIN 1
+#define VOXONE_BT_I2S_WS_PIN 2
+#define VOXONE_BT_I2S_DATA_PIN 17
 // Future TDA7719 shares the RTC I2C pins: SCL 7, SDA 8.
 
 #endif
