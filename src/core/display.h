@@ -2,6 +2,9 @@
 #define display_h
 #include <stdint.h>
 #include "common.h"
+#if defined(VOXONE_PROFILE_SALON) && DSP_MODEL==DSP_ST7796
+#include "salon_player_scroll.h"
+#endif
 
 enum class DisplaySourceKind : uint8_t { Radio, Bluetooth };
 enum class DisplayPlaybackState : uint8_t { None, Stopped, Playing, Paused };
@@ -133,6 +136,12 @@ class Display {
     void _setRSSI(int rssi);
 #if DSP_MODEL==DSP_ST7796
     void _updatePlaybackStatus();
+#endif
+#if defined(VOXONE_PROFILE_SALON) && DSP_MODEL==DSP_ST7796
+    SalonPlayerScroll _salonScroll;
+    void _salonScrollTextChanged(uint8_t row);
+    void _salonScrollTick();
+    void _salonScrollMode(bool playerMode);
 #endif
 };
 

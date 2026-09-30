@@ -15,10 +15,6 @@
 
 - Na wszystkich ekranach LCD pokazywać ikonę BT, gdy telefon jest fizycznie połączony, niezależnie od aktywnego źródła.
 
-## 5. Scroll tekstu
-
-- Przeanalizować scroll stacji, artysty i utworu na podstawie `reference/yoPilot/`; katalog `reference/` pozostawić tylko do odczytu.
-
 ## 6. LCD AKTUALIZACJA
 
 - Pokazać czarne tło oraz wycentrowany pionowo i poziomo czerwony napis „AKTUALIZACJA” czcionką jak nazwa stacji, bez elementów PLAYER.

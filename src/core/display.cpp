@@ -345,6 +345,14 @@ void Display::_buildPager(){
   #ifndef HIDE_TITLE2
     _title2 = new ScrollWidget("*", title2Conf, config.theme.title2, config.theme.background);
   #endif
+#if defined(VOXONE_PROFILE_SALON) && DSP_MODEL==DSP_ST7796
+  const auto onTextChanged = [](void* context, uint8_t row) {
+    static_cast<Display*>(context)->_salonScrollTextChanged(row);
+  };
+  _meta->setChangeObserver(this, 0, onTextChanged);
+  _title1->setChangeObserver(this, 1, onTextChanged);
+  _title2->setChangeObserver(this, 2, onTextChanged);
+#endif
   #if !defined(DSP_LCD) && DSP_MODEL!=DSP_NOKIA5110
 #if DSP_MODEL==DSP_ST7789_76
     _plbackground = new FillWidget(playlBGConf, config.theme.metabg);
@@ -553,6 +561,9 @@ void Display::_start() {
     nextion.start();
   #endif
   _buildPager();
+#if defined(VOXONE_PROFILE_SALON) && DSP_MODEL==DSP_ST7796
+  _salonScrollMode(true);
+#endif
   _mode = PLAYER;
   config.setTitle(LANG::const_PlReady);
   
@@ -606,6 +617,10 @@ void Display::_swichMode(displayMode_e newmode) {
     if (!getDisplaySourceView || !getDisplaySourceView(source) ||
         source.kind != DisplaySourceKind::Bluetooth || !source.connected) return;
   }
+#endif
+#if defined(VOXONE_PROFILE_SALON) && DSP_MODEL==DSP_ST7796
+  if (_mode == PLAYER && newmode != PLAYER) _salonScrollMode(false);
+  else if (_mode != PLAYER && newmode == PLAYER) _salonScrollMode(true);
 #endif
   if (_mode == STATIONS || _mode == BT_TRANSPORT) timekeeper.cancelReturnPlayer();
   _mode = newmode;
@@ -790,6 +805,36 @@ void Display::_updatePlaybackStatus() {
 }
 #endif
 
+#if defined(VOXONE_PROFILE_SALON) && DSP_MODEL==DSP_ST7796
+void Display::_salonScrollMode(bool playerMode) {
+  ScrollWidget* rows[3] = {_meta, _title1, _title2};
+  if (playerMode) _salonScroll.enter();
+  else _salonScroll.leave();
+  for (ScrollWidget* row : rows) row->setExternallyScheduled(playerMode);
+}
+
+void Display::_salonScrollTextChanged(uint8_t row) {
+  if (_bootStep != 2 || _mode != PLAYER || !_salonScroll.enabled()) return;
+  ScrollWidget* rows[3] = {_meta, _title1, _title2};
+  for (ScrollWidget* widget : rows)
+    if (dsp.getScrollId() == widget) dsp.setScrollId(NULL);
+  _salonScroll.textChanged(row);
+}
+
+void Display::_salonScrollTick() {
+  ScrollWidget* rows[3] = {_meta, _title1, _title2};
+  const bool needsScroll[3] = {
+      rows[0]->scrollNeeded(), rows[1]->scrollNeeded(), rows[2]->scrollNeeded()};
+  const SalonPlayerScroll::Event event = _salonScroll.tick(millis(), needsScroll);
+  if (event.action == SalonPlayerScroll::Action::Start) {
+    rows[event.row]->startScheduledTurn();
+  } else if (event.action == SalonPlayerScroll::Action::Step &&
+             rows[event.row]->stepScheduledTurn(SalonPlayerScroll::kStepPixels)) {
+    _salonScroll.cycleFinished();
+  }
+}
+#endif
+
 void Display::loop() {
   if(_bootStep==0) {
     _pager->begin();
@@ -799,6 +844,9 @@ void Display::loop() {
   if(displayQueue==NULL || _locked) return;
 #if DSP_MODEL==DSP_ST7789_76
   if(_mode == PLAYER) ScrollWidget::nextDeskScrollFrame();
+#endif
+#if defined(VOXONE_PROFILE_SALON) && DSP_MODEL==DSP_ST7796
+  if (_bootStep == 2 && _mode == PLAYER) _salonScrollTick();
 #endif
   _pager->loop();
 #if DSP_MODEL==DSP_ST7796

@@ -107,6 +107,15 @@ class ScrollWidget: public TextWidget {
     void loop();
     void setText(const char* txt);
     void setText(const char* txt, const char *format);
+    bool scrollNeeded() const { return _doscroll; }
+    void setExternallyScheduled(bool enabled);
+    void startScheduledTurn();
+    bool stepScheduledTurn(uint8_t pixels);
+    void setChangeObserver(void* context, uint8_t row, void (*observer)(void*, uint8_t)) {
+      _changeContext = context;
+      _changeRow = row;
+      _changeObserver = observer;
+    }
 #if DSP_MODEL==DSP_ST7789_76
     void setDeskScrollSlot(uint8_t slot);
     static void nextDeskScrollFrame();
@@ -122,13 +131,17 @@ class ScrollWidget: public TextWidget {
     uint16_t _sepwidth, _startscrolldelay;
     uint8_t _charWidth;
     psFrameBuffer* _fb=nullptr;
+    bool _externallyScheduled = false;
+    void* _changeContext = nullptr;
+    uint8_t _changeRow = 0;
+    void (*_changeObserver)(void*, uint8_t) = nullptr;
 #if DSP_MODEL==DSP_ST7789_76
     bool _deskIndependentScroll = false;
     uint8_t _deskScrollSlot = 0;
 #endif
   private:
     void _setTextParams();
-    void _calcX();
+    void _calcX(uint8_t pixels);
     void _drawFrame();
     void _draw();
     bool _checkIsScrollNeeded();

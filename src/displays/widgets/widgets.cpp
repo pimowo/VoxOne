@@ -169,7 +169,12 @@ bool ScrollWidget::_checkIsScrollNeeded() {
 }
 
 void ScrollWidget::setText(const char* txt) {
-  strlcpy(_text, utf8Rus(txt), _buffsize - 1);
+  const char* encoded = utf8Rus(txt);
+  char nextText[_buffsize];
+  strlcpy(nextText, encoded, _buffsize - 1);
+  const bool changed = strcmp(_text, nextText) != 0;
+  strlcpy(_text, nextText, _buffsize);
+  if (changed && _changeObserver) _changeObserver(_changeContext, _changeRow);
   if (strcmp(_oldtext, _text) == 0) return;
   _textwidth = strlen(_text) * _charWidth;
   _x = _fb->ready()?0:_config.left;
@@ -223,6 +228,7 @@ void ScrollWidget::setText(const char* txt, const char *format){
 
 void ScrollWidget::loop() {
   if(_locked) return;
+  if (_externallyScheduled) return;
   if (!_doscroll || _config.textsize == 0) return;
 #if DSP_MODEL==DSP_ST7789_76
   if (_deskIndependentScroll) {
@@ -232,9 +238,30 @@ void ScrollWidget::loop() {
   if (dsp.getScrollId() != NULL && dsp.getScrollId() != this) return;
   uint16_t fbl = _fb->ready()?0:_config.left;
   if (_checkDelay(_x == fbl ? _startscrolldelay : _scrolltime, _scrolldelay)) {
-    _calcX();
+    _calcX(_scrolldelta);
     if (_active) _draw();
   }
+}
+
+void ScrollWidget::setExternallyScheduled(bool enabled) {
+  _externallyScheduled = enabled;
+  if (dsp.getScrollId() == this) dsp.setScrollId(NULL);
+}
+
+void ScrollWidget::startScheduledTurn() {
+  if (!_externallyScheduled || !_doscroll) return;
+  const int16_t start = _fb->ready() ? 0 : _config.left;
+  const bool redraw = _x != start;
+  _x = start;
+  if (dsp.getScrollId() == this) dsp.setScrollId(NULL);
+  if (redraw && _active) _draw();
+}
+
+bool ScrollWidget::stepScheduledTurn(uint8_t pixels) {
+  if (!_externallyScheduled || !_doscroll || !_active || _locked) return false;
+  _calcX(pixels);
+  _draw();
+  return _x == (_fb->ready() ? 0 : _config.left);
 }
 
 void ScrollWidget::_clear(){
@@ -301,9 +328,9 @@ void ScrollWidget::_draw() {
   }
 }
 
-void ScrollWidget::_calcX() {
+void ScrollWidget::_calcX(uint8_t pixels) {
   if (!_doscroll || _config.textsize == 0) return;
-  _x -= _scrolldelta;
+  _x -= pixels;
   uint16_t fbl = _fb->ready()?0:_config.left;
   if (-_x > _textwidth + _sepwidth - fbl) {
     _x = fbl;
