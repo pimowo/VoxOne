@@ -98,6 +98,13 @@ bool bluetoothSourceSelected() {
   return selected;
 }
 
+bool bluetoothPhysicallyConnected() {
+  portENTER_CRITICAL(&sourceMux);
+  const bool connected = sourceState.bluetoothPhysicallyConnected();
+  portEXIT_CRITICAL(&sourceMux);
+  return connected;
+}
+
 #if VOXONE_BT_I2S_RX_ENABLED
 uint16_t sourceManagerGetVuLevel(uint16_t dimension, bool& playing) {
   bool bluetoothActive = false;

@@ -10,6 +10,7 @@ void sourceManagerBegin();
 void sourceManagerLoop();
 void cycleNextSource();
 bool bluetoothSourceSelected();
+bool bluetoothPhysicallyConnected();
 bool radioI2SOutputEnabled();
 #if VOXONE_BT_I2S_RX_ENABLED
 uint16_t sourceManagerGetVuLevel(uint16_t dimension, bool& playing);

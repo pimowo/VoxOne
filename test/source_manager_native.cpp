@@ -12,6 +12,7 @@ int main() {
 
   // A: boot starts on radio.
   assert(sources.active() == ActiveSource::Radio);
+  assert(!sources.bluetoothPhysicallyConnected());
   sources.displayView(view);
   assert(view.kind == DisplaySourceKind::Radio);
   assert(view.playback == DisplayPlaybackState::Stopped);
@@ -34,6 +35,7 @@ int main() {
   bt.runtimeAvailable = true;
   assert(!sources.observe(bt).activeChanged);
   assert(sources.active() == ActiveSource::Radio);
+  assert(!sources.bluetoothPhysicallyConnected());
 
   // C: only a disconnected -> connected edge selects BT automatically.
   bt.connected = true;
@@ -48,6 +50,7 @@ int main() {
   assert(update.activeChanged && update.reason == SourceChangeReason::BtConnect);
   assert(update.stationChanged && update.titleChanged);
   assert(sources.active() == ActiveSource::Bluetooth);
+  assert(sources.bluetoothPhysicallyConnected());
   sources.displayView(view);
   assert(view.kind == DisplaySourceKind::Bluetooth && view.connected);
   assert(std::strcmp(view.peerName, "Telefon") == 0);
@@ -79,6 +82,8 @@ int main() {
     assert(!sources.observe(bt).activeChanged);
     assert(sources.active() == ActiveSource::Radio);
   }
+  sources.displayView(view);
+  assert(!view.connected && sources.bluetoothPhysicallyConnected());
 
   // E: disconnect while RADIO does not switch sources.
   bt.connected = false;
@@ -86,6 +91,7 @@ int main() {
   bt.playback = BtPlayback::Stopped;
   assert(!sources.observe(bt).activeChanged);
   assert(sources.active() == ActiveSource::Radio);
+  assert(!sources.bluetoothPhysicallyConnected());
 
   // F: a later, real connect edge can select BT again.
   bt.connected = true;
@@ -93,6 +99,7 @@ int main() {
   update = sources.observe(bt);
   assert(update.activeChanged && update.reason == SourceChangeReason::BtConnect);
   assert(sources.active() == ActiveSource::Bluetooth);
+  assert(sources.bluetoothPhysicallyConnected());
 
   // Changed BT fields request only the relevant partial LCD update.
   std::strcpy(bt.peerName, "Telefon 2");
@@ -175,6 +182,7 @@ int main() {
   assert(update.activeChanged && update.reason == SourceChangeReason::BtOffline);
   assert(update.stationChanged && update.titleChanged);
   assert(sources.active() == ActiveSource::Radio);
+  assert(!sources.bluetoothPhysicallyConnected());
   assert(!sources.cycle(bt).activeChanged);
   sources.displayView(view);
   assert(view.kind == DisplaySourceKind::Radio);

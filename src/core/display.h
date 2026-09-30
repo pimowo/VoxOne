@@ -51,6 +51,11 @@ class VuWidget;
 class NumWidget;
 class ClockWidget;
 class TextWidget;
+#if DSP_MODEL==DSP_ST7796
+class SalonVolumeWidget;
+class SalonBluetoothWidget;
+class SalonEqWidget;
+#endif
     
 class Display {
   public:
@@ -93,6 +98,9 @@ class Display {
 #if DSP_MODEL==DSP_ST7796
     TextWidget *_salonRssiLabel;
     TextWidget *_salonPlayback, *_btTransportPlayback;
+    SalonVolumeWidget *_salonVolume;
+    SalonBluetoothWidget *_salonBluetoothIcon;
+    SalonEqWidget *_salonEq = nullptr;
     ScrollWidget *_btTransportArtist, *_btTransportTitle;
     Page *_btTransportPage;
 #endif

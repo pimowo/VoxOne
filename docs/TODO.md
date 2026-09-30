@@ -4,9 +4,7 @@
 
 ## 2. LCD SALON — dolna część PLAYER
 
-- Zastąpić „VOL” ikoną głośnika; pokazać „WiFi” bliżej słupków RSSI.
-- Wyśrodkować bitrate/audio info między VU a zegarem, ikonę BT nad nim i Volume względem VU.
-- Umieścić PLAY/PAUZA/STOP oraz ROCK/POP/USER/LOUDNESS w cienkich ramkach; zachować symetrię i odstępy.
+- Fizycznie sprawdzić ramkę aktywnego presetu EQ (FLAT/BASS/ROCK/POP/MOWA/USER) na PLAYER SALON oraz odświeżanie po zmianie tonu z WWW przy RADIO i BT.
 
 ## 3. LCD audio info — test large radio values
 
@@ -109,6 +107,7 @@
 
 ## 20. Późniejsze
 
+- LCD SKIN — YAMAHA AMBER: opcjonalna, przełączalna skórka z czarnym tłem i interfejsem w jednym bursztynowo-pomarańczowym kolorze, w stylu starszych amplitunerów Yamaha. Punkt startowy: #FF9A1F, RGB565 0xFCC3.
 - Sleep/screensaver, MUTE/AMP_POWER, SALON_DSP/TDA7719, AUX, SPDIF i Alarm.
 - SALON_DSP: EQ, Loudness, Balance, Fader, Subwoofer, 2.0/2.1, presety, storage oraz WWW/LCD. DS3231 i TDA7719 mają współdzielić jedną magistralę I²C GPIO7/8.
 - DIN: fizycznie sprawdzić PCM5102A GPIO1/2/3, VoxOneBT, WWW, MQTT/HA i NoDisplay; ustalić docelową definicję ESP32-S3 Zero.

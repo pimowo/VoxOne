@@ -34,11 +34,14 @@ const FillConfig  heapbarConf     PROGMEM = {{ 0, DSP_HEIGHT-2, 0, WA_LEFT }, DS
 /* WIDGETS  */                           /* { left, top, fontsize, align } */
 const WidgetConfig bootstrConf    PROGMEM = { 0, 243, 1, WA_CENTER };
 const WidgetConfig bitrateConf    PROGMEM = { 250, 282, 2, WA_LEFT };
-const WidgetConfig voltxtConf     PROGMEM = { TFT_FRAMEWDT, 282, 2, WA_LEFT };
+const WidgetConfig voltxtConf     PROGMEM = { 16, 298, 2, WA_LEFT };
 const WidgetConfig  iptxtConf     PROGMEM = { TFT_FRAMEWDT, 282, 2, WA_LEFT };
-const WidgetConfig   rssiConf     PROGMEM = { TFT_FRAMEWDT, 282, 2, WA_RIGHT };
-const WidgetConfig rssiLabelConf  PROGMEM = { 356, 282, 2, WA_LEFT };
-const WidgetConfig salonPlaybackConf PROGMEM = { 170, 282, 2, WA_LEFT };
+const WidgetConfig   rssiConf     PROGMEM = { TFT_FRAMEWDT, 298, 2, WA_RIGHT };
+const WidgetConfig rssiLabelConf  PROGMEM = { 390, 298, 2, WA_LEFT };
+const WidgetConfig salonPlaybackConf PROGMEM = { 0, 298, 2, WA_CENTER };
+const FillConfig salonPlaybackFrameConf PROGMEM = {{190, 295, 0, WA_LEFT}, 100, 22, true};
+const FillConfig salonEqFrameConf PROGMEM = {{304, 295, 0, WA_LEFT}, 72, 22, true};
+const WidgetConfig salonBluetoothIconConf PROGMEM = { 107, 198, 0, WA_LEFT };
 const WidgetConfig btTransportPrevConf PROGMEM = { 80, 176, 8, WA_LEFT };
 const WidgetConfig btTransportNextConf PROGMEM = { 80, 176, 8, WA_RIGHT };
 const WidgetConfig btTransportPlaybackConf PROGMEM = { 0, 283, 3, WA_CENTER };
@@ -59,7 +62,7 @@ const WidgetConfig vuConf         PROGMEM = { TFT_FRAMEWDT, 136, 1, WA_LEFT };
 
 const WidgetConfig bootWdtConf    PROGMEM = { 0, 216, 1, WA_CENTER };
 const ProgressConfig bootPrgConf  PROGMEM = { 90, 14, 4 };
-const BitrateConfig fullbitrateConf PROGMEM = {{270, 270, 2, WA_LEFT}, 42 };
+const BitrateConfig fullbitrateConf PROGMEM = {{90, 222, 2, WA_LEFT}, 42 };
 const uint16_t fullbitrateWidth = 52;
 
 /* BANDS  */                             /* { onebandwidth, onebandheight, bandsHspace, bandsVspace, numofbands, fadespeed } */
@@ -69,7 +72,6 @@ const VUBandsConfig bandsConf     PROGMEM = { 32, 130, 4, 2, 10, 3 };
 const char         numtxtFmt[]    PROGMEM = "%d";
 const char           rssiFmt[]    PROGMEM = "WiFi %d";
 const char          iptxtFmt[]    PROGMEM = "IP: %s";
-const char         voltxtFmt[]    PROGMEM = "VOL %d";
 const char        bitrateFmt[]    PROGMEM = "%d kBs";
 
 /* MOVES  */                             /* { left, top, width } */

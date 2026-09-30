@@ -43,6 +43,7 @@ struct SourceUpdate {
 class SourceManagerState {
  public:
   ActiveSource active() const { return active_; }
+  bool bluetoothPhysicallyConnected() const { return observedConnected_; }
   bool bluetoothPlaying() const {
     return active_ == ActiveSource::Bluetooth && connected_ &&
            playback_ == BtPlayback::Playing;
