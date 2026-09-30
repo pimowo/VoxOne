@@ -367,6 +367,11 @@
     if (selected === "settings") loadTimeStatus();
   }
 
+  function showStartupTab() {
+    history.replaceState(null, "", "#status");
+    showTab();
+  }
+
   function setRtcFeedback(message, error = false) {
     rtcFeedback.textContent = message;
     rtcFeedback.dataset.kind = error ? "error" : "status";
@@ -1829,6 +1834,9 @@
   }
 
   window.addEventListener("hashchange", showTab);
+  window.addEventListener("pageshow", event => {
+    if (event.persisted) showStartupTab();
+  });
   for (const [target, image] of Object.entries(updateImages)) {
     image.file.addEventListener("change", renderUpdateFiles);
     image.button.addEventListener("click", () => uploadUpdateImage(target));
@@ -1860,6 +1868,6 @@
   renderIdentity();
   renderUpdateFiles();
   renderConnection();
-  showTab();
+  showStartupTab();
   connect();
 })();

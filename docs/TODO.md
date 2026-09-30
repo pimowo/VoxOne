@@ -2,13 +2,8 @@
 
 > Jedyna kanoniczna lista bieżących prac. Po zakończeniu i odpowiedniej weryfikacji usuwamy zadanie; nie prowadzimy sekcji DONE.
 
-## 2. LCD SALON — dolna część PLAYER
+## 3. LCD audio info
 
-- Fizycznie sprawdzić ramkę aktywnego presetu EQ (FLAT/BASS/ROCK/POP/MOWA/USER) na PLAYER SALON oraz odświeżanie po zmianie tonu z WWW przy RADIO i BT.
-
-## 3. LCD audio info — test large radio values
-
-- Fizycznie sprawdzić w poszerzonej ramce RADIO wartości 999, 1000 i 1411 oraz formaty FLAC; podstawowe formaty RADIO i BT 44.1/48 kHz oraz przejścia RADIO ↔ BT zostały potwierdzone.
 - Później rozważyć codec i rzeczywisty bitrate A2DP.
 
 ## 4. Ikona BT
@@ -17,6 +12,7 @@
 
 ## 6. LCD AKTUALIZACJA
 
+- Po rozpoczęciu aktualizacji firmware lub filesystem zatrzymać całe audio: RADIO ma przejść do STOP, BT nie może podawać PCM do I2S0, a bridge i ownership audio trzeba bezpiecznie wyłączyć na czas aktualizacji. Zapewnić pełną ciszę; obecne szatkowanie BT podczas aktualizacji jest niedopuszczalne.
 - Pokazać czarne tło oraz wycentrowany pionowo i poziomo czerwony napis „AKTUALIZACJA” czcionką jak nazwa stacji, bez elementów PLAYER.
 - Zweryfikować osobno ekran aktualizacji DESK i nie naruszyć stabilnego ScrollWidget/HOLD.
 
@@ -42,10 +38,6 @@
 
 - Dane PLAYER pobierać z Source Managera. RADIO: stacja, artysta, utwór, codec, bitrate. BT: nazwa urządzenia, artysta, utwór, playback, sample rate.
 - Przy aktywnym BT nie pokazywać poprzednich danych RADIO; dodać sterowanie/status BT w WWW i HA.
-
-## 11. WWW — STATUS jako ekran startowy
-
-- Po otwarciu WWW i po refresh/F5 otwierać STATUS, bez przywracania poprzedniej zakładki jako startowej.
 
 ## 12. WWW — stopka
 
@@ -103,6 +95,9 @@
 
 ## 20. Późniejsze
 
+- LAN / W5500: dodać opcjonalny moduł na osobnej magistrali SPI, niezależnej od ST7796, oraz tryby AUTO, LAN i Wi-Fi. W AUTO preferować Ethernet przy aktywnym linku LAN, a przy braku linku przechodzić na Wi-Fi.
+- LAN / W5500: uruchamiać DHCP, później rozważyć statyczny IP. W WWW pokazywać aktywny interfejs, link LAN, IP i podstawowy status Ethernet. Warstwa sieciowa RADIO/DLNA nie może zakładać na sztywno `WiFiClient` ani Wi-Fi; DLNA/SSDP ma działać przez LAN i Wi-Fi.
+- LAN / W5500: w obecnym obszarze LCD pokazywać „WiFi” i słupki RSSI dla Wi-Fi, a dla LAN „LAN” i małą programowo rysowaną ikonę RJ45/Ethernet zamiast słupków. Nie zmieniać położenia obszaru.
 - LCD SKIN — YAMAHA AMBER: opcjonalna, przełączalna skórka z czarnym tłem i interfejsem w jednym bursztynowo-pomarańczowym kolorze, w stylu starszych amplitunerów Yamaha. Punkt startowy: #FF9A1F, RGB565 0xFCC3.
 - Sleep/screensaver, MUTE/AMP_POWER, SALON_DSP/TDA7719, AUX, SPDIF i Alarm.
 - SALON_DSP: EQ, Loudness, Balance, Fader, Subwoofer, 2.0/2.1, presety, storage oraz WWW/LCD. DS3231 i TDA7719 mają współdzielić jedną magistralę I²C GPIO7/8.
