@@ -13,9 +13,9 @@
 - Wyśrodkować bitrate/audio info między VU a zegarem, ikonę BT nad nim i Volume względem VU.
 - Umieścić PLAY/PAUZA/STOP oraz ROCK/POP/USER/LOUDNESS w cienkich ramkach; zachować symetrię i odstępy.
 
-## 3. BT-AUDIO-INFO-1
+## 3. LCD audio info — test large radio values
 
-- Przy aktywnym BT pokazywać sample rate 44.1/48 kHz zamiast starego bitrate RADIO.
+- Fizycznie sprawdzić w poszerzonej ramce RADIO wartości 999, 1000 i 1411 oraz formaty FLAC; podstawowe formaty RADIO i BT 44.1/48 kHz oraz przejścia RADIO ↔ BT zostały potwierdzone.
 - Później rozważyć codec i rzeczywisty bitrate A2DP.
 
 ## 4. Ikona BT
@@ -101,12 +101,16 @@
 - Fizycznie przetestować Radio Directory na SALON i DESK, w tym dodanie, odtwarzanie, restart, pamięć i brak zakłóceń audio.
 - Sprawdzić prezentację A↔T na LCD/WWW/Nextion/MQTT, zachowanie po reorder i usunięciu stacji, pstryknięcie audio przy mutacji oraz wyłączenie legacy `/upload`.
 
-## 19. DLNA
+## 19. Standard sterowania enkoderem i Source Control
 
-- Docelowy cykl źródeł: RADIO | BT | DLNA według capabilities i dostępności.
-- Sterowanie: double click na PLAYER zmienia źródło; long click na DLNA otwiera katalogi; obrót wybiera pozycję; click wchodzi/odtwarza; double click wraca; triple click zmienia tryb odtwarzania.
-- Tryby: jeden utwór w pętli, folder kolejno w pętli, folder losowo w pętli.
-- Ustalić IP serwera, skanowanie, ContentDirectory, browsing, pagination, kolejny utwór, repeat/random oraz integrację Source Manager, LCD i WWW.
+- WEB PLAYER: obrót → Volume; klik → PLAY/STOP; dwuklik → następne źródło; trójklik → brak akcji; przytrzymanie → lista stacji.
+- BT PLAYER: obrót → Volume; klik → PLAY/PAUSE; dwuklik → następne źródło; trójklik → brak akcji; przytrzymanie → sterowanie BT.
+- DLNA PLAYER: obrót → Volume; klik → PLAY/PAUSE; dwuklik → następne źródło; trójklik → tryb ALL/RND/ONE; przytrzymanie → biblioteka DLNA.
+- Cykl źródeł: WEB → BT → DLNA → WEB. Source Manager pomija źródła niedostępne według capabilities.
+- DLNA ALL/FOLDER odtwarza cały folder kolejno w pętli; RND odtwarza każdy utwór folderu raz, po czym tasuje ponownie; ONE zapętla bieżący utwór.
+- Przeglądarka DLNA: obrót wybiera pozycję; klik folderu wchodzi do niego; klik „ODTWÓRZ FOLDER” rozpoczyna od pierwszego utworu; klik utworu rozpoczyna od wybranego; dwuklik wraca poziom wyżej; przytrzymanie wraca do PLAYER; timeout około 15 s wraca do PLAYER; trójklik nie wykonuje akcji.
+- Gesty klik, dwuklik i trójklik rozstrzygać po krótkim oknie czasowym, aby trójklik nie został wcześniej wykonany jako dwuklik.
+- DLNA pozostaje niezaimplementowane. Do ustalenia i wykonania: IP serwera, skanowanie, ContentDirectory, browsing, pagination, kolejny utwór oraz integracja Source Manager, LCD i WWW.
 
 ## 20. Późniejsze
 
@@ -128,15 +132,14 @@
 
 ## Kolejność najbliższych prac
 
-1. BT-AUDIO-INFO-1.
-2. Drobne poprawki LCD BT.
-3. Dolna część LCD PLAYER.
-4. Ikona BT.
-5. Scroll na podstawie yoPILOT.
-6. TTS BT i LCD TTS.
-7. WWW zależne od aktywnego źródła.
-8. Porządki WWW.
-9. Stopka i logo WWW.
-10. Start i zmiana źródła → STOP.
-11. DLNA.
-12. AAC, M3U i dalsza zgodność.
+1. Drobne poprawki LCD BT.
+2. Dolna część LCD PLAYER.
+3. Ikona BT.
+4. Scroll na podstawie yoPILOT.
+5. TTS BT i LCD TTS.
+6. WWW zależne od aktywnego źródła.
+7. Porządki WWW.
+8. Stopka i logo WWW.
+9. Start i zmiana źródła → STOP.
+10. DLNA.
+11. AAC, M3U i dalsza zgodność.

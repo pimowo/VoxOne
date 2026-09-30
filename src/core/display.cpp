@@ -5,6 +5,7 @@
 #include "time.h"
 #include "config.h"
 #include "display.h"
+#include "display_audio_info.h"
 #include "player.h"
 #include "volume_map.h"
 #include "station_metadata.h"
@@ -278,7 +279,11 @@ void Display::_buildPager(){
   if(_title2) pages[PG_PLAYER]->addWidget(_title2);
   #if BITRATE_FULL
     _fullbitrate = new BitrateWidget(fullbitrateConf, config.theme.bitrate, config.theme.background);
+#if DSP_MODEL==DSP_ST7796
+    _fullbitrate->setFrameWidth(fullbitrateWidth);
+#endif
     pages[PG_PLAYER]->addWidget( _fullbitrate);
+
   #else
     _bitrate = new TextWidget(bitrateConf, 30, config.theme.bitrate, config.theme.background);
     pages[PG_PLAYER]->addWidget( _bitrate);
@@ -697,26 +702,27 @@ void Display::loop() {
         case DRAWPLAYLIST: _drawPlaylist(); break;
         case DRAWVOL: _volume(); break;
         case DBITRATE: {
-            char buf[20];
+            DisplaySourceView source{};
+            if (getDisplaySourceView) getDisplaySourceView(source);
+            const DisplayAudioInfo info = selectDisplayAudioInfo(
+                source, config.station.bitrate, config.configFmt);
+            if (_fullbitrate) {
+              if (info.bluetooth)
+                _fullbitrate->setCustomText(info.top, info.bottom);
+              else {
+                _fullbitrate->setBitrate(info.radioBitrate);
+                _fullbitrate->setFormat(info.radioFormat);
+              }
+            } else if (_bitrate) {
+                char buf[20];
 #if DSP_MODEL==DSP_ST7789_76
-            const char* codec = "";
-            switch(config.configFmt) {
-              case BF_MP3: codec = "MP3"; break;
-              case BF_AAC: codec = "AAC"; break;
-              case BF_FLAC: codec = "FLC"; break;
-              case BF_OGG: codec = "OGG"; break;
-              case BF_WAV: codec = "WAV"; break;
-              default: break;
-            }
-            snprintf(buf, sizeof(buf), codec[0] ? "%u %s" : "%u", config.station.bitrate, codec);
+              formatDisplayAudioInfo(buf, sizeof(buf), source,
+                                     config.station.bitrate, config.configFmt);
 #else
-            snprintf(buf, sizeof(buf), bitrateFmt, config.station.bitrate);
+              snprintf(buf, sizeof(buf), bitrateFmt, config.station.bitrate);
 #endif
-            if(_bitrate) { _bitrate->setText(config.station.bitrate==0?"":buf); }
-            if(_fullbitrate) { 
-              _fullbitrate->setBitrate(config.station.bitrate); 
-              _fullbitrate->setFormat(config.configFmt); 
-            } 
+              _bitrate->setText(config.station.bitrate == 0 ? "" : buf);
+            }
           }
           break;
         case AUDIOINFO: if(_heapbar)  { _heapbar->lock(!config.store.audioinfo); _heapbar->setValue(player.inBufferFilled()); } break;

@@ -251,11 +251,16 @@ class BitrateWidget: public Widget {
     void init(BitrateConfig bconf, uint16_t fgcolor, uint16_t bgcolor);
     void setBitrate(uint16_t bitrate);
     void setFormat(BitrateFormat format);
+    void setCustomText(const char* top, const char* bottom);
+    void setFrameWidth(uint16_t width) { _frameWidth = width; }
   protected:
     BitrateFormat _format;
+    bool _custom = false;
     char _buf[6];
+    char _customTop[6];
+    char _customBottom[6];
     uint8_t _charWidth;
-    uint16_t _dimension, _bitrate, _textheight;
+    uint16_t _dimension, _frameWidth, _bitrate, _textheight;
     void _draw();
     void _clear();
     void _charSize(uint8_t textsize, uint8_t& width, uint16_t& height);

@@ -16,6 +16,7 @@ struct SourceUpdate {
   bool activeChanged = false;
   bool stationChanged = false;
   bool titleChanged = false;
+  bool audioInfoChanged = false;
   bool volumeChanged = false;
   bool btConnected = false;
   bool btDisconnected = false;
@@ -51,6 +52,7 @@ class SourceManagerState {
     update.activeChanged = true;
     update.stationChanged = true;
     update.titleChanged = true;
+    update.audioInfoChanged = true;
     update.reason = SourceChangeReason::Manual;
     return update;
   }
@@ -78,6 +80,7 @@ class SourceManagerState {
       update.activeChanged = true;
       update.stationChanged = true;
       update.titleChanged = true;
+      update.audioInfoChanged = true;
       update.reason = SourceChangeReason::BtOffline;
       return update;
     }
@@ -88,6 +91,7 @@ class SourceManagerState {
       update.activeChanged = true;
       update.stationChanged = true;
       update.titleChanged = true;
+      update.audioInfoChanged = true;
       update.reason = SourceChangeReason::BtConnect;
       return update;
     }
@@ -97,6 +101,7 @@ class SourceManagerState {
       update.activeChanged = true;
       update.stationChanged = true;
       update.titleChanged = true;
+      update.audioInfoChanged = true;
       update.reason = SourceChangeReason::BtDisconnect;
       return update;
     }
@@ -108,7 +113,9 @@ class SourceManagerState {
                           bt.playback != playback_ ||
                           strcmp(bt.artist, artist_) != 0 ||
                           strcmp(bt.title, title_) != 0;
-    if (update.stationChanged || update.titleChanged) remember(bt);
+    update.audioInfoChanged = bt.sampleRate != sampleRate_;
+    if (update.stationChanged || update.titleChanged || update.audioInfoChanged)
+      remember(bt);
     return update;
   }
 
@@ -130,6 +137,8 @@ class SourceManagerState {
     view.peerName = active_ == ActiveSource::Bluetooth ? peerName_ : "";
     view.artist = active_ == ActiveSource::Bluetooth ? artist_ : "";
     view.title = active_ == ActiveSource::Bluetooth ? title_ : "";
+    view.sampleRate = active_ == ActiveSource::Bluetooth && connected_
+                          ? sampleRate_ : 0;
   }
 
   bool canControlBluetooth() const {
@@ -140,6 +149,7 @@ class SourceManagerState {
   void remember(const BtLinkState& bt) {
     connected_ = bt.connected;
     playback_ = bt.playback;
+    sampleRate_ = bt.connected ? bt.sampleRate : 0;
     memcpy(peerName_, bt.peerName, sizeof(peerName_));
     memcpy(artist_, bt.artist, sizeof(artist_));
     memcpy(title_, bt.title, sizeof(title_));
@@ -149,6 +159,7 @@ class SourceManagerState {
   bool observedConnected_ = false;
   bool connected_ = false;
   BtPlayback playback_ = BtPlayback::Stopped;
+  uint32_t sampleRate_ = 0;
   uint32_t observedVolumeRevision_ = 0;
   uint16_t rawVuLeft_ = 0;
   uint16_t rawVuRight_ = 0;

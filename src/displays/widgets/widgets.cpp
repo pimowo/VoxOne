@@ -852,20 +852,32 @@ void ClockWidget::_clear(){}
 void BitrateWidget::init(BitrateConfig bconf, uint16_t fgcolor, uint16_t bgcolor){
   Widget::init(bconf.widget, fgcolor, bgcolor);
   _dimension = bconf.dimension;
+  _frameWidth = _dimension;
   _bitrate = 0;
   _format = BF_UNKNOWN;
+  _custom = false;
   _charSize(bconf.widget.textsize, _charWidth, _textheight);
-  memset(_buf, 0, 6);
+  memset(_buf, 0, sizeof(_buf));
+  memset(_customTop, 0, sizeof(_customTop));
+  memset(_customBottom, 0, sizeof(_customBottom));
 }
 
 void BitrateWidget::setBitrate(uint16_t bitrate){
+  _custom = false;
   _bitrate = bitrate;
-  if(_bitrate>999) _bitrate=999;
   _draw();
 }
 
 void BitrateWidget::setFormat(BitrateFormat format){
+  _custom = false;
   _format = format;
+  _draw();
+}
+
+void BitrateWidget::setCustomText(const char* top, const char* bottom){
+  _custom = true;
+  snprintf(_customTop, sizeof(_customTop), "%s", top ? top : "");
+  snprintf(_customBottom, sizeof(_customBottom), "%s", bottom ? bottom : "");
   _draw();
 }
 
@@ -882,29 +894,58 @@ void BitrateWidget::_charSize(uint8_t textsize, uint8_t& width, uint16_t& height
 
 void BitrateWidget::_draw(){
   _clear();
-  if(!_active || _format == BF_UNKNOWN || _bitrate==0) return;
-  dsp.drawRect(_config.left, _config.top, _dimension, _dimension, _fgcolor);
-  dsp.fillRect(_config.left, _config.top + _dimension/2, _dimension, _dimension/2, _fgcolor);
-  dsp.setFont();
-  dsp.setTextSize(_config.textsize);
-  dsp.setTextColor(_fgcolor, _bgcolor);
-  snprintf(_buf, 6, "%d", _bitrate);
-  dsp.setCursor(_config.left + _dimension/2 - _charWidth*strlen(_buf)/2 + 1, _config.top + _dimension/4 - _textheight/2+1);
-  dsp.print(_buf);
-  dsp.setTextColor(_bgcolor, _fgcolor);
-  dsp.setCursor(_config.left + _dimension/2 - _charWidth*3/2 + 1, _config.top + _dimension - _dimension/4 - _textheight/2);
-  switch(_format){
-    case BF_MP3:  dsp.print("MP3"); break;
-    case BF_AAC:  dsp.print("AAC"); break;
-    case BF_FLAC: dsp.print("FLC"); break;
-    case BF_OGG:  dsp.print("OGG"); break;
-    case BF_WAV:  dsp.print("WAV"); break;
-    default:                        break;
+  if(!_active) return;
+  if(_custom) {
+    if(!_customTop[0] || !_customBottom[0]) return;
+  } else if(_format == BF_UNKNOWN || _bitrate == 0) {
+    return;
   }
-}
 
+  const char* top = _customTop;
+  const char* bottom = _customBottom;
+  if(!_custom) {
+    snprintf(_buf, sizeof(_buf), "%u", _bitrate);
+    top = _buf;
+    switch(_format){
+      case BF_MP3:  bottom = "MP3"; break;
+      case BF_AAC:  bottom = "AAC"; break;
+      case BF_FLAC: bottom = "FLAC"; break;
+      case BF_OGG:  bottom = "OGG"; break;
+      case BF_WAV:  bottom = "WAV"; break;
+      default:      bottom = ""; break;
+    }
+  }
+
+  dsp.drawRect(_config.left, _config.top, _frameWidth, _dimension, _fgcolor);
+  dsp.fillRect(_config.left, _config.top + _dimension/2, _frameWidth, _dimension/2, _fgcolor);
+  dsp.setFont();
+  uint8_t topSize = _config.textsize;
+  uint8_t topCharWidth = _charWidth;
+  uint16_t topTextHeight = _textheight;
+  if(topCharWidth * strlen(top) > _frameWidth - 2 && topSize > 1) {
+    topSize = 1;
+    _charSize(topSize, topCharWidth, topTextHeight);
+  }
+  dsp.setTextSize(topSize);
+  dsp.setTextColor(_fgcolor, _bgcolor);
+  dsp.setCursor(_config.left + _frameWidth/2 - topCharWidth*strlen(top)/2 + 1,
+                _config.top + _dimension/4 - topTextHeight/2+1);
+  dsp.print(top);
+  uint8_t bottomSize = _config.textsize;
+  uint8_t bottomCharWidth = _charWidth;
+  uint16_t bottomTextHeight = _textheight;
+  if(bottomCharWidth * strlen(bottom) > _frameWidth - 2 && bottomSize > 1) {
+    bottomSize = 1;
+    _charSize(bottomSize, bottomCharWidth, bottomTextHeight);
+  }
+  dsp.setTextSize(bottomSize);
+  dsp.setTextColor(_bgcolor, _fgcolor);
+  dsp.setCursor(_config.left + _frameWidth/2 - bottomCharWidth*strlen(bottom)/2 + 1,
+                _config.top + _dimension - _dimension/4 - bottomTextHeight/2);
+  dsp.print(bottom);
+}
 void BitrateWidget::_clear() {
-  dsp.fillRect(_config.left, _config.top, _dimension, _dimension, _bgcolor);
+  dsp.fillRect(_config.left, _config.top, _frameWidth, _dimension, _bgcolor);
 }
 
 

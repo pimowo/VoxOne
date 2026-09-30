@@ -41,6 +41,8 @@ const char* sourceReason(SourceChangeReason reason) {
 
 void refreshDisplay(const SourceUpdate& update) {
 #if VOXONE_HAS_DISPLAY
+  if (update.activeChanged || update.audioInfoChanged)
+    display.putRequest(DBITRATE);
   if (update.stationChanged) display.putRequest(NEWSTATION);
   if (update.titleChanged) display.putRequest(NEWTITLE);
   if (update.activeChanged || update.volumeChanged) display.putRequest(DRAWVOL);

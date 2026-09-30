@@ -20,6 +20,7 @@ struct DisplaySourceView {
     const char* peerName;
     const char* artist;
     const char* title;
+    uint32_t sampleRate = 0;
 };
 inline bool displaySourceVuVisible(const DisplaySourceView& source) {
     return source.playback == DisplayPlaybackState::Playing ||
