@@ -143,9 +143,31 @@ int main() {
   }
   sources.displayView(view);
   assert(view.kind == DisplaySourceKind::Bluetooth && !view.connected);
-  assert(view.playback == DisplayPlaybackState::Stopped);
+  assert(std::strcmp(view.peerName, "Bluetooth") == 0);
+  assert(std::strcmp(view.artist, "Oczekuję na połączenie...") == 0);
+  assert(std::strcmp(view.title, "") == 0);
+  assert(view.playback == DisplayPlaybackState::None);
+  assert(std::strcmp(displayPlaybackLabel(view.playback), "") == 0);
   assert(btTransportAction(BtTransportInput::Toggle, view) == BtTransportAction::None);
   assert(btTransportAction(BtTransportInput::Next, view) == BtTransportAction::None);
+
+  // Connected placeholder metadata is exposed as empty LCD fields.
+  bt.connected = true;
+  std::strcpy(bt.artist, "Not Provided");
+  std::strcpy(bt.title, "NOT PROVIDED");
+  update = sources.observe(bt);
+  assert(!update.activeChanged && update.stationChanged && update.titleChanged);
+  sources.displayView(view);
+  assert(view.connected);
+  assert(std::strcmp(view.artist, "") == 0);
+  assert(std::strcmp(view.title, "") == 0);
+
+  std::strcpy(bt.artist, "not provided");
+  std::strcpy(bt.title, "Nowy utwór");
+  sources.observe(bt);
+  sources.displayView(view);
+  assert(std::strcmp(view.artist, "") == 0);
+  assert(std::strcmp(view.title, "Nowy utwór") == 0);
 
   // I: loss of the module has priority over phone disconnect.
   bt.runtimeAvailable = false;

@@ -12,6 +12,20 @@ enum class SourceChangeReason : uint8_t {
   None, Manual, BtConnect, BtDisconnect, BtOffline
 };
 
+inline const char* displayBtMetadata(const char* value) {
+  if (value == nullptr) return "";
+  constexpr char placeholder[] = "Not Provided";
+  size_t i = 0;
+  for (; placeholder[i] != '\0' && value[i] != '\0'; ++i) {
+    char actual = value[i];
+    char expected = placeholder[i];
+    if (actual >= 'A' && actual <= 'Z') actual += 'a' - 'A';
+    if (expected >= 'A' && expected <= 'Z') expected += 'a' - 'A';
+    if (actual != expected) return value;
+  }
+  return placeholder[i] == '\0' && value[i] == '\0' ? "" : value;
+}
+
 struct SourceUpdate {
   bool activeChanged = false;
   bool stationChanged = false;
@@ -123,20 +137,28 @@ class SourceManagerState {
     view.kind = active_ == ActiveSource::Bluetooth
                     ? DisplaySourceKind::Bluetooth : DisplaySourceKind::Radio;
     view.connected = active_ == ActiveSource::Bluetooth && connected_;
-    if (active_ == ActiveSource::Radio)
+    if (active_ == ActiveSource::Radio) {
       view.playback = radioPlaying ? DisplayPlaybackState::Playing
                                    : DisplayPlaybackState::Stopped;
-    else if (!connected_)
-      view.playback = DisplayPlaybackState::Stopped;
-    else if (playback_ == BtPlayback::Playing)
-      view.playback = DisplayPlaybackState::Playing;
-    else if (playback_ == BtPlayback::Paused)
-      view.playback = DisplayPlaybackState::Paused;
-    else
-      view.playback = DisplayPlaybackState::Stopped;
-    view.peerName = active_ == ActiveSource::Bluetooth ? peerName_ : "";
-    view.artist = active_ == ActiveSource::Bluetooth ? artist_ : "";
-    view.title = active_ == ActiveSource::Bluetooth ? title_ : "";
+      view.peerName = "";
+      view.artist = "";
+      view.title = "";
+    } else if (!connected_) {
+      view.playback = DisplayPlaybackState::None;
+      view.peerName = "Bluetooth";
+      view.artist = "Oczekuję na połączenie...";
+      view.title = "";
+    } else {
+      if (playback_ == BtPlayback::Playing)
+        view.playback = DisplayPlaybackState::Playing;
+      else if (playback_ == BtPlayback::Paused)
+        view.playback = DisplayPlaybackState::Paused;
+      else
+        view.playback = DisplayPlaybackState::Stopped;
+      view.peerName = peerName_[0] != '\0' ? peerName_ : "Bluetooth";
+      view.artist = displayBtMetadata(artist_);
+      view.title = displayBtMetadata(title_);
+    }
     view.sampleRate = active_ == ActiveSource::Bluetooth && connected_
                           ? sampleRate_ : 0;
   }

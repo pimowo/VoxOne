@@ -2,11 +2,6 @@
 
 > Jedyna kanoniczna lista bieżących prac. Po zakończeniu i odpowiedniej weryfikacji usuwamy zadanie; nie prowadzimy sekcji DONE.
 
-## 1. LCD SALON — poprawki BT
-
-- Zmienić „Oczekuję na połączenie” na „Oczekuję na połączenie...”; przy rozłączonym BT nie pokazywać STOP.
-- Ukrywać tekst „Not Provided”; stacja ma pokazywać nazwę urządzenia, a artysta i utwór pozostawać puste bez prawdziwych metadata.
-
 ## 2. LCD SALON — dolna część PLAYER
 
 - Zastąpić „VOL” ikoną głośnika; pokazać „WiFi” bliżej słupków RSSI.

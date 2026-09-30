@@ -846,7 +846,7 @@ void Display::_station() {
 #if DSP_MODEL==DSP_ST7796
   DisplaySourceView source{};
   if(getDisplaySourceView && getDisplaySourceView(source) && source.kind == DisplaySourceKind::Bluetooth) {
-    _meta->setText(source.connected && source.peerName && source.peerName[0] ? source.peerName : "Bluetooth");
+    _meta->setText(source.peerName ? source.peerName : "Bluetooth");
   } else {
     _meta->setText(player.isRunning() ? config.station.name : "WEB Radio");
   }
@@ -921,10 +921,10 @@ void Display::_title() {
   _updatePlaybackStatus();
   DisplaySourceView source{};
   if(getDisplaySourceView && getDisplaySourceView(source) && source.kind == DisplaySourceKind::Bluetooth) {
-    _title1->setText(source.connected ? (source.artist ? source.artist : "") : "Oczekuję na połączenie");
-    if(_title2) _title2->setText(source.connected && source.title ? source.title : "");
-    _btTransportArtist->setText(source.connected && source.artist ? source.artist : "");
-    _btTransportTitle->setText(source.connected && source.title ? source.title : "");
+    _title1->setText(source.artist ? source.artist : "");
+    if(_title2) _title2->setText(source.title ? source.title : "");
+    _btTransportArtist->setText(source.artist ? source.artist : "");
+    _btTransportTitle->setText(source.title ? source.title : "");
     return;
   }
 #endif

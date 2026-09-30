@@ -4,9 +4,10 @@
 #include "common.h"
 
 enum class DisplaySourceKind : uint8_t { Radio, Bluetooth };
-enum class DisplayPlaybackState : uint8_t { Stopped, Playing, Paused };
+enum class DisplayPlaybackState : uint8_t { None, Stopped, Playing, Paused };
 inline const char* displayPlaybackLabel(DisplayPlaybackState state) {
     switch (state) {
+        case DisplayPlaybackState::None: return "";
         case DisplayPlaybackState::Playing: return "PLAY";
         case DisplayPlaybackState::Paused: return "PAUZA";
         case DisplayPlaybackState::Stopped: return "STOP";
