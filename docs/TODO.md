@@ -36,8 +36,8 @@
 
 ## 10. WWW — aktywne źródło
 
-- Dane PLAYER pobierać z Source Managera. RADIO: stacja, artysta, utwór, codec, bitrate. BT: nazwa urządzenia, artysta, utwór, playback, sample rate.
-- Przy aktywnym BT nie pokazywać poprzednich danych RADIO; dodać sterowanie/status BT w WWW i HA.
+- Dodać source-aware status i sterowanie BT w HA bez zmiany istniejącego kontraktu MQTT do czasu osobnej walidacji.
+- Później pokazać wiarygodny codec/bitrate A2DP, jeśli będzie dostępny.
 
 ## 12. WWW — stopka
 
@@ -45,7 +45,6 @@
 
 ## 13. WWW — porządki
 
-- STATUS: sygnał i źródło zgodne z aktywnym RADIO/BT.
 - USTAWIENIA → Sieć: uporządkować profile Wi-Fi, enabled, SSID, hasło, clear i priority.
 - USTAWIENIA → Sen: screensaver, wygaszanie i sleep timer.
 - SYSTEM → Informacje systemowe: firmware, profil, IP, RSSI, uptime, heap, MAC, capabilities i dane VoxOneBT.
@@ -122,11 +121,9 @@
 ## Kolejność najbliższych prac
 
 1. PLAY_MEDIA / TTS BT oraz TTS Volume CURRENT/FIXED.
-2. Start i zmiana źródła → STOP.
-3. WWW zależne od aktywnego źródła.
-4. AAC/AAC+.
-5. M3U/PLS i redirecty.
-6. Testy playlist i stacji.
-7. Audit DESK/DIN i stabilność.
-8. Stabilne RADIO+BT.
-9. Później: DLNA, W5500/LAN, AUX/SPDIF i DSP.
+2. AAC/AAC+.
+3. M3U/PLS i redirecty.
+4. Testy playlist i stacji.
+5. Audit DESK/DIN i stabilność.
+6. Stabilne RADIO+BT.
+7. Później: DLNA, W5500/LAN, AUX/SPDIF i DSP.

@@ -5,6 +5,17 @@
 
 #if VOXONE_HAS_BT && VOXONE_PIN_MAP_COMPLETE
 #include "bt_transport.h"
+#include "bt_link_protocol.h"
+
+struct SourceWebSnapshot {
+  DisplaySourceKind kind = DisplaySourceKind::Radio;
+  bool connected = false;
+  DisplayPlaybackState playback = DisplayPlaybackState::Stopped;
+  uint32_t sampleRate = 0;
+  char peerName[sizeof(BtLinkState::peerName)]{};
+  char artist[sizeof(BtLinkState::artist)]{};
+  char title[sizeof(BtLinkState::title)]{};
+};
 
 void sourceManagerBegin();
 void sourceManagerLoop();
@@ -20,6 +31,7 @@ uint16_t sourceManagerGetVuLevel(uint16_t dimension, bool& playing);
 bool bluetoothTransportAvailable();
 bool sourceManagerStepBluetoothVolume(int8_t delta);
 void sourceManagerTransport(BtTransportInput input);
+void sourceManagerWebSnapshot(SourceWebSnapshot& snapshot);
 #endif
 
 #endif

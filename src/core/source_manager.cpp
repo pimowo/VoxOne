@@ -8,6 +8,7 @@
 #include "config.h"
 #include "display.h"
 #include "network.h"
+#include "netserver.h"
 #include "player.h"
 #include "serialcli.h"
 #include "source_manager_state.h"
@@ -109,6 +110,9 @@ void sourceManagerLoop() {
     display.putRequest(NEWMODE, PLAYER);
 #endif
   refreshDisplay(update);
+  if (update.activeChanged || update.stationChanged || update.titleChanged ||
+      update.audioInfoChanged)
+    netserver.requestOnChange(WEBSTATUS, 0);
 }
 
 void sourceManagerStopForUpdate() {
@@ -223,6 +227,7 @@ void sourceManagerTransport(BtTransportInput input) {
           SourceUpdate update;
           update.titleChanged = true;
           refreshDisplay(update);
+          netserver.requestOnChange(WEBSTATUS, 0);
         }
       }
       break;
@@ -240,6 +245,22 @@ void cycleNextSource() {
   stopOnSourceChange(update, btLink.state());
   serialCli.printf("##[SOURCE]# active=%s reason=manual\n", sourceName(active));
   refreshDisplay(update);
+  netserver.requestOnChange(WEBSTATUS, 0);
+}
+
+void sourceManagerWebSnapshot(SourceWebSnapshot& snapshot) {
+  const bool radioPlaying = player.isRunning();
+  portENTER_CRITICAL(&sourceMux);
+  DisplaySourceView view{};
+  sourceState.displayView(view, radioPlaying);
+  snapshot.kind = view.kind;
+  snapshot.connected = view.connected;
+  snapshot.playback = view.playback;
+  snapshot.sampleRate = view.sampleRate;
+  strlcpy(snapshot.peerName, view.peerName, sizeof(snapshot.peerName));
+  strlcpy(snapshot.artist, view.artist, sizeof(snapshot.artist));
+  strlcpy(snapshot.title, view.title, sizeof(snapshot.title));
+  portEXIT_CRITICAL(&sourceMux);
 }
 
 bool getDisplaySourceView(DisplaySourceView& view) {

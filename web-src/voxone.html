@@ -31,11 +31,15 @@
 
     <main id="main">
       <section id="status" data-panel aria-labelledby="status-title">
-        <div class="section-heading"><div><p class="eyebrow">TERAZ GRA</p><h2 id="status-title">Status radia</h2></div><span class="badge" id="ws-state" role="status" aria-live="polite" data-state="connecting">Łączenie...</span></div>
+        <div class="section-heading"><div><p class="eyebrow">ODTWARZANIE</p><h2 id="status-title">Status VoxOne</h2></div><span class="badge" id="ws-state" role="status" aria-live="polite" data-state="connecting">Łączenie...</span></div>
         <article class="card hero">
-          <span class="label">STACJA</span><h3 id="current-station-name">—</h3>
+          <span class="label" id="status-name-label">STACJA</span><h3 id="current-station-name">—</h3>
           <p class="track" id="metadata">—</p>
-          <p class="hint">Metadata z bieżącego strumienia.</p>
+          <p class="track" id="bt-artist" hidden></p>
+          <p class="track" id="bt-title" hidden></p>
+          <p class="track" id="bt-disconnected" hidden>Brak połączenia z telefonem.</p>
+          <p class="hint" id="metadata-hint">Metadata z bieżącego strumienia.</p>
+          <p class="hint" id="playback-state" aria-live="polite">—</p>
           <div class="transport" aria-label="Sterowanie odtwarzaniem">
             <button type="button" id="prev-button" disabled aria-label="Poprzednia stacja">‹‹</button>
             <button type="button" id="play-button" disabled class="primary" aria-label="Stan odtwarzania niedostępny">—</button>
@@ -43,7 +47,7 @@
           </div>
         </article>
         <div class="grid">
-          <article class="card"><h3>Sygnał i źródło</h3><dl class="facts"><div><dt>Źródło</dt><dd id="source">—</dd></div><div><dt>Kodek / bitrate</dt><dd id="codec">—</dd></div><div><dt>Wi-Fi RSSI</dt><dd id="rssi">—</dd></div></dl></article>
+          <article class="card"><h3>Sygnał i źródło</h3><dl class="facts"><div><dt>Źródło</dt><dd id="source">—</dd></div><div><dt>Audio</dt><dd id="codec">—</dd></div><div><dt>Wi-Fi RSSI</dt><dd id="rssi">—</dd></div></dl></article>
           <article class="card"><h3>Głośność</h3><div class="audio-control"><div class="audio-control-heading"><label for="volume-slider">Volume</label><output id="volume">—</output></div><input id="volume-slider" class="volume-slider" type="range" min="0" max="100" step="1" value="0" disabled></div></article>
         </div>
       </section>

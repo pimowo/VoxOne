@@ -1,6 +1,7 @@
 #include "options.h"
 #include "system_operation_state.h"
 #include "source_manager.h"
+#include "web_status_view.h"
 #include "bt_audio_input.h"
 #include "Arduino.h"
 #include <SPIFFS.h>
@@ -482,6 +483,68 @@ static void formatWsTextPayload(char *output, size_t capacity, const char *id, c
     return;
   }
   memcpy(output + used, "\"}]}", 5);
+}
+
+static bool appendWebStatusLiteral(char* output, size_t capacity,
+                                   size_t& used, const char* literal) {
+  const size_t length = strlen(literal);
+  if (used + length >= capacity) return false;
+  memcpy(output + used, literal, length);
+  used += length;
+  output[used] = '\0';
+  return true;
+}
+
+static bool appendWebStatusText(char* output, size_t capacity, size_t& used,
+                                const char* key, const char* value) {
+  if (!appendWebStatusLiteral(output, capacity, used, key)) return false;
+  // A bounded field keeps unusual control-heavy metadata from exhausting wsBuf.
+  const size_t fieldEnd = std::min(capacity, used + 240);
+  if (!appendJsonEscaped(output, fieldEnd, used, value, true)) return false;
+  return appendWebStatusLiteral(output, capacity, used, "\"");
+}
+
+static void formatWebStatus(char* output, size_t capacity) {
+  char radioMetadata[BUFLEN + 1]{};
+  stationMetaDisplay(config.station.title,
+                     config.station.metadataMode == STATION_META_SWAP,
+                     radioMetadata, sizeof(radioMetadata));
+  DisplaySourceView sourceView{};
+  sourceView.kind = DisplaySourceKind::Radio;
+  sourceView.playback = player.isRunning() ? DisplayPlaybackState::Playing
+                                            : DisplayPlaybackState::Stopped;
+#if VOXONE_HAS_BT && VOXONE_PIN_MAP_COMPLETE
+  SourceWebSnapshot bt{};
+  sourceManagerWebSnapshot(bt);
+  sourceView.kind = bt.kind;
+  sourceView.connected = bt.connected;
+  sourceView.playback = bt.playback;
+  sourceView.sampleRate = bt.sampleRate;
+  sourceView.peerName = bt.peerName;
+  sourceView.artist = bt.artist;
+  sourceView.title = bt.title;
+#endif
+  const WebStatusView status = selectWebStatusView(
+      sourceView, config.station.name, radioMetadata,
+      getFormat(config.configFmt), config.station.bitrate);
+  size_t used = 0;
+  output[0] = '\0';
+  if (!appendWebStatusLiteral(output, capacity, used, "{\"webStatus\":{") ||
+      !appendWebStatusText(output, capacity, used, "\"source\":\"", status.source) ||
+      !appendWebStatusText(output, capacity, used, ",\"name\":\"", status.name) ||
+      !appendWebStatusText(output, capacity, used, ",\"metadata\":\"", status.metadata) ||
+      !appendWebStatusText(output, capacity, used, ",\"artist\":\"", status.artist) ||
+      !appendWebStatusText(output, capacity, used, ",\"title\":\"", status.title) ||
+      !appendWebStatusText(output, capacity, used, ",\"codec\":\"", status.codec) ||
+      !appendWebStatusText(output, capacity, used, ",\"playback\":\"", status.playback)) {
+    output[0] = '\0';
+    return;
+  }
+  const int tail = snprintf(output + used, capacity - used,
+      ",\"bitrate\":%u,\"sampleRate\":%lu,\"btConnected\":%s}}",
+      status.bitrate, static_cast<unsigned long>(status.sampleRate),
+      status.btConnected ? "true" : "false");
+  if (tail < 0 || static_cast<size_t>(tail) >= capacity - used) output[0] = '\0';
 }
 
 static bool readIndexedStation(File &playlist, File &index, uint16_t number, station_t &station) {
@@ -1620,6 +1683,7 @@ void NetServer::processQueue(){
       case BALANCE:       sprintf (wsBuf, "{\"payload\":[{\"id\": \"balance\", \"value\": %d}]}", config.store.balance); break;
       case SDINIT:        sprintf (wsBuf, "{\"sdinit\": %d}", SDC_CS!=255); break;
       case GETPLAYERMODE: sprintf (wsBuf, "{\"playermode\": \"%s\"}", config.getMode()==PM_SDCARD?"modesd":"modeweb"); break;
+      case WEBSTATUS:     formatWebStatus(wsBuf, sizeof(wsBuf)); break;
       #ifdef USE_SD
         case CHANGEMODE:    config.changeMode(config.newConfigMode); return; break;
       #endif
@@ -1629,6 +1693,17 @@ void NetServer::processQueue(){
       if (clientId == 0) { websocket.textAll(wsBuf); }else{ websocket.text(clientId, wsBuf); }
       if (clientId == 0 && (request.type == STATION || request.type == ITEM || request.type == TITLE || request.type == MODE)) mqttPublishStatus();
       if (clientId == 0 && request.type == VOLUME) mqttPublishVolume();
+    }
+    if (clientId == 0 && websocket.count() > 0 &&
+        (request.type == STATIONNAME || request.type == TITLE ||
+         request.type == BITRATE || request.type == MODE)) {
+#if VOXONE_HAS_BT && VOXONE_PIN_MAP_COMPLETE
+      if (!bluetoothSourceSelected())
+#endif
+      {
+        formatWebStatus(wsBuf, sizeof(wsBuf));
+        if (wsBuf[0]) websocket.textAll(wsBuf);
+      }
     }
   }
 }

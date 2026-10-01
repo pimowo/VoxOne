@@ -11,6 +11,8 @@
 #include "serialcli.h"
 #include "volume_map.h"
 #include "ui_timeout_config.h"
+#include "source_manager.h"
+#include "web_transport.h"
 
 #if DSP_MODEL==DSP_DUMMY
 #define DUMMYDISPLAY
@@ -37,6 +39,26 @@ static bool parseTimeInterval(const char* value, long minimum, long maximum, uin
 }
 
 bool CommandHandler::exec(const char *command, const char *value, uint32_t cid) {
+  if (strEquals(command, "webtransport")) {
+    bool bluetoothSelected = false;
+#if VOXONE_HAS_BT && VOXONE_PIN_MAP_COMPLETE
+    bluetoothSelected = bluetoothSourceSelected();
+#endif
+    switch (webTransportAction(bluetoothSelected, value)) {
+      case WebTransportAction::RadioPrevious: player.prev(); return true;
+      case WebTransportAction::RadioToggle: player.toggle(); return true;
+      case WebTransportAction::RadioNext: player.next(); return true;
+#if VOXONE_HAS_BT && VOXONE_PIN_MAP_COMPLETE
+      case WebTransportAction::BluetoothPrevious:
+        sourceManagerTransport(BtTransportInput::Previous); return true;
+      case WebTransportAction::BluetoothToggle:
+        sourceManagerTransport(BtTransportInput::Toggle); return true;
+      case WebTransportAction::BluetoothNext:
+        sourceManagerTransport(BtTransportInput::Next); return true;
+#endif
+      default: return false;
+    }
+  }
   if (strEquals(command, "start"))    { player.sendCommand({PR_PLAY, config.lastStation()}); return true; }
   if (strEquals(command, "stop"))     { player.sendCommand({PR_STOP, 0}); return true; }
   if (strEquals(command, "toggle"))   { player.toggle(); return true; }
@@ -104,6 +126,7 @@ bool CommandHandler::exec(const char *command, const char *value, uint32_t cid) 
   if (strEquals(command, "getrssi"))   { netserver.requestOnChange(NRSSI, cid); return true; }
   
   if (strEquals(command, "getsystem"))  { netserver.requestOnChange(GETSYSTEM, cid); return true; }
+  if (strEquals(command, "getwebstatus")) { netserver.requestOnChange(WEBSTATUS, cid); return true; }
   if (strEquals(command, "getscreen"))  { netserver.requestOnChange(GETSCREEN, cid); return true; }
   if (strEquals(command, "stationlisttimeout") || strEquals(command, "bttransporttimeout")) {
     uint8_t seconds;

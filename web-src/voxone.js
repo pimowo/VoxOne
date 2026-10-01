@@ -136,6 +136,7 @@
   let rtcStatusLoading = false;
   const state = {
     connection: "connecting",
+    webStatus: null,
     source: null,
     station: null,
     metadata: null,
@@ -567,9 +568,11 @@
       disconnected: "Rozłączono"
     }[state.connection];
     const connected = state.connection === "connected";
-    buttons.prev.disabled = !connected;
-    buttons.next.disabled = !connected;
-    buttons.play.disabled = !connected || state.playing === null;
+    const btDisconnected = state.webStatus?.source === "BT" && !state.webStatus.btConnected;
+    buttons.prev.disabled = !connected || btDisconnected;
+    buttons.next.disabled = !connected || btDisconnected;
+    buttons.play.disabled = !connected || btDisconnected ||
+      (state.webStatus ? !state.webStatus.playback : state.playing === null);
     for (const slider of volumeSliders) slider.disabled = !connected || state.volume100 === null;
     maximumVolumeSlider.disabled = !connected || state.maximumVolume === null;
     startupModeSelect.disabled = !connected || state.startupMode === null;
@@ -589,22 +592,41 @@
   }
 
   function renderStation() {
-    text("current-station-name", state.station || "—");
+    const status = state.webStatus;
+    text("status-name-label", status?.source === "BT" ? "URZĄDZENIE" : "STACJA");
+    text("current-station-name", (status ? status.name : state.station) || "—");
   }
 
   function renderMetadata() {
-    text("metadata", state.metadata || "—");
+    const status = state.webStatus;
+    const bt = status?.source === "BT";
+    document.getElementById("metadata").hidden = bt;
+    document.getElementById("metadata-hint").hidden = bt;
+    document.getElementById("bt-artist").hidden = !bt || !status.btConnected;
+    document.getElementById("bt-title").hidden = !bt || !status.btConnected;
+    document.getElementById("bt-disconnected").hidden = !bt || status.btConnected;
+    text("metadata", (status ? status.metadata : state.metadata) || "—");
+    text("bt-artist", "Artysta: " + (bt && status.btConnected && status.artist ? status.artist : "—"));
+    text("bt-title", "Utwór: " + (bt && status.btConnected && status.title ? status.title : "—"));
   }
 
   function renderStream() {
+    const status = state.webStatus;
+    if (status?.source === "BT") {
+      const rate = status.btConnected ? status.sampleRate : 0;
+      text("codec", rate > 0 ? (Number.isInteger(rate / 1000) ? rate / 1000 : (rate / 1000).toFixed(1)) + " kHz" : "—");
+      return;
+    }
     const parts = [];
-    if (state.codec) parts.push(state.codec);
-    if (state.bitrate > 0) parts.push(state.bitrate + " kb/s");
+    const codec = status ? status.codec : state.codec;
+    const bitrate = status ? status.bitrate : state.bitrate;
+    if (codec) parts.push(codec);
+    if (bitrate > 0) parts.push(bitrate + " kb/s");
     text("codec", parts.length ? parts.join(" · ") : "—");
   }
 
   function renderSource() {
-    text("source", state.source || "—");
+    text("source", (state.webStatus ? state.webStatus.source : state.source) || "—");
   }
 
   function renderRssi() {
@@ -612,9 +634,22 @@
   }
 
   function renderPlaying() {
-    buttons.play.textContent = state.playing === null ? "—" : state.playing ? "■" : "▶";
-    buttons.play.setAttribute("aria-label", state.playing === null ? "Stan odtwarzania niedostępny" : state.playing ? "Zatrzymaj" : "Odtwarzaj");
+    const status = state.webStatus;
+    const playback = status ? status.playback : state.playing === null ? "" : state.playing ? "PLAY" : "STOP";
+    const bt = status?.source === "BT";
+    buttons.play.textContent = !playback ? "—" : playback === "PLAY" ? (bt ? "❚❚" : "■") : "▶";
+    buttons.play.setAttribute("aria-label", !playback ? "Stan odtwarzania niedostępny" :
+      playback === "PLAY" ? (bt ? "Pauza" : "Zatrzymaj") : "Odtwarzaj");
+    text("playback-state", bt && !status.btConnected ? "Brak połączenia" : playback || "—");
     renderConnection();
+  }
+
+  function renderStatus() {
+    renderStation();
+    renderMetadata();
+    renderStream();
+    renderSource();
+    renderPlaying();
   }
 
   function showVolume(value) {
@@ -1212,6 +1247,7 @@
     for (const key of ["source", "station", "metadata", "codec", "bitrate", "rssi", "volume", "volume100", "maximumVolume", "startupMode", "startupFixedVolume", "brightness", "stationListTimeout", "btTransportTimeout", "bass", "middle", "treble", "balance", "playing", "current", "ip"]) {
       state[key] = null;
     }
+    state.webStatus = null;
     state.canBrightness = false;
     state.canBtTransport = false;
     state.flip = null;
@@ -1239,12 +1275,8 @@
     pendingVolume = null;
     clearTimeout(volumeTimer);
     clearTimeout(volumeAckTimer);
-    renderStation();
-    renderMetadata();
-    renderStream();
-    renderSource();
+    renderStatus();
     renderRssi();
-    renderPlaying();
     showVolume(null);
     renderVolumeSettings();
     renderDisplaySettings();
@@ -1364,6 +1396,14 @@
       console.warn("VoxOne: invalid WebSocket JSON", error);
       return;
     }
+    const status = message.webStatus;
+    if (status && (status.source === "WEB" || status.source === "BT") &&
+        ["name", "metadata", "artist", "title", "codec", "playback"].every(key => typeof status[key] === "string") &&
+        Number.isInteger(status.bitrate) && Number.isInteger(status.sampleRate) &&
+        typeof status.btConnected === "boolean") {
+      state.webStatus = status;
+      renderStatus();
+    }
     if (Array.isArray(message.payload)) {
       let toneChanged = false;
       for (const item of message.payload) {
@@ -1446,6 +1486,7 @@
       resetRuntime();
       state.connection = "connected";
       renderConnection();
+      send("getwebstatus", 1);
       send("getindex", 1);
       send("getscreen", 1);
       extraSyncTimer = setTimeout(requestExtraSync, 1500);
@@ -1480,13 +1521,13 @@
   }
 
   buttons.prev.addEventListener("click", () => {
-    if (send("prev", 1)) flashButton(buttons.prev);
+    if (send("webtransport", "prev")) flashButton(buttons.prev);
   });
   buttons.play.addEventListener("click", () => {
-    if (send("toggle", 1)) flashButton(buttons.play);
+    if (send("webtransport", "toggle")) flashButton(buttons.play);
   });
   buttons.next.addEventListener("click", () => {
-    if (send("next", 1)) flashButton(buttons.next);
+    if (send("webtransport", "next")) flashButton(buttons.next);
   });
 
   myStationsTab.addEventListener("click", () => showStationView(false));
