@@ -49,8 +49,7 @@
 - USTAWIENIA → Sieć: uporządkować profile Wi-Fi, enabled, SSID, hasło, clear i priority.
 - USTAWIENIA → Sen: screensaver, wygaszanie i sleep timer.
 - SYSTEM → Informacje systemowe: firmware, profil, IP, RSSI, uptime, heap, MAC, capabilities i dane VoxOneBT.
-- AKTUALIZACJA → Urządzenie: online/offline, firmware, protocol, BT name i capabilities VoxOneBT; dodać przyszłą aktualizację VoxOneBT.
-- Zmienić nazwy „Firmware” na „VoxOne Firmware” i „WWW/system plików” na „VoxOne system plików”.
+- Aktualizacja VoxOneBT: PC/telefon → WWW VoxOne MAIN → UART → VoxOneBT, bez osobnego Wi-Fi/WWW w VoxOneBT. Dodać osobny aktywny przycisk, binarny transfer UART, progress, ACK/NACK, walidację CRC i rozmiaru oraz bezpieczny slot OTA. Restartować tylko VoxOneBT; MAIN ma pozostać uruchomiony i po restarcie sprawdzić `FW_VERSION`.
 - Fizycznie sprawdzić na DESK ukrycie suwaka jasności LCD oraz restart WWW i powrót Wi-Fi bez utraty stacji/config.
 
 ## 14. WWW — auto reload

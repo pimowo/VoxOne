@@ -1,6 +1,7 @@
 #include "options.h"
 #include "system_operation_state.h"
 #include "source_manager.h"
+#include "bt_link.h"
 #include "web_status_view.h"
 #include "bt_audio_input.h"
 #include "Arduino.h"
@@ -524,6 +525,21 @@ static void formatWebStatus(char* output, size_t capacity) {
   sourceView.artist = bt.artist;
   sourceView.title = bt.title;
 #endif
+  bool btOnline = false;
+  unsigned btProtocol = 0;
+  const char* btFirmware = "";
+  const char* btName = "";
+  const char* btCapabilities = "";
+#if VOXONE_HAS_BT && VOXONE_PIN_MAP_COMPLETE
+  const BtLinkState& link = btLink.state();
+  btOnline = link.runtimeAvailable;
+  if (btOnline) {
+    btProtocol = link.protocolVersion;
+    btFirmware = link.firmwareVersion;
+    btName = link.btName;
+    btCapabilities = link.capabilities;
+  }
+#endif
   const WebStatusView status = selectWebStatusView(
       sourceView, config.station.name, radioMetadata,
       getFormat(config.configFmt), config.station.bitrate);
@@ -536,12 +552,17 @@ static void formatWebStatus(char* output, size_t capacity) {
       !appendWebStatusText(output, capacity, used, ",\"artist\":\"", status.artist) ||
       !appendWebStatusText(output, capacity, used, ",\"title\":\"", status.title) ||
       !appendWebStatusText(output, capacity, used, ",\"codec\":\"", status.codec) ||
-      !appendWebStatusText(output, capacity, used, ",\"playback\":\"", status.playback)) {
+      !appendWebStatusText(output, capacity, used, ",\"playback\":\"", status.playback) ||
+      !appendWebStatusLiteral(output, capacity, used, ",\"btModule\":{\"firmware\":\"") ||
+      !appendWebStatusText(output, capacity, used, "", btFirmware) ||
+      !appendWebStatusText(output, capacity, used, ",\"name\":\"", btName) ||
+      !appendWebStatusText(output, capacity, used, ",\"capabilities\":\"", btCapabilities)) {
     output[0] = '\0';
     return;
   }
   const int tail = snprintf(output + used, capacity - used,
-      ",\"bitrate\":%u,\"sampleRate\":%lu,\"btConnected\":%s}}",
+      ",\"online\":%s,\"protocol\":%u},\"bitrate\":%u,\"sampleRate\":%lu,\"btConnected\":%s}}",
+      btOnline ? "true" : "false", btProtocol,
       status.bitrate, static_cast<unsigned long>(status.sampleRate),
       status.btConnected ? "true" : "false");
   if (tail < 0 || static_cast<size_t>(tail) >= capacity - used) output[0] = '\0';

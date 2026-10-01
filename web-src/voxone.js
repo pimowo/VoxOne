@@ -16,6 +16,8 @@
   };
   const updateStatus = document.getElementById("update-status");
   const updateProgress = document.getElementById("update-progress");
+  const updateBtFile = document.getElementById("update-bt-file");
+  const updateBtFileName = document.getElementById("update-bt-file-name");
   let updateBusy = false;
   const rebootButton = document.getElementById("reboot-button");
   const rebootDialog = document.getElementById("reboot-dialog");
@@ -222,6 +224,17 @@
       image.file.disabled = updateBusy;
       image.button.disabled = updateBusy || !file;
     }
+    updateBtFileName.textContent = updateBtFile.files[0]?.name || "Nie wybrano pliku.";
+  }
+
+  function renderBtModule() {
+    const module = state.webStatus?.btModule;
+    const online = state.connection === "connected" && module?.online === true;
+    text("update-bt-online", online ? "TAK" : "NIE");
+    text("update-bt-firmware", online && module.firmware ? module.firmware : "—");
+    text("update-bt-protocol", online && module.protocol ? String(module.protocol) : "—");
+    text("update-bt-name", online && module.name ? module.name : "—");
+    text("update-bt-capabilities", online && module.capabilities ? module.capabilities : "—");
   }
 
   function setUpdateStatus(message, error = false) {
@@ -366,6 +379,7 @@
     if (selected === "stations" && state.stationsStatus === "idle") loadStations();
     if (selected === "settings" && !mqttConfigLoaded) loadMqttConfig();
     if (selected === "settings") loadTimeStatus();
+    if (selected === "update") send("getwebstatus", 1);
   }
 
   function showStartupTab() {
@@ -1248,6 +1262,7 @@
       state[key] = null;
     }
     state.webStatus = null;
+    renderBtModule();
     state.canBrightness = false;
     state.canBtTransport = false;
     state.flip = null;
@@ -1403,6 +1418,7 @@
         typeof status.btConnected === "boolean") {
       state.webStatus = status;
       renderStatus();
+      renderBtModule();
     }
     if (Array.isArray(message.payload)) {
       let toneChanged = false;
@@ -1502,6 +1518,7 @@
       clearTimeout(volumeAckTimer);
       socket = null;
       state.connection = "disconnected";
+      renderBtModule();
       for (const control of Object.values(audioControls)) {
         control.dragging = false;
         clearTimeout(control.ackTimer);
@@ -1882,6 +1899,7 @@
     image.file.addEventListener("change", renderUpdateFiles);
     image.button.addEventListener("click", () => uploadUpdateImage(target));
   }
+  updateBtFile.addEventListener("change", renderUpdateFiles);
   rebootButton.addEventListener("click", () => {
     if (!rebootStarted) rebootDialog.showModal();
   });

@@ -232,18 +232,33 @@
         <article class="card"><h3>Urządzenie</h3><dl class="facts"><div><dt>Wersja VoxOne</dt><dd id="update-version">VoxOne —</dd></div><div><dt>Profil</dt><dd id="update-profile">—</dd></div></dl></article>
         <div class="grid update-grid">
           <article class="card update-card">
-            <h3>Firmware</h3>
+            <h3>VoxOne Firmware</h3>
             <label for="update-firmware-file">Plik firmware (.bin)</label>
             <input id="update-firmware-file" type="file" accept=".bin,application/octet-stream">
             <p id="update-firmware-name" class="update-file-name">Nie wybrano pliku.</p>
             <button id="update-firmware-button" type="button" disabled>Aktualizuj firmware</button>
           </article>
           <article class="card update-card">
-            <h3>WWW / system plików</h3>
+            <h3>VoxOne system plików</h3>
             <label for="update-spiffs-file">Obraz SPIFFS z buildu (.bin)</label>
             <input id="update-spiffs-file" type="file" accept=".bin,application/octet-stream">
             <p id="update-spiffs-name" class="update-file-name">Nie wybrano pliku.</p>
             <button id="update-spiffs-button" type="button" disabled>Aktualizuj WWW</button>
+          </article>
+          <article class="card update-card">
+            <h3>VoxOneBT Firmware</h3>
+            <dl class="facts">
+              <div><dt>Online</dt><dd id="update-bt-online">NIE</dd></div>
+              <div><dt>Firmware</dt><dd id="update-bt-firmware">—</dd></div>
+              <div><dt>Protocol</dt><dd id="update-bt-protocol">—</dd></div>
+              <div><dt>BT Name</dt><dd id="update-bt-name">—</dd></div>
+              <div><dt>Capabilities</dt><dd id="update-bt-capabilities">—</dd></div>
+            </dl>
+            <label for="update-bt-file">Plik firmware VoxOneBT (.bin)</label>
+            <input id="update-bt-file" type="file" accept=".bin,application/octet-stream">
+            <p id="update-bt-file-name" class="update-file-name">Nie wybrano pliku.</p>
+            <button id="update-bt-button" type="button" disabled>Aktualizuj VoxOneBT</button>
+            <p class="hint">Aktualizacja przez VoxOne MAIN — funkcja w przygotowaniu.</p>
           </article>
         </div>
         <article class="card update-progress-card" aria-labelledby="update-progress-title">

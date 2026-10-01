@@ -3,6 +3,7 @@
 #if VOXONE_HAS_BT && VOXONE_PIN_MAP_COMPLETE
 
 #include "serialcli.h"
+#include "netserver.h"
 
 static_assert(VOXONE_BT_UART_RX_PIN != 255 && VOXONE_BT_UART_TX_PIN != 255,
               "BT capable profile requires UART RX and TX pins");
@@ -72,9 +73,11 @@ void BtLink::onEvent(void* context, BtLinkEvent event) {
       serialCli.printf("##[BT]# online proto=%u fw=%s name=%s\n",
                        state.protocolVersion, state.firmwareVersion,
                        state.btName);
+      netserver.requestOnChange(WEBSTATUS, 0);
       break;
     case BtLinkEvent::Offline:
       serialCli.printf("##[BT]# module offline\n");
+      netserver.requestOnChange(WEBSTATUS, 0);
       break;
     case BtLinkEvent::Diagnostics: {
       const BtLinkDiagnostics& diag = link->protocol_.diagnostics();
