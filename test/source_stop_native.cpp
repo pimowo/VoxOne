@@ -81,6 +81,10 @@ int main() {
   source.displayView(view);
   assert(view.playback == DisplayPlaybackState::None);
   assert(!source.bluetoothAudioOutputAllowed());
+  for (int i = 0; i < 10; ++i) {
+    assert(!source.observe(bt).activeChanged);
+    assert(source.active() == ActiveSource::Bluetooth);
+  }
   bt.connected = true;
   bt.playback = BtPlayback::Playing;
   update = source.observe(bt);
@@ -88,4 +92,18 @@ int main() {
   source.displayView(view);
   assert(view.playback == DisplayPlaybackState::Stopped);
   assert(!source.bluetoothAudioOutputAllowed());
+
+  // A lost backend is different from a disconnected phone: return to RADIO
+  // in STOP, retain user MUTE, and keep the logical DAC output muted.
+  bt.runtimeAvailable = false;
+  update = source.observe(bt);
+  assert(update.activeChanged && update.reason == SourceChangeReason::BtOffline);
+  assert(source.active() == ActiveSource::Radio);
+  source.displayView(view);
+  assert(view.playback == DisplayPlaybackState::Stopped);
+  assert(!source.bluetoothAudioOutputAllowed() && mute.active());
+  assert(!dacXsmtHigh(dacPlaybackForSource(false, false, false,
+                                         BtPlayback::Stopped), false));
+  assert(!source.cycle(bt).activeChanged);  // Unavailable BT is skipped.
+  assert(source.active() == ActiveSource::Radio);
 }

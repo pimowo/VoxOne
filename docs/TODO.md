@@ -8,7 +8,7 @@
 
 ## 4. Ikona BT
 
-- Na pozostałych ekranach LCD dodać ikonę BT, gdy telefon jest fizycznie połączony, niezależnie od aktywnego źródła.
+- Przy dodawaniu DLNA, AUX i SPDIF pokazywać ikonę BT również na głównym PLAYER tych źródeł, gdy telefon jest fizycznie połączony. Ekrany pomocnicze i modalne (VOLUME, BT_TRANSPORT, menu/listy, UPDATE) pozostają bez tej ikony.
 
 ## 6. LCD AKTUALIZACJA
 
@@ -31,7 +31,8 @@
 
 ## 9. Zachowanie startowe / zmiana źródła
 
-- Sprawdzić fallbacki niedostępnego źródła.
+- Fizycznie sprawdzić utratę runtime VoxOneBT przy aktywnym BT: fallback do RADIO STOP, logical XSMT LOW i zachowanie MUTE.
+- Jeśli przyszły profil nie będzie miał RADIO, zapewnić bezpieczny STOP/no-source po utracie wszystkich dostępnych źródeł; przy dodawaniu DLNA/AUX/SPDIF uwzględnić ich capabilities i runtime availability.
 - Oddzielić tę semantykę od istniejącego Startup Volume. Konfigurację startowej stacji/źródła wprowadzać tylko w zgodzie z powyższą zasadą.
 
 ## 10. WWW — aktywne źródło
@@ -108,7 +109,6 @@
 ## 21. Stabilność / release
 
 - Ustalić i podłączyć GPIO XSMT PCM5102A na SALON, potem fizycznie sprawdzić LOW przy PAUZA/STOP, HIGH przy PLAY, ciszę podczas przejść i Web Update oraz czerwoną ramkę VOL bez zmiany działania MUTE.
-- Fizycznie sprawdzić końcowy PLAYER SALON po usunięciu górnego separatora: dolną linię y=280, stałą geometrię slotów LOUD/MODE oraz brak kolizji z VU, audio-info, zegarem i datą.
 - Wykonać audit DESK, testy regresyjne DESK/SALON, długie testy audio i diagnostykę problemów występujących na sprzęcie, w tym logów czasu i wcześniejszego `ipc1` panic.
 - Fizycznie sprawdzić MQTT/HA SALON, Web Update firmware SALON oraz firmware/SPIFFS DESK, w tym postęp, błędy, backup i powrót WWW.
 - Sprawdzić recovery AP przy błędnych danych Wi-Fi, Serial CLI, ekran AP na telefonie i jego kolory oraz `/update.html` i `/emergency` przy niedostępnym SPIFFS.
