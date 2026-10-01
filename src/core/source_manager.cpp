@@ -7,6 +7,7 @@
 #include "bt_volume.h"
 #include "config.h"
 #include "display.h"
+#include "network.h"
 #include "player.h"
 #include "serialcli.h"
 #include "source_manager_state.h"
@@ -51,6 +52,19 @@ void refreshDisplay(const SourceUpdate& update) {
   (void)update;
 #endif
 }
+
+void stopOnSourceChange(const SourceUpdate& update, const BtLinkState& bt) {
+  if (update.activeChanged) {
+    // Discard a queued PLAY before exposing the newly selected source.
+    network.lostPlaying = false;
+    player.resetQueue();
+    if (player.status() == PLAYING || player.isRunning())
+      player.sendCommand({PR_STOP, 0});
+  }
+  if ((update.activeChanged || update.btConnected) && bt.runtimeAvailable &&
+      bt.connected && bt.playback == BtPlayback::Playing)
+    btLink.pause();
+}
 }  // namespace
 
 void sourceManagerBegin() {
@@ -66,6 +80,7 @@ void sourceManagerLoop() {
   const SourceUpdate update = sourceState.observe(btLink.state());
   const ActiveSource active = sourceState.active();
   portEXIT_CRITICAL(&sourceMux);
+  stopOnSourceChange(update, btLink.state());
   if (update.btDisconnected) volumeSync.disconnect();
   if (update.btConnected) {
     const uint8_t user = config.userVolume;
@@ -108,6 +123,13 @@ bool bluetoothSourceSelected() {
   const bool selected = sourceState.active() == ActiveSource::Bluetooth;
   portEXIT_CRITICAL(&sourceMux);
   return selected;
+}
+
+bool bluetoothAudioOutputAllowed() {
+  portENTER_CRITICAL(&sourceMux);
+  const bool allowed = sourceState.bluetoothAudioOutputAllowed();
+  portEXIT_CRITICAL(&sourceMux);
+  return allowed;
 }
 
 bool bluetoothPhysicallyConnected() {
@@ -192,7 +214,18 @@ void sourceManagerTransport(BtTransportInput input) {
   switch (action) {
     case BtTransportAction::Previous: btLink.prev(); break;
     case BtTransportAction::Next: btLink.next(); break;
-    case BtTransportAction::Play: btLink.play(); break;
+    case BtTransportAction::Play:
+      if (btLink.play()) {
+        portENTER_CRITICAL(&sourceMux);
+        const bool released = sourceState.allowBluetoothPlayback();
+        portEXIT_CRITICAL(&sourceMux);
+        if (released) {
+          SourceUpdate update;
+          update.titleChanged = true;
+          refreshDisplay(update);
+        }
+      }
+      break;
     case BtTransportAction::Pause: btLink.pause(); break;
     case BtTransportAction::None: break;
   }
@@ -204,6 +237,7 @@ void cycleNextSource() {
   const ActiveSource active = sourceState.active();
   portEXIT_CRITICAL(&sourceMux);
   if (!update.activeChanged) return;
+  stopOnSourceChange(update, btLink.state());
   serialCli.printf("##[SOURCE]# active=%s reason=manual\n", sourceName(active));
   refreshDisplay(update);
 }

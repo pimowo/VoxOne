@@ -11,6 +11,7 @@
 #include "player.h"
 #include "mqtt.h"
 #include "mqtt_config.h"
+#include "source_manager.h"
 #include "timekeeper.h"
 #include <sys/time.h>
 #include <atomic>
@@ -44,7 +45,12 @@ void MyNetwork::WiFiReconnected(WiFiEvent_t event, WiFiEventInfo_t info){
     display.putRequest(NEWIP, 0);
   }else{
     display.putRequest(NEWMODE, PLAYER);
-    if (network.lostPlaying) player.sendCommand({PR_PLAY, config.lastStation()});
+    if (network.lostPlaying
+#if VOXONE_HAS_BT && VOXONE_PIN_MAP_COMPLETE
+        && !bluetoothSourceSelected()
+#endif
+        ) player.sendCommand({PR_PLAY, config.lastStation()});
+    network.lostPlaying = false;
   }
   mqttWifiConnected();
 }

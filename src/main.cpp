@@ -118,9 +118,7 @@ void setup() {
   #endif
   if (config.getMode()==PM_SDCARD) player.initHeaders(config.station.url);
   player.lockOutput=false;
-  if (config.store.smartstart == 1) {
-    player.sendCommand({PR_PLAY, config.lastStation()});
-  }
+  // Preserve the selected station, but always enter the base source in STOP.
   pm.on_end_setup();
 }
 
@@ -135,7 +133,7 @@ void loop() {
   #endif
   #if VOXONE_HAS_BT && VOXONE_PIN_MAP_COMPLETE && VOXONE_BT_I2S_RX_ENABLED
     if (!btLink.hasIncompleteOnlineSnapshot())
-      btAudioInput.loop(btLink.state(), bluetoothSourceSelected(),
+      btAudioInput.loop(btLink.state(), bluetoothAudioOutputAllowed(),
                         player.getSampleRate(), millis());
   #endif
   if (network.status == CONNECTED || network.status==SDREADY) {
@@ -148,7 +146,8 @@ void loop() {
   const BtLinkState& bt = btLink.state();
   const DacPlaybackState dacPlayback = dacPlaybackForSource(
       bluetoothSourceSelected(), player.isRunning(),
-      !btLink.hasIncompleteOnlineSnapshot() && bt.runtimeAvailable &&
+      bluetoothAudioOutputAllowed() &&
+          !btLink.hasIncompleteOnlineSnapshot() && bt.runtimeAvailable &&
           bt.connected && btAudioDesiredRate(bt) != 0,
       bt.playback);
   dacMute.update(dacPlayback, systemUpdateAudioBlocked());

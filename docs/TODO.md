@@ -31,8 +31,7 @@
 
 ## 9. Zachowanie startowe / zmiana źródła
 
-- Docelowo start urządzenia i każda zmiana źródła mają pozostawiać odtwarzanie w STOP: RADIO → BT → STOP oraz BT → RADIO → STOP.
-- Sprawdzić automatyczny wybór BT po nowym połączeniu telefonu, fallbacki niedostępnego źródła oraz cold boot.
+- Sprawdzić fallbacki niedostępnego źródła.
 - Oddzielić tę semantykę od istniejącego Startup Volume. Konfigurację startowej stacji/źródła wprowadzać tylko w zgodzie z powyższą zasadą.
 
 ## 10. WWW — aktywne źródło

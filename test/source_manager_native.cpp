@@ -90,6 +90,11 @@ int main() {
   assert(std::strcmp(view.peerName, "Telefon") == 0);
   assert(std::strcmp(view.artist, "Żółć") == 0);
   assert(std::strcmp(view.title, "Utwór") == 0);
+  assert(view.playback == DisplayPlaybackState::Stopped);
+  assert(!sources.bluetoothAudioOutputAllowed());
+  assert(btTransportAction(BtTransportInput::Toggle, view) == BtTransportAction::Play);
+  assert(sources.allowBluetoothPlayback());  // Explicit user PLAY.
+  sources.displayView(view);
   assert(view.playback == DisplayPlaybackState::Playing);
   assert(displaySourceVuVisible(view));
   for (uint8_t volume : {0, 1, 50}) {
@@ -112,6 +117,7 @@ int main() {
   update = sources.cycle(bt);
   assert(update.reason == SourceChangeReason::Manual);
   assert(sources.active() == ActiveSource::Radio);
+  assert(!sources.bluetoothAudioOutputAllowed());
   for (int i = 0; i < 10; ++i) {
     assert(!sources.observe(bt).activeChanged);
     assert(sources.active() == ActiveSource::Radio);
@@ -136,6 +142,9 @@ int main() {
   assert(sources.bluetoothPhysicallyConnected());
 
   // Changed BT fields request only the relevant partial LCD update.
+  sources.displayView(view);
+  assert(view.playback == DisplayPlaybackState::Stopped);
+  assert(sources.allowBluetoothPlayback());
   std::strcpy(bt.peerName, "Telefon 2");
   update = sources.observe(bt);
   assert(update.stationChanged && !update.titleChanged);
@@ -169,6 +178,7 @@ int main() {
   assert(update.stationChanged && update.titleChanged);
   assert(update.activeChanged && update.reason == SourceChangeReason::BtDisconnect);
   assert(sources.active() == ActiveSource::Radio);
+  assert(!sources.bluetoothAudioOutputAllowed());
   for (int i = 0; i < 10; ++i) {
     assert(!sources.observe(bt).activeChanged);
     assert(sources.active() == ActiveSource::Radio);

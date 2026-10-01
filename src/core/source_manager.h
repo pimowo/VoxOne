@@ -11,6 +11,7 @@ void sourceManagerLoop();
 void sourceManagerStopForUpdate();
 void cycleNextSource();
 bool bluetoothSourceSelected();
+bool bluetoothAudioOutputAllowed();
 bool bluetoothPhysicallyConnected();
 bool radioI2SOutputEnabled();
 #if VOXONE_BT_I2S_RX_ENABLED

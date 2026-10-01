@@ -45,8 +45,19 @@ class SourceManagerState {
   ActiveSource active() const { return active_; }
   bool bluetoothPhysicallyConnected() const { return observedConnected_; }
   bool bluetoothPlaying() const {
-    return active_ == ActiveSource::Bluetooth && connected_ &&
+    return bluetoothAudioOutputAllowed() &&
            playback_ == BtPlayback::Playing;
+  }
+  bool bluetoothAudioOutputAllowed() const {
+    return active_ == ActiveSource::Bluetooth && connected_ &&
+           !bluetoothPlaybackHeld_;
+  }
+  // A PLAYING report alone may be an automatic phone resume after connection.
+  bool allowBluetoothPlayback() {
+    if (active_ != ActiveSource::Bluetooth || !connected_ ||
+        !bluetoothPlaybackHeld_) return false;
+    bluetoothPlaybackHeld_ = false;
+    return true;
   }
   void bluetoothRawVu(uint16_t& left, uint16_t& right,
                       uint32_t& lastDataMs) const {
@@ -61,8 +72,10 @@ class SourceManagerState {
       if (!bt.runtimeAvailable) return update;
       active_ = ActiveSource::Bluetooth;
       remember(bt);
+      bluetoothPlaybackHeld_ = true;
     } else {
       active_ = ActiveSource::Radio;
+      bluetoothPlaybackHeld_ = false;
     }
     update.activeChanged = true;
     update.stationChanged = true;
@@ -92,6 +105,7 @@ class SourceManagerState {
 
     if (active_ == ActiveSource::Bluetooth && !bt.runtimeAvailable) {
       active_ = ActiveSource::Radio;
+      bluetoothPlaybackHeld_ = false;
       update.activeChanged = true;
       update.stationChanged = true;
       update.titleChanged = true;
@@ -103,6 +117,7 @@ class SourceManagerState {
     if (!wasConnected && connectedNow && active_ == ActiveSource::Radio) {
       active_ = ActiveSource::Bluetooth;
       remember(bt);
+      bluetoothPlaybackHeld_ = true;
       update.activeChanged = true;
       update.stationChanged = true;
       update.titleChanged = true;
@@ -113,6 +128,7 @@ class SourceManagerState {
 
     if (wasConnected && !connectedNow && active_ == ActiveSource::Bluetooth) {
       active_ = ActiveSource::Radio;
+      bluetoothPlaybackHeld_ = false;
       update.activeChanged = true;
       update.stationChanged = true;
       update.titleChanged = true;
@@ -122,6 +138,7 @@ class SourceManagerState {
     }
 
     if (active_ != ActiveSource::Bluetooth) return update;
+    if (update.btConnected) bluetoothPlaybackHeld_ = true;
     update.stationChanged = bt.connected != connected_ ||
                             strcmp(bt.peerName, peerName_) != 0;
     update.titleChanged = bt.connected != connected_ ||
@@ -150,7 +167,9 @@ class SourceManagerState {
       view.artist = "Oczekuję na połączenie...";
       view.title = "";
     } else {
-      if (playback_ == BtPlayback::Playing)
+      if (bluetoothPlaybackHeld_)
+        view.playback = DisplayPlaybackState::Stopped;
+      else if (playback_ == BtPlayback::Playing)
         view.playback = DisplayPlaybackState::Playing;
       else if (playback_ == BtPlayback::Paused)
         view.playback = DisplayPlaybackState::Paused;
@@ -170,6 +189,7 @@ class SourceManagerState {
 
   void stopForUpdate(const BtLinkState& bt) {
     active_ = ActiveSource::Radio;
+    bluetoothPlaybackHeld_ = false;
     observedConnected_ = bt.runtimeAvailable && bt.connected;
     observedVolumeRevision_ = bt.volumeRevision;
   }
@@ -187,6 +207,7 @@ class SourceManagerState {
   ActiveSource active_ = ActiveSource::Radio;
   bool observedConnected_ = false;
   bool connected_ = false;
+  bool bluetoothPlaybackHeld_ = false;
   BtPlayback playback_ = BtPlayback::Stopped;
   uint32_t sampleRate_ = 0;
   uint32_t observedVolumeRevision_ = 0;
