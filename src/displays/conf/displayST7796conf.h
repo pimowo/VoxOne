@@ -34,14 +34,16 @@ const FillConfig  heapbarConf     PROGMEM = {{ 0, DSP_HEIGHT-2, 0, WA_LEFT }, DS
 /* WIDGETS  */                           /* { left, top, fontsize, align } */
 const WidgetConfig bootstrConf    PROGMEM = { 0, 243, 1, WA_CENTER };
 const WidgetConfig bitrateConf    PROGMEM = { 250, 282, 2, WA_LEFT };
-const WidgetConfig voltxtConf     PROGMEM = { 16, 298, 2, WA_LEFT };
+const WidgetConfig voltxtConf     PROGMEM = { 10, 293, 2, WA_LEFT };
 const WidgetConfig  iptxtConf     PROGMEM = { TFT_FRAMEWDT, 282, 2, WA_LEFT };
 const WidgetConfig   rssiConf     PROGMEM = { TFT_FRAMEWDT, 298, 2, WA_RIGHT };
-const WidgetConfig rssiLabelConf  PROGMEM = { 390, 298, 2, WA_LEFT };
-const WidgetConfig salonPlaybackConf PROGMEM = { 0, 298, 2, WA_CENTER };
-const FillConfig salonPlaybackFrameConf PROGMEM = {{190, 295, 0, WA_LEFT}, 100, 22, true};
-const FillConfig salonEqFrameConf PROGMEM = {{304, 295, 0, WA_LEFT}, 72, 22, true};
-const WidgetConfig salonBluetoothIconConf PROGMEM = { 107, 198, 0, WA_LEFT };
+const FillConfig salonPlaybackFrameConf PROGMEM = {{90, 182, 0, WA_LEFT}, 52, 24, true};
+const FillConfig salonLoudFrameConf PROGMEM = {{90, 293, 0, WA_LEFT}, 52, 24, true};
+const FillConfig salonEqFrameConf PROGMEM = {{156, 293, 0, WA_LEFT}, 72, 24, true};
+const FillConfig salonSourceFrameConf PROGMEM = {{242, 293, 0, WA_LEFT}, 100, 24, true};
+const FillConfig salonModeFrameConf PROGMEM = {{356, 293, 0, WA_LEFT}, 48, 24, true};
+const FillConfig salonLowerDividerConf PROGMEM = {{10, 280, 0, WA_LEFT}, 460, 1, false};
+const WidgetConfig salonBluetoothIconConf PROGMEM = { 420, 297, 0, WA_LEFT };
 const WidgetConfig btTransportPrevConf PROGMEM = { 80, 176, 8, WA_LEFT };
 const WidgetConfig btTransportNextConf PROGMEM = { 80, 176, 8, WA_RIGHT };
 const WidgetConfig btTransportPlaybackConf PROGMEM = { 0, 283, 3, WA_CENTER };
@@ -62,7 +64,7 @@ const WidgetConfig vuConf         PROGMEM = { TFT_FRAMEWDT, 136, 1, WA_LEFT };
 
 const WidgetConfig bootWdtConf    PROGMEM = { 0, 216, 1, WA_CENTER };
 const ProgressConfig bootPrgConf  PROGMEM = { 90, 14, 4 };
-const BitrateConfig fullbitrateConf PROGMEM = {{90, 222, 2, WA_LEFT}, 42 };
+const BitrateConfig fullbitrateConf PROGMEM = {{90, 220, 2, WA_LEFT}, 44 };
 const uint16_t fullbitrateWidth = 52;
 
 /* BANDS  */                             /* { onebandwidth, onebandheight, bandsHspace, bandsVspace, numofbands, fadespeed } */

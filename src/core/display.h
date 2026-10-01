@@ -6,8 +6,42 @@
 #include "salon_player_scroll.h"
 #endif
 
-enum class DisplaySourceKind : uint8_t { Radio, Bluetooth };
+enum class DisplaySourceKind : uint8_t { Radio, Bluetooth, Dlna, Aux, Spdif, Tts };
+inline const char* displaySourceLabel(DisplaySourceKind kind) {
+    switch (kind) {
+        case DisplaySourceKind::Radio: return "WEB";
+        case DisplaySourceKind::Bluetooth: return "BT";
+        case DisplaySourceKind::Dlna: return "DLNA";
+        case DisplaySourceKind::Aux: return "AUX";
+        case DisplaySourceKind::Spdif: return "SPDIF";
+        case DisplaySourceKind::Tts: return "TTS";
+    }
+    return "";
+}
+inline bool displayVolumeMuted(uint8_t userVolume, bool muted = false) {
+    return muted || userVolume == 0;
+}
+inline const char* displayLoudLabel(bool active) {
+    return active ? "LOUD" : "";
+}
+enum class DisplayDlnaMode : uint8_t { Unavailable, All, Random, One };
+inline const char* displayDlnaModeLabel(DisplayDlnaMode mode) {
+    switch (mode) {
+        case DisplayDlnaMode::All: return "ALL";
+        case DisplayDlnaMode::Random: return "RND";
+        case DisplayDlnaMode::One: return "ONE";
+        case DisplayDlnaMode::Unavailable: return "";
+    }
+    return "";
+}
+inline bool displaySlotVisible(const char* label) {
+    return label && label[0] != '\0';
+}
 enum class DisplayPlaybackState : uint8_t { None, Stopped, Playing, Paused };
+inline bool displayVolumeFrameRed(uint8_t userVolume, bool muted,
+                                 bool logicalDacMuted) {
+    return displayVolumeMuted(userVolume, muted) || logicalDacMuted;
+}
 inline const char* displayPlaybackLabel(DisplayPlaybackState state) {
     switch (state) {
         case DisplayPlaybackState::None: return "";
@@ -57,7 +91,8 @@ class TextWidget;
 #if DSP_MODEL==DSP_ST7796
 class SalonVolumeWidget;
 class SalonBluetoothWidget;
-class SalonEqWidget;
+class SalonLabelFrameWidget;
+class SalonPlaybackIconWidget;
 #endif
     
 class Display {
@@ -99,11 +134,12 @@ class Display {
     Page *_boot;
     TextWidget *_bootstring, *_volip, *_voltxt, *_rssi, *_bitrate;
 #if DSP_MODEL==DSP_ST7796
-    TextWidget *_salonRssiLabel;
-    TextWidget *_salonPlayback, *_btTransportPlayback;
+    TextWidget *_btTransportPlayback;
+    SalonPlaybackIconWidget *_salonPlayback = nullptr;
     SalonVolumeWidget *_salonVolume;
     SalonBluetoothWidget *_salonBluetoothIcon;
-    SalonEqWidget *_salonEq = nullptr;
+    SalonLabelFrameWidget *_salonSource = nullptr, *_salonEq = nullptr;
+    SalonLabelFrameWidget *_salonLoud = nullptr, *_salonMode = nullptr;
     ScrollWidget *_btTransportArtist, *_btTransportTitle;
     Page *_btTransportPage;
     Page *_salonUpdatePage = nullptr;

@@ -13,7 +13,10 @@
 #include "core/timekeeper.h"
 #include "core/bt_link.h"
 #include "core/bt_audio_input.h"
+#include "core/bt_audio_input_state.h"
 #include "core/source_manager.h"
+#include "core/dac_mute.h"
+#include "core/system_operation_state.h"
 #ifdef USE_NEXTION
 #include "displays/nextion.h"
 #endif
@@ -73,6 +76,9 @@ void setupOTA(){
 
 void setup() {
   Serial.begin(115200);
+#if defined(VOXONE_PROFILE_SALON)
+  dacMute.begin();
+#endif
 #if defined(VOXONE_PROFILE_SALON) && defined(RGB_BUILTIN) && \
     defined(PIN_NEOPIXEL) && PIN_NEOPIXEL == 48
   neopixelWrite(RGB_BUILTIN, 0, 0, 0);
@@ -138,6 +144,15 @@ void loop() {
     ArduinoOTA.handle();
 #endif
   }
+#if defined(VOXONE_PROFILE_SALON)
+  const BtLinkState& bt = btLink.state();
+  const DacPlaybackState dacPlayback = dacPlaybackForSource(
+      bluetoothSourceSelected(), player.isRunning(),
+      !btLink.hasIncompleteOnlineSnapshot() && bt.runtimeAvailable &&
+          bt.connected && btAudioDesiredRate(bt) != 0,
+      bt.playback);
+  dacMute.update(dacPlayback, systemUpdateAudioBlocked());
+#endif
   loopControls();
   #ifdef NETSERVER_LOOP1
   netserver.loop();

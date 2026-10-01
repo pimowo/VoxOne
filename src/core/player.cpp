@@ -186,8 +186,8 @@ void Player::loop() {
     } else if (pendingMode == 0) {
       const VolumeState state = volumeStateFromRaw(pendingVolume, config.store.maximumVolume);
       config.setVolumeState(state.raw, state.user);
-    } else config.setVolumeState(config.store.volume, config.userVolume);
-    Audio::setVolume(volToI2S(config.store.volume));
+    } else if (pendingMode == 2) config.setVolumeState(config.store.volume, config.userVolume);
+    Audio::setVolume(_mute.outputVolume(volToI2S(config.store.volume)));
   }
   playerRequestParams_t requestP;
   if(xQueueReceive(playerQueue, &requestP, isRunning()?PL_QUEUE_TICKS:PL_QUEUE_TICKS_ST)){
@@ -211,7 +211,7 @@ void Player::loop() {
         const uint8_t requested = static_cast<uint8_t>(constrain(requestP.payload, 0, 254));
         const VolumeState state = volumeStateFromRaw(requested, config.store.maximumVolume);
         config.setVolumeState(state.raw, state.user);
-        Audio::setVolume(volToI2S(state.raw));
+        Audio::setVolume(_mute.outputVolume(volToI2S(state.raw)));
         _volTicks = millis();
         _volTimer = true;
         break;
@@ -369,7 +369,23 @@ uint8_t Player::volToI2S(uint8_t volume) {
 }
 
 void Player::_loadVol(uint8_t volume) {
-  setVolume(volToI2S(volume));
+  setVolume(_mute.outputVolume(volToI2S(volume)));
+}
+
+void Player::setMuted(bool muted) {
+  if (_mute.active() == muted) return;
+  _mute.set(muted);
+  portENTER_CRITICAL(&playerVolumeMux);
+  if (!_volumePending) {
+    _pendingMode = 3; // Refresh output gain without changing saved USER volume.
+    _volumePending = true;
+  }
+  portEXIT_CRITICAL(&playerVolumeMux);
+  display.putRequest(DRAWVOL);
+}
+
+bool Player::outputSilent() const {
+  return _mute.outputSilent(config.userVolume);
 }
 
 void Player::setVol(uint8_t volume) {
@@ -397,12 +413,10 @@ void Player::setUserVol(uint8_t user) {
 
 void Player::stepUserVol(int8_t direction) {
   portENTER_CRITICAL(&playerVolumeMux);
-  int user = static_cast<int>(config.userVolume) + (direction > 0 ? 1 : -1);
-  if (user < 0) user = 0;
-  if (user > 100) user = 100;
-  config.userVolume = static_cast<uint8_t>(user);
-  config.store.lastUserVolume = static_cast<uint8_t>(user);
-  _pendingVolume = static_cast<uint8_t>(user);
+  const uint8_t user = _mute.stepUserVolume(config.userVolume, direction);
+  config.userVolume = user;
+  config.store.lastUserVolume = user;
+  _pendingVolume = user;
   _pendingMode = 1;
   _volumePending = true;
   portEXIT_CRITICAL(&playerVolumeMux);

@@ -15,6 +15,29 @@ int main() {
   assert(!sources.bluetoothPhysicallyConnected());
   sources.displayView(view);
   assert(view.kind == DisplaySourceKind::Radio);
+  assert(std::strcmp(displaySourceLabel(view.kind), "WEB") == 0);
+  assert(std::strcmp(displaySourceLabel(DisplaySourceKind::Bluetooth), "BT") == 0);
+  assert(std::strcmp(displaySourceLabel(DisplaySourceKind::Dlna), "DLNA") == 0);
+  assert(std::strcmp(displaySourceLabel(DisplaySourceKind::Aux), "AUX") == 0);
+  assert(std::strcmp(displaySourceLabel(DisplaySourceKind::Spdif), "SPDIF") == 0);
+  assert(std::strcmp(displaySourceLabel(DisplaySourceKind::Tts), "TTS") == 0);
+  assert(displayVolumeMuted(0));
+  assert(!displayVolumeMuted(1));
+  assert(displayVolumeMuted(50, true));
+  assert(!displayVolumeFrameRed(27, false, false));
+  assert(displayVolumeFrameRed(27, false, true));
+  assert(!displayVolumeMuted(27, false));
+  assert(displayVolumeFrameRed(27, true, false));
+  assert(displayVolumeMuted(27, true));
+  assert(displayVolumeFrameRed(0, false, false));
+  assert(displayVolumeMuted(0, false));
+  assert(!displaySlotVisible(displayLoudLabel(false)));
+  assert(std::strcmp(displayLoudLabel(true), "LOUD") == 0);
+  assert(displaySlotVisible(displayLoudLabel(true)));
+  assert(!displaySlotVisible(displayDlnaModeLabel(DisplayDlnaMode::Unavailable)));
+  assert(std::strcmp(displayDlnaModeLabel(DisplayDlnaMode::All), "ALL") == 0);
+  assert(std::strcmp(displayDlnaModeLabel(DisplayDlnaMode::Random), "RND") == 0);
+  assert(std::strcmp(displayDlnaModeLabel(DisplayDlnaMode::One), "ONE") == 0);
   // An update stops source selection without treating a still-connected phone
   // as a fresh connect when normal observation resumes.
   SourceManagerState updating;

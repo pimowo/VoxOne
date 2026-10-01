@@ -6,6 +6,7 @@
 #include "config.h"
 #include "display.h"
 #include "display_audio_info.h"
+#include "dac_mute.h"
 #include "eq_preset_label.h"
 #include "player.h"
 #include "volume_map.h"
@@ -104,29 +105,49 @@ class SalonVolumeWidget : public Widget {
     Widget::init(position, color, background);
   }
 
-  void setVolume(uint8_t value) {
-    if (_value == value) return;
+  void setVolume(uint8_t value, bool muted) {
+    if (_value == value && _muted == muted) return;
     _value = value;
+    _muted = muted;
+    if (_active) _draw();
+  }
+
+  void setDacMuted(bool muted) {
+    if (_dacMuted == muted) return;
+    _dacMuted = muted;
     if (_active) _draw();
   }
 
  private:
-  static constexpr uint16_t kWidth = 56;
-  static constexpr uint16_t kHeight = 16;
+  static constexpr uint16_t kWidth = 68;
+  static constexpr uint16_t kHeight = 24;
+  static constexpr uint16_t kMuteColor = 0xF800;
   uint8_t _value = 0;
+  bool _muted = false;
+  bool _dacMuted = true;
 
   void _draw() override {
     if (!_active) return;
     _clear();
+    const bool muted = displayVolumeMuted(_value, _muted);
+    const uint16_t color = muted ? kMuteColor : _fgcolor;
+    const uint16_t frameColor =
+        displayVolumeFrameRed(_value, _muted, _dacMuted) ? kMuteColor : _fgcolor;
+    dsp.drawRoundRect(_config.left, _config.top, kWidth, kHeight, 3, frameColor);
+    dsp.setFont();
+    dsp.setTextSize(2);
+    dsp.setTextColor(color, _bgcolor);
+    if (muted) {
+      dsp.setCursor(_config.left + (kWidth - 4 * 12) / 2, _config.top + 4);
+      dsp.print("MUTE");
+      return;
+    }
     const uint8_t digits = _value >= 100 ? 3 : (_value >= 10 ? 2 : 1);
     const uint16_t groupWidth = 12 + 8 + digits * 12;
     const uint16_t left = _config.left + (kWidth - groupWidth) / 2;
-    dsp.setFont();
-    dsp.setTextSize(2);
-    dsp.setTextColor(_fgcolor, _bgcolor);
-    dsp.setCursor(left, _config.top);
+    dsp.setCursor(left, _config.top + 4);
     dsp.print("\023");  // Existing yoFont speaker glyph.
-    dsp.setCursor(left + 20, _config.top);
+    dsp.setCursor(left + 20, _config.top + 4);
     dsp.print(_value);
   }
 
@@ -135,30 +156,11 @@ class SalonVolumeWidget : public Widget {
   }
 };
 
-class SalonPlaybackFrameWidget : public Widget {
+class SalonLabelFrameWidget : public Widget {
  public:
-  SalonPlaybackFrameWidget(FillConfig frame, uint16_t color, uint16_t background)
-      : width_(frame.width), height_(frame.height) {
-    Widget::init(frame.widget, color, background);
-  }
-
- private:
-  uint16_t width_, height_;
-
-  void _draw() override {
-    if (_active)
-      dsp.drawRect(_config.left, _config.top, width_, height_, _fgcolor);
-  }
-
-  void _clear() override {
-    dsp.fillRect(_config.left, _config.top, width_, height_, _bgcolor);
-  }
-};
-
-class SalonEqWidget : public Widget {
- public:
-  SalonEqWidget(FillConfig frame, uint16_t color, uint16_t background)
-      : width_(frame.width), height_(frame.height) {
+  SalonLabelFrameWidget(FillConfig frame, uint16_t color, uint16_t background,
+                        bool rounded = false)
+      : width_(frame.width), height_(frame.height), rounded_(rounded) {
     Widget::init(frame.widget, color, background);
   }
 
@@ -170,18 +172,70 @@ class SalonEqWidget : public Widget {
 
  private:
   uint16_t width_, height_;
+  bool rounded_;
   const char* label_ = "";
 
   void _draw() override {
     if (!_active) return;
-    dsp.drawRect(_config.left, _config.top, width_, height_, _fgcolor);
-    dsp.fillRect(_config.left + 1, _config.top + 1, width_ - 2, height_ - 2, _bgcolor);
+    _clear();
+    if (!displaySlotVisible(label_)) return;
+    if (rounded_)
+      dsp.drawRoundRect(_config.left, _config.top, width_, height_, 3, _fgcolor);
+    else
+      dsp.drawRect(_config.left, _config.top, width_, height_, _fgcolor);
     dsp.setFont();
     dsp.setTextSize(2);
     dsp.setTextColor(_fgcolor, _bgcolor);
     const uint16_t textWidth = strlen(label_) * 12;
-    dsp.setCursor(_config.left + (width_ - textWidth) / 2, _config.top + 3);
+    dsp.setCursor(_config.left + (width_ - textWidth) / 2,
+                  _config.top + (height_ - 16) / 2);
     dsp.print(label_);
+  }
+
+  void _clear() override {
+    dsp.fillRect(_config.left, _config.top, width_, height_, _bgcolor);
+  }
+};
+
+class SalonPlaybackIconWidget : public Widget {
+ public:
+  SalonPlaybackIconWidget(FillConfig frame, uint16_t color, uint16_t background)
+      : width_(frame.width), height_(frame.height) {
+    Widget::init(frame.widget, color, background);
+  }
+
+  void setState(DisplayPlaybackState state) {
+    if (state_ == state) return;
+    state_ = state;
+    if (_active) _draw();
+  }
+
+ private:
+  uint16_t width_, height_;
+  DisplayPlaybackState state_ = DisplayPlaybackState::None;
+
+  void _draw() override {
+    if (!_active) return;
+    _clear();
+    if (state_ == DisplayPlaybackState::None) return;
+    dsp.drawRoundRect(_config.left, _config.top, width_, height_, 3, _fgcolor);
+    const int16_t centerX = _config.left + width_ / 2;
+    const int16_t centerY = _config.top + height_ / 2;
+    switch (state_) {
+      case DisplayPlaybackState::Playing:
+        dsp.fillTriangle(centerX - 5, centerY - 7, centerX - 5, centerY + 7,
+                         centerX + 7, centerY, _fgcolor);
+        break;
+      case DisplayPlaybackState::Paused:
+        dsp.fillRect(centerX - 7, centerY - 7, 5, 14, _fgcolor);
+        dsp.fillRect(centerX + 2, centerY - 7, 5, 14, _fgcolor);
+        break;
+      case DisplayPlaybackState::Stopped:
+        dsp.fillRect(centerX - 6, centerY - 6, 12, 12, _fgcolor);
+        break;
+      case DisplayPlaybackState::None:
+        break;
+    }
   }
 
   void _clear() override {
@@ -381,7 +435,7 @@ void Display::_buildPager(){
   #ifndef HIDE_VOL
 #if DSP_MODEL==DSP_ST7796
     _salonVolume = new SalonVolumeWidget(voltxtConf, config.theme.meta, config.theme.background);
-    _salonVolume->setVolume(displayedVolume());
+    _salonVolume->setVolume(displayedVolume(), player.isMuted());
 #else
     _voltxt = new TextWidget(voltxtConf, 10, config.theme.vol, config.theme.background);
 #endif
@@ -393,11 +447,20 @@ void Display::_buildPager(){
     _rssi = new TextWidget(rssiConf, 20, config.theme.rssi, config.theme.background);
   #endif
 #if DSP_MODEL==DSP_ST7796
-  _salonRssiLabel = new TextWidget(rssiLabelConf, 8, config.theme.rssi, config.theme.background);
-  _salonRssiLabel->setText("WiFi");
-  _salonPlayback = new TextWidget(salonPlaybackConf, 8, config.theme.meta, config.theme.background);
-  _salonEq = new SalonEqWidget(salonEqFrameConf, config.theme.meta, config.theme.background);
+  _salonPlayback = new SalonPlaybackIconWidget(salonPlaybackFrameConf, config.theme.meta,
+                                               config.theme.background);
+  _salonLoud = new SalonLabelFrameWidget(salonLoudFrameConf, config.theme.meta,
+                                         config.theme.background, true);
+  _salonLoud->setLabel(displayLoudLabel(false));
+  _salonSource = new SalonLabelFrameWidget(salonSourceFrameConf, config.theme.meta,
+                                           config.theme.background, true);
+  _salonSource->setLabel("WEB");
+  _salonEq = new SalonLabelFrameWidget(salonEqFrameConf, config.theme.meta,
+                                       config.theme.background, true);
   _salonEq->setLabel(eqPresetLabel(config.store.bass, config.store.middle, config.store.trebble));
+  _salonMode = new SalonLabelFrameWidget(salonModeFrameConf, config.theme.meta,
+                                         config.theme.background, true);
+  _salonMode->setLabel(displayDlnaModeLabel(DisplayDlnaMode::Unavailable));
   _salonBluetoothIcon = new SalonBluetoothWidget(salonBluetoothIconConf, config.theme.meta, config.theme.background);
 #endif
 #if DSP_MODEL==DSP_ST7789_76
@@ -424,6 +487,9 @@ void Display::_buildPager(){
 #endif
   pages[PG_PLAYER]->addWidget(_title1);
   if(_title2) pages[PG_PLAYER]->addWidget(_title2);
+#if DSP_MODEL==DSP_ST7796
+  pages[PG_PLAYER]->addWidget(new FillWidget(salonLowerDividerConf, config.theme.div));
+#endif
   #if BITRATE_FULL
     _fullbitrate = new BitrateWidget(fullbitrateConf, config.theme.bitrate, config.theme.background);
 #if DSP_MODEL==DSP_ST7796
@@ -445,11 +511,12 @@ void Display::_buildPager(){
   pages[PG_PLAYER]->addWidget(_clock);
 #if DSP_MODEL==DSP_ST7796
   if(_salonVolume) pages[PG_PLAYER]->addWidget(_salonVolume);
-  pages[PG_PLAYER]->addWidget(new SalonPlaybackFrameWidget(salonPlaybackFrameConf, config.theme.meta, config.theme.background));
   pages[PG_PLAYER]->addWidget(_salonPlayback);
+  pages[PG_PLAYER]->addWidget(_salonLoud);
   pages[PG_PLAYER]->addWidget(_salonEq);
+  pages[PG_PLAYER]->addWidget(_salonSource);
+  pages[PG_PLAYER]->addWidget(_salonMode);
   pages[PG_PLAYER]->addWidget(_salonBluetoothIcon);
-  if(_salonRssiLabel) pages[PG_PLAYER]->addWidget(_salonRssiLabel);
   if(_rssi) pages[PG_PLAYER]->addWidget(_rssi);
   if(_heapbar) pages[PG_PLAYER]->addWidget(_heapbar);
 #else
@@ -687,7 +754,8 @@ void Display::_swichMode(displayMode_e newmode) {
     #else
       _showDialog(config.ipToStr(WiFi.localIP()));
     #endif
-    _nums->setText(displayedVolume(), numtxtFmt);
+    if (player.isMuted()) _nums->setText("MUTE");
+    else _nums->setText(displayedVolume(), numtxtFmt);
   }
   if (newmode == LOST)      _showDialog(LANG::const_DlgLost);
   if (newmode == UPDATING) {
@@ -811,7 +879,7 @@ void Display::_updatePlaybackStatus() {
           : (player.isRunning() ? DisplayPlaybackState::Playing
                                 : DisplayPlaybackState::Stopped);
   const char* label = displayPlaybackLabel(playback);
-  _salonPlayback->setText(label);
+  _salonPlayback->setState(playback);
   _btTransportPlayback->setText(label);
 }
 #endif
@@ -861,8 +929,17 @@ void Display::loop() {
 #endif
   _pager->loop();
 #if DSP_MODEL==DSP_ST7796
-  if (_bootStep == 2 && _salonEq)
-    _salonEq->setLabel(eqPresetLabel(config.store.bass, config.store.middle, config.store.trebble));
+  if (_bootStep == 2) {
+    if (_salonVolume) _salonVolume->setDacMuted(dacMute.logicalMuted());
+    if (_salonEq)
+      _salonEq->setLabel(eqPresetLabel(config.store.bass, config.store.middle, config.store.trebble));
+    if (_salonSource) {
+      DisplaySourceView source{};
+      _salonSource->setLabel(displaySourceLabel(
+          getDisplaySourceView && getDisplaySourceView(source)
+              ? source.kind : DisplaySourceKind::Radio));
+    }
+  }
 #endif
 #if DSP_MODEL==DSP_ST7796 && VOXONE_HAS_BT && VOXONE_PIN_MAP_COMPLETE
   if (_salonBluetoothIcon)
@@ -1213,7 +1290,7 @@ void Display::_volume() {
   if(_deskVolume) _deskVolume->setText(displayedVolume(), "\023 %d");
 #endif
 #if DSP_MODEL==DSP_ST7796
-  if(_salonVolume) _salonVolume->setVolume(displayedVolume());
+  if(_salonVolume) _salonVolume->setVolume(displayedVolume(), player.isMuted());
 #else
   #ifndef HIDE_VOL
     if(_voltxt) _voltxt->setText(displayedVolume(), voltxtFmt);
@@ -1225,7 +1302,8 @@ void Display::_volume() {
 #else
     timekeeper.waitAndReturnPlayer(3);
 #endif
-    _nums->setText(displayedVolume(), numtxtFmt);
+    if (player.isMuted()) _nums->setText("MUTE");
+    else _nums->setText(displayedVolume(), numtxtFmt);
   }
   /*#ifdef USE_NEXTION
     nextion.setVol(config.store.volume, _mode == VOL);

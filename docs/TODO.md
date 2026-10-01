@@ -8,7 +8,7 @@
 
 ## 4. Ikona BT
 
-- Na wszystkich ekranach LCD pokazywać ikonę BT, gdy telefon jest fizycznie połączony, niezależnie od aktywnego źródła.
+- Na pozostałych ekranach LCD dodać ikonę BT, gdy telefon jest fizycznie połączony, niezależnie od aktywnego źródła.
 
 ## 6. LCD AKTUALIZACJA
 
@@ -24,8 +24,10 @@
 
 - RADIO PLAY → TTS → RADIO PLAY i RADIO STOP → TTS → RADIO STOP działają; poprawić BT PLAY → TTS → BT PLAY oraz BT STOP → TTS → BT STOP.
 - Uporządkować ownership I2S0, przywracanie sample rate, źródła i playback oraz cleanup po błędzie, przerwaniu i timeout. Gdy BT zniknie podczas TTS, zakończyć w RADIO STOP bez autoplay.
-- Podczas TTS pokazać na LCD: stacja „KOMUNIKAT TTS”, artysta „Powiadomienie głosowe”, utwór pusty.
-- Później rozważyć HTTPS, redirecty i opcjonalną Volume TTS.
+- Automatyzacja HA wysyła tylko `play_media(URL)`. VoxOne sam zatrzymuje lub pauzuje bieżące źródło, przejmuje I2S0, ustawia sample rate i głośność TTS, przywraca poprzednie źródło oraz stan odtwarzania i sprząta po błędzie lub timeout.
+- TTS Volume: CURRENT albo FIXED 0–100; FIXED nie zmienia głównego `userVolume`. TTS jest tymczasowym audio override, nie zwykłym źródłem użytkownika. Docelowo ma działać dla RADIO, BT, DLNA, AUX i SPDIF.
+- Podczas TTS pokazać na LCD: stacja „KOMUNIKAT TTS”, artysta „Powiadomienie głosowe”, utwór pusty. Sprawdzić też etykietę źródła TTS na PLAYER SALON.
+- Później rozważyć HTTPS i redirecty.
 
 ## 9. Zachowanie startowe / zmiana źródła
 
@@ -71,6 +73,7 @@
 
 - Tylko jeśli nadal występuje `Truncated MP3 frame`: przeanalizować ICY stripping, buforowanie, MP3 sync/frame length i Helix przed zmianą dekodowania.
 - Przed stable przetestować SHOUTcast/Icecast, `ICY 200`, MIME, HTTP/HTTPS, reconnect, dead stream oraz stream z metadata i bez.
+- Przyszłe źródła: DLNA — VU z PCM, codec i bitrate; AUX — VU z PCM po ADC, sample rate i format PCM zamiast bitrate; SPDIF — VU z PCM, sample rate i format. Na wyjściu może być aktywne tylko jedno źródło audio naraz.
 - Zweryfikować semantykę `status.on = config.store.dspon` w `ha_yoradio`.
 
 ## 18. Playlisty
@@ -96,15 +99,18 @@
 
 - LAN / W5500: dodać opcjonalny moduł na osobnej magistrali SPI, niezależnej od ST7796, oraz tryby AUTO, LAN i Wi-Fi. W AUTO preferować Ethernet przy aktywnym linku LAN, a przy braku linku przechodzić na Wi-Fi.
 - LAN / W5500: uruchamiać DHCP, później rozważyć statyczny IP. W WWW pokazywać aktywny interfejs, link LAN, IP i podstawowy status Ethernet. Warstwa sieciowa RADIO/DLNA nie może zakładać na sztywno `WiFiClient` ani Wi-Fi; DLNA/SSDP ma działać przez LAN i Wi-Fi.
-- LAN / W5500: w obecnym obszarze LCD pokazywać „WiFi” i słupki RSSI dla Wi-Fi, a dla LAN „LAN” i małą programowo rysowaną ikonę RJ45/Ethernet zamiast słupków. Nie zmieniać położenia obszaru.
+- LAN / W5500: w stałym obszarze systemowym LCD pokazywać dla Wi-Fi tylko słupki RSSI i obok małą ikonę BT; dla LAN zastąpić słupki małą ikoną RJ45/Ethernet. Bez napisów „WiFi” i „LAN” oraz bez przesuwania tego obszaru.
 - LCD SKIN — YAMAHA AMBER: opcjonalna, przełączalna skórka z czarnym tłem i interfejsem w jednym bursztynowo-pomarańczowym kolorze, w stylu starszych amplitunerów Yamaha. Punkt startowy: #FF9A1F, RGB565 0xFCC3.
-- Sleep/screensaver, MUTE/AMP_POWER, SALON_DSP/TDA7719, AUX, SPDIF i Alarm.
+- Sleep/screensaver, sterowanie istniejącym MUTE z WWW/HA/MQTT, SALON_DSP/TDA7719, AUX, SPDIF i Alarm.
+- AMP_POWER: sterowanie zasilaniem wzmacniacza z anti-pop — mute/fade przed wyłączeniem, opóźnienie po włączeniu i unmute/fade po stabilizacji.
 - SALON_DSP: EQ, Loudness, Balance, Fader, Subwoofer, 2.0/2.1, presety, storage oraz WWW/LCD. DS3231 i TDA7719 mają współdzielić jedną magistralę I²C GPIO7/8.
 - DIN: fizycznie sprawdzić PCM5102A GPIO1/2/3, VoxOneBT, WWW, MQTT/HA i NoDisplay; ustalić docelową definicję ESP32-S3 Zero.
 - Dodatkowe wyświetlacze i opcjonalny czujnik światła rozwijać po podstawowych funkcjach.
 
 ## 21. Stabilność / release
 
+- Ustalić i podłączyć GPIO XSMT PCM5102A na SALON, potem fizycznie sprawdzić LOW przy PAUZA/STOP, HIGH przy PLAY, ciszę podczas przejść i Web Update oraz czerwoną ramkę VOL bez zmiany działania MUTE.
+- Fizycznie sprawdzić końcowy PLAYER SALON po usunięciu górnego separatora: dolną linię y=280, stałą geometrię slotów LOUD/MODE oraz brak kolizji z VU, audio-info, zegarem i datą.
 - Wykonać audit DESK, testy regresyjne DESK/SALON, długie testy audio i diagnostykę problemów występujących na sprzęcie, w tym logów czasu i wcześniejszego `ipc1` panic.
 - Fizycznie sprawdzić MQTT/HA SALON, Web Update firmware SALON oraz firmware/SPIFFS DESK, w tym postęp, błędy, backup i powrót WWW.
 - Sprawdzić recovery AP przy błędnych danych Wi-Fi, Serial CLI, ekran AP na telefonie i jego kolory oraz `/update.html` i `/emergency` przy niedostępnym SPIFFS.
@@ -116,14 +122,12 @@
 
 ## Kolejność najbliższych prac
 
-1. Drobne poprawki LCD BT.
-2. Dolna część LCD PLAYER.
-3. Ikona BT.
-4. Scroll na podstawie yoPILOT.
-5. TTS BT i LCD TTS.
-6. WWW zależne od aktywnego źródła.
-7. Porządki WWW.
-8. Stopka i logo WWW.
-9. Start i zmiana źródła → STOP.
-10. DLNA.
-11. AAC, M3U i dalsza zgodność.
+1. PLAY_MEDIA / TTS BT oraz TTS Volume CURRENT/FIXED.
+2. Start i zmiana źródła → STOP.
+3. WWW zależne od aktywnego źródła.
+4. AAC/AAC+.
+5. M3U/PLS i redirecty.
+6. Testy playlist i stacji.
+7. Audit DESK/DIN i stabilność.
+8. Stabilne RADIO+BT.
+9. Później: DLNA, W5500/LAN, AUX/SPDIF i DSP.

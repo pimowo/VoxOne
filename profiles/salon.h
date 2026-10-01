@@ -37,6 +37,8 @@
 #define I2S_BCLK 5
 #define I2S_LRC 6
 #define I2S_INTERNAL false
+// PCM5102A XSMT: no GPIO assigned until the physical connection is confirmed.
+#define VOXONE_DAC_XSMT_PIN 255
 
 #define RTC_MODULE DS3231
 #define RTC_SDA 8

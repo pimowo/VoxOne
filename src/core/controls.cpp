@@ -534,9 +534,17 @@ void controlsEvent(bool toRight, int8_t volDelta) {
   if (display.mode() != STATIONS) {
 #if VOXONE_HAS_BT && VOXONE_HAS_ENCODER && VOXONE_PIN_MAP_COMPLETE
     if (bluetoothSourceSelected()) {
-      if (sourceManagerStepBluetoothVolume(volDelta != 0 ? volDelta : (toRight ? 1 : -1))) {
+      const int8_t direction = volDelta != 0 ? volDelta : (toRight ? 1 : -1);
+      const bool wasMuted = player.isMuted();
+      const int8_t step = wasMuted ? (direction > 0 ? 1 : -1) : direction;
+      if (sourceManagerStepBluetoothVolume(step)) {
+        player.setMuted(false);
         display.putRequest(NEWMODE, VOL);
         display.putRequest(DRAWVOL);
+      } else if (wasMuted) {
+        // Keep the remembered USER volume adjustable while BT waits for a phone.
+        player.stepUserVol(step);
+        display.putRequest(NEWMODE, VOL);
       }
       return;
     }
@@ -596,6 +604,10 @@ void onBtnClick(int id) {
     case EVT_BTNCENTER:
     case EVT_ENCBTNB:
     case EVT_ENC2BTNB: {
+        if (btnid == EVT_ENCBTNB && display.mode() == VOL) {
+          player.toggleMute();
+          break;
+        }
         if (display.mode() == NUMBERS) {
           display.numOfNextStation = 0;
           display.putRequest(NEWMODE, PLAYER);

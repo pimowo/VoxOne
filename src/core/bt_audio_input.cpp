@@ -7,6 +7,7 @@
 
 #include "bt_audio_input_state.h"
 #include "bt_audio_route_state.h"
+#include "player.h"
 #include "serialcli.h"
 #include "system_operation_state.h"
 
@@ -226,6 +227,7 @@ void BtAudioInput::readContinuously() {
     if (routeEnabled_.load() && !systemUpdateAudioBlocked() && outputMutex_ &&
         xSemaphoreTake(outputMutex_, pdMS_TO_TICKS(kWriteWaitMs)) == pdTRUE) {
       if (routeEnabled_.load() && !systemUpdateAudioBlocked()) {
+        if (player.outputSilent()) memset(pcm, 0, bytesRead);
         size_t bytesWritten = 0;
         const esp_err_t writeError = i2s_write(I2S_NUM_0, pcm, bytesRead,
                                                &bytesWritten,

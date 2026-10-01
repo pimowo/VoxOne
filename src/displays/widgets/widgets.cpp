@@ -613,10 +613,29 @@ void NumWidget::setText(int val, const char *format){
 }
 
 void NumWidget::_getBounds() {
+#if DSP_MODEL==DSP_ST7796
+  if (strcmp(_text, "MUTE") == 0) {
+    _textwidth = 4 * CHARWIDTH * 8;
+    return;
+  }
+#endif
   _textwidth= _textWidth(_text);
 }
 
 void NumWidget::_draw() {
+#if DSP_MODEL==DSP_ST7796
+  if (strcmp(_text, "MUTE") == 0) {
+    if (!_active) return;
+    dsp.setFont();
+    dsp.setTextSize(8);
+    dsp.setTextColor(0xF800, _bgcolor);
+    dsp.setCursor(_realLeft(), _config.top - _textheight + 4);
+    dsp.print(_text);
+    strlcpy(_oldtext, _text, _buffsize);
+    dsp.setTextSize(1);
+    return;
+  }
+#endif
 #ifndef DSP_LCD
   if(!_active || TIME_SIZE<2) return;
   dsp.setTextSize(Clock_GFXfontPtr==nullptr?TIME_SIZE:1);
@@ -943,8 +962,17 @@ void BitrateWidget::_draw(){
     }
   }
 
+#if DSP_MODEL==DSP_ST7796
+  dsp.fillRoundRect(_config.left, _config.top, _frameWidth, _dimension, 3, _fgcolor);
+  dsp.fillRoundRect(_config.left + 1, _config.top + 1,
+                    _frameWidth - 2, _dimension - 2, 2, _bgcolor);
+  const uint16_t lowerTop = _dimension/2 - 1;
+  dsp.fillRect(_config.left + 1, _config.top + lowerTop,
+               _frameWidth - 2, _dimension - lowerTop - 1, _fgcolor);
+#else
   dsp.drawRect(_config.left, _config.top, _frameWidth, _dimension, _fgcolor);
   dsp.fillRect(_config.left, _config.top + _dimension/2, _frameWidth, _dimension/2, _fgcolor);
+#endif
   dsp.setFont();
   uint8_t topSize = _config.textsize;
   uint8_t topCharWidth = _charWidth;
