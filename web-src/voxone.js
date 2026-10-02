@@ -1,7 +1,7 @@
 (() => {
   "use strict";
 
-  const tabs = ["status", "stations", "audio", "settings", "system", "update"];
+  const tabs = ["status", "stations", "audio", "dsp", "settings", "system", "update"];
   const updateImages = {
     firmware: {
       file: document.getElementById("update-firmware-file"),
@@ -184,6 +184,10 @@
     version: typeof voxOneVersion === "string" ? voxOneVersion : null,
     baseVersion: typeof yoRadioVersion === "string" ? yoRadioVersion : null
   };
+  const advancedAudio = window.createAdvancedAudioDemo(
+    document.getElementById("advanced-audio-root"),
+    { getShared: () => state, send: (command, value) => send(command, value) }
+  );
 
   let socket = null;
   let reconnectTimer = 0;
@@ -473,6 +477,7 @@
     if (selected === "settings" && !mqttConfigLoaded) loadMqttConfig();
     if (selected === "settings") loadTimeStatus();
     if (selected === "update") send("getwebstatus", 1);
+    if (selected === "dsp") advancedAudio.render();
     scheduleSystemInfoRefresh();
   }
 
@@ -699,6 +704,7 @@
     renderDisplaySettings();
     renderFooter();
     renderNetworkInfo();
+    advancedAudio.syncShared();
   }
 
   function renderStation() {

@@ -8,6 +8,7 @@
   <link rel="icon" type="image/svg+xml" href="/voxone-logo.svg?v={voxone-logo.svg-hash}">
   <link rel="stylesheet" href="/voxone.css?v={voxone.css-hash}">
   <script src="/variables.js"></script>
+  <script src="/advanced-audio.js?v={advanced-audio.js-hash}" defer></script>
   <script src="/voxone.js?v={voxone.js-hash}" defer></script>
 </head>
 <body>
@@ -24,6 +25,7 @@
       <a href="#status" data-tab="status" aria-current="page">Status</a>
       <a href="#stations" data-tab="stations">Stacje</a>
       <a href="#audio" data-tab="audio">Audio</a>
+      <a href="#dsp" data-tab="dsp">DSP</a>
       <a href="#settings" data-tab="settings">Ustawienia</a>
       <a href="#system" data-tab="system">System</a>
       <a href="#update" data-tab="update">Aktualizacja</a>
@@ -146,6 +148,10 @@
           </div>
           <p id="volume-settings-pending" class="hint" role="status" aria-live="polite" hidden>Oczekiwanie na potwierdzenie urządzenia…</p>
         </article>
+      </section>
+
+      <section id="dsp" data-panel aria-labelledby="dsp-title" hidden>
+        <div id="advanced-audio-root"></div>
       </section>
 
       <section id="settings" data-panel aria-labelledby="settings-title" hidden>

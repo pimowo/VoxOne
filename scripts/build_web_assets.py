@@ -11,7 +11,7 @@ from pathlib import Path
 PROJECT_DIR = Path(env.subst("$PROJECT_DIR"))
 SOURCE_DIR = PROJECT_DIR / "web-src"
 TARGET_DIR = PROJECT_DIR / "data" / "www"
-ASSETS = ("voxone.html", "voxone.css", "voxone.js", "voxone-logo.svg")
+ASSETS = ("voxone.html", "voxone.css", "voxone.js", "advanced-audio.js", "voxone-logo.svg")
 
 
 def compress(data):
