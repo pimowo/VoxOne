@@ -40,21 +40,16 @@
 - Dodać source-aware status i sterowanie BT w HA bez zmiany istniejącego kontraktu MQTT do czasu osobnej walidacji.
 - Później pokazać wiarygodny codec/bitrate A2DP, jeśli będzie dostępny.
 
-## 12. WWW — stopka
-
-- Na podstawie `reference/yoPilot/` zaprojektować własną, schludną stopkę z nazwą projektu, wersją i informacjami systemowymi; nie kopiować 1:1 i nie zmieniać `reference/`.
-
 ## 13. WWW — porządki
 
-- USTAWIENIA → Sieć: uporządkować profile Wi-Fi, enabled, SSID, hasło, clear i priority.
+- USTAWIENIA → Sieć: dodać bezpieczny, trwały zapis profili Wi-Fi (nowe hasło, zachowanie lub czyszczenie hasła, walidacja, atomowy zapis i kontrolowany restart). Nie obiecywać pola `enabled`, dopóki backend go nie obsługuje.
 - USTAWIENIA → Sen: screensaver, wygaszanie i sleep timer.
 - Aktualizacja VoxOneBT: PC/telefon → WWW VoxOne MAIN → UART → VoxOneBT, bez osobnego Wi-Fi/WWW w VoxOneBT. Dodać osobny aktywny przycisk, binarny transfer UART, progress, ACK/NACK, walidację CRC i rozmiaru oraz bezpieczny slot OTA. Restartować tylko VoxOneBT; MAIN ma pozostać uruchomiony i po restarcie sprawdzić `FW_VERSION`.
 - Fizycznie sprawdzić na DESK ukrycie suwaka jasności LCD oraz restart WWW i powrót Wi-Fi bez utraty stacji/config.
 
 ## 14. WWW — auto reload
 
-- Po ZAPISZ, restarcie, aktualizacji firmware i filesystem pokazywać „Restartowanie”, odpytywać urządzenie co około 1 s, a po powrocie otwierać STATUS.
-- Dodać rozsądny timeout i komunikat, gdy urządzenie nie wróci; przetestować błędy backendu i nieudany backup.
+- Przetestować timeout i komunikat, gdy urządzenie nie wróci, błędy backendu oraz nieudany backup. Powrót do STATUS po zwykłym restarcie i aktualizacji jest już potwierdzony.
 
 ## 15. AAC / AAC+
 

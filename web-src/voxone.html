@@ -151,7 +151,7 @@
       <section id="settings" data-panel aria-labelledby="settings-title" hidden>
         <div class="section-heading"><div><p class="eyebrow">KONFIGURACJA</p><h2 id="settings-title">Ustawienia</h2></div><span class="badge">Urządzenie</span></div>
         <div class="grid">
-          <article class="card"><h3>Sieć</h3><dl class="facts"><div><dt>Hostname</dt><dd>—</dd></div><div><dt>Wi-Fi</dt><dd>—</dd></div></dl><p class="hint">Pola tylko poglądowe.</p></article>
+          <article class="card"><h3>Sieć</h3><dl class="facts"><div><dt>Hostname</dt><dd id="network-hostname">—</dd></div><div><dt>Aktywna sieć Wi-Fi</dt><dd id="network-active-ssid">—</dd></div></dl><h4>Profile Wi-Fi</h4><ol id="network-profiles" class="network-profiles"><li class="muted">Oczekiwanie na dane urządzenia.</li></ol><p class="hint">Hasła nie są wysyłane do przeglądarki. Kolejność określa kolejność prób połączenia; połączenie rozpoczyna się od ostatniego użytego profilu. Edycja profili nie jest obecnie obsługiwana.</p></article>
           <article id="display-settings-card" class="card" hidden>
             <h3>Wyświetlacz</h3>
             <label id="flip-screen-control" class="display-setting-toggle"><input id="flip-screen-toggle" type="checkbox" disabled><span>Odwróć ekran</span></label>
@@ -229,18 +229,18 @@
             <div><dt>IP</dt><dd id="system-ip">—</dd></div>
             <div><dt>MAC Wi-Fi</dt><dd id="system-mac">—</dd></div>
             <div><dt>RSSI</dt><dd id="system-rssi">—</dd></div>
-            <div><dt>Uptime</dt><dd id="system-uptime">—</dd></div>
-            <div><dt>Free heap</dt><dd id="system-free-heap">—</dd></div>
-            <div><dt>Minimum free heap</dt><dd id="system-minimum-heap">—</dd></div>
+            <div><dt>Czas pracy</dt><dd id="system-uptime">—</dd></div>
+            <div><dt>Wolna pamięć heap</dt><dd id="system-free-heap">—</dd></div>
+            <div><dt>Minimum wolnej pamięci heap</dt><dd id="system-minimum-heap">—</dd></div>
             <div><dt>PSRAM</dt><dd id="system-psram">—</dd></div>
-            <div><dt>Capabilities</dt><dd id="system-capabilities">—</dd></div>
+            <div><dt>Możliwości</dt><dd id="system-capabilities">—</dd></div>
           </dl></article>
           <article class="card"><h3>VoxOneBT</h3><dl class="facts">
             <div><dt>Online</dt><dd id="system-bt-online">NIE</dd></div>
             <div><dt>Firmware</dt><dd id="system-bt-firmware">—</dd></div>
-            <div><dt>Protocol</dt><dd id="system-bt-protocol">—</dd></div>
-            <div><dt>BT Name</dt><dd id="system-bt-name">—</dd></div>
-            <div><dt>Capabilities</dt><dd id="system-bt-capabilities">—</dd></div>
+            <div><dt>Protokół</dt><dd id="system-bt-protocol">—</dd></div>
+            <div><dt>Nazwa BT</dt><dd id="system-bt-name">—</dd></div>
+            <div><dt>Możliwości</dt><dd id="system-bt-capabilities">—</dd></div>
           </dl></article>
         </div>
         <article class="card reboot-card"><h3>Urządzenie</h3><p class="muted">Uruchamia urządzenie ponownie bez zmiany zapisanych ustawień.</p><button id="reboot-button" type="button">Restart VoxOne</button><p id="reboot-status" class="reboot-status" role="status" aria-live="polite"></p></article>
@@ -269,9 +269,9 @@
             <dl class="facts">
               <div><dt>Online</dt><dd id="update-bt-online">NIE</dd></div>
               <div><dt>Firmware</dt><dd id="update-bt-firmware">—</dd></div>
-              <div><dt>Protocol</dt><dd id="update-bt-protocol">—</dd></div>
-              <div><dt>BT Name</dt><dd id="update-bt-name">—</dd></div>
-              <div><dt>Capabilities</dt><dd id="update-bt-capabilities">—</dd></div>
+              <div><dt>Protokół</dt><dd id="update-bt-protocol">—</dd></div>
+              <div><dt>Nazwa BT</dt><dd id="update-bt-name">—</dd></div>
+              <div><dt>Możliwości</dt><dd id="update-bt-capabilities">—</dd></div>
             </dl>
             <label for="update-bt-file">Plik firmware VoxOneBT (.bin)</label>
             <input id="update-bt-file" type="file" accept=".bin,application/octet-stream">
@@ -294,7 +294,7 @@
       <p class="muted">Zapisane ustawienia pozostaną bez zmian.</p>
       <div class="station-form-actions"><button id="reboot-cancel" type="button">Anuluj</button><button id="reboot-confirm" class="primary" type="button">Restart</button></div>
     </dialog>
-    <footer>VoxOne · Status aktualizowany przez WebSocket</footer>
+    <footer class="site-footer"><span id="footer-details">VoxOne</span><span id="footer-connection" data-state="connecting">Łączenie...</span></footer>
   </div>
 </body>
 </html>

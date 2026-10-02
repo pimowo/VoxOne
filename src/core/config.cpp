@@ -819,7 +819,6 @@ void Config::setTitle(const char* title) {
   strlcpy(config.station.title, title, BUFLEN);
   u8fix(config.station.title);
   netserver.requestOnChange(TITLE, 0);
-  netserver.loop();
   display.putRequest(NEWTITLE);
 }
 

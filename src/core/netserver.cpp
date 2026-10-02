@@ -74,6 +74,8 @@
 
 NetServer netserver;
 portMUX_TYPE netserverVolumeMux = portMUX_INITIALIZER_UNLOCKED;
+static portMUX_TYPE netserverLoopMux = portMUX_INITIALIZER_UNLOCKED;
+static bool netserverLoopActive = false;
 
 static bool parseToneValue(const char* value, int8_t& bass, int8_t& middle, int8_t& trebble) {
   int8_t* fields[] = {&bass, &middle, &trebble};
@@ -506,6 +508,30 @@ static bool appendWebStatusText(char* output, size_t capacity, size_t& used,
   const size_t fieldEnd = std::min(capacity, used + 240);
   if (!appendJsonEscaped(output, fieldEnd, used, value, true)) return false;
   return appendWebStatusLiteral(output, capacity, used, "\"");
+}
+
+static bool formatNetworkInfo(char* output, size_t capacity, size_t& used) {
+  const String activeSsid = network.status == CONNECTED ? WiFi.SSID() : String();
+  if (!appendWebStatusLiteral(output, capacity, used, "{\"hostname\":\"") ||
+      !appendJsonEscaped(output, capacity, used, config.store.mdnsname, true) ||
+      !appendWebStatusLiteral(output, capacity, used, "\",\"activeSsid\":\"") ||
+      !appendJsonEscaped(output, capacity, used, activeSsid.c_str(), true) ||
+      !appendWebStatusLiteral(output, capacity, used, "\",\"profiles\":[")) return false;
+
+  const uint8_t profileCount = std::min<uint8_t>(config.ssidsCount, 5);
+  for (uint8_t index = 0; index < profileCount; ++index) {
+    if (index && !appendWebStatusLiteral(output, capacity, used, ",")) return false;
+    if (!appendWebStatusLiteral(output, capacity, used, "{\"ssid\":\"") ||
+        !appendJsonEscaped(output, capacity, used, config.ssids[index].ssid, true)) return false;
+    char profileFields[80];
+    const int length = snprintf(profileFields, sizeof(profileFields),
+        "\",\"passwordSet\":%s,\"order\":%u}",
+        config.ssids[index].password[0] ? "true" : "false",
+        static_cast<unsigned>(index + 1));
+    if (length <= 0 || static_cast<size_t>(length) >= sizeof(profileFields) ||
+        !appendWebStatusLiteral(output, capacity, used, profileFields)) return false;
+  }
+  return appendWebStatusLiteral(output, capacity, used, "]}");
 }
 
 static void formatWebStatus(char* output, size_t capacity) {
@@ -1681,8 +1707,8 @@ void NetServer::processQueue(){
         const int wifiRssi = network.status == CONNECTED ? WiFi.RSSI() : -127;
         const unsigned long long uptimeSeconds =
             static_cast<unsigned long long>(esp_timer_get_time() / 1000000LL);
-        snprintf(wsBuf, sizeof(wsBuf),
-            "{\"sst\":%d,\"vu\":%d,\"canVu\":%d,\"softr\":%d,\"vut\":%d,\"mdns\":\"%s\",\"ipaddr\":\"%s\",\"abuff\":%d,\"systemInfo\":{\"mac\":\"%s\",\"rssi\":%d,\"uptimeSeconds\":%llu,\"freeHeap\":%lu,\"minimumFreeHeap\":%lu,\"psramTotal\":%lu,\"psramFree\":%lu,\"capabilities\":\"%s\"}}",
+        const int prefixLength = snprintf(wsBuf, sizeof(wsBuf),
+            "{\"sst\":%d,\"vu\":%d,\"canVu\":%d,\"softr\":%d,\"vut\":%d,\"mdns\":\"%s\",\"ipaddr\":\"%s\",\"abuff\":%d,\"systemInfo\":{\"mac\":\"%s\",\"rssi\":%d,\"uptimeSeconds\":%llu,\"freeHeap\":%lu,\"minimumFreeHeap\":%lu,\"psramTotal\":%lu,\"psramFree\":%lu,\"capabilities\":\"%s\"},\"networkInfo\":",
             config.store.smartstart != 2, config.store.vumeter,
             voxone::activeProfile.capabilities.hasVu, config.store.softapdelay,
             config.vuThreshold, config.store.mdnsname, ipText, config.store.abuff,
@@ -1691,6 +1717,13 @@ void NetServer::processQueue(){
             static_cast<unsigned long>(minimumFreeHeap),
             static_cast<unsigned long>(psramTotal),
             static_cast<unsigned long>(psramFree), capabilities);
+        if (prefixLength < 0 || static_cast<size_t>(prefixLength) >= sizeof(wsBuf)) {
+          wsBuf[0] = '\0';
+          break;
+        }
+        size_t used = static_cast<size_t>(prefixLength);
+        if (!formatNetworkInfo(wsBuf, sizeof(wsBuf), used) ||
+            !appendWebStatusLiteral(wsBuf, sizeof(wsBuf), used, "}")) wsBuf[0] = '\0';
         break;
       }
       case GETSCREEN:     snprintf (wsBuf, sizeof(wsBuf), "{\"flip\":%d,\"canFlip\":%d,\"canBrightness\":%d,\"br\":%d,\"nump\":%d,\"tsf\":%d,\"tsd\":%d,\"dspon\":%d,\"con\":%d,\"scre\":%d,\"scrt\":%d,\"scrb\":%d,\"scrpe\":%d,\"scrpt\":%d,\"scrpb\":%d,\"stationListTimeout\":%u,\"btTransportTimeout\":%u,\"canBtTransport\":%d}",
@@ -1810,6 +1843,14 @@ void NetServer::loop() {
     ESP.restart();
   }
   if (systemOperationState.blocksRequests()) return;
+  // DspTask and the player task can both call loop(); only one may use wsBuf.
+  portENTER_CRITICAL(&netserverLoopMux);
+  if (netserverLoopActive) {
+    portEXIT_CRITICAL(&netserverLoopMux);
+    return;
+  }
+  netserverLoopActive = true;
+  portEXIT_CRITICAL(&netserverLoopMux);
   processQueue();
   processVolumeUpdate();
   websocket.cleanupClients();
@@ -1818,6 +1859,9 @@ void NetServer::loop() {
     case IMWIFI:  config.saveWifi(); importRequest = IMDONE; break;
     default:      break;
   }
+  portENTER_CRITICAL(&netserverLoopMux);
+  netserverLoopActive = false;
+  portEXIT_CRITICAL(&netserverLoopMux);
   //processQueue();
 }
 

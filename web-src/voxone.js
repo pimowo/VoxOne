@@ -140,6 +140,7 @@
     connection: "connecting",
     webStatus: null,
     systemInfo: null,
+    networkInfo: null,
     source: null,
     station: null,
     metadata: null,
@@ -276,9 +277,54 @@
     renderBtModule();
   }
 
+  function renderFooter() {
+    const details = document.getElementById("footer-details");
+    const connection = document.getElementById("footer-connection");
+    if (details) {
+      const parts = [state.version ? "VoxOne " + state.version : "VoxOne"];
+      if (state.profile) parts.push(state.profile.toUpperCase());
+      if (state.connection === "connected" && state.ip) parts.push(state.ip);
+      details.textContent = parts.join(" · ");
+    }
+    if (connection) {
+      connection.dataset.state = state.connection;
+      connection.textContent = {
+        connected: "Połączono",
+        connecting: "Łączenie...",
+        disconnected: "Rozłączono"
+      }[state.connection];
+    }
+  }
+
+  function renderNetworkInfo() {
+    const info = state.connection === "connected" ? state.networkInfo : null;
+    text("network-hostname", info?.hostname || "—");
+    text("network-active-ssid", info?.activeSsid || "—");
+    const list = document.getElementById("network-profiles");
+    if (!list) return;
+    list.replaceChildren();
+    if (!info || !info.profiles.length) {
+      const item = document.createElement("li");
+      item.className = "muted";
+      item.textContent = info ? "Brak zapisanych profili Wi-Fi." : "Oczekiwanie na dane urządzenia.";
+      list.append(item);
+      return;
+    }
+    for (const profile of info.profiles) {
+      const item = document.createElement("li");
+      const name = document.createElement("strong");
+      name.textContent = profile.ssid || "(pusty SSID)";
+      const detail = document.createElement("span");
+      detail.textContent = "Hasło: " + (profile.passwordSet ? "zapisane" : "brak") +
+        " · kolejność prób: " + profile.order;
+      item.append(name, detail);
+      list.append(item);
+    }
+  }
+
   function scheduleSystemInfoRefresh() {
     clearTimeout(systemInfoTimer);
-    if (location.hash.slice(1) !== "system" || state.connection !== "connected") return;
+    if (!['system', 'settings'].includes(location.hash.slice(1)) || state.connection !== "connected") return;
     send("getsystem", 1);
     send("getrssi", 1);
     systemInfoTimer = setTimeout(scheduleSystemInfoRefresh, 10000);
@@ -651,6 +697,8 @@
     });
     renderStationActions();
     renderDisplaySettings();
+    renderFooter();
+    renderNetworkInfo();
   }
 
   function renderStation() {
@@ -1311,8 +1359,10 @@
     }
     state.webStatus = null;
     state.systemInfo = null;
+    state.networkInfo = null;
     renderBtModule();
     renderSystemInfo();
+    renderNetworkInfo();
     state.canBrightness = false;
     state.canBtTransport = false;
     state.flip = null;
@@ -1364,7 +1414,7 @@
     if (extraSyncSent) return;
     extraSyncSent = true;
     clearTimeout(extraSyncTimer);
-    if (location.hash.slice(1) !== "system") {
+    if (!['system', 'settings'].includes(location.hash.slice(1))) {
       send("getsystem", 1);
       send("getrssi", 1);
     }
@@ -1482,6 +1532,20 @@
       state.systemInfo = systemInfo;
       renderSystemInfo();
     }
+    const networkInfo = message.networkInfo;
+    if (networkInfo && typeof networkInfo.hostname === "string" &&
+        typeof networkInfo.activeSsid === "string" && Array.isArray(networkInfo.profiles)) {
+      const profiles = networkInfo.profiles.slice(0, 5).filter(profile =>
+        profile && typeof profile.ssid === "string" && typeof profile.passwordSet === "boolean" &&
+        Number.isInteger(profile.order) && profile.order >= 1 && profile.order <= 5)
+        .map(profile => ({ssid: profile.ssid, passwordSet: profile.passwordSet, order: profile.order}));
+      state.networkInfo = {
+        hostname: networkInfo.hostname,
+        activeSsid: networkInfo.activeSsid,
+        profiles
+      };
+      renderNetworkInfo();
+    }
     if (Array.isArray(message.payload)) {
       let toneChanged = false;
       for (const item of message.payload) {
@@ -1505,6 +1569,7 @@
     if (typeof message.ipaddr === "string") {
       state.ip = message.ipaddr;
       text("system-ip", state.ip || "—");
+      renderFooter();
     }
     if (message.canFlip === 0 || message.canFlip === 1) {
       state.canFlip = message.canFlip === 1;
@@ -1584,6 +1649,8 @@
       state.connection = "disconnected";
       renderBtModule();
       renderSystemInfo();
+      renderNetworkInfo();
+      renderFooter();
       for (const control of Object.values(audioControls)) {
         control.dragging = false;
         clearTimeout(control.ackTimer);

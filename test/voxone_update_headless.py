@@ -26,6 +26,7 @@ class MockWebSocket {
   close() { this.readyState = 3; this.onclose?.(); }
   receive(status) { this.onmessage({data: JSON.stringify({webStatus: status})}); }
   receiveSystem(info) { this.onmessage({data: JSON.stringify({systemInfo: info})}); }
+  receiveNetwork(info) { this.onmessage({data: JSON.stringify({networkInfo: info})}); }
 }
 window.WebSocket = MockWebSocket;
 </script>
@@ -38,10 +39,19 @@ setTimeout(() => {
   const check = (ok, message) => { if (!ok) throw Error(message); };
   try {
     check(location.hash === '#status', 'startup tab');
+    check(get('footer-details').textContent === 'VoxOne 0.2.0 · SALON', 'footer identity');
+    check(get('footer-connection').textContent === 'Połączono', 'footer WebSocket connected');
     check(get('system').querySelector('h3').textContent === 'VoxOne', 'VoxOne system card');
     check([...get('system').querySelectorAll('h3')].some(node => node.textContent === 'VoxOneBT'), 'VoxOneBT system card');
+    ['Czas pracy', 'Wolna pamięć heap', 'Możliwości', 'Protokół', 'Nazwa BT'].forEach(label =>
+      check([...get('system').querySelectorAll('dt')].some(node => node.textContent === label), 'system label ' + label));
     ['VoxOne Firmware', 'VoxOne system plików', 'VoxOneBT Firmware'].forEach(label =>
       check([...get('update').querySelectorAll('h3')].some(node => node.textContent === label), label));
+    const networkCard = [...get('settings').querySelectorAll('.card')].find(card => card.querySelector('h3')?.textContent === 'Sieć');
+    check(!!networkCard, 'network card');
+    location.hash = '#settings';
+    window.dispatchEvent(new Event('hashchange'));
+    check(btTestSocket.sent.some(item => item === 'getsystem=1'), 'network snapshot requested on Settings');
     location.hash = '#update';
     window.dispatchEvent(new Event('hashchange'));
     check(btTestSocket.sent.some(item => item.includes('getwebstatus')), 'status request');
@@ -50,6 +60,17 @@ setTimeout(() => {
       btModule:{online:true, firmware:'0.6.1-dev', protocol:2,
                 name:'VoxOneBT-EFF35A', capabilities:'AVRCP,VU'}};
     btTestSocket.receive(status);
+    btTestSocket.receiveNetwork({hostname:'voxone-salon', activeSsid:'HomeNet', profiles:[
+      {ssid:'HomeNet', passwordSet:true, password:'secret', order:1},
+      {ssid:'backup', passwordSet:false, order:2}
+    ]});
+    check(get('network-hostname').textContent === 'voxone-salon', 'network hostname');
+    check(get('network-active-ssid').textContent === 'HomeNet', 'active Wi-Fi SSID');
+    check(get('network-profiles').textContent.includes('Hasło: zapisane'), 'passwordSet true');
+    check(get('network-profiles').textContent.includes('Hasło: brak'), 'passwordSet false');
+    check(get('network-profiles').textContent.includes('kolejność prób: 2'), 'profile order');
+    check(!networkCard.querySelector('input,button,select,textarea'), 'network card has no unsupported edit controls');
+    check(!get('network-profiles').textContent.includes('secret'), 'no password value rendered');
     check(get('update-bt-online').textContent === 'TAK', 'online, phone disconnected');
     check(get('update-bt-firmware').textContent === '0.6.1-dev', 'firmware');
     check(get('update-bt-protocol').textContent === '2', 'protocol');
@@ -63,6 +84,7 @@ setTimeout(() => {
     check(btTestSocket.sent.some(item => item === 'getrssi=1'), 'system RSSI request');
     btTestSocket.onmessage({data:JSON.stringify({ipaddr:'192.168.1.42',
       payload:[{id:'rssi',value:-57}]})});
+    check(get('footer-details').textContent === 'VoxOne 0.2.0 · SALON · 192.168.1.42', 'footer IP');
     check(get('system-version').textContent === 'VoxOne 0.2.0', 'identity firmware fallback');
     check(get('system-profile').textContent === 'SALON', 'identity profile fallback');
     check(get('system-ip').textContent === '192.168.1.42', 'legacy IP field');
@@ -85,6 +107,10 @@ setTimeout(() => {
     check(get('system-minimum-heap').textContent === '125 kB', 'minimum free heap');
     check(get('system-psram').textContent === '8.0 MB total / 4.0 MB free', 'PSRAM');
     check(get('system-capabilities').textContent.includes('RTC'), 'system capabilities');
+    btTestSocket.close();
+    check(get('footer-connection').textContent === 'Rozłączono', 'footer WebSocket disconnected');
+    check(get('footer-details').textContent === 'VoxOne 0.2.0 · SALON', 'offline footer hides stale IP');
+    check(get('network-active-ssid').textContent === '—', 'offline network info cleared');
     const transfer = new DataTransfer();
     transfer.items.add(new File(['image'], 'voxonebt.bin', {type:'application/octet-stream'}));
     get('update-bt-file').files = transfer.files;
