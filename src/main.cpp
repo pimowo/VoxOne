@@ -17,6 +17,7 @@
 #include "core/source_manager.h"
 #include "core/dac_mute.h"
 #include "core/system_operation_state.h"
+#include "core/nvs_diagnostics.h"
 #ifdef USE_NEXTION
 #include "displays/nextion.h"
 #endif
@@ -97,6 +98,7 @@ void setup() {
   #if VOXONE_HAS_BT && VOXONE_PIN_MAP_COMPLETE && VOXONE_BT_I2S_RX_ENABLED
     btAudioInput.begin();
   #endif
+  logNvsStats();
   if (network.status != CONNECTED && network.status!=SDREADY) {
     netserver.begin();
     initControls();
