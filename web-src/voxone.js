@@ -139,6 +139,7 @@
   const state = {
     connection: "connecting",
     webStatus: null,
+    systemInfo: null,
     source: null,
     station: null,
     metadata: null,
@@ -187,6 +188,7 @@
   let reconnectTimer = 0;
   let reconnectDelay = 1000;
   let extraSyncTimer = 0;
+  let systemInfoTimer = 0;
   let extraSyncSent = false;
   let volumeTimer = 0;
   let volumeAckTimer = 0;
@@ -230,11 +232,56 @@
   function renderBtModule() {
     const module = state.webStatus?.btModule;
     const online = state.connection === "connected" && module?.online === true;
-    text("update-bt-online", online ? "TAK" : "NIE");
-    text("update-bt-firmware", online && module.firmware ? module.firmware : "—");
-    text("update-bt-protocol", online && module.protocol ? String(module.protocol) : "—");
-    text("update-bt-name", online && module.name ? module.name : "—");
-    text("update-bt-capabilities", online && module.capabilities ? module.capabilities : "—");
+    for (const prefix of ["update-bt", "system-bt"]) {
+      text(prefix + "-online", online ? "TAK" : "NIE");
+      text(prefix + "-firmware", online && module.firmware ? module.firmware : "—");
+      text(prefix + "-protocol", online && module.protocol ? String(module.protocol) : "—");
+      text(prefix + "-name", online && module.name ? module.name : "—");
+      text(prefix + "-capabilities", online && module.capabilities ? module.capabilities : "—");
+    }
+  }
+
+  function formatSystemUptime(seconds) {
+    if (!Number.isSafeInteger(seconds) || seconds < 0) return "—";
+    const days = Math.floor(seconds / 86400);
+    const hours = Math.floor((seconds % 86400) / 3600);
+    const minutes = Math.floor((seconds % 3600) / 60);
+    const remainder = seconds % 60;
+    const clock = [hours, minutes, remainder].map(value => String(value).padStart(2, "0")).join(":");
+    return days ? days + " d " + clock : clock;
+  }
+
+  function formatHeap(bytes) {
+    return Number.isSafeInteger(bytes) && bytes >= 0 ? Math.floor(bytes / 1024) + " kB" : "—";
+  }
+
+  function renderSystemInfo() {
+    const info = state.connection === "connected" ? state.systemInfo : null;
+    text("system-version", state.version ? "VoxOne " + state.version : "—");
+    text("system-profile", state.profile ? state.profile.toUpperCase() : "—");
+    text("system-ip", state.ip || "—");
+    text("system-mac", info?.mac || "—");
+    const rssi = Number.isInteger(info?.rssi) ? info.rssi : state.rssi;
+    text("system-rssi", Number.isInteger(rssi) && rssi > -127 ? rssi + " dBm" : "—");
+    text("system-uptime", formatSystemUptime(info?.uptimeSeconds));
+    text("system-free-heap", formatHeap(info?.freeHeap));
+    text("system-minimum-heap", formatHeap(info?.minimumFreeHeap));
+    const psramTotal = info?.psramTotal;
+    const psramFree = info?.psramFree;
+    text("system-psram", !info ? "—" : Number.isSafeInteger(psramTotal) && psramTotal > 0 &&
+      Number.isSafeInteger(psramFree) && psramFree >= 0
+      ? (psramTotal / 1048576).toFixed(1) + " MB total / " +
+        (psramFree / 1048576).toFixed(1) + " MB free" : "Brak");
+    text("system-capabilities", info?.capabilities || "—");
+    renderBtModule();
+  }
+
+  function scheduleSystemInfoRefresh() {
+    clearTimeout(systemInfoTimer);
+    if (location.hash.slice(1) !== "system" || state.connection !== "connected") return;
+    send("getsystem", 1);
+    send("getrssi", 1);
+    systemInfoTimer = setTimeout(scheduleSystemInfoRefresh, 10000);
   }
 
   function setUpdateStatus(message, error = false) {
@@ -380,6 +427,7 @@
     if (selected === "settings" && !mqttConfigLoaded) loadMqttConfig();
     if (selected === "settings") loadTimeStatus();
     if (selected === "update") send("getwebstatus", 1);
+    scheduleSystemInfoRefresh();
   }
 
   function showStartupTab() {
@@ -1262,7 +1310,9 @@
       state[key] = null;
     }
     state.webStatus = null;
+    state.systemInfo = null;
     renderBtModule();
+    renderSystemInfo();
     state.canBrightness = false;
     state.canBtTransport = false;
     state.flip = null;
@@ -1314,8 +1364,10 @@
     if (extraSyncSent) return;
     extraSyncSent = true;
     clearTimeout(extraSyncTimer);
-    send("getsystem", 1);
-    send("getrssi", 1);
+    if (location.hash.slice(1) !== "system") {
+      send("getsystem", 1);
+      send("getrssi", 1);
+    }
   }
 
   function updatePayload(id, value) {
@@ -1378,6 +1430,7 @@
         const rssi = Number(value);
         state.rssi = Number.isFinite(rssi) ? rssi : null;
         renderRssi();
+        renderSystemInfo();
         break;
       }
       case "bitrate": {
@@ -1419,6 +1472,15 @@
       state.webStatus = status;
       renderStatus();
       renderBtModule();
+    }
+    const systemInfo = message.systemInfo;
+    if (systemInfo && typeof systemInfo === "object" &&
+        ["mac", "capabilities"].every(key => typeof systemInfo[key] === "string") &&
+        Number.isInteger(systemInfo.rssi) &&
+        ["uptimeSeconds", "freeHeap", "minimumFreeHeap", "psramTotal", "psramFree"]
+          .every(key => Number.isSafeInteger(systemInfo[key]) && systemInfo[key] >= 0)) {
+      state.systemInfo = systemInfo;
+      renderSystemInfo();
     }
     if (Array.isArray(message.payload)) {
       let toneChanged = false;
@@ -1506,6 +1568,7 @@
       send("getindex", 1);
       send("getscreen", 1);
       extraSyncTimer = setTimeout(requestExtraSync, 1500);
+      scheduleSystemInfoRefresh();
     };
     ws.onmessage = event => {
       if (socket === ws) receive(event.data);
@@ -1514,11 +1577,13 @@
     ws.onclose = () => {
       if (socket !== ws) return;
       clearTimeout(extraSyncTimer);
+      clearTimeout(systemInfoTimer);
       clearTimeout(volumeTimer);
       clearTimeout(volumeAckTimer);
       socket = null;
       state.connection = "disconnected";
       renderBtModule();
+      renderSystemInfo();
       for (const control of Object.values(audioControls)) {
         control.dragging = false;
         clearTimeout(control.ackTimer);

@@ -222,9 +222,28 @@
 
       <section id="system" data-panel aria-labelledby="system-title" hidden>
         <div class="section-heading"><div><p class="eyebrow">URZĄDZENIE</p><h2 id="system-title">System</h2></div><span class="badge">Podgląd</span></div>
-        <article class="card"><h3>Oprogramowanie</h3><dl class="facts"><div><dt>Firmware</dt><dd id="system-version">VoxOne —</dd></div><div><dt>Profil</dt><dd id="system-profile">—</dd></div><div><dt>Baza</dt><dd id="system-base">yoRadio —</dd></div><div><dt>IP</dt><dd id="system-ip">—</dd></div></dl></article>
+        <div class="grid system-info-grid">
+          <article class="card"><h3>VoxOne</h3><dl class="facts">
+            <div><dt>Firmware</dt><dd id="system-version">—</dd></div>
+            <div><dt>Profil</dt><dd id="system-profile">—</dd></div>
+            <div><dt>IP</dt><dd id="system-ip">—</dd></div>
+            <div><dt>MAC Wi-Fi</dt><dd id="system-mac">—</dd></div>
+            <div><dt>RSSI</dt><dd id="system-rssi">—</dd></div>
+            <div><dt>Uptime</dt><dd id="system-uptime">—</dd></div>
+            <div><dt>Free heap</dt><dd id="system-free-heap">—</dd></div>
+            <div><dt>Minimum free heap</dt><dd id="system-minimum-heap">—</dd></div>
+            <div><dt>PSRAM</dt><dd id="system-psram">—</dd></div>
+            <div><dt>Capabilities</dt><dd id="system-capabilities">—</dd></div>
+          </dl></article>
+          <article class="card"><h3>VoxOneBT</h3><dl class="facts">
+            <div><dt>Online</dt><dd id="system-bt-online">NIE</dd></div>
+            <div><dt>Firmware</dt><dd id="system-bt-firmware">—</dd></div>
+            <div><dt>Protocol</dt><dd id="system-bt-protocol">—</dd></div>
+            <div><dt>BT Name</dt><dd id="system-bt-name">—</dd></div>
+            <div><dt>Capabilities</dt><dd id="system-bt-capabilities">—</dd></div>
+          </dl></article>
+        </div>
         <article class="card reboot-card"><h3>Urządzenie</h3><p class="muted">Uruchamia urządzenie ponownie bez zmiany zapisanych ustawień.</p><button id="reboot-button" type="button">Restart VoxOne</button><p id="reboot-status" class="reboot-status" role="status" aria-live="polite"></p></article>
-        <article class="card"><h3>Informacje systemowe</h3><p class="muted">Dodatkowe informacje systemowe są w przygotowaniu.</p></article>
       </section>
 
       <section id="update" data-panel aria-labelledby="update-title" hidden>

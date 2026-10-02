@@ -9,6 +9,9 @@
 #include <Update.h>
 #include <esp_ota_ops.h>
 #include <esp_partition.h>
+#include <esp_mac.h>
+#include <esp_heap_caps.h>
+#include <esp_timer.h>
 #include <nvs.h>
 #include <memory>
 #include <algorithm>
@@ -1637,16 +1640,59 @@ void NetServer::processQueue(){
           return; 
           break;
         }
-      case GETSYSTEM:     sprintf (wsBuf, "{\"sst\":%d,\"vu\":%d,\"canVu\":%d,\"softr\":%d,\"vut\":%d,\"mdns\":\"%s\",\"ipaddr\":\"%s\", \"abuff\": %d }",
-                                  config.store.smartstart != 2, 
-                                  config.store.vumeter, 
-                                  voxone::activeProfile.capabilities.hasVu,
-                                  config.store.softapdelay,
-                                  config.vuThreshold,
-                                  config.store.mdnsname,
-                                  config.ipToStr(WiFi.localIP()),
-                                  config.store.abuff);
-                                  break;
+      case GETSYSTEM: {
+        uint8_t mac[6]{};
+        char macText[18] = "";
+        if (esp_read_mac(mac, ESP_MAC_WIFI_STA) == ESP_OK) {
+          snprintf(macText, sizeof(macText), "%02X:%02X:%02X:%02X:%02X:%02X",
+                   mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
+        }
+        const IPAddress address = network.status == SOFT_AP ? WiFi.softAPIP() : WiFi.localIP();
+        char ipText[16];
+        snprintf(ipText, sizeof(ipText), "%u.%u.%u.%u", address[0], address[1],
+                 address[2], address[3]);
+
+        char capabilities[128] = "";
+        size_t capabilityLength = 0;
+        const struct { bool enabled; const char* name; } profileCapabilities[] = {
+          {voxone::activeProfile.capabilities.hasDisplay, "DISPLAY"},
+          {voxone::activeProfile.capabilities.hasEncoder, "ENCODER"},
+          {voxone::activeProfile.capabilities.hasBt, "BT"},
+          {voxone::activeProfile.capabilities.hasVu, "VU"},
+          {RTCSUPPORTED, "RTC"},
+          {voxone::activeProfile.capabilities.hasAux, "AUX"},
+          {voxone::activeProfile.capabilities.hasSpdif, "SPDIF"},
+          {voxone::activeProfile.capabilities.hasTda7719, "TDA7719"}
+        };
+        for (const auto& capability : profileCapabilities) {
+          if (!capability.enabled || capabilityLength >= sizeof(capabilities)) continue;
+          const int written = snprintf(capabilities + capabilityLength,
+              sizeof(capabilities) - capabilityLength, "%s%s",
+              capabilityLength ? ", " : "", capability.name);
+          if (written > 0) capabilityLength = std::min(
+              capabilityLength + static_cast<size_t>(written), sizeof(capabilities) - 1);
+        }
+
+        const uint32_t internalHeapCaps = MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT;
+        const uint32_t freeHeap = heap_caps_get_free_size(internalHeapCaps);
+        const uint32_t minimumFreeHeap = heap_caps_get_minimum_free_size(internalHeapCaps);
+        const uint32_t psramTotal = ESP.getPsramSize();
+        const uint32_t psramFree = ESP.getFreePsram();
+        const int wifiRssi = network.status == CONNECTED ? WiFi.RSSI() : -127;
+        const unsigned long long uptimeSeconds =
+            static_cast<unsigned long long>(esp_timer_get_time() / 1000000LL);
+        snprintf(wsBuf, sizeof(wsBuf),
+            "{\"sst\":%d,\"vu\":%d,\"canVu\":%d,\"softr\":%d,\"vut\":%d,\"mdns\":\"%s\",\"ipaddr\":\"%s\",\"abuff\":%d,\"systemInfo\":{\"mac\":\"%s\",\"rssi\":%d,\"uptimeSeconds\":%llu,\"freeHeap\":%lu,\"minimumFreeHeap\":%lu,\"psramTotal\":%lu,\"psramFree\":%lu,\"capabilities\":\"%s\"}}",
+            config.store.smartstart != 2, config.store.vumeter,
+            voxone::activeProfile.capabilities.hasVu, config.store.softapdelay,
+            config.vuThreshold, config.store.mdnsname, ipText, config.store.abuff,
+            macText, wifiRssi,
+            uptimeSeconds, static_cast<unsigned long>(freeHeap),
+            static_cast<unsigned long>(minimumFreeHeap),
+            static_cast<unsigned long>(psramTotal),
+            static_cast<unsigned long>(psramFree), capabilities);
+        break;
+      }
       case GETSCREEN:     snprintf (wsBuf, sizeof(wsBuf), "{\"flip\":%d,\"canFlip\":%d,\"canBrightness\":%d,\"br\":%d,\"nump\":%d,\"tsf\":%d,\"tsd\":%d,\"dspon\":%d,\"con\":%d,\"scre\":%d,\"scrt\":%d,\"scrb\":%d,\"scrpe\":%d,\"scrpt\":%d,\"scrpb\":%d,\"stationListTimeout\":%u,\"btTransportTimeout\":%u,\"canBtTransport\":%d}",
                                   config.store.flipscreen,
                                   voxone::activeProfile.display != voxone::Display::None,
