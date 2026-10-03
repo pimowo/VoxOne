@@ -18,6 +18,7 @@
 #include "core/dac_mute.h"
 #include "core/system_operation_state.h"
 #include "core/nvs_diagnostics.h"
+#include "core/dsp_runtime.h"
 #ifdef USE_NEXTION
 #include "displays/nextion.h"
 #endif
@@ -88,6 +89,10 @@ void setup() {
   if (yoradio_on_setup) yoradio_on_setup();
   pm.on_setup();
   config.init();
+#if defined(VOXONE_PROFILE_SALON)
+  voxone::dsp::initDspRuntime({config.store.bass, config.store.middle,
+                              config.store.trebble});
+#endif
   display.init();
   player.init();
   network.begin();
