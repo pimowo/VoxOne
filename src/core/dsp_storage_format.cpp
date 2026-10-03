@@ -232,42 +232,11 @@ bool readWorking(Reader& reader, DspWorkingState& working) {
   return validWorking(working);
 }
 
-template <typename Byte>
-bool validUtf8Name(const Byte* bytes, size_t length) {
-  if (!bytes || length == 0 || length > kMaxPresetNameBytes) return false;
-  for (size_t i = 0; i < length;) {
-    const uint8_t lead = static_cast<uint8_t>(bytes[i++]);
-    if (lead < 0x80) {
-      if (lead < 0x20 || lead == 0x7f) return false;
-      continue;
-    }
-    unsigned continuation = 0;
-    uint32_t codePoint = 0;
-    uint32_t minimum = 0;
-    if (lead >= 0xc2 && lead <= 0xdf) {
-      continuation = 1; codePoint = lead & 0x1f; minimum = 0x80;
-    } else if (lead >= 0xe0 && lead <= 0xef) {
-      continuation = 2; codePoint = lead & 0x0f; minimum = 0x800;
-    } else if (lead >= 0xf0 && lead <= 0xf4) {
-      continuation = 3; codePoint = lead & 0x07; minimum = 0x10000;
-    } else return false;
-    if (continuation > length - i) return false;
-    while (continuation--) {
-      const uint8_t part = static_cast<uint8_t>(bytes[i++]);
-      if ((part & 0xc0) != 0x80) return false;
-      codePoint = (codePoint << 6) | (part & 0x3f);
-    }
-    if (codePoint < minimum || codePoint > 0x10ffff ||
-        (codePoint >= 0xd800 && codePoint <= 0xdfff)) return false;
-  }
-  return true;
-}
-
 bool presetName(const char* name, size_t& length) {
   if (!name) return false;
   length = 0;
   while (length <= kMaxPresetNameBytes && name[length]) ++length;
-  return validUtf8Name(name, length);
+  return isValidDspPresetName(name, length);
 }
 
 bool writeTone(Writer& writer, const ToneSnapshot& tone) {
@@ -353,7 +322,8 @@ bool decodeUserPreset(const uint8_t* buffer, size_t length, DspPreset& out,
       payloadLength != kUserFixedPayloadBytes + nameLength ||
       nameCapacity <= nameLength) return false;
   const uint8_t* name = reader.take(nameLength);
-  if (!validUtf8Name(name, nameLength)) return false;
+  if (!isValidDspPresetName(reinterpret_cast<const char*>(name), nameLength))
+    return false;
   DspPreset decoded{};
   decoded.id = static_cast<PresetId>(id);
   decoded.writable = true;

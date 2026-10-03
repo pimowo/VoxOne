@@ -11,7 +11,7 @@ namespace dsp {
 namespace storage_format {
 
 constexpr uint8_t kSchemaVersion = 1;
-constexpr size_t kMaxPresetNameBytes = 24;
+constexpr size_t kMaxPresetNameBytes = kMaxDspPresetNameBytes;
 constexpr size_t kHeaderBytes = 8;
 constexpr size_t kCrcBytes = 4;
 constexpr size_t kGlobalPayloadBytes = 7 + kOutputCount * 4 + 2 + 4 + 1;

@@ -97,6 +97,44 @@ bool presetWritable(PresetId id) {
   return id == PresetId::User1 || id == PresetId::User2;
 }
 
+bool isValidDspPresetName(const char* name, size_t length) {
+  if (!name || length == 0 || length > kMaxDspPresetNameBytes) return false;
+  const uint8_t* bytes = reinterpret_cast<const uint8_t*>(name);
+  for (size_t i = 0; i < length;) {
+    const uint8_t lead = bytes[i++];
+    if (lead < 0x80) {
+      if (lead < 0x20 || lead == 0x7f) return false;
+      continue;
+    }
+    unsigned continuation = 0;
+    uint32_t codePoint = 0;
+    uint32_t minimum = 0;
+    if (lead >= 0xc2 && lead <= 0xdf) {
+      continuation = 1; codePoint = lead & 0x1f; minimum = 0x80;
+    } else if (lead >= 0xe0 && lead <= 0xef) {
+      continuation = 2; codePoint = lead & 0x0f; minimum = 0x800;
+    } else if (lead >= 0xf0 && lead <= 0xf4) {
+      continuation = 3; codePoint = lead & 0x07; minimum = 0x10000;
+    } else return false;
+    if (continuation > length - i) return false;
+    while (continuation--) {
+      const uint8_t part = bytes[i++];
+      if ((part & 0xc0) != 0x80) return false;
+      codePoint = (codePoint << 6) | (part & 0x3f);
+    }
+    if (codePoint < minimum || codePoint > 0x10ffff ||
+        (codePoint >= 0xd800 && codePoint <= 0xdfff)) return false;
+  }
+  return true;
+}
+
+bool isValidDspPresetName(const char* name) {
+  if (!name) return false;
+  size_t length = 0;
+  while (length <= kMaxDspPresetNameBytes && name[length]) ++length;
+  return isValidDspPresetName(name, length);
+}
+
 bool validTone(const ToneSnapshot& tone) {
   return tone.bass >= -6 && tone.bass <= 6 && tone.middle >= -6 && tone.middle <= 6 &&
          tone.treble >= -6 && tone.treble <= 6;

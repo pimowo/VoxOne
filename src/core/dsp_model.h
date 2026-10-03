@@ -10,6 +10,7 @@ namespace dsp {
 constexpr size_t kPeqBands = 5;
 constexpr size_t kOutputCount = 4;
 constexpr size_t kPresetCount = 8;
+constexpr size_t kMaxDspPresetNameBytes = 24;
 
 enum class OutputMode : uint8_t { Stereo20, Stereo21, Stereo22 };
 enum class SubRouting : uint8_t { Sum, Stereo };
@@ -132,6 +133,8 @@ bool validDynamics(const Dynamics& dynamics);
 bool validTone(const ToneSnapshot& tone);
 bool validPresetId(PresetId id);
 bool presetWritable(PresetId id);
+bool isValidDspPresetName(const char* name, size_t length);
+bool isValidDspPresetName(const char* name);
 DspPreset factoryPreset(PresetId id);
 OutputRole outputRole(OutputMode mode, SubRouting routing, size_t index);
 SubRouting effectiveSubRouting(OutputMode mode, SubRouting preferred);
