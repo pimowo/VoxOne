@@ -184,10 +184,11 @@
     version: typeof voxOneVersion === "string" ? voxOneVersion : null,
     baseVersion: typeof yoRadioVersion === "string" ? yoRadioVersion : null
   };
-  const advancedAudio = window.createAdvancedAudioDemo(
+  const advancedAudio = window.createAdvancedAudioLive(
     document.getElementById("advanced-audio-root"),
     { getShared: () => state, send: (command, value) => send(command, value) }
   );
+  let dspTabActive = false;
 
   let socket = null;
   let reconnectTimer = 0;
@@ -477,7 +478,14 @@
     if (selected === "settings" && !mqttConfigLoaded) loadMqttConfig();
     if (selected === "settings") loadTimeStatus();
     if (selected === "update") send("getwebstatus", 1);
-    if (selected === "dsp") advancedAudio.render();
+    if (selected === "dsp") {
+      if (!dspTabActive) advancedAudio.enter();
+      else advancedAudio.render();
+      dspTabActive = true;
+    } else if (dspTabActive) {
+      advancedAudio.leave();
+      dspTabActive = false;
+    }
     scheduleSystemInfoRefresh();
   }
 
@@ -1520,6 +1528,7 @@
       console.warn("VoxOne: invalid WebSocket JSON", error);
       return;
     }
+    if (advancedAudio.handleWsMessage(message)) return;
     const status = message.webStatus;
     if (status && (status.source === "WEB" || status.source === "BT") &&
         ["name", "metadata", "artist", "title", "codec", "playback"].every(key => typeof status[key] === "string") &&
@@ -1635,6 +1644,7 @@
       resetRuntime();
       state.connection = "connected";
       renderConnection();
+      advancedAudio.connected();
       send("getwebstatus", 1);
       send("getindex", 1);
       send("getscreen", 1);
@@ -1653,6 +1663,7 @@
       clearTimeout(volumeAckTimer);
       socket = null;
       state.connection = "disconnected";
+      advancedAudio.disconnected();
       renderBtModule();
       renderSystemInfo();
       renderNetworkInfo();

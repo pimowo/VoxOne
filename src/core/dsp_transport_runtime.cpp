@@ -64,7 +64,7 @@ void sendError(uint32_t clientId, uint32_t requestId, uint16_t code) {
 }
 
 void sendChanged(const DspCommand& command, uint32_t revision,
-                 uint32_t appliedRevision, PresetId activePreset) {
+                 uint32_t appliedRevision, PresetId activePreset, bool dirty) {
   char escapedName[kMaxDspPresetNameBytes * 2 + 1]{};
   size_t escapedLength = 0;
   if (command.name[0]) {
@@ -81,7 +81,7 @@ void sendChanged(const DspCommand& command, uint32_t revision,
            "{\"event\":\"dsp.changed\",\"requestId\":%lu,"
            "\"operation\":%u,\"parameterId\":%u,\"index\":%u,"
            "\"value\":%.3f%s,\"activePresetId\":%u,\"revision\":%lu,"
-           "\"appliedRevision\":%lu}",
+           "\"appliedRevision\":%lu,\"dirty\":%s}",
            static_cast<unsigned long>(command.requestId),
            static_cast<unsigned>(command.operation),
            command.operation == DspOperation::Set
@@ -90,7 +90,7 @@ void sendChanged(const DspCommand& command, uint32_t revision,
            static_cast<double>(command.value), nameField,
            static_cast<unsigned>(activePreset),
            static_cast<unsigned long>(revision),
-           static_cast<unsigned long>(appliedRevision));
+           static_cast<unsigned long>(appliedRevision), dirty ? "true" : "false");
   websocket.textAll(reply);
 }
 
@@ -223,14 +223,17 @@ void processDspTransportQueue() {
       const DspRuntimeState& state = service.runtime();
       const uint32_t revision = state.revision;
       const uint32_t applied = state.appliedRevision;
+      const bool dirty = service.dirty(tone);
       publishRevision(revision);
       unlockDspToneMutation();
       xSemaphoreGive(serviceMutex);
       char reply[128];
       snprintf(reply, sizeof(reply),
                "{\"event\":\"dsp.changed\",\"requestId\":0,"
-               "\"parameterId\":0,\"revision\":%lu,\"appliedRevision\":%lu}",
-               static_cast<unsigned long>(revision), static_cast<unsigned long>(applied));
+               "\"parameterId\":0,\"revision\":%lu,\"appliedRevision\":%lu,"
+               "\"dirty\":%s}",
+               static_cast<unsigned long>(revision), static_cast<unsigned long>(applied),
+               dirty ? "true" : "false");
       websocket.textAll(reply);
       return;
     }
@@ -250,17 +253,18 @@ void processDspTransportQueue() {
   const uint32_t revision = state.revision;
   const uint32_t applied = state.appliedRevision;
   const PresetId activePreset = service.global().activePresetId;
+  const bool dirty = service.dirty(currentTone());
   publishRevision(revision);
   unlockDspToneMutation();
   xSemaphoreGive(serviceMutex);
   if (tonePersistenceFailed)
     sendError(command.clientId, command.requestId, kTonePersistFailed);
   else if (result == DspServiceError::BackendError && revision != previousRevision) {
-    sendChanged(command, revision, applied, activePreset);
+    sendChanged(command, revision, applied, activePreset, dirty);
     sendError(command.clientId, command.requestId, static_cast<uint16_t>(result));
   } else if (result != DspServiceError::Ok)
     sendError(command.clientId, command.requestId, static_cast<uint16_t>(result));
-  else sendChanged(command, revision, applied, activePreset);
+  else sendChanged(command, revision, applied, activePreset, dirty);
 }
 
 void handleDspState(AsyncWebServerRequest* request) {
