@@ -6,6 +6,9 @@
 #include "player.h"
 #include "network.h"
 #include "netserver.h"
+#if defined(VOXONE_PROFILE_SALON)
+#include "dsp_transport_runtime.h"
+#endif
 #include "controls.h"
 #include "timekeeper.h"
 #include "serialcli.h"
@@ -756,18 +759,27 @@ void Config::setStartupFixedVolume(uint8_t user) {
   saveValue(&store.startupFixedVolume, user);
 }
 
-void Config::setTone(int8_t bass, int8_t middle, int8_t trebble) {
+bool Config::setTone(int8_t bass, int8_t middle, int8_t trebble) {
+#if defined(VOXONE_PROFILE_SALON)
+  const bool toneLocked = voxone::dsp::lockDspToneMutation();
+#endif
   bass = clampTone(bass);
   middle = clampTone(middle);
   trebble = clampTone(trebble);
+  bool persisted = true;
   if (store.bass != bass || store.middle != middle || store.trebble != trebble) {
     saveValue(&store.bass, bass, false);
     saveValue(&store.middle, middle, false);
     saveValue(&store.trebble, trebble, false);
-    EEPROM.commit();
+    persisted = EEPROM.commit();
   }
   player.setTone(store.bass, store.middle, store.trebble);
   netserver.requestOnChange(EQUALIZER, 0);
+#if defined(VOXONE_PROFILE_SALON)
+  voxone::dsp::dspTransportToneChanged({store.bass, store.middle, store.trebble});
+  if (toneLocked) voxone::dsp::unlockDspToneMutation();
+#endif
+  return persisted;
 }
 
 void Config::setSmartStart(uint8_t ss) {

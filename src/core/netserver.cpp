@@ -19,6 +19,9 @@
 #include <climits>
 #include <cstdlib>
 #include "config.h"
+#if defined(VOXONE_PROFILE_SALON)
+#include "dsp_transport_runtime.h"
+#endif
 #include "ap_wifi_recovery.h"
 #include "playlist_store.h"
 #include "playlist_mapping.h"
@@ -327,6 +330,10 @@ bool NetServer::begin(bool quiet) {
   _lastVolumeUpdate = millis() - NS_VOLUME_INTERVAL_MS;
   nsQueue = xQueueCreate( 20, sizeof( nsRequestParams_t ) );
   while(nsQueue==NULL){;}
+#if defined(VOXONE_PROFILE_SALON)
+  if (!voxone::dsp::beginDspTransport())
+    Serial.println("[DSP] transport queue unavailable");
+#endif
 
   // Must precede static handlers: their canHandle() opens files in SPIFFS.
   webserver.addHandler(new WebUpdateRequestGuard());
@@ -345,6 +352,9 @@ bool NetServer::begin(bool quiet) {
   webserver.on("/api/mqtt", HTTP_POST, handleMqttConfigSave);
   webserver.on("/api/time", HTTP_GET, handleTimeStatus);
   webserver.on("/api/time/sync", HTTP_POST, handleTimeSync);
+#if defined(VOXONE_PROFILE_SALON)
+  webserver.on("/api/dsp/state", HTTP_GET, voxone::dsp::handleDspState);
+#endif
   webserver.onNotFound(handleNotFound);
   webserver.onFileUpload(handleUpload);
 
@@ -1852,6 +1862,9 @@ void NetServer::loop() {
   netserverLoopActive = true;
   portEXIT_CRITICAL(&netserverLoopMux);
   processQueue();
+#if defined(VOXONE_PROFILE_SALON)
+  voxone::dsp::processDspTransportQueue();
+#endif
   processVolumeUpdate();
   websocket.cleanupClients();
   switch (importRequest) {
@@ -1881,6 +1894,11 @@ void NetServer::irValsToWs() {
 
 void NetServer::onWsMessage(void *arg, uint8_t *data, size_t len, uint32_t clientId) {
   AwsFrameInfo *info = (AwsFrameInfo*)arg;
+#if defined(VOXONE_PROFILE_SALON)
+  if (info->index == 0 &&
+      voxone::dsp::handleDspWsFrame(data, len, clientId,
+          info->final && info->len == len && info->opcode == WS_TEXT)) return;
+#endif
   if (info->final && info->index == 0 && info->len == len && info->opcode == WS_TEXT) {
     data[len] = 0;
     if (config.parseWsCommand((const char*)data, _wscmd, _wsval, 65)) {

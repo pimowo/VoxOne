@@ -275,6 +275,34 @@ void testFailuresAndRuntimeIsolation() {
   assert(!service.runtime().masterMute);
   assert(service.global().activePresetId == PresetId::Flat);
   assert(!service.dirty({}));
+
+  ToneSnapshot audioTone{2, 0, 0};
+  uint32_t revision = service.runtime().revision;
+  unsigned applies = backend.applies;
+  assert(ok(service.notifySharedToneChanged(audioTone)));
+  assert(service.runtime().revision == revision + 1);
+  assert(backend.applies == applies + 1);
+
+  assert(ok(service.prepareActivation(PresetId::Rock, plan)));
+  revision = service.runtime().revision;
+  applies = backend.applies;
+  assert(ok(service.commitActivation(plan, plan.toneToApply)));
+  assert(service.runtime().revision == revision + 1);
+  assert(backend.applies == applies + 1);
+  // Config's deferred Tone notification arrives after the preset commit.
+  assert(ok(service.notifySharedToneChanged(plan.toneToApply)));
+  assert(service.runtime().revision == revision + 1);
+  assert(backend.applies == applies + 1);
+
+  assert(ok(service.prepareRestore(plan)));
+  revision = service.runtime().revision;
+  applies = backend.applies;
+  assert(ok(service.commitActivation(plan, plan.toneToApply)));
+  assert(service.runtime().revision == revision + 1);
+  assert(backend.applies == applies + 1);
+  assert(ok(service.notifySharedToneChanged(plan.toneToApply)));
+  assert(service.runtime().revision == revision + 1);
+  assert(backend.applies == applies + 1);
 }
 
 void testSaveSnapshots() {

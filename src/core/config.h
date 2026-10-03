@@ -200,7 +200,8 @@ class Config {
     void setMaximumVolume(uint8_t maximum);
     void setStartupMode(uint8_t mode);
     void setStartupFixedVolume(uint8_t user);
-    void setTone(int8_t bass, int8_t middle, int8_t trebble);
+    // Returns whether the EEPROM commit succeeded (or no persistence was needed).
+    bool setTone(int8_t bass, int8_t middle, int8_t trebble);
     void setBalance(int8_t balance);
     uint8_t setLastStation(uint16_t val);
     bool setLastStationChecked(uint16_t val, bool intentionalZero=true);
