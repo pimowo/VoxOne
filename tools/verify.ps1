@@ -79,20 +79,29 @@ Invoke-Step 'Native tests' {
  if($tests.Count -eq 0) { throw 'No native tests found' }
  foreach($test in $tests) {
   $name=$test.BaseName
-  $exe=Join-Path $work ($name+'.exe')
   $sources=@($test.FullName)
   if($nativeSources.ContainsKey($name)) { $sources+=@($nativeSources[$name] | ForEach-Object { Join-Path $root $_ }) }
-  $compileLog=Join-Path $work ($name+'.compile.log')
-  $oldPreference=$ErrorActionPreference
-  $ErrorActionPreference='Continue'
-  try { & $Cxx -std=c++11 -O2 -Wall -Wextra -Werror -Wno-unused-parameter -o $exe @sources *> $compileLog; $compileCode=$LASTEXITCODE }
-  finally { $ErrorActionPreference=$oldPreference }
-  if($compileCode -ne 0) { Get-Content -LiteralPath $compileLog -Tail 30 | Out-Host; throw "Compile failed: $name" }
-  if($LASTEXITCODE -ne 0) { throw "Compile failed: $name" }
-  $testLog=Join-Path $work ($name+'.log')
-  & $exe *> $testLog
-  if($LASTEXITCODE -ne 0) { Get-Content -LiteralPath $testLog -Tail 20 | Out-Host; throw "Test failed: $name" }
-  Write-Host "  PASS $name"
+  $variants=if($name -eq 'hardware_descriptor_native') { @('DESK','DIN','SALON') } else { @('') }
+  foreach($variant in $variants) {
+   $label=if($variant) { "$name-$variant" } else { $name }
+   $exe=Join-Path $work ($label+'.exe')
+   $compileLog=Join-Path $work ($label+'.compile.log')
+   $compileArgs=@('-std=c++11','-O2','-Wall','-Wextra','-Werror','-Wno-unused-parameter')
+   if($variant) {
+    $compileArgs+="-DVOXONE_PROFILE_$variant=1"
+    $sourcesForVariant=$sources+@(Join-Path $root 'src/hardware/hardware_descriptor.cpp')
+   } else { $sourcesForVariant=$sources }
+   $compileArgs+=@('-o',$exe)+$sourcesForVariant
+   $oldPreference=$ErrorActionPreference
+   $ErrorActionPreference='Continue'
+   try { & $Cxx @compileArgs *> $compileLog; $compileCode=$LASTEXITCODE }
+   finally { $ErrorActionPreference=$oldPreference }
+   if($compileCode -ne 0) { Get-Content -LiteralPath $compileLog -Tail 30 | Out-Host; throw "Compile failed: $label" }
+   $testLog=Join-Path $work ($label+'.log')
+   & $exe *> $testLog
+   if($LASTEXITCODE -ne 0) { Get-Content -LiteralPath $testLog -Tail 20 | Out-Host; throw "Test failed: $label" }
+   Write-Host "  PASS $label"
+  }
  }
  Write-Host "  $($tests.Count) native tests passed"
 }
