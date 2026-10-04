@@ -2,6 +2,7 @@
 #include "../src/core/dac_mute_state.h"
 #include "../src/core/mute_state.h"
 #include "../src/core/source_manager_state.h"
+#include "../src/core/bt_runtime.h"
 
 #include <cassert>
 
@@ -106,4 +107,22 @@ int main() {
                                          BtPlayback::Stopped), false));
   assert(!source.cycle(bt).activeChanged);  // Unavailable BT is skipped.
   assert(source.active() == ActiveSource::Radio);
+
+  // Runtime OFF follows the same RADIO STOP fallback as a lost BT backend.
+  BtRuntime runtime(true);
+  assert(runtime.start());
+  SourceManagerState disabledSource;
+  BtLinkState connectedBt{};
+  connectedBt.runtimeAvailable = true;
+  connectedBt.connected = true;
+  connectedBt.playback = BtPlayback::Playing;
+  assert(disabledSource.observe(runtime.effectiveLinkState(connectedBt)).activeChanged);
+  runtime.setEnabled(false);
+  update = disabledSource.observe(runtime.effectiveLinkState(connectedBt));
+  assert(update.activeChanged && update.reason == SourceChangeReason::BtOffline);
+  disabledSource.displayView(view);
+  assert(disabledSource.active() == ActiveSource::Radio);
+  assert(view.playback == DisplayPlaybackState::Stopped && mute.active());
+  assert(!dacXsmtHigh(dacPlaybackForSource(false, false, false,
+                                         BtPlayback::Stopped), false));
 }

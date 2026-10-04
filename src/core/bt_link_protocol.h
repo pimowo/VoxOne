@@ -48,6 +48,7 @@ class BtLinkProtocol {
   BtLinkProtocol(SendCommand sendCommand, OnEvent onEvent, void* context);
 
   void begin(uint32_t nowMs);
+  void suspend();
   void feed(char byte, uint32_t nowMs);
   void tick(uint32_t nowMs);
   void requestStatus(uint32_t nowMs);

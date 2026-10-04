@@ -8,6 +8,7 @@
 #include <HardwareSerial.h>
 
 #include "bt_link_protocol.h"
+#include "bt_runtime.h"
 
 class BtLink {
  public:
@@ -24,10 +25,12 @@ class BtLink {
   bool prev();
   bool setVolume(uint8_t absoluteVolume);
 
-  const BtLinkState& state() const { return protocol_.state(); }
+  const BtLinkState& state() const {
+    return btRuntime.effectiveLinkState(protocol_.state());
+  }
   const BtLinkDiagnostics& diagnostics() const { return protocol_.diagnostics(); }
   bool hasIncompleteOnlineSnapshot() const {
-    return protocol_.hasIncompleteOnlineSnapshot();
+    return btRuntime.available() && protocol_.hasIncompleteOnlineSnapshot();
   }
 
  private:
@@ -37,6 +40,7 @@ class BtLink {
   HardwareSerial serial_;
   BtLinkProtocol protocol_;
   bool started_ = false;
+  bool runtimeActive_ = false;
 };
 
 extern BtLink btLink;

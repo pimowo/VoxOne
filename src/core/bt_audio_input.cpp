@@ -35,7 +35,7 @@ void BtAudioInput::begin() {
 }
 
 bool BtAudioInput::blockForUpdate() {
-  if (!btRuntime.shouldStart()) return true;
+  if (!btRuntime.physicalStarted()) return true;
   routeEnabled_.store(false);
   radioReady_.store(false);
   if (!outputMutex_ || xSemaphoreTake(outputMutex_, pdMS_TO_TICKS(100)) != pdTRUE)

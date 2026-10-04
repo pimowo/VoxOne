@@ -21,6 +21,7 @@ void BtLink::begin() {
     return;
   }
   started_ = true;
+  runtimeActive_ = true;
   serialCli.printf("##[BT]# UART RX=%d TX=%d baud=115200\n",
                    uart.rx, uart.tx);
   protocol_.begin(millis());
@@ -28,6 +29,19 @@ void BtLink::begin() {
 
 void BtLink::loop() {
   if (!started_) return;
+  const bool enabled = btRuntime.available();
+  if (!enabled) {
+    if (runtimeActive_) protocol_.suspend();
+    runtimeActive_ = false;
+    return;
+  }
+  if (!runtimeActive_) {
+    // Drop bytes accumulated while disabled, then request a fresh snapshot.
+    uint16_t remaining = 1024;
+    while (remaining-- != 0 && serial_.available() > 0) serial_.read();
+    protocol_.begin(millis());
+    runtimeActive_ = true;
+  }
   // Bound work per main loop so a busy UART cannot starve the radio player.
   uint16_t remaining = 512;
   while (remaining-- != 0 && serial_.available() > 0) {
@@ -39,23 +53,24 @@ void BtLink::loop() {
 }
 
 void BtLink::requestStatus() {
-  if (started_) protocol_.requestStatus(millis());
+  if (started_ && btRuntime.available()) protocol_.requestStatus(millis());
 }
 
 void BtLink::requestDiag() {
-  if (started_) protocol_.requestDiag();
+  if (started_ && btRuntime.available()) protocol_.requestDiag();
 }
 
 void BtLink::ping() {
-  if (started_) protocol_.ping(millis());
+  if (started_ && btRuntime.available()) protocol_.ping(millis());
 }
 
-bool BtLink::play() { return started_ && protocol_.play(); }
-bool BtLink::pause() { return started_ && protocol_.pause(); }
-bool BtLink::next() { return started_ && protocol_.next(); }
-bool BtLink::prev() { return started_ && protocol_.prev(); }
+bool BtLink::play() { return started_ && btRuntime.available() && protocol_.play(); }
+bool BtLink::pause() { return started_ && btRuntime.available() && protocol_.pause(); }
+bool BtLink::next() { return started_ && btRuntime.available() && protocol_.next(); }
+bool BtLink::prev() { return started_ && btRuntime.available() && protocol_.prev(); }
 bool BtLink::setVolume(uint8_t absoluteVolume) {
-  return started_ && protocol_.setVolume(absoluteVolume);
+  return started_ && btRuntime.available() &&
+         protocol_.setVolume(absoluteVolume);
 }
 
 void BtLink::sendCommand(void* context, const char* command) {

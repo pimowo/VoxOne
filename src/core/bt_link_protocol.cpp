@@ -123,6 +123,12 @@ void BtLinkProtocol::goOffline() {
   if (wasOnline) notify(BtLinkEvent::Offline);
 }
 
+void BtLinkProtocol::suspend() {
+  goOffline();
+  lineLength_ = 0;
+  discardingLine_ = false;
+}
+
 void BtLinkProtocol::tick(uint32_t nowMs) {
   if (state_.runtimeAvailable && nowMs - lastRxMs_ >= OfflineTimeoutMs) {
     goOffline();

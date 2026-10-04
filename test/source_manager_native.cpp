@@ -1,5 +1,6 @@
 #include "../src/core/source_manager_state.h"
 #include "../src/core/bt_transport.h"
+#include "../src/core/bt_runtime.h"
 
 #include <cassert>
 #include <cstring>
@@ -230,4 +231,31 @@ int main() {
   assert(!sources.cycle(bt).activeChanged);
   sources.displayView(view);
   assert(view.kind == DisplaySourceKind::Radio);
+
+  // Runtime OFF masks a raw connection before Source Manager sees it.
+  BtRuntime runtime(true);
+  assert(runtime.start());
+  SourceManagerState offSources;
+  BtLinkState rawBt{};
+  rawBt.runtimeAvailable = true;
+  rawBt.connected = true;
+  runtime.setEnabled(false);
+  assert(!offSources.observe(runtime.effectiveLinkState(rawBt)).activeChanged);
+  assert(offSources.active() == ActiveSource::Radio);
+  assert(!offSources.cycle(runtime.effectiveLinkState(rawBt)).activeChanged);
+  assert(offSources.active() == ActiveSource::Radio);
+
+  runtime.setEnabled(true);
+  update = offSources.observe(runtime.effectiveLinkState(rawBt));
+  assert(update.activeChanged && update.reason == SourceChangeReason::BtConnect);
+  assert(offSources.active() == ActiveSource::Bluetooth);
+  runtime.setEnabled(false);
+  update = offSources.observe(runtime.effectiveLinkState(rawBt));
+  assert(update.activeChanged && update.reason == SourceChangeReason::BtOffline);
+  assert(offSources.active() == ActiveSource::Radio);
+  assert(!offSources.bluetoothAudioOutputAllowed());
+  offSources.displayView(view);
+  assert(view.kind == DisplaySourceKind::Radio &&
+         view.playback == DisplayPlaybackState::Stopped);
+  assert(!offSources.cycle(runtime.effectiveLinkState(rawBt)).activeChanged);
 }

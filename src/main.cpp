@@ -99,13 +99,13 @@ void setup() {
   player.init();
   network.begin();
   #if VOXONE_HAS_BT && VOXONE_PIN_MAP_COMPLETE
-    if (btRuntime.shouldStart()) {
+    if (btRuntime.physicalStarted()) {
       btLink.begin();
       sourceManagerBegin();
     }
   #endif
   #if VOXONE_HAS_BT && VOXONE_PIN_MAP_COMPLETE && VOXONE_BT_I2S_RX_ENABLED
-    if (btRuntime.shouldStart()) btAudioInput.begin();
+    if (btRuntime.physicalStarted()) btAudioInput.begin();
   #endif
   logNvsStats();
   if (network.status != CONNECTED && network.status!=SDREADY) {
@@ -137,7 +137,7 @@ void loop() {
   timekeeper.loop1();
   serialCli.loop();
   #if VOXONE_HAS_BT && VOXONE_PIN_MAP_COMPLETE
-    if (btRuntime.shouldStart()) {
+    if (btRuntime.physicalStarted()) {
       btLink.loop();
       // STATUS_BEGIN clears session fields before STATUS_END completes them.
       // Do not let consumers treat that partial snapshot as a disconnect.
@@ -145,7 +145,8 @@ void loop() {
     }
   #endif
   #if VOXONE_HAS_BT && VOXONE_PIN_MAP_COMPLETE && VOXONE_BT_I2S_RX_ENABLED
-    if (btRuntime.shouldStart() && !btLink.hasIncompleteOnlineSnapshot())
+    if (btRuntime.physicalStarted() &&
+        !btLink.hasIncompleteOnlineSnapshot())
       btAudioInput.loop(btLink.state(), bluetoothAudioOutputAllowed(),
                         player.getSampleRate(), millis());
   #endif

@@ -196,6 +196,14 @@ int main() {
   assert(!fragmented.link.hasIncompleteOnlineSnapshot());
   assert(fragmented.link.state().connected);
   assert(fragmented.link.state().sampleRate == 44100);
+  fragmented.link.suspend();
+  assert(!fragmented.link.state().runtimeAvailable);
+  assert(!fragmented.link.state().connected);
+  assert(fragmented.events.back() == BtLinkEvent::Offline);
+  assert(!fragmented.link.play());
+  fragmented.link.begin(10);
+  assert(!fragmented.link.state().runtimeAvailable);
+  assert(fragmented.sent.back() == "GET_STATUS");
 
   // The currently checked-out VoxOneBT source is protocol v1. Its repeated
   // READY must neither mark v2 available nor flood GET_STATUS requests.
