@@ -2,7 +2,7 @@
 
 Target opisuje konkretne PCB: MCU, przypisane GPIO, magistrale i mo?liwo?ci fizyczne. Rodzina MCU sama w sobie nie identyfikuje PCB. Ustawienia runtime, takie jak wyb?r LCD, BT, preset DSP lub preferencje u?ytkownika, nie tworz? nowego targetu. Nowe PCB dostaje nowy descriptor; inna obsada tego samego PCB nie wymaga nowego targetu, je?li opis pin?w i mo?liwo?ci nadal jest prawdziwy.
 
-Warstwa src/hardware/hardware_descriptor.h rozdziela to?samo?? PCB, magistrale SPI/I2C, linie I2S/UART, piny urz?dze? (LCD, enkoder, DAC) oraz mo?liwo?ci. kNoPin reprezentuje brak przypisanego GPIO; adapter fromLegacyPin t?umaczy dotychczasowe 255 i -1. Zero w polu rozmiaru pami?ci oznacza brak potwierdzonej warto?ci. Runtime odczytuje descriptor w dac_mute, rtcsupport, bt_link, bt_audio_input i dla pin?w enkodera w controls; pozosta?e modu?y nadal korzystaj? z makr profiles/ i Config.
+Warstwa src/hardware/hardware_descriptor.h rozdziela to?samo?? PCB, magistrale SPI/I2C, linie I2S/UART, piny urz?dze? (LCD, enkoder, DAC) oraz mo?liwo?ci. kNoPin reprezentuje brak przypisanego GPIO; adapter fromLegacyPin t?umaczy dotychczasowe 255 i -1. Zero w polu rozmiaru pami?ci oznacza brak potwierdzonej warto?ci. Runtime odczytuje descriptor w dac_mute, rtcsupport, bt_link, bt_audio_input, dla pin?w enkodera w controls oraz dla CS/DC/RST w sterownikach ST7789 i ST7796. Pozosta?e modu?y nadal korzystaj? z makr profiles/ i Config.
 
 ## Obecne targety migracyjne
 
@@ -12,7 +12,7 @@ Warstwa src/hardware/hardware_descriptor.h rozdziela to?samo?? PCB, magistrale S
 | DIN | ESP32-S3 | bez LCD i enkodera, PCM5102A, VoxOneBT UART; piny BT I2S s? zarezerwowane, lecz RX jest wy??czony |
 | SALON | ESP32-S3 | ST7796S 480?320, enkoder, PCM5102A, DS3231 na I2C, VoxOneBT UART i BT I2S RX |
 
-Descriptor bierze znane piny z aktywnego profilu. Niepotwierdzone piny domy?lnego SPI DESK pozostaj? kNoPin; znane SPI SALON (SCK 12, MOSI 11, MISO 13) opisuje magistral? tylko raz. DS3231 i przysz?e urz?dzenie I2C mog? wsp??dzieli? jedn? par? SDA/SCL bez powielania pin?w w descriptorze. Pin XSMT SALON nadal jest nieprzypisany. Mo?liwo?? fizycznego DSP i MAX98357 dla obecnych trzech PCB pozostaje wy??czona. Stary profil SALON_DSP nie ma kompletnej mapy i nadal nie jest targetem builda.
+Descriptor bierze znane piny z aktywnego profilu. Niepotwierdzone piny domy?lnego SPI DESK pozostaj? kNoPin; znane SPI SALON (SCK 12, MOSI 11, MISO 13) opisuje magistral? tylko raz. Sterowniki LCD nadal korzystaj? z domy?lnej inicjalizacji magistrali SPI; nie ustawiaj? jej pin?w z descriptora. Pod?wietlenie SALON (GPIO 14) jest opisane w descriptorze, lecz nadal steruje nim Config. DS3231 i przysz?e urz?dzenie I2C mog? wsp??dzieli? jedn? par? SDA/SCL bez powielania pin?w w descriptorze. Pin XSMT SALON nadal jest nieprzypisany. Mo?liwo?? fizycznego DSP i MAX98357 dla obecnych trzech PCB pozostaje wy??czona. Stary profil SALON_DSP nie ma kompletnej mapy i nadal nie jest targetem builda.
 
 ## Docelowy plan
 

@@ -2,11 +2,18 @@
 #if DSP_MODEL==DSP_ST7789 || DSP_MODEL==DSP_ST7789_240 || DSP_MODEL==DSP_ST7789_76 || DSP_MODEL==DSP_ST7789_170
 #include "dspcore.h"
 #include "../core/config.h"
+#include "../hardware/hardware_descriptor.h"
 
 #if DSP_HSPI
-DspCore::DspCore(): Adafruit_ST7789(&SPI2, TFT_CS, TFT_DC, TFT_RST) {}
+DspCore::DspCore(): Adafruit_ST7789(&SPI2,
+  voxone::hardware::currentHardware().display.cs,
+  voxone::hardware::currentHardware().display.dc,
+  voxone::hardware::currentHardware().display.rst) {}
 #else
-DspCore::DspCore(): Adafruit_ST7789(TFT_CS, TFT_DC, TFT_RST) {}
+DspCore::DspCore(): Adafruit_ST7789(
+  voxone::hardware::currentHardware().display.cs,
+  voxone::hardware::currentHardware().display.dc,
+  voxone::hardware::currentHardware().display.rst) {}
 #endif
 
 void DspCore::initDisplay() {

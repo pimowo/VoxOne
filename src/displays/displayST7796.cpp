@@ -2,11 +2,18 @@
 #if DSP_MODEL==DSP_ST7796
 #include "dspcore.h"
 #include "../core/config.h"
+#include "../hardware/hardware_descriptor.h"
 
 #if DSP_HSPI
-DspCore::DspCore(): Adafruit_ST7796S_kbv(&SPI2, TFT_DC, TFT_CS, TFT_RST) {}
+DspCore::DspCore(): Adafruit_ST7796S_kbv(&SPI2,
+  voxone::hardware::currentHardware().display.dc,
+  voxone::hardware::currentHardware().display.cs,
+  voxone::hardware::currentHardware().display.rst) {}
 #else
-DspCore::DspCore(): Adafruit_ST7796S_kbv(TFT_CS, TFT_DC, TFT_RST) {}
+DspCore::DspCore(): Adafruit_ST7796S_kbv(
+  voxone::hardware::currentHardware().display.cs,
+  voxone::hardware::currentHardware().display.dc,
+  voxone::hardware::currentHardware().display.rst) {}
 #endif
 
 void DspCore::initDisplay() {

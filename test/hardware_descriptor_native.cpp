@@ -29,6 +29,10 @@ int main() {
   assert(d.audioOut.dout == fromLegacyPin(I2S_DOUT));
   assert(d.display.cs == fromLegacyPin(TFT_CS));
   assert(d.display.dc == fromLegacyPin(TFT_DC));
+  assert(d.display.rst == fromLegacyPin(TFT_RST));
+  assert(d.capabilities.supportsDisplay == (d.displayKind != DisplayKind::None));
+  assert(d.display.bus == (d.capabilities.supportsDisplay ?
+                           BusKind::Spi : BusKind::None));
   assert(d.encoder.a == fromLegacyPin(ENC_BTNL));
   assert(d.encoder.b == fromLegacyPin(ENC_BTNR));
   assert(d.encoder.button == fromLegacyPin(ENC_BTNB));
@@ -56,11 +60,15 @@ int main() {
   assert(d.board.id == BoardId::Desk);
   assert(d.board.mcu == McuFamily::Esp32);
   assert(d.displayKind == DisplayKind::St7789_284x76);
+  assert(d.capabilities.supportsDisplay);
   assert(d.display.cs == 5 && d.display.dc == 4);
+  assert(d.display.rst == kNoPin && d.display.backlight == kNoPin);
   assert(d.audioOut.dout == 27 && d.audioOut.bclk == 26 && d.audioOut.ws == 25);
   assert(d.encoder.a == 33 && d.encoder.b == 35 && d.encoder.button == 32);
   assert(!d.encoder.internalPullup && d.encoder.stepsPerDetent == 4);
-  assert(d.spi.sck == kNoPin);  // Default bus pins are not in desk.h.
+  // The legacy DESK profile does not specify default SPI bus pins.
+  assert(d.spi.sck == kNoPin && d.spi.mosi == kNoPin &&
+         d.spi.miso == kNoPin);
   assert(!d.capabilities.supportsVoxOneBt);
   assert(d.btUart.rx == kNoPin && d.btUart.tx == kNoPin);
   assert(d.btAudioIn.bclk == kNoPin && d.btAudioIn.ws == kNoPin &&
@@ -69,6 +77,9 @@ int main() {
 #elif defined(VOXONE_PROFILE_DIN)
   assert(d.board.id == BoardId::Din);
   assert(d.displayKind == DisplayKind::None);
+  assert(!d.capabilities.supportsDisplay);
+  assert(d.spi.sck == kNoPin && d.spi.mosi == kNoPin &&
+         d.spi.miso == kNoPin);
   assert(d.audioOut.bclk == 1 && d.audioOut.dout == 2 && d.audioOut.ws == 3);
   assert(d.btAudioIn.bclk == 4 && d.btAudioIn.ws == 5 && d.btAudioIn.din == 6);
   assert(!d.btAudioRxEnabled);  // Reserved wiring; runtime RX stays disabled.
@@ -76,7 +87,8 @@ int main() {
   assert(d.btUart.rx == fromLegacyPin(VOXONE_BT_UART_RX_PIN));
   assert(d.btUart.tx == fromLegacyPin(VOXONE_BT_UART_TX_PIN));
   assert(d.capabilities.supportsVoxOneBt);
-  assert(d.display.cs == kNoPin);
+  assert(d.display.cs == kNoPin && d.display.dc == kNoPin &&
+         d.display.rst == kNoPin && d.display.backlight == kNoPin);
   assert(!d.capabilities.supportsEncoder);
   assert(d.encoder.a == kNoPin && d.encoder.b == kNoPin &&
          d.encoder.button == kNoPin);
@@ -84,8 +96,11 @@ int main() {
 #elif defined(VOXONE_PROFILE_SALON)
   assert(d.board.id == BoardId::Salon);
   assert(d.displayKind == DisplayKind::St7796_480x320);
+  assert(d.capabilities.supportsDisplay);
   assert(d.spi.mosi == 11 && d.spi.sck == 12 && d.spi.miso == 13);
   assert(d.display.cs == 10 && d.display.dc == 9 && d.display.backlight == 14);
+  assert(d.display.rst == kNoPin);
+  assert(d.display.backlight == fromLegacyPin(BRIGHTNESS_PIN));
   assert(d.encoder.a == 41 && d.encoder.b == 40 && d.encoder.button == 39);
   assert(!d.encoder.internalPullup && d.encoder.stepsPerDetent == 4);
   assert(d.audioOut.dout == 4 && d.audioOut.bclk == 5 && d.audioOut.ws == 6);
@@ -115,6 +130,19 @@ int main() {
   assert(validateDescriptor(bad));
   bad = d;
   bad.capabilities.supportsDisplay = !d.capabilities.supportsDisplay;
+  assert(!validateDescriptor(bad));
+  bad = d;
+  bad.display.bus = d.capabilities.supportsDisplay ? BusKind::None : BusKind::Spi;
+  assert(!validateDescriptor(bad));
+  bad = d;
+  bad.displayKind = d.capabilities.supportsDisplay ? DisplayKind::None :
+                    DisplayKind::St7789_284x76;
+  assert(!validateDescriptor(bad));
+  bad = d;
+  bad.capabilities.supportsDisplay = true;
+  bad.displayKind = DisplayKind::St7789_284x76;
+  bad.display.bus = BusKind::Spi;
+  bad.display.cs = kNoPin;
   assert(!validateDescriptor(bad));
   bad = d;
   bad.capabilities.supportsEncoder = true;
