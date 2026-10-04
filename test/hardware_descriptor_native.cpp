@@ -16,6 +16,8 @@ int main() {
   assert(d.capabilities.supportsDisplay == bool(VOXONE_HAS_DISPLAY));
   assert(d.capabilities.supportsEncoder == bool(VOXONE_HAS_ENCODER));
   assert(d.capabilities.supportsVoxOneBt == bool(VOXONE_HAS_BT));
+  assert(d.capabilities.supportsVoxOneBt ==
+         (hasPin(d.btUart.rx) && hasPin(d.btUart.tx)));
   assert(d.capabilities.supportsPcm5102);
   assert(!d.capabilities.supportsDsp);
   assert(!d.capabilities.supportsMax98357);
@@ -30,7 +32,11 @@ int main() {
   assert(d.btAudioIn.bclk == fromLegacyPin(VOXONE_BT_I2S_BCLK_PIN));
   assert(d.btAudioIn.ws == fromLegacyPin(VOXONE_BT_I2S_WS_PIN));
   assert(d.btAudioIn.din == fromLegacyPin(VOXONE_BT_I2S_DATA_PIN));
+  assert(d.btAudioIn.dout == kNoPin);
   assert(d.btAudioRxEnabled == bool(VOXONE_BT_I2S_RX_ENABLED));
+  assert(!d.btAudioRxEnabled ||
+         (hasPin(d.btAudioIn.bclk) && hasPin(d.btAudioIn.ws) &&
+          hasPin(d.btAudioIn.din)));
   assert(d.i2c.sda == fromLegacyPin(RTC_SDA));
   assert(d.i2c.scl == fromLegacyPin(RTC_SCL));
   assert(d.capabilities.supportsRtc ==
@@ -48,6 +54,10 @@ int main() {
   assert(d.audioOut.dout == 27 && d.audioOut.bclk == 26 && d.audioOut.ws == 25);
   assert(d.encoder.a == 33 && d.encoder.b == 35 && d.encoder.button == 32);
   assert(d.spi.sck == kNoPin);  // Default bus pins are not in desk.h.
+  assert(!d.capabilities.supportsVoxOneBt);
+  assert(d.btUart.rx == kNoPin && d.btUart.tx == kNoPin);
+  assert(d.btAudioIn.bclk == kNoPin && d.btAudioIn.ws == kNoPin &&
+         d.btAudioIn.din == kNoPin && !d.btAudioRxEnabled);
   assert(d.dacXsmt == kNoPin);
 #elif defined(VOXONE_PROFILE_DIN)
   assert(d.board.id == BoardId::Din);
@@ -56,6 +66,9 @@ int main() {
   assert(d.btAudioIn.bclk == 4 && d.btAudioIn.ws == 5 && d.btAudioIn.din == 6);
   assert(!d.btAudioRxEnabled);  // Reserved wiring; runtime RX stays disabled.
   assert(d.btUart.rx == 7 && d.btUart.tx == 8);
+  assert(d.btUart.rx == fromLegacyPin(VOXONE_BT_UART_RX_PIN));
+  assert(d.btUart.tx == fromLegacyPin(VOXONE_BT_UART_TX_PIN));
+  assert(d.capabilities.supportsVoxOneBt);
   assert(d.display.cs == kNoPin);
   assert(d.dacXsmt == kNoPin);
 #elif defined(VOXONE_PROFILE_SALON)
@@ -67,6 +80,9 @@ int main() {
   assert(d.audioOut.dout == 4 && d.audioOut.bclk == 5 && d.audioOut.ws == 6);
   assert(d.i2c.sda == 8 && d.i2c.scl == 7);
   assert(d.btUart.rx == 15 && d.btUart.tx == 16);
+  assert(d.btUart.rx == fromLegacyPin(VOXONE_BT_UART_RX_PIN));
+  assert(d.btUart.tx == fromLegacyPin(VOXONE_BT_UART_TX_PIN));
+  assert(d.capabilities.supportsVoxOneBt && d.btAudioRxEnabled);
   assert(d.btAudioIn.bclk == 1 && d.btAudioIn.ws == 2 && d.btAudioIn.din == 17);
   assert(d.dacXsmt == kNoPin);
   assert(d.dacXsmt == fromLegacyPin(VOXONE_DAC_XSMT_PIN));

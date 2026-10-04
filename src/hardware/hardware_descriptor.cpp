@@ -69,6 +69,15 @@ constexpr HardwareDescriptor kCurrent = {
    kI2c.sda != kNoPin && kI2c.scl != kNoPin}
 };
 
+static_assert(!VOXONE_HAS_BT ||
+              (hasPin(kCurrent.btUart.rx) && hasPin(kCurrent.btUart.tx)),
+              "BT capable profile requires UART RX and TX pins");
+static_assert(!VOXONE_BT_I2S_RX_ENABLED ||
+              (hasPin(kCurrent.btAudioIn.bclk) &&
+               hasPin(kCurrent.btAudioIn.ws) &&
+               hasPin(kCurrent.btAudioIn.din)),
+              "BT I2S RX requires a complete pin map");
+
 bool validPin(Pin pin, McuFamily mcu) {
   if (!hasPin(pin)) return true;
   if (pin < 0) return false;

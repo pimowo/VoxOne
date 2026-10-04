@@ -4,9 +4,7 @@
 
 #include "serialcli.h"
 #include "netserver.h"
-
-static_assert(VOXONE_BT_UART_RX_PIN != 255 && VOXONE_BT_UART_TX_PIN != 255,
-              "BT capable profile requires UART RX and TX pins");
+#include "../hardware/hardware_descriptor.h"
 
 BtLink btLink;
 
@@ -14,17 +12,17 @@ BtLink::BtLink()
     : serial_(1), protocol_(&BtLink::sendCommand, &BtLink::onEvent, this) {}
 
 void BtLink::begin() {
+  const auto& uart = voxone::hardware::currentHardware().btUart;
   serial_.setRxBufferSize(1024);
-  serial_.begin(115200, SERIAL_8N1, VOXONE_BT_UART_RX_PIN,
-                VOXONE_BT_UART_TX_PIN);
+  serial_.begin(115200, SERIAL_8N1, uart.rx, uart.tx);
   if (!serial_) {
     serialCli.printf("##[BT]# UART init failed RX=%d TX=%d\n",
-                     VOXONE_BT_UART_RX_PIN, VOXONE_BT_UART_TX_PIN);
+                     uart.rx, uart.tx);
     return;
   }
   started_ = true;
   serialCli.printf("##[BT]# UART RX=%d TX=%d baud=115200\n",
-                   VOXONE_BT_UART_RX_PIN, VOXONE_BT_UART_TX_PIN);
+                   uart.rx, uart.tx);
   protocol_.begin(millis());
 }
 

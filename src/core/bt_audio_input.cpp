@@ -10,11 +10,7 @@
 #include "player.h"
 #include "serialcli.h"
 #include "system_operation_state.h"
-
-static_assert(VOXONE_BT_I2S_BCLK_PIN != 255 &&
-                  VOXONE_BT_I2S_WS_PIN != 255 &&
-                  VOXONE_BT_I2S_DATA_PIN != 255,
-              "BT I2S RX requires a complete pin map");
+#include "../hardware/hardware_descriptor.h"
 
 namespace {
 constexpr i2s_port_t kBtI2sPort = I2S_NUM_1;
@@ -126,12 +122,13 @@ bool BtAudioInput::start(uint32_t rate, uint32_t nowMs) {
     return false;
   }
 
+  const auto& btPins = voxone::hardware::currentHardware().btAudioIn;
   i2s_pin_config_t pins{};
   pins.mck_io_num = I2S_PIN_NO_CHANGE;
-  pins.bck_io_num = VOXONE_BT_I2S_BCLK_PIN;
-  pins.ws_io_num = VOXONE_BT_I2S_WS_PIN;
+  pins.bck_io_num = btPins.bclk;
+  pins.ws_io_num = btPins.ws;
   pins.data_out_num = I2S_PIN_NO_CHANGE;
-  pins.data_in_num = VOXONE_BT_I2S_DATA_PIN;
+  pins.data_in_num = btPins.din;
   error = i2s_set_pin(kBtI2sPort, &pins);
   if (error != ESP_OK) {
     i2s_driver_uninstall(kBtI2sPort);
@@ -160,8 +157,8 @@ bool BtAudioInput::start(uint32_t rate, uint32_t nowMs) {
 
   active_ = true;
   serialCli.printf("##[BT-AUDIO]# I2S1 RX started rate=%lu BCLK=%d WS=%d DATA=%d\n",
-                   static_cast<unsigned long>(rate), VOXONE_BT_I2S_BCLK_PIN,
-                   VOXONE_BT_I2S_WS_PIN, VOXONE_BT_I2S_DATA_PIN);
+                   static_cast<unsigned long>(rate), btPins.bclk,
+                   btPins.ws, btPins.din);
   return true;
 }
 
