@@ -14,6 +14,7 @@
 #include "core/bt_link.h"
 #include "core/bt_audio_input.h"
 #include "core/bt_audio_input_state.h"
+#include "core/bt_runtime.h"
 #include "core/source_manager.h"
 #include "core/dac_mute.h"
 #include "core/system_operation_state.h"
@@ -89,6 +90,7 @@ void setup() {
   if (yoradio_on_setup) yoradio_on_setup();
   pm.on_setup();
   config.init();
+  btRuntime.start();
 #if defined(VOXONE_PROFILE_SALON)
   voxone::dsp::initDspRuntime({config.store.bass, config.store.middle,
                               config.store.trebble});
@@ -97,11 +99,13 @@ void setup() {
   player.init();
   network.begin();
   #if VOXONE_HAS_BT && VOXONE_PIN_MAP_COMPLETE
-    btLink.begin();
-    sourceManagerBegin();
+    if (btRuntime.shouldStart()) {
+      btLink.begin();
+      sourceManagerBegin();
+    }
   #endif
   #if VOXONE_HAS_BT && VOXONE_PIN_MAP_COMPLETE && VOXONE_BT_I2S_RX_ENABLED
-    btAudioInput.begin();
+    if (btRuntime.shouldStart()) btAudioInput.begin();
   #endif
   logNvsStats();
   if (network.status != CONNECTED && network.status!=SDREADY) {
@@ -133,13 +137,15 @@ void loop() {
   timekeeper.loop1();
   serialCli.loop();
   #if VOXONE_HAS_BT && VOXONE_PIN_MAP_COMPLETE
-    btLink.loop();
-    // STATUS_BEGIN clears session fields before STATUS_END completes them.
-    // Do not let consumers treat that partial snapshot as a disconnect.
-    if (!btLink.hasIncompleteOnlineSnapshot()) sourceManagerLoop();
+    if (btRuntime.shouldStart()) {
+      btLink.loop();
+      // STATUS_BEGIN clears session fields before STATUS_END completes them.
+      // Do not let consumers treat that partial snapshot as a disconnect.
+      if (!btLink.hasIncompleteOnlineSnapshot()) sourceManagerLoop();
+    }
   #endif
   #if VOXONE_HAS_BT && VOXONE_PIN_MAP_COMPLETE && VOXONE_BT_I2S_RX_ENABLED
-    if (!btLink.hasIncompleteOnlineSnapshot())
+    if (btRuntime.shouldStart() && !btLink.hasIncompleteOnlineSnapshot())
       btAudioInput.loop(btLink.state(), bluetoothAudioOutputAllowed(),
                         player.getSampleRate(), millis());
   #endif
@@ -151,11 +157,13 @@ void loop() {
   }
 #if defined(VOXONE_PROFILE_SALON)
   const BtLinkState& bt = btLink.state();
+  const BtRuntimeStatus btStatus = btRuntime.status(bt.runtimeAvailable,
+                                                    bt.connected);
   const DacPlaybackState dacPlayback = dacPlaybackForSource(
       bluetoothSourceSelected(), player.isRunning(),
       bluetoothAudioOutputAllowed() &&
-          !btLink.hasIncompleteOnlineSnapshot() && bt.runtimeAvailable &&
-          bt.connected && btAudioDesiredRate(bt) != 0,
+          !btLink.hasIncompleteOnlineSnapshot() && btStatus.btOnline &&
+          btStatus.btConnected && btAudioDesiredRate(bt) != 0,
       bt.playback);
   dacMute.update(dacPlayback, systemUpdateAudioBlocked());
 #endif

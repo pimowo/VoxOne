@@ -6,6 +6,7 @@
 #include <freertos/task.h>
 
 #include "bt_audio_input_state.h"
+#include "bt_runtime.h"
 #include "bt_audio_route_state.h"
 #include "player.h"
 #include "serialcli.h"
@@ -34,6 +35,7 @@ void BtAudioInput::begin() {
 }
 
 bool BtAudioInput::blockForUpdate() {
+  if (!btRuntime.shouldStart()) return true;
   routeEnabled_.store(false);
   radioReady_.store(false);
   if (!outputMutex_ || xSemaphoreTake(outputMutex_, pdMS_TO_TICKS(100)) != pdTRUE)

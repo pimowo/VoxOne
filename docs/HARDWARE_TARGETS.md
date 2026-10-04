@@ -14,6 +14,8 @@ Warstwa src/hardware/hardware_descriptor.h rozdziela to?samo?? PCB, magistrale S
 
 Descriptor bierze znane piny z aktywnego profilu. Niepotwierdzone piny domy?lnego SPI DESK pozostaj? kNoPin; znane SPI SALON (SCK 12, MOSI 11, MISO 13) opisuje magistral? tylko raz. Sterowniki LCD nadal korzystaj? z domy?lnej inicjalizacji magistrali SPI; nie ustawiaj? jej pin?w z descriptora. Pod?wietlenie SALON (GPIO 14) jest opisane w descriptorze, lecz nadal steruje nim Config. DS3231 i przysz?e urz?dzenie I2C mog? wsp??dzieli? jedn? par? SDA/SCL bez powielania pin?w w descriptorze. Pin XSMT SALON nadal jest nieprzypisany. Mo?liwo?? fizycznego DSP i MAX98357 dla obecnych trzech PCB pozostaje wy??czona. Stary profil SALON_DSP nie ma kompletnej mapy i nadal nie jest targetem builda.
 
+Runtime BT rozdziela supportsVoxOneBt (mo?liwo?? PCB), btEnabled (wyb?r na czas startu), btOnline (odpowied? modu?u) i btConnected (po??czenie telefonu). btEnabled domy?lnie odpowiada supportsVoxOneBt; mo?na go ustawi? tylko przed startem BT. W 1D.1 nie jest zapisywany trwale ani udost?pniany w WWW. Gdy jest wy??czony, UART i BT I2S nie startuj?, a ?r?d?o BT pozostaje niedost?pne. Selekcja ?r?d?a i fallback w Source Managerze pozostaj? bez zmian.
+
 ## Docelowy plan
 
 | Planowany target | MCU | Docelowa obsada audio |
