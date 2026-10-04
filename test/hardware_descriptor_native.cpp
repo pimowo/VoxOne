@@ -31,6 +31,10 @@ int main() {
   assert(d.btAudioIn.ws == fromLegacyPin(VOXONE_BT_I2S_WS_PIN));
   assert(d.btAudioIn.din == fromLegacyPin(VOXONE_BT_I2S_DATA_PIN));
   assert(d.btAudioRxEnabled == bool(VOXONE_BT_I2S_RX_ENABLED));
+  assert(d.i2c.sda == fromLegacyPin(RTC_SDA));
+  assert(d.i2c.scl == fromLegacyPin(RTC_SCL));
+  assert(d.capabilities.supportsRtc ==
+         (RTC_SDA != 255 && RTC_SCL != 255));
   assert(fromLegacyPin(255) == kNoPin && fromLegacyPin(-1) == kNoPin);
   assert(!hasPin(kNoPin));
   assert(validateDescriptor(d));
@@ -44,6 +48,7 @@ int main() {
   assert(d.audioOut.dout == 27 && d.audioOut.bclk == 26 && d.audioOut.ws == 25);
   assert(d.encoder.a == 33 && d.encoder.b == 35 && d.encoder.button == 32);
   assert(d.spi.sck == kNoPin);  // Default bus pins are not in desk.h.
+  assert(d.dacXsmt == kNoPin);
 #elif defined(VOXONE_PROFILE_DIN)
   assert(d.board.id == BoardId::Din);
   assert(d.displayKind == DisplayKind::None);
@@ -52,6 +57,7 @@ int main() {
   assert(!d.btAudioRxEnabled);  // Reserved wiring; runtime RX stays disabled.
   assert(d.btUart.rx == 7 && d.btUart.tx == 8);
   assert(d.display.cs == kNoPin);
+  assert(d.dacXsmt == kNoPin);
 #elif defined(VOXONE_PROFILE_SALON)
   assert(d.board.id == BoardId::Salon);
   assert(d.displayKind == DisplayKind::St7796_480x320);
@@ -63,6 +69,7 @@ int main() {
   assert(d.btUart.rx == 15 && d.btUart.tx == 16);
   assert(d.btAudioIn.bclk == 1 && d.btAudioIn.ws == 2 && d.btAudioIn.din == 17);
   assert(d.dacXsmt == kNoPin);
+  assert(d.dacXsmt == fromLegacyPin(VOXONE_DAC_XSMT_PIN));
 #endif
 
   HardwareDescriptor bad = d;

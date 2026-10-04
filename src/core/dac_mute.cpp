@@ -1,28 +1,25 @@
 #include "dac_mute.h"
 
 #include "Arduino.h"
-#include "options.h"
-
-#ifndef VOXONE_DAC_XSMT_PIN
-#define VOXONE_DAC_XSMT_PIN 255
-#endif
+#include "../hardware/hardware_descriptor.h"
 
 DacMuteController dacMute;
 
 void DacMuteController::begin() {
   high_.store(false, std::memory_order_relaxed);
-#if VOXONE_DAC_XSMT_PIN != 255
-  digitalWrite(VOXONE_DAC_XSMT_PIN, LOW);
-  pinMode(VOXONE_DAC_XSMT_PIN, OUTPUT);
-#endif
+  const auto pin = voxone::hardware::currentHardware().dacXsmt;
+  if (voxone::hardware::hasPin(pin)) {
+    digitalWrite(pin, LOW);
+    pinMode(pin, OUTPUT);
+  }
 }
 
 void DacMuteController::update(DacPlaybackState playback,
                                bool updateAudioBlocked) {
   const bool nextHigh = dacXsmtHigh(playback, updateAudioBlocked);
   if (nextHigh == high_.load(std::memory_order_relaxed)) return;
-#if VOXONE_DAC_XSMT_PIN != 255
-  digitalWrite(VOXONE_DAC_XSMT_PIN, nextHigh ? HIGH : LOW);
-#endif
+  const auto pin = voxone::hardware::currentHardware().dacXsmt;
+  if (voxone::hardware::hasPin(pin))
+    digitalWrite(pin, nextHigh ? HIGH : LOW);
   high_.store(nextHigh, std::memory_order_relaxed);
 }

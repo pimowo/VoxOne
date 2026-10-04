@@ -1,5 +1,6 @@
 #include "options.h"
 #include "rtcsupport.h"
+#include "../hardware/hardware_descriptor.h"
 
 #if RTCSUPPORTED
 #include <Wire.h>
@@ -9,7 +10,8 @@ TwoWire RTCWire = TwoWire(0);
 RTC rtc;
 
 bool RTC::init(){
-	RTCWire.begin(RTC_SDA, RTC_SCL);
+	const auto& bus = voxone::hardware::currentHardware().i2c;
+	RTCWire.begin(bus.sda, bus.scl);
 	return begin(&RTCWire);
 }
 

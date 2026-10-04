@@ -2,7 +2,7 @@
 
 Target opisuje konkretne PCB: MCU, przypisane GPIO, magistrale i mo?liwo?ci fizyczne. Rodzina MCU sama w sobie nie identyfikuje PCB. Ustawienia runtime, takie jak wyb?r LCD, BT, preset DSP lub preferencje u?ytkownika, nie tworz? nowego targetu. Nowe PCB dostaje nowy descriptor; inna obsada tego samego PCB nie wymaga nowego targetu, je?li opis pin?w i mo?liwo?ci nadal jest prawdziwy.
 
-Warstwa src/hardware/hardware_descriptor.h rozdziela to?samo?? PCB, magistrale SPI/I2C, linie I2S/UART, piny urz?dze? (LCD, enkoder, DAC) oraz mo?liwo?ci. kNoPin reprezentuje brak przypisanego GPIO; adapter fromLegacyPin t?umaczy dotychczasowe 255 i -1. Zero w polu rozmiaru pami?ci oznacza brak potwierdzonej warto?ci. Descriptor nie steruje jeszcze runtime; aktywne pozostaj? makra profiles/ i Config.
+Warstwa src/hardware/hardware_descriptor.h rozdziela to?samo?? PCB, magistrale SPI/I2C, linie I2S/UART, piny urz?dze? (LCD, enkoder, DAC) oraz mo?liwo?ci. kNoPin reprezentuje brak przypisanego GPIO; adapter fromLegacyPin t?umaczy dotychczasowe 255 i -1. Zero w polu rozmiaru pami?ci oznacza brak potwierdzonej warto?ci. Runtime odczytuje descriptor w dac_mute i rtcsupport; pozosta?e modu?y nadal korzystaj? z makr profiles/ i Config.
 
 ## Obecne targety migracyjne
 

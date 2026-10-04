@@ -56,7 +56,7 @@ struct HardwareDescriptor {
   Capabilities capabilities;
 };
 
-// Current firmware still reads the legacy profile macros. This describes them.
+// Describes the current legacy profile values for runtime consumers.
 const HardwareDescriptor& currentHardware();
 bool hasPinConflicts(const HardwareDescriptor& descriptor);
 bool validateDescriptor(const HardwareDescriptor& descriptor);

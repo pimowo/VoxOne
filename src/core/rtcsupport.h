@@ -1,7 +1,8 @@
 #ifndef rtcsupport_h
 #define rtcsupport_h
 
-#define RTCSUPPORTED (RTC_SDA!=255 && RTC_SCL!=255 && (RTC_MODULE==DS3231 || RTC_MODULE==DS1307))
+// Keep the RTC library choice at compile time. GPIO comes from HardwareDescriptor.
+#define RTCSUPPORTED (RTC_MODULE==DS3231 || RTC_MODULE==DS1307)
 
 #if RTCSUPPORTED
 #include "RTClib.h"
