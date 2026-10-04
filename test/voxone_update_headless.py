@@ -134,12 +134,18 @@ setTimeout(() => {
 
 def main():
     html = (ROOT / "web-src/voxone.html").read_text(encoding="utf-8")
-    js = (ROOT / "web-src/voxone.js").read_text(encoding="utf-8")
+    scripts = [
+        (ROOT / "web-src" / name).read_text(encoding="utf-8")
+        for name in ("advanced-audio.js", "dsp-client.js", "voxone.js")
+    ]
     html = re.sub(r'<script src="/variables.js"></script>', MOCK, html, count=1)
-    html = re.sub(r'<script src="/voxone.js[^\"]*" defer></script>', "", html, count=1)
+    html = re.sub(
+        r'<script src="/(?:advanced-audio|dsp-client|voxone)\.js[^"]*" defer></script>',
+        "", html)
     html = html.replace("</body>", '<output id="headless-result">PENDING</output>' +
-                        "<script>" + js + "</script>" + CHECK + "</body>")
-    with tempfile.TemporaryDirectory(prefix="voxone-web-test-") as temporary:
+                        "".join("<script>" + script + "</script>" for script in scripts) +
+                        CHECK + "</body>")
+    with tempfile.TemporaryDirectory(prefix="voxone-web-test-", ignore_cleanup_errors=True) as temporary:
         page = Path(temporary) / "test.html"
         page.write_text(html, encoding="utf-8")
         command = [str(CHROME), "--headless", "--disable-gpu", "--disable-gpu-compositing",
