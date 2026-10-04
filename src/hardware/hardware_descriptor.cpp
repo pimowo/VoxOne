@@ -58,7 +58,8 @@ constexpr HardwareDescriptor kCurrent = {
   VOXONE_BT_I2S_RX_ENABLED != 0,
   kBtUart,
   {fromLegacyPin(ENC_BTNL), fromLegacyPin(ENC_BTNR),
-   fromLegacyPin(ENC_BTNB)},
+   fromLegacyPin(ENC_BTNB), ENC_INTERNALPULLUP,
+   ENC_HALFQUARD == 255 ? 1 : (ENC_HALFQUARD ? 2 : 4)},
   {fromLegacyPin(TFT_CS), fromLegacyPin(TFT_DC),
    fromLegacyPin(TFT_RST), kBacklight,
    VOXONE_HAS_DISPLAY ? BusKind::Spi : BusKind::None},
@@ -121,7 +122,7 @@ bool validateDescriptor(const HardwareDescriptor& d) {
   if (!display && d.display.bus != BusKind::None) return false;
   if (d.capabilities.supportsEncoder &&
       (!hasPin(d.encoder.a) || !hasPin(d.encoder.b) ||
-       !hasPin(d.encoder.button))) return false;
+       !hasPin(d.encoder.button) || d.encoder.stepsPerDetent == 0)) return false;
   if (d.btAudioRxEnabled &&
       (!d.capabilities.supportsVoxOneBt || !hasPin(d.btAudioIn.bclk) ||
        !hasPin(d.btAudioIn.ws) || !hasPin(d.btAudioIn.din))) return false;

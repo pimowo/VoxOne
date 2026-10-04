@@ -8,6 +8,7 @@
 #include "network.h"
 #include "netserver.h"
 #include "../pluginsManager/pluginsManager.h"
+#include "../hardware/hardware_descriptor.h"
 
 long encOldPosition  = 0;
 long enc2OldPosition  = 0;
@@ -40,7 +41,8 @@ ButtonBinding buttons[] {
   {{BTN_RIGHT, true, BTN_INTERNALPULLUP}, EVT_BTNRIGHT},
 #endif
 #if ENC_BTNB!=255
-  {{ENC_BTNB, true, ENC_INTERNALPULLUP}, EVT_ENCBTNB},
+  {{voxone::hardware::currentHardware().encoder.button, true,
+    voxone::hardware::currentHardware().encoder.internalPullup}, EVT_ENCBTNB},
 #endif
 #if BTN_UP!=255
   {{BTN_UP, true, BTN_INTERNALPULLUP}, EVT_BTNUP},
@@ -58,13 +60,6 @@ ButtonBinding buttons[] {
 constexpr uint8_t nrOfButtons = sizeof(buttons) / sizeof(buttons[0]);
 #endif
 
-#if ENC_HALFQUARD==false
-#define ENCODER_STEPS 4
-#elif ENC_HALFQUARD==true
-#define ENCODER_STEPS 2
-#elif ENC_HALFQUARD==255
-#define ENCODER_STEPS 1
-#endif
 #if ENC2_HALFQUARD==false
 #define ENCODER2_STEPS 4
 #elif ENC2_HALFQUARD==true
@@ -76,7 +71,10 @@ constexpr uint8_t nrOfButtons = sizeof(buttons) / sizeof(buttons[0]);
 #if (ENC_BTNL!=255 && ENC_BTNR!=255) || (ENC2_BTNL!=255 && ENC2_BTNR!=255)
   #include "../yoEncoder/yoEncoder.h"
   #if (ENC_BTNL!=255 && ENC_BTNR!=255)
-    yoEncoder encoder = yoEncoder(ENC_BTNL, ENC_BTNR, ENCODER_STEPS, ENC_INTERNALPULLUP);
+    yoEncoder encoder = yoEncoder(voxone::hardware::currentHardware().encoder.a,
+                                  voxone::hardware::currentHardware().encoder.b,
+                                  voxone::hardware::currentHardware().encoder.stepsPerDetent,
+                                  voxone::hardware::currentHardware().encoder.internalPullup);
   #endif
   #if (ENC2_BTNL!=255 && ENC2_BTNR!=255)
     yoEncoder encoder2 = yoEncoder(ENC2_BTNL, ENC2_BTNR, ENCODER2_STEPS, ENC2_INTERNALPULLUP);
@@ -213,7 +211,7 @@ void encodersLoop(yoEncoder *enc, bool first){
     uint8_t encBtnState = HIGH;
     if(first){
 #if ENC_BTNB!=255
-      encBtnState = digitalRead(ENC_BTNB);
+      encBtnState = digitalRead(voxone::hardware::currentHardware().encoder.button);
 #endif
     }else{
 #if ENC2_BTNB!=255

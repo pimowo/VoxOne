@@ -15,6 +15,9 @@ int main() {
                          McuFamily::Esp32 : McuFamily::Esp32S3));
   assert(d.capabilities.supportsDisplay == bool(VOXONE_HAS_DISPLAY));
   assert(d.capabilities.supportsEncoder == bool(VOXONE_HAS_ENCODER));
+  assert(d.capabilities.supportsEncoder ==
+         (hasPin(d.encoder.a) && hasPin(d.encoder.b) &&
+          hasPin(d.encoder.button)));
   assert(d.capabilities.supportsVoxOneBt == bool(VOXONE_HAS_BT));
   assert(d.capabilities.supportsVoxOneBt ==
          (hasPin(d.btUart.rx) && hasPin(d.btUart.tx)));
@@ -29,6 +32,9 @@ int main() {
   assert(d.encoder.a == fromLegacyPin(ENC_BTNL));
   assert(d.encoder.b == fromLegacyPin(ENC_BTNR));
   assert(d.encoder.button == fromLegacyPin(ENC_BTNB));
+  assert(d.encoder.internalPullup == bool(ENC_INTERNALPULLUP));
+  assert(d.encoder.stepsPerDetent ==
+         (ENC_HALFQUARD == 255 ? 1 : (ENC_HALFQUARD ? 2 : 4)));
   assert(d.btAudioIn.bclk == fromLegacyPin(VOXONE_BT_I2S_BCLK_PIN));
   assert(d.btAudioIn.ws == fromLegacyPin(VOXONE_BT_I2S_WS_PIN));
   assert(d.btAudioIn.din == fromLegacyPin(VOXONE_BT_I2S_DATA_PIN));
@@ -53,6 +59,7 @@ int main() {
   assert(d.display.cs == 5 && d.display.dc == 4);
   assert(d.audioOut.dout == 27 && d.audioOut.bclk == 26 && d.audioOut.ws == 25);
   assert(d.encoder.a == 33 && d.encoder.b == 35 && d.encoder.button == 32);
+  assert(!d.encoder.internalPullup && d.encoder.stepsPerDetent == 4);
   assert(d.spi.sck == kNoPin);  // Default bus pins are not in desk.h.
   assert(!d.capabilities.supportsVoxOneBt);
   assert(d.btUart.rx == kNoPin && d.btUart.tx == kNoPin);
@@ -70,6 +77,9 @@ int main() {
   assert(d.btUart.tx == fromLegacyPin(VOXONE_BT_UART_TX_PIN));
   assert(d.capabilities.supportsVoxOneBt);
   assert(d.display.cs == kNoPin);
+  assert(!d.capabilities.supportsEncoder);
+  assert(d.encoder.a == kNoPin && d.encoder.b == kNoPin &&
+         d.encoder.button == kNoPin);
   assert(d.dacXsmt == kNoPin);
 #elif defined(VOXONE_PROFILE_SALON)
   assert(d.board.id == BoardId::Salon);
@@ -77,6 +87,7 @@ int main() {
   assert(d.spi.mosi == 11 && d.spi.sck == 12 && d.spi.miso == 13);
   assert(d.display.cs == 10 && d.display.dc == 9 && d.display.backlight == 14);
   assert(d.encoder.a == 41 && d.encoder.b == 40 && d.encoder.button == 39);
+  assert(!d.encoder.internalPullup && d.encoder.stepsPerDetent == 4);
   assert(d.audioOut.dout == 4 && d.audioOut.bclk == 5 && d.audioOut.ws == 6);
   assert(d.i2c.sda == 8 && d.i2c.scl == 7);
   assert(d.btUart.rx == 15 && d.btUart.tx == 16);
@@ -104,6 +115,14 @@ int main() {
   assert(validateDescriptor(bad));
   bad = d;
   bad.capabilities.supportsDisplay = !d.capabilities.supportsDisplay;
+  assert(!validateDescriptor(bad));
+  bad = d;
+  bad.capabilities.supportsEncoder = true;
+  bad.encoder.button = kNoPin;
+  assert(!validateDescriptor(bad));
+  bad = d;
+  bad.capabilities.supportsEncoder = true;
+  bad.encoder.stepsPerDetent = 0;
   assert(!validateDescriptor(bad));
   std::printf("PASS hardware_descriptor_native (%s)\n", d.board.name);
 }

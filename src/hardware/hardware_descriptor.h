@@ -30,7 +30,11 @@ struct I2sPins { Pin bclk, ws, dout, din; };
 struct SpiBusPins { Pin sck, mosi, miso; };
 struct I2cBusPins { Pin sda, scl; };
 struct UartPins { Pin rx, tx; };
-struct EncoderPins { Pin a, b, button; };
+struct EncoderPins {
+  Pin a, b, button;
+  bool internalPullup;
+  uint8_t stepsPerDetent;
+};
 struct DisplayPins { Pin cs, dc, rst, backlight; BusKind bus; };
 struct Capabilities {
   bool supportsDisplay;
