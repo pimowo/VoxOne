@@ -1,5 +1,8 @@
 #include "options.h"
 #include "config.h"
+#include "config_startup.h"
+#include "bt_runtime.h"
+#include "../hardware/hardware_descriptor.h"
 #include "playlist_store.h"
 #include "station_format.h"
 #include "display.h"
@@ -27,6 +30,11 @@
 #include <cstddef>
 
 namespace {
+static_assert(CONFIG_VERSION == voxone::config_format::kConfigV6,
+              "Startup adapter expects the legacy v6 runtime");
+static_assert(STARTUP_LAST == 0, "Startup defaults must match STARTUP_LAST");
+static_assert(EEPROM_SIZE - EEPROM_START == voxone::config_format::kConfigEepromCapacity,
+              "Config area size changed");
 constexpr char WARSAW_TZ[] = "CET-1CEST,M3.5.0/2,M10.5.0/3";
 constexpr char DEFAULT_NTP_1[] = "0.pl.pool.ntp.org";
 constexpr char DEFAULT_NTP_2[] = "1.pl.pool.ntp.org";
@@ -77,7 +85,8 @@ bool Config::_isFSempty() {
 }
 
 void Config::init() {
-  EEPROM.begin(EEPROM_SIZE);
+  voxone::config_format::ConfigStartupReadOnlyScope readOnly(_startupReadOnly);
+  const bool eepromReady = EEPROM.begin(EEPROM_SIZE);
   mqttConfig();
   uiTimeoutConfig();
   sdResumePos = 0;
@@ -108,26 +117,30 @@ void Config::init() {
     SDSPI.begin(SD_SPIPINS); // SCK, MISO, MOSI
   #endif
 #endif
-  eepromRead(EEPROM_START, store);
-  bootInfo(); // https://github.com/e2002/yoradio/pull/149
-  if (store.config_set != 4262) {
-    setDefaults();
+  uint8_t configArea[EEPROM_SIZE - EEPROM_START]{};
+  if (eepromReady) {
+    for (size_t i = 0; i < sizeof(configArea); ++i)
+      configArea[i] = EEPROM.read(EEPROM_START + i);
   }
-  if(store.version>CONFIG_VERSION) store.version=1;
-  const bool migratingVolume = store.version <= 5;
-  while(store.version!=CONFIG_VERSION) _setupVersion();
+  const bool supportsBt = voxone::hardware::currentHardware().capabilities.supportsVoxOneBt;
+  const auto loaded = voxone::config_format::loadStartupConfig(
+      eepromReady ? configArea : nullptr, sizeof(configArea), supportsBt, store,
+      [this](config_t&) { _applyDefaults(); });
+  btRuntime.configureBeforeStart(loaded.btEnabled);
+  Serial.printf("[CONFIG] %s\n", voxone::config_format::configStartupMessage(loaded.status));
+  bootInfo(); // https://github.com/e2002/yoradio/pull/149
+  const bool migratingVolume = loaded.migratingVolume;
   if (store.maximumVolume < 1 || store.maximumVolume > 100) store.maximumVolume = 100;
   if (store.startupMode != STARTUP_LAST && store.startupMode != STARTUP_FIXED) store.startupMode = STARTUP_LAST;
   if (store.startupFixedVolume > 100) store.startupFixedVolume = 20;
   if (store.lastUserVolume > 100) store.lastUserVolume = volumeRawToUser(store.volume, store.maximumVolume);
-  const uint8_t storedRaw = store.volume;
-  const uint8_t storedUser = store.lastUserVolume;
   const VolumeState bootVolume = volumeStateAtStartup(store.volume, store.lastUserVolume,
     store.maximumVolume, store.startupMode == STARTUP_FIXED, store.startupFixedVolume, migratingVolume);
   userVolume = bootVolume.user;
   store.volume = bootVolume.raw;
   store.lastUserVolume = bootVolume.user;
-  volumeBootDirty = store.volume != storedRaw || store.lastUserVolume != storedUser;
+  // Read-only startup must not schedule a delayed legacy volume write either.
+  volumeBootDirty = false;
   _normalizeProductConfig();
   _normalizeAudioConfig();
   BOOTLOG("CONFIG_VERSION\t%d", store.version);
@@ -578,11 +591,12 @@ void Config::_makeDefaultMdnsName(char *buffer, size_t size) {
 }
 
 void Config::_normalizeProductConfig() {
+  // Startup normalization is RAM-only; persistence remains explicit.
   char legacyMdnsName[MDNS_LENGTH];
   snprintf(legacyMdnsName, sizeof(legacyMdnsName), "yoradio-%x", (unsigned int)getChipId());
   if (store.mdnsname[0] == '\0' || strcmp(store.mdnsname, legacyMdnsName) == 0) {
     _makeDefaultMdnsName(tmpBuf, sizeof(tmpBuf));
-    saveValue(store.mdnsname, tmpBuf, sizeof(store.mdnsname));
+    strlcpy(store.mdnsname, tmpBuf, sizeof(store.mdnsname));
   }
 
   const bool usesLegacyDefaultNtp =
@@ -590,14 +604,14 @@ void Config::_normalizeProductConfig() {
     (strcmp(store.sntp2, "0.ru.pool.ntp.org") == 0 ||
      strcmp(store.sntp2, "1.ru.pool.ntp.org") == 0);
   if (usesLegacyDefaultNtp) {
-    saveValue(store.sntp1, DEFAULT_NTP_1, sizeof(store.sntp1), false);
-    saveValue(store.sntp2, DEFAULT_NTP_2, sizeof(store.sntp2));
+    strlcpy(store.sntp1, DEFAULT_NTP_1, sizeof(store.sntp1));
+    strlcpy(store.sntp2, DEFAULT_NTP_2, sizeof(store.sntp2));
   } else {
-    if (store.sntp1[0] == '\0') saveValue(store.sntp1, DEFAULT_NTP_1, sizeof(store.sntp1));
-    if (store.sntp2[0] == '\0') saveValue(store.sntp2, DEFAULT_NTP_2, sizeof(store.sntp2));
+    if (store.sntp1[0] == '\0') strlcpy(store.sntp1, DEFAULT_NTP_1, sizeof(store.sntp1));
+    if (store.sntp2[0] == '\0') strlcpy(store.sntp2, DEFAULT_NTP_2, sizeof(store.sntp2));
   }
 
-  saveValue(&store.watchdog, true);
+  store.watchdog = true;
 }
 
 void Config::_normalizeAudioConfig() {
@@ -608,79 +622,21 @@ void Config::_normalizeAudioConfig() {
   if (store.bass == bass && store.middle == middle &&
       store.trebble == trebble && store.balance == balance) return;
 
-  saveValue(&store.bass, bass, false);
-  saveValue(&store.middle, middle, false);
-  saveValue(&store.trebble, trebble, false);
-  saveValue(&store.balance, balance, false);
-  EEPROM.commit();
+  store.bass = bass;
+  store.middle = middle;
+  store.trebble = trebble;
+  store.balance = balance;
+}
+
+void Config::_applyDefaults() {
+  char mdns[MDNS_LENGTH];
+  _makeDefaultMdnsName(mdns, sizeof(mdns));
+  voxone::config_format::buildConfigDefaults(
+      store, DEFAULT_NTP_1, DEFAULT_NTP_2, mdns, VS1053_CS == 255 ? 7 : 10);
 }
 
 void Config::setDefaults() {
-  store.config_set = 4262;
-  store.version = CONFIG_VERSION;
-  store.volume = 12;
-  store.balance = 0;
-  store.trebble = 0;
-  store.middle = 0;
-  store.bass = 0;
-  store.lastStation = 0;
-  store.countStation = 0;
-  store.lastSSID = 0;
-  store.audioinfo = false;
-  store.smartstart = 2;
-  store.tzHour = 3;
-  store.tzMin = 0;
-  store.timezoneOffset = 0;
-
-  store.vumeter=false;
-  store.softapdelay=0;
-  store.flipscreen=false;
-  store.invertdisplay=false;
-  store.numplaylist=false;
-  store.fliptouch=false;
-  store.dbgtouch=false;
-  store.dspon=true;
-  store.brightness=100;
-  store.contrast=55;
-  strlcpy(store.sntp1, DEFAULT_NTP_1, sizeof(store.sntp1));
-  strlcpy(store.sntp2, DEFAULT_NTP_2, sizeof(store.sntp2));
-  memset(store.reservedWeather, 0, sizeof(store.reservedWeather));
-  store._reserved = 0;
-  store.lastSdStation = 0;
-  store.sdsnuffle = false;
-  store.volsteps = 1;
-  store.encacc = 200;
-  store.play_mode = 0;
-  store.irtlp = 35;
-  store.btnpullup = true;
-  store.btnlongpress = 200;
-  store.btnclickticks = 300;
-  store.btnpressticks = 500;
-  store.encpullup = false;
-  store.enchalf = false;
-  store.enc2pullup = false;
-  store.enc2half = false;
-  store.forcemono = false;
-  store.i2sinternal = false;
-  store.rotate90 = false;
-  store.screensaverEnabled = false;
-  store.screensaverTimeout = 20;
-  store.screensaverBlank = false;
-  _makeDefaultMdnsName(store.mdnsname, sizeof(store.mdnsname));
-  store.skipPlaylistUpDown = false;
-  store.screensaverPlayingEnabled = false;
-  store.screensaverPlayingTimeout = 5;
-  store.screensaverPlayingBlank = false;
-  store.abuff = VS1053_CS==255?7:10;
-  store.reservedTelnet = false;
-  store.watchdog = true;
-  store.timeSyncInterval = 60;    //min
-  store.timeSyncIntervalRTC = 24; //hour
-  store.reservedWeatherSyncInterval = 0;
-  store.maximumVolume = 100;
-  store.startupMode = STARTUP_LAST;
-  store.startupFixedVolume = 20;
-  store.lastUserVolume = volumeRawToUser(store.volume);
+  _applyDefaults();
   eepromWrite(EEPROM_START, store);
 }
 
@@ -804,6 +760,8 @@ bool Config::setLastStationChecked(uint16_t val, bool intentionalZero) {
   const uint16_t previousMarker = store._reserved;
   store.lastStation = val;
   store._reserved = marker;
+  // Playlist recovery can call this from init(); preserve EEPROM during load.
+  if (_startupReadOnly) return true;
   EEPROM.put(getAddr(&store.lastStation), val);
   EEPROM.put(getAddr(&store._reserved), marker);
   if (EEPROM.commit()) return true;

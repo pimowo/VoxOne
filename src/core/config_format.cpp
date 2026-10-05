@@ -364,5 +364,18 @@ ConfigRecordStatus loadConfigRecord(const uint8_t* input, std::size_t inputSize,
   return ConfigRecordStatus::MIGRATED_V6;
 }
 
+ConfigRecordStatus loadConfigArea(const uint8_t* input, std::size_t size,
+                                  bool supportsBt, config_v7_t& output) {
+  if (!input || size < 4) return loadConfigRecord(input, size, supportsBt, output);
+  Reader header{input, size};
+  const uint16_t magic = header.u16();
+  const uint16_t version = header.u16();
+  std::size_t recordSize = size;
+  if (magic == kConfigV7Magic && version == kConfigV7) recordSize = kConfigV7SerializedSize;
+  if (magic == kLegacyConfigMagic && version == kConfigV5) recordSize = 250;
+  if (magic == kLegacyConfigMagic && version == kConfigV6) recordSize = 254;
+  return loadConfigRecord(input, size < recordSize ? size : recordSize, supportsBt, output);
+}
+
 }  // namespace config_format
 }  // namespace voxone

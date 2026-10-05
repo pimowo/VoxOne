@@ -305,9 +305,11 @@ class Config {
     template <class T> int eepromWrite(int ee, const T& value);
     template <class T> int eepromRead(int ee, T& value);
     bool _bootDone;
+    bool _startupReadOnly = false;
     bool _rtcFound;
     FS* _SDplaylistFS;
     void setDefaults();
+    void _applyDefaults();
     static void doSleep();
     uint16_t color565(uint8_t r, uint8_t g, uint8_t b);
     void _setupVersion();

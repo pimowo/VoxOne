@@ -237,6 +237,11 @@ ConfigRecordStatus parseConfigV7(const uint8_t* input, std::size_t inputSize,
 ConfigRecordStatus loadConfigRecord(const uint8_t* input, std::size_t inputSize,
                                     bool supportsBt, config_v7_t& output);
 
+// A config-area buffer may include unused bytes after a known record.
+// Truncated records still fail; detection and parsing stay in this layer.
+ConfigRecordStatus loadConfigArea(const uint8_t* input, std::size_t size,
+                                  bool supportsBt, config_v7_t& output);
+
 }  // namespace config_format
 }  // namespace voxone
 
