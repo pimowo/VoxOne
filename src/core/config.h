@@ -5,6 +5,8 @@
 #include <SPI.h>
 #include <SPIFFS.h>
 #include <EEPROM.h>
+#include "config_persistence.h"
+#include <freertos/semphr.h>
 #include "../displays/widgets/widgetsconfig.h" //BitrateFormat
 
 #define EEPROM_SIZE       768
@@ -29,7 +31,7 @@
   #define ESP_ARDUINO_3 1
 #endif
 
-#define CONFIG_VERSION  6
+#define CONFIG_VERSION  7
 constexpr uint16_t VOXONE_NO_STATION_MARKER = 0xC302;
 enum StartupVolumeMode : uint8_t { STARTUP_LAST = 0, STARTUP_FIXED = 1 };
 
@@ -67,7 +69,7 @@ struct theme_t {
 };
 struct config_t
 {
-  uint16_t  config_set; //must be 4262
+  uint16_t  config_set; // Runtime header; persistence uses explicit v7 serialization.
   uint16_t  version;
   uint8_t   volume;
   int8_t    balance;
@@ -193,6 +195,10 @@ class Config {
     void saveIR();
 #endif
     void init();
+    bool persistV7();
+    bool setBtEnabled(bool enabled);
+    voxone::config_format::ConfigStorageMode storageMode() const { return _storage.mode(); }
+    bool storedBtEnabled() const { return _storage.storedBtEnabled(); }
     void loadTheme();
     uint8_t setVolume(uint8_t val);
     uint8_t setVolumeState(uint8_t raw, uint8_t user);
@@ -273,26 +279,15 @@ class Config {
     FS* SDPLFS(){ return _SDplaylistFS; }
     bool isRTCFound(){ return _rtcFound; };
     template <typename T>
-    size_t getAddr(const T *field) const {
-      return (size_t)((const uint8_t *)field - (const uint8_t *)&store) + EEPROM_START;
-    }
-    template <typename T>
     void saveValue(T *field, const T &value, bool commit=true, bool force=false){
-      if(*field == value && !force) return;
-      *field = value;
-      size_t address = getAddr(field);
-      EEPROM.put(address, value);
-      if(commit)
-        EEPROM.commit();
+      WriteLock lock(_persistMutex);
+      _storage.update(*field, value, force);
+      if (commit && _storage.dirty() && !_startupReadOnly) persistV7();
     }
     void saveValue(char *field, const char *value, size_t N, bool commit=true, bool force=false) {
-      if (strcmp(field, value) == 0 && !force) return;
-      strlcpy(field, value, N);
-      size_t address = getAddr(field);
-      size_t fieldlen = strlen(field);
-      for (size_t i = 0; i <=fieldlen ; i++) EEPROM.write(address + i, field[i]);
-      if(commit)
-        EEPROM.commit();
+      WriteLock lock(_persistMutex);
+      _storage.update(field, value, N, force);
+      if (commit && _storage.dirty() && !_startupReadOnly) persistV7();
     }
     uint32_t getChipId(){
       uint32_t chipId = 0;
@@ -302,13 +297,25 @@ class Config {
       return chipId;
     }
   private:
-    template <class T> int eepromWrite(int ee, const T& value);
     template <class T> int eepromRead(int ee, T& value);
+    class WriteLock {
+     public:
+      explicit WriteLock(SemaphoreHandle_t mutex) : mutex_(mutex) {
+        if (mutex_) xSemaphoreTakeRecursive(mutex_, portMAX_DELAY);
+      }
+      ~WriteLock() { if (mutex_) xSemaphoreGiveRecursive(mutex_); }
+      WriteLock(const WriteLock&) = delete;
+      WriteLock& operator=(const WriteLock&) = delete;
+     private:
+      SemaphoreHandle_t mutex_;
+    };
+    SemaphoreHandle_t _persistMutex = nullptr;
+    voxone::config_format::ConfigPersistence _storage;
     bool _bootDone;
     bool _startupReadOnly = false;
     bool _rtcFound;
     FS* _SDplaylistFS;
-    void setDefaults();
+    bool setDefaults();
     void _applyDefaults();
     static void doSleep();
     uint16_t color565(uint8_t r, uint8_t g, uint8_t b);

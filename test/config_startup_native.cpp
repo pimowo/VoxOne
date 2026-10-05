@@ -72,7 +72,7 @@ struct Runtime {
   int8_t balance;
   uint8_t volume;
   uint16_t version;
-uint16_t config_set;
+  uint16_t config_set;
 };
 template <typename A, typename B>
 void equalFields(const A& a, const B& b) {
@@ -195,7 +195,7 @@ int main() {
     config_v7_t golden{};
     const S status = version == 5 ? S::MIGRATED_V5 : S::MIGRATED_V6;
     assert(loadConfigRecord(area, version == 5 ? 250 : 254, true, golden) == status);
-    golden.fields.config_set = 4262; golden.fields.version = 6;
+    golden.fields.config_set = kConfigV7Magic; golden.fields.version = 7;
     for (bool supports : {false, true}) {
       auto result = run(area, sizeof(area), supports, runtime, status, false);
       equalFields(runtime, golden.fields);
@@ -216,8 +216,10 @@ int main() {
   }
   config_v6_t v6{}; defaults(v6);
   v6.lastStation = 123; v6.volume = 111; v6.lastUserVolume = 53;
+  v6.config_set = kLegacyConfigMagic; v6.version = 6;
   config_v7_t v7{};
   assert(migrateConfigV6ToV7(v6, true, v7));
+  v6.config_set = kConfigV7Magic; v6.version = 7;
   for (uint8_t enabled : {0, 1}) {
     v7.btEnabled = enabled; v7.crc32 = calculateConfigV7Crc(v7);
     assert(serializeConfigV7(v7, area, 255));
@@ -226,6 +228,7 @@ int main() {
       const auto result = run(area, sizeof(area), supports, runtime, S::LOADED_V7, false);
       equalFields(runtime, v6);
       assert(result.btEnabled == (supports && enabled));
+      assert(result.storedBtEnabled == (enabled != 0));
       assert(!result.migratingVolume);
     }
   }

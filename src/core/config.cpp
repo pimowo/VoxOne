@@ -28,10 +28,11 @@
 #include "../displays/nextion.h"
 #endif
 #include <cstddef>
+#include <nvs.h>
 
 namespace {
-static_assert(CONFIG_VERSION == voxone::config_format::kConfigV6,
-              "Startup adapter expects the legacy v6 runtime");
+static_assert(CONFIG_VERSION == voxone::config_format::kConfigV7,
+              "Persistence adapter expects v7");
 static_assert(STARTUP_LAST == 0, "Startup defaults must match STARTUP_LAST");
 static_assert(EEPROM_SIZE - EEPROM_START == voxone::config_format::kConfigEepromCapacity,
               "Config area size changed");
@@ -42,6 +43,31 @@ constexpr int8_t TONE_MIN = -6;
 constexpr int8_t TONE_MAX = 6;
 constexpr int8_t BALANCE_MIN = -16;
 constexpr int8_t BALANCE_MAX = 16;
+
+// The existing Arduino EEPROM object uses namespace/key "eeprom".
+// Read-back uses that same blob, not a second configuration store and not
+// EEPROM.read(), which only returns the write cache in this framework.
+struct ConfigEepromStorage {
+  bool writeRecord(const uint8_t* bytes, size_t size) {
+    if (size != voxone::config_format::kConfigV7SerializedSize ||
+        EEPROM.length() != EEPROM_SIZE) return false;
+    for (size_t i = 0; i < size; ++i) EEPROM.write(EEPROM_START + i, bytes[i]);
+    return true;
+  }
+  bool commit() { return EEPROM.commit(); }
+  bool readRecord(uint8_t* bytes, size_t size) {
+    if (size != voxone::config_format::kConfigV7SerializedSize) return false;
+    nvs_handle_t handle;
+    if (nvs_open("eeprom", NVS_READONLY, &handle) != ESP_OK) return false;
+    uint8_t stored[EEPROM_SIZE];
+    size_t length = sizeof(stored);
+    const esp_err_t result = nvs_get_blob(handle, "eeprom", stored, &length);
+    nvs_close(handle);
+    if (result != ESP_OK || length != sizeof(stored)) return false;
+    memcpy(bytes, stored + EEPROM_START, size);
+    return true;
+  }
+};
 
 int8_t clampTone(int8_t value) {
   return constrain(value, TONE_MIN, TONE_MAX);
@@ -86,7 +112,8 @@ bool Config::_isFSempty() {
 
 void Config::init() {
   voxone::config_format::ConfigStartupReadOnlyScope readOnly(_startupReadOnly);
-  const bool eepromReady = EEPROM.begin(EEPROM_SIZE);
+  if (!_persistMutex) _persistMutex = xSemaphoreCreateRecursiveMutex();
+  const bool eepromReady = _persistMutex && EEPROM.begin(EEPROM_SIZE);
   mqttConfig();
   uiTimeoutConfig();
   sdResumePos = 0;
@@ -126,6 +153,7 @@ void Config::init() {
   const auto loaded = voxone::config_format::loadStartupConfig(
       eepromReady ? configArea : nullptr, sizeof(configArea), supportsBt, store,
       [this](config_t&) { _applyDefaults(); });
+  _storage.begin(loaded.status, loaded.storedBtEnabled);
   btRuntime.configureBeforeStart(loaded.btEnabled);
   Serial.printf("[CONFIG] %s\n", voxone::config_format::configStartupMessage(loaded.status));
   bootInfo(); // https://github.com/e2002/yoradio/pull/149
@@ -143,6 +171,13 @@ void Config::init() {
   volumeBootDirty = false;
   _normalizeProductConfig();
   _normalizeAudioConfig();
+  // A valid v7 boot does not rewrite the record. Legacy/default records get
+  // one full write; future versions remain read-only for this entire boot.
+  ConfigEepromStorage backend;
+  const auto startupWrite = _storage.finishStartup(store, backend);
+  if (startupWrite != voxone::config_format::ConfigWriteStatus::OK &&
+      _storage.mode() != voxone::config_format::ConfigStorageMode::FUTURE_READ_ONLY)
+    Serial.printf("[CONFIG] persistence: %s\n", voxone::config_format::configWriteMessage(startupWrite));
   BOOTLOG("CONFIG_VERSION\t%d", store.version);
   store.play_mode = store.play_mode & 0b11;
   if(store.play_mode>1) store.play_mode=PM_WEB;
@@ -168,6 +203,7 @@ void Config::init() {
 }
 
 void Config::_setupVersion(){
+  // Legacy/remove-later. No startup consumer; v5/v6 use config_format.
   uint16_t currentVersion = store.version;
   switch(currentVersion){
     case 1:
@@ -196,7 +232,7 @@ void Config::_setupVersion(){
       saveValue(&store.startupMode, static_cast<uint8_t>(STARTUP_LAST), false, true);
       saveValue(&store.startupFixedVolume, static_cast<uint8_t>(20), false, true);
       saveValue(&store.lastUserVolume, volumeRawToUser(store.volume), false, true);
-      EEPROM.commit();
+      persistV7();
       break;
     default:
       break;
@@ -433,15 +469,6 @@ void Config::loadTheme(){
   #include "../displays/tools/tftinverttitle.h"
 }
 
-template <class T> int Config::eepromWrite(int ee, const T& value) {
-  const uint8_t* p = (const uint8_t*)(const void*)&value;
-  int i;
-  for (i = 0; i < sizeof(value); i++)
-    EEPROM.write(ee++, *p++);
-  EEPROM.commit();
-  return i;
-}
-
 template <class T> int Config::eepromRead(int ee, T& value) {
   uint8_t* p = (uint8_t*)(void*)&value;
   int i;;
@@ -451,11 +478,15 @@ template <class T> int Config::eepromRead(int ee, T& value) {
 }
 
 void Config::reset(){
+  if (!_storage.writable()) {
+    Serial.println("[CONFIG] factory reset blocked: storage read-only/unavailable");
+    return;
+  }
   if (!mqttClearConfig()) {
     Serial.println("##[ERROR]# MQTT config reset failed; factory reset cancelled");
     return;
   }
-  setDefaults();
+  if (!setDefaults()) return;
   delay(500);
   ESP.restart();
 }
@@ -541,7 +572,7 @@ void Config::resetSystem(const char *val, uint8_t clientId){
     saveValue(&store.flipscreen, false, false);
     display.flip();
     saveValue(&store.dspon, true, false);
-    store.brightness = 100;
+    saveValue(&store.brightness, static_cast<uint8_t>(100), false);
     setBrightness(false);
     saveValue(&store.contrast, (uint8_t)55, false);
     display.setContrast();
@@ -635,9 +666,40 @@ void Config::_applyDefaults() {
       store, DEFAULT_NTP_1, DEFAULT_NTP_2, mdns, VS1053_CS == 255 ? 7 : 10);
 }
 
-void Config::setDefaults() {
-  _applyDefaults();
-  eepromWrite(EEPROM_START, store);
+bool Config::persistV7() {
+  WriteLock lock(_persistMutex);
+  if (_startupReadOnly) return false;
+  ConfigEepromStorage backend;
+  const auto previous = _storage.lastStatus();
+  const auto result = _storage.persist(store, backend);
+  if (result != voxone::config_format::ConfigWriteStatus::OK &&
+      (result != previous || result != voxone::config_format::ConfigWriteStatus::BLOCKED))
+    Serial.printf("[CONFIG] persistence: %s\n", voxone::config_format::configWriteMessage(result));
+  return result == voxone::config_format::ConfigWriteStatus::OK;
+}
+
+bool Config::setBtEnabled(bool enabled) {
+  WriteLock lock(_persistMutex);
+  _storage.setStoredBtEnabled(enabled);
+  const bool effective = voxone::hardware::currentHardware().capabilities.supportsVoxOneBt && enabled;
+  btRuntime.setEnabled(effective);
+  if (!_storage.dirty()) return _storage.mode() == voxone::config_format::ConfigStorageMode::V7;
+  return persistV7();
+}
+
+bool Config::setDefaults() {
+  WriteLock lock(_persistMutex);
+  ConfigEepromStorage backend;
+  const bool supportsBt = voxone::hardware::currentHardware().capabilities.supportsVoxOneBt;
+  const auto result = _storage.factoryReset(store, supportsBt, backend,
+      [this](config_t&) { _applyDefaults(); });
+  if (result != voxone::config_format::ConfigWriteStatus::BLOCKED) {
+    btRuntime.setEnabled(supportsBt);
+    userVolume = store.lastUserVolume;
+  }
+  if (result != voxone::config_format::ConfigWriteStatus::OK)
+    Serial.printf("[CONFIG] factory reset: %s\n", voxone::config_format::configWriteMessage(result));
+  return result == voxone::config_format::ConfigWriteStatus::OK;
 }
 
 void Config::setTimezone(int8_t tzh, int8_t tzm) {
@@ -661,14 +723,21 @@ void Config::setSnuffle(bool sn){
 
 #if IR_PIN!=255
 void Config::saveIR(){
-  eepromWrite(EEPROM_START_IR, ircodes);
+  WriteLock lock(_persistMutex);
+  // Separate IR region 0..499, never a config_t offset. Do not flush an
+  // unverified config cache after a failed write, or touch future formats.
+  if (_startupReadOnly || _storage.mode() != voxone::config_format::ConfigStorageMode::V7)
+    return;
+  static_assert(EEPROM_START_IR + sizeof(ircodes) <= EEPROM_START, "IR overlaps config");
+  const uint8_t* bytes = reinterpret_cast<const uint8_t*>(&ircodes);
+  for (size_t i = 0; i < sizeof(ircodes); ++i) EEPROM.write(EEPROM_START_IR + i, bytes[i]);
+  if (!EEPROM.commit()) Serial.println("[CONFIG] IR commit failed");
 }
 #endif
 
 void Config::saveVolume(){
-  EEPROM.put(getAddr(&store.volume), store.volume);
-  EEPROM.put(getAddr(&store.lastUserVolume), store.lastUserVolume);
-  EEPROM.commit();
+  // The player's existing volume timer still controls when this is called.
+  persistV7();
 }
 
 uint8_t Config::setVolume(uint8_t val) {
@@ -677,6 +746,7 @@ uint8_t Config::setVolume(uint8_t val) {
 }
 
 uint8_t Config::setVolumeState(uint8_t raw, uint8_t user) {
+  WriteLock lock(_persistMutex);
   store.volume = raw;
   userVolume = user;
   store.lastUserVolume = user;
@@ -686,6 +756,7 @@ uint8_t Config::setVolumeState(uint8_t raw, uint8_t user) {
 }
 
 void Config::setMaximumVolume(uint8_t maximum) {
+  WriteLock lock(_persistMutex);
   if (maximum < 1 || maximum > 100 || maximum == store.maximumVolume) return;
   const uint8_t oldMaximum = store.maximumVolume;
   const uint8_t oldUser = userVolume;
@@ -698,10 +769,7 @@ void Config::setMaximumVolume(uint8_t maximum) {
     adjusted.user = volumeRawToUser(adjusted.raw, maximum);
   }
   setVolumeState(adjusted.raw, adjusted.user);
-  EEPROM.put(getAddr(&store.maximumVolume), store.maximumVolume);
-  EEPROM.put(getAddr(&store.volume), store.volume);
-  EEPROM.put(getAddr(&store.lastUserVolume), store.lastUserVolume);
-  EEPROM.commit();
+  persistV7();
   player.applyCurrentVolume();
 }
 
@@ -719,15 +787,17 @@ bool Config::setTone(int8_t bass, int8_t middle, int8_t trebble) {
 #if defined(VOXONE_PROFILE_SALON)
   const bool toneLocked = voxone::dsp::lockDspToneMutation();
 #endif
+  WriteLock lock(_persistMutex);
   bass = clampTone(bass);
   middle = clampTone(middle);
   trebble = clampTone(trebble);
   bool persisted = true;
-  if (store.bass != bass || store.middle != middle || store.trebble != trebble) {
+  if (store.bass != bass || store.middle != middle || store.trebble != trebble ||
+      _storage.dirty() || _storage.mode() != voxone::config_format::ConfigStorageMode::V7) {
     saveValue(&store.bass, bass, false);
     saveValue(&store.middle, middle, false);
     saveValue(&store.trebble, trebble, false);
-    persisted = EEPROM.commit();
+    persisted = persistV7();
   }
   player.setTone(store.bass, store.middle, store.trebble);
   netserver.requestOnChange(EQUALIZER, 0);
@@ -754,22 +824,22 @@ uint8_t Config::setLastStation(uint16_t val) {
 }
 
 bool Config::setLastStationChecked(uint16_t val, bool intentionalZero) {
+  WriteLock lock(_persistMutex);
   const uint16_t marker = val == 0 && intentionalZero ? VOXONE_NO_STATION_MARKER : 0;
-  if (store.lastStation == val && store._reserved == marker) return true;
+  if (store.lastStation == val && store._reserved == marker)
+    return _startupReadOnly || (!_storage.dirty() &&
+      _storage.mode() == voxone::config_format::ConfigStorageMode::V7) || persistV7();
   const uint16_t previous = store.lastStation;
   const uint16_t previousMarker = store._reserved;
   store.lastStation = val;
   store._reserved = marker;
   // Playlist recovery can call this from init(); preserve EEPROM during load.
   if (_startupReadOnly) return true;
-  EEPROM.put(getAddr(&store.lastStation), val);
-  EEPROM.put(getAddr(&store._reserved), marker);
-  if (EEPROM.commit()) return true;
+  if (persistV7()) return true;
   store.lastStation = previous;
   store._reserved = previousMarker;
-  EEPROM.put(getAddr(&store.lastStation), previous);
-  EEPROM.put(getAddr(&store._reserved), previousMarker);
-  EEPROM.commit();
+  // Keep the previous RAM selection on failure. Never attempt a legacy
+  // rollback write or claim the failed commit was undone in flash.
   return false;
 }
 

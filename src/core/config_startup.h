@@ -13,7 +13,77 @@ struct ConfigStartupResult {
   bool migratingVolume;
   // CONFIG-2B.1 never requests a persistence operation.
   bool needsWrite;
+  bool storedBtEnabled;
 };
+
+// Named field mapping works for the runtime model and the frozen wire model.
+template <typename Source, typename Target>
+void copyConfigFields(const Source& source, Target& target) {
+  target.config_set = source.config_set;
+  target.version = source.version;
+  target.volume = source.volume;
+  target.balance = source.balance;
+  target.trebble = source.trebble;
+  target.middle = source.middle;
+  target.bass = source.bass;
+  target.lastStation = source.lastStation;
+  target.countStation = source.countStation;
+  target.lastSSID = source.lastSSID;
+  target.audioinfo = source.audioinfo;
+  target.smartstart = source.smartstart;
+  target.tzHour = source.tzHour;
+  target.tzMin = source.tzMin;
+  target.timezoneOffset = source.timezoneOffset;
+  target.vumeter = source.vumeter;
+  target.softapdelay = source.softapdelay;
+  target.flipscreen = source.flipscreen;
+  target.invertdisplay = source.invertdisplay;
+  target.numplaylist = source.numplaylist;
+  target.fliptouch = source.fliptouch;
+  target.dbgtouch = source.dbgtouch;
+  target.dspon = source.dspon;
+  target.brightness = source.brightness;
+  target.contrast = source.contrast;
+  std::memcpy(target.sntp1, source.sntp1, sizeof(target.sntp1));
+  std::memcpy(target.sntp2, source.sntp2, sizeof(target.sntp2));
+  std::memcpy(target.reservedWeather, source.reservedWeather, sizeof(target.reservedWeather));
+  target._reserved = source._reserved;
+  target.lastSdStation = source.lastSdStation;
+  target.sdsnuffle = source.sdsnuffle;
+  target.volsteps = source.volsteps;
+  target.encacc = source.encacc;
+  target.play_mode = source.play_mode;
+  target.irtlp = source.irtlp;
+  target.btnpullup = source.btnpullup;
+  target.btnlongpress = source.btnlongpress;
+  target.btnclickticks = source.btnclickticks;
+  target.btnpressticks = source.btnpressticks;
+  target.encpullup = source.encpullup;
+  target.enchalf = source.enchalf;
+  target.enc2pullup = source.enc2pullup;
+  target.enc2half = source.enc2half;
+  target.forcemono = source.forcemono;
+  target.i2sinternal = source.i2sinternal;
+  target.rotate90 = source.rotate90;
+  target.screensaverEnabled = source.screensaverEnabled;
+  target.screensaverTimeout = source.screensaverTimeout;
+  target.screensaverBlank = source.screensaverBlank;
+  target.screensaverPlayingEnabled = source.screensaverPlayingEnabled;
+  target.screensaverPlayingTimeout = source.screensaverPlayingTimeout;
+  target.screensaverPlayingBlank = source.screensaverPlayingBlank;
+  std::memcpy(target.mdnsname, source.mdnsname, sizeof(target.mdnsname));
+  target.skipPlaylistUpDown = source.skipPlaylistUpDown;
+  target.abuff = source.abuff;
+  target.reservedTelnet = source.reservedTelnet;
+  target.watchdog = source.watchdog;
+  target.timeSyncInterval = source.timeSyncInterval;
+  target.timeSyncIntervalRTC = source.timeSyncIntervalRTC;
+  target.reservedWeatherSyncInterval = source.reservedWeatherSyncInterval;
+  target.maximumVolume = source.maximumVolume;
+  target.startupMode = source.startupMode;
+  target.startupFixedVolume = source.startupFixedVolume;
+  target.lastUserVolume = source.lastUserVolume;
+}
 
 // Covers Config::init callbacks (including station recovery), with restoration
 // on all returns. It does not change persistence outside startup loading.
@@ -41,8 +111,8 @@ inline void copyStartupString(char* output, const char* input, std::size_t capac
 template <typename Runtime>
 void buildConfigDefaults(Runtime& store, const char* ntp1, const char* ntp2,
                          const char* mdns, uint16_t audioBuffer) {
-  store.config_set = kLegacyConfigMagic;
-  store.version = kConfigV6;
+  store.config_set = kConfigV7Magic;
+  store.version = kConfigV7;
   store.volume = 12;
   store.balance = 0;
   store.trebble = 0;
@@ -136,73 +206,9 @@ ConfigStartupResult loadStartupConfig(const uint8_t* input, std::size_t size,
       status == ConfigRecordStatus::MIGRATED_V5 ||
       status == ConfigRecordStatus::MIGRATED_V6;
   if (success) {
-    runtime.config_set = loaded.fields.config_set;
-    runtime.version = loaded.fields.version;
-    runtime.volume = loaded.fields.volume;
-    runtime.balance = loaded.fields.balance;
-    runtime.trebble = loaded.fields.trebble;
-    runtime.middle = loaded.fields.middle;
-    runtime.bass = loaded.fields.bass;
-    runtime.lastStation = loaded.fields.lastStation;
-    runtime.countStation = loaded.fields.countStation;
-    runtime.lastSSID = loaded.fields.lastSSID;
-    runtime.audioinfo = loaded.fields.audioinfo;
-    runtime.smartstart = loaded.fields.smartstart;
-    runtime.tzHour = loaded.fields.tzHour;
-    runtime.tzMin = loaded.fields.tzMin;
-    runtime.timezoneOffset = loaded.fields.timezoneOffset;
-    runtime.vumeter = loaded.fields.vumeter;
-    runtime.softapdelay = loaded.fields.softapdelay;
-    runtime.flipscreen = loaded.fields.flipscreen;
-    runtime.invertdisplay = loaded.fields.invertdisplay;
-    runtime.numplaylist = loaded.fields.numplaylist;
-    runtime.fliptouch = loaded.fields.fliptouch;
-    runtime.dbgtouch = loaded.fields.dbgtouch;
-    runtime.dspon = loaded.fields.dspon;
-    runtime.brightness = loaded.fields.brightness;
-    runtime.contrast = loaded.fields.contrast;
-    std::memcpy(runtime.sntp1, loaded.fields.sntp1, sizeof(runtime.sntp1));
-    std::memcpy(runtime.sntp2, loaded.fields.sntp2, sizeof(runtime.sntp2));
-    std::memcpy(runtime.reservedWeather, loaded.fields.reservedWeather, sizeof(runtime.reservedWeather));
-    runtime._reserved = loaded.fields._reserved;
-    runtime.lastSdStation = loaded.fields.lastSdStation;
-    runtime.sdsnuffle = loaded.fields.sdsnuffle;
-    runtime.volsteps = loaded.fields.volsteps;
-    runtime.encacc = loaded.fields.encacc;
-    runtime.play_mode = loaded.fields.play_mode;
-    runtime.irtlp = loaded.fields.irtlp;
-    runtime.btnpullup = loaded.fields.btnpullup;
-    runtime.btnlongpress = loaded.fields.btnlongpress;
-    runtime.btnclickticks = loaded.fields.btnclickticks;
-    runtime.btnpressticks = loaded.fields.btnpressticks;
-    runtime.encpullup = loaded.fields.encpullup;
-    runtime.enchalf = loaded.fields.enchalf;
-    runtime.enc2pullup = loaded.fields.enc2pullup;
-    runtime.enc2half = loaded.fields.enc2half;
-    runtime.forcemono = loaded.fields.forcemono;
-    runtime.i2sinternal = loaded.fields.i2sinternal;
-    runtime.rotate90 = loaded.fields.rotate90;
-    runtime.screensaverEnabled = loaded.fields.screensaverEnabled;
-    runtime.screensaverTimeout = loaded.fields.screensaverTimeout;
-    runtime.screensaverBlank = loaded.fields.screensaverBlank;
-    runtime.screensaverPlayingEnabled = loaded.fields.screensaverPlayingEnabled;
-    runtime.screensaverPlayingTimeout = loaded.fields.screensaverPlayingTimeout;
-    runtime.screensaverPlayingBlank = loaded.fields.screensaverPlayingBlank;
-    std::memcpy(runtime.mdnsname, loaded.fields.mdnsname, sizeof(runtime.mdnsname));
-    runtime.skipPlaylistUpDown = loaded.fields.skipPlaylistUpDown;
-    runtime.abuff = loaded.fields.abuff;
-    runtime.reservedTelnet = loaded.fields.reservedTelnet;
-    runtime.watchdog = loaded.fields.watchdog;
-    runtime.timeSyncInterval = loaded.fields.timeSyncInterval;
-    runtime.timeSyncIntervalRTC = loaded.fields.timeSyncIntervalRTC;
-    runtime.reservedWeatherSyncInterval = loaded.fields.reservedWeatherSyncInterval;
-    runtime.maximumVolume = loaded.fields.maximumVolume;
-    runtime.startupMode = loaded.fields.startupMode;
-    runtime.startupFixedVolume = loaded.fields.startupFixedVolume;
-    runtime.lastUserVolume = loaded.fields.lastUserVolume;
-    // Runtime remains the legacy model. Never persist v7 headers as raw v6.
-    runtime.config_set = kLegacyConfigMagic;
-    runtime.version = kConfigV6;
+    copyConfigFields(loaded.fields, runtime);
+    runtime.config_set = kConfigV7Magic;
+    runtime.version = kConfigV7;
     // Legacy records have no CRC; bound strings before runtime C string calls.
     runtime.sntp1[sizeof(runtime.sntp1) - 1] = '\0';
     runtime.sntp2[sizeof(runtime.sntp2) - 1] = '\0';
@@ -211,7 +217,8 @@ ConfigStartupResult loadStartupConfig(const uint8_t* input, std::size_t size,
     defaults(runtime);
   }
   return {status, supportsBt && (!success || loaded.btEnabled != 0),
-          status == ConfigRecordStatus::MIGRATED_V5, false};
+          status == ConfigRecordStatus::MIGRATED_V5, false,
+          success ? loaded.btEnabled != 0 : supportsBt};
 }
 
 }  // namespace config_format
