@@ -1222,8 +1222,8 @@ void Config::bootInfo() {
   BOOTLOG("invertdisplay:\t%s", store.invertdisplay?"true":"false");
   BOOTLOG("buttons:\tleft=%d, center=%d, right=%d, up=%d, down=%d, mode=%d, pullup=%s", 
           BTN_LEFT, BTN_CENTER, BTN_RIGHT, BTN_UP, BTN_DOWN, BTN_MODE, BTN_INTERNALPULLUP?"true":"false");
-  BOOTLOG("encoders:\tl1=%d, b1=%d, r1=%d, pullup=%s, l2=%d, b2=%d, r2=%d, pullup=%s", 
-          ENC_BTNL, ENC_BTNB, ENC_BTNR, ENC_INTERNALPULLUP?"true":"false", ENC2_BTNL, ENC2_BTNB, ENC2_BTNR, ENC2_INTERNALPULLUP?"true":"false");
+  BOOTLOG("encoder:\tl=%d, b=%d, r=%d, pullup=%s",
+          ENC_BTNL, ENC_BTNB, ENC_BTNR, ENC_INTERNALPULLUP?"true":"false");
   BOOTLOG("ir:\t\t%d", IR_PIN);
   if(SDC_CS!=255) BOOTLOG("SD:\t\t%d", SDC_CS);
   BOOTLOG("------------------------------------------------");

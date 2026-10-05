@@ -10,12 +10,7 @@ boolean checklpdelay(int m, unsigned long &tstamp);
 
 void initControls();
 void loopControls();
-#if (ENC_BTNL!=255 && ENC_BTNR!=255) || (ENC2_BTNL!=255 && ENC2_BTNR!=255)
-class yoEncoder;
-void encodersLoop(yoEncoder *enc, bool first=true);
-#endif
 void encoder1Loop();
-void encoder2Loop();
 void irLoop();
 void irNumber(uint8_t num);
 void irBlink();

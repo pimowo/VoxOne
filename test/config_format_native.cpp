@@ -384,9 +384,17 @@ void recordTests() {
 }  // namespace
 
 int main() {
+  static_assert(offsetof(config_v5_t, enc2pullup) == 202,
+                "v5 legacy enc2pullup offset");
+  static_assert(offsetof(config_v5_t, enc2half) == 203,
+                "v5 legacy enc2half offset");
   static_assert(sizeof(config_v6_t) == 254, "v6 size");
   static_assert(offsetof(config_v6_t, config_set) == 0, "v6 magic");
   static_assert(offsetof(config_v6_t, version) == 2, "v6 version");
+  static_assert(offsetof(config_v6_t, enc2pullup) == 202,
+                "v6 legacy enc2pullup offset");
+  static_assert(offsetof(config_v6_t, enc2half) == 203,
+                "v6 legacy enc2half offset");
   static_assert(offsetof(config_v6_t, lastUserVolume) == 253, "v6 tail");
   static_assert(kConfigV7SerializedSize == 255, "v7 wire size");
   static_assert(kConfigV7SerializedSize <= 268, "v7 EEPROM capacity");
@@ -412,6 +420,8 @@ int main() {
   assert(serializeConfigV7(enabled, bytes, sizeof(bytes)));
   assert(bytes[0] == 0xa7 && bytes[1] == 0xc7);  // New magic, little endian.
   assert(bytes[2] == 7 && bytes[3] == 0);
+  assert(bytes[198] == 0);  // Legacy enc2pullup compatibility byte.
+  assert(bytes[199] == 1);  // Legacy enc2half compatibility byte.
   assert(bytes[kConfigV7BtEnabledOffset] == 1);
   assert(enabled.crc32 == referenceCrc32(bytes, kConfigV7CrcOffset));
 

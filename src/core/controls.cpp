@@ -11,7 +11,6 @@
 #include "../hardware/hardware_descriptor.h"
 
 long encOldPosition  = 0;
-long enc2OldPosition  = 0;
 int lpId = -1;
 
 #if VOXONE_HAS_BT && VOXONE_HAS_ENCODER && VOXONE_PIN_MAP_COMPLETE
@@ -22,7 +21,7 @@ int lpId = -1;
 #define DUMMYDISPLAY
 #endif
 
-#define ISPUSHBUTTONS BTN_LEFT!=255 || BTN_CENTER!=255 || BTN_RIGHT!=255 || ENC_BTNB!=255 || BTN_UP!=255 || BTN_DOWN!=255 || ENC2_BTNB!=255 || BTN_MODE!=255
+#define ISPUSHBUTTONS BTN_LEFT!=255 || BTN_CENTER!=255 || BTN_RIGHT!=255 || ENC_BTNB!=255 || BTN_UP!=255 || BTN_DOWN!=255 || BTN_MODE!=255
 #if ISPUSHBUTTONS
 #include "../OneButton/OneButton.h"
 struct ButtonBinding {
@@ -50,9 +49,6 @@ ButtonBinding buttons[] {
 #if BTN_DOWN!=255
   {{BTN_DOWN, true, BTN_INTERNALPULLUP}, EVT_BTNDOWN},
 #endif
-#if ENC2_BTNB!=255
-  {{ENC2_BTNB, true, ENC2_INTERNALPULLUP}, EVT_ENC2BTNB},
-#endif
 #if BTN_MODE!=255
   {{BTN_MODE, true, BTN_INTERNALPULLUP}, EVT_BTNMODE},
 #endif
@@ -60,25 +56,12 @@ ButtonBinding buttons[] {
 constexpr uint8_t nrOfButtons = sizeof(buttons) / sizeof(buttons[0]);
 #endif
 
-#if ENC2_HALFQUARD==false
-#define ENCODER2_STEPS 4
-#elif ENC2_HALFQUARD==true
-#define ENCODER2_STEPS 2
-#elif ENC2_HALFQUARD==255
-#define ENCODER2_STEPS 1
-#endif
-
-#if (ENC_BTNL!=255 && ENC_BTNR!=255) || (ENC2_BTNL!=255 && ENC2_BTNR!=255)
+#if ENC_BTNL!=255 && ENC_BTNR!=255
   #include "../yoEncoder/yoEncoder.h"
-  #if (ENC_BTNL!=255 && ENC_BTNR!=255)
-    yoEncoder encoder = yoEncoder(voxone::hardware::currentHardware().encoder.a,
-                                  voxone::hardware::currentHardware().encoder.b,
-                                  voxone::hardware::currentHardware().encoder.stepsPerDetent,
-                                  voxone::hardware::currentHardware().encoder.internalPullup);
-  #endif
-  #if (ENC2_BTNL!=255 && ENC2_BTNR!=255)
-    yoEncoder encoder2 = yoEncoder(ENC2_BTNL, ENC2_BTNR, ENCODER2_STEPS, ENC2_INTERNALPULLUP);
-  #endif
+  yoEncoder encoder = yoEncoder(voxone::hardware::currentHardware().encoder.a,
+                                voxone::hardware::currentHardware().encoder.b,
+                                voxone::hardware::currentHardware().encoder.stepsPerDetent,
+                                voxone::hardware::currentHardware().encoder.internalPullup);
 #endif
 
 #if (TS_MODEL!=TS_MODEL_UNDEFINED) && (DSP_MODEL!=DSP_DUMMY)
@@ -110,14 +93,6 @@ void IRAM_ATTR readEncoderISR()
   encoder.readEncoder_ISR();
 }
 #endif
-#if ENC2_BTNL!=255
-void IRAM_ATTR readEncoder2ISR()
-{
-  if((SDC_CS==255 && display.mode()==LOST) || display.mode()==UPDATING) return;
-  encoder2.readEncoder_ISR();
-}
-#endif
-
 void initControls() {
   
 #if ENC_BTNL!=255
@@ -126,13 +101,6 @@ void initControls() {
   encoder.setBoundaries(0, 254, true);
   encoder.setAcceleration(config.store.encacc);
 #endif
-#if ENC2_BTNL!=255
-  encoder2.begin();
-  encoder2.setup(readEncoder2ISR);
-  encoder2.setBoundaries(0, 254, true);
-  encoder2.setAcceleration(config.store.encacc);
-#endif
-
 #if ISPUSHBUTTONS
   for (int i = 0; i < nrOfButtons; i++)
   {
@@ -174,9 +142,6 @@ void loopControls() {
 #if ENC_BTNL!=255
   encoder1Loop();
 #endif
-#if ENC2_BTNL!=255
-  encoder2Loop();
-#endif
 #if ISPUSHBUTTONS
   for (unsigned i = 0; i < nrOfButtons; i++)
   {
@@ -194,33 +159,26 @@ void loopControls() {
   if (network.status == CONNECTED || network.status==SDREADY) touchscreen.loop();
 #endif
 }
-#if ENC_BTNL!=255 || ENC2_BTNL!=255
-void encodersLoop(yoEncoder *enc, bool first){
+#if ENC_BTNL!=255
+void encoder1Loop() {
   if (network.status != CONNECTED && network.status!=SDREADY) return;
   if(display.mode()==LOST) return;
-  int8_t encoderDelta = enc->encoderChanged();
+  int8_t encoderDelta = encoder.encoderChanged();
   if (encoderDelta!=0)
   {
 #if VOXONE_HAS_BT && VOXONE_HAS_ENCODER && VOXONE_PIN_MAP_COMPLETE
-    if (first && display.mode() == BT_TRANSPORT) {
+    if (display.mode() == BT_TRANSPORT) {
       display.putRequest(RESETIDLE);
       sourceManagerTransport(btTransportInputForRotation(encoderDelta));
       return;
     }
 #endif
     uint8_t encBtnState = HIGH;
-    if(first){
 #if ENC_BTNB!=255
-      encBtnState = digitalRead(voxone::hardware::currentHardware().encoder.button);
+    encBtnState = digitalRead(voxone::hardware::currentHardware().encoder.button);
 #endif
-    }else{
-#if ENC2_BTNB!=255
-      encBtnState = digitalRead(ENC2_BTNB);
-#endif
-    }
 #   if defined(DUMMYDISPLAY) && !defined(USE_NEXTION)
-    first = first?(first && encBtnState):(!encBtnState);
-    if(first){
+    if(encBtnState){
       int nv = config.store.volume+encoderDelta;
       if(nv<0) nv=0;
       if(nv>254) nv=254;
@@ -229,33 +187,9 @@ void encodersLoop(yoEncoder *enc, bool first){
       if(encoderDelta > 0) player.next(); else player.prev();
     }
 #   else
-    if(first){
-      controlsEvent(encoderDelta > 0, encoderDelta);
-    }else{
-      if (encBtnState == HIGH && display.mode() == PLAYER) {
-        if(config.store.skipPlaylistUpDown){
-          if(encoderDelta > 0) player.next(); else player.prev();
-          return;
-        }
-        display.putRequest(NEWMODE, STATIONS);
-        while(display.mode() != STATIONS) {delay(10);}
-      }
-      controlsEvent(encoderDelta > 0, encoderDelta);
-    }
+    controlsEvent(encoderDelta > 0, encoderDelta);
 #   endif
   }
-}
-#endif
-
-#if ENC_BTNL!=255
-void encoder1Loop() {
-  encodersLoop(&encoder, true);
-}
-#endif
-
-#if ENC2_BTNL!=255
-void encoder2Loop() {
-  encodersLoop(&encoder2, false);
 }
 #endif
 
@@ -449,13 +383,6 @@ void onBtnLongPressStart(int id) {
         display.putRequest(NEWMODE, display.mode() == PLAYER ? STATIONS : PLAYER);
         break;
       }
-    case EVT_ENC2BTNB: {
-#       if defined(DUMMYDISPLAY) && !defined(USE_NEXTION)
-        break;
-#       endif
-        display.putRequest(NEWMODE, display.mode() == PLAYER ? VOL : PLAYER);
-        break;
-      }
     case EVT_BTNMODE: {
         //config.doSleepW();
         display.putRequest(NEWMODE, SLEEPING);
@@ -590,7 +517,7 @@ void onBtnClick(int id) {
     }
   }
 #endif
-  bool passBnCenter = (controlEvt_e)id==EVT_BTNCENTER || (controlEvt_e)id==EVT_ENCBTNB || (controlEvt_e)id==EVT_ENC2BTNB;
+  bool passBnCenter = (controlEvt_e)id==EVT_BTNCENTER || (controlEvt_e)id==EVT_ENCBTNB;
   controlEvt_e btnid = static_cast<controlEvt_e>(id);
   pm.on_btn_click(btnid);
   if (network.status != CONNECTED && network.status!=SDREADY && (controlEvt_e)id!=EVT_BTNMODE && !passBnCenter) return;
@@ -600,8 +527,7 @@ void onBtnClick(int id) {
         break;
       }
     case EVT_BTNCENTER:
-    case EVT_ENCBTNB:
-    case EVT_ENC2BTNB: {
+    case EVT_ENCBTNB: {
         if (btnid == EVT_ENCBTNB && display.mode() == VOL) {
           player.toggleMute();
           break;
@@ -648,7 +574,7 @@ void onBtnClick(int id) {
           }
         } else {
           if (display.mode() == PLAYER) {
-            if(config.store.skipPlaylistUpDown || ENC2_BTNL!=255){
+            if(config.store.skipPlaylistUpDown){
               if (id == EVT_BTNUP) {
                 player.prev();
               } else {
@@ -698,7 +624,7 @@ void onBtnDoubleClick(int id) {
 #if !(VOXONE_HAS_BT && VOXONE_HAS_ENCODER && VOXONE_PIN_MAP_COMPLETE)
     case EVT_ENCBTNB:
 #endif
-    case EVT_ENC2BTNB: {
+    {
         //display.putRequest(NEWMODE, display.mode() == PLAYER ? VOL : PLAYER);
         onBtnClick(EVT_BTNMODE);
         break;
@@ -728,9 +654,6 @@ void setEncAcceleration(uint16_t acc){
   config.saveValue(&config.store.encacc, acc);
 #if ENC_BTNL!=255
   encoder.setAcceleration(config.store.encacc);
-#endif
-#if ENC2_BTNL!=255
-  encoder2.setAcceleration(config.store.encacc);
 #endif
 }
 void flipTS(){
