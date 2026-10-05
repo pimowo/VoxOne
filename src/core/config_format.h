@@ -1,0 +1,134 @@
+#ifndef VOXONE_CONFIG_FORMAT_H
+#define VOXONE_CONFIG_FORMAT_H
+
+#include <cstddef>
+#include <cstdint>
+
+namespace voxone {
+namespace config_format {
+
+// Frozen EEPROM v6 layout. This type describes old bytes only; runtime Config
+// continues to use config_t until the storage migration is integrated.
+struct config_v6_t {
+  uint16_t config_set;
+  uint16_t version;
+  uint8_t volume;
+  int8_t balance;
+  int8_t trebble;
+  int8_t middle;
+  int8_t bass;
+  uint16_t lastStation;
+  uint16_t countStation;
+  uint8_t lastSSID;
+  bool audioinfo;
+  uint8_t smartstart;
+  int8_t tzHour;
+  int8_t tzMin;
+  uint16_t timezoneOffset;
+  bool vumeter;
+  uint8_t softapdelay;
+  bool flipscreen;
+  bool invertdisplay;
+  bool numplaylist;
+  bool fliptouch;
+  bool dbgtouch;
+  bool dspon;
+  uint8_t brightness;
+  uint8_t contrast;
+  char sntp1[35];
+  char sntp2[35];
+  uint8_t reservedWeather[79];
+  uint16_t _reserved;
+  uint16_t lastSdStation;
+  bool sdsnuffle;
+  uint8_t volsteps;
+  uint16_t encacc;
+  uint8_t play_mode;
+  uint8_t irtlp;
+  bool btnpullup;
+  uint16_t btnlongpress;
+  uint16_t btnclickticks;
+  uint16_t btnpressticks;
+  bool encpullup;
+  bool enchalf;
+  bool enc2pullup;
+  bool enc2half;
+  bool forcemono;
+  bool i2sinternal;
+  bool rotate90;
+  bool screensaverEnabled;
+  uint16_t screensaverTimeout;
+  bool screensaverBlank;
+  bool screensaverPlayingEnabled;
+  uint16_t screensaverPlayingTimeout;
+  bool screensaverPlayingBlank;
+  char mdnsname[24];
+  bool skipPlaylistUpDown;
+  uint16_t abuff;
+  bool reservedTelnet;
+  bool watchdog;
+  uint16_t timeSyncInterval;
+  uint16_t timeSyncIntervalRTC;
+  uint16_t reservedWeatherSyncInterval;
+  uint8_t maximumVolume;
+  uint8_t startupMode;
+  uint8_t startupFixedVolume;
+  uint8_t lastUserVolume;
+};
+
+static_assert(sizeof(bool) == 1, "v6 EEPROM requires one-byte bool");
+static_assert(sizeof(config_v6_t) == 254, "v6 EEPROM size changed");
+static_assert(alignof(config_v6_t) == 2, "v6 EEPROM alignment changed");
+static_assert(offsetof(config_v6_t, config_set) == 0, "v6 magic offset changed");
+static_assert(offsetof(config_v6_t, version) == 2, "v6 version offset changed");
+static_assert(offsetof(config_v6_t, lastStation) == 10, "v6 station offset changed");
+static_assert(offsetof(config_v6_t, timezoneOffset) == 20, "v6 timezone offset changed");
+static_assert(offsetof(config_v6_t, _reserved) == 182, "v6 marker offset changed");
+static_assert(offsetof(config_v6_t, lastSdStation) == 184, "v6 SD station offset changed");
+static_assert(offsetof(config_v6_t, encacc) == 188, "v6 encoder offset changed");
+static_assert(offsetof(config_v6_t, btnlongpress) == 194, "v6 button offset changed");
+static_assert(offsetof(config_v6_t, screensaverTimeout) == 208, "v6 screen offset changed");
+static_assert(offsetof(config_v6_t, abuff) == 240, "v6 audio buffer offset changed");
+static_assert(offsetof(config_v6_t, timeSyncInterval) == 244, "v6 time offset changed");
+static_assert(offsetof(config_v6_t, lastUserVolume) == 253, "v6 tail offset changed");
+
+// In-memory model only. The v7 EEPROM representation is the explicitly
+// serialized 255-byte record below, never a dump of this C++ object.
+struct config_v7_t {
+  config_v6_t fields;
+  uint8_t btEnabled;
+  uint32_t crc32;
+};
+
+constexpr uint16_t kConfigMagic = 4262;
+constexpr uint16_t kConfigV6 = 6;
+constexpr uint16_t kConfigV7 = 7;
+constexpr std::size_t kConfigV7SerializedSize = 255;
+constexpr std::size_t kConfigV7BtEnabledOffset = 250;
+constexpr std::size_t kConfigV7CrcOffset = 251;
+constexpr std::size_t kConfigEepromCapacity = 268;  // Addresses 500..767.
+static_assert(kConfigV7SerializedSize <= kConfigEepromCapacity,
+              "v7 record exceeds EEPROM config area");
+static_assert(kConfigV7CrcOffset + sizeof(uint32_t) == kConfigV7SerializedSize,
+              "v7 CRC must end the record");
+
+// CRC-32/ISO-HDLC: initial/final XOR 0xffffffff, reflected polynomial
+// 0xedb88320. The CRC covers every serialized byte before the four-byte CRC.
+uint32_t calculateConfigV7Crc(const config_v7_t& value);
+bool validateConfigV7(const config_v7_t& value);
+
+// Exact-size, little-endian format. Bool fields, including btEnabled, are
+// encoded as one byte (0 or 1). Output is unchanged on failure.
+bool serializeConfigV7(const config_v7_t& value, uint8_t* output,
+                       std::size_t outputSize);
+bool deserializeConfigV7(const uint8_t* input, std::size_t inputSize,
+                         config_v7_t& output);
+
+// Pure conversion; no EEPROM access. Output is unchanged for invalid v6.
+bool migrateConfigV6ToV7(const config_v6_t& source, bool supportsBt,
+                         config_v7_t& output);
+
+}  // namespace config_format
+}  // namespace voxone
+
+#endif
