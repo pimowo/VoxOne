@@ -39,10 +39,41 @@ struct SourceUpdate {
   SourceChangeReason reason = SourceChangeReason::None;
 };
 
-// Logical source selection only. Radio playback and BT audio are untouched.
+struct RadioSourceActions {
+  bool suspend = false;
+  bool userStop = false;
+  bool resume = false;
+};
+
+// Source selection and the user's radio PLAY/STOP intent. Physical playback
+// remains with Player; a source change must not overwrite this intent.
 class SourceManagerState {
  public:
   ActiveSource active() const { return active_; }
+  bool radioPlayIntent() const { return radioPlayIntent_; }
+  void recordRadioCommand(bool play, uint16_t station = 0) {
+    radioPlayIntent_ = play;
+    pendingRadioStation_ = play ? station : 0;
+    pendingRadioStop_ = !play;
+  }
+  void radioPlayConsumed() { pendingRadioStation_ = 0; }
+  void radioStopConsumed() { pendingRadioStop_ = false; }
+  uint16_t radioStationForResume(uint16_t lastStation) const {
+    return pendingRadioStation_ != 0 ? pendingRadioStation_ : lastStation;
+  }
+  bool radioResumeAllowed() const {
+    return active_ == ActiveSource::Radio && radioPlayIntent_;
+  }
+  RadioSourceActions radioActions(const SourceUpdate& update,
+                                  bool radioPhysicallyActive) const {
+    if (!update.activeChanged) return {};
+    RadioSourceActions actions;
+    actions.userStop = pendingRadioStop_;
+    actions.suspend = radioPhysicallyActive && !actions.userStop;
+    actions.resume = update.reason == SourceChangeReason::Manual &&
+                     radioResumeAllowed();
+    return actions;
+  }
   bool bluetoothPhysicallyConnected() const { return observedConnected_; }
   bool bluetoothPlaying() const {
     return bluetoothAudioOutputAllowed() &&
@@ -205,6 +236,9 @@ class SourceManagerState {
   }
 
   ActiveSource active_ = ActiveSource::Radio;
+  bool radioPlayIntent_ = false;
+  uint16_t pendingRadioStation_ = 0;
+  bool pendingRadioStop_ = false;
   bool observedConnected_ = false;
   bool connected_ = false;
   bool bluetoothPlaybackHeld_ = false;

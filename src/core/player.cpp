@@ -8,6 +8,7 @@
 #include "timekeeper.h"
 #include "volume_map.h"
 #include "system_operation_state.h"
+#include "source_manager.h"
 #if I2S_DOUT!=255 && VS1053_CS==255
 #include <driver/i2s.h>
 #endif
@@ -82,8 +83,15 @@ void Player::init() {
 
 void Player::sendCommand(playerRequestParams_t request){
   if(playerQueue==NULL) return;
-  if(systemUpdateAudioBlocked() && request.type != PR_STOP) return;
-  xQueueSend(playerQueue, &request, PLQ_SEND_DELAY);
+  if(systemUpdateAudioBlocked() && request.type != PR_STOP &&
+     request.type != PR_RADIO_SUSPEND) return;
+  if(xQueueSend(playerQueue, &request, PLQ_SEND_DELAY) != pdPASS) return;
+#if VOXONE_HAS_BT && VOXONE_PIN_MAP_COMPLETE
+  if(request.type == PR_PLAY || request.type == PR_STOP)
+    sourceManagerRadioCommandQueued(request.type == PR_PLAY,
+                                   request.type == PR_PLAY && request.payload > 0
+                                       ? static_cast<uint16_t>(request.payload) : 0);
+#endif
 }
 
 void Player::resetQueue(){
@@ -106,7 +114,7 @@ void Player::setError(const char *e){
   setError();
 }
 
-void Player::_stop(bool alreadyStopped){
+void Player::_stop(bool alreadyStopped, RadioStopReason reason){
   log_i("%s called", __func__);
   if(config.getMode()==PM_SDCARD && !alreadyStopped) config.sdResumePos = player.getFilePos();
   _status = STOPPED;
@@ -130,7 +138,7 @@ void Player::_stop(bool alreadyStopped){
   display.putRequest(PSTOP);
   //setDefaults();
   //if(!alreadyStopped) stopSong();
-  if(!lockOutput) stopInfo();
+  if(radioStopUpdatesSmartStart(reason, lockOutput)) stopInfo();
   if (player_on_stop_play) player_on_stop_play();
   pm.on_stop_play();
 }
@@ -191,13 +199,36 @@ void Player::loop() {
   }
   playerRequestParams_t requestP;
   if(xQueueReceive(playerQueue, &requestP, isRunning()?PL_QUEUE_TICKS:PL_QUEUE_TICKS_ST)){
-    if (systemUpdateAudioBlocked() && requestP.type != PR_STOP) return;
+    if (systemUpdateAudioBlocked() && requestP.type != PR_STOP &&
+        requestP.type != PR_RADIO_SUSPEND) return;
     switch (requestP.type){
-      case PR_STOP: _stop(); break;
+      case PR_STOP:
+        _stop();
+#if VOXONE_HAS_BT && VOXONE_PIN_MAP_COMPLETE
+        sourceManagerRadioStopConsumed();
+#endif
+        break;
+      case PR_RADIO_SUSPEND:
+        _stop(false, RadioStopReason::SourceSwitch);
+        break;
+      case PR_RADIO_RESUME:
+#if VOXONE_HAS_BT && VOXONE_PIN_MAP_COMPLETE
+        if (sourceManagerRadioResumeAllowed()) {
+          if (requestP.payload > 0 &&
+              config.lastStation() != static_cast<uint16_t>(requestP.payload))
+            config.setLastStation(static_cast<uint16_t>(requestP.payload));
+          sourceManagerRadioPlayConsumed();
+          _play(static_cast<uint16_t>(requestP.payload), true);
+        }
+#endif
+        break;
       case PR_PLAY: {
         if (requestP.payload>0) {
           config.setLastStation((uint16_t)requestP.payload);
         }
+#if VOXONE_HAS_BT && VOXONE_PIN_MAP_COMPLETE
+        sourceManagerRadioPlayConsumed();
+#endif
         _play((uint16_t)abs(requestP.payload)); 
         if (player_on_station_change) player_on_station_change(); 
         pm.on_station_change();
@@ -257,7 +288,7 @@ void Player::setOutputPins(bool isPlaying) {
   if(MUTE_PIN!=255) digitalWrite(MUTE_PIN, _ml);
 }
 
-void Player::_play(uint16_t stationId) {
+void Player::_play(uint16_t stationId, bool sourceResume) {
   log_i("%s called, stationId=%d", __func__, stationId);
   _hasError=false;
   setDefaults();
@@ -265,7 +296,7 @@ void Player::_play(uint16_t stationId) {
   setOutputPins(false);
   remoteStationName = false;
   
-  if(!config.prepareForPlaying(stationId)) return;
+  if(!config.prepareForPlaying(stationId, sourceResume)) return;
   _loadVol(config.store.volume);
   
   bool isConnected = false;
@@ -286,7 +317,8 @@ void Player::_play(uint16_t stationId) {
   }else{
     serialCli.printf("##ERROR#:\tError connecting to %.128s\n", config.station.url);
     snprintf(config.tmpBuf, sizeof(config.tmpBuf), "Error connecting to %.128s", config.station.url); setError();
-    _stop(true);
+    _stop(true, sourceResume ? RadioStopReason::SourceSwitch
+                             : RadioStopReason::Normal);
   };
 }
 

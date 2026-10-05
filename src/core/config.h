@@ -274,7 +274,7 @@ class Config {
     bool spiffsCleanup();
     void waitConnection();
     char * ipToStr(IPAddress ip);
-    bool prepareForPlaying(uint16_t stationId);
+    bool prepareForPlaying(uint16_t stationId, bool sourceResume = false);
     void configPostPlaying(uint16_t stationId);
     FS* SDPLFS(){ return _SDplaylistFS; }
     bool isRTCFound(){ return _rtcFound; };

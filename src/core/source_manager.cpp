@@ -56,11 +56,20 @@ void refreshDisplay(const SourceUpdate& update) {
 
 void stopOnSourceChange(const SourceUpdate& update, const BtLinkState& bt) {
   if (update.activeChanged) {
-    // Discard a queued PLAY before exposing the newly selected source.
+    const bool radioActive = player.status() == PLAYING || player.isRunning();
+    portENTER_CRITICAL(&sourceMux);
+    const RadioSourceActions radio = sourceState.radioActions(update, radioActive);
+    const uint16_t resumeStation =
+        sourceState.radioStationForResume(config.lastStation());
+    portEXIT_CRITICAL(&sourceMux);
+    // Preserve the queued user intent, then replace stale physical work with
+    // the ordered stop/suspend/resume actions for the newly selected source.
     network.lostPlaying = false;
     player.resetQueue();
-    if (player.status() == PLAYING || player.isRunning())
-      player.sendCommand({PR_STOP, 0});
+    if (radio.userStop) player.sendCommand({PR_STOP, 0});
+    if (radio.suspend) player.sendCommand({PR_RADIO_SUSPEND, 0});
+    if (radio.resume)
+      player.sendCommand({PR_RADIO_RESUME, resumeStation});
   }
   if ((update.activeChanged || update.btConnected) && bt.runtimeAvailable &&
       bt.connected && bt.playback == BtPlayback::Playing)
@@ -70,6 +79,31 @@ void stopOnSourceChange(const SourceUpdate& update, const BtLinkState& bt) {
 
 void sourceManagerBegin() {
   serialCli.printf("##[SOURCE]# active=RADIO\n");
+}
+
+void sourceManagerRadioCommandQueued(bool play, uint16_t station) {
+  portENTER_CRITICAL(&sourceMux);
+  sourceState.recordRadioCommand(play, station);
+  portEXIT_CRITICAL(&sourceMux);
+}
+
+void sourceManagerRadioPlayConsumed() {
+  portENTER_CRITICAL(&sourceMux);
+  sourceState.radioPlayConsumed();
+  portEXIT_CRITICAL(&sourceMux);
+}
+
+void sourceManagerRadioStopConsumed() {
+  portENTER_CRITICAL(&sourceMux);
+  sourceState.radioStopConsumed();
+  portEXIT_CRITICAL(&sourceMux);
+}
+
+bool sourceManagerRadioResumeAllowed() {
+  portENTER_CRITICAL(&sourceMux);
+  const bool allowed = sourceState.radioResumeAllowed();
+  portEXIT_CRITICAL(&sourceMux);
+  return allowed;
 }
 
 void sourceManagerLoop() {

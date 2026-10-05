@@ -2,6 +2,7 @@
 #define player_h
 
 #include "mute_state.h"
+#include "radio_source_policy.h"
 
 #if I2S_DOUT!=255 || I2S_INTERNAL
   #include "../audioI2S/AudioEx.h"
@@ -17,7 +18,7 @@
   #define PLQ_SEND_DELAY pdMS_TO_TICKS(1000) //portMAX_DELAY
 #endif
 
-enum playerRequestType_e : uint8_t { PR_PLAY = 1, PR_STOP = 2, PR_PREV = 3, PR_NEXT = 4, PR_VOL = 5, PR_CHECKSD = 6, PR_VUTONUS = 7, PR_BURL = 8, PR_TOGGLE = 9 };
+enum playerRequestType_e : uint8_t { PR_PLAY = 1, PR_STOP = 2, PR_PREV = 3, PR_NEXT = 4, PR_VOL = 5, PR_CHECKSD = 6, PR_VUTONUS = 7, PR_BURL = 8, PR_TOGGLE = 9, PR_RADIO_SUSPEND = 10, PR_RADIO_RESUME = 11 };
 struct playerRequestParams_t
 {
   playerRequestType_e type;
@@ -40,8 +41,9 @@ class Player: public Audio {
     MuteState _mute;
     //char        _plError[PLERR_LN];
   private:
-    void _stop(bool alreadyStopped = false);
-    void _play(uint16_t stationId);
+    void _stop(bool alreadyStopped = false,
+               RadioStopReason reason = RadioStopReason::Normal);
+    void _play(uint16_t stationId, bool sourceResume = false);
     void _loadVol(uint8_t volume);
     bool _hasError;
   public:

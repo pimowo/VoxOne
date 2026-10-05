@@ -295,7 +295,7 @@ char * Config::ipToStr(IPAddress ip){
   snprintf(ipBuf, 16, "%u.%u.%u.%u", ip[0], ip[1], ip[2], ip[3]);
   return ipBuf;
 }
-bool Config::prepareForPlaying(uint16_t stationId){
+bool Config::prepareForPlaying(uint16_t stationId, bool sourceResume){
   setDspOn(1);
   vuThreshold = 0;
   screensaverTicks=SCREENSAVERSTARTUPDELAY;
@@ -316,7 +316,7 @@ bool Config::prepareForPlaying(uint16_t stationId){
   netserver.requestOnChange(MODE, 0);
   netserver.loop();
   netserver.loop();
-  if(store.smartstart!=2)
+  if(radioPlayPreparationUpdatesSmartStart(sourceResume, store.smartstart))
     setSmartStart(0);
   return true;
 }
