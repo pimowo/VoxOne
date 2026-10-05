@@ -7,6 +7,94 @@
 namespace voxone {
 namespace config_format {
 
+// Frozen v5 prefix, confirmed at f245821e (v0.2.0) and e96f3d49.
+// Historical weather/telnet slots are retained only as opaque legacy data.
+struct config_v5_t {
+  uint16_t config_set;
+  uint16_t version;
+  uint8_t volume;
+  int8_t balance;
+  int8_t trebble;
+  int8_t middle;
+  int8_t bass;
+  uint16_t lastStation;
+  uint16_t countStation;
+  uint8_t lastSSID;
+  bool audioinfo;
+  uint8_t smartstart;
+  int8_t tzHour;
+  int8_t tzMin;
+  uint16_t timezoneOffset;
+  bool vumeter;
+  uint8_t softapdelay;
+  bool flipscreen;
+  bool invertdisplay;
+  bool numplaylist;
+  bool fliptouch;
+  bool dbgtouch;
+  bool dspon;
+  uint8_t brightness;
+  uint8_t contrast;
+  char sntp1[35];
+  char sntp2[35];
+  uint8_t reservedWeather[79];
+  uint16_t _reserved;
+  uint16_t lastSdStation;
+  bool sdsnuffle;
+  uint8_t volsteps;
+  uint16_t encacc;
+  uint8_t play_mode;
+  uint8_t irtlp;
+  bool btnpullup;
+  uint16_t btnlongpress;
+  uint16_t btnclickticks;
+  uint16_t btnpressticks;
+  bool encpullup;
+  bool enchalf;
+  bool enc2pullup;
+  bool enc2half;
+  bool forcemono;
+  bool i2sinternal;
+  bool rotate90;
+  bool screensaverEnabled;
+  uint16_t screensaverTimeout;
+  bool screensaverBlank;
+  bool screensaverPlayingEnabled;
+  uint16_t screensaverPlayingTimeout;
+  bool screensaverPlayingBlank;
+  char mdnsname[24];
+  bool skipPlaylistUpDown;
+  uint16_t abuff;
+  bool reservedTelnet;
+  bool watchdog;
+  uint16_t timeSyncInterval;
+  uint16_t timeSyncIntervalRTC;
+  uint16_t reservedWeatherSyncInterval;
+};
+static_assert(sizeof(bool) == 1, "legacy EEPROM requires one-byte bool");
+static_assert(sizeof(config_v5_t) == 250, "v5 EEPROM size changed");
+static_assert(alignof(config_v5_t) == 2, "v5 EEPROM alignment changed");
+static_assert(offsetof(config_v5_t, config_set) == 0, "v5 config_set offset changed");
+static_assert(offsetof(config_v5_t, version) == 2, "v5 version offset changed");
+static_assert(offsetof(config_v5_t, volume) == 4, "v5 volume offset changed");
+static_assert(offsetof(config_v5_t, timezoneOffset) == 20, "v5 timezone offset changed");
+static_assert(offsetof(config_v5_t, sntp1) == 32, "v5 SNTP1 offset changed");
+static_assert(offsetof(config_v5_t, sntp2) == 67, "v5 SNTP2 offset changed");
+static_assert(offsetof(config_v5_t, reservedWeather) == 102, "v5 weather offset changed");
+static_assert(offsetof(config_v5_t, lastSdStation) == 184, "v5 SD offset changed");
+static_assert(offsetof(config_v5_t, btnlongpress) == 194, "v5 button offset changed");
+static_assert(offsetof(config_v5_t, screensaverTimeout) == 208, "v5 screen offset changed");
+static_assert(offsetof(config_v5_t, mdnsname) == 215, "v5 mDNS offset changed");
+static_assert(offsetof(config_v5_t, lastStation) == 10, "v5 lastStation offset changed");
+static_assert(offsetof(config_v5_t, _reserved) == 182, "v5 _reserved offset changed");
+static_assert(offsetof(config_v5_t, encacc) == 188, "v5 encacc offset changed");
+static_assert(offsetof(config_v5_t, abuff) == 240, "v5 abuff offset changed");
+static_assert(offsetof(config_v5_t, reservedTelnet) == 242, "v5 reservedTelnet offset changed");
+static_assert(offsetof(config_v5_t, watchdog) == 243, "v5 watchdog offset changed");
+static_assert(offsetof(config_v5_t, timeSyncInterval) == 244, "v5 timeSyncInterval offset changed");
+static_assert(offsetof(config_v5_t, timeSyncIntervalRTC) == 246, "v5 timeSyncIntervalRTC offset changed");
+static_assert(offsetof(config_v5_t, reservedWeatherSyncInterval) == 248, "v5 reservedWeatherSyncInterval offset changed");
+
 // Frozen EEPROM v6 layout. This type describes old bytes only; runtime Config
 // continues to use config_t until the storage migration is integrated.
 struct config_v6_t {
@@ -100,7 +188,10 @@ struct config_v7_t {
   uint32_t crc32;
 };
 
-constexpr uint16_t kConfigMagic = 4262;
+constexpr uint16_t kLegacyConfigMagic = 4262;
+constexpr uint16_t kConfigV7Magic = 0xc7a7;
+static_assert(kConfigV7Magic != kLegacyConfigMagic, "downgrade must reject v7");
+constexpr uint16_t kConfigV5 = 5;
 constexpr uint16_t kConfigV6 = 6;
 constexpr uint16_t kConfigV7 = 7;
 constexpr std::size_t kConfigV7SerializedSize = 255;
@@ -127,6 +218,24 @@ bool deserializeConfigV7(const uint8_t* input, std::size_t inputSize,
 // Pure conversion; no EEPROM access. Output is unchanged for invalid v6.
 bool migrateConfigV6ToV7(const config_v6_t& source, bool supportsBt,
                          config_v7_t& output);
+
+bool migrateConfigV5ToV7(const config_v5_t& source, bool supportsBt,
+                         config_v7_t& output);
+
+enum class ConfigRecordStatus {
+  LOADED_V7, MIGRATED_V5, MIGRATED_V6,
+  DEFAULTS_REQUIRED, UNSUPPORTED_NEWER,
+  INVALID_ARGUMENT, INVALID_LENGTH, INVALID_MAGIC, INVALID_BOOL, INVALID_CRC
+};
+
+// Pure byte parsers. Exact record length is required (not the whole EEPROM
+// region). Only success statuses modify output. No defaults or writes occur.
+// New magic with any version other than 7 is UNSUPPORTED_NEWER, even if the
+// record uses an unknown length. The caller must preserve it without writing.
+ConfigRecordStatus parseConfigV7(const uint8_t* input, std::size_t inputSize,
+                                 config_v7_t& output);
+ConfigRecordStatus loadConfigRecord(const uint8_t* input, std::size_t inputSize,
+                                    bool supportsBt, config_v7_t& output);
 
 }  // namespace config_format
 }  // namespace voxone

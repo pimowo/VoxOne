@@ -1,4 +1,5 @@
 #include "config_format.h"
+#include "volume_map.h"
 
 #include <cstring>
 
@@ -41,12 +42,13 @@ struct Writer {
 };
 
 struct Reader {
-  Reader(const uint8_t* data, std::size_t size)
-      : bytes(data), capacity(size), position(0), valid(true) {}
+  Reader(const uint8_t* data, std::size_t size, bool legacy = false)
+      : bytes(data), capacity(size), position(0), valid(true), aligned(legacy) {}
   const uint8_t* bytes;
   std::size_t capacity;
   std::size_t position;
   bool valid;
+  bool aligned;
 
   uint8_t u8() {
     if (position >= capacity) { valid = false; return 0; }
@@ -62,6 +64,8 @@ struct Reader {
     return value == 1;
   }
   uint16_t u16() {
+    // v5/v6 contain four ABI padding bytes; never interpret them as fields.
+    if (aligned && (position & 1u)) u8();
     const uint16_t low = u8();
     return static_cast<uint16_t>(low | (static_cast<uint16_t>(u8()) << 8));
   }
@@ -116,7 +120,8 @@ void writeFields(Writer& w, const config_v6_t& f) {
 #undef U16
 }
 
-void readFields(Reader& r, config_v6_t& f) {
+template <typename Legacy>
+void readPrefix(Reader& r, Legacy& f) {
 #define U8(name) f.name = r.u8()
 #define I8(name) f.name = r.i8()
 #define B(name) f.name = r.boolean()
@@ -142,12 +147,19 @@ void readFields(Reader& r, config_v6_t& f) {
   r.chars(f.mdnsname, sizeof(f.mdnsname));
   B(skipPlaylistUpDown); U16(abuff); B(reservedTelnet); B(watchdog);
   U16(timeSyncInterval); U16(timeSyncIntervalRTC);
-  U16(reservedWeatherSyncInterval); U8(maximumVolume);
-  U8(startupMode); U8(startupFixedVolume); U8(lastUserVolume);
+  U16(reservedWeatherSyncInterval);
 #undef U8
 #undef I8
 #undef B
 #undef U16
+}
+
+void readFields(Reader& r, config_v6_t& f) {
+  readPrefix(r, f);
+  f.maximumVolume = r.u8();
+  f.startupMode = r.u8();
+  f.startupFixedVolume = r.u8();
+  f.lastUserVolume = r.u8();
 }
 
 uint32_t crc32(const uint8_t* data, std::size_t length) {
@@ -186,7 +198,7 @@ uint32_t calculateConfigV7Crc(const config_v7_t& value) {
 
 bool validateConfigV7(const config_v7_t& value) {
   uint32_t expected = 0;
-  return value.fields.config_set == kConfigMagic &&
+  return value.fields.config_set == kConfigV7Magic &&
          value.fields.version == kConfigV7 && value.btEnabled <= 1 &&
          computeCrc(value, expected) && value.crc32 == expected;
 }
@@ -206,29 +218,150 @@ bool serializeConfigV7(const config_v7_t& value, uint8_t* output,
 
 bool deserializeConfigV7(const uint8_t* input, std::size_t inputSize,
                          config_v7_t& output) {
-  if (!input || inputSize != kConfigV7SerializedSize) return false;
+  return parseConfigV7(input, inputSize, output) == ConfigRecordStatus::LOADED_V7;
+}
+
+ConfigRecordStatus parseConfigV7(const uint8_t* input, std::size_t inputSize,
+                                 config_v7_t& output) {
+  if (!input) return ConfigRecordStatus::INVALID_ARGUMENT;
+  if (inputSize < 4) return ConfigRecordStatus::INVALID_LENGTH;
+  Reader header{input, inputSize};
+  if (header.u16() != kConfigV7Magic) return ConfigRecordStatus::INVALID_MAGIC;
+  if (header.u16() != kConfigV7) return ConfigRecordStatus::UNSUPPORTED_NEWER;
+  if (inputSize != kConfigV7SerializedSize) return ConfigRecordStatus::INVALID_LENGTH;
   config_v7_t decoded{};
   Reader reader{input, inputSize};
   readFields(reader, decoded.fields);
   decoded.btEnabled = reader.u8();
   decoded.crc32 = reader.u32();
-  if (!reader.valid || reader.position != kConfigV7SerializedSize ||
-      !validateConfigV7(decoded)) return false;
+  if (!reader.valid || decoded.btEnabled > 1) return ConfigRecordStatus::INVALID_BOOL;
+  // Check the original bytes, not a normalized reserialization.
+  if (decoded.crc32 != crc32(input, kConfigV7CrcOffset))
+    return ConfigRecordStatus::INVALID_CRC;
   output = decoded;
-  return true;
+  return ConfigRecordStatus::LOADED_V7;
 }
 
 bool migrateConfigV6ToV7(const config_v6_t& source, bool supportsBt,
                          config_v7_t& output) {
-  if (source.config_set != kConfigMagic || source.version != kConfigV6)
+  if (source.config_set != kLegacyConfigMagic || source.version != kConfigV6)
     return false;
   config_v7_t migrated{};
   migrated.fields = source;
+  migrated.fields.config_set = kConfigV7Magic;
   migrated.fields.version = kConfigV7;
   migrated.btEnabled = supportsBt ? 1 : 0;
   if (!computeCrc(migrated, migrated.crc32)) return false;
   output = migrated;
   return true;
+}
+
+bool migrateConfigV5ToV7(const config_v5_t& source, bool supportsBt,
+                         config_v7_t& output) {
+  if (source.config_set != kLegacyConfigMagic || source.version != kConfigV5)
+    return false;
+  config_v7_t migrated{};
+  migrated.fields.config_set = source.config_set;
+  migrated.fields.version = source.version;
+  migrated.fields.volume = source.volume;
+  migrated.fields.balance = source.balance;
+  migrated.fields.trebble = source.trebble;
+  migrated.fields.middle = source.middle;
+  migrated.fields.bass = source.bass;
+  migrated.fields.lastStation = source.lastStation;
+  migrated.fields.countStation = source.countStation;
+  migrated.fields.lastSSID = source.lastSSID;
+  migrated.fields.audioinfo = source.audioinfo;
+  migrated.fields.smartstart = source.smartstart;
+  migrated.fields.tzHour = source.tzHour;
+  migrated.fields.tzMin = source.tzMin;
+  migrated.fields.timezoneOffset = source.timezoneOffset;
+  migrated.fields.vumeter = source.vumeter;
+  migrated.fields.softapdelay = source.softapdelay;
+  migrated.fields.flipscreen = source.flipscreen;
+  migrated.fields.invertdisplay = source.invertdisplay;
+  migrated.fields.numplaylist = source.numplaylist;
+  migrated.fields.fliptouch = source.fliptouch;
+  migrated.fields.dbgtouch = source.dbgtouch;
+  migrated.fields.dspon = source.dspon;
+  migrated.fields.brightness = source.brightness;
+  migrated.fields.contrast = source.contrast;
+  std::memcpy(migrated.fields.sntp1, source.sntp1, sizeof(source.sntp1));
+  std::memcpy(migrated.fields.sntp2, source.sntp2, sizeof(source.sntp2));
+  std::memcpy(migrated.fields.reservedWeather, source.reservedWeather, sizeof(source.reservedWeather));
+  migrated.fields._reserved = source._reserved;
+  migrated.fields.lastSdStation = source.lastSdStation;
+  migrated.fields.sdsnuffle = source.sdsnuffle;
+  migrated.fields.volsteps = source.volsteps;
+  migrated.fields.encacc = source.encacc;
+  migrated.fields.play_mode = source.play_mode;
+  migrated.fields.irtlp = source.irtlp;
+  migrated.fields.btnpullup = source.btnpullup;
+  migrated.fields.btnlongpress = source.btnlongpress;
+  migrated.fields.btnclickticks = source.btnclickticks;
+  migrated.fields.btnpressticks = source.btnpressticks;
+  migrated.fields.encpullup = source.encpullup;
+  migrated.fields.enchalf = source.enchalf;
+  migrated.fields.enc2pullup = source.enc2pullup;
+  migrated.fields.enc2half = source.enc2half;
+  migrated.fields.forcemono = source.forcemono;
+  migrated.fields.i2sinternal = source.i2sinternal;
+  migrated.fields.rotate90 = source.rotate90;
+  migrated.fields.screensaverEnabled = source.screensaverEnabled;
+  migrated.fields.screensaverTimeout = source.screensaverTimeout;
+  migrated.fields.screensaverBlank = source.screensaverBlank;
+  migrated.fields.screensaverPlayingEnabled = source.screensaverPlayingEnabled;
+  migrated.fields.screensaverPlayingTimeout = source.screensaverPlayingTimeout;
+  migrated.fields.screensaverPlayingBlank = source.screensaverPlayingBlank;
+  std::memcpy(migrated.fields.mdnsname, source.mdnsname, sizeof(source.mdnsname));
+  migrated.fields.skipPlaylistUpDown = source.skipPlaylistUpDown;
+  migrated.fields.abuff = source.abuff;
+  migrated.fields.reservedTelnet = source.reservedTelnet;
+  migrated.fields.watchdog = source.watchdog;
+  migrated.fields.timeSyncInterval = source.timeSyncInterval;
+  migrated.fields.timeSyncIntervalRTC = source.timeSyncIntervalRTC;
+  migrated.fields.reservedWeatherSyncInterval = source.reservedWeatherSyncInterval;
+  migrated.fields.config_set = kConfigV7Magic;
+  migrated.fields.version = kConfigV7;
+  // Exact defaults from Config::_setupVersion case 5. STARTUP_LAST is 0.
+  migrated.fields.maximumVolume = 100;
+  migrated.fields.startupMode = 0;
+  migrated.fields.startupFixedVolume = 20;
+  migrated.fields.lastUserVolume = volumeRawToUser(source.volume);
+  migrated.btEnabled = supportsBt ? 1 : 0;
+  if (!computeCrc(migrated, migrated.crc32)) return false;
+  output = migrated;
+  return true;
+}
+
+ConfigRecordStatus loadConfigRecord(const uint8_t* input, std::size_t inputSize,
+                                    bool supportsBt, config_v7_t& output) {
+  if (!input) return ConfigRecordStatus::INVALID_ARGUMENT;
+  if (inputSize < 4) return ConfigRecordStatus::INVALID_LENGTH;
+  Reader header{input, inputSize};
+  const uint16_t magic = header.u16();
+  const uint16_t version = header.u16();
+  if (magic == kConfigV7Magic) return parseConfigV7(input, inputSize, output);
+  if (magic != kLegacyConfigMagic) return ConfigRecordStatus::DEFAULTS_REQUIRED;
+  if (version != kConfigV5 && version != kConfigV6)
+    return ConfigRecordStatus::DEFAULTS_REQUIRED;
+  const std::size_t expected = version == kConfigV5 ? 250 : 254;
+  if (inputSize != expected) return ConfigRecordStatus::INVALID_LENGTH;
+  // Explicit LE field reads validate bool bytes before constructing bools.
+  // No raw blob is copied into a C++ object or reinterpreted as another version.
+  Reader reader{input, inputSize, true};
+  if (version == kConfigV5) {
+    config_v5_t legacy{};
+    readPrefix(reader, legacy);
+    if (!reader.valid) return ConfigRecordStatus::INVALID_BOOL;
+    migrateConfigV5ToV7(legacy, supportsBt, output);
+    return ConfigRecordStatus::MIGRATED_V5;
+  }
+  config_v6_t legacy{};
+  readFields(reader, legacy);
+  if (!reader.valid) return ConfigRecordStatus::INVALID_BOOL;
+  migrateConfigV6ToV7(legacy, supportsBt, output);
+  return ConfigRecordStatus::MIGRATED_V6;
 }
 
 }  // namespace config_format
