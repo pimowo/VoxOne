@@ -11,8 +11,6 @@ struct ConfigStartupResult {
   ConfigRecordStatus status;
   bool btEnabled;
   bool migratingVolume;
-  // CONFIG-2B.1 never requests a persistence operation.
-  bool needsWrite;
   bool storedBtEnabled;
 };
 
@@ -106,7 +104,7 @@ inline void copyStartupString(char* output, const char* input, std::size_t capac
   output[count] = '\0';
 }
 
-// Shared by startup RAM defaults and the existing legacy factory reset.
+// Shared by startup RAM defaults and the v7 factory reset.
 // The caller supplies profile/device values; this function has no storage API.
 template <typename Runtime>
 void buildConfigDefaults(Runtime& store, const char* ntp1, const char* ntp2,
@@ -217,7 +215,7 @@ ConfigStartupResult loadStartupConfig(const uint8_t* input, std::size_t size,
     defaults(runtime);
   }
   return {status, supportsBt && (!success || loaded.btEnabled != 0),
-          status == ConfigRecordStatus::MIGRATED_V5, false,
+          status == ConfigRecordStatus::MIGRATED_V5,
           success ? loaded.btEnabled != 0 : supportsBt};
 }
 

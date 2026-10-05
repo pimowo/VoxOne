@@ -96,7 +96,7 @@ static_assert(offsetof(config_v5_t, timeSyncIntervalRTC) == 246, "v5 timeSyncInt
 static_assert(offsetof(config_v5_t, reservedWeatherSyncInterval) == 248, "v5 reservedWeatherSyncInterval offset changed");
 
 // Frozen EEPROM v6 layout. This type describes old bytes only; runtime Config
-// continues to use config_t until the storage migration is integrated.
+// uses config_t while persistence uses the explicit serialized v7 format.
 struct config_v6_t {
   uint16_t config_set;
   uint16_t version;

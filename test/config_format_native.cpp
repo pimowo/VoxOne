@@ -328,7 +328,7 @@ void recordTests() {
   uint8_t good[255]{};
   assert(serializeConfigV7(result, good, sizeof(good)));
   assert(good[0] == 0xa7 && good[1] == 0xc7);
-  // Old Config::init tests magic before calling _setupVersion.
+  // Historical v6 firmware checks magic before attempting old migrations.
   const uint16_t oldMagic = static_cast<uint16_t>(good[0] | (good[1] << 8));
   assert(oldMagic != 4262);  // Old firmware chooses defaults, never migrations.
   assert(loadConfigRecord(good, sizeof(good), true, result) == S::LOADED_V7);

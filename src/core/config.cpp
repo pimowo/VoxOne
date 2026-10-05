@@ -202,45 +202,6 @@ void Config::init() {
   setTimeConf();
 }
 
-void Config::_setupVersion(){
-  // Legacy/remove-later. No startup consumer; v5/v6 use config_format.
-  uint16_t currentVersion = store.version;
-  switch(currentVersion){
-    case 1:
-      saveValue(&store.screensaverEnabled, false);
-      saveValue(&store.screensaverTimeout, (uint16_t)20);
-      break;
-    case 2:
-      _makeDefaultMdnsName(tmpBuf, sizeof(tmpBuf));
-      saveValue(store.mdnsname, tmpBuf, MDNS_LENGTH);
-      saveValue(&store.skipPlaylistUpDown, false);
-      break;
-    case 3:
-      saveValue(&store.screensaverBlank, false);
-      saveValue(&store.screensaverPlayingEnabled, false);
-      saveValue(&store.screensaverPlayingTimeout, (uint16_t)5);
-      saveValue(&store.screensaverPlayingBlank, false);
-      break;
-    case 4:
-      saveValue(&store.abuff, (uint16_t)(VS1053_CS==255?7:10));
-      saveValue(&store.watchdog, true);
-      saveValue(&store.timeSyncInterval, (uint16_t)60);    //min
-      saveValue(&store.timeSyncIntervalRTC, (uint16_t)24); //hours
-      break;
-    case 5:
-      saveValue(&store.maximumVolume, static_cast<uint8_t>(100), false, true);
-      saveValue(&store.startupMode, static_cast<uint8_t>(STARTUP_LAST), false, true);
-      saveValue(&store.startupFixedVolume, static_cast<uint8_t>(20), false, true);
-      saveValue(&store.lastUserVolume, volumeRawToUser(store.volume), false, true);
-      persistV7();
-      break;
-    default:
-      break;
-  }
-  currentVersion++;
-  saveValue(&store.version, currentVersion);
-}
-
 void Config::changeMode(int newmode){
 #ifdef USE_SD
   bool pir = player.isRunning();

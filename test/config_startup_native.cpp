@@ -171,7 +171,6 @@ ConfigStartupResult run(const uint8_t* data, std::size_t size, bool supports,
   const auto result = loadStartupConfig(data, size, supports, runtime,
     [&](Runtime& value) { ++defaultsCalls; defaults(value); });
   assert(result.status == expected);
-  assert(!result.needsWrite);
   assert(defaultsCalls == (useDefaults ? 1u : 0u));
   if (data) assert(std::memcmp(before, data, size) == 0);
   if (useDefaults) {

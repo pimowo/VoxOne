@@ -319,7 +319,6 @@ class Config {
     void _applyDefaults();
     static void doSleep();
     uint16_t color565(uint8_t r, uint8_t g, uint8_t b);
-    void _setupVersion();
     void _makeDefaultMdnsName(char *buffer, size_t size);
     void _normalizeProductConfig();
     void _normalizeAudioConfig();

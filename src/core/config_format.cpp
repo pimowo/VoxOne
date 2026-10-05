@@ -323,7 +323,7 @@ bool migrateConfigV5ToV7(const config_v5_t& source, bool supportsBt,
   migrated.fields.reservedWeatherSyncInterval = source.reservedWeatherSyncInterval;
   migrated.fields.config_set = kConfigV7Magic;
   migrated.fields.version = kConfigV7;
-  // Exact defaults from Config::_setupVersion case 5. STARTUP_LAST is 0.
+  // Defaults added for the historical v5-to-v6 transition. STARTUP_LAST is 0.
   migrated.fields.maximumVolume = 100;
   migrated.fields.startupMode = 0;
   migrated.fields.startupFixedVolume = 20;
