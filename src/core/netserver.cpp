@@ -2274,7 +2274,7 @@ void handleNotFound(AsyncWebServerRequest * request) {
     request->send(200, "text/html", netserver.nsBuf);
     return;
   }
-  if (strcmp(request->url().c_str(), "/settings.html") == 0 || strcmp(request->url().c_str(), "/ir.html") == 0){
+  if (strcmp(request->url().c_str(), "/settings.html") == 0){
     //request->send_P(200, "text/html", index_html);
     AsyncWebServerResponse *response = request->beginResponse_P(200, "text/html", index_html);
     response->addHeader("Cache-Control","max-age=31536000");

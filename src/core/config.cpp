@@ -90,14 +90,13 @@ void u8fix(char *src){
 }
 
 bool Config::_isFSempty() {
-  const char* reqiredFiles[] = {"dragpl.js.gz","ir.css.gz","irrecord.html.gz","ir.js.gz","logo.svg.gz","options.html.gz","player.html.gz","script.js.gz",
+  const char* reqiredFiles[] = {"dragpl.js.gz","logo.svg.gz","options.html.gz","player.html.gz","script.js.gz",
                                 "style.css.gz","updform.html.gz","theme.css"};
-  const uint8_t reqiredFilesSize = 11;
+  const uint8_t reqiredFilesSize = 8;
   char fullpath[28];
   if(SPIFFS.exists("/www/settings.html")) SPIFFS.remove("/www/settings.html");
   if(SPIFFS.exists("/www/update.html")) SPIFFS.remove("/www/update.html");
   if(SPIFFS.exists("/www/index.html")) SPIFFS.remove("/www/index.html");
-  if(SPIFFS.exists("/www/ir.html")) SPIFFS.remove("/www/ir.html");
   if(SPIFFS.exists("/www/elogo.png")) SPIFFS.remove("/www/elogo.png");
   if(SPIFFS.exists("/www/elogo84.png")) SPIFFS.remove("/www/elogo84.png");
   for (uint8_t i=0; i<reqiredFilesSize; i++){

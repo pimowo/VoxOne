@@ -4,6 +4,7 @@
 #include <fstream>
 #include <iterator>
 #include <string>
+#include <sys/stat.h>
 #include <type_traits>
 
 namespace {
@@ -50,6 +51,9 @@ int main() {
   const auto serverHeader = readFile("src/core/netserver.h");
   const auto serverCode = readFile("src/core/netserver.cpp");
   const auto controls = readFile("src/core/controls.cpp");
+  const auto platformio = readFile("platformio.ini");
+  const auto verify = readFile("tools/verify.ps1");
+  const auto assetBuilder = readFile("scripts/build_web_assets.py");
 
   assert(configHeader.find("#define EEPROM_START      500") != std::string::npos);
   assert(configHeader.find("#define EEPROM_SIZE       768") != std::string::npos);
@@ -75,6 +79,17 @@ int main() {
   }
   absent(controls, "IRrecv");
   absent(controls, "irLoop");
+  absent(serverCode, "\"/ir.html\"");
+  assert(serverCode.find("\"/settings.html\"") != std::string::npos);
+  for (const char* token : {"irrecord.html.gz", "ir.js.gz", "ir.css.gz"}) {
+    absent(configCode, token);
+    absent(verify, token);
+    absent(assetBuilder, token);
+    assert(!std::ifstream((std::string("data/www/") + token).c_str()).good());
+  }
+  absent(platformio, "IRremoteESP8266");
+  struct stat irTree;
+  assert(stat("src/IRremoteESP8266", &irTree) != 0);
 
   const auto modernHtml = readFile("web-src/voxone.html");
   const auto modernJs = readFile("web-src/voxone.js");
