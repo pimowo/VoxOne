@@ -27,6 +27,7 @@ int main() {
   const auto audioCode = readFile("src/audioI2S/Audio.cpp");
   const auto optionsChecker = readFile("src/core/optionschecker.h");
   const auto build = readFile("platformio.ini");
+  const auto options = readFile("src/core/options.h");
 
   for (const auto& source : {playerHeader, playerCode, configCode,
                              audioCode, optionsChecker}) {
@@ -40,5 +41,15 @@ int main() {
   assert(playerCode.find("setPinout(I2S_BCLK, I2S_LRC, I2S_DOUT)") !=
          std::string::npos);
   assert(configCode.find("mdns, 7)") != std::string::npos);
-  assert(build.find("-<audioVS1053/>") != std::string::npos);
+  assert(build.find("audioVS1053") == std::string::npos);
+  assert(build.find("build_src_filter") == std::string::npos);
+  assert(!std::ifstream("src/audioVS1053/audioVS1053Ex.cpp").good());
+  assert(!std::ifstream("src/audioVS1053/audioVS1053Ex.h").good());
+  assert(!std::ifstream("src/audioVS1053/vs1053b-patches-flac.h").good());
+  assert(readFile("src/audioI2S/AudioEx.h").size() > 0);
+  for (const char* macro : {"VS1053_CS", "VS1053_DCS", "VS1053_DREQ",
+                            "VS1053_RST", "VS_HSPI", "I2S_INTERNAL",
+                            "MUTE_LOCK"}) {
+    assert(options.find(macro) != std::string::npos);
+  }
 }
