@@ -147,10 +147,11 @@ void loop() {
   #if VOXONE_HAS_BT && VOXONE_PIN_MAP_COMPLETE && VOXONE_BT_I2S_RX_ENABLED
     if (btRuntime.physicalStarted() &&
         !btLink.hasIncompleteOnlineSnapshot())
-      btAudioInput.loop(btLink.state(), bluetoothSourceSelected(),
+      btAudioInput.loop(btLink.state(),
+                        bluetoothOwnsAudio(bluetoothSourceSelected(), player.temporaryActive()),
                         player.getSampleRate(), millis());
   #endif
-  if (network.status == CONNECTED || network.status==SDREADY) {
+  if (network.status == CONNECTED || network.status==SDREADY || player.temporaryBusy()) {
     player.loop();
 #if USE_OTA
     ArduinoOTA.handle();
@@ -161,7 +162,7 @@ void loop() {
   const BtRuntimeStatus btStatus = btRuntime.status(bt.runtimeAvailable,
                                                     bt.connected);
   const DacPlaybackState dacPlayback = dacPlaybackForSource(
-      bluetoothSourceSelected(), player.isRunning(),
+      bluetoothOwnsAudio(bluetoothSourceSelected(), player.temporaryActive()), player.isRunning(),
       bluetoothAudioOutputAllowed() &&
           !btLink.hasIncompleteOnlineSnapshot() && btStatus.btOnline &&
           btStatus.btConnected && btAudioDesiredRate(bt) != 0,

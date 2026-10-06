@@ -162,9 +162,6 @@ void onMqttMessage(char* receivedTopic, char* payload, AsyncMqttClientMessagePro
       return;
     }
   } else {
-    if (len >= sizeof(player.burl)) return;
-    memcpy(player.burl, payload, len);
-    player.burl[len] = '\0';
-    player.sendCommand({PR_BURL, 0});
+    player.requestTemporaryUrl(payload, len);
   }
 }

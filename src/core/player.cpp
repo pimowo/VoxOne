@@ -9,6 +9,8 @@
 #include "volume_map.h"
 #include "system_operation_state.h"
 #include "source_manager.h"
+#include "network.h"
+#include "bt_audio_input.h"
 #if I2S_DOUT!=255 && VS1053_CS==255
 #include <driver/i2s.h>
 #endif
@@ -55,7 +57,7 @@ void Player::init() {
   playerQueue = xQueueCreate( 5, sizeof( playerRequestParams_t ) );
   setOutputPins(false);
   delay(50);
-  memset(burl, 0, MQTT_BURL_SIZE);
+  _temporaryUrls = xQueueCreate(1, MQTT_BURL_SIZE);
   if(MUTE_PIN!=255) pinMode(MUTE_PIN, OUTPUT);
   #if I2S_DOUT!=255
     #if !I2S_INTERNAL
@@ -86,12 +88,10 @@ void Player::sendCommand(playerRequestParams_t request){
   if(systemUpdateAudioBlocked() && request.type != PR_STOP &&
      request.type != PR_RADIO_SUSPEND) return;
   if(xQueueSend(playerQueue, &request, PLQ_SEND_DELAY) != pdPASS) return;
-#if VOXONE_HAS_BT && VOXONE_PIN_MAP_COMPLETE
   if(request.type == PR_PLAY || request.type == PR_STOP)
     sourceManagerRadioCommandQueued(request.type == PR_PLAY,
                                    request.type == PR_PLAY && request.payload > 0
                                        ? static_cast<uint16_t>(request.payload) : 0);
-#endif
 }
 
 void Player::resetQueue(){
@@ -105,6 +105,7 @@ void Player::stopInfo() {
 
 void Player::setError(){
   _hasError=true;
+  _temporary.signal(_callbackToken);
   config.setTitle(config.tmpBuf);
   serialCli.printf("##ERROR#:\t%s\n", config.tmpBuf);
 }
@@ -116,7 +117,8 @@ void Player::setError(const char *e){
 
 void Player::_stop(bool alreadyStopped, RadioStopReason reason){
   log_i("%s called", __func__);
-  if(config.getMode()==PM_SDCARD && !alreadyStopped) config.sdResumePos = player.getFilePos();
+  if(config.getMode()==PM_SDCARD && !alreadyStopped && !temporaryActive())
+    config.sdResumePos = player.getFilePos();
   _status = STOPPED;
   setOutputPins(false);
   if(!_hasError) config.setTitle((display.mode()==LOST || display.mode()==UPDATING)?"":LANG::const_PlStopped);
@@ -203,16 +205,22 @@ void Player::loop() {
         requestP.type != PR_RADIO_SUSPEND) return;
     switch (requestP.type){
       case PR_STOP:
-        _stop();
-#if VOXONE_HAS_BT && VOXONE_PIN_MAP_COMPLETE
+        if (_temporaryUrls) xQueueReset(_temporaryUrls);
+        if (temporaryBusy()) {
+          if (temporaryActive()) finishTemporary();
+          else if (systemUpdateAudioBlocked())
+            _stop(false, RadioStopReason::SourceSwitch);
+          if (!sourceManagerRadioPlayIntent()) stopInfo();
+        } else {
+          _stop();
+        }
         sourceManagerRadioStopConsumed();
-#endif
         break;
       case PR_RADIO_SUSPEND:
-        _stop(false, RadioStopReason::SourceSwitch);
+        if (!temporaryBusy()) _stop(false, RadioStopReason::SourceSwitch);
         break;
       case PR_RADIO_RESUME:
-#if VOXONE_HAS_BT && VOXONE_PIN_MAP_COMPLETE
+        if (temporaryBusy()) break;
         if (sourceManagerRadioResumeAllowed()) {
           if (requestP.payload > 0 &&
               config.lastStation() != static_cast<uint16_t>(requestP.payload))
@@ -220,15 +228,15 @@ void Player::loop() {
           sourceManagerRadioPlayConsumed();
           _play(static_cast<uint16_t>(requestP.payload), true);
         }
-#endif
         break;
       case PR_PLAY: {
+        // Accepted commands already updated canonical intent/station. Let the
+        // announcement finish, then use that current intent exactly once.
+        if (temporaryBusy()) break;
         if (requestP.payload>0) {
           config.setLastStation((uint16_t)requestP.payload);
         }
-#if VOXONE_HAS_BT && VOXONE_PIN_MAP_COMPLETE
         sourceManagerRadioPlayConsumed();
-#endif
         _play((uint16_t)abs(requestP.payload)); 
         if (player_on_station_change) player_on_station_change(); 
         pm.on_station_change();
@@ -263,17 +271,29 @@ void Player::loop() {
         break;
       }
       case PR_BURL: {
-        if(strlen(burl)>0){
-          browseUrl();
-        }
+        // Wake-up only. URL bytes are owned by the one-slot mailbox below.
         break;
       }
           
       default: break;
     }
   }
-  Audio::loop();
-  if(!isRunning() && _status==PLAYING) _stop(true);
+  char url[MQTT_BURL_SIZE];
+  if (_temporaryUrls && xQueueReceive(_temporaryUrls, url, 0) == pdTRUE &&
+      !systemUpdateAudioBlocked()) browseUrl(url);
+  // Backend EOF/error callbacks run synchronously inside these calls. They
+  // signal this invocation's token; never reconnect from a decoder callback.
+  _callbackToken = _temporary.token();
+  if (!_temporary.terminal()) Audio::loop();
+  _callbackToken = 0;
+  if (temporaryActive()) {
+    if (_temporary.terminal() || !isRunning()) finishTemporary();
+  } else if (!isRunning() && _status==PLAYING) {
+    _stop(true);
+  }
+  if (uxQueueMessagesWaiting(playerQueue) == 0 &&
+      (!_temporaryUrls || uxQueueMessagesWaiting(_temporaryUrls) == 0))
+    restoreTemporaryBase();
   if(_volTimer){
     if((millis()-_volTicks)>3000){
       config.saveVolume();
@@ -322,15 +342,77 @@ void Player::_play(uint16_t stationId, bool sourceResume) {
   };
 }
 
-void Player::browseUrl(){
+void Player::requestTemporaryUrl(const char* url, size_t length) {
+  if (!_temporaryUrls || !url || !length || length >= MQTT_BURL_SIZE ||
+      systemUpdateAudioBlocked()) return;
+  char request[MQTT_BURL_SIZE]{};
+  memcpy(request, url, length);
+  // MQTT runs on another task. Replace the pending URL atomically, never a
+  // buffer currently used by connecttohost(). Latest pending request wins.
+  xQueueOverwrite(_temporaryUrls, request);
+  sendCommand({PR_BURL, 0});
+}
+
+bool Player::temporaryEof() {
+  if (!_callbackToken) return false;
+  _temporary.signal(_callbackToken);
+  return true;
+}
+
+bool Player::interruptTemporaryForNetwork() {
+  const bool busy = temporaryBusy();
+  _temporary.signal(_temporary.token());
+  return busy;
+}
+
+void Player::finishTemporary() {
+  const uint32_t token = _temporary.token();
+  if (!token) return;
+  _callbackToken = 0;
+  // Stop/clear Player while it still owns I2S0. This is not a user RADIO STOP.
+  _stop(false, RadioStopReason::SourceSwitch);
+  remoteStationName = false;
+  _temporary.finish(token);
+}
+
+void Player::restoreTemporaryBase() {
+  if (!temporaryBusy() || temporaryActive()) return;
+  uint16_t station = config.lastStation();
+  if (!sourceManagerTakeTemporaryRestore(_temporary,
+          WiFi.isConnected() || config.getMode() == PM_SDCARD,
+          systemUpdateAudioBlocked(), station)) return;
+  if (station != config.lastStation()) config.setLastStation(station);
+  _play(station, true);
+}
+
+void Player::browseUrl(const char* url){
+#if VOXONE_HAS_BT && VOXONE_PIN_MAP_COMPLETE && VOXONE_BT_I2S_RX_ENABLED
+  if (!btAudioInput.acquirePlayerOutput()) {
+    serialCli.printf("##ERROR#:\tTemporary URL cannot acquire I2S0\n");
+    return;
+  }
+#endif
+  const bool first = !temporaryActive();
+  _callbackToken = 0;
+  if (first && config.getMode() == PM_SDCARD && isRunning()) {
+    const uint32_t position = getFilePos();
+    _resumeFilePos = position >= sd_min ? position - sd_min : 0;
+    config.sdResumePos = 0;
+  }
+  // Replacement invalidates the previous token without changing the base.
+  const uint32_t token = _temporary.begin();
+  stopSong();
+  network.lostPlaying = false;
   _hasError=false;
   remoteStationName = true;
   config.setDspOn(1);
-  resumeAfterUrl = _status==PLAYING;
   display.putRequest(PSTOP);
   setOutputPins(false);
   config.setTitle(LANG::const_PlConnect);
-  if (connecttohost(burl)){
+  _callbackToken = token;
+  const bool connected = connecttohost(url);
+  _callbackToken = 0;
+  if (connected){
     _status = PLAYING;
     config.setTitle("");
     netserver.requestOnChange(MODE, 0);
@@ -339,11 +421,10 @@ void Player::browseUrl(){
     if (player_on_start_play) player_on_start_play();
     pm.on_start_play();
   }else{
-    serialCli.printf("##ERROR#:\tError connecting to %.128s\n", burl);
-    snprintf(config.tmpBuf, sizeof(config.tmpBuf), "Error connecting to %.128s", burl); setError();
-    _stop(true);
+    serialCli.printf("##ERROR#:\tError connecting to %.128s\n", url);
+    snprintf(config.tmpBuf, sizeof(config.tmpBuf), "Error connecting to %.128s", url); setError();
+    _temporary.signal(token);
   }
-  //memset(burl, 0, MQTT_BURL_SIZE);
 }
 
 void Player::prev() {
@@ -370,7 +451,7 @@ void Player::next() {
 }
 
 void Player::toggle() {
-  if (_status == PLAYING) {
+  if (temporaryBusy() ? sourceManagerRadioPlayIntent() : _status == PLAYING) {
     sendCommand({PR_STOP, 0});
   } else {
     const uint16_t selected = config.lastStation();

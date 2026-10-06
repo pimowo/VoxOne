@@ -2,6 +2,18 @@
 #define VOXONE_SOURCE_MANAGER_H
 
 #include "options.h"
+#include <stdint.h>
+
+// Radio intent also exists on targets without Bluetooth (temporary URL restore).
+void sourceManagerRadioCommandQueued(bool play, uint16_t station);
+void sourceManagerRadioPlayConsumed();
+void sourceManagerRadioStopConsumed();
+bool sourceManagerRadioResumeAllowed();
+bool sourceManagerRadioPlayIntent();
+class TemporaryAudioState;
+bool sourceManagerTakeTemporaryRestore(TemporaryAudioState& temporary,
+                                      bool networkReady, bool blocked,
+                                      uint16_t& station);
 
 #if VOXONE_HAS_BT && VOXONE_PIN_MAP_COMPLETE
 #include "bt_transport.h"
@@ -21,10 +33,6 @@ void sourceManagerBegin();
 void sourceManagerLoop();
 void sourceManagerStopForUpdate();
 void cycleNextSource();
-void sourceManagerRadioCommandQueued(bool play, uint16_t station);
-void sourceManagerRadioPlayConsumed();
-void sourceManagerRadioStopConsumed();
-bool sourceManagerRadioResumeAllowed();
 bool bluetoothSourceSelected();
 bool bluetoothAudioOutputAllowed();
 bool bluetoothPhysicallyConnected();

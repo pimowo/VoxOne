@@ -3,6 +3,7 @@
 
 #include "mute_state.h"
 #include "radio_source_policy.h"
+#include "temporary_audio_state.h"
 
 #if I2S_DOUT!=255 || I2S_INTERNAL
   #include "../audioI2S/AudioEx.h"
@@ -39,6 +40,9 @@ class Player: public Audio {
     uint32_t    _resumeFilePos;
     plStatus_e  _status;
     MuteState _mute;
+    TemporaryAudioState _temporary;
+    uint32_t _callbackToken = 0;
+    QueueHandle_t _temporaryUrls = nullptr;
     //char        _plError[PLERR_LN];
   private:
     void _stop(bool alreadyStopped = false,
@@ -46,12 +50,13 @@ class Player: public Audio {
     void _play(uint16_t stationId, bool sourceResume = false);
     void _loadVol(uint8_t volume);
     bool _hasError;
+    void browseUrl(const char* url);
+    void finishTemporary();
+    void restoreTemporaryBase();
   public:
     bool lockOutput = true;
-    bool resumeAfterUrl = false;
     volatile bool connproc = true;
     uint32_t sd_min, sd_max;
-    char      burl[MQTT_BURL_SIZE];  /* buffer for browseUrl  */
   public:
     Player();
     void init();
@@ -62,7 +67,11 @@ class Player: public Audio {
     //bool hasError() { return strlen(_plError)>0; }
     void sendCommand(playerRequestParams_t request);
     void resetQueue();
-    void browseUrl();
+    void requestTemporaryUrl(const char* url, size_t length);
+    bool temporaryActive() const { return _temporary.active(); }
+    bool temporaryBusy() const { return _temporary.busy(); }
+    bool temporaryEof();
+    bool interruptTemporaryForNetwork();
     bool remoteStationName = false;
     plStatus_e status() { return _status; }
     void prev();

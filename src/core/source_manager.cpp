@@ -1,4 +1,60 @@
 #include "source_manager.h"
+#include <Arduino.h>
+#include "source_manager_state.h"
+#include "temporary_audio_state.h"
+
+namespace {
+SourceManagerState sourceState;
+portMUX_TYPE sourceMux = portMUX_INITIALIZER_UNLOCKED;
+}
+
+void sourceManagerRadioCommandQueued(bool play, uint16_t station) {
+  portENTER_CRITICAL(&sourceMux);
+  sourceState.recordRadioCommand(play, station);
+  portEXIT_CRITICAL(&sourceMux);
+}
+
+void sourceManagerRadioPlayConsumed() {
+  portENTER_CRITICAL(&sourceMux);
+  sourceState.radioPlayConsumed();
+  portEXIT_CRITICAL(&sourceMux);
+}
+
+void sourceManagerRadioStopConsumed() {
+  portENTER_CRITICAL(&sourceMux);
+  sourceState.radioStopConsumed();
+  portEXIT_CRITICAL(&sourceMux);
+}
+
+bool sourceManagerRadioResumeAllowed() {
+  portENTER_CRITICAL(&sourceMux);
+  const bool allowed = sourceState.radioResumeAllowed();
+  portEXIT_CRITICAL(&sourceMux);
+  return allowed;
+}
+
+bool sourceManagerRadioPlayIntent() {
+  portENTER_CRITICAL(&sourceMux);
+  const bool play = sourceState.radioPlayIntent();
+  portEXIT_CRITICAL(&sourceMux);
+  return play;
+}
+
+bool sourceManagerTakeTemporaryRestore(TemporaryAudioState& temporary,
+                                      bool networkReady, bool blocked,
+                                      uint16_t& station) {
+  portENTER_CRITICAL(&sourceMux);
+  // Commit the restore decision together with the current base. A controls
+  // task changing source cannot fall between reading intent and consuming it.
+  const bool play = temporary.takeRadioRestore(sourceState.radioResumeAllowed(),
+                                               networkReady, blocked);
+  if (play) {
+    station = sourceState.radioStationForResume(station);
+    sourceState.radioPlayConsumed();
+  }
+  portEXIT_CRITICAL(&sourceMux);
+  return play;
+}
 
 #if VOXONE_HAS_BT && VOXONE_PIN_MAP_COMPLETE
 
@@ -16,9 +72,7 @@
 #include "system_operation_state.h"
 
 namespace {
-SourceManagerState sourceState;
 BtVolumeSync volumeSync;
-portMUX_TYPE sourceMux = portMUX_INITIALIZER_UNLOCKED;
 
 // Only the display task writes this copy. Widgets copy its text in setText().
 struct DisplayText {
@@ -54,8 +108,13 @@ void refreshDisplay(const SourceUpdate& update) {
 #endif
 }
 
-void stopOnSourceChange(const SourceUpdate& update) {
+void stopOnSourceChange(const SourceUpdate& update, bool temporaryAtChange) {
   if (update.activeChanged) {
+    // Selection keeps following BT/user events; only physical work is deferred.
+    if (temporaryAtChange || player.temporaryBusy()) {
+      network.lostPlaying = false;
+      return;
+    }
     const bool radioActive = player.status() == PLAYING || player.isRunning();
     portENTER_CRITICAL(&sourceMux);
     const RadioSourceActions radio = sourceState.radioActions(update, radioActive);
@@ -78,31 +137,6 @@ void sourceManagerBegin() {
   serialCli.printf("##[SOURCE]# active=RADIO\n");
 }
 
-void sourceManagerRadioCommandQueued(bool play, uint16_t station) {
-  portENTER_CRITICAL(&sourceMux);
-  sourceState.recordRadioCommand(play, station);
-  portEXIT_CRITICAL(&sourceMux);
-}
-
-void sourceManagerRadioPlayConsumed() {
-  portENTER_CRITICAL(&sourceMux);
-  sourceState.radioPlayConsumed();
-  portEXIT_CRITICAL(&sourceMux);
-}
-
-void sourceManagerRadioStopConsumed() {
-  portENTER_CRITICAL(&sourceMux);
-  sourceState.radioStopConsumed();
-  portEXIT_CRITICAL(&sourceMux);
-}
-
-bool sourceManagerRadioResumeAllowed() {
-  portENTER_CRITICAL(&sourceMux);
-  const bool allowed = sourceState.radioResumeAllowed();
-  portEXIT_CRITICAL(&sourceMux);
-  return allowed;
-}
-
 void sourceManagerLoop() {
   if (systemUpdateAudioBlocked()) {
     sourceManagerStopForUpdate();
@@ -111,8 +145,9 @@ void sourceManagerLoop() {
   portENTER_CRITICAL(&sourceMux);
   const SourceUpdate update = sourceState.observe(btLink.state());
   const ActiveSource active = sourceState.active();
+  const bool temporaryAtChange = player.temporaryBusy();
   portEXIT_CRITICAL(&sourceMux);
-  stopOnSourceChange(update);
+  stopOnSourceChange(update, temporaryAtChange);
   if (update.btDisconnected) volumeSync.disconnect();
   if (update.btConnected) {
     const uint8_t user = config.userVolume;
@@ -206,7 +241,8 @@ uint16_t sourceManagerGetVuLevel(uint16_t dimension, bool& playing) {
 bool radioI2SOutputEnabled() {
   if (systemUpdateAudioBlocked()) return false;
 #if VOXONE_BT_I2S_RX_ENABLED
-  return !bluetoothSourceSelected() && btAudioInput.radioOutputReady();
+  return !bluetoothOwnsAudio(bluetoothSourceSelected(), player.temporaryActive()) &&
+         btAudioInput.radioOutputReady();
 #else
   return true;
 #endif
@@ -259,9 +295,10 @@ void cycleNextSource() {
   portENTER_CRITICAL(&sourceMux);
   const SourceUpdate update = sourceState.cycle(btLink.state());
   const ActiveSource active = sourceState.active();
+  const bool temporaryAtChange = player.temporaryBusy();
   portEXIT_CRITICAL(&sourceMux);
   if (!update.activeChanged) return;
-  stopOnSourceChange(update);
+  stopOnSourceChange(update, temporaryAtChange);
   serialCli.printf("##[SOURCE]# active=%s reason=manual\n", sourceName(active));
   refreshDisplay(update);
   netserver.requestOnChange(WEBSTATUS, 0);

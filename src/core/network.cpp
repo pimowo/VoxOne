@@ -46,6 +46,7 @@ void MyNetwork::WiFiReconnected(WiFiEvent_t event, WiFiEventInfo_t info){
     display.putRequest(NEWIP, 0);
   }else{
     display.putRequest(NEWMODE, PLAYER);
+    if (player.temporaryBusy()) network.lostPlaying = false;
 #if VOXONE_HAS_BT && VOXONE_PIN_MAP_COMPLETE
     if (radioWifiReconnectShouldPlay(network.lostPlaying,
                                      !bluetoothSourceSelected()))
@@ -72,12 +73,13 @@ void MyNetwork::WiFiLostConnection(WiFiEvent_t event, WiFiEventInfo_t info){
     return;
   }
   if(!network.beginReconnect){
+    const bool temporaryRecovery = player.interruptTemporaryForNetwork();
     Serial.printf("Lost connection, reconnecting to %s...\n", config.ssids[config.store.lastSSID-1].ssid);
     if(config.getMode()==PM_SDCARD) {
       network.status=SDREADY;
       display.putRequest(NEWIP, 0);
     }else{
-      network.lostPlaying = player.isRunning();
+      network.lostPlaying = !temporaryRecovery && player.isRunning();
       if (network.lostPlaying) {
         player.lockOutput = true;
 #if VOXONE_HAS_BT && VOXONE_PIN_MAP_COMPLETE

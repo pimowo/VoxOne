@@ -45,6 +45,23 @@ bool BtAudioInput::blockForUpdate() {
   return error == ESP_OK;
 }
 
+bool BtAudioInput::acquirePlayerOutput() {
+  if (!btRuntime.physicalStarted()) return true;
+  routeEnabled_.store(false);
+  radioReady_.store(false);
+  // Drain any in-flight BT write before Player resets its decoder/I2S clock.
+  if (!outputMutex_ || xSemaphoreTake(outputMutex_, pdMS_TO_TICKS(100)) != pdTRUE)
+    return false;
+  const esp_err_t error = i2s_zero_dma_buffer(I2S_NUM_0);
+  if (error == ESP_OK) {
+    bluetoothSelected_ = false;
+    outputRate_ = player.getSampleRate();
+    radioReady_.store(true);
+  }
+  xSemaphoreGive(outputMutex_);
+  return error == ESP_OK;
+}
+
 void BtAudioInput::route(bool bluetoothSelected, bool playbackPlaying,
                          uint32_t radioRate) {
   if (systemUpdateAudioBlocked()) {

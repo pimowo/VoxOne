@@ -105,19 +105,18 @@ void audio_id3data(const char *info){  //id3 metadata
 }
 
 void audio_eof_mp3(const char *info){  //end of file
+    if (player.temporaryEof()) return;
     config.sdResumePos = 0;
     player.next();
 }
 
 void audio_eof_stream(const char *info){
+  if (player.temporaryEof()) return;
   player.sendCommand({PR_STOP, 0});
-  if(!player.resumeAfterUrl) return;
-  if (config.getMode()==PM_WEB){
-    player.sendCommand({PR_PLAY, config.lastStation()});
-  }else{
-    player.setResumeFilePos( config.sdResumePos==0?0:config.sdResumePos-player.sd_min);
-    player.sendCommand({PR_PLAY, config.lastStation()});
-  }
+}
+
+void audio_eof_speech(const char *info){
+  player.temporaryEof();
 }
 
 void audio_progress(uint32_t startpos, uint32_t endpos){

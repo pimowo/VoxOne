@@ -19,6 +19,7 @@ class BtAudioInput {
             uint32_t radioRate, uint32_t nowMs);
   bool radioOutputReady() const { return radioReady_.load(); }
   bool blockForUpdate();
+  bool acquirePlayerOutput();
 
  private:
   struct Stats {
