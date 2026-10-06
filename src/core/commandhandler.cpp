@@ -140,7 +140,6 @@ bool CommandHandler::exec(const char *command, const char *value, uint32_t cid) 
     return true;
   }
   if (strEquals(command, "gettimezone")){ netserver.requestOnChange(GETTIMEZONE, cid); return true; }
-  if (strEquals(command, "getcontrols")){ netserver.requestOnChange(GETCONTROLS, cid); return true; }
   if (strEquals(command, "getactive"))  { netserver.requestOnChange(GETACTIVE, cid); return true; }
   if (strEquals(command, "newmode"))    { config.newConfigMode = atoi(value); netserver.requestOnChange(CHANGEMODE, cid); return true; }
   
@@ -177,7 +176,6 @@ bool CommandHandler::exec(const char *command, const char *value, uint32_t cid) 
   
   if (strEquals(command, "volsteps"))         { config.saveValue(&config.store.volsteps, static_cast<uint8_t>(atoi(value))); return true; }
   if (strEquals(command, "encacc"))  { setEncAcceleration(static_cast<uint16_t>(atoi(value))); return true; }
-  if (strEquals(command, "irtlp"))            { config.saveValue(&config.store.irtlp, static_cast<uint8_t>(atoi(value))); return true; }
   if (strEquals(command, "oneclickswitching")){ config.saveValue(&config.store.skipPlaylistUpDown, static_cast<bool>(atoi(value))); return true; }
   
   if (strEquals(command, "sdpos"))   { config.setSDpos(static_cast<uint32_t>(atoi(value))); return true; }
@@ -188,11 +186,6 @@ bool CommandHandler::exec(const char *command, const char *value, uint32_t cid) 
   if (strEquals(command, "format"))  { SPIFFS.format(); ESP.restart(); return true; }
   if (strEquals(command, "submitplaylist"))  { player.sendCommand({PR_STOP, 0}); return true; }
 
-#if IR_PIN!=255
-  if (strEquals(command, "irbtn"))  { config.setIrBtn(atoi(value)); return true; }
-  if (strEquals(command, "chkid"))  { config.irchck = static_cast<uint8_t>(atoi(value)); return true; }
-  if (strEquals(command, "irclr"))  { config.ircodes.irVals[config.irindex][static_cast<uint8_t>(atoi(value))] = 0; return true; }
-#endif
   if (strEquals(command, "reset"))  { config.resetSystem(value, cid); return true; }
 
   if (strEquals(command, "smartstart")){ uint8_t ss = atoi(value) == 1 ? 1 : 2; if (!player.isRunning() && ss == 1) ss = 0; config.setSmartStart(ss); return true; }

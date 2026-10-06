@@ -134,9 +134,6 @@ void Config::init() {
   }
 #endif
   emptyFS = true;
-#if IR_PIN!=255
-    irindex=-1;
-#endif
 #if defined(SD_SPIPINS) || SD_HSPI
   #if !defined(SD_SPIPINS)
     SDSPI.begin();
@@ -378,13 +375,6 @@ void Config::initPlaylistMode(){
 
 void Config::_initHW(){
   loadTheme();
-  #if IR_PIN!=255
-  eepromRead(EEPROM_START_IR, ircodes);
-  if(ircodes.ir_set!=4224){
-    ircodes.ir_set=4224;
-    memset(ircodes.irVals, 0, sizeof(ircodes.irVals));
-  }
-  #endif
   #if BRIGHTNESS_PIN!=255
     pinMode(BRIGHTNESS_PIN, OUTPUT);
     setBrightness(false);
@@ -428,14 +418,6 @@ void Config::loadTheme(){
   theme.playlist[3]   = color565(COLOR_PLAYLIST_3);
   theme.playlist[4]   = color565(COLOR_PLAYLIST_4);
   #include "../displays/tools/tftinverttitle.h"
-}
-
-template <class T> int Config::eepromRead(int ee, T& value) {
-  uint8_t* p = (uint8_t*)(void*)&value;
-  int i;;
-  for (i = 0; i < sizeof(value); i++)
-    *p++ = EEPROM.read(ee++);
-  return i;
 }
 
 void Config::reset(){
@@ -506,15 +488,6 @@ void Config::setSDpos(uint32_t val){
     }
   }
 }
-#if IR_PIN!=255
-void Config::setIrBtn(int val){
-  irindex = val;
-  netserver.irRecordEnable = (irindex >= 0);
-  irchck = 0;
-  netserver.irValsToWs();
-  if (irindex < 0) saveIR();
-}
-#endif
 void Config::resetSystem(const char *val, uint8_t clientId){
   if (strcmp(val, "system") == 0) {
     saveValue(&store.smartstart, (uint8_t)2, false);
@@ -565,8 +538,6 @@ void Config::resetSystem(const char *val, uint8_t clientId){
     saveValue(&store.dbgtouch, false, false);
     saveValue(&store.skipPlaylistUpDown, false);
     setEncAcceleration(200);
-    saveValue(&store.irtlp, static_cast<uint8_t>(40));
-    netserver.requestOnChange(GETCONTROLS, clientId);
     return;
   }
   if (strcmp(val, "1") == 0) {
@@ -681,20 +652,6 @@ void Config::setSnuffle(bool sn){
   saveValue(&store.sdsnuffle, sn);
   if(store.sdsnuffle) player.next();
 }
-
-#if IR_PIN!=255
-void Config::saveIR(){
-  WriteLock lock(_persistMutex);
-  // Separate IR region 0..499, never a config_t offset. Do not flush an
-  // unverified config cache after a failed write, or touch future formats.
-  if (_startupReadOnly || _storage.mode() != voxone::config_format::ConfigStorageMode::V7)
-    return;
-  static_assert(EEPROM_START_IR + sizeof(ircodes) <= EEPROM_START, "IR overlaps config");
-  const uint8_t* bytes = reinterpret_cast<const uint8_t*>(&ircodes);
-  for (size_t i = 0; i < sizeof(ircodes); ++i) EEPROM.write(EEPROM_START_IR + i, bytes[i]);
-  if (!EEPROM.commit()) Serial.println("[CONFIG] IR commit failed");
-}
-#endif
 
 void Config::saveVolume(){
   // The player's existing volume timer still controls when this is called.
@@ -1224,7 +1181,6 @@ void Config::bootInfo() {
           BTN_LEFT, BTN_CENTER, BTN_RIGHT, BTN_UP, BTN_DOWN, BTN_MODE, BTN_INTERNALPULLUP?"true":"false");
   BOOTLOG("encoder:\tl=%d, b=%d, r=%d, pullup=%s",
           ENC_BTNL, ENC_BTNB, ENC_BTNR, ENC_INTERNALPULLUP?"true":"false");
-  BOOTLOG("ir:\t\t%d", IR_PIN);
   if(SDC_CS!=255) BOOTLOG("SD:\t\t%d", SDC_CS);
   BOOTLOG("------------------------------------------------");
 }

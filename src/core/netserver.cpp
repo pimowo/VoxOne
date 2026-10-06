@@ -324,7 +324,6 @@ bool NetServer::begin(bool quiet) {
   if (!netServerShouldInitialize(_started, network.status == SDREADY)) return true;
   if(!quiet) Serial.print("##[BOOT]#\tnetserver.begin\t");
   importRequest = IMDONE;
-  irRecordEnable = false;
   playerBufMax = psramInit()?300000:1600 * config.store.abuff;
   _volumeUpdatePending = false;
   _lastVolumeUpdate = millis() - NS_VOLUME_INTERVAL_MS;
@@ -1646,9 +1645,8 @@ void NetServer::processQueue(){
             if (TS_MODEL != TS_MODEL_UNDEFINED || dbgact)       APPEND_GROUP("group_touch");
             if (DSP_MODEL == DSP_NOKIA5110)                     APPEND_GROUP("group_nokia");
                                                                 APPEND_GROUP("group_timezone");
-            if (TS_MODEL != TS_MODEL_UNDEFINED || IR_PIN != 255 || dbgact)
+            if (TS_MODEL != TS_MODEL_UNDEFINED || dbgact)
                                                                 APPEND_GROUP("group_controls");
-            if (IR_PIN != 255 || dbgact)                        APPEND_GROUP("group_ir");
             if (!psramInit())                                   APPEND_GROUP("group_buffer");
                                                               #if RTCSUPPORTED
                                                                 APPEND_GROUP("group_rtc");
@@ -1762,9 +1760,6 @@ void NetServer::processQueue(){
                                   config.store.timeSyncInterval,
                                   config.store.timeSyncIntervalRTC); 
                                   break;
-      case GETCONTROLS:   sprintf (wsBuf, "{\"irtl\":%d}", config.store.irtlp);
-
-                                  break;
       case DSPON:         sprintf (wsBuf, "{\"dspontrue\":%d}", 1); break;
       case STATION:       requestOnChange(STATIONNAME, clientId); requestOnChange(ITEM, clientId); break;
       case STATIONNAME:   formatWsTextPayload(wsBuf, sizeof(wsBuf), "nameset", config.station.name); break;
@@ -1877,20 +1872,6 @@ void NetServer::loop() {
   portEXIT_CRITICAL(&netserverLoopMux);
   //processQueue();
 }
-
-#if IR_PIN!=255
-void NetServer::irToWs(const char* protocol, uint64_t irvalue) {
-  wsBuf[0]='\0';
-  sprintf (wsBuf, "{\"ircode\": %llu, \"protocol\": \"%s\"}", irvalue, protocol);
-  websocket.textAll(wsBuf);
-}
-void NetServer::irValsToWs() {
-  if (!irRecordEnable) return;
-  wsBuf[0]='\0';
-  sprintf (wsBuf, "{\"irvals\": [%llu, %llu, %llu]}", config.ircodes.irVals[config.irindex][0], config.ircodes.irVals[config.irindex][1], config.ircodes.irVals[config.irindex][2]);
-  websocket.textAll(wsBuf);
-}
-#endif
 
 void NetServer::onWsMessage(void *arg, uint8_t *data, size_t len, uint32_t clientId) {
   AwsFrameInfo *info = (AwsFrameInfo*)arg;

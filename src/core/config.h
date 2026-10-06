@@ -11,8 +11,7 @@
 
 #define EEPROM_SIZE       768
 #define EEPROM_START      500
-#define EEPROM_START_IR   0
-#define EEPROM_START_2    10
+// Addresses 0..499 are reserved for historical IR data; never reuse them.
 #define PLAYLIST_PATH     "/data/stations.tsv"
 #define SSIDS_PATH        "/data/wifi.csv"
 #define TMP_PATH          "/data/tmpfile.txt"
@@ -136,14 +135,6 @@ struct config_t
 };
 static_assert(EEPROM_START + sizeof(config_t) <= EEPROM_SIZE, "config_t exceeds EEPROM");
 
-#if IR_PIN!=255
-struct ircodes_t
-{
-  unsigned int ir_set; //must be 4224
-  uint64_t irVals[20][3];
-};
-#endif
-
 struct station_t
 {
   uint64_t id = 0;
@@ -168,11 +159,6 @@ class Config {
     bool volumeBootDirty = false;
     station_t station;
     theme_t   theme;
-#if IR_PIN!=255
-    int irindex;
-    uint8_t irchck;
-    ircodes_t ircodes;
-#endif
     BitrateFormat configFmt = BF_UNKNOWN;
     neworkItem ssids[5];
     uint8_t ssidsCount;
@@ -191,9 +177,6 @@ class Config {
   public:
     Config() {};
     //void save();
-#if IR_PIN!=255
-    void saveIR();
-#endif
     void init();
     bool persistV7();
     bool setBtEnabled(bool enabled);
@@ -267,9 +250,6 @@ class Config {
     void setScreensaverPlayingBlank(bool val);
     void setSntpOne(const char *val);
     void setSDpos(uint32_t val);
-#if IR_PIN!=255
-    void setIrBtn(int val);
-#endif
     void resetSystem(const char *val, uint8_t clientId);
     bool spiffsCleanup();
     void waitConnection();
@@ -297,7 +277,6 @@ class Config {
       return chipId;
     }
   private:
-    template <class T> int eepromRead(int ee, T& value);
     class WriteLock {
      public:
       explicit WriteLock(SemaphoreHandle_t mutex) : mutex_(mutex) {
