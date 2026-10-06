@@ -28,15 +28,8 @@ int main() {
   SourceUpdate update = source.observe(bt);
   assert(update.activeChanged && update.reason == SourceChangeReason::BtConnect);
   source.displayView(view);
-  assert(view.playback == DisplayPlaybackState::Stopped);
-  assert(!source.bluetoothAudioOutputAllowed());
-  assert(!dacXsmtHigh(dacPlaybackForSource(true, false,
-                                         source.bluetoothAudioOutputAllowed(),
-                                         bt.playback), false));
-  assert(btTransportAction(BtTransportInput::Toggle, view) == BtTransportAction::Play);
-  assert(source.allowBluetoothPlayback());
-  source.displayView(view);
   assert(view.playback == DisplayPlaybackState::Playing);
+  assert(source.bluetoothAudioOutputAllowed());
   assert(dacXsmtHigh(dacPlaybackForSource(true, false,
                                         source.bluetoothAudioOutputAllowed(),
                                         bt.playback), false));
@@ -50,21 +43,19 @@ int main() {
     assert(!source.observe(bt).activeChanged);
   assert(source.active() == ActiveSource::Radio);
 
-  update = source.cycle(bt);  // RADIO PLAY -> BT STOP, even if phone plays.
+  update = source.cycle(bt);  // RADIO -> BT; phone continues playing.
   assert(update.activeChanged && source.active() == ActiveSource::Bluetooth);
   source.displayView(view);
-  assert(view.playback == DisplayPlaybackState::Stopped);
-  assert(!source.bluetoothAudioOutputAllowed() && mute.active());
-  bt.playback = BtPlayback::Paused;  // Pause acknowledgement.
-  source.observe(bt);
-  assert(!source.bluetoothAudioOutputAllowed());
-  bt.playback = BtPlayback::Playing;  // An unsolicited phone resume stays muted.
+  assert(view.playback == DisplayPlaybackState::Playing);
+  assert(source.bluetoothAudioOutputAllowed() && mute.active());
+  bt.playback = BtPlayback::Paused;
   source.observe(bt);
   assert(!source.bluetoothAudioOutputAllowed());
   source.displayView(view);
-  assert(view.playback == DisplayPlaybackState::Stopped);
-  assert(btTransportAction(BtTransportInput::Toggle, view) == BtTransportAction::Play);
-  assert(source.allowBluetoothPlayback());
+  assert(view.playback == DisplayPlaybackState::Paused);
+  bt.playback = BtPlayback::Playing;  // Remote event restores the route.
+  source.observe(bt);
+  assert(source.bluetoothAudioOutputAllowed());
   source.displayView(view);
   assert(view.playback == DisplayPlaybackState::Playing);
 
@@ -91,8 +82,8 @@ int main() {
   update = source.observe(bt);
   assert(update.btConnected && !update.activeChanged);
   source.displayView(view);
-  assert(view.playback == DisplayPlaybackState::Stopped);
-  assert(!source.bluetoothAudioOutputAllowed());
+  assert(view.playback == DisplayPlaybackState::Playing);
+  assert(source.bluetoothAudioOutputAllowed());
 
   // A lost backend is different from a disconnected phone: return to RADIO
   // in STOP, retain user MUTE, and keep the logical DAC output muted.

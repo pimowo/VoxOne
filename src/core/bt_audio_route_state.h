@@ -10,9 +10,11 @@ struct BtAudioRouteTarget {
 };
 
 inline BtAudioRouteTarget btAudioRouteTarget(bool bluetoothSelected,
+                                            bool playbackPlaying,
                                             bool rxRunning, uint32_t btRate,
                                             uint32_t radioRate) {
-  const bool btOutput = bluetoothSelected && rxRunning && btRate != 0;
+  const bool btOutput = bluetoothSelected && playbackPlaying && rxRunning &&
+                        btRate != 0;
   return {!bluetoothSelected, btOutput,
           bluetoothSelected ? (btOutput ? btRate : 0) : radioRate};
 }

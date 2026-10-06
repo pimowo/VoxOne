@@ -82,10 +82,7 @@ int main() {
   // Rotation and click retain the existing transport command mapping.
   DisplaySourceView view{};
   sources.displayView(view);
-  assert(view.playback == DisplayPlaybackState::Stopped);
-  assert(btTransportAction(BtTransportInput::Toggle, view) == BtTransportAction::Play);
-  assert(sources.allowBluetoothPlayback());
-  sources.displayView(view);
+  assert(view.playback == DisplayPlaybackState::Playing);
   assert(btTransportInputForRotation(-1) == BtTransportInput::Previous);
   assert(btTransportInputForRotation(1) == BtTransportInput::Next);
   assert(btTransportAction(BtTransportInput::Previous, view) == BtTransportAction::Previous);
@@ -115,11 +112,10 @@ int main() {
   assert(sources.active() == ActiveSource::Bluetooth);
   bt.playback = BtPlayback::Playing;
   sources.observe(bt);
-  DisplaySourceView heldView{};
-  sources.displayView(heldView);
-  assert(heldView.playback == DisplayPlaybackState::Stopped);
-  assert(!sources.bluetoothAudioOutputAllowed());
-  assert(sources.allowBluetoothPlayback());
+  DisplaySourceView resumedView{};
+  sources.displayView(resumedView);
+  assert(resumedView.playback == DisplayPlaybackState::Playing);
+  assert(sources.bluetoothAudioOutputAllowed());
   click(PLAYER, sources, calls);
   assert(calls.radioToggle == 1 && calls.btPause == 1 && calls.btPlay == 0);
 

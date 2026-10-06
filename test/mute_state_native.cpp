@@ -47,13 +47,13 @@ int main() {
   sources.displayView(view, true);
   mute.toggle();
   assert(sources.active() == ActiveSource::Bluetooth);
-  assert(view.playback == DisplayPlaybackState::Stopped);
+  assert(view.playback == DisplayPlaybackState::Playing);
   mute.set(true);
   sources.cycle(phone);
   assert(mute.active());
   sources.cycle(phone);
   assert(mute.active());
-  assert(sources.allowBluetoothPlayback());
+  assert(sources.bluetoothAudioOutputAllowed());
   sources.displayView(view, true);
   assert(view.playback == DisplayPlaybackState::Playing);
   sources.displayView(view, true);

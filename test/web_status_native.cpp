@@ -30,22 +30,20 @@ int main() {
   std::strcpy(bt.peerName, "Telefon");
   std::strcpy(bt.artist, "BT Artysta");
   std::strcpy(bt.title, "BT Utwór");
-  sources.observe(bt);  // RADIO -> BT, held in STOP.
+  sources.observe(bt);  // RADIO -> BT; report remote playback.
   sources.displayView(display);
   status = selectWebStatusView(display, "Radio A", "Artysta - Utwór", "MP3", 320);
   assert(std::strcmp(status.source, "BT") == 0);
   assert(std::strcmp(status.name, "Telefon") == 0);
   assert(std::strcmp(status.artist, "BT Artysta") == 0);
   assert(std::strcmp(status.title, "BT Utwór") == 0);
-  assert(std::strcmp(status.playback, "STOP") == 0);
+  assert(std::strcmp(status.playback, "PLAY") == 0);
   assert(status.sampleRate == 44100 && status.btConnected);
   assert(status.metadata[0] == '\0' && status.codec[0] == '\0' && status.bitrate == 0);
   assert(webTransportAction(true, "prev") == WebTransportAction::BluetoothPrevious);
   assert(webTransportAction(true, "toggle") == WebTransportAction::BluetoothToggle);
   assert(webTransportAction(true, "next") == WebTransportAction::BluetoothNext);
-  assert(btTransportAction(BtTransportInput::Toggle, display) == BtTransportAction::Play);
-
-  assert(sources.allowBluetoothPlayback());
+  assert(btTransportAction(BtTransportInput::Toggle, display) == BtTransportAction::Pause);
   sources.displayView(display);
   status = selectWebStatusView(display, "Radio A", "Artysta - Utwór", "MP3", 320);
   assert(std::strcmp(status.playback, "PLAY") == 0);

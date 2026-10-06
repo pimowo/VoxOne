@@ -45,7 +45,8 @@ bool BtAudioInput::blockForUpdate() {
   return error == ESP_OK;
 }
 
-void BtAudioInput::route(bool bluetoothSelected, uint32_t radioRate) {
+void BtAudioInput::route(bool bluetoothSelected, bool playbackPlaying,
+                         uint32_t radioRate) {
   if (systemUpdateAudioBlocked()) {
     routeEnabled_.store(false);
     radioReady_.store(false);
@@ -57,7 +58,7 @@ void BtAudioInput::route(bool bluetoothSelected, uint32_t radioRate) {
     return;
   }
   const BtAudioRouteTarget target = btAudioRouteTarget(
-      bluetoothSelected, active_ && taskRunning_.load() &&
+      bluetoothSelected, playbackPlaying, active_ && taskRunning_.load() &&
           !stopRequested_.load(), sampleRate_, radioRate);
   const uint32_t targetRate = target.outputRate;
   const bool desiredBt = target.btOutput;
@@ -252,18 +253,20 @@ void BtAudioInput::readContinuously() {
 void BtAudioInput::loop(const BtLinkState& link, bool bluetoothSelected,
                         uint32_t radioRate, uint32_t nowMs) {
   const uint32_t desiredRate = btAudioDesiredRate(link);
+  const bool playbackPlaying = desiredRate != 0 &&
+                               link.playback == BtPlayback::Playing;
   if (desiredRate == 0) {
-    route(bluetoothSelected, radioRate);
+    route(bluetoothSelected, false, radioRate);
     stop();
     retryPending_ = false;
     return;
   }
   if (active_ && stopRequested_.load() && !stop()) {
-    route(bluetoothSelected, radioRate);
+    route(bluetoothSelected, playbackPlaying, radioRate);
     return;
   }
   if (active_ && sampleRate_ != desiredRate) {
-    route(false, radioRate);
+    route(false, false, radioRate);
     if (!stop()) return;
   }
   if (active_ && !taskRunning_.load()) {
@@ -284,7 +287,7 @@ void BtAudioInput::loop(const BtLinkState& link, bool bluetoothSelected,
     retryPending_ = false;
   }
 
-  route(bluetoothSelected, radioRate);
+  route(bluetoothSelected, playbackPlaying, radioRate);
 
   if (active_ && nowMs - lastReportMs_ >= kReportIntervalMs) {
     Stats snapshot;

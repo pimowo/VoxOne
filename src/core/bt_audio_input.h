@@ -38,7 +38,8 @@ class BtAudioInput {
   void readContinuously();
   bool start(uint32_t rate, uint32_t nowMs);
   bool stop();
-  void route(bool bluetoothSelected, uint32_t radioRate);
+  void route(bool bluetoothSelected, bool playbackPlaying,
+             uint32_t radioRate);
 
   bool active_ = false;
   bool retryPending_ = false;

@@ -91,12 +91,8 @@ int main() {
   assert(std::strcmp(view.peerName, "Telefon") == 0);
   assert(std::strcmp(view.artist, "Żółć") == 0);
   assert(std::strcmp(view.title, "Utwór") == 0);
-  assert(view.playback == DisplayPlaybackState::Stopped);
-  assert(!sources.bluetoothAudioOutputAllowed());
-  assert(btTransportAction(BtTransportInput::Toggle, view) == BtTransportAction::Play);
-  assert(sources.allowBluetoothPlayback());  // Explicit user PLAY.
-  sources.displayView(view);
   assert(view.playback == DisplayPlaybackState::Playing);
+  assert(sources.bluetoothAudioOutputAllowed());
   assert(displaySourceVuVisible(view));
   for (uint8_t volume : {0, 1, 50}) {
     assert(displayVuUnlocked(true, displaySourceVuVisible(view), volume) ==
@@ -145,7 +141,7 @@ int main() {
   // Changed BT fields request only the relevant partial LCD update.
   sources.displayView(view);
   assert(view.playback == DisplayPlaybackState::Stopped);
-  assert(sources.allowBluetoothPlayback());
+  assert(!sources.bluetoothAudioOutputAllowed());
   std::strcpy(bt.peerName, "Telefon 2");
   update = sources.observe(bt);
   assert(update.stationChanged && !update.titleChanged);
@@ -160,6 +156,7 @@ int main() {
   assert(!update.stationChanged && update.titleChanged);
   sources.displayView(view);
   assert(view.playback == DisplayPlaybackState::Paused);
+  assert(!sources.bluetoothAudioOutputAllowed());
   assert(displaySourceVuVisible(view));
   assert(std::strcmp(displayPlaybackLabel(view.playback), "PAUZA") == 0);
   assert(btTransportAction(BtTransportInput::Toggle, view) == BtTransportAction::Play);
