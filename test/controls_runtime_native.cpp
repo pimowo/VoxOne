@@ -1,6 +1,7 @@
 #include <cassert>
 #include <cstdint>
 #include <fstream>
+#include <initializer_list>
 #include <iterator>
 #include <string>
 
@@ -39,6 +40,17 @@ int main() {
          std::string::npos);
   assert(implementation.find("void onBtnLongPressStart(int id)") !=
          std::string::npos);
+  assert(implementation.find("cycleNextSource()") != std::string::npos);
+  assert(implementation.find("sourceManagerTransport(") != std::string::npos);
+  assert(implementation.find("btEncoderClickAction(") != std::string::npos);
+
+  for (const char* token : {"IRrecv", "decode_results", "irrecv", "irResults",
+                            "irLoop", "irVolRepeat", "irBlink", "irNumber",
+                            "irRecordEnable", "IRremoteESP8266/", "#if IR_PIN"}) {
+    assertMissing(implementation, token);
+  }
+  assertMissing(interface, "irLoop");
+  assertMissing(interface, "IR_PLAY");
 
   assertMissing(implementation, "encoder2");
   assertMissing(implementation, "ENC2_");

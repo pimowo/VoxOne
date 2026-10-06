@@ -565,7 +565,7 @@ void Config::resetSystem(const char *val, uint8_t clientId){
     saveValue(&store.dbgtouch, false, false);
     saveValue(&store.skipPlaylistUpDown, false);
     setEncAcceleration(200);
-    setIRTolerance(40);
+    saveValue(&store.irtlp, static_cast<uint8_t>(40));
     netserver.requestOnChange(GETCONTROLS, clientId);
     return;
   }

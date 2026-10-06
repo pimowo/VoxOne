@@ -69,23 +69,6 @@ constexpr uint8_t nrOfButtons = sizeof(buttons) / sizeof(buttons[0]);
   TouchScreen touchscreen;
 #endif
 
-#if IR_PIN!=255
-#include <assert.h>
-
-#include "../IRremoteESP8266/IRrecv.h"
-#include "../IRremoteESP8266/IRremoteESP8266.h"
-#include "../IRremoteESP8266/IRac.h"
-#include "../IRremoteESP8266/IRtext.h"
-#include "../IRremoteESP8266/IRutils.h"
-uint8_t irVolRepeat = 0;
-//const uint16_t kCaptureBufferSize = 1024;
-const uint16_t kMinUnknownSize = 12;
-#define LEGACY_TIMING_INFO false
-
-IRrecv irrecv(IR_PIN, IR_BUFSIZE, IR_TIMEOUT, true);
-decode_results irResults;
-#endif
-
 #if ENC_BTNL!=255
 void IRAM_ATTR readEncoderISR()
 {
@@ -124,15 +107,6 @@ void initControls() {
 #if (TS_MODEL!=TS_MODEL_UNDEFINED) && (DSP_MODEL!=DSP_DUMMY)
   touchscreen.init(display.width(), display.height());
 #endif
-#if IR_PIN!=255
-  pinMode(IR_PIN, INPUT);
-  assert(irutils::lowLevelSanityCheck() == 0);
-#if DECODE_HASH
-  irrecv.setUnknownThreshold(kMinUnknownSize);
-#endif  // DECODE_HASH
-  irrecv.setTolerance(config.store.irtlp);
-  irrecv.enableIRIn();
-#endif // IR_PIN!=255
 }
 
 void loopControls() {
@@ -151,9 +125,6 @@ void loopControls() {
       onBtnDuringLongPress(lpId);
     }
   }
-#endif
-#if IR_PIN!=255
-  irLoop();
 #endif
 #if (TS_MODEL!=TS_MODEL_UNDEFINED) && (DSP_MODEL!=DSP_DUMMY)
   if (network.status == CONNECTED || network.status==SDREADY) touchscreen.loop();
@@ -192,154 +163,6 @@ void encoder1Loop() {
   }
 }
 #endif
-
-#if IR_PIN!=255
-void irBlink() {
-  if(REAL_LEDBUILTIN==255) return;
-  if (player.status() == STOPPED) {
-    for (uint8_t i = 0; i < 7; i++) {
-      digitalWrite(REAL_LEDBUILTIN, !digitalRead(REAL_LEDBUILTIN));
-      delay(100);
-    }
-  }
-}
-
-void irNumber(uint8_t num) {
-  uint16_t s;
-  if (display.numOfNextStation == 0 && num == 0) return;
-  display.putRequest(NEWMODE, NUMBERS);
-  if (display.numOfNextStation > UINT16_MAX / 10) return;
-  s = display.numOfNextStation * 10 + num;
-  if (s > config.playlistLength()) return;
-  display.numOfNextStation = s;
-  display.putRequest(NEXTSTATION, s);
-}
-
-void irLoop() {
-  if (irrecv.decode(&irResults)) {
-    if(irResults.value<256) return;
-    if (netserver.irRecordEnable) {
-      Serial.print(resultToHumanReadableBasic(&irResults));
-      Serial.println("--------------------------");
-      config.ircodes.irVals[config.irindex][config.irchck]=irResults.value;
-      netserver.irToWs(typeToString(irResults.decode_type, irResults.repeat).c_str(), irResults.value);
-      return;
-    }
-    if (!irResults.repeat/* && irResults.command!=0*/) {
-      irVolRepeat = 0;
-    }
-    switch (irVolRepeat) {
-      case 1: {
-          controlsEvent(display.mode() == STATIONS ? false : true);
-          break;
-        }
-      case 2: {
-          controlsEvent(display.mode() == STATIONS ? true : false);
-          break;
-        }
-    }
-    for(int target=0; target<17; target++){
-      for(int j=0; j<3; j++){
-        if(config.ircodes.irVals[target][j]==irResults.value){
-          if (network.status != CONNECTED && network.status!=SDREADY && target!=IR_AST) return;
-          if(target!=IR_AST && display.mode()==LOST) return;
-          if (display.mode() == SCREENSAVER || display.mode() == SCREENBLANK) {
-            display.putRequest(NEWMODE, PLAYER);
-            return;
-          }
-          switch (target){
-            case IR_PLAY: {
-                irBlink();
-                if (display.mode() == NUMBERS) {
-                  display.putRequest(NEWMODE, PLAYER);
-                  player.sendCommand({PR_PLAY, display.numOfNextStation});
-                  display.numOfNextStation = 0;
-                  break;
-                }
-                onBtnClick(1);
-                break;
-              }
-            case IR_PREV: {
-                player.prev();
-                break;
-              }
-            case IR_NEXT: {
-                player.next();
-                break;
-              }
-            case IR_UP: {
-                controlsEvent(display.mode() == STATIONS ? false : true);
-                irVolRepeat = 1;
-                break;
-              }
-            case IR_DOWN: {
-                controlsEvent(display.mode() == STATIONS ? true : false);
-                irVolRepeat = 2;
-                break;
-              }
-            case IR_HASH: {
-                if (display.mode() == NUMBERS) {
-                  display.putRequest(NEWMODE, PLAYER);
-                  display.numOfNextStation = 0;
-                  break;
-                }
-                display.putRequest(NEWMODE, display.mode() == PLAYER ? STATIONS : PLAYER);
-                break;
-              }
-            case IR_0: {
-                irNumber(0);
-                break;
-              }
-            case IR_1: {
-                irNumber(1);
-                break;
-              }
-            case IR_2: {
-                irNumber(2);
-                break;
-              }
-            case IR_3: {
-                irNumber(3);
-                break;
-              }
-            case IR_4: {
-                irNumber(4);
-                break;
-              }
-            case IR_5: {
-                irNumber(5);
-                break;
-              }
-            case IR_6: {
-                irNumber(6);
-                break;
-              }
-            case IR_7: {
-                irNumber(7);
-                break;
-              }
-            case IR_8: {
-                irNumber(8);
-                break;
-              }
-            case IR_9: {
-                irNumber(9);
-                break;
-              }
-            case IR_AST: {
-                //ESP.restart();
-                onBtnClick(EVT_BTNMODE);
-                break;
-              }
-          } /* switch (target) */
-          target=17;
-          break;
-        } /* if(config.ircodes.irVals[target][j]==irResults.value) */
-      }   /* for(int j=0; j<3; j++) */
-    }     /* for(int target=0; target<16; target++) */
-  }       /* if (irrecv.decode(&irResults)) */
-}
-#endif // if IR_PIN!=255
 
 void onBtnLongPressStart(int id) {
   switch ((controlEvt_e)id) {
@@ -643,12 +466,6 @@ void onBtnDoubleClick(int id) {
     default:
         break;
   }
-}
-void setIRTolerance(uint8_t tl){
-  config.saveValue(&config.store.irtlp, tl);
-#if IR_PIN!=255
-  irrecv.setTolerance(config.store.irtlp);
-#endif
 }
 void setEncAcceleration(uint16_t acc){
   config.saveValue(&config.store.encacc, acc);
