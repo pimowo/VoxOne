@@ -12,6 +12,7 @@
 #include "mqtt.h"
 #include "mqtt_config.h"
 #include "source_manager.h"
+#include "radio_source_policy.h"
 #include "timekeeper.h"
 #include <sys/time.h>
 #include <atomic>
@@ -45,11 +46,14 @@ void MyNetwork::WiFiReconnected(WiFiEvent_t event, WiFiEventInfo_t info){
     display.putRequest(NEWIP, 0);
   }else{
     display.putRequest(NEWMODE, PLAYER);
-    if (network.lostPlaying
 #if VOXONE_HAS_BT && VOXONE_PIN_MAP_COMPLETE
-        && !bluetoothSourceSelected()
+    if (radioWifiReconnectShouldPlay(network.lostPlaying,
+                                     !bluetoothSourceSelected()))
+      player.sendCommand({PR_RADIO_RESUME, config.lastStation()});
+#else
+    if (network.lostPlaying)
+      player.sendCommand({PR_PLAY, config.lastStation()});
 #endif
-        ) player.sendCommand({PR_PLAY, config.lastStation()});
     network.lostPlaying = false;
   }
   mqttWifiConnected();
@@ -74,7 +78,14 @@ void MyNetwork::WiFiLostConnection(WiFiEvent_t event, WiFiEventInfo_t info){
       display.putRequest(NEWIP, 0);
     }else{
       network.lostPlaying = player.isRunning();
-      if (network.lostPlaying) { player.lockOutput = true; player.sendCommand({PR_STOP, 0}); }
+      if (network.lostPlaying) {
+        player.lockOutput = true;
+#if VOXONE_HAS_BT && VOXONE_PIN_MAP_COMPLETE
+        player.sendCommand({PR_RADIO_SUSPEND, 0});
+#else
+        player.sendCommand({PR_STOP, 0});
+#endif
+      }
       display.putRequest(NEWMODE, LOST);
     }
   }

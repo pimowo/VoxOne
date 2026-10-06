@@ -70,8 +70,10 @@ class SourceManagerState {
     RadioSourceActions actions;
     actions.userStop = pendingRadioStop_;
     actions.suspend = radioPhysicallyActive && !actions.userStop;
-    actions.resume = update.reason == SourceChangeReason::Manual &&
-                     radioResumeAllowed();
+    const bool enteringRadio = update.reason == SourceChangeReason::Manual ||
+                               update.reason == SourceChangeReason::BtDisconnect ||
+                               update.reason == SourceChangeReason::BtOffline;
+    actions.resume = enteringRadio && radioResumeAllowed();
     return actions;
   }
   bool bluetoothPhysicallyConnected() const { return observedConnected_; }

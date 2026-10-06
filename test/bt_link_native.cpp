@@ -1,4 +1,5 @@
 #include "../src/core/bt_link_protocol.h"
+#include "../src/core/source_manager_state.h"
 
 #include <cassert>
 #include <cstring>
@@ -183,12 +184,17 @@ int main() {
   assert(fragmented.link.state().runtimeAvailable);
   assert(fragmented.link.state().connected);
   assert(!fragmented.link.hasIncompleteOnlineSnapshot());
+  SourceManagerState snapshotSource;
+  assert(snapshotSource.observe(fragmented.link.state()).reason ==
+         SourceChangeReason::BtConnect);
   fragmented.line("STATUS_BEGIN", 6);
   assert(fragmented.link.hasIncompleteOnlineSnapshot());
   assert(!fragmented.link.play());
   assert(!fragmented.link.setVolume(50));
   assert(!fragmented.link.state().connected);
   assert(fragmented.link.state().sampleRate == 0);
+  // main.cpp skips Source Manager while the snapshot is incomplete.
+  assert(snapshotSource.active() == ActiveSource::Bluetooth);
   fragmented.line("CONNECTED", 7);
   fragmented.line("SAMPLE_RATE 44100", 8);
   assert(fragmented.link.hasIncompleteOnlineSnapshot());
@@ -196,6 +202,16 @@ int main() {
   assert(!fragmented.link.hasIncompleteOnlineSnapshot());
   assert(fragmented.link.state().connected);
   assert(fragmented.link.state().sampleRate == 44100);
+  assert(!snapshotSource.observe(fragmented.link.state()).activeChanged);
+  fragmented.line("STATUS_BEGIN", 10);
+  fragmented.line("STATUS_END", 11);
+  assert(snapshotSource.observe(fragmented.link.state()).reason ==
+         SourceChangeReason::BtDisconnect);
+  fragmented.line("STATUS_BEGIN", 12);
+  fragmented.line("CONNECTED", 13);
+  fragmented.line("STATUS_END", 14);
+  assert(snapshotSource.observe(fragmented.link.state()).reason ==
+         SourceChangeReason::BtConnect);
   fragmented.link.suspend();
   assert(!fragmented.link.state().runtimeAvailable);
   assert(!fragmented.link.state().connected);

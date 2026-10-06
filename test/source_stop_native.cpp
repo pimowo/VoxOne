@@ -85,8 +85,8 @@ int main() {
   assert(view.playback == DisplayPlaybackState::Playing);
   assert(source.bluetoothAudioOutputAllowed());
 
-  // A lost backend is different from a disconnected phone: return to RADIO
-  // in STOP, retain user MUTE, and keep the logical DAC output muted.
+  // With RADIO intent STOP, a lost backend returns to RADIO in STOP,
+  // retains user MUTE, and keeps the logical DAC output muted.
   bt.runtimeAvailable = false;
   update = source.observe(bt);
   assert(update.activeChanged && update.reason == SourceChangeReason::BtOffline);
@@ -99,7 +99,7 @@ int main() {
   assert(!source.cycle(bt).activeChanged);  // Unavailable BT is skipped.
   assert(source.active() == ActiveSource::Radio);
 
-  // Runtime OFF follows the same RADIO STOP fallback as a lost BT backend.
+  // Runtime OFF follows the same intent-based fallback.
   BtRuntime runtime(true);
   assert(runtime.start());
   SourceManagerState disabledSource;

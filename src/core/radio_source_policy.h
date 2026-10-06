@@ -14,4 +14,9 @@ inline bool radioPlayPreparationUpdatesSmartStart(bool sourceResume,
   return !sourceResume && smartstart != 2;
 }
 
+inline bool radioWifiReconnectShouldPlay(bool lostPlaying,
+                                         bool radioSelected) {
+  return lostPlaying && radioSelected;
+}
+
 #endif

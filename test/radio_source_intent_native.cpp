@@ -98,7 +98,7 @@ int main() {
   radio.recordRadioCommand(false);
   assert(!radio.radioResumeAllowed());
 
-  // Automatic BT disconnect remains a STOP fallback in SOURCE-1A.
+  // A disconnect restores RADIO only when its saved intent is PLAY.
   SourceManagerState automatic;
   automatic.recordRadioCommand(true);
   update = automatic.observe(bt);
@@ -107,7 +107,7 @@ int main() {
   bt.connected = false;
   update = automatic.observe(bt);
   assert(update.activeChanged && update.reason == SourceChangeReason::BtDisconnect);
-  assert(!automatic.radioActions(update, false).resume);
+  assert(automatic.radioActions(update, false).resume);
   assert(automatic.radioPlayIntent());
 
   // Manual RADIO remains selected while BT stays connected.
