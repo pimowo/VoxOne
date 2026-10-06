@@ -375,8 +375,6 @@ void Display::_buildPager(){
   _clock->init(clockConf, 0, 0);
 #if DSP_MODEL==DSP_ST7796
   _plcurrent->init("*", salonStationConf, config.theme.plcurrent, config.theme.plcurrentbg);
-#elif DSP_MODEL==DSP_NOKIA5110
-    _plcurrent->init("*", playlistConf, 0, 1);
   #else
     _plcurrent->init("*", playlistConf, config.theme.plcurrent, config.theme.plcurrentbg);
   #endif
@@ -407,7 +405,7 @@ void Display::_buildPager(){
   _title1->setChangeObserver(this, 1, onTextChanged);
   _title2->setChangeObserver(this, 2, onTextChanged);
 #endif
-  #if !defined(DSP_LCD) && DSP_MODEL!=DSP_NOKIA5110
+  #if !defined(DSP_LCD)
 #if DSP_MODEL==DSP_ST7789_76
     _plbackground = new FillWidget(playlBGConf, config.theme.metabg);
 #else
@@ -418,10 +416,6 @@ void Display::_buildPager(){
     #else
       _metabackground = new FillWidget(metaBGConfInv, config.theme.metafill);
     #endif
-  #endif
-  #if DSP_MODEL==DSP_NOKIA5110
-    _plbackground = new FillWidget(playlBGConf, 1);
-    //_metabackground = new FillWidget(metaBGConf, 1);
   #endif
   #ifndef HIDE_VU
     _vuwidget = new VuWidget(vuConf, bandsConf, config.theme.vumax, config.theme.vumin, config.theme.background);
@@ -533,7 +527,7 @@ void Display::_buildPager(){
   if(_volip) _volip->lock();
 #endif
   
-  #if !defined(DSP_LCD) && DSP_MODEL!=DSP_NOKIA5110 && DSP_MODEL!=DSP_ST7796
+  #if !defined(DSP_LCD) && DSP_MODEL!=DSP_ST7796
     pages[PG_DIALOG]->addPage(_footer);
   #endif
 #if DSP_MODEL==DSP_ST7789_76 || DSP_MODEL==DSP_ST7796
@@ -589,13 +583,11 @@ void Display::_apScreen() {
   if(_boot) _pager->removePage(_boot);
   #ifndef DSP_LCD
     _boot = new Page();
-    #if DSP_MODEL!=DSP_NOKIA5110
       #if DSP_INVERT_TITLE || defined(DSP_OLED)
       _boot->addWidget(new FillWidget(metaBGConf, config.theme.metafill));
       #else
       _boot->addWidget(new FillWidget(metaBGConfInv, config.theme.metafill));
       #endif
-    #endif
     ScrollWidget *bootTitle = (ScrollWidget*) &_boot->addWidget(new ScrollWidget("*", apTitleConf, config.theme.meta, config.theme.metabg));
     bootTitle->setText("VoxOne tryb AP");
     TextWidget *apname = (TextWidget*) &_boot->addWidget(new TextWidget(apNameConf, 30, config.theme.title1, config.theme.background));
@@ -1314,11 +1306,7 @@ void Display::flip(){ dsp.flip(); }
 
 void Display::invert(){ dsp.invert(); }
 
-void  Display::setContrast(){
-  #if DSP_MODEL==DSP_NOKIA5110
-    dsp.setContrast(config.store.contrast);
-  #endif
-}
+void  Display::setContrast(){}
 
 bool Display::deepsleep(){
 #if defined(LCD_I2C) || defined(DSP_OLED) || BRIGHTNESS_PIN!=255

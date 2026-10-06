@@ -530,7 +530,7 @@ void VuWidget::_clear(){ }
       NUM & CLOCK
  ************************/
 #if !defined(DSP_LCD)
-  #if TIME_SIZE<19 //19->NOKIA
+  #if TIME_SIZE<19
   const GFXfont* Clock_GFXfontPtr = nullptr;
   #define CLOCKFONT5x7
   #else

@@ -20,14 +20,9 @@ class DspCore: public yoDisplay {
     void printClock(){}
     #ifdef DSP_OLED
     inline void loop(bool force=false){
-      #if DSP_MODEL==DSP_NOKIA5110
-        if(digitalRead(TFT_CS)==LOW) return;
-        display();
-      #else
-        display();
-        //delay(DSP_MODEL==DSP_ST7920?20:5);
-        vTaskDelay(DSP_MODEL==DSP_ST7920?10:0);
-      #endif
+      display();
+      //delay(DSP_MODEL==DSP_ST7920?20:5);
+      vTaskDelay(DSP_MODEL==DSP_ST7920?10:0);
     }
     inline void drawLogo(uint16_t top) {
       #if DSP_MODEL!=DSP_SSD1306x32

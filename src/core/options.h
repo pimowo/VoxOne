@@ -26,7 +26,6 @@ The connection tables are located here https://github.com/e2002/yoradio#connecti
 #define DSP_DUMMY       0     // without display
 #define DSP_ST7735      1     // 160x128  1.8'  or 128x128  1.44'  or 160x80   0.96'  https://aliexpress.com/item/1005002822797745.html
 #define DSP_SSD1306     2     // 128x64   0.96' https://aliexpress.com/item/1005001621806398.html
-#define DSP_NOKIA5110   3     // 84x48    1.6'  https://aliexpress.com/item/1005001621837569.html
 #define DSP_ST7789      4     // 320x240  2.4'  https://aliexpress.com/item/32960241206.html 
 #define DSP_SH1106      5     // 128x64   1.3'  https://aliexpress.com/item/32683094040.html
 #define DSP_1602I2C     6     // 16x2           https://aliexpress.com/item/32305776560.html
