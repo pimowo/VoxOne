@@ -311,7 +311,7 @@ class Config {
 };
 
 extern Config config;
-#if DSP_HSPI || TS_HSPI || VS_HSPI
+#if DSP_HSPI || TS_HSPI
 extern SPIClass  SPI2;
 #endif
 

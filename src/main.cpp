@@ -33,7 +33,7 @@
 #include <ArduinoOTA.h>
 #endif
 
-#if DSP_HSPI || TS_HSPI || VS_HSPI
+#if DSP_HSPI || TS_HSPI
 SPIClass  SPI2(HSPI);
 #endif
 

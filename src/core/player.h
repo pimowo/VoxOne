@@ -5,11 +5,7 @@
 #include "radio_source_policy.h"
 #include "temporary_audio_state.h"
 
-#if I2S_DOUT!=255 || I2S_INTERNAL
-  #include "../audioI2S/AudioEx.h"
-#else
-  #include "../audioVS1053/audioVS1053Ex.h"
-#endif
+#include "../audioI2S/AudioEx.h"
 
 #ifndef MQTT_BURL_SIZE
   #define MQTT_BURL_SIZE  512

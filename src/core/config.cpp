@@ -493,7 +493,7 @@ void Config::resetSystem(const char *val, uint8_t clientId){
     saveValue(&store.audioinfo, false, false);
     saveValue(&store.vumeter, false, false);
     saveValue(&store.softapdelay, (uint8_t)0, false);
-    saveValue(&store.abuff, (uint16_t)(VS1053_CS==255?7:10), false);
+    saveValue(&store.abuff, (uint16_t)7, false);
     saveValue(&store.watchdog, true);
     _makeDefaultMdnsName(tmpBuf, sizeof(tmpBuf));
     saveValue(store.mdnsname, tmpBuf, MDNS_LENGTH, true, true);
@@ -594,7 +594,7 @@ void Config::_applyDefaults() {
   char mdns[MDNS_LENGTH];
   _makeDefaultMdnsName(mdns, sizeof(mdns));
   voxone::config_format::buildConfigDefaults(
-      store, DEFAULT_NTP_1, DEFAULT_NTP_2, mdns, VS1053_CS == 255 ? 7 : 10);
+      store, DEFAULT_NTP_1, DEFAULT_NTP_2, mdns, 7);
 }
 
 bool Config::persistV7() {
@@ -1165,11 +1165,7 @@ void Config::bootInfo() {
   }
   BOOTLOG("chip:\t\tmodel: %s | rev: %d | id: %lu | cores: %d | psram: %lu", ESP.getChipModel(), ESP.getChipRevision(), chipId, ESP.getChipCores(), ESP.getPsramSize());
   BOOTLOG("display:\t%d", DSP_MODEL);
-  if(VS1053_CS==255) {
-    BOOTLOG("audio:\t\t%s (%d, %d, %d)", "I2S", I2S_DOUT, I2S_BCLK, I2S_LRC);
-  }else{
-    BOOTLOG("audio:\t\t%s (%d, %d, %d, %d, %s)", "VS1053", VS1053_CS, VS1053_DCS, VS1053_DREQ, VS1053_RST, VS_HSPI?"true":"false");
-  }
+  BOOTLOG("audio:\t\t%s (%d, %d, %d)", "I2S", I2S_DOUT, I2S_BCLK, I2S_LRC);
   BOOTLOG("audioinfo:\t%s", store.audioinfo?"true":"false");
   BOOTLOG("smartstart:\t%d", store.smartstart);
   BOOTLOG("vumeter:\t%s", store.vumeter?"true":"false");

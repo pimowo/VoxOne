@@ -1,5 +1,4 @@
 #include "../core/options.h"
-#if VS1053_CS==255
 /*
  * Audio.cpp
  *
@@ -5163,4 +5162,3 @@ void Audio::slowStreamDetection(uint32_t inBuffFilled, uint32_t maxFrameSize){
     }
     else cnt_slow = 0;
 }
-#endif  //  if VS1053_CS==255

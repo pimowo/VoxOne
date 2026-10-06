@@ -11,7 +11,7 @@
 #include "source_manager.h"
 #include "network.h"
 #include "bt_audio_input.h"
-#if I2S_DOUT!=255 && VS1053_CS==255
+#if I2S_DOUT!=255
 #include <driver/i2s.h>
 #endif
 #include "../displays/tools/l10n.h"
@@ -23,25 +23,10 @@ Player player;
 QueueHandle_t playerQueue;
 portMUX_TYPE playerVolumeMux = portMUX_INITIALIZER_UNLOCKED;
 
-#if VS1053_CS!=255 && !I2S_INTERNAL
-  #if VS_HSPI
-    Player::Player(): Audio(VS1053_CS, VS1053_DCS, VS1053_DREQ, &SPI2) {}
-  #else
-    Player::Player(): Audio(VS1053_CS, VS1053_DCS, VS1053_DREQ, &SPI) {}
-  #endif
-  void ResetChip(){
-    pinMode(VS1053_RST, OUTPUT);
-    digitalWrite(VS1053_RST, LOW);
-    delay(30);
-    digitalWrite(VS1053_RST, HIGH);
-    delay(100);
-  }
+#if !I2S_INTERNAL
+Player::Player() {}
 #else
-  #if !I2S_INTERNAL
-    Player::Player() {}
-  #else
-    Player::Player(): Audio(true, I2S_DAC_CHANNEL_BOTH_EN)  {}
-  #endif
+Player::Player(): Audio(true, I2S_DAC_CHANNEL_BOTH_EN) {}
 #endif
 
 
@@ -59,14 +44,8 @@ void Player::init() {
   delay(50);
   _temporaryUrls = xQueueCreate(1, MQTT_BURL_SIZE);
   if(MUTE_PIN!=255) pinMode(MUTE_PIN, OUTPUT);
-  #if I2S_DOUT!=255
-    #if !I2S_INTERNAL
-      setPinout(I2S_BCLK, I2S_LRC, I2S_DOUT);
-    #endif
-  #else
-    SPI.begin();
-    if(VS1053_RST>0) ResetChip();
-    begin();
+  #if I2S_DOUT!=255 && !I2S_INTERNAL
+    setPinout(I2S_BCLK, I2S_LRC, I2S_DOUT);
   #endif
   setBalance(config.store.balance);
   setTone(config.store.bass, config.store.middle, config.store.trebble);
@@ -130,7 +109,7 @@ void Player::_stop(bool alreadyStopped, RadioStopReason reason){
   setDefaults();
   if(!alreadyStopped) stopSong();
   if (systemUpdateAudioBlocked()) {
-#if I2S_DOUT!=255 && VS1053_CS==255
+#if I2S_DOUT!=255
     i2s_zero_dma_buffer(I2S_NUM_0);
 #endif
     systemUpdateRadioStopped();
