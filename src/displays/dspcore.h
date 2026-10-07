@@ -16,12 +16,7 @@
   #define DSP_OLED
   #include "displaySSD1306.h"
 
-#elif DSP_MODEL==DSP_SSD1306x32    // https://k210.org/images/content/uploads/yoradio/SSD1306x32.jpg
-  #define TIME_SIZE           1
-  #define DSP_OLED
-  #include "displaySSD1306.h"
-
-#elif DSP_MODEL==DSP_ST7789 || DSP_MODEL==DSP_ST7789_240 || DSP_MODEL==DSP_ST7789_170  // https://k210.org/images/content/uploads/yoradio/ST7789.jpg
+#elif DSP_MODEL==DSP_ST7789  // https://k210.org/images/content/uploads/yoradio/ST7789.jpg
   #define TIME_SIZE           52
   #define PSFBUFFER
   #include "displayST7789.h"
@@ -31,7 +26,7 @@
   #define PSFBUFFER
   #include "displayST7789.h"
 
-#elif DSP_MODEL==DSP_SH1106 || DSP_MODEL==DSP_SH1107    // https://k210.org/images/content/uploads/yoradio/SH1106.jpg
+#elif DSP_MODEL==DSP_SH1106    // https://k210.org/images/content/uploads/yoradio/SH1106.jpg
   #define TIME_SIZE           2
   #define DSP_OLED
   #include "displaySH1106.h"

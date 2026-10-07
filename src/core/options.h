@@ -28,18 +28,13 @@ The connection tables are located here https://github.com/e2002/yoradio#connecti
 #define DSP_SSD1306     2     // 128x64   0.96' https://aliexpress.com/item/1005001621806398.html
 #define DSP_ST7789      4     // 320x240  2.4'  https://aliexpress.com/item/32960241206.html 
 #define DSP_SH1106      5     // 128x64   1.3'  https://aliexpress.com/item/32683094040.html
-#define DSP_SSD1306x32  7     // 128x32   0.91' https://aliexpress.com/item/32798439084.html
 #define DSP_SSD1305     10    // 128x64   2.4'  SSD1305 and SSD1309 SPI https://aliexpress.com/item/32950307344.html
-#define DSP_SH1107      11    // 128x64   1.3'  https://aliexpress.com/item/4000551696674.html
 #define DSP_SSD1305I2C  16    // 128x64   2.4'  SSD1305 and SSD1309 I2C https://aliexpress.com/item/32950307344.html
-#define DSP_ST7789_240  18    // 240x240  1.3'  https://aliexpress.com/item/32996979276.html
-/* !!! DSP_ST7789_240 requires further development when used in conjunction with the VS1053 module !!! See the link https://www.instructables.com/Adding-CS-Pin-to-13-LCD/ */
 #define DSP_ST7796      19    // 480x320  3.5'  https://aliexpress.com/item/1005004632953455.html?sku_id=12000029911293172
 #define DSP_GC9A01A     20    // 240x240  1.28' https://aliexpress.com/item/1005004069703494.html?sku_id=12000029869654615
 #define DSP_SSD1322     23    // 256x64   2.8'  https://aliexpress.com/item/1005003480981568.html
 #define DSP_ST7920      24    // 128x64   2.6'  https://aliexpress.com/item/32699482638.html
 #define DSP_ST7789_76   25    // 284x76   2.25' https://aliexpress.com/item/1005009016973081.html
-#define DSP_ST7789_170  28    // 320x170  1.9'  https://aliexpress.com/item/1005008723378017.html
 #define DSP_CUSTOM      101   // your display
 
 #ifndef DSP_MODEL

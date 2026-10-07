@@ -8,11 +8,7 @@
 
 typedef GFXcanvas1 Canvas;
 
-#if DSP_MODEL==DSP_SH1106
 typedef Adafruit_SH1106G yoDisplay;
-#else
-typedef Adafruit_SH1107 yoDisplay;
-#endif
 
 #include "tools/commongfx.h"
 

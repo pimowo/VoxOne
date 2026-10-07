@@ -280,7 +280,7 @@ class SalonBluetoothWidget : public Widget {
 
 Page *pages[] = { new Page(), new Page(), new Page(), new Page() };
 
-#if !((DSP_MODEL==DSP_ST7735 && DTYPE==INITR_BLACKTAB) || DSP_MODEL==DSP_ST7789 || DSP_MODEL==DSP_ST7796 || DSP_MODEL==DSP_ST7789_170)
+#if !((DSP_MODEL==DSP_ST7735 && DTYPE==INITR_BLACKTAB) || DSP_MODEL==DSP_ST7789 || DSP_MODEL==DSP_ST7796)
   #undef  BITRATE_FULL
   #define BITRATE_FULL     false
 #endif

@@ -739,7 +739,7 @@ void ClockWidget::_printClock(bool force){
   auto& gfx = getRealDsp();
   gfx.setTextSize(Clock_GFXfontPtr==nullptr?TIME_SIZE:1);
   gfx.setFont(Clock_GFXfontPtr);
-  bool clockInTitle=!config.isScreensaver && _config.top<_timeheight; //DSP_SSD1306x32
+  bool clockInTitle=!config.isScreensaver && _config.top<_timeheight;
   if(force){
     _clearClock();
     _getTimeBounds();

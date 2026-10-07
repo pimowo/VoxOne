@@ -25,11 +25,7 @@ class DspCore: public yoDisplay {
       vTaskDelay(DSP_MODEL==DSP_ST7920?10:0);
     }
     inline void drawLogo(uint16_t top) {
-      #if DSP_MODEL!=DSP_SSD1306x32
-        drawBitmap((width()  - LOGO_WIDTH ) / 2, top, logo, LOGO_WIDTH, LOGO_HEIGHT, 1);
-      #else
-        setTextSize(1); setCursor((width() - 6*CHARWIDTH) / 2, 0); setTextColor(TFT_FG, TFT_BG); print(utf8Rus("ёRadio"));
-      #endif
+      drawBitmap((width()  - LOGO_WIDTH ) / 2, top, logo, LOGO_WIDTH, LOGO_HEIGHT, 1);
       display();
     }
     #else

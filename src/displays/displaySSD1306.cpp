@@ -1,11 +1,11 @@
 #include "../core/options.h"
-#if DSP_MODEL==DSP_SSD1306 || DSP_MODEL==DSP_SSD1306x32
+#if DSP_MODEL==DSP_SSD1306
 #include "dspcore.h"
 #include <Wire.h>
 #include "../core/config.h"
 
 #ifndef SCREEN_ADDRESS
-  #define SCREEN_ADDRESS 0x3C ///< See datasheet for Address; 0x3D for 128x64, 0x3C for 128x32 or scan it https://create.arduino.cc/projecthub/abdularbi17/how-to-scan-i2c-address-in-arduino-eaadda
+  #define SCREEN_ADDRESS 0x3C ///< See datasheet for Address; scan the I2C bus if needed: https://create.arduino.cc/projecthub/abdularbi17/how-to-scan-i2c-address-in-arduino-eaadda
 #endif
 
 #ifndef I2CFREQ_HZ
@@ -14,7 +14,7 @@
 
 TwoWire I2CSSD1306 = TwoWire(0);
 
-DspCore::DspCore(): Adafruit_SSD1306(128, ((DSP_MODEL==DSP_SSD1306)?64:32), &I2CSSD1306, I2C_RST, I2CFREQ_HZ) { }
+DspCore::DspCore(): Adafruit_SSD1306(128, 64, &I2CSSD1306, I2C_RST, I2CFREQ_HZ) { }
 
 void DspCore::initDisplay() {
   I2CSSD1306.begin(I2C_SDA, I2C_SCL);

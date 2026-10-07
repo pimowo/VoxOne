@@ -5,9 +5,7 @@
 #include <Adafruit_GFX.h>
 #include <Adafruit_SSD1306.h>
 
-#if DSP_MODEL==DSP_SSD1306
-  #include "fonts/bootlogo21x32.h"
-#endif
+#include "fonts/bootlogo21x32.h"
 
 typedef GFXcanvas1 Canvas;
 typedef Adafruit_SSD1306 yoDisplay;
@@ -17,11 +15,7 @@ typedef Adafruit_SSD1306 yoDisplay;
 #if __has_include("conf/displaySSD1306conf_custom.h")
   #include "conf/displaySSD1306conf_custom.h"
 #else
-  #if DSP_MODEL==DSP_SSD1306
-    #include "conf/displaySSD1306conf.h"
-  #else
-    #include "conf/displaySSD1306x32conf.h"
-  #endif
+  #include "conf/displaySSD1306conf.h"
 #endif
 
 /*
