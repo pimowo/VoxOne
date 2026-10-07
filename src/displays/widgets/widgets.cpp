@@ -565,11 +565,7 @@ void VuWidget::_clear(){ }
 uint16_t _textWidth(const char *txt){
   uint16_t w = 0, l=strlen(txt);
   for(uint16_t c=0;c<l;c++) w+=_charWidth(txt[c]);
-//  #if DSP_MODEL==DSP_ILI9225
-//  return w+l;
-//  #else
   return w;
-//  #endif
 }
 
 /************************
@@ -680,7 +676,7 @@ void ProgressWidget::loop() {
 void ClockWidget::init(WidgetConfig wconf, uint16_t fgcolor, uint16_t bgcolor){
   Widget::init(wconf, fgcolor, bgcolor);
   _timeheight = _textHeight();
-  _fullclock = TIME_SIZE>35 || DSP_MODEL==DSP_ILI9225;
+  _fullclock = TIME_SIZE>35;
   if(_fullclock) _superfont = TIME_SIZE / 17; //magick
   else if(TIME_SIZE==19 || TIME_SIZE==2) _superfont=1;
   else _superfont=0;
