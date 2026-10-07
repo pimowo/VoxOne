@@ -281,7 +281,7 @@ class SalonBluetoothWidget : public Widget {
 Page *pages[] = { new Page(), new Page(), new Page(), new Page() };
 
 #if !((DSP_MODEL==DSP_ST7735 && DTYPE==INITR_BLACKTAB) || DSP_MODEL==DSP_ST7789 || DSP_MODEL==DSP_ST7796 || DSP_MODEL==DSP_ILI9488 \
- || DSP_MODEL==DSP_ILI9486 || DSP_MODEL==DSP_ILI9341 || DSP_MODEL==DSP_ST7789_170)
+ || DSP_MODEL==DSP_ILI9486 || DSP_MODEL==DSP_ST7789_170)
   #undef  BITRATE_FULL
   #define BITRATE_FULL     false
 #endif
@@ -345,10 +345,6 @@ uint16_t Display::height(){ return dsp.height(); }
     #define BOOT_PRG_COLOR    WHITE
     #define BOOT_TXT_COLOR    WHITE
     #define PINK              WHITE
-  #elif DSP_MODEL==DSP_SSD1327
-    #define BOOT_PRG_COLOR    0x07
-    #define BOOT_TXT_COLOR    0x3f
-    #define PINK              0x02
   #else
     #define BOOT_PRG_COLOR    0xE68B
     #define BOOT_TXT_COLOR    0xFFFF

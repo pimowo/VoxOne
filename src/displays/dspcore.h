@@ -43,16 +43,6 @@
   #define DSP_LCD
   #include "displayLC1602.h"
 
-#elif DSP_MODEL==DSP_SSD1327         // https://k210.org/images/content/uploads/yoradio/SSD1327.jpg
-  #define TIME_SIZE           35
-  #define DSP_OLED
-  #include "displaySSD1327.h"
-
-#elif DSP_MODEL==DSP_ILI9341         // https://k210.org/images/content/uploads/yoradio/ILI9341.jpg
-  #define TIME_SIZE           52
-  #define PSFBUFFER
-  #include "displayILI9341.h"
-
 #elif DSP_MODEL==DSP_SSD1305 || DSP_MODEL==DSP_SSD1305I2C   // https://k210.org/images/content/uploads/yoradio/SSD1305.jpg
   #define TIME_SIZE           2
   #define DSP_OLED

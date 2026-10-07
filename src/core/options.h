@@ -30,8 +30,6 @@ The connection tables are located here https://github.com/e2002/yoradio#connecti
 #define DSP_SH1106      5     // 128x64   1.3'  https://aliexpress.com/item/32683094040.html
 #define DSP_1602I2C     6     // 16x2           https://aliexpress.com/item/32305776560.html
 #define DSP_SSD1306x32  7     // 128x32   0.91' https://aliexpress.com/item/32798439084.html
-#define DSP_SSD1327     8     // 128x128  1.5'  https://aliexpress.com/item/1005001414175498.html
-#define DSP_ILI9341     9     // 320x240  3.2'  https://aliexpress.com/item/33048191074.html
 #define DSP_SSD1305     10    // 128x64   2.4'  SSD1305 and SSD1309 SPI https://aliexpress.com/item/32950307344.html
 #define DSP_SH1107      11    // 128x64   1.3'  https://aliexpress.com/item/4000551696674.html
 #define DSP_1602        12    // 16x2           https://aliexpress.com/item/32685016568.html
