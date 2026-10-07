@@ -41,13 +41,8 @@ TextWidget::~TextWidget() {
 }
 
 void TextWidget::_charSize(uint8_t textsize, uint8_t& width, uint16_t& height){
-#ifndef DSP_LCD
   width = textsize * CHARWIDTH;
   height = textsize * CHARHEIGHT;
-#else
-  width = 1;
-  height = 1;
-#endif
 }
 
 void TextWidget::init(WidgetConfig wconf, uint16_t buffsize, uint16_t fgcolor, uint16_t bgcolor) {
@@ -305,9 +300,7 @@ void ScrollWidget::_draw() {
       dsp.setCursor(_x + hiddenChars * _charWidth, _config.top);
       dsp.setClipping({_config.left, _config.top, _width, _textheight});
       dsp.print(_window);
-      #ifndef DSP_LCD
         dsp.print(" ");
-      #endif
       dsp.clearClipping();
     }
   } else {
@@ -411,7 +404,7 @@ void SliderWidget::_reset() {
 /************************
       VU WIDGET
  ************************/
-#if !defined(DSP_LCD) && !defined(DSP_OLED)
+#if !defined(DSP_OLED)
 VuWidget::~VuWidget() {
   if(_canvas) free(_canvas);
 }
@@ -516,7 +509,7 @@ void VuWidget::loop(){
 void VuWidget::_clear(){
   dsp.fillRect(_config.left, _config.top, _bands.width * 2 + _bands.space, _bands.height, _bgcolor);
 }
-#else // DSP_LCD
+#else // DSP_OLED
 VuWidget::~VuWidget() { }
 void VuWidget::init(WidgetConfig wconf, VUBandsConfig bands, uint16_t vumaxcolor, uint16_t vumincolor, uint16_t bgcolor) {
   Widget::init(wconf, bgcolor, bgcolor);
@@ -529,16 +522,14 @@ void VuWidget::_clear(){ }
 /************************
       NUM & CLOCK
  ************************/
-#if !defined(DSP_LCD)
   #if TIME_SIZE<19
   const GFXfont* Clock_GFXfontPtr = nullptr;
   #define CLOCKFONT5x7
   #else
   const GFXfont* Clock_GFXfontPtr = &Clock_GFXfont;
   #endif
-#endif //!defined(DSP_LCD)
 
-#if !defined(CLOCKFONT5x7) && !defined(DSP_LCD)
+#if !defined(CLOCKFONT5x7)
   inline GFXglyph *pgm_read_glyph_ptr(const GFXfont *gfxFont, uint8_t c) {
     return gfxFont->glyph + c;
   }
@@ -550,13 +541,9 @@ void VuWidget::_clear(){ }
     GFXglyph *glyph = pgm_read_glyph_ptr(&Clock_GFXfont, '8' - 0x20);
     return pgm_read_byte(&glyph->height);
   }
-#else //!defined(CLOCKFONT5x7) && !defined(DSP_LCD)
+#else //!defined(CLOCKFONT5x7)
   uint8_t _charWidth(unsigned char c){
-  #ifndef DSP_LCD
     return CHARWIDTH * TIME_SIZE;
-  #else
-    return 1;
-  #endif
   }
   uint16_t _textHeight(){
     return CHARHEIGHT * TIME_SIZE;
@@ -632,12 +619,10 @@ void NumWidget::_draw() {
     return;
   }
 #endif
-#ifndef DSP_LCD
   if(!_active || TIME_SIZE<2) return;
   dsp.setTextSize(Clock_GFXfontPtr==nullptr?TIME_SIZE:1);
   dsp.setFont(Clock_GFXfontPtr);
   dsp.setTextColor(_fgcolor, _bgcolor);
-#endif
   if(!_active) return;
   dsp.setCursor(_realLeft(), _config.top);
   dsp.print(_text);
@@ -742,8 +727,6 @@ void ClockWidget::_getTimeBounds() {
   strftime(buf, 4, "%H", &network.timeinfo);
   _dotsleft=_textWidth(buf);
 }
-
-#ifndef DSP_LCD
 
 Adafruit_GFX& ClockWidget::getRealDsp(){
 #ifdef PSFBUFFER
@@ -862,31 +845,6 @@ void ClockWidget::_reset(){
 void ClockWidget::_clear(){
   _clearClock();
 }
-#else //#ifndef DSP_LCD
-
-void ClockWidget::_printClock(bool force){
-  strftime(_timebuffer, sizeof(_timebuffer), "%H:%M", &network.timeinfo);
-  if(force){
-    dsp.setCursor(dsp.width()-5, 0);
-    dsp.print(_timebuffer);
-  }
-  dsp.setCursor(dsp.width()-5+2, 0);
-  dsp.print((network.timeinfo.tm_sec % 2 == 0)?":":" ");
-}
-
-void ClockWidget::_clearClock(){}
-
-void ClockWidget::draw(bool force){
-  if(!_active) return;
-  _printClock(true);
-}
-void ClockWidget::_draw(){
-  if(!_active) return;
-  _printClock(true);
-}
-void ClockWidget::_reset(){}
-void ClockWidget::_clear(){}
-#endif //#ifndef DSP_LCD
 
 /**************************
       BITRATE WIDGET
@@ -925,13 +883,8 @@ void BitrateWidget::setCustomText(const char* top, const char* bottom){
 
 //TODO move to parent
 void BitrateWidget::_charSize(uint8_t textsize, uint8_t& width, uint16_t& height){
-#ifndef DSP_LCD
   width = textsize * CHARWIDTH;
   height = textsize * CHARHEIGHT;
-#else
-  width = 1;
-  height = 1;
-#endif
 }
 
 void BitrateWidget::_draw(){
@@ -1006,16 +959,11 @@ void BitrateWidget::_clear() {
 void PlayListWidget::init(ScrollWidget* current){
   Widget::init({0, 0, 0, WA_LEFT}, 0, 0);
   _current = current;
-  #ifndef DSP_LCD
   _plItemHeight = playlistConf.widget.textsize*(CHARHEIGHT-1)+playlistConf.widget.textsize*4;
   _plTtemsCount = round((float)dsp.height()/_plItemHeight);
   if(_plTtemsCount%2==0) _plTtemsCount++;
   _plCurrentPos = _plTtemsCount/2;
   _plYStart = (dsp.height() / 2 - _plItemHeight / 2) - _plItemHeight * (_plTtemsCount - 1) / 2 + playlistConf.widget.textsize*2;
-  #else
-  _plTtemsCount = PLMITEMS;
-  _plCurrentPos = 1;
-  #endif
 }
 
 uint8_t PlayListWidget::_fillPlMenu(int from, uint8_t count) {
@@ -1057,7 +1005,6 @@ uint8_t PlayListWidget::_fillPlMenu(int from, uint8_t count) {
   playlist.close();
   return c;
 }
-#ifndef DSP_LCD
 void PlayListWidget::drawPlaylist(uint16_t currentItem) {
   uint8_t lastPos = _fillPlMenu(currentItem - _plCurrentPos, _plTtemsCount);
   if(lastPos<_plTtemsCount){
@@ -1077,25 +1024,6 @@ void PlayListWidget::_printPLitem(uint8_t pos, const char* item){
     dsp.print(utf8Rus(item));
   }
 }
-#else
-void PlayListWidget::_printPLitem(uint8_t pos, const char* item){
-  if (pos == _plCurrentPos) {
-    _current->setText(item);
-  } else {
-    dsp.setCursor(1, pos);
-    char tmp[dsp.width()] = {0};
-    strlcpy(tmp, utf8Rus(item), dsp.width());
-    dsp.print(tmp);
-  }
-}
-
-void PlayListWidget::drawPlaylist(uint16_t currentItem) {
-  dsp.clear();
-  _fillPlMenu(currentItem - _plCurrentPos, _plTtemsCount);
-  dsp.setCursor(0,1);
-  dsp.write(uint8_t(126));
-}
-#endif
 
 
 #endif // #if DSP_MODEL!=DSP_DUMMY

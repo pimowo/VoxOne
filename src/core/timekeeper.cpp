@@ -232,7 +232,6 @@ void TimeKeeper::_upClock(){
 }
 
 void TimeKeeper::_upScreensaver(){
-#ifndef DSP_LCD
   if(!display.ready()) return;
   if(config.store.screensaverEnabled && display.mode()==PLAYER && !player.isRunning()){
     config.screensaverTicks++;
@@ -256,7 +255,6 @@ void TimeKeeper::_upScreensaver(){
       config.screensaverPlayingTicks=SCREENSAVERSTARTUPDELAY;
     }
   }
-#endif
 }
 
 void TimeKeeper::_upRSSI(){

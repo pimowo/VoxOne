@@ -3,13 +3,8 @@
 #if DSP_MODEL!=DSP_DUMMY
 #include "widgetsconfig.h"
 
-#ifndef DSP_LCD
   #define CHARWIDTH   6
   #define CHARHEIGHT  8
-#else
-  #define CHARWIDTH   1
-  #define CHARHEIGHT  1
-#endif
 
 class psFrameBuffer;
 
@@ -179,7 +174,7 @@ class VuWidget: public Widget {
     void init(WidgetConfig wconf, VUBandsConfig bands, uint16_t vumaxcolor, uint16_t vumincolor, uint16_t bgcolor);
     void loop();
   protected:
-    #if !defined(DSP_LCD) && !defined(DSP_OLED)
+    #if !defined(DSP_OLED)
       Canvas *_canvas;
     #endif
     VUBandsConfig _bands;
@@ -230,9 +225,7 @@ class ClockWidget: public Widget {
     inline uint16_t dateSize(){ return _space+ _dateheight; }
     inline uint16_t clockWidth(){ return _clockwidth; }
   private:
-  #ifndef DSP_LCD
     Adafruit_GFX &getRealDsp();
-  #endif
   protected:
     char  _timebuffer[20]="00:00";
     char _tmp[30], _datebuf[30];

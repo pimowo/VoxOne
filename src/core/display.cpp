@@ -385,9 +385,7 @@ void Display::_buildPager(){
   _plheader->setText("WEB - STACJA");
 #else
   _plwidget->init(_plcurrent);
-  #if !defined(DSP_LCD)
     _plcurrent->moveTo({TFT_FRAMEWDT, (uint16_t)(_plwidget->currentTop()), (int16_t)playlistConf.width});
-  #endif
 #endif
   #ifndef HIDE_TITLE2
     _title2 = new ScrollWidget("*", title2Conf, config.theme.title2, config.theme.background);
@@ -400,7 +398,6 @@ void Display::_buildPager(){
   _title1->setChangeObserver(this, 1, onTextChanged);
   _title2->setChangeObserver(this, 2, onTextChanged);
 #endif
-  #if !defined(DSP_LCD)
 #if DSP_MODEL==DSP_ST7789_76
     _plbackground = new FillWidget(playlBGConf, config.theme.metabg);
 #else
@@ -411,7 +408,6 @@ void Display::_buildPager(){
     #else
       _metabackground = new FillWidget(metaBGConfInv, config.theme.metafill);
     #endif
-  #endif
   #ifndef HIDE_VU
     _vuwidget = new VuWidget(vuConf, bandsConf, config.theme.vumax, config.theme.vumin, config.theme.background);
   #endif
@@ -522,7 +518,7 @@ void Display::_buildPager(){
   if(_volip) _volip->lock();
 #endif
   
-  #if !defined(DSP_LCD) && DSP_MODEL!=DSP_ST7796
+  #if DSP_MODEL!=DSP_ST7796
     pages[PG_DIALOG]->addPage(_footer);
   #endif
 #if DSP_MODEL==DSP_ST7789_76 || DSP_MODEL==DSP_ST7796
@@ -534,13 +530,11 @@ void Display::_buildPager(){
   pages[PG_PLAYLIST]->addWidget(_plcounter);
   pages[PG_PLAYLIST]->addWidget(_plplaying);
 #else
-  #if !defined(DSP_LCD)
   if(_plbackground) {
     pages[PG_PLAYLIST]->addWidget( _plbackground);
     _plbackground->setHeight(_plwidget->itemHeight());
     _plbackground->moveTo({0,(uint16_t)(_plwidget->currentTop()-playlistConf.widget.textsize*2), (int16_t)playlBGConf.width});
   }
-  #endif
   pages[PG_PLAYLIST]->addWidget(_plcurrent);
   pages[PG_PLAYLIST]->addWidget(_plwidget);
 #endif
@@ -576,7 +570,6 @@ void Display::_buildPager(){
 
 void Display::_apScreen() {
   if(_boot) _pager->removePage(_boot);
-  #ifndef DSP_LCD
     _boot = new Page();
       #if DSP_INVERT_TITLE || defined(DSP_OLED)
       _boot->addWidget(new FillWidget(metaBGConf, config.theme.metafill));
@@ -597,9 +590,6 @@ void Display::_apScreen() {
     bootSett->setText(config.ipToStr(WiFi.softAPIP()), LANG::apSettFmt);
     _pager->addPage(_boot);
     _pager->setPage(_boot);
-  #else
-    dsp.apScreen();
-  #endif
 }
 
 void Display::_start() {
@@ -696,9 +686,6 @@ void Display::_swichMode(displayMode_e newmode) {
       if(clockMove.width<0) _clock->moveBack(); else _clock->moveTo(clockMove);
     else
       _clock->moveBack();
-    #ifdef DSP_LCD
-      dsp.clearDsp();
-    #endif
     numOfNextStation = 0;
     #ifdef META_MOVE
       _meta->moveBack();
@@ -1304,7 +1291,7 @@ void Display::invert(){ dsp.invert(); }
 void  Display::setContrast(){}
 
 bool Display::deepsleep(){
-#if defined(LCD_I2C) || defined(DSP_OLED) || BRIGHTNESS_PIN!=255
+#if defined(DSP_OLED) || BRIGHTNESS_PIN!=255
   dsp.sleep();
   return true;
 #endif
@@ -1312,7 +1299,7 @@ bool Display::deepsleep(){
 }
 
 void Display::wakeup(){
-#if defined(LCD_I2C) || defined(DSP_OLED) || BRIGHTNESS_PIN!=255
+#if defined(DSP_OLED) || BRIGHTNESS_PIN!=255
   dsp.wake();
 #endif
 }

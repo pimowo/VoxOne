@@ -33,23 +33,8 @@ class DspCore: public yoDisplay {
       display();
     }
     #else
-      #ifndef DSP_LCD
       inline void loop(bool force=false){}
       inline void drawLogo(uint16_t top){ drawRGBBitmap((width() - LOGO_WIDTH) / 2, top, logo, LOGO_WIDTH, LOGO_HEIGHT); }
-      #endif
-    #endif
-    #ifdef DSP_LCD
-      uint16_t width();
-      uint16_t height();
-      void fillRect(int16_t x, int16_t y, int16_t w, int16_t h, uint16_t color);
-      void drawRect(int16_t x, int16_t y, int16_t w, int16_t h, uint16_t color){}
-      void setTextSize(uint8_t s){}
-      void setTextSize(uint8_t sx, uint8_t sy){}
-      void setTextColor(uint16_t c, uint16_t bg){}
-      void setFont(){}
-      void apScreen();
-      void drawLogo(uint16_t top){}
-      void loop(bool force=false){}
     #endif
     void flip();
     void invert();
@@ -58,7 +43,6 @@ class DspCore: public yoDisplay {
     void setScrollId(void * scrollid) { _scrollid = scrollid; }
     void * getScrollId() { return _scrollid; }
     uint16_t textWidth(const char *txt);
-    #if !defined(DSP_LCD)
       inline void writePixel(int16_t x, int16_t y, uint16_t color) {
         if(_clipping){
           if ((x < _cliparea.left) || (x > _cliparea.left+_cliparea.width) || (y < _cliparea.top) || (y > _cliparea.top + _cliparea.height)) return;
@@ -71,19 +55,12 @@ class DspCore: public yoDisplay {
         }
         yoDisplay::writeFillRect(x, y, w, h, color);
       }
-    #else
-      inline void writePixel(int16_t x, int16_t y, uint16_t color) { }
-      inline void writeFillRect(int16_t x, int16_t y, int16_t w, int16_t h, uint16_t color) { }
-    #endif
     inline void setClipping(clipArea ca){
       _cliparea = ca;
       _clipping = true;
     }
     inline void clearClipping(){
       _clipping = false;
-      #ifdef DSP_LCD
-      setClipping({0, 0, width(), height()});
-      #endif
     }
   private:
     bool _clipping;

@@ -36,13 +36,6 @@
   #define DSP_OLED
   #include "displaySH1106.h"
 
-#elif DSP_MODEL==DSP_1602I2C || DSP_MODEL==DSP_2004I2C || DSP_MODEL==DSP_1602 || DSP_MODEL==DSP_2004 || DSP_MODEL==DSP_2002 || DSP_MODEL==DSP_2002I2C
-// https://k210.org/images/content/uploads/yoradio/DSP_1602.jpg
-// https://k210.org/images/content/uploads/yoradio/DSP_2004.jpg
-  #define TIME_SIZE           1
-  #define DSP_LCD
-  #include "displayLC1602.h"
-
 #elif DSP_MODEL==DSP_SSD1305 || DSP_MODEL==DSP_SSD1305I2C   // https://k210.org/images/content/uploads/yoradio/SSD1305.jpg
   #define TIME_SIZE           2
   #define DSP_OLED

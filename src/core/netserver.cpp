@@ -1634,7 +1634,7 @@ void NetServer::processQueue(){
                                                                 APPEND_GROUP("group_nextion");
             nxtn=true;
           #endif
-                                                              #if defined(LCD_I2C) || defined(DSP_OLED)
+                                                              #if defined(DSP_OLED)
                                                                 APPEND_GROUP("group_oled");
                                                               #endif
                                                               #if !defined(HIDE_VU) && !defined(DUMMYDISPLAY)
