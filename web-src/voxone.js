@@ -1575,12 +1575,6 @@
       wsCurrentSequence++;
       updateCurrentMarker(previousCurrent);
     }
-    if (typeof message.playermode === "string") {
-      const modes = { modeweb: "WEB", modesd: "SD" };
-      state.source = modes[message.playermode] || message.playermode;
-      renderSource();
-      requestExtraSync();
-    }
     if (typeof message.ipaddr === "string") {
       state.ip = message.ipaddr;
       text("system-ip", state.ip || "—");

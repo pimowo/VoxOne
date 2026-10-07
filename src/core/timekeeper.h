@@ -39,7 +39,6 @@ class TimeKeeper {
     ReturnPlayerTimeout _returnPlayerTimer;
     DelayedAction _delayedActions[static_cast<uint8_t>(DelayedActionSlot::COUNT)];
     void _upRSSI();
-    void _upSDPos();
     void _upClock();
     void _upScreensaver();
     void _returnPlayer();

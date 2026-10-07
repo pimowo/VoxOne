@@ -179,17 +179,6 @@ void SerialCli::on_input(const char* str, uint8_t clientId) {
       player.sendCommand({PR_PLAY, (uint16_t)sb});
       return;
     }
-    #ifdef USE_SD
-    int mm;
-    if (sscanf(str, "mode %d", &mm) == 1 ) {
-      if (mm > 2) mm = 0;
-      if(mm==2)
-        config.changeMode();
-      else
-        config.changeMode(mm);
-      return;
-    }
-    #endif
     if (strcmp(str, "sys.tzo") == 0 || strcmp(str, "tzo") == 0) {
       printf(clientId, "##SYS.TZO#: %d:%d\n> ", config.store.tzHour, config.store.tzMin);
       return;

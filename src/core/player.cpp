@@ -123,7 +123,6 @@ void Player::initHeaders(const char *file) {
   connecttoFS(sdman,file);
   eofHeader = false;
   while(!eofHeader) Audio::loop();
-  //netserver.requestOnChange(SDPOS, 0);
   setDefaults();
 }
 void resetPlayer(){

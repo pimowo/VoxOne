@@ -115,7 +115,6 @@ void Config::init() {
   sdResumePos = 0;
   screensaverTicks = 0;
   screensaverPlayingTicks = 0;
-  newConfigMode = 0;
   isScreensaver = false;
   memset(tmpBuf, 0, BUFLEN);
   //bootInfo();
@@ -210,7 +209,6 @@ void Config::changeMode(int newmode){
   if(!sdman.ready && newmode!=PM_WEB) {
     if(!sdman.start()){
       Serial.println("##[ERROR]#\tSD Not Found");
-      netserver.requestOnChange(GETPLAYERMODE, 0);
       sdman.stop();
       return;
     }
@@ -240,10 +238,7 @@ void Config::changeMode(int newmode){
   initPlaylistMode();
   if (pir) player.sendCommand({PR_PLAY, getMode()==PM_WEB?store.lastStation:store.lastSdStation});
   netserver.resetQueue();
-  //netserver.requestOnChange(GETPLAYERMODE, 0);
   netserver.requestOnChange(GETINDEX, 0);
-  //netserver.requestOnChange(GETMODE, 0);
- // netserver.requestOnChange(CHANGEMODE, 0);
   display.resetQueue();
   display.putRequest(NEWMODE, PLAYER);
   display.putRequest(NEWSTATION);
@@ -461,17 +456,6 @@ void Config::setSntpOne(const char *val){
   setTimeConf();
   timekeeper.forceTimeSync = true;
 }
-void Config::setSDpos(uint32_t val){
-  if (getMode()==PM_SDCARD){
-    sdResumePos = 0;
-    if(!player.isRunning()){
-      player.setResumeFilePos(val-player.sd_min);
-      player.sendCommand({PR_PLAY, config.store.lastSdStation});
-    }else{
-      player.setFilePos(val-player.sd_min);
-    }
-  }
-}
 void Config::resetSystem(const char *val, uint8_t clientId){
   if (strcmp(val, "system") == 0) {
     saveValue(&store.smartstart, (uint8_t)2, false);
@@ -628,11 +612,6 @@ void Config::setTimezoneOffset(uint16_t tzo) {
 
 uint16_t Config::getTimezoneOffset() {
   return 0; // TODO
-}
-
-void Config::setSnuffle(bool sn){
-  saveValue(&store.sdsnuffle, sn);
-  if(store.sdsnuffle) player.next();
 }
 
 void Config::saveVolume(){

@@ -49,9 +49,6 @@
 #define DUMMYDISPLAY
 #endif
 
-#ifdef USE_SD
-#include "sdmanager.h"
-#endif
 #ifndef MIN_MALLOC
 #define MIN_MALLOC 24112
 #endif
@@ -191,8 +188,7 @@ constexpr WebUpdateFile kWebUpdateFiles[] = {
   {SSIDS_PATH, "wifi"},
   {PLAYLIST_PATH, "stations"},
   {INDEX_PATH, "stidx"},
-  {"/data/playlist.csv", "playlist"}, // Restore backups made by pre-v1 firmware.
-  {PLAYLIST_SD_PATH, "playlistsd"}
+  {"/data/playlist.csv", "playlist"} // Restore backups made by pre-v1 firmware.
 };
 constexpr char kWebUpdateNamespace[] = "voxupdate";
 AsyncWebServerRequest* activeUpdateRequest = nullptr;
@@ -228,8 +224,7 @@ bool backupWebUpdateData(const char*& error) {
     File file = SPIFFS.open(item.path, "r");
     if (!file) continue;
     const size_t size = file.size();
-    if (size == 0 && (strcmp(item.path, "/data/playlist.csv") == 0 ||
-                      strcmp(item.path, PLAYLIST_SD_PATH) == 0)) {
+    if (size == 0 && strcmp(item.path, "/data/playlist.csv") == 0) {
       file.close();
       continue;
     }
@@ -379,13 +374,7 @@ size_t NetServer::chunkedHtmlPageCallback(uint8_t* buffer, size_t maxLen, size_t
     display.unlock();
     return 0;
   }
-  File requiredfile;
-  bool sdpl = strcmp(netserver.chunkedPathBuffer, PLAYLIST_SD_PATH) == 0;
-  if(sdpl){
-    requiredfile = config.SDPLFS()->open(netserver.chunkedPathBuffer, "r");
-  }else{
-    requiredfile = SPIFFS.open(netserver.chunkedPathBuffer, "r");
-  }
+  File requiredfile = SPIFFS.open(netserver.chunkedPathBuffer, "r");
   if (!requiredfile) return 0;
   size_t filesize = requiredfile.size();
   size_t needread = filesize - index;
@@ -1661,9 +1650,6 @@ void NetServer::processQueue(){
           requestOnChange(BALANCE, clientId); 
           requestOnChange(BITRATE, clientId); 
           requestOnChange(MODE, clientId); 
-          requestOnChange(SDINIT, clientId);
-          requestOnChange(GETPLAYERMODE, clientId); 
-          if (config.getMode()==PM_SDCARD) { requestOnChange(SDPOS, clientId); requestOnChange(SDLEN, clientId); requestOnChange(SDSNUFFLE, clientId); } 
           return; 
           break;
         }
@@ -1765,24 +1751,11 @@ void NetServer::processQueue(){
       }
       case VOLUME:        sprintf (wsBuf, "{\"payload\":[{\"id\":\"volume\",\"value\":%d},{\"id\":\"volume100\",\"value\":%d},{\"id\":\"maximumVolume\",\"value\":%d},{\"id\":\"startupMode\",\"value\":%d},{\"id\":\"startupFixedVolume\",\"value\":%d}]}", config.store.volume, config.userVolume, config.store.maximumVolume, config.store.startupMode, config.store.startupFixedVolume); serialCli.printf("##CLI.VOL#: %d\n", config.store.volume); break;
       case NRSSI:         rssi = WiFi.RSSI(); sprintf (wsBuf, "{\"payload\":[{\"id\":\"rssi\", \"value\": %d}, {\"id\":\"heap\", \"value\": %d}]}", rssi, (player.isRunning() && config.store.audioinfo)?(int)(100*player.inBufferFilled()/playerBufMax):0); /*rssi = 255;*/ break;
-      case SDPOS:         sprintf (wsBuf, "{\"sdpos\": %lu,\"sdend\": %lu,\"sdtpos\": %lu,\"sdtend\": %lu}", 
-                                  player.getFilePos(), 
-                                  player.getFileSize(), 
-                                  player.getAudioCurrentTime(), 
-                                  player.getAudioFileDuration()); 
-                                  break;
-      case SDLEN:         sprintf (wsBuf, "{\"sdmin\": %lu,\"sdmax\": %lu}", player.sd_min, player.sd_max); break;
-      case SDSNUFFLE:     sprintf (wsBuf, "{\"snuffle\": %d}", config.store.sdsnuffle); break;
       case BITRATE:       sprintf (wsBuf, "{\"payload\":[{\"id\":\"bitrate\", \"value\": %d}, {\"id\":\"fmt\", \"value\": \"%s\"}]}", config.station.bitrate, getFormat(config.configFmt)); break;
       case MODE:          sprintf (wsBuf, "{\"payload\":[{\"id\":\"playerwrap\", \"value\": \"%s\"}]}", player.status() == PLAYING ? "playing" : "stopped"); serialCli.info(); break;
       case EQUALIZER:     sprintf (wsBuf, "{\"payload\":[{\"id\":\"bass\", \"value\": %d}, {\"id\": \"middle\", \"value\": %d}, {\"id\": \"trebble\", \"value\": %d}]}", config.store.bass, config.store.middle, config.store.trebble); break;
       case BALANCE:       sprintf (wsBuf, "{\"payload\":[{\"id\": \"balance\", \"value\": %d}]}", config.store.balance); break;
-      case SDINIT:        sprintf (wsBuf, "{\"sdinit\": %d}", SDC_CS!=255); break;
-      case GETPLAYERMODE: sprintf (wsBuf, "{\"playermode\": \"%s\"}", config.getMode()==PM_SDCARD?"modesd":"modeweb"); break;
       case WEBSTATUS:     formatWebStatus(wsBuf, sizeof(wsBuf)); break;
-      #ifdef USE_SD
-        case CHANGEMODE:    config.changeMode(config.newConfigMode); return; break;
-      #endif
       default:          break;
     }
     if (strlen(wsBuf) > 0) {
@@ -2202,15 +2175,9 @@ void handleNotFound(AsyncWebServerRequest * request) {
     if (strcmp(request->url().c_str(), PLAYLIST_PATH) == 0 || 
         strcmp(request->url().c_str(), SSIDS_PATH) == 0 || 
         strcmp(request->url().c_str(), INDEX_PATH) == 0 || 
-        strcmp(request->url().c_str(), TMP_PATH) == 0 || 
-        strcmp(request->url().c_str(), PLAYLIST_SD_PATH) == 0 || 
-        strcmp(request->url().c_str(), INDEX_SD_PATH) == 0) {
+        strcmp(request->url().c_str(), TMP_PATH) == 0) {
       if (strcmp(request->url().c_str(), PLAYLIST_PATH) == 0) while (mqttplaylistblock) vTaskDelay(5);
-      if(strcmp(request->url().c_str(), PLAYLIST_PATH) == 0 && config.getMode()==PM_SDCARD){
-        netserver.chunkedHtmlPage("application/octet-stream", request, PLAYLIST_SD_PATH);
-      }else{
-        netserver.chunkedHtmlPage("application/octet-stream", request, request->url().c_str());
-      }
+      netserver.chunkedHtmlPage("application/octet-stream", request, request->url().c_str());
       return;
     }// if (strcmp(request->url().c_str(), PLAYLIST_PATH) == 0 || 
   }// if (request->method() == HTTP_GET)

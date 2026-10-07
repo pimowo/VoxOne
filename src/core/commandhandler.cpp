@@ -66,9 +66,6 @@ bool CommandHandler::exec(const char *command, const char *value, uint32_t cid) 
   if (strEquals(command, "next"))     { player.next(); return true; }
   if (strEquals(command, "volm"))     { player.stepVol(false); return true; }
   if (strEquals(command, "volp"))     { player.stepVol(true); return true; }
-#ifdef USE_SD
-  if (strEquals(command, "mode"))     { config.changeMode(atoi(value)); return true; }
-#endif
   if (strEquals(command, "reset") && cid==0)    { config.reset(); return true; }
   if (strEquals(command, "ballance")) { config.setBalance(atoi(value)); return true; }
   if (strEquals(command, "playstation") || strEquals(command, "play")){ 
@@ -141,9 +138,6 @@ bool CommandHandler::exec(const char *command, const char *value, uint32_t cid) 
   }
   if (strEquals(command, "gettimezone")){ netserver.requestOnChange(GETTIMEZONE, cid); return true; }
   if (strEquals(command, "getactive"))  { netserver.requestOnChange(GETACTIVE, cid); return true; }
-  if (strEquals(command, "newmode"))    { config.newConfigMode = atoi(value); netserver.requestOnChange(CHANGEMODE, cid); return true; }
-  
-
   if (strEquals(command, "numplaylist"))  { config.saveValue(&config.store.numplaylist, static_cast<bool>(atoi(value))); display.putRequest(NEWMODE, CLEAR); display.putRequest(NEWMODE, PLAYER); return true; }
   if (strEquals(command, "flipscreen")) {
     config.saveValue(&config.store.flipscreen, static_cast<bool>(atoi(value)));
@@ -176,8 +170,6 @@ bool CommandHandler::exec(const char *command, const char *value, uint32_t cid) 
   if (strEquals(command, "encacc"))  { setEncAcceleration(static_cast<uint16_t>(atoi(value))); return true; }
   if (strEquals(command, "oneclickswitching")){ config.saveValue(&config.store.skipPlaylistUpDown, static_cast<bool>(atoi(value))); return true; }
   
-  if (strEquals(command, "sdpos"))   { config.setSDpos(static_cast<uint32_t>(atoi(value))); return true; }
-  if (strEquals(command, "snuffle")) { config.setSnuffle(strcmp(value, "true") == 0); return true; }
   if (strEquals(command, "balance")) { config.setBalance(static_cast<uint8_t>(atoi(value))); return true; }
   if (strEquals(command, "reboot"))  { requestSystemRestart(); return true; }
   if (strEquals(command, "boot"))    { requestSystemRestart(); return true; }
@@ -200,7 +192,6 @@ bool CommandHandler::exec(const char *command, const char *value, uint32_t cid) 
   
   return false;
 }
-
 
 
 

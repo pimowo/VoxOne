@@ -116,7 +116,6 @@ void audio_eof_speech(const char *info){
 void audio_progress(uint32_t startpos, uint32_t endpos){
   player.sd_min = startpos;
   player.sd_max = endpos;
-  netserver.requestOnChange(SDLEN, 0);
 }
 
 #endif

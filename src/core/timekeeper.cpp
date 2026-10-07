@@ -138,7 +138,6 @@ bool TimeKeeper::loop1(){ // core1 (player)
   #endif
 #endif
     _upScreensaver();
-    _upSDPos();
     _returnPlayer();
     _doAfterWait();
   }
@@ -267,10 +266,6 @@ void TimeKeeper::_upRSSI(){
   if(display.mode()!=SDCHANGE) player.sendCommand({PR_CHECKSD, 0});
 #endif
   player.sendCommand({PR_VUTONUS, 0});
-}
-
-void TimeKeeper::_upSDPos(){
-  if(player.isRunning() && config.getMode()==PM_SDCARD) netserver.requestOnChange(SDPOS, 0);
 }
 
 void TimeKeeper::timeTask(){

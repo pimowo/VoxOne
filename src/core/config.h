@@ -169,7 +169,6 @@ class Config {
     uint16_t screensaverTicks;
     uint16_t screensaverPlayingTicks;
     bool     isScreensaver;
-    int      newConfigMode;
     char      tmpBuf[BUFLEN];
     char     tmpBuf2[BUFLEN];
     char       ipBuf[16];
@@ -237,7 +236,6 @@ class Config {
     void sleepForAfter(uint16_t sleepfor, uint16_t sleepafter=0);
     void bootInfo();
     void doSleepW();
-    void setSnuffle(bool sn);
     uint8_t getMode() { return store.play_mode/* & 0b11*/; }
     void initPlaylistMode();
     void reset();
@@ -248,7 +246,6 @@ class Config {
     void setScreensaverPlayingTimeout(uint16_t val);
     void setScreensaverPlayingBlank(bool val);
     void setSntpOne(const char *val);
-    void setSDpos(uint32_t val);
     void resetSystem(const char *val, uint8_t clientId);
     bool spiffsCleanup();
     void waitConnection();
