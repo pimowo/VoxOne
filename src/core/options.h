@@ -24,7 +24,6 @@ The connection tables are located here https://github.com/e2002/yoradio#connecti
 ********************************************************/
 
 #define DSP_DUMMY       0     // without display
-#define DSP_ST7735      1     // 160x128  1.8'  or 128x128  1.44'  or 160x80   0.96'  https://aliexpress.com/item/1005002822797745.html
 #define DSP_SSD1306     2     // 128x64   0.96' https://aliexpress.com/item/1005001621806398.html
 #define DSP_ST7789      4     // 320x240  2.4'  https://aliexpress.com/item/32960241206.html 
 #define DSP_SH1106      5     // 128x64   1.3'  https://aliexpress.com/item/32683094040.html
@@ -300,19 +299,6 @@ The connection tables are located here https://github.com/e2002/yoradio#connecti
 #ifndef SD_MAX_LEVELS
   #define SD_MAX_LEVELS      3      //  search depth for files on the SD card
 #endif
-/*
-*** ST7735 display submodel ***
-  INITR_BLACKTAB        // 1.8' https://aliexpress.ru/item/1005002822797745.html
-      See this note If INITR_BLACKTAB have a noisy line on one side of the screen https://github.com/e2002/yoradio#note-if-initr_blacktab-dsp-have-a-noisy-line-on-one-side-of-the-screen-then-in-adafruit_st7735cpp
-  INITR_144GREENTAB     // 1.44' https://aliexpress.ru/item/1005002822797745.html
-  INITR_MINI160x80      // 0.96' 160x80 ST7735S   https://????
-  INITR_GREENTAB
-  INITR_REDTAB
- */
-#ifndef DTYPE
-  #define DTYPE INITR_BLACKTAB
-#endif
-
 /*        IR                      */
 #ifndef IR_PIN
   #define IR_PIN                255
