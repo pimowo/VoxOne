@@ -8,9 +8,6 @@
 void audio_info(const char *info) {
   if(player.lockOutput) return;
   if(config.store.audioinfo) serialCli.printf("##AUDIO.INFO#: %s\n", info);
-  #ifdef USE_NEXTION
-    nextion.audioinfo(info);
-  #endif
   if (strstr(info, "format is aac")  != NULL) { config.setBitrateFormat(BF_AAC); display.putRequest(DBITRATE); }
   if (strstr(info, "format is flac") != NULL) { config.setBitrateFormat(BF_FLAC); display.putRequest(DBITRATE); }
   if (strstr(info, "format is mp3")  != NULL) { config.setBitrateFormat(BF_MP3); display.putRequest(DBITRATE); }
@@ -32,9 +29,6 @@ void audio_bitrate(const char *info)
   if(config.store.audioinfo) serialCli.printf("%s %s\n", "##AUDIO.BITRATE#:", info);
   config.station.bitrate = atoi(info) / 1000;
   display.putRequest(DBITRATE);
-  #ifdef USE_NEXTION
-    nextion.bitrate(config.station.bitrate);
-  #endif
   netserver.requestOnChange(BITRATE, 0);
 }
 

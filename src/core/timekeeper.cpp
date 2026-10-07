@@ -106,7 +106,7 @@ bool TimeKeeper::loop0(){ // core0 (display)
   if (currentTime - _last1s >= 1000) { // 1sec
     _last1s = currentTime;
 //#ifndef DUMMYDISPLAY
-#if !defined(DUMMYDISPLAY) || defined(USE_NEXTION)
+#if !defined(DUMMYDISPLAY)
   #ifndef UPCLOCK_CORE1
     _upClock();
   #endif
@@ -132,7 +132,7 @@ bool TimeKeeper::loop1(){ // core1 (player)
     pm.on_ticker();
     _last1s = currentTime;
 //#ifndef DUMMYDISPLAY
-#if !defined(DUMMYDISPLAY) || defined(USE_NEXTION)
+#if !defined(DUMMYDISPLAY)
   #ifdef UPCLOCK_CORE1
     _upClock();
   #endif

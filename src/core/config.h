@@ -207,7 +207,6 @@ class Config {
     bool initNetwork();
     bool saveWifi();
     void setTimeConf();
-    bool saveWifiFromNextion(const char* post);
     bool saveWifiCredentials(const char* ssid, const char* password);
     void setSmartStart(uint8_t ss);
     void setBitrateFormat(BitrateFormat fmt) { configFmt = fmt; }

@@ -16,9 +16,6 @@
 #endif
 #include "../displays/tools/l10n.h"
 #include "../pluginsManager/pluginsManager.h"
-#ifdef USE_NEXTION
-#include "../displays/nextion.h"
-#endif
 Player player;
 QueueHandle_t playerQueue;
 portMUX_TYPE playerVolumeMux = portMUX_INITIALIZER_UNLOCKED;
@@ -103,9 +100,6 @@ void Player::_stop(bool alreadyStopped, RadioStopReason reason){
   if(!_hasError) config.setTitle((display.mode()==LOST || display.mode()==UPDATING)?"":LANG::const_PlStopped);
   config.station.bitrate = 0;
   config.setBitrateFormat(BF_UNKNOWN);
-  #ifdef USE_NEXTION
-    nextion.bitrate(config.station.bitrate);
-  #endif
   setDefaults();
   if(!alreadyStopped) stopSong();
   if (systemUpdateAudioBlocked()) {

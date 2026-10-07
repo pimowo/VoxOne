@@ -20,9 +20,6 @@
 #include "core/system_operation_state.h"
 #include "core/nvs_diagnostics.h"
 #include "core/dsp_runtime.h"
-#ifdef USE_NEXTION
-#include "displays/nextion.h"
-#endif
 
 #if USE_OTA
 #if ESP_ARDUINO_VERSION >= ESP_ARDUINO_VERSION_VAL(3, 0, 0)

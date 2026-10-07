@@ -70,9 +70,6 @@ The connection tables are located here https://github.com/e2002/yoradio#connecti
 #ifndef NEXTION_TX
   #define NEXTION_TX    255
 #endif
-#if NEXTION_RX!=255 && NEXTION_TX!=255
-  #define USE_NEXTION
-#endif
 /*        OLED I2C DISPLAY        */
 #ifndef I2C_SDA
   #define I2C_SDA 21

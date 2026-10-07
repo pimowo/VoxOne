@@ -25,10 +25,6 @@
 #include "../displays/tools/l10n.h"
 
 Display display;
-#ifdef USE_NEXTION
-#include "../displays/nextion.h"
-Nextion nextion;
-#endif
 
 #ifndef CORE_STACK_SIZE
   #define CORE_STACK_SIZE  1024*4
@@ -304,9 +300,6 @@ Display::~Display() {
 
 void Display::init() {
   Serial.print("##[BOOT]#\tdisplay.init\t");
-#ifdef USE_NEXTION
-  nextion.begin();
-#endif
 #if LIGHT_SENSOR!=255
   analogSetAttenuation(ADC_0db);
 #endif
@@ -594,21 +587,11 @@ void Display::_apScreen() {
 
 void Display::_start() {
   if(_boot) _pager->removePage(_boot);
-  #ifdef USE_NEXTION
-    nextion.wake();
-  #endif
   if (network.status != CONNECTED && network.status != SDREADY) {
     _apScreen();
-    #ifdef USE_NEXTION
-      nextion.apScreen();
-    #endif
     _bootStep = 2;
     return;
   }
-  #ifdef USE_NEXTION
-    //nextion.putcmd("page player");
-    nextion.start();
-  #endif
   _buildPager();
 #if defined(VOXONE_PROFILE_SALON) && DSP_MODEL==DSP_ST7796
   _salonScrollMode(true);
@@ -655,10 +638,6 @@ static bool activeSourceVuVisible() {
 }
 
 void Display::_swichMode(displayMode_e newmode) {
-  #ifdef USE_NEXTION
-    //nextion.swichMode(newmode);
-    nextion.putRequest({NEWMODE, newmode});
-  #endif
   if (newmode == _mode || (network.status != CONNECTED && network.status != SDREADY)) return;
 #if DSP_MODEL==DSP_ST7796
   if (newmode == BT_TRANSPORT) {
@@ -741,7 +720,6 @@ void Display::_swichMode(displayMode_e newmode) {
   }
   if (newmode == SLEEPING)  _showDialog("SLEEPING");
   if (newmode == SDCHANGE)  _showDialog(LANG::const_waitForSD);
-  if (newmode == INFO || newmode == SETTINGS || newmode == TIMEZONE || newmode == WIFI) _showDialog(LANG::const_DlgNextion);
   if (newmode == NUMBERS) _showDialog("");
   if (newmode == STATIONS) {
     _pager->setPage( pages[PG_PLAYLIST]);
@@ -803,9 +781,6 @@ void Display::putRequest(displayRequestType_e type, int payload){
     portENTER_CRITICAL(&displayVolumeMux);
     _volumePending = true;
     portEXIT_CRITICAL(&displayVolumeMux);
-    #ifdef USE_NEXTION
-      nextion.putRequest(request);
-    #endif
     return;
   }
   bool volumeModeRequest = type == NEWMODE && payload == VOL;
@@ -824,9 +799,6 @@ void Display::putRequest(displayRequestType_e type, int payload){
     Serial.println("##ERROR#:\tdisplay queue full for volume mode");
     return;
   }
-  #ifdef USE_NEXTION
-    nextion.putRequest(request);
-  #endif
 }
 
 void Display::_setVuVisibility(bool sourceVisible) {
@@ -919,9 +891,6 @@ void Display::loop() {
   if (_salonBluetoothIcon)
     _salonBluetoothIcon->setConnected(bluetoothPhysicallyConnected());
 #endif
-#ifdef USE_NEXTION
-  nextion.loop();
-#endif
   requestParams_t request;
   if(xQueueReceive(displayQueue, &request, DSP_QUEUE_TICKS)){
     bool pm_result = true;
@@ -946,10 +915,6 @@ void Display::loop() {
         case CLOSEPLAYLIST: player.sendCommand({PR_PLAY, request.payload}); break;
         case CLOCK: 
           if(_mode==PLAYER || _mode==SCREENSAVER) _time(request.payload==1); 
-          /*#ifdef USE_NEXTION
-            if(_mode==TIMEZONE) nextion.localTime(network.timeinfo);
-            if(_mode==INFO)     nextion.rssi();
-          #endif*/
           break;
         case NEWTITLE: _title(); _layoutChange(activeSourceVuVisible()); break;
         case NEWSTATION:
@@ -994,11 +959,6 @@ void Display::loop() {
         }
         case BOOTSTRING: {
           if(_bootstring) _bootstring->setText(config.ssids[request.payload].ssid, LANG::bootstrFmt);
-          /*#ifdef USE_NEXTION
-            char buf[50];
-            snprintf(buf, 50, bootstrFmt, config.ssids[request.payload].ssid);
-            nextion.bootString(buf);
-          #endif*/
           break;
         }
         case WAITFORSD: {
@@ -1116,11 +1076,6 @@ void Display::_station() {
 #if DSP_MODEL==DSP_ST7789_76
   if(_deskStation) _deskStation->setText(config.station.name);
 #endif
-/*#ifdef USE_NEXTION
-  nextion.newNameset(config.station.name);
-  nextion.bitrate(config.station.bitrate);
-  nextion.bitratePic(ICON_NA);
-#endif*/
 }
 
 char *split(char *str, const char *delim) {
@@ -1213,9 +1168,6 @@ void Display::_title() {
 #endif
       if(_title2) _title2->setText("");
     }
-    /*#ifdef USE_NEXTION
-      nextion.newTitle(config.station.title);
-    #endif*/
     
   }else{
     _title1->setText("");
@@ -1252,9 +1204,6 @@ void Display::_time(bool redraw) {
     _deskClock->setText(timeText);
   }
 #endif
-  /*#ifdef USE_NEXTION
-    nextion.printClock(network.timeinfo);
-  #endif*/
 }
 
 void Display::_volume() {
@@ -1279,9 +1228,6 @@ void Display::_volume() {
     if (player.isMuted()) _nums->setText("MUTE");
     else _nums->setText(displayedVolume(), numtxtFmt);
   }
-  /*#ifdef USE_NEXTION
-    nextion.setVol(config.store.volume, _mode == VOL);
-  #endif*/
 }
 
 void Display::flip(){ dsp.flip(); }
@@ -1308,28 +1254,14 @@ void Display::wakeup(){
 //============================================================================================================================
 void Display::init(){
   _createDspTask();
-  #ifdef USE_NEXTION
-  nextion.begin(true);
-  #endif
 }
 void Display::_start(){
-  #ifdef USE_NEXTION
-  //nextion.putcmd("page player");
-  nextion.start();
-  #endif
   config.setTitle(LANG::const_PlReady);
 }
 
 void Display::putRequest(displayRequestType_e type, int payload){
   if(type==DSP_START) _start();
-  #ifdef USE_NEXTION
-    requestParams_t request;
-    request.type = type;
-    request.payload = payload;
-    nextion.putRequest(request);
-  #else
-    if(type==NEWMODE) mode((displayMode_e)payload);
-  #endif
+  if(type==NEWMODE) mode((displayMode_e)payload);
 }
 //============================================================================================================================
 #endif // DUMMYDISPLAY

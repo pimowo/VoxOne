@@ -148,7 +148,7 @@ void encoder1Loop() {
 #if ENC_BTNB!=255
     encBtnState = digitalRead(voxone::hardware::currentHardware().encoder.button);
 #endif
-#   if defined(DUMMYDISPLAY) && !defined(USE_NEXTION)
+#   if defined(DUMMYDISPLAY)
     if(encBtnState){
       int nv = config.store.volume+encoderDelta;
       if(nv<0) nv=0;
@@ -174,7 +174,7 @@ void onBtnLongPressStart(int id) {
         break;
       }
     case EVT_BTNCENTER: {
-#       if defined(DUMMYDISPLAY) && !defined(USE_NEXTION)
+#       if defined(DUMMYDISPLAY)
         break;
 #       endif
         display.putRequest(NEWMODE, display.mode() == PLAYER ? STATIONS : PLAYER);
@@ -200,7 +200,7 @@ void onBtnLongPressStart(int id) {
           break;
         }
 #endif
-#       if defined(DUMMYDISPLAY) && !defined(USE_NEXTION)
+#       if defined(DUMMYDISPLAY)
         break;
 #       endif
         display.putRequest(NEWMODE, display.mode() == PLAYER ? STATIONS : PLAYER);
@@ -297,7 +297,7 @@ void controlsEvent(bool toRight, int8_t volDelta) {
       return;
     }
 #endif
-    #if !defined(DUMMYDISPLAY) || defined(USE_NEXTION)
+    #if !defined(DUMMYDISPLAY)
       display.putRequest(NEWMODE, VOL);
     #endif
     if(volDelta!=0){

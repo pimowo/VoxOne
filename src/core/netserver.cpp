@@ -1622,7 +1622,7 @@ void NetServer::processQueue(){
         getPlaylist(clientId); break;
       }
       case GETACTIVE: {
-          bool dbgact = false, nxtn=false;
+          bool dbgact = false;
           //String act = F("\"group_wifi\",");
           nsBuf[0]='\0';
           APPEND_GROUP("group_wifi");
@@ -1630,17 +1630,13 @@ void NetServer::processQueue(){
                                                                 //act += F("\"group_system\",");
                                                                 APPEND_GROUP("group_system");
             if (BRIGHTNESS_PIN != 255 || DSP_CAN_FLIPPED || dbgact)    APPEND_GROUP("group_display");
-          #ifdef USE_NEXTION
-                                                                APPEND_GROUP("group_nextion");
-            nxtn=true;
-          #endif
                                                               #if defined(DSP_OLED)
                                                                 APPEND_GROUP("group_oled");
                                                               #endif
                                                               #if !defined(HIDE_VU) && !defined(DUMMYDISPLAY)
                                                                 APPEND_GROUP("group_vu");
                                                               #endif
-            if (BRIGHTNESS_PIN != 255 || nxtn || dbgact)        APPEND_GROUP("group_brightness");
+            if (BRIGHTNESS_PIN != 255 || dbgact)                APPEND_GROUP("group_brightness");
             if (DSP_CAN_FLIPPED || dbgact)                      APPEND_GROUP("group_tft");
             if (TS_MODEL != TS_MODEL_UNDEFINED || dbgact)       APPEND_GROUP("group_touch");
                                                                 APPEND_GROUP("group_timezone");

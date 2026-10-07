@@ -24,9 +24,6 @@
 #ifdef USE_SD
 #include "sdmanager.h"
 #endif
-#ifdef USE_NEXTION
-#include "../displays/nextion.h"
-#endif
 #include <cstddef>
 #include <nvs.h>
 
@@ -622,7 +619,7 @@ bool Config::setDefaults() {
 }
 
 void Config::setTimezone(int8_t tzh, int8_t tzm) {
-  // Preserve legacy CLI/Nextion storage without affecting the fixed Warsaw TZ.
+  // Preserve legacy timezone storage without affecting the fixed Warsaw TZ.
   saveValue(&store.tzHour, tzh, false);
   saveValue(&store.tzMin, tzm);
 }
@@ -990,18 +987,6 @@ bool Config::parseSsid(const char* line, char* ssid, char* pass) {
   return true;
 }
 
-bool Config::saveWifiFromNextion(const char* post){
-  File file = SPIFFS.open(SSIDS_PATH, "w");
-  if (!file) {
-    return false;
-  } else {
-    file.print(post);
-    file.close();
-    ESP.restart();
-    return true;
-  }
-}
-
 bool Config::saveWifiCredentials(const char* ssid, const char* password) {
   if (!apWifiCredentialsValid(ssid, password)) return false;
   constexpr char wifiTempPath[] = "/data/wifi.csv.tmp";
@@ -1069,18 +1054,7 @@ void Config::setBrightness(bool dosave){
     saveValue(&store.dspon, store.dspon, true, true);
   }
 #endif
-#ifdef USE_NEXTION
-  nextion.wake();
-  char cmd[15];
-  snprintf(cmd, 15, "dims=%d", store.brightness);
-  nextion.putcmd(cmd);
-  if(!store.dspon) store.dspon = true;
-  if(dosave){
-    saveValue(&store.brightness, store.brightness, false, true);
-    saveValue(&store.dspon, store.dspon, true, true);
-  }
-#endif
-#if BRIGHTNESS_PIN != 255 || defined(USE_NEXTION)
+#if BRIGHTNESS_PIN != 255
   if (dosave) netserver.requestOnChange(GETSCREEN, 0);
 #endif
 }
@@ -1090,10 +1064,6 @@ void Config::setDspOn(bool dspon, bool saveval){
     store.dspon = dspon;
     saveValue(&store.dspon, store.dspon, true, true);
   }
-#ifdef USE_NEXTION
-  if(!dspon) nextion.sleep();
-  else nextion.wake();
-#endif
   if(!dspon){
 #if BRIGHTNESS_PIN!=255
   analogWrite(BRIGHTNESS_PIN, 0);
@@ -1110,9 +1080,6 @@ void Config::setDspOn(bool dspon, bool saveval){
 void Config::doSleep(){
   if(BRIGHTNESS_PIN!=255) analogWrite(BRIGHTNESS_PIN, 0);
   display.deepsleep();
-#ifdef USE_NEXTION
-  nextion.sleep();
-#endif
 #if !defined(ARDUINO_ESP32C3_DEV)
   if(WAKE_PIN!=255) esp_sleep_enable_ext0_wakeup((gpio_num_t)WAKE_PIN, LOW);
   esp_sleep_enable_timer_wakeup(config.sleepfor * 60 * 1000000ULL);
@@ -1123,9 +1090,6 @@ void Config::doSleep(){
 void Config::doSleepW(){
   if(BRIGHTNESS_PIN!=255) analogWrite(BRIGHTNESS_PIN, 0);
   display.deepsleep();
-#ifdef USE_NEXTION
-  nextion.sleep();
-#endif
 #if !defined(ARDUINO_ESP32C3_DEV)
   if(WAKE_PIN!=255) esp_sleep_enable_ext0_wakeup((gpio_num_t)WAKE_PIN, LOW);
   esp_deep_sleep_start();

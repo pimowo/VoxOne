@@ -41,7 +41,6 @@ const char const_PlConnect[]  PROGMEM = "[łączenie]";
 const char const_DlgVolume[]  PROGMEM = "GŁOŚNOŚĆ";
 const char const_DlgLost[]    PROGMEM = "* BRAK SIECI *";
 const char const_DlgUpdate[]  PROGMEM = "* AKTUALIZACJA *";
-const char const_DlgNextion[] PROGMEM = "* NEXTION *";
 const char const_waitForSD[]  PROGMEM = "INDEKS SD";
 
 const char apNameTxt[] PROGMEM = "NAZWA AP";
