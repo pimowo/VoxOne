@@ -40,8 +40,6 @@ The connection tables are located here https://github.com/e2002/yoradio#connecti
 /* !!! DSP_ST7789_240 requires further development when used in conjunction with the VS1053 module !!! See the link https://www.instructables.com/Adding-CS-Pin-to-13-LCD/ */
 #define DSP_ST7796      19    // 480x320  3.5'  https://aliexpress.com/item/1005004632953455.html?sku_id=12000029911293172
 #define DSP_GC9A01A     20    // 240x240  1.28' https://aliexpress.com/item/1005004069703494.html?sku_id=12000029869654615
-#define DSP_ILI9488     21    // 480x320  3.5'  https://aliexpress.com/item/1005001999296476.html?sku_id=12000018365356570
-#define DSP_ILI9486     22    // (Testing mode) 480x320  3.5'  https://aliexpress.com/item/1005001999296476.html?sku_id=12000018365356568
 #define DSP_SSD1322     23    // 256x64   2.8'  https://aliexpress.com/item/1005003480981568.html
 #define DSP_ST7920      24    // 128x64   2.6'  https://aliexpress.com/item/32699482638.html
 #define DSP_ST7789_76   25    // 284x76   2.25' https://aliexpress.com/item/1005009016973081.html

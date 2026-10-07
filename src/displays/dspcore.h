@@ -62,11 +62,6 @@
   #define PSFBUFFER
   #include "displayGC9A01A.h"
 
-#elif DSP_MODEL==DSP_ILI9488 || DSP_MODEL==DSP_ILI9486  // https://k210.org/images/content/uploads/yoradio/ILI9488.jpg
-  #define TIME_SIZE           70
-  #define PSFBUFFER
-  #include "displayILI9488.h"
-
 #elif DSP_MODEL==DSP_SSD1322        // https://k210.org/images/content/uploads/yoradio/ssd1322.mp4
   #define TIME_SIZE           35
   #define DSP_OLED
