@@ -64,11 +64,6 @@ constexpr uint8_t nrOfButtons = sizeof(buttons) / sizeof(buttons[0]);
                                 voxone::hardware::currentHardware().encoder.internalPullup);
 #endif
 
-#if (TS_MODEL!=TS_MODEL_UNDEFINED) && (DSP_MODEL!=DSP_DUMMY)
-  #include "touchscreen.h"
-  TouchScreen touchscreen;
-#endif
-
 #if ENC_BTNL!=255
 void IRAM_ATTR readEncoderISR()
 {
@@ -104,9 +99,6 @@ void initControls() {
     buttons[i].button.setPressTicks(BTN_PRESS_TICKS);
   }
 #endif
-#if (TS_MODEL!=TS_MODEL_UNDEFINED) && (DSP_MODEL!=DSP_DUMMY)
-  touchscreen.init(display.width(), display.height());
-#endif
 }
 
 void loopControls() {
@@ -125,9 +117,6 @@ void loopControls() {
       onBtnDuringLongPress(lpId);
     }
   }
-#endif
-#if (TS_MODEL!=TS_MODEL_UNDEFINED) && (DSP_MODEL!=DSP_DUMMY)
-  if (network.status == CONNECTED || network.status==SDREADY) touchscreen.loop();
 #endif
 }
 #if ENC_BTNL!=255
@@ -465,10 +454,5 @@ void setEncAcceleration(uint16_t acc){
   config.saveValue(&config.store.encacc, acc);
 #if ENC_BTNL!=255
   encoder.setAcceleration(config.store.encacc);
-#endif
-}
-void flipTS(){
-#if (TS_MODEL!=TS_MODEL_UNDEFINED) && (DSP_MODEL!=DSP_DUMMY)
-  touchscreen.flip();
 #endif
 }

@@ -518,8 +518,6 @@ void Config::resetSystem(const char *val, uint8_t clientId){
   }
   if (strcmp(val, "controls") == 0) {
     saveValue(&store.volsteps, (uint8_t)1, false);
-    saveValue(&store.fliptouch, false, false);
-    saveValue(&store.dbgtouch, false, false);
     saveValue(&store.skipPlaylistUpDown, false);
     setEncAcceleration(200);
     return;
@@ -1131,4 +1129,3 @@ void Config::bootInfo() {
   if(SDC_CS!=255) BOOTLOG("SD:\t\t%d", SDC_CS);
   BOOTLOG("------------------------------------------------");
 }
-

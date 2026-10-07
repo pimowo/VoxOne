@@ -96,7 +96,7 @@ void writeFields(Writer& w, const config_v6_t& f) {
   U16(lastStation); U16(countStation); U8(lastSSID); B(audioinfo);
   U8(smartstart); I8(tzHour); I8(tzMin); U16(timezoneOffset);
   B(vumeter); U8(softapdelay); B(flipscreen); B(invertdisplay);
-  B(numplaylist); B(fliptouch); B(dbgtouch); B(dspon);
+  B(numplaylist); B(reservedInput0); B(reservedInput1); B(dspon);
   U8(brightness); U8(contrast);
   w.chars(f.sntp1, sizeof(f.sntp1));
   w.chars(f.sntp2, sizeof(f.sntp2));
@@ -131,7 +131,7 @@ void readPrefix(Reader& r, Legacy& f) {
   U16(lastStation); U16(countStation); U8(lastSSID); B(audioinfo);
   U8(smartstart); I8(tzHour); I8(tzMin); U16(timezoneOffset);
   B(vumeter); U8(softapdelay); B(flipscreen); B(invertdisplay);
-  B(numplaylist); B(fliptouch); B(dbgtouch); B(dspon);
+  B(numplaylist); B(reservedInput0); B(reservedInput1); B(dspon);
   U8(brightness); U8(contrast);
   r.chars(f.sntp1, sizeof(f.sntp1));
   r.chars(f.sntp2, sizeof(f.sntp2));
@@ -281,8 +281,8 @@ bool migrateConfigV5ToV7(const config_v5_t& source, bool supportsBt,
   migrated.fields.flipscreen = source.flipscreen;
   migrated.fields.invertdisplay = source.invertdisplay;
   migrated.fields.numplaylist = source.numplaylist;
-  migrated.fields.fliptouch = source.fliptouch;
-  migrated.fields.dbgtouch = source.dbgtouch;
+  migrated.fields.reservedInput0 = source.reservedInput0;
+  migrated.fields.reservedInput1 = source.reservedInput1;
   migrated.fields.dspon = source.dspon;
   migrated.fields.brightness = source.brightness;
   migrated.fields.contrast = source.contrast;

@@ -23,8 +23,8 @@ config_v6_t legacyFixture() {
   value.flipscreen = true;
   value.invertdisplay = false;
   value.numplaylist = true;
-  value.fliptouch = false;
-  value.dbgtouch = true;
+  value.reservedInput0 = false;
+  value.reservedInput1 = true;
   value.dspon = true;
   value.sdsnuffle = false;
   value.btnpullup = true;
@@ -52,7 +52,7 @@ void assertFieldsEqual(const config_v6_t& a, const config_v6_t& b) {
   CHECK(countStation); CHECK(lastSSID); CHECK(audioinfo); CHECK(smartstart);
   CHECK(tzHour); CHECK(tzMin); CHECK(timezoneOffset); CHECK(vumeter);
   CHECK(softapdelay); CHECK(flipscreen); CHECK(invertdisplay);
-  CHECK(numplaylist); CHECK(fliptouch); CHECK(dbgtouch); CHECK(dspon);
+  CHECK(numplaylist); CHECK(reservedInput0); CHECK(reservedInput1); CHECK(dspon);
   CHECK(brightness); CHECK(contrast);
   assert(std::memcmp(a.sntp1, b.sntp1, sizeof(a.sntp1)) == 0);
   assert(std::memcmp(a.sntp2, b.sntp2, sizeof(a.sntp2)) == 0);
@@ -139,9 +139,9 @@ void legacyBytes(uint8_t (&bytes)[254], config_v6_t& expected) {
   bytes[25] = static_cast<uint8_t>(1);
   expected.numplaylist = 1;
   bytes[26] = static_cast<uint8_t>(1);
-  expected.fliptouch = 0;
+  expected.reservedInput0 = 0;
   bytes[27] = static_cast<uint8_t>(0);
-  expected.dbgtouch = 1;
+  expected.reservedInput1 = 1;
   bytes[28] = static_cast<uint8_t>(1);
   expected.dspon = 1;
   bytes[29] = static_cast<uint8_t>(1);

@@ -51,8 +51,8 @@ struct Runtime {
   uint8_t contrast;
   uint8_t brightness;
   bool dspon;
-  bool dbgtouch;
-  bool fliptouch;
+  bool reservedInput1;
+  bool reservedInput0;
   bool numplaylist;
   bool invertdisplay;
   bool flipscreen;
@@ -96,8 +96,8 @@ void equalFields(const A& a, const B& b) {
   assert(a.flipscreen == b.flipscreen);
   assert(a.invertdisplay == b.invertdisplay);
   assert(a.numplaylist == b.numplaylist);
-  assert(a.fliptouch == b.fliptouch);
-  assert(a.dbgtouch == b.dbgtouch);
+  assert(a.reservedInput0 == b.reservedInput0);
+  assert(a.reservedInput1 == b.reservedInput1);
   assert(a.dspon == b.dspon);
   assert(a.brightness == b.brightness);
   assert(a.contrast == b.contrast);

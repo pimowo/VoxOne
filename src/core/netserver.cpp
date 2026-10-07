@@ -1638,10 +1638,8 @@ void NetServer::processQueue(){
                                                               #endif
             if (BRIGHTNESS_PIN != 255 || dbgact)                APPEND_GROUP("group_brightness");
             if (DSP_CAN_FLIPPED || dbgact)                      APPEND_GROUP("group_tft");
-            if (TS_MODEL != TS_MODEL_UNDEFINED || dbgact)       APPEND_GROUP("group_touch");
                                                                 APPEND_GROUP("group_timezone");
-            if (TS_MODEL != TS_MODEL_UNDEFINED || dbgact)
-                                                                APPEND_GROUP("group_controls");
+            if (dbgact)                                         APPEND_GROUP("group_controls");
             if (!psramInit())                                   APPEND_GROUP("group_buffer");
                                                               #if RTCSUPPORTED
                                                                 APPEND_GROUP("group_rtc");
@@ -1729,14 +1727,12 @@ void NetServer::processQueue(){
             !appendWebStatusLiteral(wsBuf, sizeof(wsBuf), used, "}")) wsBuf[0] = '\0';
         break;
       }
-      case GETSCREEN:     snprintf (wsBuf, sizeof(wsBuf), "{\"flip\":%d,\"canFlip\":%d,\"canBrightness\":%d,\"br\":%d,\"nump\":%d,\"tsf\":%d,\"tsd\":%d,\"dspon\":%d,\"con\":%d,\"scre\":%d,\"scrt\":%d,\"scrb\":%d,\"scrpe\":%d,\"scrpt\":%d,\"scrpb\":%d,\"stationListTimeout\":%u,\"btTransportTimeout\":%u,\"canBtTransport\":%d}",
+      case GETSCREEN:     snprintf (wsBuf, sizeof(wsBuf), "{\"flip\":%d,\"canFlip\":%d,\"canBrightness\":%d,\"br\":%d,\"nump\":%d,\"dspon\":%d,\"con\":%d,\"scre\":%d,\"scrt\":%d,\"scrb\":%d,\"scrpe\":%d,\"scrpt\":%d,\"scrpb\":%d,\"stationListTimeout\":%u,\"btTransportTimeout\":%u,\"canBtTransport\":%d}",
                                   config.store.flipscreen,
                                   voxone::activeProfile.display != voxone::Display::None,
                                   BRIGHTNESS_PIN != 255,
                                   config.store.brightness,
-                                  config.store.numplaylist, 
-                                  config.store.fliptouch, 
-                                  config.store.dbgtouch, 
+                                  config.store.numplaylist,
                                   config.store.dspon, 
                                   config.store.contrast,
                                   config.store.screensaverEnabled,

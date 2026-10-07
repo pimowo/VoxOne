@@ -145,8 +145,6 @@ bool CommandHandler::exec(const char *command, const char *value, uint32_t cid) 
   
 
   if (strEquals(command, "numplaylist"))  { config.saveValue(&config.store.numplaylist, static_cast<bool>(atoi(value))); display.putRequest(NEWMODE, CLEAR); display.putRequest(NEWMODE, PLAYER); return true; }
-  if (strEquals(command, "fliptouch"))    { config.saveValue(&config.store.fliptouch, static_cast<bool>(atoi(value))); flipTS(); return true; }
-  if (strEquals(command, "dbgtouch"))     { config.saveValue(&config.store.dbgtouch, static_cast<bool>(atoi(value))); return true; }
   if (strEquals(command, "flipscreen")) {
     config.saveValue(&config.store.flipscreen, static_cast<bool>(atoi(value)));
     display.flip();
@@ -202,7 +200,6 @@ bool CommandHandler::exec(const char *command, const char *value, uint32_t cid) 
   
   return false;
 }
-
 
 
 

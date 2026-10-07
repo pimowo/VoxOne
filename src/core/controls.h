@@ -16,7 +16,6 @@ void onBtnLongPressStart(int id);
 void onBtnLongPressStop(int id);
 
 void setEncAcceleration(uint16_t acc);
-void flipTS();
 
 extern __attribute__((weak)) void ctrls_on_loop();
 

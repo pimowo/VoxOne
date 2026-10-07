@@ -88,8 +88,8 @@ struct config_t
   bool      flipscreen;
   bool      invertdisplay;
   bool      numplaylist;
-  bool      fliptouch;
-  bool      dbgtouch;
+  bool      reservedInput0;  // retired input bytes; keep serialized offsets
+  bool      reservedInput1;
   bool      dspon;
   uint8_t   brightness;
   uint8_t   contrast;
@@ -310,7 +310,7 @@ class Config {
 };
 
 extern Config config;
-#if DSP_HSPI || TS_HSPI
+#if DSP_HSPI
 extern SPIClass  SPI2;
 #endif
 

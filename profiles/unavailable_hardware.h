@@ -59,7 +59,6 @@
 #define ENC_HALFQUARD false
 #endif
 
-#define TS_MODEL TS_MODEL_UNDEFINED
 #define SDC_CS 255
 #define IR_PIN 255
 #ifndef RTC_MODULE

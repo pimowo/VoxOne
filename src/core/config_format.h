@@ -30,8 +30,8 @@ struct config_v5_t {
   bool flipscreen;
   bool invertdisplay;
   bool numplaylist;
-  bool fliptouch;
-  bool dbgtouch;
+  bool reservedInput0;  // Retired local-input byte; serialized offset is frozen.
+  bool reservedInput1;
   bool dspon;
   uint8_t brightness;
   uint8_t contrast;
@@ -78,6 +78,8 @@ static_assert(offsetof(config_v5_t, config_set) == 0, "v5 config_set offset chan
 static_assert(offsetof(config_v5_t, version) == 2, "v5 version offset changed");
 static_assert(offsetof(config_v5_t, volume) == 4, "v5 volume offset changed");
 static_assert(offsetof(config_v5_t, timezoneOffset) == 20, "v5 timezone offset changed");
+static_assert(offsetof(config_v5_t, reservedInput0) == 27, "v5 reserved input 0 offset changed");
+static_assert(offsetof(config_v5_t, reservedInput1) == 28, "v5 reserved input 1 offset changed");
 static_assert(offsetof(config_v5_t, sntp1) == 32, "v5 SNTP1 offset changed");
 static_assert(offsetof(config_v5_t, sntp2) == 67, "v5 SNTP2 offset changed");
 static_assert(offsetof(config_v5_t, reservedWeather) == 102, "v5 weather offset changed");
@@ -118,8 +120,8 @@ struct config_v6_t {
   bool flipscreen;
   bool invertdisplay;
   bool numplaylist;
-  bool fliptouch;
-  bool dbgtouch;
+  bool reservedInput0;  // Retired local-input byte; serialized offset is frozen.
+  bool reservedInput1;
   bool dspon;
   uint8_t brightness;
   uint8_t contrast;
@@ -171,6 +173,8 @@ static_assert(offsetof(config_v6_t, config_set) == 0, "v6 magic offset changed")
 static_assert(offsetof(config_v6_t, version) == 2, "v6 version offset changed");
 static_assert(offsetof(config_v6_t, lastStation) == 10, "v6 station offset changed");
 static_assert(offsetof(config_v6_t, timezoneOffset) == 20, "v6 timezone offset changed");
+static_assert(offsetof(config_v6_t, reservedInput0) == 27, "v6 reserved input 0 offset changed");
+static_assert(offsetof(config_v6_t, reservedInput1) == 28, "v6 reserved input 1 offset changed");
 static_assert(offsetof(config_v6_t, _reserved) == 182, "v6 marker offset changed");
 static_assert(offsetof(config_v6_t, lastSdStation) == 184, "v6 SD station offset changed");
 static_assert(offsetof(config_v6_t, encacc) == 188, "v6 encoder offset changed");

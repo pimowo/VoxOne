@@ -37,8 +37,8 @@ void copyConfigFields(const Source& source, Target& target) {
   target.flipscreen = source.flipscreen;
   target.invertdisplay = source.invertdisplay;
   target.numplaylist = source.numplaylist;
-  target.fliptouch = source.fliptouch;
-  target.dbgtouch = source.dbgtouch;
+  target.reservedInput0 = source.reservedInput0;
+  target.reservedInput1 = source.reservedInput1;
   target.dspon = source.dspon;
   target.brightness = source.brightness;
   target.contrast = source.contrast;
@@ -130,8 +130,8 @@ void buildConfigDefaults(Runtime& store, const char* ntp1, const char* ntp2,
   store.flipscreen=false;
   store.invertdisplay=false;
   store.numplaylist=false;
-  store.fliptouch=false;
-  store.dbgtouch=false;
+  store.reservedInput0=false;
+  store.reservedInput1=false;
   store.dspon=true;
   store.brightness=100;
   store.contrast=55;
