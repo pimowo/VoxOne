@@ -2,7 +2,7 @@
 #define network_h
 #include <WiFi.h>
 
-enum n_Status_e { CONNECTED, SOFT_AP, FAILED, SDREADY };
+enum n_Status_e { CONNECTED, SOFT_AP, FAILED };
 
 class MyNetwork {
   public:

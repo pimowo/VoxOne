@@ -101,8 +101,8 @@ void writeFields(Writer& w, const config_v6_t& f) {
   w.chars(f.sntp1, sizeof(f.sntp1));
   w.chars(f.sntp2, sizeof(f.sntp2));
   w.raw(f.reservedWeather, sizeof(f.reservedWeather));
-  U16(_reserved); U16(lastSdStation); B(sdsnuffle);
-  U8(volsteps); U16(encacc); U8(play_mode); U8(irtlp);
+  U16(_reserved); U16(reservedSdStation); B(reservedSdFlags);
+  U8(volsteps); U16(encacc); U8(reservedPlayMode); U8(irtlp);
   B(btnpullup); U16(btnlongpress); U16(btnclickticks);
   U16(btnpressticks); B(encpullup); B(enchalf);
   B(enc2pullup); B(enc2half); B(forcemono); B(i2sinternal);
@@ -136,8 +136,8 @@ void readPrefix(Reader& r, Legacy& f) {
   r.chars(f.sntp1, sizeof(f.sntp1));
   r.chars(f.sntp2, sizeof(f.sntp2));
   r.raw(f.reservedWeather, sizeof(f.reservedWeather));
-  U16(_reserved); U16(lastSdStation); B(sdsnuffle);
-  U8(volsteps); U16(encacc); U8(play_mode); U8(irtlp);
+  U16(_reserved); U16(reservedSdStation); B(reservedSdFlags);
+  U8(volsteps); U16(encacc); U8(reservedPlayMode); U8(irtlp);
   B(btnpullup); U16(btnlongpress); U16(btnclickticks);
   U16(btnpressticks); B(encpullup); B(enchalf);
   B(enc2pullup); B(enc2half); B(forcemono); B(i2sinternal);
@@ -290,11 +290,11 @@ bool migrateConfigV5ToV7(const config_v5_t& source, bool supportsBt,
   std::memcpy(migrated.fields.sntp2, source.sntp2, sizeof(source.sntp2));
   std::memcpy(migrated.fields.reservedWeather, source.reservedWeather, sizeof(source.reservedWeather));
   migrated.fields._reserved = source._reserved;
-  migrated.fields.lastSdStation = source.lastSdStation;
-  migrated.fields.sdsnuffle = source.sdsnuffle;
+  migrated.fields.reservedSdStation = source.reservedSdStation;
+  migrated.fields.reservedSdFlags = source.reservedSdFlags;
   migrated.fields.volsteps = source.volsteps;
   migrated.fields.encacc = source.encacc;
-  migrated.fields.play_mode = source.play_mode;
+  migrated.fields.reservedPlayMode = source.reservedPlayMode;
   migrated.fields.irtlp = source.irtlp;
   migrated.fields.btnpullup = source.btnpullup;
   migrated.fields.btnlongpress = source.btnlongpress;

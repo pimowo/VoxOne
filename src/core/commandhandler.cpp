@@ -115,7 +115,7 @@ bool CommandHandler::exec(const char *command, const char *value, uint32_t cid) 
   }
   if (strEquals(command, "dspon"))     { config.setDspOn(atoi(value)!=0); return true; }
   if (strEquals(command, "dim"))       { int d=atoi(value); config.store.brightness = (uint8_t)(d < 0 ? 0 : (d > 100 ? 100 : d)); config.setBrightness(true); return true; }
-  if (strEquals(command, "clearspiffs")){ config.spiffsCleanup(); config.saveValue(&config.store.play_mode, static_cast<uint8_t>(PM_WEB)); return true; }
+  if (strEquals(command, "clearspiffs")){ config.spiffsCleanup(); return true; }
   /*********************************************/
   /****************** WEBSOCKET ****************/
   /*********************************************/
@@ -192,6 +192,5 @@ bool CommandHandler::exec(const char *command, const char *value, uint32_t cid) 
   
   return false;
 }
-
 
 

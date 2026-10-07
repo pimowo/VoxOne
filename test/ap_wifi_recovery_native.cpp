@@ -16,7 +16,6 @@ int main() {
   assert(!apWifiCredentialsValid("Home", "bad\npassword"));
   assert(!apWifiCredentialsValid("123456789012345678901234567890", "secret"));
   assert(!apWifiCredentialsValid("Home", "1234567890123456789012345678901234567890"));
-  assert(netServerShouldInitialize(false, false));
-  assert(!netServerShouldInitialize(true, false));
-  assert(!netServerShouldInitialize(false, true));
+  assert(netServerShouldInitialize(false));
+  assert(!netServerShouldInitialize(true));
 }

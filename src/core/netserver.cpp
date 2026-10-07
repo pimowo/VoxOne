@@ -316,7 +316,7 @@ bool NetServer::begin(bool quiet) {
   Serial.printf("##[BOOT]# NetServer::begin called: status=%d started=%s caller=%s\n",
                 static_cast<int>(network.status), _started ? "yes" : "no",
                 quiet ? "searchWiFi" : "setup");
-  if (!netServerShouldInitialize(_started, network.status == SDREADY)) return true;
+  if (!netServerShouldInitialize(_started)) return true;
   if(!quiet) Serial.print("##[BOOT]#\tnetserver.begin\t");
   importRequest = IMDONE;
   playerBufMax = psramInit()?300000:1600 * config.store.abuff;
@@ -1281,7 +1281,7 @@ void handleStationsImport(AsyncWebServerRequest* request) {
     rows.clear();
   }
   const uint16_t oldCurrent = config.lastStation();
-  if (config.getMode() != PM_WEB || oldCurrent > oldCount) {
+  if (oldCurrent > oldCount) {
     stationsError(request, 500, "invalid_playlist_state");
     finishPlaylistUpload(request);
     return;
@@ -1456,7 +1456,7 @@ void handleStationsMutation(AsyncWebServerRequest *request) {
   uint16_t newCurrent = oldCurrent;
   uint16_t number = 0;
   bool reconnect = false, stop = false, refreshCurrent = false;
-  if (config.getMode() != PM_WEB || oldCurrent > rows.size()) {
+  if (oldCurrent > rows.size()) {
     stationsError(request, 500, "invalid_playlist_state");
     return;
   }
@@ -1597,19 +1597,6 @@ void NetServer::processQueue(){
     wsBuf[0]='\0';
     switch (request.type) {
       case PLAYLIST:        getPlaylist(clientId); break;
-      case PLAYLISTSAVED:   {
-        #ifdef USE_SD
-        if(config.getMode()==PM_SDCARD) {
-        //  config.indexSDPlaylist();
-          config.initSDPlaylist();
-        }
-        #endif
-        if(config.getMode()==PM_WEB){
-          config.indexPlaylist(); 
-          config.initPlaylist(); 
-        }
-        getPlaylist(clientId); break;
-      }
       case GETACTIVE: {
           bool dbgact = false;
           //String act = F("\"group_wifi\",");
@@ -1806,7 +1793,6 @@ void NetServer::loop() {
   if (systemOperationState.audioBlocked() && !systemOperationState.blocksRequests() &&
       systemOperationState.isRadioStopped())
     systemOperationState.releaseFailedUpdateAudio();
-  if(network.status==SDREADY) return;
   if (systemRestartPending() && (int32_t)(millis() - webUpdateRebootAt) >= 0) {
     Serial.println("Rebooting...");
     ESP.restart();

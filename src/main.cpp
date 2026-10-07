@@ -105,18 +105,14 @@ void setup() {
     if (btRuntime.physicalStarted()) btAudioInput.begin();
   #endif
   logNvsStats();
-  if (network.status != CONNECTED && network.status!=SDREADY) {
+  if (network.status != CONNECTED) {
     netserver.begin();
     initControls();
     display.putRequest(DSP_START);
     while(!display.ready()) delay(10);
     return;
   }
-  if(SDC_CS!=255) {
-    display.putRequest(WAITFORSD, 0);
-    Serial.print("##[BOOT]#\tSD search\t");
-  }
-  config.initPlaylistMode();
+  config.initRadioPlaylist();
   netserver.begin();
   initControls();
   display.putRequest(DSP_START);
@@ -124,7 +120,6 @@ void setup() {
   #if USE_OTA
     setupOTA();
   #endif
-  if (config.getMode()==PM_SDCARD) player.initHeaders(config.station.url);
   player.lockOutput=false;
   // Preserve the selected station, but always enter the base source in STOP.
   pm.on_end_setup();
@@ -148,7 +143,7 @@ void loop() {
                         bluetoothOwnsAudio(bluetoothSourceSelected(), player.temporaryActive()),
                         player.getSampleRate(), millis());
   #endif
-  if (network.status == CONNECTED || network.status==SDREADY || player.temporaryBusy()) {
+  if (network.status == CONNECTED || player.temporaryBusy()) {
     player.loop();
 #if USE_OTA
     ArduinoOTA.handle();

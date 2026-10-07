@@ -222,7 +222,7 @@ void TimeKeeper::_upClock(){
     mktime(&network.timeinfo);
   }
 #else
-  if(network.timeinfo.tm_year>100 || network.status == SDREADY) {
+  if(network.timeinfo.tm_year>100) {
     network.timeinfo.tm_sec++;
     mktime(&network.timeinfo);
   }
@@ -262,9 +262,6 @@ void TimeKeeper::_upRSSI(){
     netserver.requestOnChange(NRSSI, 0);
     if(display.ready()) display.putRequest(DSPRSSI, netserver.getRSSI());
   }
-#ifdef USE_SD
-  if(display.mode()!=SDCHANGE) player.sendCommand({PR_CHECKSD, 0});
-#endif
   player.sendCommand({PR_VUTONUS, 0});
 }
 

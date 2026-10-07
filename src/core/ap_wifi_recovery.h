@@ -15,6 +15,6 @@ inline bool apWifiCredentialsValid(const char* ssid, const char* password) {
   return !std::strpbrk(ssid, "\t\r\n") && !std::strpbrk(password, "\t\r\n");
 }
 
-inline bool netServerShouldInitialize(bool started, bool sdReady) {
-  return !started && !sdReady;
+inline bool netServerShouldInitialize(bool started) {
+  return !started;
 }

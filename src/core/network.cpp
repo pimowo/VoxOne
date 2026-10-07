@@ -23,9 +23,6 @@
   #define WIFI_ATTEMPTS  16
 #endif
 
-#ifndef SEARCH_WIFI_CORE_ID
-  #define SEARCH_WIFI_CORE_ID  0
-#endif
 MyNetwork network;
 char apSsid[14] = "VoxOne-Setup";
 
@@ -41,22 +38,17 @@ void MyNetwork::WiFiReconnected(WiFiEvent_t event, WiFiEventInfo_t info){
   player.lockOutput = false;
   delay(100);
   display.putRequest(NEWMODE, PLAYER);
-  if(config.getMode()==PM_SDCARD) {
-    network.status=CONNECTED;
-    display.putRequest(NEWIP, 0);
-  }else{
-    display.putRequest(NEWMODE, PLAYER);
-    if (player.temporaryBusy()) network.lostPlaying = false;
+  display.putRequest(NEWMODE, PLAYER);
+  if (player.temporaryBusy()) network.lostPlaying = false;
 #if VOXONE_HAS_BT && VOXONE_PIN_MAP_COMPLETE
-    if (radioWifiReconnectShouldPlay(network.lostPlaying,
-                                     !bluetoothSourceSelected()))
-      player.sendCommand({PR_RADIO_RESUME, config.lastStation()});
+  if (radioWifiReconnectShouldPlay(network.lostPlaying,
+                                   !bluetoothSourceSelected()))
+    player.sendCommand({PR_RADIO_RESUME, config.lastStation()});
 #else
-    if (network.lostPlaying)
-      player.sendCommand({PR_PLAY, config.lastStation()});
+  if (network.lostPlaying)
+    player.sendCommand({PR_PLAY, config.lastStation()});
 #endif
-    network.lostPlaying = false;
-  }
+  network.lostPlaying = false;
   mqttWifiConnected();
 }
 
@@ -75,21 +67,16 @@ void MyNetwork::WiFiLostConnection(WiFiEvent_t event, WiFiEventInfo_t info){
   if(!network.beginReconnect){
     const bool temporaryRecovery = player.interruptTemporaryForNetwork();
     Serial.printf("Lost connection, reconnecting to %s...\n", config.ssids[config.store.lastSSID-1].ssid);
-    if(config.getMode()==PM_SDCARD) {
-      network.status=SDREADY;
-      display.putRequest(NEWIP, 0);
-    }else{
-      network.lostPlaying = !temporaryRecovery && player.isRunning();
-      if (network.lostPlaying) {
-        player.lockOutput = true;
+    network.lostPlaying = !temporaryRecovery && player.isRunning();
+    if (network.lostPlaying) {
+      player.lockOutput = true;
 #if VOXONE_HAS_BT && VOXONE_PIN_MAP_COMPLETE
-        player.sendCommand({PR_RADIO_SUSPEND, 0});
+      player.sendCommand({PR_RADIO_SUSPEND, 0});
 #else
-        player.sendCommand({PR_STOP, 0});
+      player.sendCommand({PR_STOP, 0});
 #endif
-      }
-      display.putRequest(NEWMODE, LOST);
     }
+    display.putRequest(NEWMODE, LOST);
   }
   network.beginReconnect = true;
   mqttWifiDisconnected();
@@ -137,20 +124,6 @@ bool MyNetwork::wifiBegin(bool silent){
   return false;
 }
 
-void searchWiFi(void * pvParameters){
-  if(!network.wifiBegin(true)){
-    delay(10000);
-    xTaskCreatePinnedToCore(searchWiFi, "searchWiFi", 1024 * 4, NULL, 0, NULL, SEARCH_WIFI_CORE_ID);
-  }else{
-    network.status = CONNECTED;
-    netserver.begin(true);
-    network.setWifiParams();
-    display.putRequest(NEWIP, 0);
-    mqttInit();
-  }
-  vTaskDelete( NULL );
-}
-
 #define DBGAP false
 
 void MyNetwork::begin() {
@@ -174,20 +147,15 @@ void MyNetwork::begin() {
     raiseSoftAP();
     return;
   }
-  if(config.getMode()!=PM_SDCARD){
-    if(!wifiBegin()){
-      raiseSoftAP();
-      Serial.println("##[BOOT]#\tdone");
-      return;
-    }
-    Serial.println(".");
-    status = CONNECTED;
-    setWifiParams();
-    mqttInit();
-  }else{
-    status = SDREADY;
-    xTaskCreatePinnedToCore(searchWiFi, "searchWiFi", 1024 * 4, NULL, 0, NULL, SEARCH_WIFI_CORE_ID);
+  if(!wifiBegin()){
+    raiseSoftAP();
+    Serial.println("##[BOOT]#\tdone");
+    return;
   }
+  Serial.println(".");
+  status = CONNECTED;
+  setWifiParams();
+  mqttInit();
   
   Serial.println("##[BOOT]#\tdone");
   if(REAL_LEDBUILTIN!=255) digitalWrite(REAL_LEDBUILTIN, LOW);

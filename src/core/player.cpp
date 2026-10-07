@@ -30,7 +30,6 @@ Player::Player(): Audio(true, I2S_DAC_CHANNEL_BOTH_EN) {}
 void Player::init() {
   Serial.print("##[BOOT]#\tplayer.init\t");
   playerQueue=NULL;
-  _resumeFilePos = 0;
   _hasError=false;
   _pendingVolume = config.store.volume;
   _pendingMode = 0;
@@ -93,8 +92,6 @@ void Player::setError(const char *e){
 
 void Player::_stop(bool alreadyStopped, RadioStopReason reason){
   log_i("%s called", __func__);
-  if(config.getMode()==PM_SDCARD && !alreadyStopped && !temporaryActive())
-    config.sdResumePos = player.getFilePos();
   _status = STOPPED;
   setOutputPins(false);
   if(!_hasError) config.setTitle((display.mode()==LOST || display.mode()==UPDATING)?"":LANG::const_PlStopped);
@@ -227,17 +224,6 @@ void Player::loop() {
         _volTimer = true;
         break;
       }
-      #ifdef USE_SD
-      case PR_CHECKSD: {
-        if(config.getMode()==PM_SDCARD){
-          if(!sdman.cardPresent()){
-            sdman.stop();
-            config.changeMode(PM_WEB);
-          }
-        }
-        break;
-      }
-      #endif
       case PR_VUTONUS: {
         if(config.vuThreshold>10) config.vuThreshold -=10;
         break;
@@ -292,17 +278,12 @@ void Player::_play(uint16_t stationId, bool sourceResume) {
   _loadVol(config.store.volume);
   
   bool isConnected = false;
-  if(config.getMode()==PM_SDCARD && SDC_CS!=255){
-    isConnected=connecttoFS(sdman,config.station.url,config.sdResumePos==0?_resumeFilePos:config.sdResumePos-player.sd_min);
-  }else {
-    config.saveValue(&config.store.play_mode, static_cast<uint8_t>(PM_WEB));
-  }
   connproc = false;
-  if(config.getMode()==PM_WEB) isConnected=connecttohost(config.station.url);
+  isConnected=connecttohost(config.station.url);
   connproc = true;
   if(isConnected){
     _status = PLAYING;
-    config.configPostPlaying(stationId);
+    config.configPostPlaying();
     setOutputPins(true);
     if (player_on_start_play) player_on_start_play();
     pm.on_start_play();
@@ -351,7 +332,7 @@ void Player::restoreTemporaryBase() {
   if (!temporaryBusy() || temporaryActive()) return;
   uint16_t station = config.lastStation();
   if (!sourceManagerTakeTemporaryRestore(_temporary,
-          WiFi.isConnected() || config.getMode() == PM_SDCARD,
+          WiFi.isConnected(),
           systemUpdateAudioBlocked(), station)) return;
   if (station != config.lastStation()) config.setLastStation(station);
   _play(station, true);
@@ -364,13 +345,7 @@ void Player::browseUrl(const char* url){
     return;
   }
 #endif
-  const bool first = !temporaryActive();
   _callbackToken = 0;
-  if (first && config.getMode() == PM_SDCARD && isRunning()) {
-    const uint32_t position = getFilePos();
-    _resumeFilePos = position >= sd_min ? position - sd_min : 0;
-    config.sdResumePos = 0;
-  }
   // Replacement invalidates the previous token without changing the base.
   const uint32_t token = _temporary.begin();
   stopSong();
@@ -403,9 +378,7 @@ void Player::prev() {
   uint16_t lastStation = config.lastStation();
   const uint16_t count = config.playlistLength();
   if (count == 0) return;
-  if(config.getMode()==PM_WEB || !config.store.sdsnuffle){
-    if (lastStation <= 1) config.lastStation(count); else config.lastStation(lastStation-1);
-  }
+  if (lastStation <= 1) config.lastStation(count); else config.lastStation(lastStation-1);
   sendCommand({PR_PLAY, config.lastStation()});
 }
 
@@ -413,12 +386,8 @@ void Player::next() {
   uint16_t lastStation = config.lastStation();
   const uint16_t count = config.playlistLength();
   if (count == 0) return;
-  if(config.getMode()==PM_WEB || !config.store.sdsnuffle){
-    if (lastStation == 0 || lastStation >= count) config.lastStation(1);
-    else config.lastStation(lastStation+1);
-  }else{
-    config.lastStation(random(1, count));
-  }
+  if (lastStation == 0 || lastStation >= count) config.lastStation(1);
+  else config.lastStation(lastStation+1);
   sendCommand({PR_PLAY, config.lastStation()});
 }
 

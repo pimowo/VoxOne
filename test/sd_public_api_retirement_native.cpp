@@ -65,10 +65,5 @@ int main() {
                   "handleStationsMutation", "stationDirectory::kDirectorySearchRoute",
                   "request->url()==\"/update\"", "handleWebUpdateUpload",
                   "request->url()==\"/emergency\"", "handleIndex"});
-  hasAll(configHeader, {"PLAYLIST_PATH", "INDEX_PATH", "PM_SDCARD",
-                        "initSDPlaylist", "SDPLFS", "REAL_PLAYL",
-                        "REAL_INDEX"});
-
-  assert(std::ifstream("src/core/sdmanager.cpp").good());
-  assert(std::ifstream("src/core/sdmanager.h").good());
+  hasAll(configHeader, {"PLAYLIST_PATH", "INDEX_PATH"});
 }

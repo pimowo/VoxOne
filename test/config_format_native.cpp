@@ -26,7 +26,7 @@ config_v6_t legacyFixture() {
   value.reservedInput0 = false;
   value.reservedInput1 = true;
   value.dspon = true;
-  value.sdsnuffle = false;
+  value.reservedSdFlags = false;
   value.btnpullup = true;
   value.encpullup = false;
   value.enchalf = true;
@@ -58,8 +58,8 @@ void assertFieldsEqual(const config_v6_t& a, const config_v6_t& b) {
   assert(std::memcmp(a.sntp2, b.sntp2, sizeof(a.sntp2)) == 0);
   assert(std::memcmp(a.reservedWeather, b.reservedWeather,
                      sizeof(a.reservedWeather)) == 0);
-  CHECK(_reserved); CHECK(lastSdStation); CHECK(sdsnuffle);
-  CHECK(volsteps); CHECK(encacc); CHECK(play_mode); CHECK(irtlp);
+  CHECK(_reserved); CHECK(reservedSdStation); CHECK(reservedSdFlags);
+  CHECK(volsteps); CHECK(encacc); CHECK(reservedPlayMode); CHECK(irtlp);
   CHECK(btnpullup); CHECK(btnlongpress); CHECK(btnclickticks);
   CHECK(btnpressticks); CHECK(encpullup); CHECK(enchalf);
   CHECK(enc2pullup); CHECK(enc2half); CHECK(forcemono); CHECK(i2sinternal);
@@ -164,17 +164,17 @@ void legacyBytes(uint8_t (&bytes)[254], config_v6_t& expected) {
   expected._reserved = 1182;
   bytes[182] = static_cast<uint8_t>(1182);
   bytes[183] = static_cast<uint8_t>(1182 >> 8);
-  expected.lastSdStation = 1184;
+  expected.reservedSdStation = 1184;
   bytes[184] = static_cast<uint8_t>(1184);
   bytes[185] = static_cast<uint8_t>(1184 >> 8);
-  expected.sdsnuffle = 0;
+  expected.reservedSdFlags = 0;
   bytes[186] = static_cast<uint8_t>(0);
   expected.volsteps = 8;
   bytes[187] = static_cast<uint8_t>(8);
   expected.encacc = 1188;
   bytes[188] = static_cast<uint8_t>(1188);
   bytes[189] = static_cast<uint8_t>(1188 >> 8);
-  expected.play_mode = 11;
+  expected.reservedPlayMode = 11;
   bytes[190] = static_cast<uint8_t>(11);
   expected.irtlp = 12;
   bytes[191] = static_cast<uint8_t>(12);
@@ -395,6 +395,12 @@ int main() {
                 "v6 legacy enc2pullup offset");
   static_assert(offsetof(config_v6_t, enc2half) == 203,
                 "v6 legacy enc2half offset");
+  static_assert(offsetof(config_v6_t, reservedSdStation) == 184,
+                "v6 reserved SD station offset");
+  static_assert(offsetof(config_v6_t, reservedSdFlags) == 186,
+                "v6 reserved SD flags offset");
+  static_assert(offsetof(config_v6_t, reservedPlayMode) == 190,
+                "v6 reserved play mode offset");
   static_assert(offsetof(config_v6_t, lastUserVolume) == 253, "v6 tail");
   static_assert(kConfigV7SerializedSize == 255, "v7 wire size");
   static_assert(kConfigV7SerializedSize <= 268, "v7 EEPROM capacity");
@@ -420,6 +426,10 @@ int main() {
   assert(serializeConfigV7(enabled, bytes, sizeof(bytes)));
   assert(bytes[0] == 0xa7 && bytes[1] == 0xc7);  // New magic, little endian.
   assert(bytes[2] == 7 && bytes[3] == 0);
+  assert(bytes[kConfigV7ReservedSdStationOffset] == 0x5a);
+  assert(bytes[kConfigV7ReservedSdStationOffset + 1] == 0x5a);
+  assert(bytes[kConfigV7ReservedSdFlagsOffset] == 0);
+  assert(bytes[kConfigV7ReservedPlayModeOffset] == 0x5a);
   assert(bytes[198] == 0);  // Legacy enc2pullup compatibility byte.
   assert(bytes[199] == 1);  // Legacy enc2half compatibility byte.
   assert(bytes[kConfigV7BtEnabledOffset] == 1);

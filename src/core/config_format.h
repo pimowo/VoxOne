@@ -39,11 +39,11 @@ struct config_v5_t {
   char sntp2[35];
   uint8_t reservedWeather[79];
   uint16_t _reserved;
-  uint16_t lastSdStation;
-  bool sdsnuffle;
+  uint16_t reservedSdStation;
+  bool reservedSdFlags;
   uint8_t volsteps;
   uint16_t encacc;
-  uint8_t play_mode;
+  uint8_t reservedPlayMode;
   uint8_t irtlp;
   bool btnpullup;
   uint16_t btnlongpress;
@@ -83,7 +83,9 @@ static_assert(offsetof(config_v5_t, reservedInput1) == 28, "v5 reserved input 1 
 static_assert(offsetof(config_v5_t, sntp1) == 32, "v5 SNTP1 offset changed");
 static_assert(offsetof(config_v5_t, sntp2) == 67, "v5 SNTP2 offset changed");
 static_assert(offsetof(config_v5_t, reservedWeather) == 102, "v5 weather offset changed");
-static_assert(offsetof(config_v5_t, lastSdStation) == 184, "v5 SD offset changed");
+static_assert(offsetof(config_v5_t, reservedSdStation) == 184, "v5 reserved SD station offset changed");
+static_assert(offsetof(config_v5_t, reservedSdFlags) == 186, "v5 reserved SD flags offset changed");
+static_assert(offsetof(config_v5_t, reservedPlayMode) == 190, "v5 reserved play mode offset changed");
 static_assert(offsetof(config_v5_t, btnlongpress) == 194, "v5 button offset changed");
 static_assert(offsetof(config_v5_t, screensaverTimeout) == 208, "v5 screen offset changed");
 static_assert(offsetof(config_v5_t, mdnsname) == 215, "v5 mDNS offset changed");
@@ -129,11 +131,11 @@ struct config_v6_t {
   char sntp2[35];
   uint8_t reservedWeather[79];
   uint16_t _reserved;
-  uint16_t lastSdStation;
-  bool sdsnuffle;
+  uint16_t reservedSdStation;
+  bool reservedSdFlags;
   uint8_t volsteps;
   uint16_t encacc;
-  uint8_t play_mode;
+  uint8_t reservedPlayMode;
   uint8_t irtlp;
   bool btnpullup;
   uint16_t btnlongpress;
@@ -176,7 +178,9 @@ static_assert(offsetof(config_v6_t, timezoneOffset) == 20, "v6 timezone offset c
 static_assert(offsetof(config_v6_t, reservedInput0) == 27, "v6 reserved input 0 offset changed");
 static_assert(offsetof(config_v6_t, reservedInput1) == 28, "v6 reserved input 1 offset changed");
 static_assert(offsetof(config_v6_t, _reserved) == 182, "v6 marker offset changed");
-static_assert(offsetof(config_v6_t, lastSdStation) == 184, "v6 SD station offset changed");
+static_assert(offsetof(config_v6_t, reservedSdStation) == 184, "v6 reserved SD station offset changed");
+static_assert(offsetof(config_v6_t, reservedSdFlags) == 186, "v6 reserved SD flags offset changed");
+static_assert(offsetof(config_v6_t, reservedPlayMode) == 190, "v6 reserved play mode offset changed");
 static_assert(offsetof(config_v6_t, encacc) == 188, "v6 encoder offset changed");
 static_assert(offsetof(config_v6_t, btnlongpress) == 194, "v6 button offset changed");
 static_assert(offsetof(config_v6_t, screensaverTimeout) == 208, "v6 screen offset changed");
@@ -199,11 +203,20 @@ constexpr uint16_t kConfigV5 = 5;
 constexpr uint16_t kConfigV6 = 6;
 constexpr uint16_t kConfigV7 = 7;
 constexpr std::size_t kConfigV7SerializedSize = 255;
+constexpr std::size_t kConfigV7ReservedSdStationOffset = 181;
+constexpr std::size_t kConfigV7ReservedSdFlagsOffset = 183;
+constexpr std::size_t kConfigV7ReservedPlayModeOffset = 187;
 constexpr std::size_t kConfigV7BtEnabledOffset = 250;
 constexpr std::size_t kConfigV7CrcOffset = 251;
 constexpr std::size_t kConfigEepromCapacity = 268;  // Addresses 500..767.
 static_assert(kConfigV7SerializedSize <= kConfigEepromCapacity,
               "v7 record exceeds EEPROM config area");
+static_assert(kConfigV7ReservedSdStationOffset == 181,
+              "v7 reserved SD station offset changed");
+static_assert(kConfigV7ReservedSdFlagsOffset == 183,
+              "v7 reserved SD flags offset changed");
+static_assert(kConfigV7ReservedPlayModeOffset == 187,
+              "v7 reserved play mode offset changed");
 static_assert(kConfigV7CrcOffset + sizeof(uint32_t) == kConfigV7SerializedSize,
               "v7 CRC must end the record");
 

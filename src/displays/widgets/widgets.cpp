@@ -973,8 +973,8 @@ uint8_t PlayListWidget::_fillPlMenu(int from, uint8_t count) {
   if (config.playlistLength() == 0) {
     return 0;
   }
-  File playlist = config.SDPLFS()->open(REAL_PLAYL, "r");
-  File index = config.SDPLFS()->open(REAL_INDEX, "r");
+  File playlist = SPIFFS.open(PLAYLIST_PATH, "r");
+  File index = SPIFFS.open(INDEX_PATH, "r");
   while (true) {
     if (ls < 1) {
       ls++;
@@ -993,8 +993,12 @@ uint8_t PlayListWidget::_fillPlMenu(int from, uint8_t count) {
     bool pla = true;
     while (pla) {
       pla = playlist.available();
-      String stationName = playlist.readStringUntil('\n');
-      stationName = stationName.substring(0, stationName.indexOf('\t'));
+      String stationLine = playlist.readStringUntil('\n');
+      const int firstTab = stationLine.indexOf('\t');
+      const int secondTab = firstTab < 0 ? -1 : stationLine.indexOf('\t', firstTab + 1);
+      String stationName = firstTab >= 0 && secondTab > firstTab
+                               ? stationLine.substring(firstTab + 1, secondTab)
+                               : String();
       if(config.store.numplaylist && stationName.length()>0) stationName = String(from+c)+" "+stationName;
       _printPLitem(c, stationName.c_str());
       c++;

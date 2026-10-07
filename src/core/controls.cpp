@@ -102,8 +102,7 @@ void initControls() {
 }
 
 void loopControls() {
-  if(display.mode()==UPDATING || display.mode()==SDCHANGE) return;
-  if(SDC_CS==255 && display.mode()==LOST) return;
+  if(display.mode()==UPDATING || display.mode()==LOST) return;
   if(ctrls_on_loop) ctrls_on_loop();
 #if ENC_BTNL!=255
   encoder1Loop();
@@ -121,7 +120,7 @@ void loopControls() {
 }
 #if ENC_BTNL!=255
 void encoder1Loop() {
-  if (network.status != CONNECTED && network.status!=SDREADY) return;
+  if (network.status != CONNECTED) return;
   if(display.mode()==LOST) return;
   int8_t encoderDelta = encoder.encoderChanged();
   if (encoderDelta!=0)
@@ -233,7 +232,7 @@ boolean checklpdelay(int m, unsigned long &tstamp) {
 }
 
 void onBtnDuringLongPress(int id) {
-  if (network.status != CONNECTED && network.status!=SDREADY) return;
+  if (network.status != CONNECTED) return;
   if (checklpdelay(BTN_LONGPRESS_LOOP_DELAY, lpdelay)) {
     switch ((controlEvt_e)id) {
       case EVT_BTNLEFT: {
@@ -332,7 +331,7 @@ void onBtnClick(int id) {
   bool passBnCenter = (controlEvt_e)id==EVT_BTNCENTER || (controlEvt_e)id==EVT_ENCBTNB;
   controlEvt_e btnid = static_cast<controlEvt_e>(id);
   pm.on_btn_click(btnid);
-  if (network.status != CONNECTED && network.status!=SDREADY && (controlEvt_e)id!=EVT_BTNMODE && !passBnCenter) return;
+  if (network.status != CONNECTED && !passBnCenter) return;
   switch (btnid) {
     case EVT_BTNLEFT: {
         controlsEvent(false);
@@ -358,11 +357,6 @@ void onBtnClick(int id) {
           display.putRequest(NEWMODE, PLAYER);
           display.putRequest(CLOSEPLAYLIST, display.currentPlItem);
           //player.sendCommand({PR_PLAY, display.currentPlItem});
-        }
-        if(network.status==SOFT_AP || display.mode()==LOST){
-          #ifdef USE_SD
-            config.changeMode();
-          #endif
         }
         break;
       }
@@ -396,12 +390,6 @@ void onBtnClick(int id) {
         }
         break;
       }
-    #ifdef USE_SD
-    case EVT_BTNMODE: {
-      config.changeMode();
-      break;
-    }
-    #endif
     default: break;
   }
 }
@@ -422,7 +410,7 @@ void onBtnDoubleClick(int id) {
   switch ((controlEvt_e)id) {
     case EVT_BTNLEFT: {
         if (display.mode() != PLAYER) return;
-        if (network.status != CONNECTED && network.status!=SDREADY) return;
+        if (network.status != CONNECTED) return;
         player.prev();
         break;
       }
@@ -442,7 +430,7 @@ void onBtnDoubleClick(int id) {
 #endif
     case EVT_BTNRIGHT: {
         if (display.mode() != PLAYER) return;
-        if (network.status != CONNECTED && network.status!=SDREADY) return;
+        if (network.status != CONNECTED) return;
         player.next();
         break;
       }

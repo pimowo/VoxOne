@@ -21,9 +21,6 @@
 #include "ui_timeout_config.h"
 #include "ap_wifi_recovery.h"
 #include "../displays/tools/l10n.h"
-#ifdef USE_SD
-#include "sdmanager.h"
-#endif
 #include <cstddef>
 #include <nvs.h>
 
@@ -112,7 +109,6 @@ void Config::init() {
   const bool eepromReady = _persistMutex && EEPROM.begin(EEPROM_SIZE);
   mqttConfig();
   uiTimeoutConfig();
-  sdResumePos = 0;
   screensaverTicks = 0;
   screensaverPlayingTicks = 0;
   isScreensaver = false;
@@ -171,8 +167,6 @@ void Config::init() {
       _storage.mode() != voxone::config_format::ConfigStorageMode::FUTURE_READ_ONLY)
     Serial.printf("[CONFIG] persistence: %s\n", voxone::config_format::configWriteMessage(startupWrite));
   BOOTLOG("CONFIG_VERSION\t%d", store.version);
-  store.play_mode = store.play_mode & 0b11;
-  if(store.play_mode>1) store.play_mode=PM_WEB;
   _initHW();
   if (!SPIFFS.begin(true)) {
     Serial.println("##[ERROR]#\tSPIFFS Mount Failed");
@@ -185,88 +179,11 @@ void Config::init() {
   emptyFS = _isFSempty();
   if(emptyFS) BOOTLOG("SPIFFS is empty!");
   ssidsCount = 0;
-  #ifdef USE_SD
-  _SDplaylistFS = getMode()==PM_SDCARD?&sdman:(true?&SPIFFS:_SDplaylistFS);
-  #else
-  _SDplaylistFS = &SPIFFS;
-  #endif
-  _bootDone=false;
   setTimeConf();
 }
 
-void Config::changeMode(int newmode){
-#ifdef USE_SD
-  bool pir = player.isRunning();
-  if(SDC_CS==255) return;
-  if(getMode()==PM_SDCARD) {
-    sdResumePos = player.getFilePos();
-  }
-  if(network.status==SOFT_AP || display.mode()==LOST){
-    saveValue(&store.play_mode, static_cast<uint8_t>(PM_SDCARD));
-    delay(50);
-    ESP.restart();
-  }
-  if(!sdman.ready && newmode!=PM_WEB) {
-    if(!sdman.start()){
-      Serial.println("##[ERROR]#\tSD Not Found");
-      sdman.stop();
-      return;
-    }
-  }
-  if(newmode<0||newmode>MAX_PLAY_MODE){
-    store.play_mode++;
-    if(getMode() > MAX_PLAY_MODE) store.play_mode=0;
-  }else{
-    store.play_mode=(playMode_e)newmode;
-  }
-  saveValue(&store.play_mode, store.play_mode, true, true);
-  _SDplaylistFS = getMode()==PM_SDCARD?&sdman:(true?&SPIFFS:_SDplaylistFS);
-  if(getMode()==PM_SDCARD){
-    if(pir) player.sendCommand({PR_STOP, 0});
-    display.putRequest(NEWMODE, SDCHANGE);
-    #ifdef NETSERVER_LOOP1
-    while(display.mode()!=SDCHANGE)
-      delay(10);
-    #endif
-    delay(50);
-  }
-  if(getMode()==PM_WEB) {
-    if(network.status==SDREADY) ESP.restart();
-    sdman.stop();
-  }
-  if(!_bootDone) return;
-  initPlaylistMode();
-  if (pir) player.sendCommand({PR_PLAY, getMode()==PM_WEB?store.lastStation:store.lastSdStation});
-  netserver.resetQueue();
-  netserver.requestOnChange(GETINDEX, 0);
-  display.resetQueue();
-  display.putRequest(NEWMODE, PLAYER);
-  display.putRequest(NEWSTATION);
-#endif
-}
-
-void Config::initSDPlaylist() {
-#ifdef USE_SD
-  //store.countStation = 0;
-  bool doIndex = !sdman.exists(INDEX_SD_PATH);
-  if(doIndex) sdman.indexSDPlaylist();
-  if (SDPLFS()->exists(INDEX_SD_PATH)) {
-    File index = SDPLFS()->open(INDEX_SD_PATH, "r");
-    //store.countStation = index.size() / 4;
-    if(doIndex){
-      lastStation(_randomStation());
-      sdResumePos = 0;
-    }
-    index.close();
-    //saveValue(&store.countStation, store.countStation, true, true);
-  }
-#endif //#ifdef USE_SD
-}
-
 bool Config::spiffsCleanup(){
-  bool ret = (SPIFFS.exists(PLAYLIST_SD_PATH)) || (SPIFFS.exists(INDEX_SD_PATH)) || (SPIFFS.exists(INDEX_PATH));
-  if(SPIFFS.exists(PLAYLIST_SD_PATH)) SPIFFS.remove(PLAYLIST_SD_PATH);
-  if(SPIFFS.exists(INDEX_SD_PATH)) SPIFFS.remove(INDEX_SD_PATH);
+  bool ret = SPIFFS.exists(INDEX_PATH);
   if(SPIFFS.exists(INDEX_PATH)) SPIFFS.remove(INDEX_PATH);
   return ret;
 }
@@ -288,12 +205,10 @@ bool Config::prepareForPlaying(uint16_t stationId, bool sourceResume){
   vuThreshold = 0;
   screensaverTicks=SCREENSAVERSTARTUPDELAY;
   screensaverPlayingTicks=SCREENSAVERSTARTUPDELAY;
-  if(getMode()!=PM_SDCARD) {
-    display.putRequest(PSTOP);
-  }
+  display.putRequest(PSTOP);
   
   if(!loadStation(stationId)) return false;
-  setTitle(getMode()==PM_WEB?LANG::const_PlConnect:"[next track]");
+  setTitle(LANG::const_PlConnect);
   station.bitrate=0;
   setBitrateFormat(BF_UNKNOWN);
   display.putRequest(DBITRATE);
@@ -308,59 +223,25 @@ bool Config::prepareForPlaying(uint16_t stationId, bool sourceResume){
     setSmartStart(0);
   return true;
 }
-void Config::configPostPlaying(uint16_t stationId){
-  if(getMode()==PM_SDCARD) {
-    sdResumePos = 0;
-    saveValue(&store.lastSdStation, stationId);
-  }
+void Config::configPostPlaying(){
   if(store.smartstart!=2) setSmartStart(1);
   netserver.requestOnChange(MODE, 0);
   //display.putRequest(NEWMODE, PLAYER);
   display.putRequest(PSTART);
 }
-void Config::initPlaylistMode(){
+void Config::initRadioPlaylist(){
   uint16_t _lastStation = 0;
-  if(getMode()==PM_WEB && !emptyFS) initPlaylist();
+  if(!emptyFS) initPlaylist();
   uint16_t cs = playlistLength();
-  #ifdef USE_SD
-    if(getMode()==PM_SDCARD){
-      if(!sdman.start()){
-        store.play_mode=PM_WEB;
-        Serial.println("SD Mount Failed");
-        changeMode(PM_WEB);
-        _lastStation = store.lastStation;
-      }else{
-        if(_bootDone) Serial.println("SD Mounted"); else BOOTLOG("SD Mounted");
-          if(_bootDone) Serial.println("Waiting for SD card indexing..."); else BOOTLOG("Waiting for SD card indexing...");
-          initSDPlaylist();
-          if(_bootDone) Serial.println("done"); else BOOTLOG("done");
-          _lastStation = store.lastSdStation;
-          
-          if(_lastStation>cs && cs>0){
-            _lastStation=1;
-          }
-          if(_lastStation==0) {
-            _lastStation = _randomStation();
-          }
-      }
-    }else{
-      Serial.println("done");
-      _lastStation = store.lastStation;
-    }
-  #else //ifdef USE_SD
-    store.play_mode=PM_WEB;
-    _lastStation = store.lastStation;
-  #endif
-  if (getMode()==PM_WEB && cs==0) _lastStation=0;
-  else if (getMode()==PM_WEB && _lastStation>cs) _lastStation=1;
+  _lastStation = store.lastStation;
+  if (cs==0) _lastStation=0;
+  else if (_lastStation>cs) _lastStation=1;
   log_i("%d" ,_lastStation);
   if (_lastStation == 0 && cs > 0 &&
-      !(getMode()==PM_WEB && store._reserved==VOXONE_NO_STATION_MARKER)) {
-    _lastStation = getMode()==PM_WEB?1:_randomStation();
+      store._reserved!=VOXONE_NO_STATION_MARKER) {
+    _lastStation = 1;
   }
   lastStation(_lastStation);
-  saveValue(&store.play_mode, store.play_mode, true, true);
-  _bootDone = true;
   loadStation(_lastStation);
 }
 
@@ -766,10 +647,10 @@ void Config::initPlaylist() {
 }
 uint16_t Config::playlistLength(){
   PlaylistGuard guard;
-  if (getMode() == PM_WEB && !guard) return 0;
+  if (!guard) return 0;
   uint16_t out = 0;
-  if (SDPLFS()->exists(REAL_INDEX)) {
-    File index = SDPLFS()->open(REAL_INDEX, "r");
+  if (SPIFFS.exists(INDEX_PATH)) {
+    File index = SPIFFS.open(INDEX_PATH, "r");
     out = index.size() / 4;
     index.close();
   }
@@ -777,7 +658,7 @@ uint16_t Config::playlistLength(){
 }
 bool Config::loadStation(uint16_t ls) {
   PlaylistGuard guard;
-  if (getMode() == PM_WEB && !guard) return false;
+  if (!guard) return false;
   station.id = 0;
   station.metadataMode = STATION_META_NORMAL;
   if (ls == 0 && store._reserved == VOXONE_NO_STATION_MARKER) {
@@ -799,29 +680,26 @@ bool Config::loadStation(uint16_t ls) {
   if (ls > playlistLength()) {
     ls = 1;
   }
-  File playlist = SDPLFS()->open(REAL_PLAYL, "r");
-  File index = SDPLFS()->open(REAL_INDEX, "r");
+  File playlist = SPIFFS.open(PLAYLIST_PATH, "r");
+  File index = SPIFFS.open(INDEX_PATH, "r");
   if (!playlist || !index || !index.seek((ls - 1) * 4, SeekSet)) return false;
   uint32_t pos = 0;
   if (index.readBytes((char *) &pos, 4) != 4 || pos >= playlist.size() ||
       !playlist.seek(pos, SeekSet)) return false;
   index.close();
   String loadedLine = playlist.readStringUntil('\n');
-  bool parsed = false;
-  if (getMode() == PM_WEB) {
-    if (loadedLine.endsWith("\r")) loadedLine.remove(loadedLine.length() - 1);
-    static char nativeLine[BUFLEN * 3]; // WEB loads are serialized by PlaylistGuard.
-    loadedLine.toCharArray(nativeLine, sizeof(nativeLine));
-    char* name = nullptr;
-    char* url = nullptr;
-    parsed = loadedLine.length() < sizeof(nativeLine) &&
-             stationParseFields(nativeLine, station.id, name, url,
-                                sOvol, station.metadataMode);
-    if (parsed) {
-      strlcpy(tmpBuf, name, BUFLEN);
-      strlcpy(tmpBuf2, url, BUFLEN);
-    }
-  } else parsed = parseCSV(loadedLine.c_str(), tmpBuf, tmpBuf2, sOvol);
+  if (loadedLine.endsWith("\r")) loadedLine.remove(loadedLine.length() - 1);
+  static char nativeLine[BUFLEN * 3]; // Loads are serialized by PlaylistGuard.
+  loadedLine.toCharArray(nativeLine, sizeof(nativeLine));
+  char* name = nullptr;
+  char* url = nullptr;
+  const bool parsed = loadedLine.length() < sizeof(nativeLine) &&
+                      stationParseFields(nativeLine, station.id, name, url,
+                                         sOvol, station.metadataMode);
+  if (parsed) {
+    strlcpy(tmpBuf, name, BUFLEN);
+    strlcpy(tmpBuf2, url, BUFLEN);
+  }
   if (parsed) {
     memset(station.url, 0, BUFLEN);
     memset(station.name, 0, BUFLEN);
@@ -839,19 +717,19 @@ bool Config::loadStation(uint16_t ls) {
 
 char * Config::stationByNum(uint16_t num){
   PlaylistGuard guard;
-  if (getMode() == PM_WEB && !guard) {
+  if (!guard) {
     _stationBuf[0] = '\0';
     return _stationBuf;
   }
-  File playlist = SDPLFS()->open(REAL_PLAYL, "r");
-  File index = SDPLFS()->open(REAL_INDEX, "r");
+  File playlist = SPIFFS.open(PLAYLIST_PATH, "r");
+  File index = SPIFFS.open(INDEX_PATH, "r");
   index.seek((num - 1) * 4, SeekSet);
   uint32_t pos;
   memset(_stationBuf, 0, sizeof(_stationBuf));
   index.readBytes((char *) &pos, 4);
   index.close();
   playlist.seek(pos, SeekSet);
-  if (getMode() == PM_WEB) playlist.readStringUntil('\t'); // Skip immutable station ID.
+  playlist.readStringUntil('\t'); // Skip immutable station ID.
   strncpy(_stationBuf, playlist.readStringUntil('\t').c_str(), sizeof(_stationBuf));
   playlist.close();
   return _stationBuf;
@@ -868,26 +746,6 @@ void Config::escapeQuotes(const char* input, char* output, size_t maxLen) {
     }
   }
   output[j] = '\0';
-}
-
-bool Config::parseCSV(const char* line, char* name, char* url, int &ovol) {
-  char *tmpe;
-  const char* cursor = line;
-  char buf[5];
-  tmpe = strstr(cursor, "\t");
-  if (tmpe == NULL) return false;
-  strlcpy(name, cursor, tmpe - cursor + 1);
-  if (strlen(name) == 0) return false;
-  cursor = tmpe + 1;
-  tmpe = strstr(cursor, "\t");
-  if (tmpe == NULL) return false;
-  strlcpy(url, cursor, tmpe - cursor + 1);
-  if (strlen(url) == 0) return false;
-  cursor = tmpe + 1;
-  if (strlen(cursor) == 0) return false;
-  strlcpy(buf, cursor, 4);
-  ovol = atoi(buf);
-  return true;
 }
 
 bool Config::parseJSON(const char* line, char* name, char* url, int &ovol) {

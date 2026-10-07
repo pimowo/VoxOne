@@ -17,13 +17,6 @@
 #define TMP_PATH          "/data/tmpfile.txt"
 #define INDEX_PATH        "/data/stations.idx"
 
-#define PLAYLIST_SD_PATH     "/data/playlistsd.csv"
-#define INDEX_SD_PATH        "/data/indexsd.dat"
-
-#define REAL_PLAYL   config.getMode()==PM_WEB?PLAYLIST_PATH:PLAYLIST_SD_PATH
-#define REAL_INDEX   config.getMode()==PM_WEB?INDEX_PATH:INDEX_SD_PATH
-
-#define MAX_PLAY_MODE   1
 #define MDNS_LENGTH 24
 
 #if ESP_ARDUINO_VERSION >= ESP_ARDUINO_VERSION_VAL(3, 0, 0)
@@ -33,8 +26,6 @@
 #define CONFIG_VERSION  7
 constexpr uint16_t VOXONE_NO_STATION_MARKER = 0xC302;
 enum StartupVolumeMode : uint8_t { STARTUP_LAST = 0, STARTUP_FIXED = 1 };
-
-enum playMode_e      : uint8_t  { PM_WEB=0, PM_SDCARD=1 };
 
 void u8fix(char *src);
 
@@ -97,11 +88,11 @@ struct config_t
   char      sntp2[35];
   uint8_t   reservedWeather[79];
   uint16_t  _reserved; // VoxOne: intentional current=0 marker; EEPROM layout unchanged
-  uint16_t  lastSdStation;
-  bool      sdsnuffle;
+  uint16_t  reservedSdStation;
+  bool      reservedSdFlags;
   uint8_t   volsteps;
   uint16_t  encacc;
-  uint8_t   play_mode;  //0 WEB, 1 SD
+  uint8_t   reservedPlayMode;
   uint8_t   irtlp;
   bool      btnpullup;
   uint16_t  btnlongpress;
@@ -163,7 +154,6 @@ class Config {
     neworkItem ssids[5];
     uint8_t ssidsCount;
     uint16_t sleepfor;
-    uint32_t sdResumePos;
     bool     emptyFS;
     uint16_t vuThreshold;
     uint16_t screensaverTicks;
@@ -198,7 +188,6 @@ class Config {
     void setTitle(const char* title);
     void setStation(const char* station);
     void escapeQuotes(const char* input, char* output, size_t maxLen);
-    bool parseCSV(const char* line, char* name, char* url, int &ovol);
     bool parseJSON(const char* line, char* name, char* url, int &ovol);
     bool parseWsCommand(const char* line, char* cmd, char* val, uint8_t cSize);
     bool parseSsid(const char* line, char* ssid, char* pass);
@@ -211,21 +200,16 @@ class Config {
     void setBitrateFormat(BitrateFormat fmt) { configFmt = fmt; }
     void initPlaylist();
     void indexPlaylist();
-    void initSDPlaylist();
-    void changeMode(int newmode=-1);
     uint16_t playlistLength();
     uint16_t lastStation(){
-      return getMode()==PM_WEB?store.lastStation:store.lastSdStation;
+      return store.lastStation;
     }
     void lastStation(uint16_t newstation){
-      if(getMode()==PM_WEB) {
-        const bool clearMarker = newstation != 0 &&
-                                 store._reserved == VOXONE_NO_STATION_MARKER;
-        if (clearMarker)
-          saveValue(&store._reserved, static_cast<uint16_t>(0), false);
-        saveValue(&store.lastStation, newstation, true, clearMarker);
-      }
-      else saveValue(&store.lastSdStation, newstation);
+      const bool clearMarker = newstation != 0 &&
+                               store._reserved == VOXONE_NO_STATION_MARKER;
+      if (clearMarker)
+        saveValue(&store._reserved, static_cast<uint16_t>(0), false);
+      saveValue(&store.lastStation, newstation, true, clearMarker);
     }
     char * stationByNum(uint16_t num);
     void setTimezone(int8_t tzh, int8_t tzm);
@@ -236,8 +220,7 @@ class Config {
     void sleepForAfter(uint16_t sleepfor, uint16_t sleepafter=0);
     void bootInfo();
     void doSleepW();
-    uint8_t getMode() { return store.play_mode/* & 0b11*/; }
-    void initPlaylistMode();
+    void initRadioPlaylist();
     void reset();
     void enableScreensaver(bool val);
     void setScreensaverTimeout(uint16_t val);
@@ -251,8 +234,7 @@ class Config {
     void waitConnection();
     char * ipToStr(IPAddress ip);
     bool prepareForPlaying(uint16_t stationId, bool sourceResume = false);
-    void configPostPlaying(uint16_t stationId);
-    FS* SDPLFS(){ return _SDplaylistFS; }
+    void configPostPlaying();
     bool isRTCFound(){ return _rtcFound; };
     template <typename T>
     void saveValue(T *field, const T &value, bool commit=true, bool force=false){
@@ -286,10 +268,8 @@ class Config {
     };
     SemaphoreHandle_t _persistMutex = nullptr;
     voxone::config_format::ConfigPersistence _storage;
-    bool _bootDone;
     bool _startupReadOnly = false;
     bool _rtcFound;
-    FS* _SDplaylistFS;
     bool setDefaults();
     void _applyDefaults();
     static void doSleep();
@@ -299,11 +279,6 @@ class Config {
     void _normalizeAudioConfig();
     void _initHW();
     bool _isFSempty();
-    uint16_t _randomStation(){
-      randomSeed(esp_random() ^ millis());
-      uint16_t station = random(1, store.countStation);
-      return station;
-    }
 };
 
 extern Config config;

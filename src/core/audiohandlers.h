@@ -99,9 +99,7 @@ void audio_id3data(const char *info){  //id3 metadata
 }
 
 void audio_eof_mp3(const char *info){  //end of file
-    if (player.temporaryEof()) return;
-    config.sdResumePos = 0;
-    player.next();
+  if (player.temporaryEof()) return;
 }
 
 void audio_eof_stream(const char *info){

@@ -587,7 +587,7 @@ void Display::_apScreen() {
 
 void Display::_start() {
   if(_boot) _pager->removePage(_boot);
-  if (network.status != CONNECTED && network.status != SDREADY) {
+  if (network.status != CONNECTED) {
     _apScreen();
     _bootStep = 2;
     return;
@@ -638,7 +638,7 @@ static bool activeSourceVuVisible() {
 }
 
 void Display::_swichMode(displayMode_e newmode) {
-  if (newmode == _mode || (network.status != CONNECTED && network.status != SDREADY)) return;
+  if (newmode == _mode || network.status != CONNECTED) return;
 #if DSP_MODEL==DSP_ST7796
   if (newmode == BT_TRANSPORT) {
     DisplaySourceView source{};
@@ -719,7 +719,6 @@ void Display::_swichMode(displayMode_e newmode) {
 #endif
   }
   if (newmode == SLEEPING)  _showDialog("SLEEPING");
-  if (newmode == SDCHANGE)  _showDialog(LANG::const_waitForSD);
   if (newmode == NUMBERS) _showDialog("");
   if (newmode == STATIONS) {
     _pager->setPage( pages[PG_PLAYLIST]);
@@ -959,14 +958,6 @@ void Display::loop() {
         }
         case BOOTSTRING: {
           if(_bootstring) _bootstring->setText(config.ssids[request.payload].ssid, LANG::bootstrFmt);
-          break;
-        }
-        case WAITFORSD: {
-          if(_bootstring) _bootstring->setText(LANG::const_waitForSD);
-          break;
-        }
-        case SDFILEINDEX: {
-          if(_mode == SDCHANGE) _nums->setText(request.payload, "%d");
           break;
         }
         case DSPRSSI: if(_rssi){ _setRSSI(request.payload); } if (_heapbar && config.store.audioinfo) _heapbar->setValue(player.isRunning()?player.inBufferFilled():0); break;
