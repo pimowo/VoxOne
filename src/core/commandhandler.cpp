@@ -91,6 +91,11 @@ bool CommandHandler::exec(const char *command, const char *value, uint32_t cid) 
       player.setUserVol(static_cast<uint8_t>(user));
     return true;
   }
+  if (strEquals(command, "mute")) {
+    if (value && (strcmp(value, "0") == 0 || strcmp(value, "1") == 0))
+      player.setMuted(value[0] == '1');
+    return true;
+  }
   if (strEquals(command, "maximumvolume")) {
     long maximum;
     if (parseVolumeValue(value, maximum) && maximum >= 1 && maximum <= 100)
@@ -181,4 +186,3 @@ bool CommandHandler::exec(const char *command, const char *value, uint32_t cid) 
   if (strEquals(command, "mdnsname"))  { config.saveValue(config.store.mdnsname, value, MDNS_LENGTH); return true; }
   return false;
 }
-

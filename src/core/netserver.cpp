@@ -1692,7 +1692,7 @@ void NetServer::processQueue(){
         serialCli.printf("##CLI.META#: %s\n> ", interpreted);
         break;
       }
-      case VOLUME:        sprintf (wsBuf, "{\"payload\":[{\"id\":\"volume\",\"value\":%d},{\"id\":\"volume100\",\"value\":%d},{\"id\":\"maximumVolume\",\"value\":%d},{\"id\":\"startupMode\",\"value\":%d},{\"id\":\"startupFixedVolume\",\"value\":%d}]}", config.store.volume, config.userVolume, config.store.maximumVolume, config.store.startupMode, config.store.startupFixedVolume); serialCli.printf("##CLI.VOL#: %d\n", config.store.volume); break;
+      case VOLUME:        sprintf (wsBuf, "{\"payload\":[{\"id\":\"volume\",\"value\":%d},{\"id\":\"volume100\",\"value\":%d},{\"id\":\"muted\",\"value\":%d},{\"id\":\"maximumVolume\",\"value\":%d},{\"id\":\"startupMode\",\"value\":%d},{\"id\":\"startupFixedVolume\",\"value\":%d}]}", config.store.volume, config.userVolume, player.isMuted(), config.store.maximumVolume, config.store.startupMode, config.store.startupFixedVolume); serialCli.printf("##CLI.VOL#: %d\n", config.store.volume); break;
       case NRSSI:         rssi = WiFi.RSSI(); sprintf (wsBuf, "{\"payload\":[{\"id\":\"rssi\", \"value\": %d}, {\"id\":\"heap\", \"value\": %d}]}", rssi, (player.isRunning() && config.store.audioinfo)?(int)(100*player.inBufferFilled()/playerBufMax):0); /*rssi = 255;*/ break;
       case BITRATE:       sprintf (wsBuf, "{\"payload\":[{\"id\":\"bitrate\", \"value\": %d}, {\"id\":\"fmt\", \"value\": \"%s\"}]}", config.station.bitrate, getFormat(config.configFmt)); break;
       case MODE:          sprintf (wsBuf, "{\"payload\":[{\"id\":\"playerwrap\", \"value\": \"%s\"}]}", player.status() == PLAYING ? "playing" : "stopped"); serialCli.info(); break;
@@ -1739,7 +1739,7 @@ void NetServer::processVolumeUpdate(){
   if(!pending) return;
 
   _lastVolumeUpdate = now;
-  sprintf(wsBuf, "{\"payload\":[{\"id\":\"volume\",\"value\":%d},{\"id\":\"volume100\",\"value\":%d},{\"id\":\"maximumVolume\",\"value\":%d},{\"id\":\"startupMode\",\"value\":%d},{\"id\":\"startupFixedVolume\",\"value\":%d}]}", config.store.volume, config.userVolume, config.store.maximumVolume, config.store.startupMode, config.store.startupFixedVolume);
+  sprintf(wsBuf, "{\"payload\":[{\"id\":\"volume\",\"value\":%d},{\"id\":\"volume100\",\"value\":%d},{\"id\":\"muted\",\"value\":%d},{\"id\":\"maximumVolume\",\"value\":%d},{\"id\":\"startupMode\",\"value\":%d},{\"id\":\"startupFixedVolume\",\"value\":%d}]}", config.store.volume, config.userVolume, player.isMuted(), config.store.maximumVolume, config.store.startupMode, config.store.startupFixedVolume);
   if(hasWebClients) websocket.textAll(wsBuf);
   serialCli.printf("##CLI.VOL#: %d\n", config.store.volume);
   mqttPublishVolume();

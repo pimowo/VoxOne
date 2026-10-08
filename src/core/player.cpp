@@ -423,6 +423,7 @@ void Player::setMuted(bool muted) {
   }
   portEXIT_CRITICAL(&playerVolumeMux);
   display.putRequest(DRAWVOL);
+  netserver.requestOnChange(VOLUME, 0);
 }
 
 bool Player::outputSilent() const {

@@ -63,6 +63,9 @@ class MockWebSocket {
   receive(status) { this.onmessage({data: JSON.stringify({webStatus: status})}); }
   receiveSystem(info) { this.onmessage({data: JSON.stringify({systemInfo: info})}); }
   receiveNetwork(info) { this.onmessage({data: JSON.stringify({networkInfo: info})}); }
+  receiveVolume(volume, muted) { this.onmessage({data: JSON.stringify({payload:[
+    {id:'volume100',value:volume},{id:'muted',value:muted ? 1 : 0}
+  ]})}); }
 }
 window.WebSocket = MockWebSocket;
 </script>
@@ -75,6 +78,29 @@ setTimeout(() => {
   const check = (ok, message) => { if (!ok) throw Error(message); };
   try {
     check(location.hash === '#status', 'startup tab');
+    const muteButtons = [...document.querySelectorAll('.mute-button')];
+    check(muteButtons.length === 2 && muteButtons.every(button => button.disabled), 'mute waits for snapshot');
+    btTestSocket.receiveVolume(27, false);
+    check(muteButtons.every(button => !button.disabled && button.getAttribute('aria-pressed') === 'false'), 'initial mute off');
+    muteButtons[0].click();
+    check(btTestSocket.sent.at(-1) === 'mute=1', 'WWW mute on command');
+    btTestSocket.receiveVolume(27, true);
+    check(muteButtons.every(button => button.getAttribute('aria-pressed') === 'true'), 'mute on both controls');
+    get('volume-slider').value = '28';
+    get('volume-slider').dispatchEvent(new Event('input'));
+    get('volume-slider').dispatchEvent(new Event('change'));
+    check(btTestSocket.sent.some(item => item === 'vol100=28'), 'volume change while muted');
+    btTestSocket.receiveVolume(28, true);
+    check(muteButtons.every(button => button.getAttribute('aria-pressed') === 'true'), 'volume ack preserves mute');
+    muteButtons[1].click();
+    check(btTestSocket.sent.at(-1) === 'mute=0', 'WWW mute off command');
+    btTestSocket.receiveVolume(28, false);
+    check(muteButtons.every(button => button.getAttribute('aria-pressed') === 'false'), 'mute off both controls');
+    btTestSocket.receiveVolume(0, false);
+    check(muteButtons.every(button => button.getAttribute('aria-pressed') === 'false'), 'volume zero is not runtime mute');
+    btTestSocket.receiveVolume(27, true);
+    check(muteButtons[0].getAttribute('aria-pressed') === 'true', 'external mute update');
+    check(!btTestSocket.sent.some(item => /^(stop|webtransport|source)=/.test(item)), 'mute does not stop or switch source');
     const icon = document.querySelector('link[rel="icon"]');
     const logo = document.querySelector('header img[src*="voxone-logo.svg"]');
     check(icon?.type === 'image/svg+xml' && !!logo, 'VoxOne SVG favicon and header logo');
@@ -152,6 +178,7 @@ setTimeout(() => {
     check(get('system-psram').textContent === '8.0 MB total / 4.0 MB free', 'PSRAM');
     check(get('system-capabilities').textContent.includes('RTC'), 'system capabilities');
     btTestSocket.close();
+    check(muteButtons.every(button => button.disabled && button.getAttribute('aria-pressed') === 'false'), 'disconnect clears mute state');
     check(get('footer-connection').textContent === 'Rozłączono', 'footer WebSocket disconnected');
     check(get('footer-details').textContent === 'VoxOne 0.2.0 · SALON', 'offline footer hides stale IP');
     check(get('network-active-ssid').textContent === '—', 'offline network info cleared');
@@ -169,7 +196,15 @@ setTimeout(() => {
       check(get('update-bt-' + field).textContent === '—', field + ' placeholder'));
     ['firmware','protocol','name','capabilities'].forEach(field =>
       check(get('system-bt-' + field).textContent === '—', 'system ' + field + ' placeholder'));
-    result.textContent = 'PASS';
+    setTimeout(() => {
+      try {
+        check(btTestSocket.readyState === MockWebSocket.OPEN, 'WebSocket reconnected');
+        check(muteButtons.every(button => button.disabled), 'reconnect waits for snapshot');
+        btTestSocket.receiveVolume(27, true);
+        check(muteButtons.every(button => !button.disabled && button.getAttribute('aria-pressed') === 'true'), 'reconnect mute snapshot');
+        result.textContent = 'PASS';
+      } catch (error) { result.textContent = 'FAIL: ' + error.message; }
+    }, 1100);
   } catch (error) { result.textContent = 'FAIL: ' + error.message; }
 }, 100);
 </script>

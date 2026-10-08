@@ -104,7 +104,7 @@ Cleanup przed stable jest zakończony. Bazą diagnostyczną testów długotrwał
 
 - [POST-STABLE] Sprawdzić kompletność metadata wszystkich aktywnych źródeł w WWW; obecne metadata BT traktować jako działający baseline.
 - [POST-STABLE] Dodać source selector do PLAYER/STATUS WWW, pokazujący wyłącznie źródła dostępne według capabilities i runtime availability.
-- [POST-STABLE] Dodać MUTE przy sterowaniu głośnością WWW, używając jednego wspólnego stanu MUTE; ujednolicić później WWW, LCD i HA.
+- [POST-STABLE] Ujednolicić później MUTE między WWW, LCD i HA.
 - [POST-STABLE] Ujednolicić WebSocket state dla RADIO, BT oraz przyszłych DLNA/AUX: aktywne źródło, transport/playback, metadata źródła, codec/format, sample rate i bitrate tam, gdzie mają znaczenie.
 - [POST-STABLE] Dokończyć edycję maksymalnie pięciu profili Wi-Fi: priority/last-known-good, nowe hasło, zachowanie lub wyczyszczenie hasła, walidacja, atomowy zapis i kontrolowany restart.
 - [POST-STABLE] Dodać konfigurację restartu, sleep/screensaver, auto standby, backup/restore config, playlist import/export, Radio Directory i recovery bez przywracania starego WWW.

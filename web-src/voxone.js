@@ -34,6 +34,7 @@
     document.getElementById("volume-slider"),
     document.getElementById("audio-volume-slider")
   ];
+  const muteButtons = [...document.querySelectorAll(".mute-button")];
   const maximumVolumeSlider = document.getElementById("maximum-volume-slider");
   const maximumVolumeValue = document.getElementById("maximum-volume-value");
   const startupModeSelect = document.getElementById("startup-mode-select");
@@ -149,6 +150,7 @@
     rssi: null,
     volume: null,
     volume100: null,
+    muted: null,
     maximumVolume: null,
     startupMode: null,
     startupFixedVolume: null,
@@ -698,6 +700,7 @@
     buttons.play.disabled = !connected || btDisconnected ||
       (state.webStatus ? !state.webStatus.playback : state.playing === null);
     for (const slider of volumeSliders) slider.disabled = !connected || state.volume100 === null;
+    for (const button of muteButtons) button.disabled = !connected || state.muted === null;
     maximumVolumeSlider.disabled = !connected || state.maximumVolume === null;
     startupModeSelect.disabled = !connected || state.startupMode === null;
     startupFixedSlider.disabled = !connected || state.startupMode !== 1 || state.startupFixedVolume === null;
@@ -793,6 +796,7 @@
 
   function renderVolume() {
     showVolume(state.volume100);
+    for (const button of muteButtons) button.setAttribute("aria-pressed", state.muted === true ? "true" : "false");
   }
 
   function renderVolumeSettings() {
@@ -1373,7 +1377,7 @@
   }
   function resetRuntime() {
     const previousCurrent = state.current;
-    for (const key of ["source", "station", "metadata", "codec", "bitrate", "rssi", "volume", "volume100", "maximumVolume", "startupMode", "startupFixedVolume", "brightness", "stationListTimeout", "btTransportTimeout", "bass", "middle", "treble", "balance", "playing", "current", "ip"]) {
+    for (const key of ["source", "station", "metadata", "codec", "bitrate", "rssi", "volume", "volume100", "muted", "maximumVolume", "startupMode", "startupFixedVolume", "brightness", "stationListTimeout", "btTransportTimeout", "bass", "middle", "treble", "balance", "playing", "current", "ip"]) {
       state[key] = null;
     }
     state.webStatus = null;
@@ -1411,7 +1415,7 @@
     clearTimeout(volumeAckTimer);
     renderStatus();
     renderRssi();
-    showVolume(null);
+    renderVolume();
     renderVolumeSettings();
     renderDisplaySettings();
     for (const control of Object.values(audioControls)) {
@@ -1466,6 +1470,12 @@
         renderVolume();
         break;
       }
+      case "muted":
+        if (value === 0 || value === 1) {
+          state.muted = value === 1;
+          renderVolume();
+        }
+        break;
       case "maximumVolume": {
         const maximum = Number(value);
         if (!Number.isInteger(maximum) || maximum < 1 || maximum > 100) break;
@@ -1662,6 +1672,8 @@
       clearTimeout(volumeAckTimer);
       socket = null;
       state.connection = "disconnected";
+      state.muted = null;
+      renderVolume();
       advancedAudio.disconnected();
       renderBtModule();
       renderSystemInfo();
@@ -1845,6 +1857,11 @@
     if (send("vol100", pendingVolume)) lastVolumeSentAt = performance.now();
     pendingVolume = null;
   }
+
+  for (const button of muteButtons) button.addEventListener("click", () => {
+    if (button.disabled) return;
+    send("mute", state.muted ? 0 : 1);
+  });
 
   for (const slider of volumeSliders) {
     slider.addEventListener("input", () => {
