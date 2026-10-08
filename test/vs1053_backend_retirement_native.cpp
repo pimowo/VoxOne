@@ -28,6 +28,7 @@ int main() {
   const auto optionsChecker = readFile("src/core/optionschecker.h");
   const auto build = readFile("platformio.ini");
   const auto options = readFile("src/core/options.h");
+  const auto unavailable = readFile("profiles/unavailable_hardware.h");
 
   for (const auto& source : {playerHeader, playerCode, configCode,
                              audioCode, optionsChecker}) {
@@ -48,8 +49,11 @@ int main() {
   assert(!std::ifstream("src/audioVS1053/vs1053b-patches-flac.h").good());
   assert(readFile("src/audioI2S/AudioEx.h").size() > 0);
   for (const char* macro : {"VS1053_CS", "VS1053_DCS", "VS1053_DREQ",
-                            "VS1053_RST", "VS_HSPI", "I2S_INTERNAL",
-                            "MUTE_LOCK"}) {
-    assert(options.find(macro) != std::string::npos);
+                            "VS1053_RST", "VS_HSPI"}) {
+    absent(options, macro);
+    absent(unavailable, macro);
   }
+  for (const char* shared : {"#include <SPI.h>", "DSP_HSPI", "#define VSPI FSPI",
+                             "TFT_CS", "I2S_INTERNAL", "MUTE_LOCK"})
+    assert(options.find(shared) != std::string::npos);
 }

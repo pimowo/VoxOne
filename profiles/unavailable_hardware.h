@@ -39,10 +39,6 @@
 #ifndef VOXONE_BT_I2S_DATA_PIN
 #define VOXONE_BT_I2S_DATA_PIN 255
 #endif
-#ifndef VS1053_CS
-#define VS1053_CS 255
-#endif
-
 #ifndef ENC_BTNL
 #define ENC_BTNL 255
 #endif
@@ -59,7 +55,6 @@
 #define ENC_HALFQUARD false
 #endif
 
-#define IR_PIN 255
 #ifndef RTC_MODULE
 #define RTC_MODULE RTC_MODULE_UNDEFINED
 #endif

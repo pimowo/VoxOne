@@ -51,6 +51,8 @@ int main() {
   const auto serverHeader = readFile("src/core/netserver.h");
   const auto serverCode = readFile("src/core/netserver.cpp");
   const auto controls = readFile("src/core/controls.cpp");
+  const auto options = readFile("src/core/options.h");
+  const auto unavailable = readFile("profiles/unavailable_hardware.h");
   const auto platformio = readFile("platformio.ini");
   const auto verify = readFile("tools/verify.ps1");
   const auto assetBuilder = readFile("scripts/build_web_assets.py");
@@ -58,6 +60,10 @@ int main() {
   assert(configHeader.find("#define EEPROM_START      500") != std::string::npos);
   assert(configHeader.find("#define EEPROM_SIZE       768") != std::string::npos);
   assert(configHeader.find("uint8_t   irtlp;") != std::string::npos);
+  for (const char* macro : {"IR_PIN", "IR_TIMEOUT", "IR_BUFSIZE"}) {
+    absent(options, macro);
+    absent(unavailable, macro);
+  }
   configIoUsesReservedBoundary(configCode, "EEPROM.read(");
   configIoUsesReservedBoundary(configCode, "EEPROM.write(");
 

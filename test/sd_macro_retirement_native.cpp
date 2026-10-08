@@ -36,12 +36,12 @@ int main() {
   const std::initializer_list<const char*> retired = {
       "SDC_CS", "SD_HSPI", "SD_SPIPINS", "USE_SD", "SD_AUTOPLAY",
       "SD_MAX_LEVELS", "SDSPISPEED", "SDSPI", "SD_SPI", "SD_CARD",
-      "SDCARD", "SD_MMC", "SDMMC"};
+      "SDCARD", "SD_MMC", "SDMMC", "VS_HSPI"};
   for (const auto& source : {options, config, controls, unavailable, platformio}) {
     hasNone(source, retired);
   }
 
-  // Shared display/audio bus options remain active and are unrelated to SD.
-  hasAll(options, {"DSP_HSPI", "VS_HSPI", "TFT_CS", "TFT_DC", "TFT_RST"});
+  // Shared display bus options remain active and are unrelated to SD.
+  hasAll(options, {"DSP_HSPI", "TFT_CS", "TFT_DC", "TFT_RST"});
   hasAll(config, {"RTC_SDA", "RTC_SCL"});
 }

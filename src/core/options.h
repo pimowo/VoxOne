@@ -73,23 +73,6 @@ The connection tables are located here https://github.com/e2002/yoradio#connecti
   #define I2C_RST -1
 #endif
 
-/*        VS1053                  */
-#ifndef VS1053_CS
-  #define VS1053_CS     255 // 27
-#endif
-#ifndef VS1053_DCS
-  #define VS1053_DCS    25
-#endif
-#ifndef VS1053_DREQ
-  #define VS1053_DREQ   26
-#endif
-#ifndef VS1053_RST
-  #define VS1053_RST    -1    // set to -1 if connected to Esp EN pin
-#endif
-#ifndef VS_HSPI
-  #define VS_HSPI   false      // use HSPI for VS1053 (miso=12, mosi=13, clk=14) instead of VSPI (by default)
-#endif
-
 /*        I2S DAC                 */
 #ifndef I2S_DOUT
   #define I2S_DOUT      27  // DIN connection
@@ -240,17 +223,6 @@ The connection tables are located here https://github.com/e2002/yoradio#connecti
 #ifndef BITRATE_FULL
   #define BITRATE_FULL     true   // display bitreta badget
 #endif
-/*        IR                      */
-#ifndef IR_PIN
-  #define IR_PIN                255
-#endif
-#ifndef IR_TIMEOUT
-  #define IR_TIMEOUT            80        // kTimeout, see IRremoteESP8266 documentation
-#endif
-#ifndef IR_BUFSIZE
-  #define IR_BUFSIZE            128
-#endif
-
 /*        THEMES                                 */
 /*        color name               R    G    B   */
 #ifndef COLOR_BACKGROUND
