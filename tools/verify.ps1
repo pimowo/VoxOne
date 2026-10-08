@@ -1,14 +1,33 @@
 # VoxOne regression gate for desk, din and salon.
 [CmdletBinding()]
 param(
- [string]$PlatformIo='C:\Users\piotrek\.platformio\penv\Scripts\pio.exe',
+ [string]$PlatformIo,
  [string]$Cxx='g++',
- [string]$Python='C:\Users\piotrek\.platformio\penv\Scripts\python.exe'
+ [string]$Python
 )
 $ErrorActionPreference='Stop'
+$onWindows=$env:OS -eq 'Windows_NT'
+function Resolve-Executable([string]$label,[string]$value,[bool]$explicit,[string[]]$names,[string]$windowsFallback) {
+ if($explicit) {
+  if([string]::IsNullOrWhiteSpace($value) -or -not (Get-Command -Name $value -CommandType Application -ErrorAction SilentlyContinue)) {
+   throw "$label not found: $value"
+  }
+  return $value
+ }
+ foreach($name in $names) {
+  $command=Get-Command -Name $name -CommandType Application -ErrorAction SilentlyContinue | Select-Object -First 1
+  if($command) { return $command.Source }
+ }
+ if($onWindows -and $windowsFallback -and (Test-Path -LiteralPath $windowsFallback -PathType Leaf)) { return $windowsFallback }
+ throw "$label not found. Tried: $($names -join ', ')$(if($onWindows) { ", $windowsFallback" })"
+}
+$PlatformIo=Resolve-Executable 'PlatformIO CLI' $PlatformIo $PSBoundParameters.ContainsKey('PlatformIo') @('pio','platformio') 'C:\Users\piotrek\.platformio\penv\Scripts\pio.exe'
+$pythonNames=if($onWindows) { @('python3','python','py') } else { @('python3','python') }
+$Python=Resolve-Executable 'Python' $Python $PSBoundParameters.ContainsKey('Python') $pythonNames 'C:\Users\piotrek\.platformio\penv\Scripts\python.exe'
+$Cxx=Resolve-Executable 'C++ compiler' $Cxx $PSBoundParameters.ContainsKey('Cxx') @('g++') ''
 $root=(Resolve-Path (Join-Path $PSScriptRoot '..')).Path
 Set-Location -LiteralPath $root
-$work=Join-Path $root '.pio\verify'
+$work=Join-Path $root '.pio/verify'
 [void][System.IO.Directory]::CreateDirectory($work)
 $results=[ordered]@{}
 $sizes=[ordered]@{}
@@ -32,7 +51,7 @@ $assetNames=@('voxone.html','voxone.css','voxone.js','advanced-audio.js','dsp-cl
 function Get-AssetHashes {
  $hashes=[ordered]@{}
  foreach($name in $assetNames) {
-  $path=Join-Path $root "data\www\$name.gz"
+  $path=Join-Path $root "data/www/$name.gz"
   if(-not (Test-Path -LiteralPath $path)) { throw "Missing $path" }
   $hashes[$name]=(Get-FileHash -LiteralPath $path -Algorithm SHA256).Hash
  }
@@ -40,11 +59,11 @@ function Get-AssetHashes {
 }
 function Assert-WebAssets {
  foreach($name in $assetNames) {
-  $source=[System.IO.File]::ReadAllBytes((Join-Path $root "web-src\$name"))
+  $source=[System.IO.File]::ReadAllBytes((Join-Path $root "web-src/$name"))
   if($name -eq 'voxone.html') {
    $html=[System.Text.Encoding]::UTF8.GetString($source)
    foreach($other in $assetNames | Where-Object { $_ -ne 'voxone.html' }) {
-    $bytes=[System.IO.File]::ReadAllBytes((Join-Path $root "web-src\$other"))
+    $bytes=[System.IO.File]::ReadAllBytes((Join-Path $root "web-src/$other"))
     $sha=[System.Security.Cryptography.SHA256]::Create()
     try { $digest=[BitConverter]::ToString($sha.ComputeHash($bytes)).Replace('-','').ToLowerInvariant().Substring(0,12) }
     finally { $sha.Dispose() }
@@ -52,7 +71,7 @@ function Assert-WebAssets {
    }
    $source=[System.Text.Encoding]::UTF8.GetBytes($html)
   }
-  $inputStream=[System.IO.File]::OpenRead((Join-Path $root "data\www\$name.gz"))
+  $inputStream=[System.IO.File]::OpenRead((Join-Path $root "data/www/$name.gz"))
   $gzip=New-Object System.IO.Compression.GZipStream($inputStream,[System.IO.Compression.CompressionMode]::Decompress)
   $output=New-Object System.IO.MemoryStream
   try { $gzip.CopyTo($output); $actual=$output.ToArray() }
@@ -87,7 +106,7 @@ Invoke-Step 'Native tests' {
   $variants=if($name -eq 'hardware_descriptor_native') { @('DESK','DIN','SALON') } else { @('') }
   foreach($variant in $variants) {
    $label=if($variant) { "$name-$variant" } else { $name }
-   $exe=Join-Path $work ($label+'.exe')
+   $exe=Join-Path $work ($label+$(if($onWindows) { '.exe' } else { '' }))
    $compileLog=Join-Path $work ($label+'.compile.log')
    $compileArgs=@('-std=c++11','-O2','-Wall','-Wextra','-Werror','-Wno-unused-parameter')
    if($variant) {
@@ -109,13 +128,13 @@ Invoke-Step 'Native tests' {
  Write-Host "  $($tests.Count) native tests passed"
 }
 Invoke-Step 'Web Update headless' {
- & $Python (Join-Path $root 'test\voxone_update_headless.py') 2>&1 | ForEach-Object { Write-Host $_ }
+ & $Python (Join-Path $root 'test/voxone_update_headless.py') 2>&1 | ForEach-Object { Write-Host $_ }
  if($LASTEXITCODE -ne 0) { throw 'Existing Chrome test failed' }
 }
 $initialAssets=Get-AssetHashes
 Invoke-Step 'SPIFFS' {
  Invoke-Pio 'salon-buildfs' @('run','-e','salon','-t','buildfs')
- $image=Join-Path $root '.pio\build\salon\spiffs.bin'
+ $image=Join-Path $root '.pio/build/salon/spiffs.bin'
  if(-not (Test-Path -LiteralPath $image)) { throw 'Missing spiffs.bin' }
  $sizes['SPIFFS']=(Get-Item -LiteralPath $image).Length
 }
@@ -129,7 +148,7 @@ foreach($target in @('desk','din','salon')) {
  $envName=$target
  Invoke-Step ($envName.ToUpperInvariant()) {
   Invoke-Pio "$envName-firmware" @('run','-e',$envName)
-  $bin=Join-Path $root ".pio\build\$envName\firmware.bin"
+  $bin=Join-Path $root ".pio/build/$envName/firmware.bin"
   if(-not (Test-Path -LiteralPath $bin)) { throw "Missing $envName firmware.bin" }
   $sizes[$envName.ToUpperInvariant()]=(Get-Item -LiteralPath $bin).Length
  }

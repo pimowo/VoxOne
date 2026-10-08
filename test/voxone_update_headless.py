@@ -1,13 +1,46 @@
 """Exercise the update tab with the production HTML/JS in headless Chrome."""
 
 from pathlib import Path
+import os
 import re
+import shutil
 import subprocess
 import tempfile
 
 
 ROOT = Path(__file__).resolve().parents[1]
-CHROME = Path(r"C:\Program Files\Google\Chrome\Application\chrome.exe")
+
+
+def resolve_chrome():
+    configured = os.environ.get("CHROME_BIN")
+    if configured:
+        candidate = shutil.which(configured)
+        if candidate:
+            return Path(candidate).resolve()
+        raise FileNotFoundError(f"CHROME_BIN does not point to an executable: {configured}")
+
+    for name in ("chromium", "chromium-browser", "google-chrome",
+                 "google-chrome-stable", "chrome"):
+        candidate = shutil.which(name)
+        if candidate:
+            return Path(candidate).resolve()
+
+    if os.name == "nt":
+        for directory in ("PROGRAMFILES", "PROGRAMFILES(X86)", "LOCALAPPDATA"):
+            base = os.environ.get(directory)
+            if base:
+                candidate = Path(base) / "Google" / "Chrome" / "Application" / "chrome.exe"
+                if candidate.is_file():
+                    return candidate.resolve()
+        original = Path(r"C:\Program Files\Google\Chrome\Application\chrome.exe")
+        if original.is_file():
+            return original.resolve()
+
+    raise FileNotFoundError(
+        "Chrome/Chromium executable not found; set CHROME_BIN or add a browser to PATH"
+    )
+
+
 MOCK = r"""
 <script>
 window.voxOneProfile = 'salon';
@@ -133,6 +166,7 @@ setTimeout(() => {
 
 
 def main():
+    chrome = resolve_chrome()
     html = (ROOT / "web-src/voxone.html").read_text(encoding="utf-8")
     scripts = [
         (ROOT / "web-src" / name).read_text(encoding="utf-8")
@@ -148,7 +182,7 @@ def main():
     with tempfile.TemporaryDirectory(prefix="voxone-web-test-", ignore_cleanup_errors=True) as temporary:
         page = Path(temporary) / "test.html"
         page.write_text(html, encoding="utf-8")
-        command = [str(CHROME), "--headless", "--disable-gpu", "--disable-gpu-compositing",
+        command = [str(chrome), "--headless", "--disable-gpu", "--disable-gpu-compositing",
                    "--disable-features=Vulkan,UseSkiaRenderer,CanvasOopRasterization",
                    "--disable-extensions", "--no-first-run",
                    "--no-default-browser-check", "--allow-file-access-from-files",
@@ -165,4 +199,7 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    try:
+        main()
+    except FileNotFoundError as error:
+        raise SystemExit(str(error)) from error
