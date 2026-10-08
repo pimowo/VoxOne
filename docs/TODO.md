@@ -6,8 +6,6 @@
 
 ## Stable hardening
 
-Cleanup przed stable jest zakończony. Bazą diagnostyczną testów długotrwałych jest checkpoint `voxone-stable-endurance-diag-1`.
-
 ### RADIO
 
 - [STABLE] Wykonać na fizycznym SALON minimum czterogodzinny endurance RADIO: jedna stabilna stacja przez co najmniej 2 h, minimum trzy zmiany stacji i dalsze granie do minimum 4 h.
@@ -47,10 +45,15 @@ Cleanup przed stable jest zakończony. Bazą diagnostyczną testów długotrwał
 
 - [STABLE] Wykonać fizyczną regresję DESK, DIN i SALON; dla DIN sprawdzić PCM5102A GPIO1/2/3, VoxOneBT, WWW, MQTT/HA i NoDisplay.
 - [STABLE] Na DESK sprawdzić ukrycie suwaka jasności, restart z WWW, powrót Wi-Fi bez utraty stacji/config oraz osobno ekran aktualizacji bez regresji ScrollWidget/HOLD.
+- [STABLE] Fizycznie zweryfikować aktualne WWW na SALON i DESK (gdy bezpieczna aktualizacja DESK będzie możliwa): MUTE, selector RADIO/BT, oznaczenie BT offline, manual source priority, reconnect/resnapshot, favicon bez 404 oraz build identity w SYSTEM i AKTUALIZACJA.
 - [HARDWARE] Przypisać GPIO XSMT PCM5102A na SALON i fizycznie sprawdzić LOW przy PAUZA/STOP, HIGH przy PLAY, ciszę podczas przejść i Web Update oraz czerwoną ramkę VOL bez zmiany semantyki MUTE.
 - [STABLE] Fizycznie sprawdzić MQTT/Home Assistant na SALON; MQTT pozostaje wspierane w pierwszym stable.
 - [STABLE] Uzupełnić dokumentację aktywnych profili, API, MQTT/HA, Source Managera, VoxOneBT oraz update/recovery; oznaczyć historyczne baseline'y i usunąć z dokumentów bieżącego stanu opisy sprzeczne z aktualnym runtime.
 - [DECISION] Przed stable ustalić minimalny zakres uwierzytelniania, CSRF i ochrony mutujących REST/WebSocket oraz ekspozycji danych.
+
+### Definition of Stable
+
+- [STABLE] Zamknąć release gate: FULL VERIFY PASS; fizyczny DESK, DIN i SALON PASS; RADIO endurance PASS; BT phone i LG TV PASS; SourceManager switching/reconnect PASS; TTS RADIO/BT restore PASS; firmware i SPIFFS update PASS; recovery PASS; Config v7 persistence PASS; L/R i VU PASS; brak otwartych błędów P0/P1.
 
 ## Znane błędy i pomiary
 
@@ -88,7 +91,7 @@ Cleanup przed stable jest zakończony. Bazą diagnostyczną testów długotrwał
 
 ## DLNA
 
-- [POST-STABLE] Dodać DLNA jako capability-filtered źródło SourceManager. Początkowy cykl po implementacji: RADIO → BT → DLNA → RADIO, z pomijaniem źródeł niedostępnych według capabilities i runtime availability.
+- [POST-STABLE] Dodać DLNA jako capability-filtered źródło SourceManager. Cykl po implementacji obejmuje RADIO, BT i DLNA wyłącznie tam, gdzie są dostępne według capabilities i runtime availability.
 - [POST-STABLE] Zaimplementować konfigurację IP serwera, discovery/scanning, ContentDirectory, browsing, pagination, wybór zasobu/play URL, next track i odtwarzanie folderu.
 - [POST-STABLE] Zachować UX PLAYER: klik PLAY/PAUSE, dwuklik następne źródło, trójklik ALL/RND/ONE, przytrzymanie biblioteka.
 - [POST-STABLE] W przeglądarce folderów: obrót wybiera, klik wchodzi/odtwarza, „ODTWÓRZ FOLDER” zaczyna od pierwszego utworu, dwuklik wraca poziom wyżej, przytrzymanie wraca do PLAYER, a timeout około 15 s wraca do PLAYER.
@@ -102,12 +105,11 @@ Cleanup przed stable jest zakończony. Bazą diagnostyczną testów długotrwał
 
 ## WWW, API i WebSocket
 
-- [POST-STABLE] Sprawdzić kompletność metadata wszystkich aktywnych źródeł w WWW; obecne metadata BT traktować jako działający baseline.
+- [POST-STABLE] Rozszerzyć source-aware metadata WWW o przyszłe DLNA/AUX; RADIO/BT są bieżącym działającym baseline.
 - [POST-STABLE] Ujednolicić później MUTE między WWW, LCD i HA.
-- [POST-STABLE] Ujednolicić WebSocket state dla RADIO, BT oraz przyszłych DLNA/AUX: aktywne źródło, transport/playback, metadata źródła, codec/format, sample rate i bitrate tam, gdzie mają znaczenie.
+- [POST-STABLE] Rozszerzyć istniejący WebSocket runtime state o source-aware metadata i codec/format DLNA/AUX, sample rate oraz bitrate tam, gdzie mają znaczenie, a następnie wykorzystać bieżący kontrakt w native HA.
 - [POST-STABLE] Dokończyć edycję maksymalnie pięciu profili Wi-Fi: priority/last-known-good, nowe hasło, zachowanie lub wyczyszczenie hasła, walidacja, atomowy zapis i kontrolowany restart.
 - [POST-STABLE] Dodać konfigurację restartu, sleep/screensaver, auto standby, backup/restore config, playlist import/export, Radio Directory i recovery bez przywracania starego WWW.
-- [POST-STABLE] Pokazać spójną identyfikację builda i dane systemowe w SYSTEM oraz AKTUALIZACJA.
 - [POST-STABLE] Dodać Web Update VoxOneBT jako osobny, jawny proces po stabilizacji aktualizacji MAIN.
 - [DECISION] Rozstrzygnąć, czy lokalny WebSocket ma walidować żądany subprotocol zamiast bezwarunkowo go odsyłać; połączyć decyzję z audytem auth/CSRF.
 
@@ -186,11 +188,11 @@ Cleanup przed stable jest zakończony. Bazą diagnostyczną testów długotrwał
 - P0 — STABLE HARDENING
 - P1 — BUGFIXES znalezione podczas stable
 - P2 — STABLE RELEASE + merge `project-cleanup-1` → `main`
-- P3 — UX/polish niewymagający nowej architektury
+- P3 — UX/polish
 - P4 — VoxOneBT hardening
 - P5 — DLNA / AUX
 - P6 — native HA
-- P7 — A1/B1/C1 hardware architecture
+- P7 — A/MAX, B/MINI, C/PORTABLE + capabilities
 - P8 — DSPmini
-- P9 — Installer / full standalone LCD configuration
+- P9 — Installer + pełna konfiguracja LCD
 - P10 — W5500 / dalsze rozszerzenia
