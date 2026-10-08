@@ -67,7 +67,7 @@ constexpr uint8_t nrOfButtons = sizeof(buttons) / sizeof(buttons[0]);
 #if ENC_BTNL!=255
 void IRAM_ATTR readEncoderISR()
 {
-  if((SDC_CS==255 && display.mode()==LOST) || display.mode()==UPDATING) return;
+  if(display.mode()==LOST || display.mode()==UPDATING) return;
   encoder.readEncoder_ISR();
 }
 #endif

@@ -108,16 +108,6 @@ The connection tables are located here https://github.com/e2002/yoradio#connecti
   #define I2S_LRC       25  // WSEL Left Right Clock
 #endif
 
-/*        SDCARD                  */
-#ifndef SDC_CS
-  #define SDC_CS        255  // SDCARD CS pin
-#endif
-#ifndef SD_HSPI
-  #define SD_HSPI       false  // use HSPI for SD (miso=12, mosi=13, clk=14) instead of VSPI (by default)
-#endif
-#if SDC_CS!=255
-  #define USE_SD
-#endif
 /*        ENCODER                 */
 #ifndef ENC_BTNL
   #define ENC_BTNL              255
@@ -292,12 +282,6 @@ The connection tables are located here https://github.com/e2002/yoradio#connecti
 #endif
 #ifndef BITRATE_FULL
   #define BITRATE_FULL     true   // display bitreta badget
-#endif
-#ifndef SD_AUTOPLAY
-  #define SD_AUTOPLAY      true   // auto play from SD card when inserted
-#endif
-#ifndef SD_MAX_LEVELS
-  #define SD_MAX_LEVELS      3      //  search depth for files on the SD card
 #endif
 /*        IR                      */
 #ifndef IR_PIN

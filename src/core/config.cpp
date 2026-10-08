@@ -125,13 +125,6 @@ void Config::init() {
   }
 #endif
   emptyFS = true;
-#if defined(SD_SPIPINS) || SD_HSPI
-  #if !defined(SD_SPIPINS)
-    SDSPI.begin();
-  #else
-    SDSPI.begin(SD_SPIPINS); // SCK, MISO, MOSI
-  #endif
-#endif
   uint8_t configArea[EEPROM_SIZE - EEPROM_START]{};
   if (eepromReady) {
     for (size_t i = 0; i < sizeof(configArea); ++i)
@@ -963,6 +956,5 @@ void Config::bootInfo() {
           BTN_LEFT, BTN_CENTER, BTN_RIGHT, BTN_UP, BTN_DOWN, BTN_MODE, BTN_INTERNALPULLUP?"true":"false");
   BOOTLOG("encoder:\tl=%d, b=%d, r=%d, pullup=%s",
           ENC_BTNL, ENC_BTNB, ENC_BTNR, ENC_INTERNALPULLUP?"true":"false");
-  if(SDC_CS!=255) BOOTLOG("SD:\t\t%d", SDC_CS);
   BOOTLOG("------------------------------------------------");
 }
