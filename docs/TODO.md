@@ -1,122 +1,199 @@
-# VoxOne — aktualne zadania
+# VoxOne — kanoniczny backlog
 
-> Jedyna kanoniczna lista bieżących prac. Po zakończeniu i odpowiedniej weryfikacji usuwamy zadanie; nie prowadzimy sekcji DONE.
+> To jest jedyna lista otwartych prac VoxOne. Dokumenty sprzętowe, baseline'y i inventory opisują stan lub historię, ale nie są roadmapą. Po ukończeniu i właściwej weryfikacji zadanie znika z tego pliku; nie prowadzimy sekcji DONE.
+>
+> Klasyfikacja: `[BUG]` — znany problem, `[STABLE]` — wymagane do wiarygodnego stable, `[DECISION]` — potrzebna jawna decyzja, `[POST-STABLE]` — praca po pierwszym stable, `[HARDWARE]` — projekt lub test sprzętowy.
 
-## 3. LCD audio info
+## Stable hardening
 
-- Później rozważyć codec i rzeczywisty bitrate A2DP.
+Cleanup przed stable jest zakończony. Bazą diagnostyczną testów długotrwałych jest checkpoint `voxone-stable-endurance-diag-1`.
 
-## 4. Ikona BT
+### RADIO
 
-- Przy dodawaniu DLNA, AUX i SPDIF pokazywać ikonę BT również na głównym PLAYER tych źródeł, gdy telefon jest fizycznie połączony. Ekrany pomocnicze i modalne (VOLUME, BT_TRANSPORT, menu/listy, UPDATE) pozostają bez tej ikony.
+- [STABLE] Wykonać na fizycznym SALON minimum czterogodzinny endurance RADIO: jedna stabilna stacja przez co najmniej 2 h, minimum trzy zmiany stacji i dalsze granie do minimum 4 h.
+- [STABLE] Zebrać log z uptime, heap/minimum heap/largest block, PSRAM/minimum PSRAM, stack HWM głównej pętli i DisplayTask, `loopMaxUs`, `audioBuffer`, reconnectami, Wi-Fi oraz RSSI; ocenić trend pamięci, stack, blokady pętli, watchdog/reboot i serie reconnectów.
+- [STABLE] Podczas endurance potwierdzić brak trwałych stall/dropout, poprawne ponowne uruchamianie streamu oraz ciągłą reakcję LCD i VU.
+- [STABLE] Przetestować realne strumienie MP3, AAC/AAC+ i FLAC oraz SHOUTcast/Icecast, `ICY 200`, MIME `audio/aacp`, HTTP/HTTPS, metadata/brak metadata, reconnect i dead stream.
+- [STABLE] Przetestować playlisty M3U/PLS, redirect, final URL, limit rekurencji i ochronę przed pętlą.
+- [BUG] Jeśli na realnym streamie nadal wystąpi `Truncated MP3 frame`, przeanalizować ICY stripping, buforowanie, MP3 sync/frame length i Helix przed zmianą dekodowania.
 
-## 6. LCD AKTUALIZACJA
+### Bluetooth i VoxOneBT
 
-- Fizycznie sprawdzić cleanup Web Update po błędzie/przerwaniu oraz brak samoczynnego wznowienia audio.
-- Zweryfikować osobno ekran aktualizacji DESK i nie naruszyć stabilnego ScrollWidget/HOLD.
+- [STABLE] Fizycznie przetestować telefon i LG TV: connect, disconnect, reconnect, wielokrotne cykle połączenia, PLAY/PAUSE, volume, metadata, VU oraz wcześniejszy HCI allocation assert.
+- [STABLE] Potwierdzić, że A2DP audio state steruje I2S, AVRCP pozostaje transportem/UI, a wybór lub fallback źródła nie wysyła przypadkowego PLAY/PAUSE/NEXT/PREV.
+- [STABLE] Sprawdzić BT VU przy PLAY, PAUSE, STOP i disconnect oraz synchronizację VU ON/OFF między klientami WWW i po restarcie.
 
-## 7. Branding
+### Source Manager i TTS restore
 
-- Przygotować logo VoxOne do ekranu startowego LCD i WWW, favicon, a później do README/GitHub.
-- Trzymać źródłowe SVG i warianty PNG w jednym miejscu, np. `assets/branding/`; nie obciążać LCD dużą grafiką.
+- [STABLE] Wykonać fizyczną macierz RADIO ↔ BT: wybór ręczny, nowy BT connect edge, disconnect, offline, utrata runtime modułu i ponowne połączenie.
+- [STABLE] Potwierdzić kontrakt normalnego fallbacku: RADIO PLAY intent wraca do RADIO PLAY, a RADIO STOP intent pozostaje RADIO STOP.
+- [STABLE] Potwierdzić wyjątek TTS: utrata BT podczas aktywnego komunikatu nie przerywa TTS, po końcu wybiera RADIO fizycznie STOP i nie uruchamia autoplay; blokada restore jest jednorazowa, a radio intent pozostaje zachowany.
+- [STABLE] Potwierdzić manual source priority: istniejące połączenie BT nie cofa ręcznie wybranego RADIO bez nowego connection edge.
+- [STABLE] Przy utracie VoxOneBT sprawdzić logical XSMT, MUTE i routing audio; dla przyszłego profilu bez RADIO określić bezpieczny STOP/no-source po utracie wszystkich dostępnych źródeł.
 
-## 8. PLAY_MEDIA / TTS
+### Kanały L/R i VU
 
-- RADIO PLAY → TTS → RADIO PLAY i RADIO STOP → TTS → RADIO STOP działają; poprawić BT PLAY → TTS → BT PLAY oraz BT STOP → TTS → BT STOP.
-- Uporządkować ownership I2S0, przywracanie sample rate, źródła i playback oraz cleanup po błędzie, przerwaniu i timeout. Gdy BT zniknie podczas TTS, zakończyć w RADIO STOP bez autoplay.
-- Automatyzacja HA wysyła tylko `play_media(URL)`. VoxOne sam zatrzymuje lub pauzuje bieżące źródło, przejmuje I2S0, ustawia sample rate i głośność TTS, przywraca poprzednie źródło oraz stan odtwarzania i sprząta po błędzie lub timeout.
-- TTS Volume: CURRENT albo FIXED 0–100; FIXED nie zmienia głównego `userVolume`. TTS jest tymczasowym audio override, nie zwykłym źródłem użytkownika. Docelowo ma działać dla RADIO, BT, DLNA, AUX i SPDIF.
-- Podczas TTS pokazać na LCD: stacja „KOMUNIKAT TTS”, artysta „Powiadomienie głosowe”, utwór pusty. Sprawdzić też etykietę źródła TTS na PLAYER SALON.
-- Później rozważyć HTTPS i redirecty.
+- [STABLE] Odtworzyć kontrolowany materiał: 0–5 s LEFT 1 kHz, 5–7 s cisza, 7–12 s RIGHT 1 kHz, 12–14 s cisza, 14–19 s LEFT+RIGHT; sprawdzić fizyczne kanały i odpowiadające im VU.
 
-## 9. Zachowanie startowe / zmiana źródła
+### Update, recovery i persistence
 
-- Fizycznie sprawdzić utratę runtime VoxOneBT przy aktywnym BT: fallback do RADIO STOP, logical XSMT LOW i zachowanie MUTE.
-- Jeśli przyszły profil nie będzie miał RADIO, zapewnić bezpieczny STOP/no-source po utracie wszystkich dostępnych źródeł; przy dodawaniu DLNA/AUX/SPDIF uwzględnić ich capabilities i runtime availability.
-- Oddzielić tę semantykę od istniejącego Startup Volume. Konfigurację startowej stacji/źródła wprowadzać tylko w zgodzie z powyższą zasadą.
+- [STABLE] Fizycznie sprawdzić Web Update firmware MAIN i SPIFFS, rzeczywisty postęp, sukces, błąd, cancel/przerwanie, restart oraz brak samoczynnego wznowienia audio po błędzie.
+- [STABLE] Sprawdzić backup/restore całej konfiguracji, walidację schematu, błąd lub nieudany backup oraz zachowanie config po firmware/SPIFFS update.
+- [STABLE] Sprawdzić recovery AP, `/update.html` i `/emergency` przy niedostępnym SPIFFS, błędne dane Wi-Fi, Serial CLI oraz ekran AP na telefonie.
+- [STABLE] Zweryfikować restart i Config v7: volume, MUTE, source intent, aktywną stację oraz rozdział ustawień runtime/persistent.
+- [STABLE] Sprawdzić auto reload WWW: powrót do STATUS, timeout i czytelny komunikat, gdy urządzenie nie wróci.
 
-## 10. WWW — aktywne źródło
+### Targety i release gate
 
-- Dodać source-aware status i sterowanie BT w HA bez zmiany istniejącego kontraktu MQTT do czasu osobnej walidacji.
-- Później pokazać wiarygodny codec/bitrate A2DP, jeśli będzie dostępny.
+- [STABLE] Wykonać fizyczną regresję DESK, DIN i SALON; dla DIN sprawdzić PCM5102A GPIO1/2/3, VoxOneBT, WWW, MQTT/HA i NoDisplay.
+- [STABLE] Na DESK sprawdzić ukrycie suwaka jasności, restart z WWW, powrót Wi-Fi bez utraty stacji/config oraz osobno ekran aktualizacji bez regresji ScrollWidget/HOLD.
+- [HARDWARE] Przypisać GPIO XSMT PCM5102A na SALON i fizycznie sprawdzić LOW przy PAUZA/STOP, HIGH przy PLAY, ciszę podczas przejść i Web Update oraz czerwoną ramkę VOL bez zmiany semantyki MUTE.
+- [STABLE] Fizycznie sprawdzić MQTT/Home Assistant na SALON; MQTT pozostaje wspierane w pierwszym stable.
+- [STABLE] Uzupełnić dokumentację aktywnych profili, API, MQTT/HA, Source Managera, VoxOneBT oraz update/recovery; oznaczyć historyczne baseline'y i usunąć z dokumentów bieżącego stanu opisy sprzeczne z aktualnym runtime.
+- [STABLE] Zaprojektować identyfikację builda w WWW SYSTEM, WWW AKTUALIZACJA i opcjonalnie Serial boot log: release version, dev/stable status, krótki Git SHA/build ID oraz profil DESK/DIN/SALON. Nie zmieniać `VOXONE_VERSION` dla checkpointów technicznych.
+- [DECISION] Przed stable ustalić minimalny zakres uwierzytelniania, CSRF i ochrony mutujących REST/WebSocket oraz ekspozycji danych.
 
-## 13. WWW — porządki
+## Znane błędy i pomiary
 
-- USTAWIENIA → Sieć: dodać bezpieczny, trwały zapis profili Wi-Fi (nowe hasło, zachowanie lub czyszczenie hasła, walidacja, atomowy zapis i kontrolowany restart). Nie obiecywać pola `enabled`, dopóki backend go nie obsługuje.
-- USTAWIENIA → Sen: screensaver, wygaszanie i sleep timer.
-- Aktualizacja VoxOneBT: PC/telefon → WWW VoxOne MAIN → UART → VoxOneBT, bez osobnego Wi-Fi/WWW w VoxOneBT. Dodać osobny aktywny przycisk, binarny transfer UART, progress, ACK/NACK, walidację CRC i rozmiaru oraz bezpieczny slot OTA. Restartować tylko VoxOneBT; MAIN ma pozostać uruchomiony i po restarcie sprawdzić `FW_VERSION`.
-- Fizycznie sprawdzić na DESK ukrycie suwaka jasności LCD oraz restart WWW i powrót Wi-Fi bez utraty stacji/config.
+- [BUG] Zdiagnozować sporadyczne pozostawienie lub powtórzenie tekstu pod „Utwór” na LCD; sprawdzić invalidate, clear, scroll oraz kolejność aktualizacji metadata.
+- [BUG] Sprawdzić bezpieczeństwo bufora/okna i clipping w `ScrollWidget`, szczególnie przy długich metadata; powiązać wynik z błędem czyszczenia i nie zmieniać timingu bez testu rendererów.
+- [HARDWARE] Wykonać kontrolowane porównanie poziomu RADIO i BT na tym samym materiale PCM. Użytkownik zmienił rezystory z 22 Ω na 41 Ω, ale trzeba nadal zmierzyć digital gain, BT Absolute Volume, VoxOneBT PCM, MAIN RX i poziom wyjścia.
+- [BUG] Zbadać pstryknięcie lub glitch audio podczas mutacji playlisty/stacji.
 
-## 14. WWW — auto reload
+## Audio, RADIO i kodeki
 
-- Przetestować timeout i komunikat, gdy urządzenie nie wróci, błędy backendu oraz nieudany backup. Powrót do STATUS po zwykłym restarcie i aktualizacji jest już potwierdzony.
+- [STABLE] Utrzymywać MP3, AAC/AAC+, FLAC oraz M4A wyłącznie jako kontener AAC; dokończyć detekcję AAC/AAC+ i `audio/aacp`, aby danych AAC nie kierować do dekodera MP3.
+- [STABLE] Na realnych stacjach sprawdzić AAC+, w tym RMF DLA DZIECI.
+- [STABLE] Dokończyć obsługę M3U, PLS, redirect i final URL streamu z limitem rekurencji i ochroną przed pętlą.
+- [DECISION] Po stable ocenić usunięcie WAV, OGG/Vorbis remnants i Opus enum/remnants oraz potrzebę ASX, M3U8, HLS i TS na podstawie realnych consumerów. Nie traktować ich jako nowych planowanych funkcji.
+- [DECISION] Ustalić źródło wiarygodnego kodeka i bitrate A2DP; publikować je dopiero, gdy VoxOneBT lub A2DP udostępni realne dane.
 
-## 15. AAC / AAC+
+## TTS / PLAY_MEDIA
 
-- Obsłużyć AAC, AAC+ i `audio/aacp` z poprawną detekcją kodeka; nie przekazywać AAC do dekodera MP3.
-- Sprawdzić rzeczywiste stacje AAC+, w tym RMF DLA DZIECI.
+- [POST-STABLE] Wprowadzić tryby TTS Volume `CURRENT`, `FIXED` i `AUTO`. `CURRENT` używa normalnego `userVolume`; `FIXED` ma własne 0–100 bez zmiany `userVolume`; `AUTO` wybiera wartość na początku komunikatu na podstawie rzeczywistego base playback i utrzymuje ją do końca TTS.
+- [POST-STABLE] Zachować Max Volume jako hard clamp i nie wysyłać BT Absolute Volume podczas TTS.
+- [STABLE] Fizycznie przetestować restore RADIO PLAY/STOP oraz BT PLAY/PAUSE/STOP, ownership I2S0, sample rate i routing po normalnym końcu, błędzie, przerwaniu i timeout.
+- [POST-STABLE] Na LCD pokazywać dla TTS stację „KOMUNIKAT TTS”, artystę „Powiadomienie głosowe”, pusty utwór i poprawną etykietę źródła.
+- [POST-STABLE] Dokończyć deterministyczny cleanup TTS po błędzie/timeout; dodać HTTPS i redirect tylko jeśli wymagają tego używane endpointy.
+- [POST-STABLE] Rozszerzyć temporary audio restore na przyszłe DLNA i AUX bez zmiany pierwszeństwa ręcznego wyboru źródła.
 
-## 16. M3U / PLS
+## Source control i VoxOneBT
 
-- Obsłużyć M3U, PLS, redirect i końcowy URL streamu; ograniczyć rekurencję i chronić przed pętlą.
-- Później rozważyć ASX/M3U8.
+- [DECISION] Ustalić zachowanie po ręcznym wyborze BT bez podłączonego telefonu: czy i na jak długo otwierać pairing/discoverability, zachowując manual source priority.
+- [DECISION] Ustalić model parowania: PIN/passkey wymagany lub nie, stały albo konfigurowalny, preferred peer, pairing window, reconnect, discoverability i bezpieczeństwo ponownego parowania.
+- [POST-STABLE] Zachować sterowanie enkoderem: RADIO — obrót Volume, klik PLAY/STOP, dwuklik następne dostępne źródło, przytrzymanie lista stacji; BT — obrót Volume, klik PLAY/PAUSE, dwuklik następne źródło, przytrzymanie transport BT; trójklik bez akcji poza źródłami, które jawnie go wykorzystują.
+- [POST-STABLE] Rozstrzygać klik/dwuklik/trójklik po wspólnym krótkim oknie, aby trójklik nie wykonywał wcześniej dwukliku.
+- [POST-STABLE] W VoxOneBT utrzymać A2DP audio state jako sterowanie I2S, a AVRCP wyłącznie jako transport/UI; uzupełnić status PLAY/PAUSE/STOP, reconnect, preferred peer, pairing window, discoverability, metadata, ograniczenia TV i realny codec/bitrate, jeśli stos udostępnia dane.
+- [POST-STABLE] Znormalizować poziom BT względem RADIO dopiero po pomiarach toru cyfrowego i analogowego.
+- [POST-STABLE] Zaprojektować aktualizację VoxOneBT: MAIN WWW → UART → VoxOneBT, walidacja rozmiaru i CRC, ACK/NACK, progress, bezpieczny slot OTA, restart tylko VoxOneBT i sprawdzenie `FW_VERSION` po restarcie. VoxOneBT pozostaje osobnym repozytorium.
 
-## 17. Audio / kompatybilność
+## DLNA
 
-- Tylko jeśli nadal występuje `Truncated MP3 frame`: przeanalizować ICY stripping, buforowanie, MP3 sync/frame length i Helix przed zmianą dekodowania.
-- Przed stable przetestować SHOUTcast/Icecast, `ICY 200`, MIME, HTTP/HTTPS, reconnect, dead stream oraz stream z metadata i bez.
-- Przyszłe źródła: DLNA — VU z PCM, codec i bitrate; AUX — VU z PCM po ADC, sample rate i format PCM zamiast bitrate; SPDIF — VU z PCM, sample rate i format. Na wyjściu może być aktywne tylko jedno źródło audio naraz.
-- Zweryfikować semantykę `status.on = config.store.dspon` w `ha_yoradio`.
+- [POST-STABLE] Dodać DLNA jako capability-filtered źródło SourceManager. Początkowy cykl po implementacji: RADIO → BT → DLNA → RADIO, z pomijaniem źródeł niedostępnych według capabilities i runtime availability.
+- [POST-STABLE] Zaimplementować konfigurację IP serwera, discovery/scanning, ContentDirectory, browsing, pagination, wybór zasobu/play URL, next track i odtwarzanie folderu.
+- [POST-STABLE] Zachować UX PLAYER: klik PLAY/PAUSE, dwuklik następne źródło, trójklik ALL/RND/ONE, przytrzymanie biblioteka.
+- [POST-STABLE] W przeglądarce folderów: obrót wybiera, klik wchodzi/odtwarza, „ODTWÓRZ FOLDER” zaczyna od pierwszego utworu, dwuklik wraca poziom wyżej, przytrzymanie wraca do PLAYER, a timeout około 15 s wraca do PLAYER.
+- [POST-STABLE] ALL/FOLDER odtwarza folder kolejno w pętli; RND odtwarza każdy utwór raz i tasuje ponownie; ONE zapętla bieżący utwór.
+- [POST-STABLE] Zintegrować DLNA z metadata, VU z PCM, SourceManager, WebSocket, WWW, LCD i natywnym HA.
 
-## 18. Playlisty
+## AUX
 
-- Dopracować import/export yoRadio: walidacja, preview, raport błędnych rekordów i ewentualny import URL.
-- Sprawdzić duże listy 50/100/250 stacji, power-loss recovery, brak miejsca SPIFFS, `current/lastStation` i zachowanie po usunięciu bieżącej stacji.
-- Zweryfikować eksport/import między DESK i SALON, ID, kolejność, OVOL, A↔T, odświeżenie WWW oraz migrację/restore przy Web Update.
-- Fizycznie przetestować Radio Directory na SALON i DESK, w tym dodanie, odtwarzanie, restart, pamięć i brak zakłóceń audio.
-- Sprawdzić prezentację A↔T na LCD/WWW/Nextion/MQTT, zachowanie po reorder i usunięciu stacji, pstryknięcie audio przy mutacji oraz wyłączenie legacy `/upload`.
+- [HARDWARE] Zaprojektować wejście AUX na PCM1808 dla analogowego RCA i ewentualnego źródła wewnętrznego oraz potwierdzić piny, zegary i format I2S input.
+- [POST-STABLE] Zintegrować AUX z SourceManager, VU z PCM, WWW, LCD i HA; zamiast bitrate pokazywać sample rate/format PCM oraz właściwy status źródła bez metadata.
 
-## 19. Standard sterowania enkoderem i Source Control
+## WWW, API i WebSocket
 
-- WEB PLAYER: obrót → Volume; klik → PLAY/STOP; dwuklik → następne źródło; trójklik → brak akcji; przytrzymanie → lista stacji.
-- BT PLAYER: obrót → Volume; klik → PLAY/PAUSE; dwuklik → następne źródło; trójklik → brak akcji; przytrzymanie → sterowanie BT.
-- DLNA PLAYER: obrót → Volume; klik → PLAY/PAUSE; dwuklik → następne źródło; trójklik → tryb ALL/RND/ONE; przytrzymanie → biblioteka DLNA.
-- Cykl źródeł: WEB → BT → DLNA → WEB. Source Manager pomija źródła niedostępne według capabilities.
-- DLNA ALL/FOLDER odtwarza cały folder kolejno w pętli; RND odtwarza każdy utwór folderu raz, po czym tasuje ponownie; ONE zapętla bieżący utwór.
-- Przeglądarka DLNA: obrót wybiera pozycję; klik folderu wchodzi do niego; klik „ODTWÓRZ FOLDER” rozpoczyna od pierwszego utworu; klik utworu rozpoczyna od wybranego; dwuklik wraca poziom wyżej; przytrzymanie wraca do PLAYER; timeout około 15 s wraca do PLAYER; trójklik nie wykonuje akcji.
-- Gesty klik, dwuklik i trójklik rozstrzygać po krótkim oknie czasowym, aby trójklik nie został wcześniej wykonany jako dwuklik.
-- DLNA pozostaje niezaimplementowane. Do ustalenia i wykonania: IP serwera, skanowanie, ContentDirectory, browsing, pagination, kolejny utwór oraz integracja Source Manager, LCD i WWW.
+- [POST-STABLE] Sprawdzić kompletność metadata wszystkich aktywnych źródeł w WWW; obecne metadata BT traktować jako działający baseline.
+- [POST-STABLE] Dodać source selector do PLAYER/STATUS WWW, pokazujący wyłącznie źródła dostępne według capabilities i runtime availability.
+- [POST-STABLE] Dodać MUTE przy sterowaniu głośnością WWW, używając jednego wspólnego stanu MUTE; ujednolicić później WWW, LCD i HA.
+- [POST-STABLE] Ujednolicić WebSocket state dla RADIO, BT oraz przyszłych DLNA/AUX: aktywne źródło, transport/playback, metadata źródła, codec/format, sample rate i bitrate tam, gdzie mają znaczenie.
+- [POST-STABLE] Dokończyć edycję maksymalnie pięciu profili Wi-Fi: priority/last-known-good, nowe hasło, zachowanie lub wyczyszczenie hasła, walidacja, atomowy zapis i kontrolowany restart.
+- [POST-STABLE] Dodać konfigurację restartu, sleep/screensaver, auto standby, backup/restore config, playlist import/export, Radio Directory i recovery bez przywracania starego WWW.
+- [POST-STABLE] Pokazać spójną identyfikację builda i dane systemowe w SYSTEM oraz AKTUALIZACJA.
+- [POST-STABLE] Dodać Web Update VoxOneBT jako osobny, jawny proces po stabilizacji aktualizacji MAIN.
+- [DECISION] Rozstrzygnąć, czy lokalny WebSocket ma walidować żądany subprotocol zamiast bezwarunkowo go odsyłać; połączyć decyzję z audytem auth/CSRF.
 
-## 20. Późniejsze
+## Local UI / LCD
 
-- LAN / W5500: dodać opcjonalny moduł na osobnej magistrali SPI, niezależnej od ST7796, oraz tryby AUTO, LAN i Wi-Fi. W AUTO preferować Ethernet przy aktywnym linku LAN, a przy braku linku przechodzić na Wi-Fi.
-- LAN / W5500: uruchamiać DHCP, później rozważyć statyczny IP. W WWW pokazywać aktywny interfejs, link LAN, IP i podstawowy status Ethernet. Warstwa sieciowa RADIO/DLNA nie może zakładać na sztywno `WiFiClient` ani Wi-Fi; DLNA/SSDP ma działać przez LAN i Wi-Fi.
-- LAN / W5500: w stałym obszarze systemowym LCD pokazywać dla Wi-Fi tylko słupki RSSI i obok małą ikonę BT; dla LAN zastąpić słupki małą ikoną RJ45/Ethernet. Bez napisów „WiFi” i „LAN” oraz bez przesuwania tego obszaru.
-- LCD SKIN — YAMAHA AMBER: opcjonalna, przełączalna skórka z czarnym tłem i interfejsem w jednym bursztynowo-pomarańczowym kolorze, w stylu starszych amplitunerów Yamaha. Punkt startowy: #FF9A1F, RGB565 0xFCC3.
-- Sleep/screensaver, sterowanie istniejącym MUTE z WWW/HA/MQTT, SALON_DSP/TDA7719, AUX, SPDIF i Alarm.
-- AMP_POWER: sterowanie zasilaniem wzmacniacza z anti-pop — mute/fade przed wyłączeniem, opóźnienie po włączeniu i unmute/fade po stabilizacji.
-- SALON_DSP: EQ, Loudness, Balance, Fader, Subwoofer, 2.0/2.1, presety, storage oraz WWW/LCD. DS3231 i TDA7719 mają współdzielić jedną magistralę I²C GPIO7/8.
-- DIN: fizycznie sprawdzić PCM5102A GPIO1/2/3, VoxOneBT, WWW, MQTT/HA i NoDisplay; ustalić docelową definicję ESP32-S3 Zero.
-- Dodatkowe wyświetlacze i opcjonalny czujnik światła rozwijać po podstawowych funkcjach.
+- [POST-STABLE] Zaprojektować pełną konfigurację urządzenia z LCD 480×320 i jednym enkoderem tak, aby po jednorazowym flashu urządzenie działało samodzielnie bez WWW; WWW i LCD mają używać wspólnego modelu konfiguracji.
+- [POST-STABLE] Przebudować PLAYER: podnieść PLAY/PAUSE/STOP oraz bitrate/audio info, a niżej dodać czytelną ramkę faktycznego trybu wyjścia 2.0/2.1/2.2 pochodzącego z konfiguracji audio/DSP.
+- [POST-STABLE] Ustalić wspólną lub jawnie przypisaną szybkość przewijania dla stacji, artysty, utworu i list; usunąć przypadkowo różne timingi rendererów.
+- [POST-STABLE] Dodać ekran aktualizacji „AKTUALIZACJA” z rzeczywistym postępem, sukcesem, błędem i restartem dla MAIN, a później dla VoxOneBT.
+- [POST-STABLE] Dodać ikonę/stan MUTE na DESK i ujednolicić go z SALON.
+- [POST-STABLE] Dodać source-aware PLAYER, ekran TTS, przyszłą przeglądarkę DLNA oraz konfigurację DSP.
+- [POST-STABLE] Przygotować wspólne `assets/branding` jako źródło logo WWW, splash/logo LCD i favicon; później użyć tych samych materiałów w README/GitHub.
+- [POST-STABLE] Rozważyć opcjonalną skórkę YAMAHA AMBER: czarne tło i jeden bursztynowy kolor, punkt startowy `#FF9A1F` / RGB565 `0xFCC3`.
+- [POST-STABLE] Rozwijać klasy display: wspólne 128×64 dla SSD1306 i SH1106, osobne SSD1322 256×64, GC9A01 240×240, ST7789 320×240 i ST7796S 480×320.
+- [DECISION] Po stable zdecydować o SSD1309 w klasie 128×64 oraz o dalszym utrzymaniu legacy ST7789 284×76.
+- [POST-STABLE] Uporządkować duplikację `_charSize` w widgetach tylko przy pracy nad rendererem; nie robić osobnego refaktoru bez korzyści testowej.
+- [HARDWARE] Ocenić opcjonalny czujnik światła dopiero po ustaleniu docelowych PCB i display.
 
-## 21. Stabilność / release
+## Power, startup i alarm
 
-- Ustalić i podłączyć GPIO XSMT PCM5102A na SALON, potem fizycznie sprawdzić LOW przy PAUZA/STOP, HIGH przy PLAY, ciszę podczas przejść i Web Update oraz czerwoną ramkę VOL bez zmiany działania MUTE.
-- Wykonać audit DESK, testy regresyjne DESK/SALON, długie testy audio i diagnostykę problemów występujących na sprzęcie, w tym logów czasu i wcześniejszego `ipc1` panic.
-- Fizycznie sprawdzić MQTT/HA SALON, Web Update firmware SALON oraz firmware/SPIFFS DESK, w tym postęp, błędy, backup i powrót WWW.
-- Sprawdzić recovery AP przy błędnych danych Wi-Fi, Serial CLI, ekran AP na telefonie i jego kolory oraz `/update.html` i `/emergency` przy niedostępnym SPIFFS.
-- Dopracować backup/restore całej konfiguracji z walidacją schematu oraz bezpieczeństwo WWW: uwierzytelnianie, CSRF, mutujące REST/WS i ekspozycję danych.
-- Sprawdzić wielokrotne BT connect/disconnect, reconnect i wcześniejszy HCI allocation assert.
-- Uzupełnić fizyczną kontrolę BT VU przy STOP/disconnect, niezależności L/R oraz synchronizacji VU ON/OFF między klientami WWW i po restarcie.
-- Dokończyć dokumentację profili, API, MQTT/HA, Source Managera, VoxOneBT i update/recovery; cleanup yoRadio wykonywać dopiero po potwierdzeniu stabilności.
-- Po potwierdzeniu wszystkich wymagań przygotować finalny release; checkpointy techniczne nie zmieniają `VOXONE_VERSION`.
+- [POST-STABLE] Zaprojektować włączanie/wyłączanie VoxOne z rozróżnieniem reboot, standby, audio mute i pełnego wyłączenia.
+- [HARDWARE] Dodać sterowanie `AMP_POWER` z anti-pop: mute/fade przed wyłączeniem, opóźnienie po włączeniu i unmute/fade po stabilizacji.
+- [POST-STABLE] Dodać auto standby/auto power-off po konfigurowanym czasie bez dźwięku, ustawienie czasu w WWW i możliwość OFF; zdefiniować aktywność osobno dla RADIO, BT, DLNA, AUX i TTS, tak aby komunikat TTS nie został zablokowany.
+- [POST-STABLE] Skonsolidować configurable boot source, boot station, startup PLAY/STOP, LAST/FIXED startup volume, max physical volume i MUTE semantics. Zachować rozdział technicznego checkpointu od release version.
+- [POST-STABLE] Dodać alarm: czas, dni, stacja, volume, ON/OFF oraz tryb „włącz radio” albo „graj przez X”.
 
-## Kolejność najbliższych prac
+## DSPmini
 
-1. PLAY_MEDIA / TTS BT oraz TTS Volume CURRENT/FIXED.
-2. AAC/AAC+.
-3. M3U/PLS i redirecty.
-4. Testy playlist i stacji.
-5. Audit DESK/DIN i stabilność.
-6. Stabilne RADIO+BT.
-7. Później: DLNA, W5500/LAN, AUX/SPDIF i DSP.
+- [HARDWARE] Docelowy DSP to moduł klasy ADAU1401/ADAU1701/ADAU1702. Ustalić schemat DSPmini, cztery wyjścia i workflow inicjalizacji/programowania z ESP bez drogiego USBi.
+- [POST-STABLE] Dodać live tuning/runtime parameters, storage presetów, PEQ, crossover, subwoofer, 2.0/2.1/2.2, role/mute wyjść, delay, Auto Loudness, protection, balance/fader i trwałość presetów.
+- [POST-STABLE] Zintegrować DSPmini z WWW i LCD. W profilu DSP rozbudowane ustawienia mają należeć do AUDIO i nie mogą dublować globalnej głośności.
+- [DECISION] Po przygotowaniu integracji sprzętowej zdecydować, które elementy obecnej zakładki/demo DSP i `DSP_CUSTOM` zachować, zastąpić lub usunąć.
+
+## Home Assistant i MQTT
+
+- [POST-STABLE] Zbudować natywną integrację HA jako jedno urządzenie z `media_player`, source list z capabilities, source-aware play/pause/stop/next/prev, metadata oraz announce/TTS.
+- [POST-STABLE] Dodać minimalne entities: TTS Volume Mode, TTS Fixed Volume, Max Volume, Wi-Fi RSSI, uptime, restart, a później standby.
+- [DECISION] Zweryfikować znaczenie `status.on = config.store.dspon` w obecnym `ha_yoradio` i nie zmieniać kontraktu MQTT bez fizycznej regresji.
+- [POST-STABLE] MQTT usunąć dopiero w osobnym etapie po uruchomieniu i fizycznym potwierdzeniu natywnego HA.
+
+## Network
+
+- [POST-STABLE] Zachować maksymalnie pięć profili Wi-Fi, priority/last-known-good, tryb NORMAL bez wymuszonego AP, oczekiwanie RADIO na sieć, możliwość działania BT offline oraz jednoznaczne CONFIG/AP/recovery behavior.
+- [HARDWARE] Dodać W5500 tylko na odpowiednich PCB i dedykowanej magistrali SPI; tryby AUTO/LAN/Wi-Fi, LAN preferred, Wi-Fi fallback i DHCP, a później opcjonalny static IP.
+- [POST-STABLE] Wydzielić abstrakcję sieciową bez twardego założenia `WiFiClient`; RADIO i DLNA mają działać przez LAN lub Wi-Fi.
+- [POST-STABLE] W WWW pokazywać aktywny interfejs/link/IP, a na LCD dla Ethernet używać małej ikony RJ45 zamiast słupków RSSI bez przesuwania stałego obszaru systemowego.
+
+## Playlisty i stacje
+
+- [POST-STABLE] Dopracować import/export yoRadio: preview, walidacja, raport błędnych rekordów i ewentualny import URL.
+- [STABLE] Sprawdzić listy 50/100/250 stacji, power loss, brak miejsca SPIFFS, `current/lastStation`, usunięcie aktywnej stacji, reorder i zachowanie po restarcie.
+- [STABLE] Zweryfikować eksport/import między DESK i SALON: ID, kolejność, OVOL, A↔T, odświeżenie WWW oraz backup/restore przez Web Update.
+- [STABLE] Fizycznie przetestować Radio Directory na SALON i DESK: dodanie, odtwarzanie, restart, pamięć i brak zakłóceń audio.
+- [POST-STABLE] Sprawdzić prezentację A↔T na LCD/WWW/MQTT oraz zachowanie po reorder i usunięciu stacji.
+
+## Hardware targets
+
+- [STABLE] Utrzymać DESK, DIN i SALON bez zmiany architektury do pierwszego stable; ESP32 legacy pozostaje stabilnym legacy targetem.
+- [HARDWARE] Po stable zaprojektować A-family/MAX na ESP32-S3 N16R8, B-family/MINI na ESP32-S3 Zero oraz C-family/PORTABLE na ESP32-S3 Zero portable.
+- [HARDWARE] Potwierdzić GPIO, rewizje PCB, opcjonalne LCD/BT/DSP oraz warianty wyjścia PCM5102A, MAX98357 portable i DSPmini.
+- [POST-STABLE] Utrzymać zasadę jednego builda firmware na target PCB zamiast buildów dla każdej kombinacji opcji; `HardwareDescriptor` i capabilities są źródłem prawdy.
+
+## Installer, first boot i release
+
+- [POST-STABLE] Przygotować VoxOne Installer dla Windows jako portable EXE dla VoxOne/VoxOneBT: wybór PCB A1/B1/C1 lub V1/V2, embedded stable factory binaries, install, erase/install, auto COM, auto chip i brak ręcznych offsetów.
+- [POST-STABLE] Zaprojektować first boot AP `VoxOne-XXXXXX` i captive wizard do Wi-Fi oraz podstawowego hardware/config; dalsza konfiguracja ma być dostępna przez WWW i LCD.
+- [POST-STABLE] Docelowy przepływ produkcyjny ma po flashu nie wymagać VS Code ani edycji kodu.
+- [STABLE] Przed release potwierdzić artefakty firmware/SPIFFS/full image, instrukcję instalacji i recovery oraz zasady zachowania NVS/config.
+- [STABLE] Po przejściu wszystkich gate'ów przygotować stable release i merge `project-cleanup-1` → `main`; dopiero release otrzymuje decyzję o zmianie `VOXONE_VERSION`.
+
+## Compatibility i małe decyzje techniczne
+
+- [DECISION] Uporządkować compatibility API strefy czasowej: system używa stałej Europe/Warsaw, pola Config v7 pozostają zachowane, ale `getTimezoneOffset()` nie może pozostać nieopisanym `return 0`; ustalić kontrakt bez zmiany serialized layout.
+
+## Kolejność
+
+- P0 — STABLE HARDENING
+- P1 — BUGFIXES znalezione podczas stable
+- P2 — STABLE RELEASE + merge `project-cleanup-1` → `main`
+- P3 — UX/polish niewymagający nowej architektury
+- P4 — VoxOneBT hardening
+- P5 — DLNA / AUX
+- P6 — native HA
+- P7 — A1/B1/C1 hardware architecture
+- P8 — DSPmini
+- P9 — Installer / full standalone LCD configuration
+- P10 — W5500 / dalsze rozszerzenia
