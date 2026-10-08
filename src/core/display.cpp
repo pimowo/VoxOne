@@ -1150,8 +1150,13 @@ void Display::_title() {
   }
 #endif
   if (strlen(config.station.title) > 0) {
+#if DSP_MODEL==DSP_ST7789_76 || DSP_MODEL==DSP_ST7796
+    const StationMetadataParts parts = playerStationMetadata(
+        config.station.title, config.station.metadataMode == STATION_META_SWAP);
+#else
     const StationMetadataParts parts = parseStationMetadata(
         config.station.title, config.station.metadataMode == STATION_META_SWAP);
+#endif
     char artist[BUFLEN];
     char title[BUFLEN];
     stationMetaCopy(artist, sizeof(artist), parts.artist, parts.artistLength);
@@ -1164,15 +1169,20 @@ void Display::_title() {
 #endif
       _title2->setText(title);
     }else{
+#if DSP_MODEL==DSP_ST7789_76 || DSP_MODEL==DSP_ST7796
+      if (_title2) {
+        _title1->setText(artist);
+        _title2->setText(deskArtistIsStation(title, config.station.name) ? "" : title);
+      } else {
+        _title1->setText(deskArtistIsStation(title, config.station.name) ? "" : title);
+      }
+#else
       char whole[BUFLEN + 1];
       stationMetaDisplay(config.station.title, config.station.metadataMode == STATION_META_SWAP,
                          whole, sizeof(whole));
-#if DSP_MODEL==DSP_ST7789_76 || DSP_MODEL==DSP_ST7796
-      _title1->setText(deskArtistIsStation(whole, config.station.name) ? "" : whole);
-#else
       _title1->setText(whole);
-#endif
       if(_title2) _title2->setText("");
+#endif
     }
     
   }else{

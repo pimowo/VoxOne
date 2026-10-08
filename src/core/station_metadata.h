@@ -26,6 +26,12 @@ inline StationMetadataParts parseStationMetadata(const char* raw, bool swapArtis
       : StationMetadataParts{raw, leftLength, right, rightLength, true};
 }
 
+inline StationMetadataParts playerStationMetadata(const char* raw, bool swapArtistTitle) {
+  const StationMetadataParts parts = parseStationMetadata(raw, swapArtistTitle);
+  if (parts.split) return parts;
+  return {"", 0, parts.artist, parts.artistLength, false};
+}
+
 inline void stationMetaCopy(char* output, size_t capacity, const char* text, size_t length) {
   if (!capacity) return;
   const size_t copy = std::min(length, capacity - 1);

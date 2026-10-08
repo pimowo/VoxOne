@@ -57,7 +57,6 @@
 
 ## Znane błędy i pomiary
 
-- [BUG] Zdiagnozować sporadyczne pozostawienie lub powtórzenie tekstu pod „Utwór” na LCD; sprawdzić invalidate, clear, scroll oraz kolejność aktualizacji metadata.
 - [BUG] Sprawdzić bezpieczeństwo bufora/okna i clipping w `ScrollWidget`, szczególnie przy długich metadata; powiązać wynik z błędem czyszczenia i nie zmieniać timingu bez testu rendererów.
 - [HARDWARE] Wykonać kontrolowane porównanie poziomu RADIO i BT na tym samym materiale PCM. Użytkownik zmienił rezystory z 22 Ω na 41 Ω, ale trzeba nadal zmierzyć digital gain, BT Absolute Volume, VoxOneBT PCM, MAIN RX i poziom wyjścia.
 - [BUG] Zbadać pstryknięcie lub glitch audio podczas mutacji playlisty/stacji.

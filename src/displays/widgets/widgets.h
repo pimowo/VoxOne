@@ -118,6 +118,7 @@ class ScrollWidget: public TextWidget {
   private:
     char *_sep;
     char *_window;
+    size_t _windowCapacity;
     int16_t _x;
     bool _doscroll;
     uint8_t _scrolldelta;
@@ -291,7 +292,6 @@ class PlayListWidget: public Widget {
 
 #endif
 #endif
-
 
 
 

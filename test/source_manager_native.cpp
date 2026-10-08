@@ -236,6 +236,26 @@ int main() {
   assert(std::strcmp(view.artist, "") == 0);
   assert(std::strcmp(view.title, "Nowy utwór") == 0);
 
+  std::strcpy(bt.artist, "Nowy artysta");
+  update = sources.observe(bt);
+  assert(update.titleChanged);
+  sources.displayView(view);
+  assert(std::strcmp(view.artist, "Nowy artysta") == 0 &&
+         std::strcmp(view.title, "Nowy utwór") == 0);
+
+  // Metadata clear while the phone stays connected must remove the old title.
+  std::strcpy(bt.title, "");
+  update = sources.observe(bt);
+  assert(update.titleChanged);
+  sources.displayView(view);
+  assert(view.connected && std::strcmp(view.artist, "Nowy artysta") == 0 &&
+         std::strcmp(view.title, "") == 0);
+  std::strcpy(bt.artist, "");
+  update = sources.observe(bt);
+  assert(update.titleChanged);
+  sources.displayView(view);
+  assert(view.artist[0] == '\0' && view.title[0] == '\0');
+
   // I: loss of the module has priority over phone disconnect.
   bt.runtimeAvailable = false;
   update = sources.observe(bt);

@@ -1,6 +1,9 @@
 #include "../src/core/salon_player_scroll.h"
+#include "../src/displays/widgets/scroll_text_state.h"
 
 #include <cassert>
+#include <cstdio>
+#include <cstring>
 
 using Action = SalonPlayerScroll::Action;
 
@@ -74,4 +77,33 @@ int main() {
   expect(scroll.tick(10100, allLong), Action::Start, 1);
   scroll.textChanged(0);
   expect(scroll.tick(10200, allLong), Action::Start, 0);
+
+  // A framebuffer frame needs one more byte than the old MAX_WIDTH-based
+  // allocation on SALON (27 bytes requested for a 460 px row at 18 px/char).
+  const size_t salonCapacity = scrollWindowCapacity(480, 18);
+  const size_t salonFrame = scrollWindowPrintCapacity(salonCapacity, 460, 18, 2);
+  assert(salonCapacity == 28 && salonFrame == 27);
+  char window[29];
+  std::memset(window, '#', sizeof(window));
+  std::snprintf(window, salonFrame, "%s", "abcdefghijklmnopqrstuvwxyz");
+  assert(window[salonFrame - 1] == '\0');
+  assert(window[salonCapacity] == '#');
+  assert(scrollWindowPrintCapacity(scrollWindowCapacity(284, 12), 280, 12, 1) == 24);
+  assert(scrollWindowPrintCapacity(scrollWindowCapacity(480, 30), 480, 30, 2) == 18);
+
+  int16_t stationOffset = -20, artistOffset = -40, titleOffset = -60;
+  assert(scrollTextChangedAndResetOffset("Radio A", "Telefon", stationOffset, 0));
+  assert(stationOffset == 0 && artistOffset == -40 && titleOffset == -60);
+  assert(scrollTextChangedAndResetOffset("Artist - previous", "Artist", artistOffset, 0));
+  assert(artistOffset == 0 && titleOffset == -60);
+  assert(scrollTextChangedAndResetOffset("Old title", "", titleOffset, 0));
+  assert(titleOffset == 0);
+  titleOffset = -12;
+  assert(!scrollTextChangedAndResetOffset("", "", titleOffset, 0) && titleOffset == -12);
+  // The last drawn value may equal the new value after changes on another page.
+  assert(scrollTextChangedAndResetOffset("Temporary title", "Old title", titleOffset, 0));
+  assert(titleOffset == 0);
+  titleOffset = -9;
+  assert(scrollTextChangedAndResetOffset("Old title", "New title", titleOffset, 2));
+  assert(titleOffset == 2);  // DESK starts at its row's left edge.
 }

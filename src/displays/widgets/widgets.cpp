@@ -3,6 +3,7 @@
 #include "../dspcore.h"
 #include "Arduino.h"
 #include "widgets.h"
+#include "scroll_text_state.h"
 #include "../../core/player.h"    //  for VU widget
 #if VOXONE_HAS_BT && VOXONE_PIN_MAP_COMPLETE && VOXONE_BT_I2S_RX_ENABLED
 #include "../../core/source_manager.h"
@@ -136,8 +137,9 @@ void ScrollWidget::init(const char* separator, ScrollConfig conf, uint16_t fgcol
   _sepwidth = strlen(_sep) * _charWidth;
   _width = conf.width;
   _backMove.width = _width;
-  _window = (char *) malloc(sizeof(char) * (MAX_WIDTH / _charWidth + 1));
-  memset(_window, 0, (MAX_WIDTH / _charWidth + 1));  // +1?
+  _windowCapacity = scrollWindowCapacity(dsp.width(), _charWidth);
+  _window = (char *) malloc(_windowCapacity);
+  memset(_window, 0, _windowCapacity);
   _doscroll = false;
   #ifdef PSFBUFFER
   _fb = new psFrameBuffer(dsp.width(), dsp.height());
@@ -167,12 +169,12 @@ void ScrollWidget::setText(const char* txt) {
   const char* encoded = utf8Rus(txt);
   char nextText[_buffsize];
   strlcpy(nextText, encoded, _buffsize - 1);
-  const bool changed = strcmp(_text, nextText) != 0;
+  const bool changed = scrollTextChangedAndResetOffset(
+      _text, nextText, _x, _fb->ready() ? 0 : _config.left);
   strlcpy(_text, nextText, _buffsize);
   if (changed && _changeObserver) _changeObserver(_changeContext, _changeRow);
-  if (strcmp(_oldtext, _text) == 0) return;
+  if (!changed) return;
   _textwidth = strlen(_text) * _charWidth;
-  _x = _fb->ready()?0:_config.left;
   _doscroll = _checkIsScrollNeeded();
   if (dsp.getScrollId() == this) dsp.setScrollId(NULL);
   _scrolldelay = millis();
@@ -183,14 +185,16 @@ void ScrollWidget::setText(const char* txt) {
       #ifdef PSFBUFFER
         _fb->fillRect(0, 0, _width, _textheight, _bgcolor);
         _fb->setCursor(0, 0);
-        snprintf(_window, _width / _charWidth + 1, "%s", _text); //TODO
+        snprintf(_window, scrollWindowPrintCapacity(_windowCapacity, _width,
+                 _charWidth, 1), "%s", _text);
         _fb->print(_window);
         _fb->display();
       #endif
       } else {
         dsp.fillRect(_config.left,  _config.top, _width, _textheight, _bgcolor);
         dsp.setCursor(_config.left, _config.top);
-        snprintf(_window, _width / _charWidth + 1, "%s", _text); //TODO
+        snprintf(_window, scrollWindowPrintCapacity(_windowCapacity, _width,
+                 _charWidth, 1), "%s", _text);
         dsp.setClipping({_config.left, _config.top, _width, _textheight});
         dsp.print(_window);
         dsp.clearClipping();
@@ -283,11 +287,13 @@ void ScrollWidget::_draw() {
     //TODO
     #pragma GCC diagnostic push
     #pragma GCC diagnostic ignored "-Wformat-truncation="
-      snprintf(_window, _width / _charWidth + addChars, "%s%s%s", _cursor, _sep, _text);
+      snprintf(_window, scrollWindowPrintCapacity(_windowCapacity, _width,
+               _charWidth, addChars), "%s%s%s", _cursor, _sep, _text);
     #pragma GCC diagnostic pop
     } else {
       const char* _scursor = _sep + (_cursor - (_text + strlen(_text)));
-      snprintf(_window, _width / _charWidth + addChars, "%s%s", _scursor, _text);
+      snprintf(_window, scrollWindowPrintCapacity(_windowCapacity, _width,
+               _charWidth, addChars), "%s%s", _scursor, _text);
     }
     if(_fb->ready()){
     #ifdef PSFBUFFER
