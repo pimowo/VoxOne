@@ -9,9 +9,11 @@
 class TemporaryAudioState {
  public:
   uint32_t begin() {
+    const bool replacing = busy();
     generation_ = (generation_ % 0x7fffffffU) + 1;
     state_.store(generation_ << 1);
     restoring_.store(false);
+    if (!replacing) radioRestoreSuppressed_.store(false);
     return generation_;
   }
   uint32_t token() const { return state_.load() >> 1; }
@@ -29,10 +31,15 @@ class TemporaryAudioState {
     state_.store(0);
     return true;
   }
+  bool suppressRadioRestore() {
+    if (!busy()) return false;
+    radioRestoreSuppressed_.store(true);
+    return true;
+  }
   // Consume restoration once, using CURRENT base intent. Wait only for network.
   bool takeRadioRestore(bool radioAllowed, bool networkReady, bool blocked) {
     if (active() || !restoring_.load()) return false;
-    if (blocked || !radioAllowed) {
+    if (radioRestoreSuppressed_.exchange(false) || blocked || !radioAllowed) {
       restoring_.store(false);
       return false;
     }
@@ -43,6 +50,7 @@ class TemporaryAudioState {
   uint32_t generation_ = 0;
   std::atomic<uint32_t> state_{0}; // token << 1 | terminal
   std::atomic<bool> restoring_{false};
+  std::atomic<bool> radioRestoreSuppressed_{false};
 };
 
 inline bool bluetoothOwnsAudio(bool selected, bool temporaryActive) {

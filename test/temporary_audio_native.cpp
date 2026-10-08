@@ -26,6 +26,11 @@ void auditTransport() {
   assert(player.find("sourceManagerTransport(") == std::string::npos);
   assert(player.find("resumeAfterUrl") == std::string::npos);
   const auto source = readFile("src/core/source_manager.cpp");
+  assert(source.find(
+      "temporaryBtLossRequiresRadioStop(update, temporaryAtChange)") !=
+      std::string::npos);
+  assert(source.find("player.suppressTemporaryRadioRestore()") !=
+         std::string::npos);
   const auto begin = source.find("void sourceManagerTransport(");
   const auto end = source.find("void cycleNextSource(", begin);
   assert(begin != std::string::npos && end != std::string::npos);
@@ -120,6 +125,8 @@ int main() {
   }
 
   // Disconnect/offline during URL changes base, but cannot terminate URL.
+  // This one fallback intentionally consumes the restore without autoplay,
+  // even when the earlier RADIO intent was PLAY.
   for (bool playing : {false, true}) {
     for (bool offline : {false, true}) {
       Scenario s;
@@ -128,14 +135,46 @@ int main() {
       const auto token = s.temporary.begin();
       if (offline) s.bt.runtimeAvailable = false;
       else s.bt.connected = false;
-      s.source.observe(s.bt);
+      const SourceUpdate update = s.source.observe(s.bt);
+      assert(temporaryBtLossRequiresRadioStop(update, s.temporary.busy()));
+      assert(s.temporary.suppressRadioRestore());
       assert(s.source.active() == ActiveSource::Radio);
       assert(s.temporary.active() && !s.temporary.terminal());
       assert(s.route().radioOutput);
       s.end(token);
+      assert(s.resumes == 0);
+      assert(s.source.radioPlayIntent() == playing);
+      assert(!s.temporary.busy());
+
+      // The exception is one-shot; a later ordinary TTS still follows the
+      // preserved current RADIO intent.
+      const auto next = s.temporary.begin();
+      s.end(next);
       assert(s.resumes == (playing ? 1U : 0U));
     }
   }
+
+  // Replacing the active URL does not lose an already observed BT-loss stop.
+  Scenario replacement;
+  replacement.radio(true);
+  replacement.connect(BtPlayback::Playing);
+  const auto replaced = replacement.temporary.begin();
+  replacement.bt.connected = false;
+  SourceUpdate loss = replacement.source.observe(replacement.bt);
+  assert(temporaryBtLossRequiresRadioStop(loss, replacement.temporary.busy()));
+  assert(replacement.temporary.suppressRadioRestore());
+  const auto replacementToken = replacement.temporary.begin();
+  assert(replaced != replacementToken);
+  replacement.end(replacementToken);
+  assert(replacement.resumes == 0 && replacement.source.radioPlayIntent());
+
+  SourceUpdate noChange;
+  assert(!temporaryBtLossRequiresRadioStop(noChange, true));
+  noChange.activeChanged = true;
+  noChange.reason = SourceChangeReason::Manual;
+  assert(!temporaryBtLossRequiresRadioStop(noChange, true));
+  noChange.reason = SourceChangeReason::BtDisconnect;
+  assert(!temporaryBtLossRequiresRadioStop(noChange, false));
 
   // EOF, decoder/stream error, connect failure and timeout share the terminal
   // signal. Duplicate notifications and an old token cannot finish a new URL.

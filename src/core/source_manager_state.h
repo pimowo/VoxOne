@@ -39,6 +39,13 @@ struct SourceUpdate {
   SourceChangeReason reason = SourceChangeReason::None;
 };
 
+inline bool temporaryBtLossRequiresRadioStop(const SourceUpdate& update,
+                                             bool temporaryBusy) {
+  return temporaryBusy && update.activeChanged &&
+         (update.reason == SourceChangeReason::BtDisconnect ||
+          update.reason == SourceChangeReason::BtOffline);
+}
+
 struct RadioSourceActions {
   bool suspend = false;
   bool userStop = false;

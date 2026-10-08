@@ -63,6 +63,9 @@ class Player: public Audio {
     void requestTemporaryUrl(const char* url, size_t length);
     bool temporaryActive() const { return _temporary.active(); }
     bool temporaryBusy() const { return _temporary.busy(); }
+    bool suppressTemporaryRadioRestore() {
+      return _temporary.suppressRadioRestore();
+    }
     bool temporaryEof();
     bool interruptTemporaryForNetwork();
     bool remoteStationName = false;

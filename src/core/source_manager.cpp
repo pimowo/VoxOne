@@ -146,6 +146,8 @@ void sourceManagerLoop() {
   const SourceUpdate update = sourceState.observe(btLink.state());
   const ActiveSource active = sourceState.active();
   const bool temporaryAtChange = player.temporaryBusy();
+  if (temporaryBtLossRequiresRadioStop(update, temporaryAtChange))
+    player.suppressTemporaryRadioRestore();
   portEXIT_CRITICAL(&sourceMux);
   stopOnSourceChange(update, temporaryAtChange);
   if (update.btDisconnected) volumeSync.disconnect();
