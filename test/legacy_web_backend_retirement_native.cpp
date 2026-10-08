@@ -31,9 +31,11 @@ int main() {
   const auto currentWeb = readFile("web-src/voxone.js");
 
   // Legacy routes and the HTTP command bridge are gone.
-  for (const char* route : {"/legacy.html", "/settings.html", "/upload",
-                            "/favicon.ico"})
+  for (const char* route : {"/legacy.html", "/settings.html", "/upload"})
     assert(!contains(server, route));
+  // The favicon route is a redirect to current branding, not a legacy page.
+  assert(contains(server, "webserver.on(\"/favicon.ico\", HTTP_GET"));
+  assert(contains(server, "request->redirect(\"/voxone-logo.svg\")"));
   assert(!contains(server, "strcmp(request->url().c_str(), SSIDS_PATH)"));
   assert(!contains(server, "strcmp(request->url().c_str(), INDEX_PATH)"));
   assert(!contains(server, "TMP_PATH"));

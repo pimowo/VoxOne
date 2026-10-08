@@ -1,6 +1,7 @@
 """Exercise the update tab with the production HTML/JS in headless Chrome."""
 
 from pathlib import Path
+import gzip
 import os
 import re
 import shutil
@@ -74,6 +75,10 @@ setTimeout(() => {
   const check = (ok, message) => { if (!ok) throw Error(message); };
   try {
     check(location.hash === '#status', 'startup tab');
+    const icon = document.querySelector('link[rel="icon"]');
+    const logo = document.querySelector('header img[src*="voxone-logo.svg"]');
+    check(icon?.type === 'image/svg+xml' && !!logo, 'VoxOne SVG favicon and header logo');
+    check(icon.getAttribute('href') === logo.getAttribute('src'), 'favicon reuses header logo');
     check(get('footer-details').textContent === 'VoxOne 0.2.0 · SALON', 'footer identity');
     check(get('footer-connection').textContent === 'Połączono', 'footer WebSocket connected');
     check(get('system').querySelector('h3').textContent === 'VoxOne', 'VoxOne system card');
@@ -174,6 +179,13 @@ setTimeout(() => {
 def main():
     chrome = resolve_chrome()
     html = (ROOT / "web-src/voxone.html").read_text(encoding="utf-8")
+    route = (ROOT / "src/core/netserver.cpp").read_text(encoding="utf-8")
+    assert re.search(r'webserver\.on\("/favicon\.ico", HTTP_GET,.*?'
+                     r'request->redirect\("/voxone-logo\.svg"\);', route, re.S), \
+        "favicon.ico must redirect to the existing logo"
+    logo = (ROOT / "web-src/voxone-logo.svg").read_bytes()
+    assert gzip.decompress((ROOT / "data/www/voxone-logo.svg.gz").read_bytes()) == logo, \
+        "served logo asset must match its source"
     scripts = [
         (ROOT / "web-src" / name).read_text(encoding="utf-8")
         for name in ("advanced-audio.js", "dsp-client.js", "voxone.js")

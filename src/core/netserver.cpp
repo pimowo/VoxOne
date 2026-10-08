@@ -337,6 +337,10 @@ bool NetServer::begin(bool quiet) {
   webserver.on("/api/mqtt", HTTP_POST, handleMqttConfigSave);
   webserver.on("/api/time", HTTP_GET, handleTimeStatus);
   webserver.on("/api/time/sync", HTTP_POST, handleTimeSync);
+  // Browsers may request the legacy icon path even when HTML declares the SVG icon.
+  webserver.on("/favicon.ico", HTTP_GET, [](AsyncWebServerRequest* request) {
+    request->redirect("/voxone-logo.svg");
+  });
 #if defined(VOXONE_PROFILE_SALON)
   webserver.on("/api/dsp/state", HTTP_GET, voxone::dsp::handleDspState);
 #endif
