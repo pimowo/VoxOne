@@ -101,26 +101,63 @@ setTimeout(() => {
     btTestSocket.receiveVolume(27, true);
     check(muteButtons[0].getAttribute('aria-pressed') === 'true', 'external mute update');
     check(!btTestSocket.sent.some(item => /^(stop|webtransport|source)=/.test(item)), 'mute does not stop or switch source');
-    const sourceSnapshot = (source, availableSources, online) => ({
-      source, availableSources, name:'Radio', metadata:'', artist:'', title:'',
-      codec:'MP3', playback:'PLAY', bitrate:128, sampleRate:0,
-      btConnected:false, btModule:{online, firmware:'', protocol:0, name:'', capabilities:''}
+    const sourceSnapshot = (source, availableSources, online, fields = {}) => ({
+      source, activeSource:source === 'WEB' ? 'radio' : 'bt', availableSources,
+      name:'Radio', metadata:'', artist:'', title:'',
+      codec:'MP3', playback:'PLAY', transport:'playing', bitrate:128, sampleRate:0,
+      btConnected:false, volume100:27, muted:true,
+      btModule:{online, firmware:'', protocol:0, name:'', capabilities:''}, ...fields
     });
     const selector = get('source-selector');
     check(selector.querySelectorAll('button').length === 0, 'source waits for snapshot');
-    btTestSocket.receive(sourceSnapshot('WEB', ['radio','bt'], true));
+    btTestSocket.receive(sourceSnapshot('WEB', ['radio','bt'], true, {
+      name:'Radio A', metadata:'Artysta - Utwór', artist:'Artysta', title:'Utwór',
+      playback:'STOP', transport:'stopped', volume100:41, muted:false
+    }));
+    check(get('current-station-name').textContent === 'Radio A', 'RADIO station from snapshot');
+    check(get('metadata').textContent === 'Artysta - Utwór', 'RADIO ICY metadata from snapshot');
+    check(get('playback-state').textContent === 'STOP', 'RADIO stopped snapshot');
+    check(get('volume').textContent === '41' && muteButtons.every(button => button.getAttribute('aria-pressed') === 'false'),
+      'volume and mute from one snapshot');
     const sourceButton = source => selector.querySelector('button[data-source="' + source + '"]');
     check(sourceButton('radio').getAttribute('aria-pressed') === 'true', 'RADIO active');
     check(!sourceButton('bt').disabled, 'BT available without phone connection');
     sourceButton('bt').click();
     check(btTestSocket.sent.at(-1) === 'source=bt', 'manual BT command');
     check(sourceButton('radio').getAttribute('aria-pressed') === 'true', 'selection waits for device');
-    btTestSocket.receive(sourceSnapshot('BT', ['radio','bt'], true));
+    btTestSocket.receive(sourceSnapshot('BT', ['radio','bt'], true, {
+      name:'Telefon', artist:'BT Artysta', title:'BT Utwór', codec:'', bitrate:0,
+      sampleRate:44100, btConnected:true, playback:'PLAY'
+    }));
     check(sourceButton('bt').getAttribute('aria-pressed') === 'true', 'BT active from device');
+    check(get('current-station-name').textContent === 'Telefon' &&
+      get('bt-artist').textContent.includes('BT Artysta') && get('bt-title').textContent.includes('BT Utwór'),
+      'BT AVRCP metadata replaces RADIO metadata');
+    check(get('metadata').hidden && get('playback-state').textContent === 'PLAY', 'BT playing');
+    btTestSocket.receive({source:'BT', btConnected:false});
+    check(get('bt-disconnected').hidden && get('playback-state').textContent === 'PLAY',
+      'incomplete status cannot imply BT disconnect; complete webStatus is atomic');
+    btTestSocket.receive(sourceSnapshot('BT', ['radio','bt'], true, {
+      name:'Telefon', codec:'', bitrate:0, sampleRate:44100,
+      btConnected:true, playback:'PAUZA', transport:'paused'
+    }));
+    check(get('playback-state').textContent === 'PAUZA' &&
+      !get('bt-artist').textContent.includes('BT Artysta') &&
+      !get('bt-title').textContent.includes('BT Utwór'), 'BT pause and metadata clear');
+    btTestSocket.receive(sourceSnapshot('BT', ['radio','bt'], true, {
+      name:'Bluetooth', codec:'', bitrate:0, btConnected:false, playback:'', transport:'unavailable'
+    }));
+    check(get('bt-disconnected').hidden === false && get('playback-state').textContent === 'Brak połączenia',
+      'BT phone disconnect snapshot');
     sourceButton('radio').click();
     check(btTestSocket.sent.at(-1) === 'source=radio', 'manual RADIO command');
     btTestSocket.receive(sourceSnapshot('WEB', ['radio','bt'], true));
     check(sourceButton('radio').getAttribute('aria-pressed') === 'true', 'RADIO active from device');
+    check(!get('metadata').hidden && get('metadata').textContent === '—' &&
+      get('playback-state').textContent === 'PLAY', 'RADIO return has no stale BT metadata');
+    btTestSocket.receiveVolume(32, true);
+    check(get('volume').textContent === '32' && muteButtons.every(button => button.getAttribute('aria-pressed') === 'true'),
+      'live volume and mute update');
     btTestSocket.receive(sourceSnapshot('WEB', ['radio','bt'], false));
     check(sourceButton('bt').disabled && sourceButton('bt').textContent.includes('offline'), 'BT offline shown');
     btTestSocket.receive(sourceSnapshot('WEB', ['radio'], false));
@@ -146,8 +183,9 @@ setTimeout(() => {
     location.hash = '#update';
     window.dispatchEvent(new Event('hashchange'));
     check(btTestSocket.sent.some(item => item.includes('getwebstatus')), 'status request');
-    const status = {source:'BT', availableSources:['radio','bt'], name:'Telefon', metadata:'', artist:'', title:'',
-      codec:'', playback:'STOP', bitrate:0, sampleRate:44100, btConnected:false,
+    const status = {source:'BT', activeSource:'bt', availableSources:['radio','bt'], name:'Telefon', metadata:'', artist:'', title:'',
+      codec:'', playback:'', transport:'unavailable', bitrate:0, sampleRate:0, btConnected:false,
+      volume100:32, muted:true,
       btModule:{online:true, firmware:'0.6.1-dev', protocol:2,
                 name:'VoxOneBT-EFF35A', capabilities:'AVRCP,VU'}};
     btTestSocket.receive(status);
@@ -203,8 +241,9 @@ setTimeout(() => {
     check(get('system-psram').textContent === '8.0 MB total / 4.0 MB free', 'PSRAM');
     check(get('system-capabilities').textContent.includes('RTC'), 'system capabilities');
     btTestSocket.close();
-    check(selector.querySelectorAll('button').length === 2 &&
-      [...selector.querySelectorAll('button')].every(button => button.disabled), 'source disabled on disconnect');
+    check(selector.querySelectorAll('button').length === 0 &&
+      get('current-station-name').textContent === '—' && get('source').textContent === '—',
+      'disconnect clears stale source and metadata');
     check(muteButtons.every(button => button.disabled && button.getAttribute('aria-pressed') === 'false'), 'disconnect clears mute state');
     check(get('footer-connection').textContent === 'Rozłączono', 'footer WebSocket disconnected');
     check(get('footer-details').textContent === 'VoxOne 0.2.0 · SALON', 'offline footer hides stale IP');
@@ -231,8 +270,8 @@ setTimeout(() => {
         btTestSocket.receive(sourceSnapshot('WEB', ['radio','bt'], true));
         check(sourceButton('radio').getAttribute('aria-pressed') === 'true' &&
           !sourceButton('bt').disabled, 'source restored after reconnect');
-        btTestSocket.receiveVolume(27, true);
-        check(muteButtons.every(button => !button.disabled && button.getAttribute('aria-pressed') === 'true'), 'reconnect mute snapshot');
+        check(muteButtons.every(button => !button.disabled && button.getAttribute('aria-pressed') === 'true'),
+          'reconnect mute restored atomically with source');
         result.textContent = 'PASS';
       } catch (error) { result.textContent = 'FAIL: ' + error.message; }
     }, 1100);

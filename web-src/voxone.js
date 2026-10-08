@@ -697,10 +697,10 @@
     const connected = state.connection === "connected";
     renderSourceSelector();
     const btDisconnected = state.webStatus?.source === "BT" && !state.webStatus.btConnected;
-    buttons.prev.disabled = !connected || btDisconnected;
-    buttons.next.disabled = !connected || btDisconnected;
-    buttons.play.disabled = !connected || btDisconnected ||
-      (state.webStatus ? !state.webStatus.playback : state.playing === null);
+    buttons.prev.disabled = !connected || !state.webStatus || btDisconnected;
+    buttons.next.disabled = !connected || !state.webStatus || btDisconnected;
+    buttons.play.disabled = !connected || !state.webStatus || btDisconnected ||
+      !state.webStatus.playback;
     for (const slider of volumeSliders) slider.disabled = !connected || state.volume100 === null;
     for (const button of muteButtons) button.disabled = !connected || state.muted === null;
     maximumVolumeSlider.disabled = !connected || state.maximumVolume === null;
@@ -726,7 +726,7 @@
   function renderStation() {
     const status = state.webStatus;
     text("status-name-label", status?.source === "BT" ? "URZĄDZENIE" : "STACJA");
-    text("current-station-name", (status ? status.name : state.station) || "—");
+    text("current-station-name", status?.name || "—");
   }
 
   function renderMetadata() {
@@ -737,7 +737,7 @@
     document.getElementById("bt-artist").hidden = !bt || !status.btConnected;
     document.getElementById("bt-title").hidden = !bt || !status.btConnected;
     document.getElementById("bt-disconnected").hidden = !bt || status.btConnected;
-    text("metadata", (status ? status.metadata : state.metadata) || "—");
+    text("metadata", status?.metadata || "—");
     text("bt-artist", "Artysta: " + (bt && status.btConnected && status.artist ? status.artist : "—"));
     text("bt-title", "Utwór: " + (bt && status.btConnected && status.title ? status.title : "—"));
   }
@@ -750,15 +750,15 @@
       return;
     }
     const parts = [];
-    const codec = status ? status.codec : state.codec;
-    const bitrate = status ? status.bitrate : state.bitrate;
+    const codec = status?.codec;
+    const bitrate = status?.bitrate;
     if (codec) parts.push(codec);
     if (bitrate > 0) parts.push(bitrate + " kb/s");
     text("codec", parts.length ? parts.join(" · ") : "—");
   }
 
   function renderSource() {
-    text("source", (state.webStatus ? state.webStatus.source : state.source) || "—");
+    text("source", state.webStatus?.activeSource?.toUpperCase() || "—");
   }
 
   function renderSourceSelector() {
@@ -776,7 +776,7 @@
       }));
       sourceSelector.dataset.sources = key;
     }
-    const active = status?.source === "WEB" ? "radio" : status?.source?.toLowerCase();
+    const active = status?.activeSource;
     for (const button of sourceSelector.querySelectorAll("button")) {
       const source = button.dataset.source;
       const offline = source === "bt" && status?.btModule?.online !== true;
@@ -793,7 +793,7 @@
 
   function renderPlaying() {
     const status = state.webStatus;
-    const playback = status ? status.playback : state.playing === null ? "" : state.playing ? "PLAY" : "STOP";
+    const playback = status?.playback || "";
     const bt = status?.source === "BT";
     buttons.play.textContent = !playback ? "—" : playback === "PLAY" ? (bt ? "❚❚" : "■") : "▶";
     buttons.play.setAttribute("aria-label", !playback ? "Stan odtwarzania niedostępny" :
@@ -1574,11 +1574,21 @@
     if (advancedAudio.handleWsMessage(message)) return;
     const status = message.webStatus;
     if (status && (status.source === "WEB" || status.source === "BT") &&
-        ["name", "metadata", "artist", "title", "codec", "playback"].every(key => typeof status[key] === "string") &&
+        ["name", "metadata", "artist", "title", "codec", "playback", "activeSource", "transport"]
+          .every(key => typeof status[key] === "string") &&
+        ["radio", "bt"].includes(status.activeSource) &&
+        ["playing", "paused", "stopped", "unavailable"].includes(status.transport) &&
         Number.isInteger(status.bitrate) && Number.isInteger(status.sampleRate) &&
-        typeof status.btConnected === "boolean") {
+        typeof status.btConnected === "boolean" &&
+        Array.isArray(status.availableSources) &&
+        status.btModule && typeof status.btModule.online === "boolean" &&
+        Number.isInteger(status.volume100) && status.volume100 >= 0 && status.volume100 <= 100 &&
+        typeof status.muted === "boolean") {
       state.webStatus = status;
+      state.volume100 = status.volume100;
+      state.muted = status.muted;
       renderStatus();
+      renderVolume();
       renderBtModule();
     }
     const systemInfo = message.systemInfo;
@@ -1700,8 +1710,7 @@
       clearTimeout(volumeAckTimer);
       socket = null;
       state.connection = "disconnected";
-      state.muted = null;
-      renderVolume();
+      resetRuntime();
       advancedAudio.disconnected();
       renderBtModule();
       renderSystemInfo();

@@ -532,6 +532,14 @@ static void formatWebStatus(char* output, size_t capacity) {
   stationMetaDisplay(config.station.title,
                      config.station.metadataMode == STATION_META_SWAP,
                      radioMetadata, sizeof(radioMetadata));
+  const StationMetadataParts radioParts = parseStationMetadata(
+      config.station.title, config.station.metadataMode == STATION_META_SWAP);
+  char radioArtist[BUFLEN + 1]{};
+  char radioTitle[BUFLEN + 1]{};
+  if (radioParts.split) {
+    stationMetaCopy(radioArtist, sizeof(radioArtist), radioParts.artist, radioParts.artistLength);
+    stationMetaCopy(radioTitle, sizeof(radioTitle), radioParts.title, radioParts.titleLength);
+  }
   DisplaySourceView sourceView{};
   sourceView.kind = DisplaySourceKind::Radio;
   sourceView.playback = player.isRunning() ? DisplayPlaybackState::Playing
@@ -548,6 +556,7 @@ static void formatWebStatus(char* output, size_t capacity) {
   sourceView.title = bt.title;
 #endif
   bool btOnline = false;
+  bool btPhoneConnected = false;
   unsigned btProtocol = 0;
   const char* btFirmware = "";
   const char* btName = "";
@@ -555,6 +564,7 @@ static void formatWebStatus(char* output, size_t capacity) {
 #if VOXONE_HAS_BT && VOXONE_PIN_MAP_COMPLETE
   const BtLinkState& link = btLink.state();
   btOnline = link.runtimeAvailable;
+  btPhoneConnected = link.connected;
   if (btOnline) {
     btProtocol = link.protocolVersion;
     btFirmware = link.firmwareVersion;
@@ -563,18 +573,20 @@ static void formatWebStatus(char* output, size_t capacity) {
   }
 #endif
   const WebStatusView status = selectWebStatusView(
-      sourceView, config.station.name, radioMetadata,
+      sourceView, config.station.name, radioMetadata, radioArtist, radioTitle,
       getFormat(config.configFmt), config.station.bitrate);
   size_t used = 0;
   output[0] = '\0';
   if (!appendWebStatusLiteral(output, capacity, used, "{\"webStatus\":{") ||
       !appendWebStatusText(output, capacity, used, "\"source\":\"", status.source) ||
+      !appendWebStatusText(output, capacity, used, ",\"activeSource\":\"", status.activeSource) ||
       !appendWebStatusText(output, capacity, used, ",\"name\":\"", status.name) ||
       !appendWebStatusText(output, capacity, used, ",\"metadata\":\"", status.metadata) ||
       !appendWebStatusText(output, capacity, used, ",\"artist\":\"", status.artist) ||
       !appendWebStatusText(output, capacity, used, ",\"title\":\"", status.title) ||
       !appendWebStatusText(output, capacity, used, ",\"codec\":\"", status.codec) ||
       !appendWebStatusText(output, capacity, used, ",\"playback\":\"", status.playback) ||
+      !appendWebStatusText(output, capacity, used, ",\"transport\":\"", status.transport) ||
       !appendWebStatusLiteral(output, capacity, used, ",\"btModule\":{\"firmware\":\"") ||
       !appendWebStatusText(output, capacity, used, "", btFirmware) ||
       !appendWebStatusText(output, capacity, used, ",\"name\":\"", btName) ||
@@ -583,11 +595,12 @@ static void formatWebStatus(char* output, size_t capacity) {
     return;
   }
   const int tail = snprintf(output + used, capacity - used,
-      ",\"online\":%s,\"protocol\":%u},\"bitrate\":%u,\"sampleRate\":%lu,\"btConnected\":%s,\"availableSources\":[\"radio\"%s]}}",
+      ",\"online\":%s,\"protocol\":%u},\"bitrate\":%u,\"sampleRate\":%lu,\"btConnected\":%s,\"availableSources\":[\"radio\"%s],\"volume100\":%u,\"muted\":%s}}",
       btOnline ? "true" : "false", btProtocol,
       status.bitrate, static_cast<unsigned long>(status.sampleRate),
-      status.btConnected ? "true" : "false",
-      voxone::activeProfile.capabilities.hasBt ? ",\"bt\"" : "");
+      btPhoneConnected ? "true" : "false",
+      voxone::activeProfile.capabilities.hasBt ? ",\"bt\"" : "",
+      config.userVolume, player.isMuted() ? "true" : "false");
   if (tail < 0 || static_cast<size_t>(tail) >= capacity - used) output[0] = '\0';
 }
 

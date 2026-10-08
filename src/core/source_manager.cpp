@@ -188,7 +188,7 @@ void sourceManagerLoop() {
 #endif
   refreshDisplay(update);
   if (update.activeChanged || update.stationChanged || update.titleChanged ||
-      update.audioInfoChanged)
+      update.audioInfoChanged || update.btConnected || update.btDisconnected)
     netserver.requestOnChange(WEBSTATUS, 0);
 }
 
