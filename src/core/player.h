@@ -51,12 +51,10 @@ class Player: public Audio {
   public:
     bool lockOutput = true;
     volatile bool connproc = true;
-    uint32_t sd_min, sd_max;
   public:
     Player();
     void init();
     void loop();
-    void initHeaders(const char *file);
     void setError();
     void setError(const char *e);
     //bool hasError() { return strlen(_plError)>0; }

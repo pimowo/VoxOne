@@ -6,9 +6,6 @@
  *      Author: Wolle (schreibfaul1)
  */
 
-//#define SDFATFS_USED  // activate for SdFat
-
-
 #pragma once
 #pragma GCC optimize ("Ofast")
 #include <vector>
@@ -16,7 +13,6 @@
 #include <libb64/cencode.h>
 #include <esp32-hal-log.h>
 
-#include <SPI.h>
 #include <WiFi.h>
 #include <WiFiClientSecure.h>
 #include <vector>
@@ -26,50 +22,9 @@
 #include <driver/i2s.h>
 #pragma GCC diagnostic pop
 
-#ifdef SDFATFS_USED
-#include <SdFat.h>  // https://github.com/greiman/SdFat
-#else
-#include <SD.h>
-#include <SD_MMC.h>
-#include <SPIFFS.h>
-#include <FS.h>
-#include <FFat.h>
-#endif // SDFATFS_USED
-
 #if ESP_ARDUINO_VERSION >= ESP_ARDUINO_VERSION_VAL(3, 0, 0)
 #include "hal/gpio_ll.h"
 #endif
-#ifdef SDFATFS_USED
-//typedef File32 File;
-typedef FsFile File;
-
-namespace fs {
-    class FS : public SdFat {
-    public:
-        bool begin(SdCsPin_t csPin = SS, uint32_t maxSck = SD_SCK_MHZ(25)) { return SdFat::begin(csPin, maxSck); }
-    };
-
-    class SDFATFS : public fs::FS {
-    public:
-        // sdcard_type_t cardType();
-        uint64_t cardSize() {
-            return totalBytes();
-        }
-        uint64_t usedBytes() {
-            // set SdFatConfig MAINTAIN_FREE_CLUSTER_COUNT non-zero. Then only the first call will take time.
-            return (uint64_t)(clusterCount() - freeClusterCount()) * (uint64_t)bytesPerCluster();
-        }
-        uint64_t totalBytes() {
-            return (uint64_t)clusterCount() * (uint64_t)bytesPerCluster();
-        }
-    };
-}
-
-extern fs::SDFATFS SD_SDFAT;
-
-using namespace fs;
-#define SD SD_SDFAT
-#endif //SDFATFS_USED
 
 using namespace std;
 
@@ -79,9 +34,6 @@ extern __attribute__((weak)) void audio_id3data(const char*); //ID3 metadata
 extern __attribute__((weak)) void audio_id3artist(const char*);
 extern __attribute__((weak)) void audio_id3album(const char*);
 extern __attribute__((weak)) void audio_id3title(const char*);
-extern __attribute__((weak)) void audio_beginSDread();
-extern __attribute__((weak)) void audio_id3image(File& file, const size_t pos, const size_t size); //ID3 metadata image
-extern __attribute__((weak)) void audio_eof_mp3(const char*); //end of mp3 file
 extern __attribute__((weak)) void audio_showstreamtitle(const char*);
 extern __attribute__((weak)) void audio_showstation(const char*);
 extern __attribute__((weak)) void audio_bitrate(const char*);
@@ -92,7 +44,6 @@ extern __attribute__((weak)) void audio_lasthost(const char*);
 extern __attribute__((weak)) void audio_eof_speech(const char*);
 extern __attribute__((weak)) void audio_eof_stream(const char*); // The webstream comes to an end
 extern __attribute__((weak)) void audio_process_extern(int16_t* buff, uint16_t len, bool *continueI2S); // record audiodata or send via BT
-extern __attribute__((weak)) void audio_progress(uint32_t startpos, uint32_t endpos);
 extern __attribute__((weak)) void audio_error(const char*);
 
 #define AUDIO_INFO(...) {char buff[512 + 64]; snprintf(buff, sizeof(buff),__VA_ARGS__); if(audio_info) audio_info(buff);}
@@ -180,14 +131,7 @@ public:
     bool connecttohost(const char* host, const char* user = "", const char* pwd = "");
     bool connecttospeech(const char* speech, const char* lang);
     bool connecttomarytts(const char* speech, const char* lang, const char* voice);
-    bool connecttoFS(fs::FS &fs, const char* path, uint32_t resumeFilePos = 0);
-    bool connecttoSD(const char* path, uint32_t resumeFilePos = 0);
-    bool setFileLoop(bool input);//TEST loop
     void setConnectionTimeout(uint16_t timeout_ms, uint16_t timeout_ms_ssl);
-    bool setAudioPlayPosition(uint16_t sec);
-    bool setFilePos(uint32_t pos);
-    bool audioFileSeek(const float speed);
-    bool setTimeOffset(int sec);
     bool setPinout(uint8_t BCLK, uint8_t LRC, uint8_t DOUT, int8_t DIN = I2S_PIN_NO_CHANGE, int8_t MCK = I2S_PIN_NO_CHANGE);
     bool pauseResume();
     bool isRunning() {return m_f_running;}
@@ -199,14 +143,10 @@ public:
     uint8_t getVolume();
     uint8_t getI2sPort();
 
-    uint32_t getAudioDataStartPos();
-    uint32_t getFileSize();
-    uint32_t getFilePos();
     uint32_t getSampleRate();
     uint8_t  getBitsPerSample();
     uint8_t  getChannels();
     uint32_t getBitRate(bool avg = false);
-    uint32_t getAudioFileDuration();
     uint32_t getAudioCurrentTime();
     uint32_t getTotalPlayingTime();
 
@@ -232,12 +172,10 @@ private:
         #define ESP_ARDUINO_VERSION_PATCH 0
     #endif
 
-    void UTF8toASCII(char* str);
     bool latinToUTF8(char* buff, size_t bufflen);
     //void setDefaults(); // free buffers and set defaults
     void initInBuff();
     bool httpPrint(const char* host);
-    void processLocalFile();
     void processWebStream();
     void processWebFile();
     void processWebStreamTS();
@@ -447,7 +385,7 @@ private:
     enum : int { APLL_AUTO = -1, APLL_ENABLE = 1, APLL_DISABLE = 0 };
     enum : int { EXTERNAL_I2S = 0, INTERNAL_DAC = 1, INTERNAL_PDM = 2 };
     enum : int { FORMAT_NONE = 0, FORMAT_M3U = 1, FORMAT_PLS = 2, FORMAT_ASX = 3, FORMAT_M3U8 = 4};
-    enum : int { AUDIO_NONE, HTTP_RESPONSE_HEADER, AUDIO_DATA, AUDIO_LOCALFILE,
+    enum : int { AUDIO_NONE, HTTP_RESPONSE_HEADER, AUDIO_DATA,
                  AUDIO_PLAYLISTINIT, AUDIO_PLAYLISTHEADER,  AUDIO_PLAYLISTDATA};
     enum : int { FLAC_BEGIN = 0, FLAC_MAGIC = 1, FLAC_MBH =2, FLAC_SINFO = 3, FLAC_PADDING = 4, FLAC_APP = 5,
                  FLAC_SEEK = 6, FLAC_VORBIS = 7, FLAC_CUESHEET = 8, FLAC_PICTURE = 9, FLAC_OKAY = 100};
@@ -476,7 +414,6 @@ private:
         int pids[4];
     } pid_array;
 
-    File                  audiofile;    // @suppress("Abstract class cannot be instantiated")
     WiFiClient            client;       // @suppress("Abstract class cannot be instantiated")
     WiFiClientSecure      clientsecure; // @suppress("Abstract class cannot be instantiated")
     WiFiClient*           _client = nullptr;
@@ -548,19 +485,17 @@ private:
     uint32_t        m_contentlength = 0;            // Stores the length if the stream comes from fileserver
     uint32_t        m_bytesNotDecoded = 0;          // pictures or something else that comes with the stream
     uint32_t        m_PlayingStartTime = 0;         // Stores the milliseconds after the start of the audio
-    uint32_t        m_resumeFilePos = 0;            // the return value from stopSong() can be entered here
     uint16_t        m_m3u8_targetDuration = 10;     //
     bool            m_f_metadata = false;           // assume stream without metadata
     bool            m_f_unsync = false;             // set within ID3 tag but not used
     bool            m_f_exthdr = false;             // ID3 extended header
     bool            m_f_ssl = false;
     bool            m_f_running = false;
-    bool            m_f_firstCall = false;          // InitSequence for processWebstream and processLokalFile
+    bool            m_f_firstCall = false;          // InitSequence for web stream processing
     bool            m_f_chunked = false ;           // Station provides chunked transfer
     bool            m_f_firstmetabyte = false;      // True if first metabyte (counter)
     bool            m_f_playing = false;            // valid mp3 stream recognized
     bool            m_f_tts = false;                // text to speech
-    bool            m_f_loop = false;               // Set if audio file should loop
     bool            m_f_forceMono = false;          // if true stereo -> mono
     bool            m_f_internalDAC = false;        // false: output vis I2S, true output via internal DAC
     bool            m_f_rtsp = false;               // set if RTSP is used (m3u8 stream)
@@ -569,13 +504,11 @@ private:
     bool            m_f_continue = false;           // next m3u8 chunk is available
     bool            m_f_ts = true;                  // transport stream
     uint8_t         m_f_channelEnabled = 3;         // internal DAC, both channels
-    uint32_t        m_audioFileDuration = 0;
     float           m_audioCurrentTime = 0;
     uint32_t        m_audioDataStart = 0;           // in bytes
     size_t          m_audioDataSize = 0;            //
     float           m_filterBuff[3][2][2][2];       // IIR filters memory for Audio DSP
     size_t          m_i2s_bytesWritten = 0;         // set in i2s_write() but not used
-    size_t          m_file_size = 0;                // size of the file
     uint16_t        m_filterFrequency[2];
     int8_t          m_gain0 = 0;                    // cut or boost filters (EQ)
     int8_t          m_gain1 = 0;

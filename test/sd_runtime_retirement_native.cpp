@@ -95,8 +95,7 @@ int main() {
   hasAll(playlistStore, {"PlaylistStore::", "PLAYLIST_PATH", "INDEX_PATH"});
   hasAll(server, {"/api/stations/import", "/api/stations/export"});
 
-  // The generic local-file backend is deliberately retained for 2G.2C.
-  hasAll(audio, {"Audio::connecttoFS", "Audio::connecttoSD", "AUDIO_LOCALFILE"});
-  hasAll(audioHeader, {"connecttoFS", "connecttoSD", "AUDIO_LOCALFILE",
-                       "<SD.h>", "<SD_MMC.h>"});
+  hasNone(audio, {"Audio::connecttoFS", "Audio::connecttoSD", "AUDIO_LOCALFILE"});
+  hasNone(audioHeader, {"connecttoFS", "connecttoSD", "AUDIO_LOCALFILE",
+                        "<SD.h>", "<SD_MMC.h>"});
 }

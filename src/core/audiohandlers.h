@@ -89,17 +89,9 @@ void audio_id3title(const char *info){
   audio_id3album(info);
 }
 
-void audio_beginSDread(){
-  config.setTitle("");
-}
-
 void audio_id3data(const char *info){  //id3 metadata
     if(player.lockOutput) return;
     serialCli.printf("##AUDIO.ID3#: %s\n", info);
-}
-
-void audio_eof_mp3(const char *info){  //end of file
-  if (player.temporaryEof()) return;
 }
 
 void audio_eof_stream(const char *info){
@@ -109,11 +101,6 @@ void audio_eof_stream(const char *info){
 
 void audio_eof_speech(const char *info){
   player.temporaryEof();
-}
-
-void audio_progress(uint32_t startpos, uint32_t endpos){
-  player.sd_min = startpos;
-  player.sd_max = endpos;
 }
 
 #endif

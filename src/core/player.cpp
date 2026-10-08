@@ -3,7 +3,6 @@
 #include "config.h"
 #include "serialcli.h"
 #include "display.h"
-#include "sdmanager.h"
 #include "netserver.h"
 #include "timekeeper.h"
 #include "volume_map.h"
@@ -115,13 +114,6 @@ void Player::_stop(bool alreadyStopped, RadioStopReason reason){
   pm.on_stop_play();
 }
 
-void Player::initHeaders(const char *file) {
-  if(strlen(file)==0 || true) return; //TODO Read TAGs
-  connecttoFS(sdman,file);
-  eofHeader = false;
-  while(!eofHeader) Audio::loop();
-  setDefaults();
-}
 void resetPlayer(){
   if(!config.store.watchdog) return;
   player.resetQueue();
