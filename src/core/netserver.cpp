@@ -2155,7 +2155,7 @@ void handleNotFound(AsyncWebServerRequest * request) {
     request->send(response);
     return;
   }
-  if(request->method() == HTTP_POST && request->url()=="/webboard" && config.emptyFS) { request->redirect("/"); ESP.restart(); return; }
+  if(request->method() == HTTP_POST && request->url()=="/webboard" && !config.currentWwwReady) { request->redirect("/"); ESP.restart(); return; }
   if (request->method() == HTTP_GET) {
     DBGVB("[%s] client ip=%s request of %s", __func__, config.ipToStr(request->client()->remoteIP()), request->url().c_str());
     if (strcmp(request->url().c_str(), PLAYLIST_PATH) == 0 || 
@@ -2214,7 +2214,7 @@ void handleNotFound(AsyncWebServerRequest * request) {
     return;
   }
   if (request->url() == "/variables.js") {
-    sprintf (netserver.nsBuf, "var voxOneVersion='%s';\nvar yoRadioVersion='%s';\nvar yoVersion=voxOneVersion;\nvar voxOneProfile='%s';\nvar formAction='%s';\nvar playMode='%s';\n", VOXONE_VERSION, YOVERSION, VOXONE_PROFILE_NAME, (network.status == CONNECTED && !config.emptyFS)?"webboard":"", (network.status == CONNECTED)?"player":"ap");
+    sprintf (netserver.nsBuf, "var voxOneVersion='%s';\nvar yoRadioVersion='%s';\nvar yoVersion=voxOneVersion;\nvar voxOneProfile='%s';\nvar formAction='%s';\nvar playMode='%s';\n", VOXONE_VERSION, YOVERSION, VOXONE_PROFILE_NAME, (network.status == CONNECTED && config.currentWwwReady)?"webboard":"", (network.status == CONNECTED)?"player":"ap");
     request->send(200, "text/html", netserver.nsBuf);
     return;
   }
@@ -2261,12 +2261,12 @@ void handleIndex(AsyncWebServerRequest * request) {
       return;
     }
   }
-  if(config.emptyFS){
+  if(!config.currentWwwReady){
     Serial.print("Not Found: ");
     Serial.println(request->url());
     request->send(404, "text/plain", "Not found");
     return;
-  } // end if(config.emptyFS)
+  } // end if(!config.currentWwwReady)
 #if defined(HTTP_USER) && defined(HTTP_PASS)
   if(network.status == CONNECTED)
     if (!request->authenticate(HTTP_USER, HTTP_PASS)) {

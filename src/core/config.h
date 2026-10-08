@@ -154,7 +154,9 @@ class Config {
     neworkItem ssids[5];
     uint8_t ssidsCount;
     uint16_t sleepfor;
-    bool     emptyFS;
+    bool     spiffsMounted;
+    bool     currentWwwReady;
+    bool     radioPlaylistReady;
     uint16_t vuThreshold;
     uint16_t screensaverTicks;
     uint16_t screensaverPlayingTicks;
@@ -278,7 +280,8 @@ class Config {
     void _normalizeProductConfig();
     void _normalizeAudioConfig();
     void _initHW();
-    bool _isFSempty();
+    void _removeObsoleteWwwFiles();
+    bool _hasCurrentWwwAssets();
 };
 
 extern Config config;

@@ -19,6 +19,7 @@
 #include "volume_map.h"
 #include "mqtt_config.h"
 #include "ui_timeout_config.h"
+#include "www_readiness.h"
 #include "ap_wifi_recovery.h"
 #include "../displays/tools/l10n.h"
 #include <cstddef>
@@ -83,24 +84,18 @@ void u8fix(char *src){
   if ((uint8_t)last >= 0xC2) src[strlen(src)-1]='\0';
 }
 
-bool Config::_isFSempty() {
-  const char* reqiredFiles[] = {"dragpl.js.gz","logo.svg.gz","options.html.gz","player.html.gz","script.js.gz",
-                                "style.css.gz","updform.html.gz","theme.css"};
-  const uint8_t reqiredFilesSize = 8;
-  char fullpath[28];
+void Config::_removeObsoleteWwwFiles() {
   if(SPIFFS.exists("/www/settings.html")) SPIFFS.remove("/www/settings.html");
   if(SPIFFS.exists("/www/update.html")) SPIFFS.remove("/www/update.html");
   if(SPIFFS.exists("/www/index.html")) SPIFFS.remove("/www/index.html");
   if(SPIFFS.exists("/www/elogo.png")) SPIFFS.remove("/www/elogo.png");
   if(SPIFFS.exists("/www/elogo84.png")) SPIFFS.remove("/www/elogo84.png");
-  for (uint8_t i=0; i<reqiredFilesSize; i++){
-    sprintf(fullpath, "/www/%s", reqiredFiles[i]);
-    if(!SPIFFS.exists(fullpath)) {
-      Serial.println(fullpath);
-      return true;
-    }
-  }
-  return false;
+}
+
+bool Config::_hasCurrentWwwAssets() {
+  return voxone::currentWwwAssetsReady([](const char* path) {
+    return SPIFFS.exists(path);
+  });
 }
 
 void Config::init() {
@@ -124,7 +119,9 @@ void Config::init() {
     BOOTLOG("[ERROR] - Couldn't find RTC");
   }
 #endif
-  emptyFS = true;
+  spiffsMounted = false;
+  currentWwwReady = false;
+  radioPlaylistReady = false;
   uint8_t configArea[EEPROM_SIZE - EEPROM_START]{};
   if (eepromReady) {
     for (size_t i = 0; i < sizeof(configArea); ++i)
@@ -165,12 +162,15 @@ void Config::init() {
     Serial.println("##[ERROR]#\tSPIFFS Mount Failed");
     return;
   }
+  spiffsMounted = true;
   BOOTLOG("SPIFFS mounted");
   if (!restoreWebUpdateData()) Serial.println("##[ERROR]# Web Update data restore incomplete");
-  if (!playlistStore.begin() || !playlistStore.recover())
+  radioPlaylistReady = playlistStore.begin() && playlistStore.recover();
+  if (!radioPlaylistReady)
     Serial.println("##[ERROR]# Playlist recovery incomplete");
-  emptyFS = _isFSempty();
-  if(emptyFS) BOOTLOG("SPIFFS is empty!");
+  _removeObsoleteWwwFiles();
+  currentWwwReady = _hasCurrentWwwAssets();
+  if (!currentWwwReady) BOOTLOG("Current VoxOne WWW assets are incomplete!");
   ssidsCount = 0;
   setTimeConf();
 }
@@ -224,7 +224,8 @@ void Config::configPostPlaying(){
 }
 void Config::initRadioPlaylist(){
   uint16_t _lastStation = 0;
-  if(!emptyFS) initPlaylist();
+  if (voxone::radioPlaylistShouldInitialize(spiffsMounted, radioPlaylistReady))
+    initPlaylist();
   uint16_t cs = playlistLength();
   _lastStation = store.lastStation;
   if (cs==0) _lastStation=0;
