@@ -1,6 +1,8 @@
 #ifndef AUDIOHANDLERS_H
 #define AUDIOHANDLERS_H
 
+#include "audio_info_bitrate.h"
+
 //=============================================//
 //              Audio handlers                 //
 //=============================================//
@@ -17,10 +19,11 @@ void audio_info(const char *info) {
     player.setError(info);
     
   }
-  char* ici; char b[20]={0};
-  if ((ici = strstr(info, "BitRate: ")) != NULL) {
-    strlcpy(b, ici + 9, 50);
-    audio_bitrate(b);
+  uint32_t bitrate;
+  if (parseAudioInfoBitrate(info, bitrate)) {
+    char bitrateText[11];
+    snprintf(bitrateText, sizeof(bitrateText), "%lu", static_cast<unsigned long>(bitrate));
+    audio_bitrate(bitrateText);
   }
 }
 
