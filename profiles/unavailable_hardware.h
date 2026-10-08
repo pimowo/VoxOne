@@ -69,13 +69,6 @@
 #ifndef RTC_SCL
 #define RTC_SCL 255
 #endif
-#define NEXTION_RX 255
-#define NEXTION_TX 255
-
-#define ENC2_BTNL 255
-#define ENC2_BTNB 255
-#define ENC2_BTNR 255
-
 #define BTN_LEFT 255
 #define BTN_CENTER 255
 #define BTN_RIGHT 255

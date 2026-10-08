@@ -62,13 +62,6 @@ The connection tables are located here https://github.com/e2002/yoradio#connecti
 #ifndef FULL_SCR_CLOCK
   #define FULL_SCR_CLOCK     true
 #endif
-/*        NEXTION                 */
-#ifndef NEXTION_RX
-  #define NEXTION_RX    255
-#endif
-#ifndef NEXTION_TX
-  #define NEXTION_TX    255
-#endif
 /*        OLED I2C DISPLAY        */
 #ifndef I2C_SDA
   #define I2C_SDA 21
@@ -125,22 +118,6 @@ The connection tables are located here https://github.com/e2002/yoradio#connecti
   #define ENC_HALFQUARD         false
 #endif
 
-#ifndef ENC2_BTNL
-  #define ENC2_BTNL              255
-#endif
-#ifndef ENC2_BTNB
-  #define ENC2_BTNB              255
-#endif
-#ifndef ENC2_BTNR
-  #define ENC2_BTNR              255
-#endif
-#ifndef ENC2_INTERNALPULLUP
-  #define ENC2_INTERNALPULLUP    true
-#endif
-#ifndef ENC2_HALFQUARD
-  #define ENC2_HALFQUARD         false
-#endif
-
 /*        BUTTONS                 */
 #ifndef BTN_LEFT
   #define BTN_LEFT              255
@@ -171,26 +148,6 @@ The connection tables are located here https://github.com/e2002/yoradio#connecti
 #endif
 #ifndef BTN_PRESS_TICKS
   #define BTN_PRESS_TICKS    500
-#endif
-
-/*        LCD DISPLAY            */
-#ifndef LCD_RS
-  #define LCD_RS                255
-#endif
-#ifndef LCD_E
-  #define LCD_E                 255
-#endif
-#ifndef LCD_D4
-  #define LCD_D4                255
-#endif
-#ifndef LCD_D5
-  #define LCD_D5                255
-#endif
-#ifndef LCD_D6
-  #define LCD_D6                255
-#endif
-#ifndef LCD_D7
-  #define LCD_D7                255
 #endif
 
 /*        RTC                     */
@@ -251,7 +208,7 @@ The connection tables are located here https://github.com/e2002/yoradio#connecti
   #define ROTATE_90         false  // Optional 90 degree rotation for square displays
 #endif
 #ifndef WAKE_PIN
-  #define WAKE_PIN      255   // Wake Pin (for manual wakeup from sleep mode. can match with BTN_XXXX, ENC_BTNB, ENC2_BTNB.  must be one of: 0,2,4,12,13,14,15,25,26,27,32,33,34,35,36,39)
+  #define WAKE_PIN      255   // Wake Pin (for manual wakeup from sleep mode. can match with BTN_XXXX or ENC_BTNB. must be one of: 0,2,4,12,13,14,15,25,26,27,32,33,34,35,36,39)
 #endif
 #ifndef LIGHT_SENSOR
   #define LIGHT_SENSOR  255   // Light sensor
