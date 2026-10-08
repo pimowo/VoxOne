@@ -131,6 +131,15 @@ void stopOnSourceChange(const SourceUpdate& update, bool temporaryAtChange) {
       player.sendCommand({PR_RADIO_RESUME, resumeStation});
   }
 }
+
+void applyManualSourceChange(const SourceUpdate& update, ActiveSource active,
+                             bool temporaryAtChange) {
+  if (!update.activeChanged) return;
+  stopOnSourceChange(update, temporaryAtChange);
+  serialCli.printf("##[SOURCE]# active=%s reason=manual\n", sourceName(active));
+  refreshDisplay(update);
+  netserver.requestOnChange(WEBSTATUS, 0);
+}
 }  // namespace
 
 void sourceManagerBegin() {
@@ -299,11 +308,17 @@ void cycleNextSource() {
   const ActiveSource active = sourceState.active();
   const bool temporaryAtChange = player.temporaryBusy();
   portEXIT_CRITICAL(&sourceMux);
-  if (!update.activeChanged) return;
-  stopOnSourceChange(update, temporaryAtChange);
-  serialCli.printf("##[SOURCE]# active=%s reason=manual\n", sourceName(active));
-  refreshDisplay(update);
-  netserver.requestOnChange(WEBSTATUS, 0);
+  applyManualSourceChange(update, active, temporaryAtChange);
+}
+
+bool sourceManagerSelectSource(ActiveSource source) {
+  portENTER_CRITICAL(&sourceMux);
+  const SourceUpdate update = sourceState.select(source, btLink.state());
+  const ActiveSource active = sourceState.active();
+  const bool temporaryAtChange = player.temporaryBusy();
+  portEXIT_CRITICAL(&sourceMux);
+  applyManualSourceChange(update, active, temporaryAtChange);
+  return update.activeChanged;
 }
 
 void sourceManagerWebSnapshot(SourceWebSnapshot& snapshot) {
@@ -337,4 +352,6 @@ bool getDisplaySourceView(DisplaySourceView& view) {
   return true;
 }
 
+#else
+bool sourceManagerSelectSource(ActiveSource) { return false; }
 #endif

@@ -583,10 +583,11 @@ static void formatWebStatus(char* output, size_t capacity) {
     return;
   }
   const int tail = snprintf(output + used, capacity - used,
-      ",\"online\":%s,\"protocol\":%u},\"bitrate\":%u,\"sampleRate\":%lu,\"btConnected\":%s}}",
+      ",\"online\":%s,\"protocol\":%u},\"bitrate\":%u,\"sampleRate\":%lu,\"btConnected\":%s,\"availableSources\":[\"radio\"%s]}}",
       btOnline ? "true" : "false", btProtocol,
       status.bitrate, static_cast<unsigned long>(status.sampleRate),
-      status.btConnected ? "true" : "false");
+      status.btConnected ? "true" : "false",
+      voxone::activeProfile.capabilities.hasBt ? ",\"bt\"" : "");
   if (tail < 0 || static_cast<size_t>(tail) >= capacity - used) output[0] = '\0';
 }
 

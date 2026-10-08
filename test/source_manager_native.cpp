@@ -14,6 +14,24 @@ int main() {
   // A: boot starts on radio.
   assert(sources.active() == ActiveSource::Radio);
   assert(!sources.bluetoothPhysicallyConnected());
+  // Explicit WWW selection is idempotent and cannot select an offline module.
+  SourceManagerState web;
+  BtLinkState webBt{};
+  assert(!web.select(ActiveSource::Bluetooth, webBt).activeChanged);
+  webBt.runtimeAvailable = true;
+  SourceUpdate webUpdate = web.select(ActiveSource::Bluetooth, webBt);
+  assert(webUpdate.activeChanged && webUpdate.reason == SourceChangeReason::Manual);
+  assert(web.active() == ActiveSource::Bluetooth);
+  assert(!web.select(ActiveSource::Bluetooth, webBt).activeChanged);
+  webUpdate = web.select(ActiveSource::Radio, webBt);
+  assert(webUpdate.activeChanged && webUpdate.reason == SourceChangeReason::Manual);
+  assert(web.active() == ActiveSource::Radio);
+  assert(!web.select(ActiveSource::Radio, webBt).activeChanged);
+  webBt.connected = true;
+  assert(web.observe(webBt).reason == SourceChangeReason::BtConnect);
+  assert(web.select(ActiveSource::Radio, webBt).reason == SourceChangeReason::Manual);
+  for (int i = 0; i < 10; ++i)
+    assert(!web.observe(webBt).activeChanged && web.active() == ActiveSource::Radio);
   sources.displayView(view);
   assert(view.kind == DisplaySourceKind::Radio);
   assert(std::strcmp(displaySourceLabel(view.kind), "WEB") == 0);

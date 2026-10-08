@@ -203,11 +203,11 @@ int main() {
   manual.radio(true);
   manual.bt.runtimeAvailable = true;
   auto token = manual.temporary.begin();
-  manual.source.cycle(manual.bt);
+  manual.source.select(ActiveSource::Bluetooth, manual.bt);
   manual.end(token);
   assert(manual.source.active() == ActiveSource::Bluetooth && manual.resumes == 0);
   token = manual.temporary.begin();
-  manual.source.cycle(manual.bt);
+  manual.source.select(ActiveSource::Radio, manual.bt);
   manual.end(token);
   assert(manual.source.active() == ActiveSource::Radio && manual.resumes == 1);
 

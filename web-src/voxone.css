@@ -47,6 +47,7 @@ footer{color:var(--muted);font-size:12px;text-align:center;border-top:1px solid 
 @media(max-width:420px){.mqtt-form-grid{grid-template-columns:minmax(0,1fr) 96px;gap:10px}.mqtt-root-choice{gap:8px 12px;padding-inline:9px}.mqtt-root-choice label{font-size:13px}.mqtt-effective{align-items:flex-start;flex-direction:column}.ha-card .hint{overflow-wrap:anywhere}}
 .badge[data-state=disconnected]{color:var(--muted)}
 .transport button.is-pending{border-color:var(--cyan);box-shadow:0 0 0 2px var(--cyan-dark)}
+.source-selector{display:flex;flex-wrap:wrap;gap:8px;margin-top:16px}.source-selector button{min-width:78px;padding:8px 12px;font-size:13px}.source-selector button[aria-pressed=true]{color:var(--cyan);background:var(--cyan-dark);border-color:var(--cyan)}
 .volume-slider{display:block;width:100%;min-height:44px;margin:10px 0 0;accent-color:var(--cyan);cursor:pointer}
 .volume-slider:disabled{cursor:not-allowed;opacity:.5}
 .volume-row{display:flex;align-items:center;gap:10px;min-width:0}.volume-row .volume-slider{flex:1;min-width:0}.mute-button{flex:none;min-width:76px}.mute-button[aria-pressed=true]{color:var(--cyan);background:var(--cyan-dark);border-color:var(--cyan)}

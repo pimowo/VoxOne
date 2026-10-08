@@ -11,6 +11,8 @@ void sourceManagerRadioStopConsumed();
 bool sourceManagerRadioResumeAllowed();
 bool sourceManagerRadioPlayIntent();
 class TemporaryAudioState;
+enum class ActiveSource : uint8_t;
+bool sourceManagerSelectSource(ActiveSource source);
 bool sourceManagerTakeTemporaryRestore(TemporaryAudioState& temporary,
                                       bool networkReady, bool blocked,
                                       uint16_t& station);

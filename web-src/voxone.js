@@ -30,6 +30,7 @@
     play: document.getElementById("play-button"),
     next: document.getElementById("next-button")
   };
+  const sourceSelector = document.getElementById("source-selector");
   const volumeSliders = [
     document.getElementById("volume-slider"),
     document.getElementById("audio-volume-slider")
@@ -694,6 +695,7 @@
       disconnected: "Rozłączono"
     }[state.connection];
     const connected = state.connection === "connected";
+    renderSourceSelector();
     const btDisconnected = state.webStatus?.source === "BT" && !state.webStatus.btConnected;
     buttons.prev.disabled = !connected || btDisconnected;
     buttons.next.disabled = !connected || btDisconnected;
@@ -757,6 +759,32 @@
 
   function renderSource() {
     text("source", (state.webStatus ? state.webStatus.source : state.source) || "—");
+  }
+
+  function renderSourceSelector() {
+    const status = state.webStatus;
+    const sources = Array.isArray(status?.availableSources) ? status.availableSources : [];
+    const ids = sources.filter(source => typeof source === "string");
+    const key = ids.join(",");
+    if (sourceSelector.dataset.sources !== key) {
+      sourceSelector.replaceChildren(...ids.map(source => {
+        const button = document.createElement("button");
+        button.type = "button";
+        button.dataset.source = source;
+        button.textContent = source.toUpperCase();
+        return button;
+      }));
+      sourceSelector.dataset.sources = key;
+    }
+    const active = status?.source === "WEB" ? "radio" : status?.source?.toLowerCase();
+    for (const button of sourceSelector.querySelectorAll("button")) {
+      const source = button.dataset.source;
+      const offline = source === "bt" && status?.btModule?.online !== true;
+      button.textContent = offline ? "BT · offline" : source.toUpperCase();
+      button.setAttribute("aria-pressed", source === active ? "true" : "false");
+      button.disabled = state.connection !== "connected" || !status ||
+        source === active || offline;
+    }
   }
 
   function renderRssi() {
@@ -1705,6 +1733,10 @@
   });
   buttons.next.addEventListener("click", () => {
     if (send("webtransport", "next")) flashButton(buttons.next);
+  });
+  sourceSelector.addEventListener("click", event => {
+    const button = event.target.closest("button[data-source]");
+    if (button && !button.disabled) send("source", button.dataset.source);
   });
 
   myStationsTab.addEventListener("click", () => showStationView(false));

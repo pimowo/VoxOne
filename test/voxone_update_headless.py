@@ -101,6 +101,31 @@ setTimeout(() => {
     btTestSocket.receiveVolume(27, true);
     check(muteButtons[0].getAttribute('aria-pressed') === 'true', 'external mute update');
     check(!btTestSocket.sent.some(item => /^(stop|webtransport|source)=/.test(item)), 'mute does not stop or switch source');
+    const sourceSnapshot = (source, availableSources, online) => ({
+      source, availableSources, name:'Radio', metadata:'', artist:'', title:'',
+      codec:'MP3', playback:'PLAY', bitrate:128, sampleRate:0,
+      btConnected:false, btModule:{online, firmware:'', protocol:0, name:'', capabilities:''}
+    });
+    const selector = get('source-selector');
+    check(selector.querySelectorAll('button').length === 0, 'source waits for snapshot');
+    btTestSocket.receive(sourceSnapshot('WEB', ['radio','bt'], true));
+    const sourceButton = source => selector.querySelector('button[data-source="' + source + '"]');
+    check(sourceButton('radio').getAttribute('aria-pressed') === 'true', 'RADIO active');
+    check(!sourceButton('bt').disabled, 'BT available without phone connection');
+    sourceButton('bt').click();
+    check(btTestSocket.sent.at(-1) === 'source=bt', 'manual BT command');
+    check(sourceButton('radio').getAttribute('aria-pressed') === 'true', 'selection waits for device');
+    btTestSocket.receive(sourceSnapshot('BT', ['radio','bt'], true));
+    check(sourceButton('bt').getAttribute('aria-pressed') === 'true', 'BT active from device');
+    sourceButton('radio').click();
+    check(btTestSocket.sent.at(-1) === 'source=radio', 'manual RADIO command');
+    btTestSocket.receive(sourceSnapshot('WEB', ['radio','bt'], true));
+    check(sourceButton('radio').getAttribute('aria-pressed') === 'true', 'RADIO active from device');
+    btTestSocket.receive(sourceSnapshot('WEB', ['radio','bt'], false));
+    check(sourceButton('bt').disabled && sourceButton('bt').textContent.includes('offline'), 'BT offline shown');
+    btTestSocket.receive(sourceSnapshot('WEB', ['radio'], false));
+    check(selector.querySelectorAll('button').length === 1 && !sourceButton('bt'), 'target without BT');
+    check(!btTestSocket.sent.some(item => /^(webtransport|stop)=/.test(item)), 'source selection sends no transport');
     const icon = document.querySelector('link[rel="icon"]');
     const logo = document.querySelector('header img[src*="voxone-logo.svg"]');
     check(icon?.type === 'image/svg+xml' && !!logo, 'VoxOne SVG favicon and header logo');
@@ -121,7 +146,7 @@ setTimeout(() => {
     location.hash = '#update';
     window.dispatchEvent(new Event('hashchange'));
     check(btTestSocket.sent.some(item => item.includes('getwebstatus')), 'status request');
-    const status = {source:'BT', name:'Telefon', metadata:'', artist:'', title:'',
+    const status = {source:'BT', availableSources:['radio','bt'], name:'Telefon', metadata:'', artist:'', title:'',
       codec:'', playback:'STOP', bitrate:0, sampleRate:44100, btConnected:false,
       btModule:{online:true, firmware:'0.6.1-dev', protocol:2,
                 name:'VoxOneBT-EFF35A', capabilities:'AVRCP,VU'}};
@@ -178,6 +203,8 @@ setTimeout(() => {
     check(get('system-psram').textContent === '8.0 MB total / 4.0 MB free', 'PSRAM');
     check(get('system-capabilities').textContent.includes('RTC'), 'system capabilities');
     btTestSocket.close();
+    check(selector.querySelectorAll('button').length === 2 &&
+      [...selector.querySelectorAll('button')].every(button => button.disabled), 'source disabled on disconnect');
     check(muteButtons.every(button => button.disabled && button.getAttribute('aria-pressed') === 'false'), 'disconnect clears mute state');
     check(get('footer-connection').textContent === 'Rozłączono', 'footer WebSocket disconnected');
     check(get('footer-details').textContent === 'VoxOne 0.2.0 · SALON', 'offline footer hides stale IP');
@@ -200,6 +227,10 @@ setTimeout(() => {
       try {
         check(btTestSocket.readyState === MockWebSocket.OPEN, 'WebSocket reconnected');
         check(muteButtons.every(button => button.disabled), 'reconnect waits for snapshot');
+        check(selector.querySelectorAll('button').length === 0, 'source reconnect waits for snapshot');
+        btTestSocket.receive(sourceSnapshot('WEB', ['radio','bt'], true));
+        check(sourceButton('radio').getAttribute('aria-pressed') === 'true' &&
+          !sourceButton('bt').disabled, 'source restored after reconnect');
         btTestSocket.receiveVolume(27, true);
         check(muteButtons.every(button => !button.disabled && button.getAttribute('aria-pressed') === 'true'), 'reconnect mute snapshot');
         result.textContent = 'PASS';

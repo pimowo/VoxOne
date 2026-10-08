@@ -12,6 +12,7 @@
 #include "volume_map.h"
 #include "ui_timeout_config.h"
 #include "source_manager.h"
+#include "source_manager_state.h"
 #include "web_transport.h"
 
 #if DSP_MODEL==DSP_DUMMY
@@ -39,6 +40,20 @@ static bool parseTimeInterval(const char* value, long minimum, long maximum, uin
 }
 
 bool CommandHandler::exec(const char *command, const char *value, uint32_t cid) {
+  if (cid != 0 && strEquals(command, "source")) {
+    if (!value) return false;
+    ActiveSource target;
+    if (strcmp(value, "radio") == 0) target = ActiveSource::Radio;
+    else if (strcmp(value, "bt") == 0) {
+#if VOXONE_HAS_BT && VOXONE_PIN_MAP_COMPLETE
+      target = ActiveSource::Bluetooth;
+#else
+      return false;
+#endif
+    } else return false;
+    if (!sourceManagerSelectSource(target)) netserver.requestOnChange(WEBSTATUS, cid);
+    return true;
+  }
   if (strEquals(command, "webtransport")) {
     bool bluetoothSelected = false;
 #if VOXONE_HAS_BT && VOXONE_PIN_MAP_COMPLETE

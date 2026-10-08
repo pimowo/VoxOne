@@ -115,6 +115,12 @@ class SourceManagerState {
     return update;
   }
 
+  SourceUpdate select(ActiveSource source, const BtLinkState& bt) {
+    if (active_ == source ||
+        (source == ActiveSource::Bluetooth && !bt.runtimeAvailable)) return {};
+    return cycle(bt);
+  }
+
   SourceUpdate observe(const BtLinkState& bt) {
     SourceUpdate update;
     rawVuLeft_ = bt.rawVuLeft;
