@@ -80,7 +80,7 @@ int main() {
   absent(controls, "IRrecv");
   absent(controls, "irLoop");
   absent(serverCode, "\"/ir.html\"");
-  assert(serverCode.find("\"/settings.html\"") != std::string::npos);
+  absent(serverCode, "\"/settings.html\"");
   for (const char* token : {"irrecord.html.gz", "ir.js.gz", "ir.css.gz"}) {
     absent(configCode, token);
     absent(verify, token);

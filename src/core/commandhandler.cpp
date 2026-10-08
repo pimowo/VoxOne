@@ -136,8 +136,6 @@ bool CommandHandler::exec(const char *command, const char *value, uint32_t cid) 
     netserver.requestOnChange(GETSCREEN, 0);
     return true;
   }
-  if (strEquals(command, "gettimezone")){ netserver.requestOnChange(GETTIMEZONE, cid); return true; }
-  if (strEquals(command, "getactive"))  { netserver.requestOnChange(GETACTIVE, cid); return true; }
   if (strEquals(command, "numplaylist"))  { config.saveValue(&config.store.numplaylist, static_cast<bool>(atoi(value))); display.putRequest(NEWMODE, CLEAR); display.putRequest(NEWMODE, PLAYER); return true; }
   if (strEquals(command, "flipscreen")) {
     config.saveValue(&config.store.flipscreen, static_cast<bool>(atoi(value)));
@@ -147,7 +145,7 @@ bool CommandHandler::exec(const char *command, const char *value, uint32_t cid) 
     netserver.requestOnChange(GETSCREEN, 0);
     return true;
   }
-  if (strEquals(command, "brightness"))   { if (!config.store.dspon) netserver.requestOnChange(DSPON, 0); config.store.brightness = static_cast<uint8_t>(atoi(value)); config.setBrightness(true); return true; }
+  if (strEquals(command, "brightness"))   { config.store.brightness = static_cast<uint8_t>(atoi(value)); config.setBrightness(true); return true; }
   if (strEquals(command, "screenon"))     { config.setDspOn(static_cast<bool>(atoi(value))); return true; }
   if (strEquals(command, "contrast"))     { config.saveValue(&config.store.contrast, static_cast<uint8_t>(atoi(value))); display.setContrast(); return true; }
   if (strEquals(command, "screensaverenabled")){ config.enableScreensaver(static_cast<bool>(atoi(value))); return true; }
@@ -163,8 +161,8 @@ bool CommandHandler::exec(const char *command, const char *value, uint32_t cid) 
   if (strEquals(command, "tzm"))        { config.saveValue(&config.store.tzMin, static_cast<int8_t>(atoi(value))); return true; }
   if (strEquals(command, "sntp2"))      { config.saveValue(config.store.sntp2, value, 35, false); return true; }
   if (strEquals(command, "sntp1"))      { config.setSntpOne(value); return true; }
-  if (strEquals(command, "timeint"))    { uint16_t minutes; if (!parseTimeInterval(value, 1, 10080, minutes)) return false; config.saveValue(&config.store.timeSyncInterval, minutes); netserver.requestOnChange(GETTIMEZONE, cid); return true; }
-  if (strEquals(command, "timeintrtc")) { uint16_t hours; if (!parseTimeInterval(value, 1, 1000, hours)) return false; config.saveValue(&config.store.timeSyncIntervalRTC, hours); netserver.requestOnChange(GETTIMEZONE, cid); return true; }
+  if (strEquals(command, "timeint"))    { uint16_t minutes; if (!parseTimeInterval(value, 1, 10080, minutes)) return false; config.saveValue(&config.store.timeSyncInterval, minutes); return true; }
+  if (strEquals(command, "timeintrtc")) { uint16_t hours; if (!parseTimeInterval(value, 1, 1000, hours)) return false; config.saveValue(&config.store.timeSyncIntervalRTC, hours); return true; }
   
   if (strEquals(command, "volsteps"))         { config.saveValue(&config.store.volsteps, static_cast<uint8_t>(atoi(value))); return true; }
   if (strEquals(command, "encacc"))  { setEncAcceleration(static_cast<uint16_t>(atoi(value))); return true; }
@@ -174,8 +172,6 @@ bool CommandHandler::exec(const char *command, const char *value, uint32_t cid) 
   if (strEquals(command, "reboot"))  { requestSystemRestart(); return true; }
   if (strEquals(command, "boot"))    { requestSystemRestart(); return true; }
   if (strEquals(command, "format"))  { SPIFFS.format(); ESP.restart(); return true; }
-  if (strEquals(command, "submitplaylist"))  { player.sendCommand({PR_STOP, 0}); return true; }
-
   if (strEquals(command, "reset"))  { config.resetSystem(value, cid); return true; }
 
   if (strEquals(command, "smartstart")){ uint8_t ss = atoi(value) == 1 ? 1 : 2; if (!player.isRunning() && ss == 1) ss = 0; config.setSmartStart(ss); return true; }
@@ -183,14 +179,6 @@ bool CommandHandler::exec(const char *command, const char *value, uint32_t cid) 
   if (strEquals(command, "vumeter"))   { config.saveValue(&config.store.vumeter, static_cast<bool>(atoi(value))); display.putRequest(SHOWVUMETER); netserver.requestOnChange(GETSYSTEM, 0); return true; }
   if (strEquals(command, "softap"))    { config.saveValue(&config.store.softapdelay, static_cast<uint8_t>(atoi(value))); return true; }
   if (strEquals(command, "mdnsname"))  { config.saveValue(config.store.mdnsname, value, MDNS_LENGTH); return true; }
-  if (strEquals(command, "rebootmdns")){
-    if(strlen(config.store.mdnsname)>0) snprintf(config.tmpBuf, sizeof(config.tmpBuf), "{\"redirect\": \"http://%s.local/settings.html\"}", config.store.mdnsname);
-    else snprintf(config.tmpBuf, sizeof(config.tmpBuf), "{\"redirect\": \"http://%s/settings.html\"}", config.ipToStr(WiFi.localIP()));
-    websocket.text(cid, config.tmpBuf); delay(500); ESP.restart();
-    return true;
-  }
-  
   return false;
 }
-
 

@@ -372,7 +372,6 @@ void Config::resetSystem(const char *val, uint8_t clientId){
     saveValue(&store.timeSyncIntervalRTC, (uint16_t)24);
     setTimeConf();
     timekeeper.forceTimeSync = true;
-    netserver.requestOnChange(GETTIMEZONE, clientId);
     return;
   }
   if (strcmp(val, "controls") == 0) {
@@ -832,14 +831,6 @@ bool Config::saveWifiCredentials(const char* ssid, const char* password) {
     SPIFFS.remove(wifiTempPath);
     return false;
   }
-  return true;
-}
-
-bool Config::saveWifi() {
-  if (!SPIFFS.exists(TMP_PATH)) return false;
-  SPIFFS.remove(SSIDS_PATH);
-  SPIFFS.rename(TMP_PATH, SSIDS_PATH);
-  ESP.restart();
   return true;
 }
 

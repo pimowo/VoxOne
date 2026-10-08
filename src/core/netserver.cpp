@@ -118,14 +118,6 @@ void onWsEvent(AsyncWebSocket *server, AsyncWebSocketClient *client, AwsEventTyp
 
 uint32_t webUpdateRebootAt = 0;
 //Ticker mqttplaylistticker;
-bool  mqttplaylistblock = false;
-void mqttplaylistSend() {
-  mqttplaylistblock = true;
-//  mqttplaylistticker.detach();
-  mqttPublishPlaylist();
-  mqttplaylistblock = false;
-}
-
 namespace {
 SystemOperationState systemOperationState;
 
@@ -318,7 +310,6 @@ bool NetServer::begin(bool quiet) {
                 quiet ? "searchWiFi" : "setup");
   if (!netServerShouldInitialize(_started)) return true;
   if(!quiet) Serial.print("##[BOOT]#\tnetserver.begin\t");
-  importRequest = IMDONE;
   playerBufMax = psramInit()?300000:1600 * config.store.abuff;
   _volumeUpdatePending = false;
   _lastVolumeUpdate = millis() - NS_VOLUME_INTERVAL_MS;
@@ -1596,39 +1587,6 @@ void NetServer::processQueue(){
     uint32_t clientId = request.clientId;
     wsBuf[0]='\0';
     switch (request.type) {
-      case PLAYLIST:        getPlaylist(clientId); break;
-      case GETACTIVE: {
-          bool dbgact = false;
-          //String act = F("\"group_wifi\",");
-          nsBuf[0]='\0';
-          APPEND_GROUP("group_wifi");
-          if (network.status == CONNECTED) {
-                                                                //act += F("\"group_system\",");
-                                                                APPEND_GROUP("group_system");
-            if (BRIGHTNESS_PIN != 255 || DSP_CAN_FLIPPED || dbgact)    APPEND_GROUP("group_display");
-                                                              #if defined(DSP_OLED)
-                                                                APPEND_GROUP("group_oled");
-                                                              #endif
-                                                              #if !defined(HIDE_VU) && !defined(DUMMYDISPLAY)
-                                                                APPEND_GROUP("group_vu");
-                                                              #endif
-            if (BRIGHTNESS_PIN != 255 || dbgact)                APPEND_GROUP("group_brightness");
-            if (DSP_CAN_FLIPPED || dbgact)                      APPEND_GROUP("group_tft");
-                                                                APPEND_GROUP("group_timezone");
-            if (dbgact)                                         APPEND_GROUP("group_controls");
-            if (!psramInit())                                   APPEND_GROUP("group_buffer");
-                                                              #if RTCSUPPORTED
-                                                                APPEND_GROUP("group_rtc");
-                                                              #else
-                                                                APPEND_GROUP("group_wortc");
-                                                              #endif
-          }
-          size_t len = strlen(nsBuf);
-          if (len > 0 && nsBuf[len - 1] == ',') nsBuf[len - 1] = '\0';
-          
-          snprintf(wsBuf, sizeof(wsBuf), "{\"act\":[%s]}", nsBuf);
-          break;
-        }
       case GETINDEX:      {
           requestOnChange(STATION, clientId); 
           requestOnChange(TITLE, clientId); 
@@ -1718,13 +1676,6 @@ void NetServer::processQueue(){
                                   uiTimeoutConfig().btTransportSeconds,
                                   VOXONE_HAS_BT && DSP_MODEL == DSP_ST7796);
                                   break;
-      case GETTIMEZONE:   sprintf (wsBuf, "{\"sntp1\":\"%s\",\"sntp2\":\"%s\", \"timeint\":%d,\"timeintrtc\":%d}",
-                                  config.store.sntp1, 
-                                  config.store.sntp2,
-                                  config.store.timeSyncInterval,
-                                  config.store.timeSyncIntervalRTC); 
-                                  break;
-      case DSPON:         sprintf (wsBuf, "{\"dspontrue\":%d}", 1); break;
       case STATION:       requestOnChange(STATIONNAME, clientId); requestOnChange(ITEM, clientId); break;
       case STATIONNAME:   formatWsTextPayload(wsBuf, sizeof(wsBuf), "nameset", config.station.name); break;
       case ITEM:          sprintf (wsBuf, "{\"current\": %d}", config.lastStation()); break;
@@ -1812,11 +1763,6 @@ void NetServer::loop() {
 #endif
   processVolumeUpdate();
   websocket.cleanupClients();
-  switch (importRequest) {
-    case IMPL:    importPlaylist();  importRequest = IMDONE; break;
-    case IMWIFI:  config.saveWifi(); importRequest = IMDONE; break;
-    default:      break;
-  }
   portENTER_CRITICAL(&netserverLoopMux);
   netserverLoopActive = false;
   portEXIT_CRITICAL(&netserverLoopMux);
@@ -1859,36 +1805,11 @@ void NetServer::onWsMessage(void *arg, uint8_t *data, size_t len, uint32_t clien
         config.setTone(valb, config.store.middle, config.store.trebble);
         return;
       }
-      if (strcmp(_wscmd, "submitplaylistdone") == 0) {
-        if (mqttActive()) timekeeper.waitAndDo(5, mqttplaylistSend, DelayedActionSlot::MQTT);
-        if (player.isRunning()) player.sendCommand({PR_PLAY, -config.lastStation()});
-        return;
-      }
-      
       if(cmd.exec(_wscmd, _wsval, clientId)){
         return;
       }
     }
   }
-}
-
-void NetServer::getPlaylist(uint32_t clientId) {
-  sprintf(nsBuf, "{\"file\": \"http://%s%s\"}", config.ipToStr(WiFi.localIP()), PLAYLIST_PATH);
-  if (clientId == 0) { websocket.textAll(nsBuf); } else { websocket.text(clientId, nsBuf); }
-}
-
-int NetServer::_readPlaylistLine(File &file, char * line, size_t size){
-  int bytesRead = file.readBytesUntil('\n', line, size);
-  if(bytesRead>0){
-    line[bytesRead] = 0;
-    if(line[bytesRead-1]=='\r') line[bytesRead-1]=0;
-  }
-  return bytesRead;
-}
-
-bool NetServer::importPlaylist() {
-  // Legacy import cannot preserve IDs. Use /api/stations/import.
-  return false;
 }
 
 void NetServer::requestOnChange(requestType_e request, uint32_t clientId) {
@@ -2094,17 +2015,14 @@ void handleWebUpdateUpload(AsyncWebServerRequest *request, const String& filenam
 
 void handleUpload(AsyncWebServerRequest *request, String filename, size_t index, uint8_t *data, size_t len, bool final) {
   if (systemOperationState.blocksRequests() && request->url() != "/update") return;
-  if(request->url()=="/upload"){
-    // Legacy yoRadio upload has no station IDs and must not overwrite v1 files.
-    return;
-  }else if(request->url()=="/update"){
+  if(request->url()=="/update"){
     handleWebUpdateUpload(request, filename, index, data, len, final);
   }
 }
 
 void onWsEvent(AsyncWebSocket *server, AsyncWebSocketClient *client, AwsEventType type, void *arg, uint8_t *data, size_t len) {
   switch (type) {
-    case WS_EVT_CONNECT: /*netserver.requestOnChange(STARTUP, client->id()); */if (config.store.audioinfo) Serial.printf("[WEBSOCKET] client #%lu connected from %s\n", client->id(), config.ipToStr(client->remoteIP())); break;
+    case WS_EVT_CONNECT: if (config.store.audioinfo) Serial.printf("[WEBSOCKET] client #%lu connected from %s\n", client->id(), config.ipToStr(client->remoteIP())); break;
     case WS_EVT_DISCONNECT: if (config.store.audioinfo) Serial.printf("[WEBSOCKET] client #%lu disconnected\n", client->id()); break;
     case WS_EVT_DATA: if (!systemOperationState.blocksRequests()) netserver.onWsMessage(arg, data, len, client->id()); break;
     case WS_EVT_PONG:
@@ -2133,29 +2051,15 @@ void handleNotFound(AsyncWebServerRequest * request) {
     request->redirect("/#update");
     return;
   }
-  if (request->method() == HTTP_GET && request->url() == "/legacy.html") {
-    AsyncWebServerResponse *response = request->beginResponse_P(200, "text/html", index_html);
-    response->addHeader("Cache-Control", "max-age=31536000");
-    request->send(response);
-    return;
-  }
   if (request->method() == HTTP_GET) {
     DBGVB("[%s] client ip=%s request of %s", __func__, config.ipToStr(request->client()->remoteIP()), request->url().c_str());
-    if (strcmp(request->url().c_str(), PLAYLIST_PATH) == 0 || 
-        strcmp(request->url().c_str(), SSIDS_PATH) == 0 || 
-        strcmp(request->url().c_str(), INDEX_PATH) == 0 || 
-        strcmp(request->url().c_str(), TMP_PATH) == 0) {
-      if (strcmp(request->url().c_str(), PLAYLIST_PATH) == 0) while (mqttplaylistblock) vTaskDelay(5);
+    if (strcmp(request->url().c_str(), PLAYLIST_PATH) == 0) {
       netserver.chunkedHtmlPage("application/octet-stream", request, request->url().c_str());
       return;
-    }// if (strcmp(request->url().c_str(), PLAYLIST_PATH) == 0 || 
+    }
   }// if (request->method() == HTTP_GET)
   
   if (request->method() == HTTP_POST) {
-    if(request->url()=="/upload"){
-      request->send(410, "text/plain", "Use VoxOne Stations import");
-      return;
-    }
     if(request->url()=="/update"){
 #if defined(HTTP_USER) && defined(HTTP_PASS)
       if (network.status == CONNECTED && !request->authenticate(HTTP_USER, HTTP_PASS)) {
@@ -2191,20 +2095,9 @@ void handleNotFound(AsyncWebServerRequest * request) {
     }
   }// if (request->method() == HTTP_POST)
   
-  if (request->url() == "/favicon.ico") {
-    request->send(200, "image/x-icon", "data:,");
-    return;
-  }
   if (request->url() == "/variables.js") {
     sprintf (netserver.nsBuf, "var voxOneVersion='%s';\nvar yoRadioVersion='%s';\nvar yoVersion=voxOneVersion;\nvar voxOneProfile='%s';\nvar playMode='%s';\n", VOXONE_VERSION, YOVERSION, VOXONE_PROFILE_NAME, (network.status == CONNECTED)?"player":"ap");
     request->send(200, "text/html", netserver.nsBuf);
-    return;
-  }
-  if (strcmp(request->url().c_str(), "/settings.html") == 0){
-    //request->send_P(200, "text/html", index_html);
-    AsyncWebServerResponse *response = request->beginResponse_P(200, "text/html", index_html);
-    response->addHeader("Cache-Control","max-age=31536000");
-    request->send(response);
     return;
   }
   Serial.print("Not Found: ");
@@ -2252,35 +2145,8 @@ void handleIndex(AsyncWebServerRequest * request) {
     }
 #endif
   if (strcmp(request->url().c_str(), "/") == 0 && request->params() == 0) {
-    if(network.status == CONNECTED) {
-      request->redirect("/voxone.html");
-    } else request->redirect("/settings.html");
+    request->redirect("/voxone.html");
     return;
   }
-  if(network.status == CONNECTED){
-    int paramsNr = request->params();
-    if(paramsNr==1){
-      AsyncWebParameter* p = request->getParam(0);
-      if(cmd.exec(p->name().c_str(),p->value().c_str())) {
-        if(p->name()=="reset" || p->name()=="clearspiffs") request->redirect("/");
-        if(p->name()=="clearspiffs") { delay(100); ESP.restart(); }
-        request->send(200, "text/plain", "");
-        return;
-      }
-    }
-    if (request->hasArg("trebble") && request->hasArg("middle") && request->hasArg("bass")) {
-      config.setTone(request->getParam("bass")->value().toInt(), request->getParam("middle")->value().toInt(), request->getParam("trebble")->value().toInt());
-      request->send(200, "text/plain", "");
-      return;
-    }
-    if (request->hasArg("sleep")) {
-      int sford = request->getParam("sleep")->value().toInt();
-      int safterd = request->hasArg("after")?request->getParam("after")->value().toInt():0;
-      if(sford > 0 && safterd >= 0){ request->send(200, "text/plain", ""); config.sleepForAfter(sford, safterd); return; }
-    }
-    request->send(404, "text/plain", "Not found");
-    
-  }else{
-    request->send(404, "text/plain", "Not found");
-  }
+  request->send(404, "text/plain", "Not found");
 }

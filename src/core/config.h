@@ -14,7 +14,6 @@
 // Addresses 0..499 are reserved for historical IR data; never reuse them.
 #define PLAYLIST_PATH     "/data/stations.tsv"
 #define SSIDS_PATH        "/data/wifi.csv"
-#define TMP_PATH          "/data/tmpfile.txt"
 #define INDEX_PATH        "/data/stations.idx"
 
 #define MDNS_LENGTH 24
@@ -195,7 +194,6 @@ class Config {
     bool parseSsid(const char* line, char* ssid, char* pass);
     bool loadStation(uint16_t station);
     bool initNetwork();
-    bool saveWifi();
     void setTimeConf();
     bool saveWifiCredentials(const char* ssid, const char* password);
     void setSmartStart(uint8_t ss);

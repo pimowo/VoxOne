@@ -1,10 +1,7 @@
 #ifndef netserver_h
 #define netserver_h
 #include "../AsyncWebServer/ESPAsyncWebServer.h"
-#define APPEND_GROUP(name) strcat(nsBuf, "\"" name "\",")
-
-enum requestType_e : uint8_t  { PLAYLIST=1, STATION=2, STATIONNAME=3, ITEM=4, TITLE=5, VOLUME=6, NRSSI=7, BITRATE=8, MODE=9, EQUALIZER=10, BALANCE=11, STARTUP=13, GETINDEX=14, GETACTIVE=15, GETSYSTEM=16, GETSCREEN=17, GETTIMEZONE=18, DSPON=21, WEBSTATUS=28 };
-enum import_e      : uint8_t  { IMDONE=0, IMPL=1, IMWIFI=2 };
+enum requestType_e : uint8_t  { STATION=2, STATIONNAME=3, ITEM=4, TITLE=5, VOLUME=6, NRSSI=7, BITRATE=8, MODE=9, EQUALIZER=10, BALANCE=11, GETINDEX=14, GETSYSTEM=16, GETSCREEN=17, WEBSTATUS=28 };
 const char emptyfs_html[] PROGMEM = R"(
 <!DOCTYPE html>
 <html lang="pl">
@@ -116,8 +113,6 @@ struct nsRequestParams_t
 
 class NetServer {
   public:
-    import_e importRequest;
-    bool resumePlay;
     char chunkedPathBuffer[40];
     char nsBuf[BUFLEN], nsBuf2[BUFLEN];
   public:
@@ -140,12 +135,9 @@ class NetServer {
     uint32_t playerBufMax;
     volatile bool _volumeUpdatePending = false;
     uint32_t _lastVolumeUpdate = 0;
-    void getPlaylist(uint32_t clientId);
-    bool importPlaylist();
     static size_t chunkedHtmlPageCallback(uint8_t* buffer, size_t maxLen, size_t index);
     void processQueue();
     void processVolumeUpdate();
-    int _readPlaylistLine(File &file, char * line, size_t size);
 };
 
 bool restoreWebUpdateData();
