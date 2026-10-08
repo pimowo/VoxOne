@@ -43,8 +43,6 @@ struct theme_t {
   uint16_t seconds;
   uint16_t dow;
   uint16_t date;
-  uint16_t heap;
-  uint16_t buffer;
   uint16_t ip;
   uint16_t vol;
   uint16_t rssi;

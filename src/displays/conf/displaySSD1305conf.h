@@ -12,7 +12,6 @@
 #define TFT_FRAMEWDT    1
 #define MAX_WIDTH       DSP_WIDTH-TFT_FRAMEWDT*2
 
-#define HIDE_HEAPBAR
 #define HIDE_VOL
 #define HIDE_VU
 
@@ -31,7 +30,6 @@ const FillConfig   metaBGConf     PROGMEM = {{ 0, 0,  0, WA_LEFT }, DSP_WIDTH, 1
 const FillConfig   metaBGConfInv  PROGMEM = {{ 0, 11, 0, WA_LEFT }, DSP_WIDTH, 1,  false };
 const FillConfig   volbarConf     PROGMEM = {{ 0, 64-1-1-1, 0, WA_LEFT }, DSP_WIDTH, 3, true };
 const FillConfig  playlBGConf     PROGMEM = {{ 0, 26, 0, WA_LEFT }, DSP_WIDTH, 12, false };
-const FillConfig  heapbarConf     PROGMEM = {{ 0, 63, 0, WA_LEFT }, DSP_WIDTH, 1, false };
 
 /* WIDGETS  */                           /* { left, top, fontsize, align } */
 const WidgetConfig bootstrConf    PROGMEM = { 0, 64-8, 1, WA_CENTER };

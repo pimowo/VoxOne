@@ -260,12 +260,6 @@ The connection tables are located here https://github.com/e2002/yoradio#connecti
 #ifndef COLOR_DATE
   #define COLOR_DATE              165, 162, 132
 #endif
-#ifndef COLOR_HEAP
-  #define COLOR_HEAP               41,  40,  41
-#endif
-#ifndef COLOR_BUFFER
-  #define COLOR_BUFFER            165, 162, 132
-#endif
 #ifndef COLOR_IP
   #define COLOR_IP                165, 162, 132
 #endif

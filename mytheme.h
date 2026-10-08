@@ -14,8 +14,6 @@
 #define COLOR_SECONDS           245, 245, 245  // kColorPrimaryText
 #define COLOR_DAY_OF_W          180, 200, 220  // kColorSecondaryText
 #define COLOR_DATE              180, 200, 220  // kColorSecondaryText
-#define COLOR_HEAP               40,  50,  65  // kColorInactive
-#define COLOR_BUFFER             80, 160, 220  // kColorInfo
 #define COLOR_IP                180, 200, 220  // kColorSecondaryText
 #define COLOR_VOLUME_VALUE      120, 170, 255  // kColorSonyBlue
 #define COLOR_RSSI              200, 200, 200  // LCD-TEST-1 RSSI

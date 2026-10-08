@@ -35,7 +35,6 @@ void DspCore::initDisplay() {
     config.theme.vol        = TFT_FG;
     config.theme.bitrate    = TFT_FG;
     config.theme.digit      = TFT_FG;
-    config.theme.buffer     = TFT_FG;
     config.theme.volbarout  = GRAY_9;
     config.theme.volbarin   = GRAY_9;
     config.theme.plcurrent     = TFT_BG;

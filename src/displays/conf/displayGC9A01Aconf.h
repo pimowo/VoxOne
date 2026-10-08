@@ -28,7 +28,6 @@ const FillConfig   metaBGConf     PROGMEM = {{ 0, 32+20, 0, WA_LEFT }, DSP_WIDTH
 const FillConfig   metaBGConfInv  PROGMEM = {{ 0, 32+20+30, 0, WA_LEFT }, DSP_WIDTH, 1, false };
 const FillConfig   volbarConf     PROGMEM = {{ TFT_FRAMEWDT+56, 240-TFT_FRAMEWDT-6, 0, WA_LEFT }, MAX_WIDTH-112, 6+TFT_FRAMEWDT+1, true };
 const FillConfig  playlBGConf     PROGMEM = {{ 0, 107, 0, WA_LEFT }, DSP_WIDTH, 24, false };
-const FillConfig  heapbarConf     PROGMEM = {{ 0, 83, 0, WA_LEFT }, DSP_WIDTH, 1, false };
 
 /* WIDGETS  */                           /* { left, top, fontsize, align } */
 const WidgetConfig bootstrConf    PROGMEM = { 0, 182, 1, WA_CENTER };

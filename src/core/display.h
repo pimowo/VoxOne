@@ -132,7 +132,7 @@ class Display {
     PlayListWidget *_plwidget;
     BitrateWidget *_fullbitrate;
     FillWidget *_metabackground, *_plbackground;
-    SliderWidget *_volbar, *_heapbar;
+    SliderWidget *_volbar;
     Pager *_pager;
     Page *_footer;
     VuWidget *_vuwidget;

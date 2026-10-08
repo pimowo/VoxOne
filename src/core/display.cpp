@@ -417,9 +417,6 @@ void Display::_buildPager(){
   #ifndef HIDE_VOLBAR
     _volbar = new SliderWidget(volbarConf, config.theme.volbarin, config.theme.background, kDisplayVolumeMax, config.theme.volbarout);
   #endif
-  #ifndef HIDE_HEAPBAR
-    _heapbar = new SliderWidget(heapbarConf, config.theme.buffer, config.theme.background, psramInit()?300000:1600 * config.store.abuff);
-  #endif
   #ifndef HIDE_VOL
 #if DSP_MODEL==DSP_ST7796
     _salonVolume = new SalonVolumeWidget(voltxtConf, config.theme.meta, config.theme.background);
@@ -463,7 +460,6 @@ void Display::_buildPager(){
   if(_voltxt)   _footer->addWidget( _voltxt);
   if(_volip)    _footer->addWidget( _volip);
   if(_rssi)     _footer->addWidget( _rssi);
-  if(_heapbar)  _footer->addWidget( _heapbar);
 #endif
   
 #if DSP_MODEL==DSP_ST7789_76
@@ -506,7 +502,6 @@ void Display::_buildPager(){
   pages[PG_PLAYER]->addWidget(_salonMode);
   pages[PG_PLAYER]->addWidget(_salonBluetoothIcon);
   if(_rssi) pages[PG_PLAYER]->addWidget(_rssi);
-  if(_heapbar) pages[PG_PLAYER]->addWidget(_heapbar);
 #else
   pages[PG_PLAYER]->addPage(_footer);
 #endif
@@ -611,9 +606,6 @@ void Display::_start() {
 #endif
   _mode = PLAYER;
   config.setTitle(LANG::const_PlReady);
-  
-  if(_heapbar)  _heapbar->lock(!config.store.audioinfo);
-  
 
   if(_vuwidget) _vuwidget->lock();
   if(_rssi)     _setRSSI(WiFi.RSSI());
@@ -964,7 +956,6 @@ void Display::loop() {
             }
           }
           break;
-        case AUDIOINFO: if(_heapbar)  { _heapbar->lock(!config.store.audioinfo); _heapbar->setValue(player.inBufferFilled()); } break;
         case SHOWVUMETER: {
           if(_vuwidget){
             _layoutChange(activeSourceVuVisible());
@@ -975,7 +966,7 @@ void Display::loop() {
           if(_bootstring) _bootstring->setText(config.ssids[request.payload].ssid, LANG::bootstrFmt);
           break;
         }
-        case DSPRSSI: if(_rssi){ _setRSSI(request.payload); } if (_heapbar && config.store.audioinfo) _heapbar->setValue(player.isRunning()?player.inBufferFilled():0); break;
+        case DSPRSSI: if(_rssi){ _setRSSI(request.payload); } break;
         case PSTART:
           _layoutChange(activeSourceVuVisible());
 #if DSP_MODEL==DSP_ST7796

@@ -258,8 +258,6 @@ void Config::loadTheme(){
   theme.seconds       = color565(COLOR_SECONDS);
   theme.dow           = color565(COLOR_DAY_OF_W);
   theme.date          = color565(COLOR_DATE);
-  theme.heap          = color565(COLOR_HEAP);
-  theme.buffer        = color565(COLOR_BUFFER);
   theme.ip            = color565(COLOR_IP);
   theme.vol           = color565(COLOR_VOLUME_VALUE);
   theme.rssi          = color565(COLOR_RSSI);
