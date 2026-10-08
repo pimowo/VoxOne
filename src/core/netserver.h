@@ -26,7 +26,6 @@ label{display:block;margin:16px 0 6px;font-weight:600}
 input[type=text],input[type=password]{display:block;width:100%;min-width:0;padding:12px;border:1px solid var(--line);border-radius:10px;background:var(--panel-2);color:var(--text);font:inherit}
 input::placeholder{color:var(--muted);opacity:1}
 input:focus-visible,button:focus-visible{outline:2px solid var(--cyan);outline-offset:2px}
-input[type=file]{display:block;max-width:100%;margin:8px 0 18px;color:var(--muted)}
 button{width:100%;min-height:46px;margin-top:22px;padding:13px;border:1px solid var(--cyan);border-radius:10px;background:var(--cyan-dark);color:var(--text);font:650 1rem system-ui,sans-serif;cursor:pointer}
 details{margin:24px 0;color:var(--muted)}
 summary{cursor:pointer;color:var(--cyan)}
@@ -55,15 +54,8 @@ footer{text-align:center;padding:16px;color:var(--muted);font-size:.85rem}
 <details>
 <summary>Tryb serwisowy / Recovery</summary>
 <div class="service">
-<p>Je&#347;li pliki WWW s&#261; niedost&#281;pne, prze&#347;lij je z obrazu projektu. Mo&#380;esz te&#380; przywr&#243;ci&#263; kopi&#281; wifi.csv.</p>
-<form action="/webboard" method="post" enctype="multipart/form-data">
-<label for="www">Pliki WWW</label>
-<input id="www" name="www" type="file" multiple>
-<label for="data">Kopia wifi.csv</label>
-<input id="data" name="data" type="file">
-<button type="submit">Prze&#347;lij pliki</button>
-</form>
-<p><a href="/emergency">Awaryjna aktualizacja firmware</a></p>
+<p>Awaryjnie mo&#380;esz wgra&#263; firmware lub pe&#322;ny obraz systemu plik&#243;w z buildu VoxOne.</p>
+<p><a href="/emergency">Awaryjna aktualizacja firmware / WWW</a></p>
 </div>
 </details>
 </main>

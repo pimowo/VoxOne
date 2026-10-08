@@ -2099,22 +2099,6 @@ void handleUpload(AsyncWebServerRequest *request, String filename, size_t index,
     return;
   }else if(request->url()=="/update"){
     handleWebUpdateUpload(request, filename, index, data, len, final);
-  }else{ // "/webboard"
-    if (filename == "playlist.csv" || filename == "stations.tsv" ||
-        filename == "stations.idx") return;
-    DBGVB("File: %s, size:%u bytes, index: %u, final: %s\n", filename.c_str(), len, index, final?"true":"false");
-    if (!index) {
-      player.sendCommand({PR_STOP, 0});
-      String spath = "/www/";
-      if(filename=="wifi.csv") spath = "/data/";
-      request->_tempFile = SPIFFS.open(spath + filename , "w");
-    }
-    if (len) {
-      request->_tempFile.write(data, len);
-    }
-    if (final) {
-      request->_tempFile.close();
-    }
   }
 }
 
@@ -2155,7 +2139,6 @@ void handleNotFound(AsyncWebServerRequest * request) {
     request->send(response);
     return;
   }
-  if(request->method() == HTTP_POST && request->url()=="/webboard" && !config.currentWwwReady) { request->redirect("/"); ESP.restart(); return; }
   if (request->method() == HTTP_GET) {
     DBGVB("[%s] client ip=%s request of %s", __func__, config.ipToStr(request->client()->remoteIP()), request->url().c_str());
     if (strcmp(request->url().c_str(), PLAYLIST_PATH) == 0 || 
@@ -2169,7 +2152,6 @@ void handleNotFound(AsyncWebServerRequest * request) {
   }// if (request->method() == HTTP_GET)
   
   if (request->method() == HTTP_POST) {
-    if(request->url()=="/webboard"){ request->redirect("/"); return; } // <--post files from /data/www
     if(request->url()=="/upload"){
       request->send(410, "text/plain", "Use VoxOne Stations import");
       return;
@@ -2214,7 +2196,7 @@ void handleNotFound(AsyncWebServerRequest * request) {
     return;
   }
   if (request->url() == "/variables.js") {
-    sprintf (netserver.nsBuf, "var voxOneVersion='%s';\nvar yoRadioVersion='%s';\nvar yoVersion=voxOneVersion;\nvar voxOneProfile='%s';\nvar formAction='%s';\nvar playMode='%s';\n", VOXONE_VERSION, YOVERSION, VOXONE_PROFILE_NAME, (network.status == CONNECTED && config.currentWwwReady)?"webboard":"", (network.status == CONNECTED)?"player":"ap");
+    sprintf (netserver.nsBuf, "var voxOneVersion='%s';\nvar yoRadioVersion='%s';\nvar yoVersion=voxOneVersion;\nvar voxOneProfile='%s';\nvar playMode='%s';\n", VOXONE_VERSION, YOVERSION, VOXONE_PROFILE_NAME, (network.status == CONNECTED)?"player":"ap");
     request->send(200, "text/html", netserver.nsBuf);
     return;
   }
@@ -2223,10 +2205,6 @@ void handleNotFound(AsyncWebServerRequest * request) {
     AsyncWebServerResponse *response = request->beginResponse_P(200, "text/html", index_html);
     response->addHeader("Cache-Control","max-age=31536000");
     request->send(response);
-    return;
-  }
-  if (request->method() == HTTP_GET && request->url() == "/webboard") {
-    request->send_P(200, "text/html", emptyfs_html);
     return;
   }
   Serial.print("Not Found: ");
