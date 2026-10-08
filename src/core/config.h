@@ -278,7 +278,6 @@ class Config {
     void _normalizeProductConfig();
     void _normalizeAudioConfig();
     void _initHW();
-    void _removeObsoleteWwwFiles();
     bool _hasCurrentWwwAssets();
 };
 

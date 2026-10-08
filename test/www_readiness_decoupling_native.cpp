@@ -81,12 +81,12 @@ int main() {
   assert(contains(currentWeb, "location.replace(\"/voxone.html?updated="));
   assert(!contains(currentWeb, "location.replace(\"/?updated="));
 
-  // Legacy files remain in this stage, but none is part of readiness.
+  // Legacy files are retired and none is part of readiness.
   for (const char* path : {"data/www/script.js.gz", "data/www/style.css.gz",
                            "data/www/theme.css", "data/www/dragpl.js.gz",
                            "data/www/logo.svg.gz", "data/www/player.html.gz",
                            "data/www/options.html.gz", "data/www/updform.html.gz"}) {
     std::ifstream legacy(path, std::ios::binary);
-    assert(legacy.good());
+    assert(!legacy.good());
   }
 }

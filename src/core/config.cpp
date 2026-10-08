@@ -84,14 +84,6 @@ void u8fix(char *src){
   if ((uint8_t)last >= 0xC2) src[strlen(src)-1]='\0';
 }
 
-void Config::_removeObsoleteWwwFiles() {
-  if(SPIFFS.exists("/www/settings.html")) SPIFFS.remove("/www/settings.html");
-  if(SPIFFS.exists("/www/update.html")) SPIFFS.remove("/www/update.html");
-  if(SPIFFS.exists("/www/index.html")) SPIFFS.remove("/www/index.html");
-  if(SPIFFS.exists("/www/elogo.png")) SPIFFS.remove("/www/elogo.png");
-  if(SPIFFS.exists("/www/elogo84.png")) SPIFFS.remove("/www/elogo84.png");
-}
-
 bool Config::_hasCurrentWwwAssets() {
   return voxone::currentWwwAssetsReady([](const char* path) {
     return SPIFFS.exists(path);
@@ -168,7 +160,6 @@ void Config::init() {
   radioPlaylistReady = playlistStore.begin() && playlistStore.recover();
   if (!radioPlaylistReady)
     Serial.println("##[ERROR]# Playlist recovery incomplete");
-  _removeObsoleteWwwFiles();
   currentWwwReady = _hasCurrentWwwAssets();
   if (!currentWwwReady) BOOTLOG("Current VoxOne WWW assets are incomplete!");
   ssidsCount = 0;
