@@ -35,7 +35,14 @@
 
 ### Update, recovery i persistence
 
-- [STABLE] Fizycznie sprawdzić Web Update firmware MAIN i SPIFFS, rzeczywisty postęp, sukces, błąd, cancel/przerwanie, restart oraz brak samoczynnego wznowienia audio po błędzie.
+- [STABLE] Fizycznie sprawdzić Web Update firmware MAIN i SPIFFS: postęp zapisu flash, sukces dopiero po finalizacji obrazu, błąd, cancel/przerwanie, restart oraz brak samoczynnego wznowienia audio po błędzie.
+- [POST-STABLE] Ujednolicić postęp MAIN, SPIFFS/WWW i VoxOneBT w jednym modelu `target`, `phase`, `totalBytes`, `writtenBytes`/`confirmedBytes`, opcjonalny `percent` i `result`/`error`; nie tworzyć osobnych systemów postępu.
+- [POST-STABLE] Dla MAIN i SPIFFS stosować fazy PREPARE, WRITING, FINALIZING, SUCCESS, ERROR i RESTART. Procent liczyć z bajtów dopiero po udanym `Update.write`; 100% zapisu nie oznacza SUCCESS, który następuje po `Update.end`. Przy nieznanym rozmiarze firmware pokazywać „ZAPIS...”; SPIFFS wymaga znanego pełnego rozmiaru obrazu.
+- [POST-STABLE] Przekazywać update progress ze współdzielonego stanu/backendu do DisplayTask; backend nie rysuje LCD. Ograniczyć publikacje do zmiany procentu i maksymalnie jednej na ok. 100–250 ms, z natychmiastowym przekazaniem faz PREPARE, FINALIZING, SUCCESS i ERROR.
+- [POST-STABLE] Pokazać na SALON „AKTUALIZACJA”, pasek, procent i krótki status; na DESK wykorzystać istniejący ekran aktualizacji i pokazać procent albo „ZAPIS...”, bez przebudowy layoutu.
+- [POST-STABLE] Udostępnić ten sam rzeczywisty stan zapisu MAIN/SPIFFS w WWW; obecny postęp HTTP uploadu pozostawić jako pomocniczy, wyraźnie odróżniony od postępu zapisu flash.
+- [POST-STABLE] Zachować wspólny backend MAIN/SPIFFS dla `/update` i `/emergency`; progress awaryjnej aktualizacji nie może zależeć od assetów WWW ani zamontowanego SPIFFS.
+- [POST-STABLE] Dodać testy modelu postępu MAIN: 0–100%, unknown total, finalizacja, sukces i błąd. Dla SPIFFS sprawdzić backup, unmount, wymagany pełny rozmiar, zapis, remount po błędzie oraz sukces/restart.
 - [STABLE] Sprawdzić backup/restore całej konfiguracji, walidację schematu, błąd lub nieudany backup oraz zachowanie config po firmware/SPIFFS update.
 - [STABLE] Sprawdzić recovery AP, `/update.html` i `/emergency` przy niedostępnym SPIFFS, błędne dane Wi-Fi, Serial CLI oraz ekran AP na telefonie.
 - [STABLE] Zweryfikować restart i Config v7: volume, MUTE, source intent, aktywną stację oraz rozdział ustawień runtime/persistent.
@@ -86,7 +93,7 @@
 - [POST-STABLE] Rozstrzygać klik/dwuklik/trójklik po wspólnym krótkim oknie, aby trójklik nie wykonywał wcześniej dwukliku.
 - [POST-STABLE] W VoxOneBT utrzymać A2DP audio state jako sterowanie I2S, a AVRCP wyłącznie jako transport/UI; uzupełnić status PLAY/PAUSE/STOP, reconnect, preferred peer, pairing window, discoverability, metadata, ograniczenia TV i realny codec/bitrate, jeśli stos udostępnia dane.
 - [POST-STABLE] Znormalizować poziom BT względem RADIO dopiero po pomiarach toru cyfrowego i analogowego.
-- [POST-STABLE] Zaprojektować aktualizację VoxOneBT: MAIN WWW → UART → VoxOneBT, walidacja rozmiaru i CRC, ACK/NACK, progress, bezpieczny slot OTA, restart tylko VoxOneBT i sprawdzenie `FW_VERSION` po restarcie. VoxOneBT pozostaje osobnym repozytorium.
+- [POST-STABLE] Rozszerzyć aktualizację VoxOneBT przepływem MAIN WWW → MAIN → UART → VoxOneBT → OTA/flash → CRC i walidacja → restart VoxOneBT → ponowne ONLINE → potwierdzenie oczekiwanego `FW_VERSION`; MAIN pozostaje uruchomiony. Używać wspólnego modelu UpdateProgress i faz PREPARE, SENDING_TO_BT, VERIFYING, RESTARTING_BT, WAITING_FOR_BT, SUCCESS i ERROR. `confirmedBytes` liczyć wyłącznie z ACK faktycznie przyjętych przez VoxOneBT bloków; 100% transferu UART nie oznacza sukcesu. SUCCESS wymaga kompletnego obrazu, zgodnego rozmiaru i CRC, poprawnego OTA, powrotu BT online oraz oczekiwanej wersji firmware. Dodać testy normalnego transferu, ACK/NACK, CRC fail, timeout, przerwania UART, restartu, braku powrotu BT, błędnej `FW_VERSION` oraz ciągłej pracy MAIN. VoxOneBT pozostaje osobnym repozytorium.
 
 ## DLNA
 
@@ -106,10 +113,9 @@
 
 - [POST-STABLE] Rozszerzyć source-aware metadata WWW o przyszłe DLNA/AUX; RADIO/BT są bieżącym działającym baseline.
 - [POST-STABLE] Ujednolicić później MUTE między WWW, LCD i HA.
-- [POST-STABLE] Rozszerzyć istniejący WebSocket runtime state o source-aware metadata i codec/format DLNA/AUX, sample rate oraz bitrate tam, gdzie mają znaczenie, a następnie wykorzystać bieżący kontrakt w native HA.
+- [POST-STABLE] Rozszerzyć istniejący WebSocket runtime state o source-aware metadata i codec/format DLNA/AUX, sample rate oraz bitrate tam, gdzie mają znaczenie.
 - [POST-STABLE] Dokończyć edycję maksymalnie pięciu profili Wi-Fi: priority/last-known-good, nowe hasło, zachowanie lub wyczyszczenie hasła, walidacja, atomowy zapis i kontrolowany restart.
 - [POST-STABLE] Dodać konfigurację restartu, sleep/screensaver, auto standby, backup/restore config, playlist import/export, Radio Directory i recovery bez przywracania starego WWW.
-- [POST-STABLE] Dodać Web Update VoxOneBT jako osobny, jawny proces po stabilizacji aktualizacji MAIN.
 - [DECISION] Rozstrzygnąć, czy lokalny WebSocket ma walidować żądany subprotocol zamiast bezwarunkowo go odsyłać; połączyć decyzję z audytem auth/CSRF.
 
 ## Local UI / LCD
@@ -117,7 +123,7 @@
 - [POST-STABLE] Zaprojektować pełną konfigurację urządzenia z LCD 480×320 i jednym enkoderem tak, aby po jednorazowym flashu urządzenie działało samodzielnie bez WWW; WWW i LCD mają używać wspólnego modelu konfiguracji.
 - [POST-STABLE] Przebudować PLAYER: podnieść PLAY/PAUSE/STOP oraz bitrate/audio info, a niżej dodać czytelną ramkę faktycznego trybu wyjścia 2.0/2.1/2.2 pochodzącego z konfiguracji audio/DSP.
 - [POST-STABLE] Ustalić wspólną lub jawnie przypisaną szybkość przewijania dla stacji, artysty, utworu i list; usunąć przypadkowo różne timingi rendererów.
-- [POST-STABLE] Dodać ekran aktualizacji „AKTUALIZACJA” z rzeczywistym postępem, sukcesem, błędem i restartem dla MAIN, a później dla VoxOneBT.
+- [POST-STABLE] Dodać ekran aktualizacji „AKTUALIZACJA” z rzeczywistym postępem, fazami, sukcesem, błędem i restartem MAIN/SPIFFS zgodnie ze wspólnym modelem UpdateProgress; VoxOneBT pokazać po UART ACK, weryfikacji i ponownym połączeniu, bez restartu MAIN.
 - [POST-STABLE] Dodać source-aware PLAYER, ekran TTS, przyszłą przeglądarkę DLNA oraz konfigurację DSP.
 - [POST-STABLE] Przygotować wspólne `assets/branding` jako źródło logo WWW, splash/logo LCD i favicon; później użyć tych samych materiałów w README/GitHub.
 - [POST-STABLE] Rozważyć opcjonalną skórkę YAMAHA AMBER: czarne tło i jeden bursztynowy kolor, punkt startowy `#FF9A1F` / RGB565 `0xFCC3`.
@@ -143,10 +149,17 @@
 
 ## Home Assistant i MQTT
 
-- [POST-STABLE] Zbudować natywną integrację HA jako jedno urządzenie z `media_player`, source list z capabilities, source-aware play/pause/stop/next/prev, metadata oraz announce/TTS.
-- [POST-STABLE] Dodać minimalne entities: TTS Volume Mode, TTS Fixed Volume, Max Volume, Wi-Fi RSSI, uptime, restart, a później standby.
+- [POST-STABLE] HA-1 — ustalić wersjonowany kontrakt integracji na bazie istniejącego `/ws`, `webStatus`, CommandHandler i SourceManager: stabilne pola snapshotu i synchronizację po reconnect, błędy/wynik komendy oraz jawne source-aware transport commands. Nie tworzyć osobnego WebSocket ani dodawać REST API wyłącznie dla HA.
+- [POST-STABLE] HA-2 — dodać mDNS/Zeroconf `_voxone._tcp` i config flow z potwierdzeniem urządzenia, pełnym MAC MAIN jako unique ID oraz ręcznym host fallback; hostname i IP nie są unique ID.
+- [POST-STABLE] HA-3 — zbudować jedno urządzenie i główny `media_player` z runtime state, volume, mute, RADIO, podstawowym BT, `source`/`source_list` oraz source-aware metadata.
+- [POST-STABLE] HA-4 — wyliczać `supported_features` zależnie od aktywnego źródła i capabilities; reklamować PLAY/PAUSE/STOP/NEXT/PREV tylko gdy dana akcja jest rzeczywiście obsługiwana. Uwzględnić RADIO i BT, a DLNA/AUX dopiero po ich implementacji.
+- [POST-STABLE] HA-5 — dodać stabilne wywołanie URL przez WS dla TTS/announce; VoxOne zarządza temporary override i restore, HA nie implementuje przywracania audio. Reklamować `MEDIA_ANNOUNCE` dopiero po fizycznej weryfikacji.
+- [POST-STABLE] HA-6 — dodać tylko minimalne dodatkowe encje: RSSI, uptime, restart i Max Volume; TTS Volume Mode/Fixed po wdrożeniu polityki TTS, standby później.
+- [POST-STABLE] HA-7 — przetestować restart HA i VoxOne, zmianę IP, utratę/reconnect WebSocket, partial snapshot i duplikat komendy.
+- [POST-STABLE] HA-8 — uruchomić native HA równolegle z MQTT i przeprowadzić audyt parytetu oraz fizyczne testy.
+- [POST-STABLE] HA-9 — rozważyć wycofanie MQTT dopiero po potwierdzeniu fizycznego parytetu i stabilnego działania native HA.
+- [DECISION] Przed dystrybucją native HA ustalić wymagania tokenu/auth i zabezpieczenia mutujących komend; mDNS nie jest autoryzacją. Istniejący hostname mDNS nie publikuje jeszcze usługi `_voxone._tcp`.
 - [DECISION] Zweryfikować znaczenie `status.on = config.store.dspon` w obecnym `ha_yoradio` i nie zmieniać kontraktu MQTT bez fizycznej regresji.
-- [POST-STABLE] MQTT usunąć dopiero w osobnym etapie po uruchomieniu i fizycznym potwierdzeniu natywnego HA.
 
 ## Network
 
