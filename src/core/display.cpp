@@ -311,6 +311,9 @@ void Display::init() {
   analogSetAttenuation(ADC_0db);
 #endif
   _bootStep = 0;
+#if defined(VOXONE_PROFILE_SALON) && DSP_MODEL==DSP_ST7796
+  _salonPlayerReady = false;
+#endif
   _volumePending = false;
   _volumeModePending = false;
   _lastVolumeDraw = millis() - DISPLAY_VOLUME_INTERVAL_MS;
@@ -566,6 +569,9 @@ void Display::_buildPager(){
   _salonUpdatePage->addWidget(updateTitle);
   _pager->addPage(_salonUpdatePage);
   #endif
+#if defined(VOXONE_PROFILE_SALON) && DSP_MODEL==DSP_ST7796
+  _salonPlayerReady = true;
+#endif
 }
 
 void Display::_apScreen() {
@@ -837,14 +843,19 @@ void Display::_updatePlaybackStatus() {
 #if defined(VOXONE_PROFILE_SALON) && DSP_MODEL==DSP_ST7796
 void Display::_salonScrollMode(bool playerMode) {
   ScrollWidget* rows[3] = {_meta, _title1, _title2};
+  if (!_salonPlayerReady || !rows[0] || !rows[1] || !rows[2]) {
+    _salonScroll.leave();
+    return;
+  }
   if (playerMode) _salonScroll.enter();
   else _salonScroll.leave();
   for (ScrollWidget* row : rows) row->setExternallyScheduled(playerMode);
 }
 
 void Display::_salonScrollTextChanged(uint8_t row) {
-  if (_bootStep != 2 || _mode != PLAYER || !_salonScroll.enabled()) return;
   ScrollWidget* rows[3] = {_meta, _title1, _title2};
+  if (!salonPlayerScrollReady(_salonPlayerReady, _mode == PLAYER,
+                              _salonScroll.enabled(), rows[0], rows[1], rows[2])) return;
   for (ScrollWidget* widget : rows)
     if (dsp.getScrollId() == widget) dsp.setScrollId(NULL);
   _salonScroll.textChanged(row);
@@ -852,6 +863,8 @@ void Display::_salonScrollTextChanged(uint8_t row) {
 
 void Display::_salonScrollTick() {
   ScrollWidget* rows[3] = {_meta, _title1, _title2};
+  if (!salonPlayerScrollReady(_salonPlayerReady, _mode == PLAYER,
+                              _salonScroll.enabled(), rows[0], rows[1], rows[2])) return;
   const bool needsScroll[3] = {
       rows[0]->scrollNeeded(), rows[1]->scrollNeeded(), rows[2]->scrollNeeded()};
   const SalonPlayerScroll::Event event = _salonScroll.tick(millis(), needsScroll);
@@ -875,7 +888,7 @@ void Display::loop() {
   if(_mode == PLAYER) ScrollWidget::nextDeskScrollFrame();
 #endif
 #if defined(VOXONE_PROFILE_SALON) && DSP_MODEL==DSP_ST7796
-  if (_bootStep == 2 && _mode == PLAYER) _salonScrollTick();
+  if (_salonPlayerReady && _mode == PLAYER) _salonScrollTick();
 #endif
   _pager->loop();
 #if DSP_MODEL==DSP_ST7796

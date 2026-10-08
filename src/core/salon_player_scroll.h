@@ -3,6 +3,12 @@
 
 #include <stdint.h>
 
+inline bool salonPlayerScrollReady(bool playerPageReady, bool playerMode,
+                                   bool schedulerEnabled, const void* meta,
+                                   const void* title1, const void* title2) {
+  return playerPageReady && playerMode && schedulerEnabled && meta && title1 && title2;
+}
+
 class SalonPlayerScroll {
  public:
   static constexpr uint32_t kStartDelayMs = 2500;

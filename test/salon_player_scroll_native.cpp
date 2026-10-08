@@ -9,6 +9,15 @@ static void expect(SalonPlayerScroll::Event event, Action action, int row) {
 }
 
 int main() {
+  // AP startup reports bootStep 2 without creating the PLAYER page.
+  int meta = 0, title1 = 0, title2 = 0;
+  assert(!salonPlayerScrollReady(false, true, false, &meta, &title1, nullptr));
+  assert(!salonPlayerScrollReady(false, true, true, &meta, &title1, nullptr));
+  assert(!salonPlayerScrollReady(true, true, true, &meta, &title1, nullptr));
+  assert(!salonPlayerScrollReady(true, true, false, &meta, &title1, &title2));
+  assert(salonPlayerScrollReady(true, true, true, &meta, &title1, &title2));
+  assert(!salonPlayerScrollReady(true, false, true, &meta, &title1, &title2));
+
   SalonPlayerScroll scroll;
   const bool allLong[3] = {true, true, true};
   const bool stationOnly[3] = {true, false, false};

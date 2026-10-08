@@ -176,6 +176,7 @@ class Display {
 #endif
 #if defined(VOXONE_PROFILE_SALON) && DSP_MODEL==DSP_ST7796
     SalonPlayerScroll _salonScroll;
+    bool _salonPlayerReady = false;
     void _salonScrollTextChanged(uint8_t row);
     void _salonScrollTick();
     void _salonScrollMode(bool playerMode);
