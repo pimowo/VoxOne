@@ -1640,11 +1640,12 @@ void NetServer::processQueue(){
         const unsigned long long uptimeSeconds =
             static_cast<unsigned long long>(esp_timer_get_time() / 1000000LL);
         const int prefixLength = snprintf(wsBuf, sizeof(wsBuf),
-            "{\"sst\":%d,\"vu\":%d,\"canVu\":%d,\"softr\":%d,\"vut\":%d,\"mdns\":\"%s\",\"ipaddr\":\"%s\",\"abuff\":%d,\"systemInfo\":{\"mac\":\"%s\",\"rssi\":%d,\"uptimeSeconds\":%llu,\"freeHeap\":%lu,\"minimumFreeHeap\":%lu,\"psramTotal\":%lu,\"psramFree\":%lu,\"capabilities\":\"%s\"},\"networkInfo\":",
+            "{\"sst\":%d,\"vu\":%d,\"canVu\":%d,\"softr\":%d,\"vut\":%d,\"mdns\":\"%s\",\"ipaddr\":\"%s\",\"abuff\":%d,\"systemInfo\":{\"version\":\"%s\",\"channel\":\"%s\",\"build\":\"%s\",\"profile\":\"%s\",\"mac\":\"%s\",\"rssi\":%d,\"uptimeSeconds\":%llu,\"freeHeap\":%lu,\"minimumFreeHeap\":%lu,\"psramTotal\":%lu,\"psramFree\":%lu,\"capabilities\":\"%s\"},\"networkInfo\":",
             config.store.smartstart != 2, config.store.vumeter,
             voxone::activeProfile.capabilities.hasVu, config.store.softapdelay,
             config.vuThreshold, config.store.mdnsname, ipText, config.store.abuff,
-            macText, wifiRssi,
+            VOXONE_VERSION, VOXONE_BUILD_CHANNEL, VOXONE_BUILD_SHA,
+            VOXONE_BUILD_PROFILE, macText, wifiRssi,
             uptimeSeconds, static_cast<unsigned long>(freeHeap),
             static_cast<unsigned long>(minimumFreeHeap),
             static_cast<unsigned long>(psramTotal),
@@ -2096,7 +2097,7 @@ void handleNotFound(AsyncWebServerRequest * request) {
   }// if (request->method() == HTTP_POST)
   
   if (request->url() == "/variables.js") {
-    sprintf (netserver.nsBuf, "var voxOneVersion='%s';\nvar yoRadioVersion='%s';\nvar yoVersion=voxOneVersion;\nvar voxOneProfile='%s';\nvar playMode='%s';\n", VOXONE_VERSION, YOVERSION, VOXONE_PROFILE_NAME, (network.status == CONNECTED)?"player":"ap");
+    sprintf (netserver.nsBuf, "var voxOneVersion='%s';\nvar voxOneChannel='%s';\nvar voxOneBuild='%s';\nvar yoRadioVersion='%s';\nvar yoVersion=voxOneVersion;\nvar voxOneProfile='%s';\nvar playMode='%s';\n", VOXONE_VERSION, VOXONE_BUILD_CHANNEL, VOXONE_BUILD_SHA, YOVERSION, VOXONE_BUILD_PROFILE, (network.status == CONNECTED)?"player":"ap");
     request->send(200, "text/html", netserver.nsBuf);
     return;
   }

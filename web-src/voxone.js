@@ -182,6 +182,8 @@
     ip: null,
     profile: typeof voxOneProfile === "string" ? voxOneProfile : null,
     version: typeof voxOneVersion === "string" ? voxOneVersion : null,
+    channel: typeof voxOneChannel === "string" ? voxOneChannel : null,
+    build: typeof voxOneBuild === "string" ? voxOneBuild : null,
     baseVersion: typeof yoRadioVersion === "string" ? yoRadioVersion : null
   };
   const advancedAudio = window.createAdvancedAudioLive(
@@ -263,7 +265,8 @@
 
   function renderSystemInfo() {
     const info = state.connection === "connected" ? state.systemInfo : null;
-    text("system-version", state.version ? "VoxOne " + state.version : "—");
+    text("system-version", state.version ? state.version + (state.channel ? "-" + state.channel : "") : "—");
+    text("system-build", state.build || "—");
     text("system-profile", state.profile ? state.profile.toUpperCase() : "—");
     text("system-ip", state.ip || "—");
     text("system-mac", info?.mac || "—");
@@ -898,13 +901,15 @@
   }
 
   function renderIdentity() {
-    const version = state.version || "—";
+    const version = state.version ? state.version + (state.channel ? "-" + state.channel : "") : "—";
     const profile = state.profile ? state.profile.toUpperCase() : "—";
     text("header-version", "VoxOne " + version);
     text("header-profile", "Profil " + profile);
     text("system-version", "VoxOne " + version);
+    text("system-build", state.build || "—");
     text("system-profile", profile);
     text("update-version", "VoxOne " + version);
+    text("update-build", state.build || "—");
     text("update-profile", profile);
     text("system-base", "yoRadio " + (state.baseVersion || "—"));
   }

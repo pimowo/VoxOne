@@ -50,7 +50,6 @@ Cleanup przed stable jest zakończony. Bazą diagnostyczną testów długotrwał
 - [HARDWARE] Przypisać GPIO XSMT PCM5102A na SALON i fizycznie sprawdzić LOW przy PAUZA/STOP, HIGH przy PLAY, ciszę podczas przejść i Web Update oraz czerwoną ramkę VOL bez zmiany semantyki MUTE.
 - [STABLE] Fizycznie sprawdzić MQTT/Home Assistant na SALON; MQTT pozostaje wspierane w pierwszym stable.
 - [STABLE] Uzupełnić dokumentację aktywnych profili, API, MQTT/HA, Source Managera, VoxOneBT oraz update/recovery; oznaczyć historyczne baseline'y i usunąć z dokumentów bieżącego stanu opisy sprzeczne z aktualnym runtime.
-- [STABLE] Zaprojektować identyfikację builda w WWW SYSTEM, WWW AKTUALIZACJA i opcjonalnie Serial boot log: release version, dev/stable status, krótki Git SHA/build ID oraz profil DESK/DIN/SALON. Nie zmieniać `VOXONE_VERSION` dla checkpointów technicznych.
 - [DECISION] Przed stable ustalić minimalny zakres uwierzytelniania, CSRF i ochrony mutujących REST/WebSocket oraz ekspozycji danych.
 
 ## Znane błędy i pomiary

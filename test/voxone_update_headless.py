@@ -45,6 +45,8 @@ MOCK = r"""
 <script>
 window.voxOneProfile = 'salon';
 window.voxOneVersion = '0.2.0';
+window.voxOneChannel = 'dev';
+window.voxOneBuild = '192a400';
 window.yoRadioVersion = 'test';
 class MockWebSocket {
   static OPEN = 1;
@@ -118,7 +120,11 @@ setTimeout(() => {
     btTestSocket.onmessage({data:JSON.stringify({ipaddr:'192.168.1.42',
       payload:[{id:'rssi',value:-57}]})});
     check(get('footer-details').textContent === 'VoxOne 0.2.0 · SALON · 192.168.1.42', 'footer IP');
-    check(get('system-version').textContent === 'VoxOne 0.2.0', 'identity firmware fallback');
+    check(get('system-version').textContent === '0.2.0-dev', 'identity firmware fallback');
+    check(get('system-build').textContent === '192a400', 'identity build');
+    check(get('update-version').textContent === 'VoxOne 0.2.0-dev', 'update firmware');
+    check(get('update-build').textContent === '192a400', 'update build');
+    check(get('update-profile').textContent === 'SALON', 'update profile');
     check(get('system-profile').textContent === 'SALON', 'identity profile fallback');
     check(get('system-ip').textContent === '192.168.1.42', 'legacy IP field');
     check(get('system-rssi').textContent === '-57 dBm', 'legacy RSSI field');
@@ -128,7 +134,7 @@ setTimeout(() => {
       freeHeap:256000, minimumFreeHeap:128000, psramTotal:8388608, psramFree:4194304,
       capabilities:'DISPLAY, ENCODER, BT, VU, RTC'};
     btTestSocket.receiveSystem(systemInfo);
-    check(get('system-version').textContent === 'VoxOne 0.2.0', 'system firmware');
+    check(get('system-version').textContent === '0.2.0-dev', 'system firmware');
     check(get('system-profile').textContent === 'SALON', 'system profile');
     check(get('system-ip').textContent === '192.168.1.42', 'system IP');
     check(get('system-rssi').textContent === '-57 dBm', 'system RSSI');

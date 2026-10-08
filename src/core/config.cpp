@@ -915,7 +915,9 @@ void Config::sleepForAfter(uint16_t sf, uint16_t sa){
 
 void Config::bootInfo() {
   BOOTLOG("************************************************");
-  BOOTLOG("VoxOne v%s", VOXONE_VERSION);
+  BOOTLOG("VoxOne v%s-%s", VOXONE_VERSION, VOXONE_BUILD_CHANNEL);
+  BOOTLOG("build: %s", VOXONE_BUILD_SHA);
+  BOOTLOG("profile: %s", VOXONE_BUILD_PROFILE);
   BOOTLOG("based on yoRadio v%s", YOVERSION);
   BOOTLOG("************************************************");
   BOOTLOG("------------------------------------------------");

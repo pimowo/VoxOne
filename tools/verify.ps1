@@ -103,15 +103,16 @@ Invoke-Step 'Native tests' {
   $name=$test.BaseName
   $sources=@($test.FullName)
   if($nativeSources.ContainsKey($name)) { $sources+=@($nativeSources[$name] | ForEach-Object { Join-Path $root $_ }) }
-  $variants=if($name -eq 'hardware_descriptor_native') { @('DESK','DIN','SALON') } else { @('') }
+  $variants=if($name -eq 'hardware_descriptor_native') { @('DESK','DIN','SALON') } elseif($name -eq 'build_identity_native') { @('','DESK','DIN','SALON','CLEAN','DIRTY') } else { @('') }
   foreach($variant in $variants) {
    $label=if($variant) { "$name-$variant" } else { $name }
    $exe=Join-Path $work ($label+$(if($onWindows) { '.exe' } else { '' }))
    $compileLog=Join-Path $work ($label+'.compile.log')
    $compileArgs=@('-std=c++11','-O2','-Wall','-Wextra','-Werror','-Wno-unused-parameter')
    if($variant) {
-    $compileArgs+="-DVOXONE_PROFILE_$variant=1"
-    $sourcesForVariant=$sources+@(Join-Path $root 'src/hardware/hardware_descriptor.cpp')
+    if($variant -eq 'CLEAN' -or $variant -eq 'DIRTY') { $compileArgs+="-DBUILD_ID_TEST_$variant=1" }
+    else { $compileArgs+="-DVOXONE_PROFILE_$variant=1" }
+    $sourcesForVariant=if($name -eq 'hardware_descriptor_native') { $sources+@(Join-Path $root 'src/hardware/hardware_descriptor.cpp') } else { $sources }
    } else { $sourcesForVariant=$sources }
    $compileArgs+=@('-o',$exe)+$sourcesForVariant
    $oldPreference=$ErrorActionPreference
