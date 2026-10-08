@@ -118,7 +118,6 @@ Cleanup przed stable jest zakończony. Bazą diagnostyczną testów długotrwał
 - [POST-STABLE] Przebudować PLAYER: podnieść PLAY/PAUSE/STOP oraz bitrate/audio info, a niżej dodać czytelną ramkę faktycznego trybu wyjścia 2.0/2.1/2.2 pochodzącego z konfiguracji audio/DSP.
 - [POST-STABLE] Ustalić wspólną lub jawnie przypisaną szybkość przewijania dla stacji, artysty, utworu i list; usunąć przypadkowo różne timingi rendererów.
 - [POST-STABLE] Dodać ekran aktualizacji „AKTUALIZACJA” z rzeczywistym postępem, sukcesem, błędem i restartem dla MAIN, a później dla VoxOneBT.
-- [POST-STABLE] Dodać ikonę/stan MUTE na DESK i ujednolicić go z SALON.
 - [POST-STABLE] Dodać source-aware PLAYER, ekran TTS, przyszłą przeglądarkę DLNA oraz konfigurację DSP.
 - [POST-STABLE] Przygotować wspólne `assets/branding` jako źródło logo WWW, splash/logo LCD i favicon; później użyć tych samych materiałów w README/GitHub.
 - [POST-STABLE] Rozważyć opcjonalną skórkę YAMAHA AMBER: czarne tło i jeden bursztynowy kolor, punkt startowy `#FF9A1F` / RGB565 `0xFCC3`.

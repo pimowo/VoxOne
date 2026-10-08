@@ -1,6 +1,7 @@
 #ifndef display_h
 #define display_h
 #include <stdint.h>
+#include <stdio.h>
 #include "common.h"
 #if defined(VOXONE_PROFILE_SALON) && DSP_MODEL==DSP_ST7796
 #include "salon_player_scroll.h"
@@ -20,6 +21,12 @@ inline const char* displaySourceLabel(DisplaySourceKind kind) {
 }
 inline bool displayVolumeMuted(uint8_t userVolume, bool muted = false) {
     return muted || userVolume == 0;
+}
+inline const char* displayDeskVolumeText(uint8_t userVolume, bool muted,
+                                         char* buffer, size_t bufferSize) {
+    if (displayVolumeMuted(userVolume, muted)) return "MUTE";
+    snprintf(buffer, bufferSize, "\023 %u", static_cast<unsigned>(userVolume));
+    return buffer;
 }
 inline const char* displayLoudLabel(bool active) {
     return active ? "LOUD" : "";

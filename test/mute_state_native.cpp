@@ -2,8 +2,23 @@
 #include "../src/core/source_manager_state.h"
 
 #include <cassert>
+#include <cstring>
 
 int main() {
+  char deskVolume[12];
+  const auto deskText = [&](uint8_t volume, bool muted) {
+    return displayDeskVolumeText(volume, muted, deskVolume, sizeof(deskVolume));
+  };
+  assert(std::strcmp(deskText(27, false), "\023 27") == 0);
+  assert(std::strcmp(deskText(27, true), "MUTE") == 0);
+  assert(std::strcmp(deskText(28, true), "MUTE") == 0);
+  assert(std::strcmp(deskText(28, false), "\023 28") == 0);
+  // The same current state is used after a refresh and on return from VOL.
+  assert(std::strcmp(deskText(28, true), "MUTE") == 0);
+  assert(displayVolumeMuted(28, true));
+  assert(std::strcmp(deskText(28, false), "\023 28") == 0);
+  assert(std::strcmp(deskText(0, false), "MUTE") == 0);
+
   MuteState mute;
   uint8_t userVolume = 27;
   SourceManagerState sources;

@@ -1215,7 +1215,11 @@ void Display::_volume() {
   _setVuVisibility(activeSourceVuVisible());
   if(_volbar) _volbar->setValue(displayedVolume());
 #if DSP_MODEL==DSP_ST7789_76
-  if(_deskVolume) _deskVolume->setText(displayedVolume(), "\023 %d");
+  if(_deskVolume) {
+    char volumeText[12];
+    _deskVolume->setText(displayDeskVolumeText(displayedVolume(), player.isMuted(),
+                                               volumeText, sizeof(volumeText)));
+  }
 #endif
 #if DSP_MODEL==DSP_ST7796
   if(_salonVolume) _salonVolume->setVolume(displayedVolume(), player.isMuted());
