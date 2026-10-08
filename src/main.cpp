@@ -19,6 +19,8 @@
 #include "core/system_operation_state.h"
 #include "core/nvs_diagnostics.h"
 #include "core/dsp_runtime.h"
+#include <esp_heap_caps.h>
+#include <esp_timer.h>
 
 #if USE_OTA
 #if ESP_ARDUINO_VERSION >= ESP_ARDUINO_VERSION_VAL(3, 0, 0)
@@ -34,6 +36,44 @@ SPIClass  SPI2(HSPI);
 #endif
 
 extern __attribute__((weak)) void yoradio_on_setup();
+
+namespace {
+constexpr uint32_t kEnduranceReportIntervalMs = 60000;
+uint32_t enduranceLastReportMs = 0;
+uint32_t enduranceMaximumLoopUs = 0;
+
+void reportEnduranceHealth(uint32_t nowMs) {
+  if (nowMs - enduranceLastReportMs < kEnduranceReportIntervalMs) return;
+
+  constexpr uint32_t internalCaps = MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT;
+  constexpr uint32_t psramCaps = MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT;
+  const uint32_t psramTotal = ESP.getPsramSize();
+  const uint32_t psramFree = psramTotal ? heap_caps_get_free_size(psramCaps) : 0;
+  const uint32_t psramMinimum =
+      psramTotal ? heap_caps_get_minimum_free_size(psramCaps) : 0;
+  const bool wifiConnected = network.status == CONNECTED;
+
+  Serial.printf(
+      "##[ENDURANCE]# uptime=%llu heap=%lu minHeap=%lu largestHeap=%lu "
+      "psram=%lu minPsram=%lu loopMaxUs=%lu loopStackHwm=%lu "
+      "displayStackHwm=%lu audioBuffer=%lu playerRunning=%u wifi=%u rssi=%d\n",
+      static_cast<unsigned long long>(esp_timer_get_time() / 1000000LL),
+      static_cast<unsigned long>(heap_caps_get_free_size(internalCaps)),
+      static_cast<unsigned long>(heap_caps_get_minimum_free_size(internalCaps)),
+      static_cast<unsigned long>(heap_caps_get_largest_free_block(internalCaps)),
+      static_cast<unsigned long>(psramFree),
+      static_cast<unsigned long>(psramMinimum),
+      static_cast<unsigned long>(enduranceMaximumLoopUs),
+      static_cast<unsigned long>(uxTaskGetStackHighWaterMark(nullptr)),
+      static_cast<unsigned long>(displayTaskStackHighWaterMark()),
+      static_cast<unsigned long>(player.inBufferFilled()),
+      player.isRunning() ? 1U : 0U, wifiConnected ? 1U : 0U,
+      wifiConnected ? WiFi.RSSI() : -127);
+
+  enduranceMaximumLoopUs = 0;
+  enduranceLastReportMs = nowMs;
+}
+}  // namespace
 
 #if USE_OTA
 void setupOTA(){
@@ -123,6 +163,7 @@ void setup() {
 }
 
 void loop() {
+  const uint32_t loopStartedUs = micros();
   timekeeper.loop1();
   serialCli.loop();
   #if VOXONE_HAS_BT && VOXONE_PIN_MAP_COMPLETE
@@ -162,6 +203,10 @@ void loop() {
   #ifdef NETSERVER_LOOP1
   netserver.loop();
   #endif
+  const uint32_t loopElapsedUs = micros() - loopStartedUs;
+  if (loopElapsedUs > enduranceMaximumLoopUs)
+    enduranceMaximumLoopUs = loopElapsedUs;
+  reportEnduranceHealth(millis());
 }
 
 #include "core/audiohandlers.h"

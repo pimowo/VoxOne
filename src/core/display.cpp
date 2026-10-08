@@ -24,6 +24,7 @@
 #include "../displays/tools/l10n.h"
 
 Display display;
+static TaskHandle_t displayTaskHandle = nullptr;
 
 #ifndef CORE_STACK_SIZE
   #define CORE_STACK_SIZE  1024*4
@@ -74,11 +75,18 @@ static void loopDspTask(void * pvParameters){
   #endif
     vTaskDelay(DSP_TASK_DELAY);
   }
+  displayTaskHandle = nullptr;
   vTaskDelete( NULL );
 }
 
 void Display::_createDspTask(){
-  xTaskCreatePinnedToCore(loopDspTask, "DspTask", CORE_STACK_SIZE,  NULL,  DSP_TASK_PRIORITY, NULL, DSP_TASK_CORE_ID);
+  xTaskCreatePinnedToCore(loopDspTask, "DspTask", CORE_STACK_SIZE, NULL,
+                         DSP_TASK_PRIORITY, &displayTaskHandle,
+                         DSP_TASK_CORE_ID);
+}
+
+uint32_t displayTaskStackHighWaterMark() {
+  return displayTaskHandle ? uxTaskGetStackHighWaterMark(displayTaskHandle) : 0;
 }
 
 #ifndef DUMMYDISPLAY

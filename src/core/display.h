@@ -218,6 +218,7 @@ class Display {
 #endif
 
 extern Display display;
+uint32_t displayTaskStackHighWaterMark();
 
 
 #endif
