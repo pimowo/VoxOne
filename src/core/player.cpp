@@ -14,7 +14,6 @@
 #include <driver/i2s.h>
 #endif
 #include "../displays/tools/l10n.h"
-#include "../pluginsManager/pluginsManager.h"
 Player player;
 QueueHandle_t playerQueue;
 portMUX_TYPE playerVolumeMux = portMUX_INITIALIZER_UNLOCKED;
@@ -111,7 +110,6 @@ void Player::_stop(bool alreadyStopped, RadioStopReason reason){
   //if(!alreadyStopped) stopSong();
   if(radioStopUpdatesSmartStart(reason, lockOutput)) stopInfo();
   if (player_on_stop_play) player_on_stop_play();
-  pm.on_stop_play();
 }
 
 void resetPlayer(){
@@ -200,7 +198,6 @@ void Player::loop() {
         sourceManagerRadioPlayConsumed();
         _play((uint16_t)abs(requestP.payload)); 
         if (player_on_station_change) player_on_station_change(); 
-        pm.on_station_change();
         break;
       }
       case PR_TOGGLE: {
@@ -278,7 +275,6 @@ void Player::_play(uint16_t stationId, bool sourceResume) {
     config.configPostPlaying();
     setOutputPins(true);
     if (player_on_start_play) player_on_start_play();
-    pm.on_start_play();
   }else{
     serialCli.printf("##ERROR#:\tError connecting to %.128s\n", config.station.url);
     snprintf(config.tmpBuf, sizeof(config.tmpBuf), "Error connecting to %.128s", config.station.url); setError();
@@ -358,7 +354,6 @@ void Player::browseUrl(const char* url){
     setOutputPins(true);
     display.putRequest(PSTART);
     if (player_on_start_play) player_on_start_play();
-    pm.on_start_play();
   }else{
     serialCli.printf("##ERROR#:\tError connecting to %.128s\n", url);
     snprintf(config.tmpBuf, sizeof(config.tmpBuf), "Error connecting to %.128s", url); setError();

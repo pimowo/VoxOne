@@ -17,7 +17,6 @@
 #include <sys/time.h>
 #include <atomic>
 #include <freertos/task.h>
-#include "../pluginsManager/pluginsManager.h"
 
 #ifndef WIFI_ATTEMPTS
   #define WIFI_ATTEMPTS  16
@@ -161,7 +160,6 @@ void MyNetwork::begin() {
   if(REAL_LEDBUILTIN!=255) digitalWrite(REAL_LEDBUILTIN, LOW);
   
   if (network_on_connect) network_on_connect();
-  pm.on_connect();
 }
 
 void MyNetwork::setWifiParams(){

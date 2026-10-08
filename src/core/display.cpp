@@ -18,7 +18,6 @@
 #if DSP_MODEL==DSP_ST7796 && VOXONE_HAS_BT && VOXONE_PIN_MAP_COMPLETE
 #include "source_manager.h"
 #endif
-#include "../pluginsManager/pluginsManager.h"
 #include "../displays/dspcore.h"
 #include "../displays/widgets/widgets.h"
 #include "../displays/widgets/pages.h"
@@ -618,7 +617,6 @@ void Display::_start() {
 #endif
   _time(false);
   _bootStep = 2;
-  pm.on_display_player();
 }
 
 void Display::_showDialog(const char *title){
@@ -681,7 +679,6 @@ void Display::_swichMode(displayMode_e newmode) {
     _updatePlaybackStatus();
 #endif
     config.setDspOn(config.store.dspon, false);
-    pm.on_display_player();
   }
   if (newmode == SCREENSAVER || newmode == SCREENBLANK) {
     config.isScreensaver = true;
@@ -892,10 +889,7 @@ void Display::loop() {
 #endif
   requestParams_t request;
   if(xQueueReceive(displayQueue, &request, DSP_QUEUE_TICKS)){
-    bool pm_result = true;
-    pm.on_display_queue(request, pm_result);
-    if(pm_result)
-      switch (request.type){
+    switch (request.type){
         case NEWMODE: {
           _swichMode((displayMode_e)request.payload);
           if(request.payload == VOL){
@@ -1165,7 +1159,6 @@ void Display::_title() {
     if(_title2) _title2->setText("");
   }
   if (player_on_track_change) player_on_track_change();
-  pm.on_track_change();
 }
 
 void Display::_time(bool redraw) {

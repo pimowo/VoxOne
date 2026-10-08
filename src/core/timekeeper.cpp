@@ -8,7 +8,6 @@
 #include "netserver.h"
 #include "rtcsupport.h"
 #include <esp_sntp.h>
-#include "../pluginsManager/pluginsManager.h"
 #if DSP_MODEL==DSP_DUMMY
 #define DUMMYDISPLAY
 #endif
@@ -129,7 +128,6 @@ bool TimeKeeper::loop1(){ // core1 (player)
   static uint32_t _last1s = 0;
   static uint32_t _last2s = 0;
   if (currentTime - _last1s >= 1000) { // 1sec
-    pm.on_ticker();
     _last1s = currentTime;
 //#ifndef DUMMYDISPLAY
 #if !defined(DUMMYDISPLAY)

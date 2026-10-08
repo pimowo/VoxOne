@@ -7,7 +7,6 @@
 #include "display.h"
 #include "network.h"
 #include "netserver.h"
-#include "../pluginsManager/pluginsManager.h"
 #include "../hardware/hardware_descriptor.h"
 
 long encOldPosition  = 0;
@@ -330,7 +329,6 @@ void onBtnClick(int id) {
 #endif
   bool passBnCenter = (controlEvt_e)id==EVT_BTNCENTER || (controlEvt_e)id==EVT_ENCBTNB;
   controlEvt_e btnid = static_cast<controlEvt_e>(id);
-  pm.on_btn_click(btnid);
   if (network.status != CONNECTED && !passBnCenter) return;
   switch (btnid) {
     case EVT_BTNLEFT: {

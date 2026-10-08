@@ -1,7 +1,6 @@
 #include "Arduino.h"
 #include "core/options.h"
 #include "core/config.h"
-#include "pluginsManager/pluginsManager.h"
 #include "core/serialcli.h"
 #include "core/player.h"
 #include "core/display.h"
@@ -85,7 +84,6 @@ void setup() {
 #endif
   if(REAL_LEDBUILTIN!=255) pinMode(REAL_LEDBUILTIN, OUTPUT);
   if (yoradio_on_setup) yoradio_on_setup();
-  pm.on_setup();
   config.init();
   btRuntime.start();
 #if defined(VOXONE_PROFILE_SALON)
@@ -122,7 +120,6 @@ void setup() {
   #endif
   player.lockOutput=false;
   // Preserve the selected station, but always enter the base source in STOP.
-  pm.on_end_setup();
 }
 
 void loop() {
