@@ -11,6 +11,7 @@ enum class Mcu {
 enum class Display {
   None,
   Ssd1306_128x64,
+  Ssd1309_128x64,
   St7789_284x76,
   St7796_480x320
 };

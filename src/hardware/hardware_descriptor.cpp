@@ -35,7 +35,11 @@ constexpr bool kSupportsRtc = false;
 #elif defined(VOXONE_PROFILE_C0)
 constexpr BoardId kBoardId = BoardId::BoardC0;
 constexpr char kBoardFamily = 'C';
+#if defined(VOXONE_C0_DISPLAY_SSD1309)
+constexpr DisplayKind kDisplayKind = DisplayKind::Ssd1309_128x64;
+#else
 constexpr DisplayKind kDisplayKind = DisplayKind::Ssd1306_128x64;
+#endif
 constexpr SpiBusPins kSpi = {kNoPin, kNoPin, kNoPin};
 constexpr I2cBusPins kI2c = {fromLegacyPin(I2C_SDA), fromLegacyPin(I2C_SCL)};
 constexpr UartPins kBtUart = {kNoPin, kNoPin};
@@ -84,7 +88,8 @@ constexpr HardwareDescriptor kCurrent = {
    ENC_HALFQUARD == 255 ? 1 : (ENC_HALFQUARD ? 2 : 4)},
   {fromLegacyPin(TFT_CS), fromLegacyPin(TFT_DC),
    fromLegacyPin(TFT_RST), kBacklight,
-   kDisplayKind == DisplayKind::Ssd1306_128x64 ? BusKind::I2c :
+   (kDisplayKind == DisplayKind::Ssd1306_128x64 ||
+    kDisplayKind == DisplayKind::Ssd1309_128x64) ? BusKind::I2c :
      (VOXONE_HAS_DISPLAY ? BusKind::Spi : BusKind::None)},
   kDacXsmt,
   {VOXONE_HAS_DISPLAY != 0, VOXONE_HAS_BT != 0,
@@ -142,7 +147,8 @@ bool validateDescriptor(const HardwareDescriptor& d) {
       d.capabilities.supportsPcm5102 !=
         (hasPin(d.audioOut.bclk) && hasPin(d.audioOut.ws) &&
          hasPin(d.audioOut.dout))) return false;
-  if (d.displayKind == DisplayKind::Ssd1306_128x64) {
+  if (d.displayKind == DisplayKind::Ssd1306_128x64 ||
+      d.displayKind == DisplayKind::Ssd1309_128x64) {
     if (d.display.bus != BusKind::I2c ||
         !hasPin(d.i2c.sda) || !hasPin(d.i2c.scl)) return false;
   } else if (display) {

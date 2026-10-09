@@ -32,7 +32,8 @@ int main() {
   assert(d.display.rst == fromLegacyPin(TFT_RST));
   assert(d.capabilities.supportsDisplay == (d.displayKind != DisplayKind::None));
   assert(d.display.bus ==
-         (d.displayKind == DisplayKind::Ssd1306_128x64 ? BusKind::I2c :
+         ((d.displayKind == DisplayKind::Ssd1306_128x64 ||
+           d.displayKind == DisplayKind::Ssd1309_128x64) ? BusKind::I2c :
           (d.capabilities.supportsDisplay ? BusKind::Spi : BusKind::None)));
   assert(d.encoder.a == fromLegacyPin(ENC_BTNL));
   assert(d.encoder.b == fromLegacyPin(ENC_BTNR));
@@ -135,12 +136,18 @@ int main() {
   assert(d.board.family == 'C' && d.board.revision == 0);
   assert(d.board.flashBytes == 4u * 1024u * 1024u);
   assert(d.board.psramBytes == 2u * 1024u * 1024u);
+#if defined(VOXONE_C0_DISPLAY_SSD1309)
+  assert(activeProfile.display == Display::Ssd1309_128x64);
+  assert(d.displayKind == DisplayKind::Ssd1309_128x64);
+#else
+  assert(activeProfile.display == Display::Ssd1306_128x64);
   assert(d.displayKind == DisplayKind::Ssd1306_128x64);
+#endif
   assert(d.display.bus == BusKind::I2c);
   assert(d.i2c.sda == 7 && d.i2c.scl == 8);
   assert(d.display.cs == kNoPin && d.display.dc == kNoPin);
   assert(d.audioOut.bclk == 1 && d.audioOut.ws == 3 && d.audioOut.dout == 2);
-  assert(d.encoder.a == 6 && d.encoder.b == 5 && d.encoder.button == 4);
+  assert(d.encoder.a == 5 && d.encoder.b == 6 && d.encoder.button == 4);
   assert(d.encoder.internalPullup);
   assert(!d.capabilities.supportsRtc);
   assert(!d.capabilities.supportsVoxOneBt);
@@ -182,7 +189,9 @@ int main() {
   assert(!validateDescriptor(bad));
   bad = d;
   bad.i2c.sda = kNoPin;
-  if (d.displayKind == DisplayKind::Ssd1306_128x64 || d.capabilities.supportsRtc)
+  if (d.displayKind == DisplayKind::Ssd1306_128x64 ||
+      d.displayKind == DisplayKind::Ssd1309_128x64 ||
+      d.capabilities.supportsRtc)
     assert(!validateDescriptor(bad));
   bad = d;
   bad.capabilities.supportsEncoder = true;
@@ -192,5 +201,9 @@ int main() {
   bad.capabilities.supportsEncoder = true;
   bad.encoder.stepsPerDetent = 0;
   assert(!validateDescriptor(bad));
+#if defined(VOXONE_C0_DISPLAY_SSD1309)
+  std::printf("PASS hardware_descriptor_native (C0 SSD1309)\n");
+#else
   std::printf("PASS hardware_descriptor_native (%s)\n", d.board.name);
+#endif
 }
