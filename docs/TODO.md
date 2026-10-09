@@ -35,15 +35,10 @@
 
 ### Update, recovery i persistence
 
-- [STABLE] Fizycznie sprawdzić Web Update firmware MAIN i SPIFFS: postęp zapisu flash, sukces dopiero po finalizacji obrazu, błąd, cancel/przerwanie, restart oraz brak samoczynnego wznowienia audio po błędzie.
-- [POST-STABLE] UPDATE-CORE-1 — wprowadzić wspólny `UpdateProgress` i globalny `UPDATE_LOCK` dla targetów MAIN / FILESYSTEM / VOXONEBT, ze wspólnymi fazami aktualizacji; podczas właściwej aktualizacji zatrzymać audio i zbędne funkcje oraz przygotować wspólny ekran LCD/WWW.
-- [POST-STABLE] Ujednolicić postęp MAIN, SPIFFS/WWW i VoxOneBT w jednym modelu `target`, `phase`, `totalBytes`, `writtenBytes`/`confirmedBytes`, opcjonalny `percent` i `result`/`error`; nie tworzyć osobnych systemów postępu.
-- [POST-STABLE] Dla MAIN i SPIFFS stosować fazy PREPARE, WRITING, FINALIZING, SUCCESS, ERROR i RESTART. Procent liczyć z bajtów dopiero po udanym `Update.write`; 100% zapisu nie oznacza SUCCESS, który następuje po `Update.end`. Przy nieznanym rozmiarze firmware pokazywać „ZAPIS...”; SPIFFS wymaga znanego pełnego rozmiaru obrazu.
-- [POST-STABLE] Przekazywać update progress ze współdzielonego stanu/backendu do DisplayTask; backend nie rysuje LCD. Ograniczyć publikacje do zmiany procentu i maksymalnie jednej na ok. 100–250 ms, z natychmiastowym przekazaniem faz PREPARE, FINALIZING, SUCCESS i ERROR.
-- [POST-STABLE] Pokazać na A0 „AKTUALIZACJA”, pasek, procent i krótki status; na X0 wykorzystać istniejący ekran aktualizacji i pokazać procent albo „ZAPIS...”, bez przebudowy layoutu.
+- [STABLE] Fizycznie sprawdzić negatywne ścieżki Web Update MAIN i SPIFFS: błędny obraz, cancel/przerwanie lub zerwane połączenie podczas uploadu, brak auto-resume audio po Error/Aborted oraz zwolnienie UPDATE_LOCK po błędzie.
+- [POST-STABLE] Ograniczyć publikację postępu zapisu do zmiany procentu i nie częściej niż co ok. 100–250 ms; zmiany faz przekazywać natychmiast. Obecnie backend aktualizuje stan po kolejnych chunkach.
 - [POST-STABLE] Udostępnić ten sam rzeczywisty stan zapisu MAIN/SPIFFS w WWW; obecny postęp HTTP uploadu pozostawić jako pomocniczy, wyraźnie odróżniony od postępu zapisu flash.
-- [POST-STABLE] Zachować wspólny backend MAIN/SPIFFS dla `/update` i `/emergency`; progress awaryjnej aktualizacji nie może zależeć od assetów WWW ani zamontowanego SPIFFS.
-- [POST-STABLE] Dodać testy modelu postępu MAIN: 0–100%, unknown total, finalizacja, sukces i błąd. Dla SPIFFS sprawdzić backup, unmount, wymagany pełny rozmiar, zapis, remount po błędzie oraz sukces/restart.
+- [POST-STABLE] Uzupełnić testy negatywnych ścieżek SPIFFS update: błąd backupu, przerwanie po unmount i remount po błędzie.
 - [STABLE] Sprawdzić backup/restore całej konfiguracji, walidację schematu, błąd lub nieudany backup oraz zachowanie config po firmware/SPIFFS update.
 - [STABLE] Sprawdzić recovery AP, `/update.html` i `/emergency` przy niedostępnym SPIFFS, błędne dane Wi-Fi, Serial CLI oraz ekran AP na telefonie.
 - [STABLE] Zweryfikować restart i Config v7: volume, MUTE, source intent, aktywną stację oraz rozdział ustawień runtime/persistent.
@@ -94,10 +89,11 @@
 - [POST-STABLE] Rozstrzygać klik/dwuklik/trójklik po wspólnym krótkim oknie, aby trójklik nie wykonywał wcześniej dwukliku.
 - [POST-STABLE] W VoxOneBT utrzymać A2DP audio state jako sterowanie I2S, a AVRCP wyłącznie jako transport/UI; uzupełnić status PLAY/PAUSE/STOP, reconnect, preferred peer, pairing window, discoverability, metadata, ograniczenia TV i realny codec/bitrate, jeśli stos udostępnia dane.
 - [POST-STABLE] Znormalizować poziom BT względem RADIO dopiero po pomiarach toru cyfrowego i analogowego.
-- [POST-STABLE] Dokończyć aktualizację VoxOneBT: podłączyć istniejący sender UART do wspólnego UpdateProgress i UI (BT-FW-6); osobno sprawdzić przerwanie UART, brak powrotu BT, błędną `FW_VERSION` oraz ciągłą pracę MAIN do chwili zakończenia aktualizacji. Utrzymać warunek sukcesu po OTA/flash i powrocie VoxOneBT online z oczekiwaną wersją; po sukcesie docelowo restartować całe VoxOne. VoxOneBT pozostaje osobnym repozytorium.
+- [STABLE] Fizycznie sprawdzić negatywne ścieżki aktualizacji VoxOneBT: przerwanie UART, brak powrotu modułu, nieoczekiwaną `FW_VERSION`, timeout identity, uszkodzony/błędny obraz oraz Error/Aborted z odzyskaniem sterowania i zwolnieniem UPDATE_LOCK.
 - BT-FW-7 — PHYSICAL PASS / zakończony: OTA V0 `0.6.1-dev` → `0.6.3-dev`; realny `FRAME_CRC`/NACK i skuteczny retry; `PENDING_VERIFY` → `VALID`; po ręcznym restarcie nadal `0.6.3-dev`.
 - BT-UART-SPEED-1 — PHYSICAL PASS / zakończony: link MAIN ↔ VoxOneBT `921600 8N1`, PROTO 2, audio, PLAY/PAUSE, volume, metadata, VU i disconnect/reconnect; pełne OTA `0.6.3-dev` → `0.6.4-dev`, `FW_VERIFY`, `FW_OK`, `PENDING_VERIFY` → `VALID`, wersja zachowana po ręcznym restarcie V0. Wynik WWW i assety SPIFFS na A0 potwierdzone fizycznie (`Success=9`, `Error=10`, `Aborted=11`).
 - BT-UART-SPEED-2 — PHYSICAL PASS / zakończony: TX burst 512 B, V0 RX buffer 2048 B; OTA `0.6.5-dev` → `0.6.6-dev` PASS, `PENDING_VERIFY` → `VALID`, po ręcznym restarcie nadal `0.6.6-dev`; throughput ok. 18 kB/s (ok. 3× szybciej).
+- UPDATE-SYSTEM-1 — PHYSICAL PASS / zakończony: MAIN, SPIFFS i VoxOneBT OTA przez wspólny UpdateProgress/UPDATE_LOCK; ekran ST7796 i płynny pasek; VoxOneBT `0.6.6-dev` → `0.6.7-dev`, `PENDING_VERIFY` → `VALID`; MQTT/HTTP/WS quiesce i czysty restart MAIN bez heap corruption.
 
 ## DLNA
 
@@ -130,7 +126,6 @@
 - [POST-STABLE] Dzielić implementację menu na małe etapy: `MENU-CORE` (wspólne drzewo, typy pozycji, working copy i stan dirty), `MENU-INPUT` (enkoder, fokus belki, CLICK/LONG/VERY_LONG i timeout), `MENU-RENDER` (renderery klas LCD korzystające wyłącznie ze wspólnego stanu), `MENU-CONFIG` (pozycje konfiguracji i kontrolowane zastosowanie/zapis) oraz `MENU-DSP` (pozycje DSP po dostępności odpowiednich capabilities). Każdy etap zachowuje jeden model logiki; różnice małych LCD dotyczą wyłącznie prezentacji i skrótów etykiet.
 - [POST-STABLE] Przebudować PLAYER: podnieść PLAY/PAUSE/STOP oraz bitrate/audio info, a niżej dodać czytelną ramkę faktycznego trybu wyjścia 2.0/2.1/2.2 pochodzącego z konfiguracji audio/DSP.
 - [POST-STABLE] Ustalić wspólną lub jawnie przypisaną szybkość przewijania dla stacji, artysty, utworu i list; usunąć przypadkowo różne timingi rendererów.
-- [POST-STABLE] Dodać ekran aktualizacji „AKTUALIZACJA” z rzeczywistym postępem, fazami, sukcesem, błędem i restartem całego VoxOne po sukcesie MAIN/SPIFFS/VoxOneBT zgodnie ze wspólnym modelem UpdateProgress; VoxOneBT pokazać po UART ACK, weryfikacji i ponownym połączeniu.
 - [POST-STABLE] Dodać source-aware PLAYER, ekran TTS, przyszłą przeglądarkę DLNA oraz konfigurację DSP.
 - [POST-STABLE] Przygotować wspólne `assets/branding` jako źródło logo WWW, splash/logo LCD i favicon; później użyć tych samych materiałów w README/GitHub.
 - [POST-STABLE] Rozważyć opcjonalną skórkę YAMAHA AMBER: czarne tło i jeden bursztynowy kolor, punkt startowy `#FF9A1F` / RGB565 `0xFCC3`.
