@@ -1,5 +1,7 @@
 #include "options.h"
 #include "system_operation_state.h"
+#include "update_progress.h"
+#include "bt_update_progress.h"
 #include "source_manager.h"
 #include "bt_link.h"
 #include "../hardware/hardware_descriptor.h"
@@ -129,7 +131,7 @@ uint32_t webUpdateRebootAt = 0;
 namespace {
 SystemOperationState systemOperationState;
 
-void finishFailedUpdateAudio() {
+void finishFailedUpdateAudio(bool aborted = false) {
   if (!systemOperationState.audioBlocked() || systemOperationState.restartPending() ||
       !systemOperationState.blocksRequests()) return;
   systemOperationState.awaitRadioStop();
@@ -140,6 +142,12 @@ void finishFailedUpdateAudio() {
 #endif
   display.putRequest(NEWMODE, PLAYER);
   systemOperationState.updateFailed();
+  const UpdateProgressSnapshot snapshot = updateProgress();
+  if (snapshot.target == UpdateTarget::VoxOneFirmware ||
+      snapshot.target == UpdateTarget::Filesystem)
+    finishUpdate(snapshot.target, aborted ? UpdatePhase::Aborted : UpdatePhase::Error,
+                 aborted ? 0 : static_cast<uint16_t>(Update.getError()),
+                 aborted ? "Upload disconnected" : "Web Update failed");
 }
 
 void scheduleSystemRestart(const char* source) {
@@ -1988,11 +1996,18 @@ void NetServer::serviceBtFirmwareUpdate() {
   portEXIT_CRITICAL(&btUpdateMux);
   if (next) {
     // The sender is owned by the main loop, not the AsyncTCP upload callback.
-    if (systemOperationState.blocksRequests() || activeUpdateRequest ||
+    const bool acquired = beginUpdate(UpdateTarget::VoxOneBtFirmware,
+                                      UpdatePhase::Preparing, next->size());
+    if (!acquired || systemOperationState.blocksRequests() || activeUpdateRequest ||
         !btLink.startFirmwareUpdate(*next)) {
+      if (acquired)
+        finishUpdate(UpdateTarget::VoxOneBtFirmware, UpdatePhase::Error, 1,
+                     "VoxOneBT sender rejected start");
       portENTER_CRITICAL(&btUpdateMux);
       btUpdateSnapshot = btLink.firmwareUpdateProgress();
-      btStartError = "VoxOneBT sender rejected start (offline, protocol, capability, BT source or busy)";
+      btStartError = acquired
+          ? "VoxOneBT sender rejected start (offline, protocol, capability, BT source or busy)"
+          : "Another update is already running";
       activeBtImage = nullptr;
       portEXIT_CRITICAL(&btUpdateMux);
       delete next;
@@ -2004,6 +2019,16 @@ void NetServer::serviceBtFirmwareUpdate() {
   const bool terminal = progress.state == BtFirmwareSender::State::Success ||
                         progress.state == BtFirmwareSender::State::Error ||
                         progress.state == BtFirmwareSender::State::Aborted;
+  const UpdatePhase phase = btUpdatePhase(progress);
+  if (terminal) {
+    finishUpdate(UpdateTarget::VoxOneBtFirmware, phase,
+                 static_cast<uint16_t>(progress.error));
+  } else {
+    setUpdatePhase(UpdateTarget::VoxOneBtFirmware, phase);
+    if (phase == UpdatePhase::Sending)
+      setUpdateProgress(UpdateTarget::VoxOneBtFirmware,
+                        progress.confirmedBytes, progress.totalBytes);
+  }
   BtFirmwareStaging* completed = nullptr;
   portENTER_CRITICAL(&btUpdateMux);
   btUpdateSnapshot = progress;
@@ -2113,7 +2138,7 @@ void handleWebUpdateUpload(AsyncWebServerRequest *request, const String& filenam
         Update.abort();
         activeUpdateRequest = nullptr;
         remountFilesystemAfterFailedUpdate();
-        if (abandoned && abandoned->audioBlocked) finishFailedUpdateAudio();
+        if (abandoned && abandoned->audioBlocked) finishFailedUpdateAudio(true);
       }
     });
     if (!request->hasParam("updatetarget", true)) {
@@ -2190,8 +2215,16 @@ void handleWebUpdateUpload(AsyncWebServerRequest *request, const String& filenam
       session->error = "Declared image size exceeds upload size";
       return;
     }
+    const UpdateTarget updateTarget = session->target == U_FLASH
+        ? UpdateTarget::VoxOneFirmware : UpdateTarget::Filesystem;
+    if (!beginUpdate(updateTarget, UpdatePhase::Preparing,
+                     static_cast<uint32_t>(session->expected))) {
+      session->error = "Another update is already running";
+      return;
+    }
     if (!systemOperationState.updateStarted()) {
       session->error = "Update already in progress";
+      finishUpdate(updateTarget, UpdatePhase::Error, 1, session->error);
       return;
     }
     session->audioBlocked = true;
@@ -2228,6 +2261,7 @@ void handleWebUpdateUpload(AsyncWebServerRequest *request, const String& filenam
       return;
     }
     session->started = true;
+    setUpdatePhase(updateTarget, UpdatePhase::Writing);
     Serial.printf("Web Update started: %s, %u bytes, limit %u\n",
                   session->target == U_FLASH ? "firmware" : "SPIFFS",
                   static_cast<unsigned>(session->expected),
@@ -2247,17 +2281,26 @@ void handleWebUpdateUpload(AsyncWebServerRequest *request, const String& filenam
     Update.abort();
     return;
   }
+  const UpdateTarget updateTarget = session->target == U_FLASH
+      ? UpdateTarget::VoxOneFirmware : UpdateTarget::Filesystem;
+  setUpdateProgress(updateTarget, static_cast<uint32_t>(index + len),
+                    static_cast<uint32_t>(session->expected));
   if (final) {
     if (session->expected && index + len != session->expected) {
       session->error = "Incomplete upload: image size differs";
       Update.abort();
-    } else if (!Update.end(session->expected == 0)) {
+    } else {
+      setUpdatePhase(updateTarget, UpdatePhase::Verifying);
+    }
+    if (!session->error && !Update.end(session->expected == 0)) {
       Serial.printf("Web Update end failed: %s\n", Update.errorString());
       session->error = "Update.end failed (see Serial)";
-    } else {
+    } else if (!session->error) {
       session->finished = true;
+      finishUpdate(updateTarget, UpdatePhase::Success, 0, "Image finalized");
       Serial.printf("##[UPDATE]# upload complete: %u bytes\n", static_cast<unsigned>(index + len));
       scheduleSystemRestart("UPDATE");
+      restartingUpdate(updateTarget);
     }
     if (session->finished) activeUpdateRequest = nullptr;
   }
