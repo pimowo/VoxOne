@@ -93,7 +93,8 @@
 - [POST-STABLE] Rozstrzygać klik/dwuklik/trójklik po wspólnym krótkim oknie, aby trójklik nie wykonywał wcześniej dwukliku.
 - [POST-STABLE] W VoxOneBT utrzymać A2DP audio state jako sterowanie I2S, a AVRCP wyłącznie jako transport/UI; uzupełnić status PLAY/PAUSE/STOP, reconnect, preferred peer, pairing window, discoverability, metadata, ograniczenia TV i realny codec/bitrate, jeśli stos udostępnia dane.
 - [POST-STABLE] Znormalizować poziom BT względem RADIO dopiero po pomiarach toru cyfrowego i analogowego.
-- [POST-STABLE] Dokończyć aktualizację VoxOneBT: podłączyć istniejący sender UART do wspólnego UpdateProgress i UI (BT-FW-6), przetestować fizycznie transfer, CRC fail, przerwanie UART, restart modułu, brak powrotu BT, błędną `FW_VERSION` oraz ciągłą pracę MAIN (BT-FW-7). Utrzymać warunek sukcesu po OTA/flash i powrocie VoxOneBT online z oczekiwaną wersją; MAIN nie restartuje się. VoxOneBT pozostaje osobnym repozytorium.
+- [POST-STABLE] Dokończyć aktualizację VoxOneBT: podłączyć istniejący sender UART do wspólnego UpdateProgress i UI (BT-FW-6); osobno sprawdzić przerwanie UART, brak powrotu BT, błędną `FW_VERSION` oraz ciągłą pracę MAIN. Utrzymać warunek sukcesu po OTA/flash i powrocie VoxOneBT online z oczekiwaną wersją; MAIN nie restartuje się. VoxOneBT pozostaje osobnym repozytorium.
+- BT-FW-7 — PHYSICAL PASS / zakończony: OTA V0 `0.6.1-dev` → `0.6.3-dev`; realny `FRAME_CRC`/NACK i skuteczny retry; `PENDING_VERIFY` → `VALID`; po ręcznym restarcie nadal `0.6.3-dev`.
 
 ## DLNA
 
