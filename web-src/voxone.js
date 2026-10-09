@@ -18,7 +18,12 @@
   const updateProgress = document.getElementById("update-progress");
   const updateBtFile = document.getElementById("update-bt-file");
   const updateBtFileName = document.getElementById("update-bt-file-name");
+  const updateBtButton = document.getElementById("update-bt-button");
+  const updateBtHint = document.getElementById("update-bt-hint");
   let updateBusy = false;
+  let btUpdateBusy = false;
+  let btUpdatePolling = false;
+  let btHttpUploading = false;
   const rebootButton = document.getElementById("reboot-button");
   const rebootDialog = document.getElementById("reboot-dialog");
   const rebootCancel = document.getElementById("reboot-cancel");
@@ -234,10 +239,26 @@
       const file = image.file.files[0];
       image.name.textContent = file ? file.name + " · " +
         (file.size / 1024 / 1024).toFixed(2) + " MB" : "Nie wybrano pliku.";
-      image.file.disabled = updateBusy;
-      image.button.disabled = updateBusy || !file;
+      image.file.disabled = updateBusy || btUpdateBusy;
+      image.button.disabled = updateBusy || btUpdateBusy || !file;
     }
-    updateBtFileName.textContent = updateBtFile.files[0]?.name || "Nie wybrano pliku.";
+    const file = updateBtFile.files[0];
+    const info = state.connection === "connected" ? state.systemInfo : null;
+    const module = state.webStatus?.btModule;
+    const supported = info?.btFirmwareUpdateSupported === true;
+    const ready = supported && Number.isSafeInteger(info.psramFree) &&
+      info.psramFree >= (file?.size || 0) + 384 * 1024 &&
+      module?.online === true && module?.protocol === 2 &&
+      module.capabilities?.split(/\s+/).includes("FW_UPDATE") &&
+      state.webStatus?.activeSource !== "bt";
+    updateBtFileName.textContent = file ? file.name + " · " +
+      (file.size / 1024 / 1024).toFixed(2) + " MB" : "Nie wybrano pliku.";
+    updateBtFile.disabled = updateBusy || btUpdateBusy || !supported;
+    updateBtButton.disabled = updateBusy || btUpdateBusy || !file || !ready ||
+      !file.size || file.size > 1310720;
+    updateBtHint.textContent = !supported ? "Aktualizacja VoxOneBT: bezpośrednio przez USB (X0)." :
+      !info.psramTotal ? "PSRAM niedostępny; upload przez MAIN jest wyłączony." :
+      "Wymaga wolnego PSRAM (obraz + 384 KiB), VoxOneBT online, PROTO 2, FW_UPDATE i źródła innego niż BT.";
   }
 
   function renderBtModule() {
@@ -286,6 +307,7 @@
         (psramFree / 1048576).toFixed(1) + " MB free" : "Brak");
     text("system-capabilities", info?.capabilities || "—");
     renderBtModule();
+    renderUpdateFiles();
   }
 
   function renderFooter() {
@@ -409,7 +431,7 @@
   }
 
   function uploadUpdateImage(target) {
-    if (updateBusy) return;
+    if (updateBusy || btUpdateBusy) return;
     const file = updateImages[target].file.files[0];
     if (!file) return;
     const lowerName = file.name.toLowerCase();
@@ -467,6 +489,79 @@
       updateBusy = false;
       renderUpdateFiles();
       updateProgress.hidden = true;
+      setUpdateStatus("Nie udało się rozpocząć wysyłania: " + error.message, true);
+    }
+  }
+
+  async function pollBtUpdate() {
+    if (btHttpUploading || btUpdatePolling || state.connection !== "connected" ||
+        state.systemInfo?.btFirmwareUpdateSupported !== true) return;
+    btUpdatePolling = true;
+    try {
+      const response = await fetch("/api/bt/update", {cache: "no-store"});
+      if (!response.ok) return;
+      const progress = await response.json();
+      const running = progress.receiving || progress.pending || progress.active;
+      if (running) {
+        btUpdateBusy = true;
+        const phase = ["Przygotowanie", "Wysyłanie do VoxOneBT", "Weryfikacja",
+          "Restart VoxOneBT", "Oczekiwanie na VoxOneBT", "Sukces", "Błąd"][progress.phase] || "Aktualizacja";
+        setUpdateStatus("VoxOneBT: " + phase + " · ACK " + progress.confirmedBytes +
+          "/" + progress.totalBytes + " B (" + progress.percent + "%).");
+      } else if (btUpdateBusy) {
+        btUpdateBusy = false;
+        if (progress.state === 10) setUpdateStatus("Aktualizacja VoxOneBT zakończona; wersja potwierdzona po restarcie.");
+        else setUpdateStatus("Aktualizacja VoxOneBT nie powiodła się: " +
+          (progress.startError || "błąd sendera " + progress.error), true);
+      }
+      renderUpdateFiles();
+    } catch (_) { /* A disconnect does not cancel a transfer owned by MAIN. */ }
+    finally { btUpdatePolling = false; }
+  }
+
+  function uploadBtFirmware() {
+    if (updateBusy || btUpdateBusy || updateBtButton.disabled) return;
+    const file = updateBtFile.files[0];
+    if (!file || !file.name.toLowerCase().endsWith(".bin") || !file.size ||
+        file.size > 1310720) {
+      setUpdateStatus("Wybierz firmware.bin VoxOneBT o rozmiarze do 1 310 720 B.", true);
+      return;
+    }
+    btUpdateBusy = true;
+    btHttpUploading = true;
+    renderUpdateFiles();
+    setUpdateStatus("Wysyłanie obrazu VoxOneBT do PSRAM...");
+    const body = new FormData();
+    body.append("filesize", String(file.size));
+    body.append("update", file, file.name);
+    const request = new XMLHttpRequest();
+    request.open("POST", "/update/bt");
+    request.upload.addEventListener("progress", event => {
+      if (event.lengthComputable) setUpdateStatus("Odbiór obrazu VoxOneBT: " +
+        Math.min(100, Math.round(event.loaded * 100 / event.total)) + "% (HTTP, nie UART).");
+    });
+    request.addEventListener("load", () => {
+      btHttpUploading = false;
+      if (request.status === 202 && request.responseText.trim() === "STAGED") {
+        setUpdateStatus("Obraz zweryfikowany; oczekiwanie na start sendera VoxOneBT...");
+        pollBtUpdate();
+      } else {
+        btUpdateBusy = false;
+        renderUpdateFiles();
+        setUpdateStatus(request.responseText.trim() || "Upload VoxOneBT odrzucony.", true);
+      }
+    });
+    request.addEventListener("error", () => {
+      btHttpUploading = false;
+      btUpdateBusy = false;
+      renderUpdateFiles();
+      setUpdateStatus("Połączenie przerwane. Sprawdź status urządzenia przed ponowną próbą.", true);
+    });
+    try { request.send(body); }
+    catch (error) {
+      btHttpUploading = false;
+      btUpdateBusy = false;
+      renderUpdateFiles();
       setUpdateStatus("Nie udało się rozpocząć wysyłania: " + error.message, true);
     }
   }
@@ -1590,6 +1685,7 @@
       renderStatus();
       renderVolume();
       renderBtModule();
+      renderUpdateFiles();
     }
     const systemInfo = message.systemInfo;
     if (systemInfo && typeof systemInfo === "object" &&
@@ -2106,6 +2202,8 @@
     image.button.addEventListener("click", () => uploadUpdateImage(target));
   }
   updateBtFile.addEventListener("change", renderUpdateFiles);
+  updateBtButton.addEventListener("click", uploadBtFirmware);
+  setInterval(pollBtUpdate, 1500);
   rebootButton.addEventListener("click", () => {
     if (!rebootStarted) rebootDialog.showModal();
   });

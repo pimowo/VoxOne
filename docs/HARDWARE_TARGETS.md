@@ -31,7 +31,7 @@ Capabilities, a nie oznaczenie A/B/C/D/X lub numer rewizji, decydują o dostępn
 
 ## Aktualizacja VoxOneBT
 
-Rodziny Ax/Bx/Cx/Dx mogą docelowo aktualizować VoxOneBT przez `WWW → MAIN → UART → VoxOneBT`, lecz wyłącznie gdy konkretny profil ma moduł VoxOneBT, odpowiednie capability aktualizacji i wystarczające zasoby PSRAM/staging. Sama rodzina S3 nie daje takiej zgody. Obecny sender BT-FW-4 pozostaje capability-driven; ten etap nie dodaje stagingu ani uploadu WWW. Dla Xx aktualizacja VoxOneBT odbywa się wyłącznie bezpośrednio przez USB. Nie projektujemy stagingu dla Xx.
+Rodziny Ax/Bx/Cx/Dx mogą aktualizować VoxOneBT przez `WWW → MAIN → UART → VoxOneBT` wyłącznie gdy konkretny profil ma moduł VoxOneBT, jawne capability aktualizacji i wystarczające zasoby PSRAM/staging. Sama rodzina S3 nie daje takiej zgody. BT-FW-5 dodaje staging i upload dla obecnych A0/B0, z obowiązkowym sprawdzeniem zasobów runtime; nie oznacza to potwierdzenia PSRAM na fizycznym B0. Dla Xx aktualizacja VoxOneBT odbywa się wyłącznie bezpośrednio przez USB. Nie ma stagingu dla Xx.
 
 ## Planowane PCB i LCD
 

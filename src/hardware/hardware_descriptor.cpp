@@ -16,6 +16,7 @@ constexpr Pin kBacklight = kNoPin;
 constexpr Pin kDacXsmt = kNoPin;
 constexpr uint32_t kFlashBytes = 0;
 constexpr uint32_t kPsramBytes = 0;
+constexpr bool kBtFirmwareUpdate = false;
 #elif defined(VOXONE_PROFILE_B0)
 constexpr BoardId kBoardId = BoardId::BoardB0;
 constexpr char kBoardFamily = 'B';
@@ -28,6 +29,7 @@ constexpr Pin kBacklight = kNoPin;
 constexpr Pin kDacXsmt = kNoPin;
 constexpr uint32_t kFlashBytes = 4u * 1024u * 1024u;
 constexpr uint32_t kPsramBytes = 0;  // Size not established by the current profile.
+constexpr bool kBtFirmwareUpdate = true;  // Runtime PSRAM is still required.
 #elif defined(VOXONE_PROFILE_A0)
 constexpr BoardId kBoardId = BoardId::BoardA0;
 constexpr char kBoardFamily = 'A';
@@ -41,6 +43,7 @@ constexpr Pin kBacklight = fromLegacyPin(BRIGHTNESS_PIN);
 constexpr Pin kDacXsmt = fromLegacyPin(VOXONE_DAC_XSMT_PIN);
 constexpr uint32_t kFlashBytes = 16u * 1024u * 1024u;
 constexpr uint32_t kPsramBytes = 0;  // Size not established by the current profile.
+constexpr bool kBtFirmwareUpdate = true;
 #else
 // The unfinished a0_dsp profile has no verified complete pin map.
 #error "HardwareDescriptor requires a complete X0, B0 or A0 profile"
@@ -68,6 +71,7 @@ constexpr HardwareDescriptor kCurrent = {
    VOXONE_HAS_DISPLAY ? BusKind::Spi : BusKind::None},
   kDacXsmt,
   {VOXONE_HAS_DISPLAY != 0, VOXONE_HAS_BT != 0,
+   kBtFirmwareUpdate && VOXONE_HAS_BT != 0,
    VOXONE_PROFILE_AUDIO == AudioOutput::Pcm5102a,
    false, false, VOXONE_HAS_ENCODER != 0,
    kI2c.sda != kNoPin && kI2c.scl != kNoPin}

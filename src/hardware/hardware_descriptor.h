@@ -41,6 +41,7 @@ struct DisplayPins { Pin cs, dc, rst, backlight; BusKind bus; };
 struct Capabilities {
   bool supportsDisplay;
   bool supportsVoxOneBt;
+  bool supportsBtFirmwareUpdate;
   bool supportsPcm5102;
   bool supportsDsp;
   bool supportsMax98357;

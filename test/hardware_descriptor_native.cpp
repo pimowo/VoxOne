@@ -72,6 +72,7 @@ int main() {
   assert(d.spi.sck == kNoPin && d.spi.mosi == kNoPin &&
          d.spi.miso == kNoPin);
   assert(!d.capabilities.supportsVoxOneBt);
+  assert(!d.capabilities.supportsBtFirmwareUpdate);
   assert(d.btUart.rx == kNoPin && d.btUart.tx == kNoPin);
   assert(d.btAudioIn.bclk == kNoPin && d.btAudioIn.ws == kNoPin &&
          d.btAudioIn.din == kNoPin && !d.btAudioRxEnabled);
@@ -91,6 +92,7 @@ int main() {
   assert(d.btUart.rx == fromLegacyPin(VOXONE_BT_UART_RX_PIN));
   assert(d.btUart.tx == fromLegacyPin(VOXONE_BT_UART_TX_PIN));
   assert(d.capabilities.supportsVoxOneBt);
+  assert(d.capabilities.supportsBtFirmwareUpdate);
   assert(d.display.cs == kNoPin && d.display.dc == kNoPin &&
          d.display.rst == kNoPin && d.display.backlight == kNoPin);
   assert(!d.capabilities.supportsEncoder);
@@ -115,6 +117,7 @@ int main() {
   assert(d.btUart.rx == fromLegacyPin(VOXONE_BT_UART_RX_PIN));
   assert(d.btUart.tx == fromLegacyPin(VOXONE_BT_UART_TX_PIN));
   assert(d.capabilities.supportsVoxOneBt && d.btAudioRxEnabled);
+  assert(d.capabilities.supportsBtFirmwareUpdate);
   assert(d.btAudioIn.bclk == 1 && d.btAudioIn.ws == 2 && d.btAudioIn.din == 17);
   assert(d.dacXsmt == kNoPin);
   assert(d.dacXsmt == fromLegacyPin(VOXONE_DAC_XSMT_PIN));

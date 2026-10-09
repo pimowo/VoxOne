@@ -68,6 +68,13 @@ class MockWebSocket {
   ]})}); }
 }
 window.WebSocket = MockWebSocket;
+class MockUpdateRequest {
+  constructor() { this.handlers = {}; this.upload = {addEventListener() {}}; window.btUpdateRequest = this; }
+  open(method, url) { this.method = method; this.url = url; }
+  addEventListener(name, handler) { this.handlers[name] = handler; }
+  send(body) { this.body = body; this.status = 202; this.responseText = 'STAGED'; this.handlers.load(); }
+}
+window.XMLHttpRequest = MockUpdateRequest;
 </script>
 """
 CHECK = r"""
@@ -240,6 +247,24 @@ setTimeout(() => {
     check(get('system-minimum-heap').textContent === '125 kB', 'minimum free heap');
     check(get('system-psram').textContent === '8.0 MB total / 4.0 MB free', 'PSRAM');
     check(get('system-capabilities').textContent.includes('RTC'), 'system capabilities');
+    check(get('update-bt-button').disabled, 'BT update requires explicit profile capability');
+    systemInfo.btFirmwareUpdateSupported = true;
+    btTestSocket.receiveSystem(systemInfo);
+    status.btModule.capabilities = 'AVRCP VU FW_UPDATE';
+    btTestSocket.receive(status);
+    check(get('update-bt-button').disabled, 'active BT source blocks firmware update');
+    status.source = 'WEB';
+    status.activeSource = 'radio';
+    btTestSocket.receive(status);
+    const btTransfer = new DataTransfer();
+    btTransfer.items.add(new File(['image'], 'voxonebt.bin', {type:'application/octet-stream'}));
+    get('update-bt-file').files = btTransfer.files;
+    get('update-bt-file').dispatchEvent(new Event('change'));
+    check(!get('update-bt-button').disabled, 'A0 enables BT upload only with capability, resources and link');
+    get('update-bt-button').click();
+    check(btUpdateRequest.url === '/update/bt' && btUpdateRequest.method === 'POST', 'dedicated BT endpoint');
+    check(btUpdateRequest.body.get('filesize') === '5', 'declared image size');
+    check(get('update-status').textContent.includes('sendera'), 'accepted staging waits for sender');
     btTestSocket.close();
     check(selector.querySelectorAll('button').length === 0 &&
       get('current-station-name').textContent === '—' && get('source').textContent === '—',
@@ -252,8 +277,8 @@ setTimeout(() => {
     transfer.items.add(new File(['image'], 'voxonebt.bin', {type:'application/octet-stream'}));
     get('update-bt-file').files = transfer.files;
     get('update-bt-file').dispatchEvent(new Event('change'));
-    check(get('update-bt-file-name').textContent === 'voxonebt.bin', 'file name');
-    check(get('update-bt-button').disabled, 'update must stay disabled');
+    check(get('update-bt-file-name').textContent.includes('voxonebt.bin'), 'file name');
+    check(get('update-bt-button').disabled, 'update disabled after disconnect');
     status.btModule = {online:false, firmware:'', protocol:0, name:'', capabilities:''};
     btTestSocket.receive(status);
     check(get('update-bt-online').textContent === 'NIE', 'offline');

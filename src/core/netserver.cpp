@@ -2,6 +2,13 @@
 #include "system_operation_state.h"
 #include "source_manager.h"
 #include "bt_link.h"
+#include "../hardware/hardware_descriptor.h"
+#if defined(CONFIG_IDF_TARGET_ESP32S3) && VOXONE_HAS_BT && VOXONE_PIN_MAP_COMPLETE
+#define VOXONE_BT_UPDATE_UPLOAD 1
+#include "bt_firmware_staging.h"
+#else
+#define VOXONE_BT_UPDATE_UPLOAD 0
+#endif
 #include "web_status_view.h"
 #include "bt_audio_input.h"
 #include "Arduino.h"
@@ -14,6 +21,7 @@
 #include <esp_timer.h>
 #include <nvs.h>
 #include <memory>
+#include <new>
 #include <algorithm>
 #include <cerrno>
 #include <climits>
@@ -185,6 +193,181 @@ constexpr WebUpdateFile kWebUpdateFiles[] = {
 constexpr char kWebUpdateNamespace[] = "voxupdate";
 AsyncWebServerRequest* activeUpdateRequest = nullptr;
 
+#if VOXONE_BT_UPDATE_UPLOAD
+portMUX_TYPE btUpdateMux = portMUX_INITIALIZER_UNLOCKED;
+AsyncWebServerRequest* activeBtUploadRequest = nullptr;
+BtFirmwareStaging* pendingBtImage = nullptr;
+BtFirmwareStaging* activeBtImage = nullptr;  // Main-loop owner until terminal sender state.
+BtFirmwareSender::Progress btUpdateSnapshot{};
+const char* btStartError = nullptr;
+struct BtUploadSession {
+  BtFirmwareStaging* image = nullptr;
+  const char* error = nullptr;
+  bool staged = false;
+};
+
+bool btFirmwareBusy() {
+  portENTER_CRITICAL(&btUpdateMux);
+  const bool busy = !BtFirmwareStaging::uploadSlotAvailable(
+      activeBtUploadRequest != nullptr, pendingBtImage != nullptr, activeBtImage != nullptr);
+  portEXIT_CRITICAL(&btUpdateMux);
+  return busy;
+}
+
+uint8_t* allocateBtPsram(size_t length, void*) {
+  return static_cast<uint8_t*>(heap_caps_malloc(length, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT));
+}
+void freeBtPsram(uint8_t* block, void*) { heap_caps_free(block); }
+
+const char* btUploadError(BtFirmwareStaging::Error error) {
+  switch (error) {
+    case BtFirmwareStaging::Error::Unsupported: return "Profile does not support VoxOneBT update";
+    case BtFirmwareStaging::Error::NoPsram: return "PSRAM unavailable";
+    case BtFirmwareStaging::Error::InvalidSize: return "Invalid or oversized VoxOneBT image";
+    case BtFirmwareStaging::Error::InsufficientPsram: return "Insufficient free PSRAM with reserve";
+    case BtFirmwareStaging::Error::Allocation: return "PSRAM block allocation failed";
+    case BtFirmwareStaging::Error::Offset: return "Invalid upload offset or size";
+    case BtFirmwareStaging::Error::Incomplete: return "Incomplete VoxOneBT image";
+    case BtFirmwareStaging::Error::ImageMagic: return "Not an ESP firmware image";
+    case BtFirmwareStaging::Error::ManifestCount: return "Expected exactly one valid VoxOneBT V0 manifest";
+    case BtFirmwareStaging::Error::None: return "OK";
+  }
+  return "Unknown staging error";
+}
+
+void handleBtUpload(AsyncWebServerRequest* request, const String& filename,
+                    size_t index, uint8_t* data, size_t len, bool final) {
+#if defined(HTTP_USER) && defined(HTTP_PASS)
+  if (network.status == CONNECTED && !request->authenticate(HTTP_USER, HTTP_PASS)) return;
+#endif
+  auto* session = static_cast<BtUploadSession*>(request->_tempObject);
+  if (index == 0) {
+    if (session) { session->error = "Only one image per request is allowed"; return; }
+    session = static_cast<BtUploadSession*>(calloc(1, sizeof(BtUploadSession)));
+    if (!session) return;
+    request->_tempObject = session;
+    if (systemOperationState.blocksRequests() || activeUpdateRequest || btFirmwareBusy()) {
+      session->error = "Another update is already running";
+      return;
+    }
+    if (!voxone::hardware::currentHardware().capabilities.supportsBtFirmwareUpdate) {
+      session->error = "Profile does not support VoxOneBT update";
+      return;
+    }
+    const BtLinkState& link = btLink.state();
+    if (!link.runtimeAvailable || link.protocolVersion != 2 ||
+        !BtFirmwareSender::hasCapability(link.capabilities, "FW_UPDATE") ||
+        bluetoothSourceSelected()) {
+      session->error = "VoxOneBT must be online with PROTO 2 and FW_UPDATE; select RADIO";
+      return;
+    }
+    if (!request->hasParam("filesize", true)) {
+      session->error = "Missing image size";
+      return;
+    }
+    const String sizeText = request->getParam("filesize", true)->value();
+    if (sizeText.isEmpty() || sizeText.length() > 10) {
+      session->error = "Invalid image size";
+      return;
+    }
+    uint32_t expected = 0;
+    for (size_t i = 0; i < sizeText.length(); ++i) {
+      if (!isDigit(sizeText[i])) { session->error = "Invalid image size"; return; }
+      const uint32_t digit = static_cast<uint32_t>(sizeText[i] - '0');
+      if (expected > (UINT32_MAX - digit) / 10u) {
+        session->error = "Invalid image size"; return;
+      }
+      expected = expected * 10u + digit;
+    }
+    if (!expected || expected > BtFirmwareStaging::MaxImageSize ||
+        expected > request->contentLength()) {
+      session->error = "Invalid or oversized VoxOneBT image";
+      return;
+    }
+    if (!filename.endsWith(".bin")) { session->error = "Only .bin images are accepted"; return; }
+    portENTER_CRITICAL(&btUpdateMux);
+    const bool occupied = !BtFirmwareStaging::uploadSlotAvailable(
+        activeBtUploadRequest != nullptr, pendingBtImage != nullptr, activeBtImage != nullptr);
+    if (!occupied) activeBtUploadRequest = request;
+    portEXIT_CRITICAL(&btUpdateMux);
+    if (occupied) { session->error = "Another VoxOneBT update is already running"; return; }
+    request->onDisconnect([request]() {
+      auto* abandoned = static_cast<BtUploadSession*>(request->_tempObject);
+      BtFirmwareStaging* image = nullptr;
+      portENTER_CRITICAL(&btUpdateMux);
+      if (activeBtUploadRequest == request) {
+        activeBtUploadRequest = nullptr;
+        if (abandoned) { image = abandoned->image; abandoned->image = nullptr; }
+      }
+      portEXIT_CRITICAL(&btUpdateMux);
+      delete image;
+    });
+    session->image = new (std::nothrow) BtFirmwareStaging(allocateBtPsram, freeBtPsram, nullptr);
+    if (!session->image) { session->error = "Could not allocate staging metadata"; return; }
+    const auto error = session->image->prepare(
+        expected, heap_caps_get_free_size(MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT),
+        true, ESP.getPsramSize() != 0 && psramFound());
+    if (error != BtFirmwareStaging::Error::None) {
+      session->error = btUploadError(error);
+      delete session->image;
+      session->image = nullptr;
+      return;
+    }
+    if (heap_caps_get_free_size(MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT) <
+        BtFirmwareStaging::PsramReserve) {
+      session->error = "PSRAM reserve would be exhausted";
+      delete session->image;
+      session->image = nullptr;
+      return;
+    }
+  }
+  if (!session || session->error || !session->image) return;
+  const auto written = session->image->append(index, data, len);
+  if (written != BtFirmwareStaging::Error::None) {
+    session->error = btUploadError(written);
+    return;
+  }
+  if (!final) return;
+  const auto checked = session->image->finalize();
+  if (checked != BtFirmwareStaging::Error::None) {
+    session->error = btUploadError(checked);
+    return;
+  }
+  // Wait for the whole multipart request: a second file must still reject it.
+  session->staged = true;
+}
+
+void handleBtUpdateStatus(AsyncWebServerRequest* request) {
+#if defined(HTTP_USER) && defined(HTTP_PASS)
+  if (network.status == CONNECTED && !request->authenticate(HTTP_USER, HTTP_PASS)) {
+    request->requestAuthentication();
+    return;
+  }
+#endif
+  BtFirmwareSender::Progress snapshot;
+  const char* startError;
+  bool receiving, pending, active;
+  portENTER_CRITICAL(&btUpdateMux);
+  snapshot = btUpdateSnapshot;
+  startError = btStartError;
+  receiving = activeBtUploadRequest != nullptr;
+  pending = pendingBtImage != nullptr;
+  active = activeBtImage != nullptr;
+  portEXIT_CRITICAL(&btUpdateMux);
+  char payload[220];
+  snprintf(payload, sizeof(payload),
+      "{\"receiving\":%s,\"pending\":%s,\"active\":%s,\"state\":%u,\"phase\":%u,\"error\":%u,\"startError\":\"%s\",\"totalBytes\":%lu,\"confirmedBytes\":%lu,\"percent\":%u}",
+      receiving ? "true" : "false", pending ? "true" : "false", active ? "true" : "false",
+      static_cast<unsigned>(snapshot.state), static_cast<unsigned>(snapshot.phase),
+      static_cast<unsigned>(snapshot.error), startError ? startError : "",
+      static_cast<unsigned long>(snapshot.totalBytes),
+      static_cast<unsigned long>(snapshot.confirmedBytes), snapshot.percent);
+  AsyncWebServerResponse* response = request->beginResponse(200, "application/json", payload);
+  response->addHeader("Cache-Control", "no-store");
+  request->send(response);
+}
+#endif
+
 struct WebUpdateSession {
   size_t expected;
   size_t limit;
@@ -337,6 +520,9 @@ bool NetServer::begin(bool quiet) {
   webserver.on("/api/mqtt", HTTP_POST, handleMqttConfigSave);
   webserver.on("/api/time", HTTP_GET, handleTimeStatus);
   webserver.on("/api/time/sync", HTTP_POST, handleTimeSync);
+#if VOXONE_BT_UPDATE_UPLOAD
+  webserver.on("/api/bt/update", HTTP_GET, handleBtUpdateStatus);
+#endif
   // Browsers may request the legacy icon path even when HTML declares the SVG icon.
   webserver.on("/favicon.ico", HTTP_GET, [](AsyncWebServerRequest* request) {
     request->redirect("/voxone-logo.svg");
@@ -1658,7 +1844,7 @@ void NetServer::processQueue(){
         const unsigned long long uptimeSeconds =
             static_cast<unsigned long long>(esp_timer_get_time() / 1000000LL);
         const int prefixLength = snprintf(wsBuf, sizeof(wsBuf),
-            "{\"sst\":%d,\"vu\":%d,\"canVu\":%d,\"softr\":%d,\"vut\":%d,\"mdns\":\"%s\",\"ipaddr\":\"%s\",\"abuff\":%d,\"systemInfo\":{\"version\":\"%s\",\"channel\":\"%s\",\"build\":\"%s\",\"profile\":\"%s\",\"mac\":\"%s\",\"rssi\":%d,\"uptimeSeconds\":%llu,\"freeHeap\":%lu,\"minimumFreeHeap\":%lu,\"psramTotal\":%lu,\"psramFree\":%lu,\"capabilities\":\"%s\"},\"networkInfo\":",
+            "{\"sst\":%d,\"vu\":%d,\"canVu\":%d,\"softr\":%d,\"vut\":%d,\"mdns\":\"%s\",\"ipaddr\":\"%s\",\"abuff\":%d,\"systemInfo\":{\"version\":\"%s\",\"channel\":\"%s\",\"build\":\"%s\",\"profile\":\"%s\",\"mac\":\"%s\",\"rssi\":%d,\"uptimeSeconds\":%llu,\"freeHeap\":%lu,\"minimumFreeHeap\":%lu,\"psramTotal\":%lu,\"psramFree\":%lu,\"btFirmwareUpdateSupported\":%s,\"capabilities\":\"%s\"},\"networkInfo\":",
             config.store.smartstart != 2, config.store.vumeter,
             voxone::activeProfile.capabilities.hasVu, config.store.softapdelay,
             config.vuThreshold, config.store.mdnsname, ipText, config.store.abuff,
@@ -1667,7 +1853,9 @@ void NetServer::processQueue(){
             uptimeSeconds, static_cast<unsigned long>(freeHeap),
             static_cast<unsigned long>(minimumFreeHeap),
             static_cast<unsigned long>(psramTotal),
-            static_cast<unsigned long>(psramFree), capabilities);
+            static_cast<unsigned long>(psramFree),
+            voxone::hardware::currentHardware().capabilities.supportsBtFirmwareUpdate ? "true" : "false",
+            capabilities);
         if (prefixLength < 0 || static_cast<size_t>(prefixLength) >= sizeof(wsBuf)) {
           wsBuf[0] = '\0';
           break;
@@ -1788,6 +1976,43 @@ void NetServer::loop() {
   //processQueue();
 }
 
+void NetServer::serviceBtFirmwareUpdate() {
+#if VOXONE_BT_UPDATE_UPLOAD
+  BtFirmwareStaging* next = nullptr;
+  portENTER_CRITICAL(&btUpdateMux);
+  if (pendingBtImage && !activeBtImage) {
+    next = pendingBtImage;
+    pendingBtImage = nullptr;
+    activeBtImage = next;
+  }
+  portEXIT_CRITICAL(&btUpdateMux);
+  if (next) {
+    // The sender is owned by the main loop, not the AsyncTCP upload callback.
+    if (systemOperationState.blocksRequests() || activeUpdateRequest ||
+        !btLink.startFirmwareUpdate(*next)) {
+      portENTER_CRITICAL(&btUpdateMux);
+      btUpdateSnapshot = btLink.firmwareUpdateProgress();
+      btStartError = "VoxOneBT sender rejected start (offline, protocol, capability, BT source or busy)";
+      activeBtImage = nullptr;
+      portEXIT_CRITICAL(&btUpdateMux);
+      delete next;
+      return;
+    }
+  }
+  if (!activeBtImage) return;
+  const BtFirmwareSender::Progress progress = btLink.firmwareUpdateProgress();
+  const bool terminal = progress.state == BtFirmwareSender::State::Success ||
+                        progress.state == BtFirmwareSender::State::Error ||
+                        progress.state == BtFirmwareSender::State::Aborted;
+  BtFirmwareStaging* completed = nullptr;
+  portENTER_CRITICAL(&btUpdateMux);
+  btUpdateSnapshot = progress;
+  if (terminal) { completed = activeBtImage; activeBtImage = nullptr; }
+  portEXIT_CRITICAL(&btUpdateMux);
+  delete completed;
+#endif
+}
+
 void NetServer::onWsMessage(void *arg, uint8_t *data, size_t len, uint32_t clientId) {
   AwsFrameInfo *info = (AwsFrameInfo*)arg;
 #if defined(VOXONE_PROFILE_A0)
@@ -1871,6 +2096,12 @@ void handleWebUpdateUpload(AsyncWebServerRequest *request, const String& filenam
       session->error = "Update or restart already in progress";
       return;
     }
+#if VOXONE_BT_UPDATE_UPLOAD
+    if (btFirmwareBusy()) {
+      session->error = "VoxOneBT update already in progress";
+      return;
+    }
+#endif
     if (activeUpdateRequest && activeUpdateRequest != request) {
       session->error = "Another update is already running";
       return;
@@ -2037,6 +2268,10 @@ void handleUpload(AsyncWebServerRequest *request, String filename, size_t index,
   if(request->url()=="/update"){
     handleWebUpdateUpload(request, filename, index, data, len, final);
   }
+#if VOXONE_BT_UPDATE_UPLOAD
+  if (request->url() == "/update/bt")
+    handleBtUpload(request, filename, index, data, len, final);
+#endif
 }
 
 void onWsEvent(AsyncWebSocket *server, AsyncWebSocketClient *client, AwsEventType type, void *arg, uint8_t *data, size_t len) {
@@ -2079,6 +2314,41 @@ void handleNotFound(AsyncWebServerRequest * request) {
   }// if (request->method() == HTTP_GET)
   
   if (request->method() == HTTP_POST) {
+#if VOXONE_BT_UPDATE_UPLOAD
+    if (request->url() == "/update/bt") {
+      auto* session = static_cast<BtUploadSession*>(request->_tempObject);
+      bool staged = session && session->staged && !session->error;
+      if (staged) {
+        portENTER_CRITICAL(&btUpdateMux);
+        if (activeBtUploadRequest == request && !pendingBtImage && !activeBtImage &&
+            !systemOperationState.blocksRequests() && !activeUpdateRequest) {
+          pendingBtImage = session->image;
+          session->image = nullptr;
+          activeBtUploadRequest = nullptr;
+          btStartError = nullptr;
+          btUpdateSnapshot = BtFirmwareSender::Progress{};
+        } else {
+          staged = false;
+          session->error = "Another update is already running";
+        }
+        portEXIT_CRITICAL(&btUpdateMux);
+      }
+      if (!staged && session) {
+        portENTER_CRITICAL(&btUpdateMux);
+        if (activeBtUploadRequest == request) activeBtUploadRequest = nullptr;
+        portEXIT_CRITICAL(&btUpdateMux);
+        delete session->image;
+        session->image = nullptr;
+      }
+      const char* message = staged ? "STAGED" :
+          (session && session->error ? session->error : "No valid VoxOneBT image received");
+      AsyncWebServerResponse* response = request->beginResponse(
+          staged ? 202 : 400, "text/plain", message);
+      response->addHeader("Cache-Control", "no-store");
+      request->send(response);
+      return;
+    }
+#endif
     if(request->url()=="/update"){
 #if defined(HTTP_USER) && defined(HTTP_PASS)
       if (network.status == CONNECTED && !request->authenticate(HTTP_USER, HTTP_PASS)) {

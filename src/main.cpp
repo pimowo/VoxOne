@@ -174,6 +174,7 @@ void loop() {
       if (!btLink.firmwareUpdateInProgress() &&
           !btLink.hasIncompleteOnlineSnapshot()) sourceManagerLoop();
     }
+    netserver.serviceBtFirmwareUpdate();
   #endif
   #if VOXONE_HAS_BT && VOXONE_PIN_MAP_COMPLETE && VOXONE_BT_I2S_RX_ENABLED
     if (btRuntime.physicalStarted() &&
