@@ -10,6 +10,7 @@ enum class Mcu {
 
 enum class Display {
   None,
+  Ssd1306_128x64,
   St7789_284x76,
   St7796_480x320
 };
@@ -41,6 +42,7 @@ struct HardwareProfile {
 }  // namespace voxone
 
 #if (defined(VOXONE_PROFILE_X0) + defined(VOXONE_PROFILE_B0) + \
+     defined(VOXONE_PROFILE_C0) + \
      defined(VOXONE_PROFILE_A0) + defined(VOXONE_PROFILE_A0_DSP)) != 1
 #error "Select exactly one VoxOne hardware profile"
 #endif
@@ -49,6 +51,8 @@ struct HardwareProfile {
 #include "x0.h"
 #elif defined(VOXONE_PROFILE_B0)
 #include "b0.h"
+#elif defined(VOXONE_PROFILE_C0)
+#include "c0.h"
 #elif defined(VOXONE_PROFILE_A0)
 #include "a0.h"
 #elif defined(VOXONE_PROFILE_A0_DSP)

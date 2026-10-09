@@ -31,8 +31,9 @@ int main() {
   assert(d.display.dc == fromLegacyPin(TFT_DC));
   assert(d.display.rst == fromLegacyPin(TFT_RST));
   assert(d.capabilities.supportsDisplay == (d.displayKind != DisplayKind::None));
-  assert(d.display.bus == (d.capabilities.supportsDisplay ?
-                           BusKind::Spi : BusKind::None));
+  assert(d.display.bus ==
+         (d.displayKind == DisplayKind::Ssd1306_128x64 ? BusKind::I2c :
+          (d.capabilities.supportsDisplay ? BusKind::Spi : BusKind::None)));
   assert(d.encoder.a == fromLegacyPin(ENC_BTNL));
   assert(d.encoder.b == fromLegacyPin(ENC_BTNR));
   assert(d.encoder.button == fromLegacyPin(ENC_BTNB));
@@ -47,10 +48,18 @@ int main() {
   assert(!d.btAudioRxEnabled ||
          (hasPin(d.btAudioIn.bclk) && hasPin(d.btAudioIn.ws) &&
           hasPin(d.btAudioIn.din)));
+#if defined(VOXONE_PROFILE_C0)
+  assert(d.i2c.sda == fromLegacyPin(I2C_SDA));
+  assert(d.i2c.scl == fromLegacyPin(I2C_SCL));
+#else
   assert(d.i2c.sda == fromLegacyPin(RTC_SDA));
   assert(d.i2c.scl == fromLegacyPin(RTC_SCL));
-  assert(d.capabilities.supportsRtc ==
-         (RTC_SDA != 255 && RTC_SCL != 255));
+#endif
+#if defined(VOXONE_PROFILE_A0)
+  assert(d.capabilities.supportsRtc);
+#else
+  assert(!d.capabilities.supportsRtc);
+#endif
   assert(fromLegacyPin(255) == kNoPin && fromLegacyPin(-1) == kNoPin);
   assert(!hasPin(kNoPin));
   assert(validateDescriptor(d));
@@ -121,6 +130,24 @@ int main() {
   assert(d.btAudioIn.bclk == 1 && d.btAudioIn.ws == 2 && d.btAudioIn.din == 17);
   assert(d.dacXsmt == kNoPin);
   assert(d.dacXsmt == fromLegacyPin(VOXONE_DAC_XSMT_PIN));
+#elif defined(VOXONE_PROFILE_C0)
+  assert(d.board.id == BoardId::BoardC0);
+  assert(d.board.family == 'C' && d.board.revision == 0);
+  assert(d.board.flashBytes == 4u * 1024u * 1024u);
+  assert(d.board.psramBytes == 2u * 1024u * 1024u);
+  assert(d.displayKind == DisplayKind::Ssd1306_128x64);
+  assert(d.display.bus == BusKind::I2c);
+  assert(d.i2c.sda == 7 && d.i2c.scl == 8);
+  assert(d.display.cs == kNoPin && d.display.dc == kNoPin);
+  assert(d.audioOut.bclk == 1 && d.audioOut.ws == 3 && d.audioOut.dout == 2);
+  assert(d.encoder.a == 6 && d.encoder.b == 5 && d.encoder.button == 4);
+  assert(d.encoder.internalPullup);
+  assert(!d.capabilities.supportsRtc);
+  assert(!d.capabilities.supportsVoxOneBt);
+  assert(!d.capabilities.supportsBtFirmwareUpdate);
+  assert(d.btUart.rx == kNoPin && d.btUart.tx == kNoPin);
+  assert(d.btAudioIn.bclk == kNoPin && d.btAudioIn.ws == kNoPin &&
+         d.btAudioIn.din == kNoPin && !d.btAudioRxEnabled);
 #endif
 
   HardwareDescriptor bad = d;
@@ -153,6 +180,10 @@ int main() {
   bad.display.bus = BusKind::Spi;
   bad.display.cs = kNoPin;
   assert(!validateDescriptor(bad));
+  bad = d;
+  bad.i2c.sda = kNoPin;
+  if (d.displayKind == DisplayKind::Ssd1306_128x64 || d.capabilities.supportsRtc)
+    assert(!validateDescriptor(bad));
   bad = d;
   bad.capabilities.supportsEncoder = true;
   bad.encoder.button = kNoPin;

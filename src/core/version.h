@@ -11,6 +11,8 @@
 #define VOXONE_BUILD_PROFILE "X0"
 #elif defined(VOXONE_PROFILE_B0)
 #define VOXONE_BUILD_PROFILE "B0"
+#elif defined(VOXONE_PROFILE_C0)
+#define VOXONE_BUILD_PROFILE "C0"
 #elif defined(VOXONE_PROFILE_A0)
 #define VOXONE_BUILD_PROFILE "A0"
 #else

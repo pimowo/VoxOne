@@ -105,7 +105,7 @@ Invoke-Step 'Native tests' {
   $name=$test.BaseName
   $sources=@($test.FullName)
   if($nativeSources.ContainsKey($name)) { $sources+=@($nativeSources[$name] | ForEach-Object { Join-Path $root $_ }) }
-  $variants=if($name -eq 'hardware_descriptor_native') { @('X0','B0','A0') } elseif($name -eq 'build_identity_native') { @('','X0','B0','A0','CLEAN','DIRTY') } else { @('') }
+  $variants=if($name -eq 'hardware_descriptor_native') { @('X0','B0','C0','A0') } elseif($name -eq 'build_identity_native') { @('','X0','B0','C0','A0','CLEAN','DIRTY') } else { @('') }
   foreach($variant in $variants) {
    $label=if($variant) { "$name-$variant" } else { $name }
    $exe=Join-Path $work ($label+$(if($onWindows) { '.exe' } else { '' }))

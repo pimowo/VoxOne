@@ -17,6 +17,7 @@ constexpr Pin kDacXsmt = kNoPin;
 constexpr uint32_t kFlashBytes = 0;
 constexpr uint32_t kPsramBytes = 0;
 constexpr bool kBtFirmwareUpdate = false;
+constexpr bool kSupportsRtc = false;
 #elif defined(VOXONE_PROFILE_B0)
 constexpr BoardId kBoardId = BoardId::BoardB0;
 constexpr char kBoardFamily = 'B';
@@ -30,6 +31,20 @@ constexpr Pin kDacXsmt = kNoPin;
 constexpr uint32_t kFlashBytes = 4u * 1024u * 1024u;
 constexpr uint32_t kPsramBytes = 0;  // Size not established by the current profile.
 constexpr bool kBtFirmwareUpdate = true;  // Runtime PSRAM is still required.
+constexpr bool kSupportsRtc = false;
+#elif defined(VOXONE_PROFILE_C0)
+constexpr BoardId kBoardId = BoardId::BoardC0;
+constexpr char kBoardFamily = 'C';
+constexpr DisplayKind kDisplayKind = DisplayKind::Ssd1306_128x64;
+constexpr SpiBusPins kSpi = {kNoPin, kNoPin, kNoPin};
+constexpr I2cBusPins kI2c = {fromLegacyPin(I2C_SDA), fromLegacyPin(I2C_SCL)};
+constexpr UartPins kBtUart = {kNoPin, kNoPin};
+constexpr Pin kBacklight = kNoPin;
+constexpr Pin kDacXsmt = kNoPin;
+constexpr uint32_t kFlashBytes = 4u * 1024u * 1024u;
+constexpr uint32_t kPsramBytes = 2u * 1024u * 1024u;
+constexpr bool kBtFirmwareUpdate = false;
+constexpr bool kSupportsRtc = false;
 #elif defined(VOXONE_PROFILE_A0)
 constexpr BoardId kBoardId = BoardId::BoardA0;
 constexpr char kBoardFamily = 'A';
@@ -44,9 +59,10 @@ constexpr Pin kDacXsmt = fromLegacyPin(VOXONE_DAC_XSMT_PIN);
 constexpr uint32_t kFlashBytes = 16u * 1024u * 1024u;
 constexpr uint32_t kPsramBytes = 0;  // Size not established by the current profile.
 constexpr bool kBtFirmwareUpdate = true;
+constexpr bool kSupportsRtc = true;
 #else
 // The unfinished a0_dsp profile has no verified complete pin map.
-#error "HardwareDescriptor requires a complete X0, B0 or A0 profile"
+#error "HardwareDescriptor requires a complete X0, B0, C0 or A0 profile"
 #endif
 
 constexpr HardwareDescriptor kCurrent = {
@@ -68,13 +84,14 @@ constexpr HardwareDescriptor kCurrent = {
    ENC_HALFQUARD == 255 ? 1 : (ENC_HALFQUARD ? 2 : 4)},
   {fromLegacyPin(TFT_CS), fromLegacyPin(TFT_DC),
    fromLegacyPin(TFT_RST), kBacklight,
-   VOXONE_HAS_DISPLAY ? BusKind::Spi : BusKind::None},
+   kDisplayKind == DisplayKind::Ssd1306_128x64 ? BusKind::I2c :
+     (VOXONE_HAS_DISPLAY ? BusKind::Spi : BusKind::None)},
   kDacXsmt,
   {VOXONE_HAS_DISPLAY != 0, VOXONE_HAS_BT != 0,
    kBtFirmwareUpdate && VOXONE_HAS_BT != 0,
    VOXONE_PROFILE_AUDIO == AudioOutput::Pcm5102a,
    false, false, VOXONE_HAS_ENCODER != 0,
-   kI2c.sda != kNoPin && kI2c.scl != kNoPin}
+   kSupportsRtc}
 };
 
 static_assert(!VOXONE_HAS_BT ||
@@ -118,15 +135,20 @@ bool hasPinConflicts(const HardwareDescriptor& d) {
 bool validateDescriptor(const HardwareDescriptor& d) {
   const bool display = d.displayKind != DisplayKind::None;
   if (d.capabilities.supportsDisplay != display ||
-      d.capabilities.supportsRtc != (hasPin(d.i2c.sda) && hasPin(d.i2c.scl)) ||
+      (d.capabilities.supportsRtc &&
+       (!hasPin(d.i2c.sda) || !hasPin(d.i2c.scl))) ||
       d.capabilities.supportsVoxOneBt !=
         (hasPin(d.btUart.rx) && hasPin(d.btUart.tx)) ||
       d.capabilities.supportsPcm5102 !=
         (hasPin(d.audioOut.bclk) && hasPin(d.audioOut.ws) &&
          hasPin(d.audioOut.dout))) return false;
-  if (display && (!hasPin(d.display.cs) || !hasPin(d.display.dc) ||
-                  d.display.bus != BusKind::Spi)) return false;
-  if (!display && d.display.bus != BusKind::None) return false;
+  if (d.displayKind == DisplayKind::Ssd1306_128x64) {
+    if (d.display.bus != BusKind::I2c ||
+        !hasPin(d.i2c.sda) || !hasPin(d.i2c.scl)) return false;
+  } else if (display) {
+    if (!hasPin(d.display.cs) || !hasPin(d.display.dc) ||
+        d.display.bus != BusKind::Spi) return false;
+  } else if (d.display.bus != BusKind::None) return false;
   if (d.capabilities.supportsEncoder &&
       (!hasPin(d.encoder.a) || !hasPin(d.encoder.b) ||
        !hasPin(d.encoder.button) || d.encoder.stepsPerDetent == 0)) return false;

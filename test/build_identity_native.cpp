@@ -25,6 +25,8 @@ int main() {
   const char* expectedProfile = "X0";
 #elif defined(VOXONE_PROFILE_B0)
   const char* expectedProfile = "B0";
+#elif defined(VOXONE_PROFILE_C0)
+  const char* expectedProfile = "C0";
 #elif defined(VOXONE_PROFILE_A0)
   const char* expectedProfile = "A0";
 #else

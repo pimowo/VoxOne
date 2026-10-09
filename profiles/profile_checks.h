@@ -6,6 +6,7 @@ namespace profile_checks {
 
 constexpr bool displayMatchesLegacy(Display display, int dspModel) {
   return (display == Display::None && dspModel == DSP_DUMMY) ||
+         (display == Display::Ssd1306_128x64 && dspModel == DSP_SSD1306) ||
          (display == Display::St7789_284x76 && dspModel == DSP_ST7789_76) ||
          (display == Display::St7796_480x320 && dspModel == DSP_ST7796);
 }
@@ -21,9 +22,17 @@ static_assert(activeProfile.capabilities.hasDisplay == (DSP_MODEL != DSP_DUMMY),
 static_assert(displayMatchesLegacy(activeProfile.display, DSP_MODEL),
               "HardwareProfile::display does not match legacy DSP_MODEL");
 
-static_assert(!activeProfile.pinMapComplete || !activeProfile.capabilities.hasDisplay ||
+static_assert(!activeProfile.pinMapComplete ||
+              (activeProfile.display != Display::St7789_284x76 &&
+               activeProfile.display != Display::St7796_480x320) ||
               (TFT_CS != 255 && TFT_DC != 255),
-              "Complete display profile requires TFT_CS and TFT_DC pins");
+              "Complete SPI display profile requires TFT_CS and TFT_DC pins");
+
+static_assert(!activeProfile.pinMapComplete ||
+              activeProfile.display != Display::Ssd1306_128x64 ||
+              (I2C_SDA != 255 && I2C_SDA != -1 &&
+               I2C_SCL != 255 && I2C_SCL != -1),
+              "Complete SSD1306 profile requires I2C_SDA and I2C_SCL pins");
 
 static_assert(!activeProfile.pinMapComplete || !activeProfile.capabilities.hasEncoder ||
               (ENC_BTNL != 255 && ENC_BTNR != 255),
