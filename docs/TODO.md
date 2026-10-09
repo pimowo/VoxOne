@@ -46,7 +46,7 @@
 
 ### Targety i release gate
 
-- [STABLE] Wykonać fizyczną regresję X0, B0 i A0; dla B0 sprawdzić PCM5102A GPIO1/2/3, VoxOneBT, WWW, MQTT/HA i NoDisplay.
+- [STABLE] Wykonać fizyczną regresję X0, B0 i A0; B0 (NoDisplay): full image, first boot/AP/Wi-Fi/WWW, RADIO, PCM5102A GPIO1/2/3 i restart PHYSICAL PASS; na B0 pozostają VoxOneBT oraz MQTT/HA.
 - [STABLE] Na X0 sprawdzić ukrycie suwaka jasności, restart z WWW, powrót Wi-Fi bez utraty stacji/config oraz osobno ekran aktualizacji bez regresji ScrollWidget/HOLD.
 - [STABLE] Fizycznie zweryfikować aktualne WWW na A0 i X0 (gdy bezpieczna aktualizacja X0 będzie możliwa): MUTE, selector RADIO/BT, oznaczenie BT offline, manual source priority, reconnect/resnapshot, favicon bez 404 oraz build identity w SYSTEM i AKTUALIZACJA.
 - [HARDWARE] Przypisać GPIO XSMT PCM5102A na A0 i fizycznie sprawdzić LOW przy PAUZA/STOP, HIGH przy PLAY, ciszę podczas przejść i Web Update oraz czerwoną ramkę VOL bez zmiany semantyki MUTE.
@@ -182,7 +182,7 @@
 
 - [STABLE] Utrzymać X0, B0 i A0 bez zmiany architektury do pierwszego stable; klasyczny ESP32 pozostaje stabilnym legacy targetem.
 - [HARDWARE] Po stable zaprojektować pierwsze PCB A1/B1/C1/D1 oraz prototypy C0/D0; mapy GPIO i złącza mogą różnić się od rewizji 0 bez zmiany logiki produktu.
-- [HARDWARE] Potwierdzić GPIO, rewizje PCB, opcjonalne LCD/BT/DSP oraz warianty wyjścia PCM5102A, MAX98357 dla C-family i DSPmini.
+- [HARDWARE] Potwierdzić GPIO, rewizje PCB, opcjonalne LCD/BT/DSP oraz warianty wyjścia PCM5102A, MAX98357 dla C-family i DSPmini. C0: PCM5102A GPIO1/2/3, EC11 GPIO4/5/6 i SSD1306 128×64 I2C GPIO7/8 PHYSICAL PASS; SSD1309 128×64 I2C GPIO7/8 PHYSICAL PASS; pozostałe OLED-y 128×64 później.
 - [POST-STABLE] Utrzymać zasadę jednego builda firmware na target PCB zamiast buildów dla każdej kombinacji opcji; `HardwareDescriptor` i capabilities są źródłem prawdy.
 - [POST-STABLE] Aktualizację VoxOneBT przez MAIN na Ax/Bx/Cx/Dx dopuścić tylko przy obecnym module BT, odpowiednim capability oraz zasobach PSRAM/staging; na Xx aktualizować VoxOneBT wyłącznie bezpośrednio przez USB. Nie dodawać stagingu na Xx.
 
