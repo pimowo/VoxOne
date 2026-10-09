@@ -13,9 +13,17 @@ enum class UpdatePhase : uint8_t {
   Restarting, HealthCheck, Success, Error, Aborted
 };
 
+enum class UpdateActivity : uint8_t {
+  None, PreparingUpdate, StoppingAudio, BackingUpSettings,
+  WritingFirmware, WritingFilesystem, SendingToBt, Verifying,
+  RestartingBt, WaitingForBt, HealthCheck, Completed,
+  PreparingRestart, Failed
+};
+
 struct UpdateProgressSnapshot {
   UpdateTarget target = UpdateTarget::None;
   UpdatePhase phase = UpdatePhase::Idle;
+  UpdateActivity activity = UpdateActivity::None;
   bool active = false;
   bool locked = false;
   bool progressKnown = false;
@@ -40,6 +48,7 @@ public:
     state_.acquisition = acquisition;
     state_.target = target;
     state_.phase = phase;
+    state_.activity = UpdateActivity::PreparingUpdate;
     state_.active = state_.locked = true;
     state_.totalBytes = total;
     if (phase == UpdatePhase::Receiving || phase == UpdatePhase::Writing ||
@@ -74,12 +83,20 @@ public:
     ++state_.revision;
   }
 
+  void activity(UpdateActivity activity) {
+    if (!state_.locked || !state_.active || state_.activity == activity) return;
+    state_.activity = activity;
+    ++state_.revision;
+  }
+
   void terminal(UpdatePhase phase, uint16_t errorCode = 0,
                 const char* status = nullptr) {
     if (!state_.locked || !state_.active) return;
     if (phase != UpdatePhase::Success && phase != UpdatePhase::Error &&
         phase != UpdatePhase::Aborted) return;
     state_.phase = phase;
+    state_.activity = phase == UpdatePhase::Success
+        ? UpdateActivity::Completed : UpdateActivity::Failed;
     state_.active = false;
     // Every successful target remains exclusive until the MAIN boots again.
     state_.locked = phase == UpdatePhase::Success;
@@ -97,6 +114,7 @@ public:
   void restarting() {
     if (!state_.locked) return;
     state_.phase = UpdatePhase::Restarting;
+    state_.activity = UpdateActivity::PreparingRestart;
     state_.progressKnown = false;
     state_.percent = 0;
     ++state_.revision;
@@ -112,6 +130,7 @@ private:
 // Thread-safe global runtime API for AsyncTCP and the MAIN loop.
 bool beginUpdate(UpdateTarget target, UpdatePhase phase, uint32_t total = 0);
 void setUpdatePhase(UpdateTarget target, UpdatePhase phase);
+void setUpdateActivity(UpdateTarget target, UpdateActivity activity);
 void setUpdateProgress(UpdateTarget target, uint32_t done, uint32_t total);
 void finishUpdate(UpdateTarget target, UpdatePhase phase,
                   uint16_t errorCode = 0, const char* status = nullptr);

@@ -156,7 +156,7 @@ int main() {
   const auto mainLoop = readSource("src/main.cpp");
   const auto controls = readSource("src/core/controls.cpp");
   assert(server.find("UpdateRuntimeGuard updateRuntimeGuard;") != std::string::npos);
-  assert(server.find("if (!updateRuntimeGuard.needsQuiesce(updateProgress())) return true;") != std::string::npos);
+  assert(server.find("if (!updateRuntimeGuard.needsQuiesce(snapshot)) return true;") != std::string::npos);
   assert(server.find("player.sendCommand({PR_UPDATE_STOP, 0});") != std::string::npos);
   assert(server.find("if (!quiesceForUpdate()) btLink.abortFirmwareUpdate();") != std::string::npos);
   assert(server.find("session->audioBlocked = true;\n    if (!quiesceForUpdate())") != std::string::npos);

@@ -25,4 +25,27 @@ inline UpdatePhase btUpdatePhase(const BtFirmwareSender::Progress& progress) {
   return UpdatePhase::Error;
 }
 
+inline UpdateActivity btUpdateActivity(const BtFirmwareSender::Progress& progress,
+                                      bool pendingVerify) {
+  using State = BtFirmwareSender::State;
+  switch (progress.state) {
+    case State::SendingBegin:
+    case State::WaitReady: return UpdateActivity::PreparingUpdate;
+    case State::SendingData:
+    case State::WaitAck: return UpdateActivity::SendingToBt;
+    case State::SendingEnd:
+    case State::WaitVerify:
+    case State::WaitOk: return UpdateActivity::Verifying;
+    case State::WaitIdentity:
+      if (progress.phase == BtFirmwareSender::Phase::RestartingBt)
+        return UpdateActivity::RestartingBt;
+      return pendingVerify ? UpdateActivity::HealthCheck : UpdateActivity::WaitingForBt;
+    case State::Success: return UpdateActivity::Completed;
+    case State::Error:
+    case State::Aborted: return UpdateActivity::Failed;
+    case State::Idle: return UpdateActivity::None;
+  }
+  return UpdateActivity::Failed;
+}
+
 #endif

@@ -3,6 +3,7 @@
 #include <stdint.h>
 #include <stdio.h>
 #include "common.h"
+#include "update_display_view.h"
 #if defined(VOXONE_PROFILE_A0) && DSP_MODEL==DSP_ST7796
 #include "a0_player_scroll.h"
 #endif
@@ -97,6 +98,7 @@ class ClockWidget;
 class TextWidget;
 #if DSP_MODEL==DSP_ST7796
 class A0VolumeWidget;
+class A0UpdateProgressWidget;
 class A0BluetoothWidget;
 class A0LabelFrameWidget;
 class A0PlaybackIconWidget;
@@ -150,6 +152,9 @@ class Display {
     ScrollWidget *_btTransportArtist, *_btTransportTitle;
     Page *_btTransportPage;
     Page *_a0UpdatePage = nullptr;
+    TextWidget *_a0UpdateTarget = nullptr, *_a0UpdatePercent = nullptr;
+    TextWidget *_a0UpdateActivity = nullptr;
+    A0UpdateProgressWidget *_a0UpdateBar = nullptr;
 #endif
 #if DSP_MODEL==DSP_ST7789_76 || DSP_MODEL==DSP_ST7796
     TextWidget *_plheader, *_plcounter, *_plplaying;
@@ -163,6 +168,10 @@ class Display {
     volatile bool _volumeModePending = false;
     uint32_t _lastVolumeDraw = 0;
     uint8_t _bootStep;
+    UpdateDisplayProgressState _updateDisplayProgress;
+    uint32_t _updateDisplayRevision = 0;
+    uint32_t _updateDisplayAcquisition = 0;
+    void _updateUpdateScreen(const UpdateProgressSnapshot& snapshot);
     void _time(bool redraw = false);
     void _apScreen();
     void _swichMode(displayMode_e newmode);

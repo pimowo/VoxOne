@@ -14,6 +14,7 @@
 #include "network.h"
 #include "netserver.h"
 #include "system_operation_state.h"
+#include "update_progress.h"
 #include "timekeeper.h"
 #include "ui_timeout_config.h"
 #if DSP_MODEL==DSP_ST7796 && VOXONE_HAS_BT && VOXONE_PIN_MAP_COMPLETE
@@ -103,6 +104,46 @@ static uint8_t displayedVolume() { return config.store.volume; }
 DspCore dsp;
 
 #if DSP_MODEL==DSP_ST7796
+class A0UpdateProgressWidget : public Widget {
+ public:
+  A0UpdateProgressWidget() {
+    Widget::init({60, 190, 1, WA_LEFT}, 0xFFFF, 0x0000);
+  }
+
+  void setProgress(UpdateDisplayProgress progress) {
+    if (progress.determinate == progress_.determinate &&
+        progress.percent == progress_.percent) return;
+    progress_ = progress;
+    _draw();
+  }
+
+  void loop() override {
+    if (!_active || progress_.determinate) return;
+    const uint32_t now = millis();
+    if (static_cast<uint32_t>(now - lastStepMs_) < 100) return;
+    lastStepMs_ = now;
+    segmentX_ = (segmentX_ + 12) % 300;
+    _draw();
+  }
+
+ private:
+  UpdateDisplayProgress progress_{};
+  uint16_t segmentX_ = 0;
+  uint32_t lastStepMs_ = 0;
+
+  void _draw() override {
+    if (!_active) return;
+    dsp.fillRect(60, 190, 360, 22, 0x0000);
+    dsp.drawRect(60, 190, 360, 22, 0xFFFF);
+    if (progress_.determinate) {
+      const uint16_t width = static_cast<uint16_t>(356u * progress_.percent / 100u);
+      if (width) dsp.fillRect(62, 192, width, 18, 0x07FF);
+    } else {
+      dsp.fillRect(62 + segmentX_, 192, 56, 18, 0x07FF);
+    }
+  }
+};
+
 class A0VolumeWidget : public Widget {
  public:
   A0VolumeWidget(WidgetConfig position, uint16_t color, uint16_t background) {
@@ -560,9 +601,17 @@ void Display::_buildPager(){
   #if DSP_MODEL==DSP_ST7796
   _pager->addPage(_btTransportPage);
   _a0UpdatePage = new Page();
-  TextWidget* updateTitle = new TextWidget({0, 144, 4, WA_CENTER}, 32, 0xF800, 0x0000);
+  TextWidget* updateTitle = new TextWidget({0, 48, 3, WA_CENTER}, 32, 0xFFFF, 0x0000);
   updateTitle->setText("AKTUALIZACJA");
   _a0UpdatePage->addWidget(updateTitle);
+  _a0UpdateTarget = new TextWidget({0, 112, 2, WA_CENTER}, 48, 0xFFFF, 0x0000);
+  _a0UpdatePage->addWidget(_a0UpdateTarget);
+  _a0UpdateBar = new A0UpdateProgressWidget();
+  _a0UpdatePage->addWidget(_a0UpdateBar);
+  _a0UpdatePercent = new TextWidget({0, 232, 3, WA_CENTER}, 12, 0xFFFF, 0x0000);
+  _a0UpdatePage->addWidget(_a0UpdatePercent);
+  _a0UpdateActivity = new TextWidget({0, 302, 1, WA_CENTER}, 80, 0xFFFF, 0x0000);
+  _a0UpdatePage->addWidget(_a0UpdateActivity);
   _pager->addPage(_a0UpdatePage);
   #endif
 #if defined(VOXONE_PROFILE_A0) && DSP_MODEL==DSP_ST7796
@@ -643,8 +692,34 @@ static bool activeSourceVuVisible() {
       ? displaySourceVuVisible(source) : player.isRunning();
 }
 
+void Display::_updateUpdateScreen(const UpdateProgressSnapshot& snapshot) {
+  const UpdateDisplayProgress progress = _updateDisplayProgress.observe(snapshot);
+  if (_updateDisplayRevision == snapshot.revision &&
+      _updateDisplayAcquisition == snapshot.acquisition) return;
+  _updateDisplayRevision = snapshot.revision;
+  _updateDisplayAcquisition = snapshot.acquisition;
+#if DSP_MODEL==DSP_ST7796
+  if (_a0UpdateTarget) _a0UpdateTarget->setText(updateTargetDisplayName(snapshot.target));
+  if (_a0UpdateActivity)
+    _a0UpdateActivity->setText(updateActivityDisplayText(snapshot.activity));
+  if (_a0UpdateBar) _a0UpdateBar->setProgress(progress);
+  if (_a0UpdatePercent) {
+    if (progress.determinate) _a0UpdatePercent->setText(progress.percent, "%d%%");
+    else _a0UpdatePercent->setText("");
+  }
+#elif DSP_MODEL==DSP_ST7789_76
+  if (_nums) {
+    if (progress.determinate) _nums->setText(progress.percent, "%d%%");
+    else _nums->setText("...");
+  }
+#else
+  (void)progress;
+#endif
+}
+
 void Display::_swichMode(displayMode_e newmode) {
-  if (newmode == _mode || network.status != CONNECTED) return;
+  if (!updateScreenAllowsMode(updateProgress(), newmode == UPDATING) ||
+      newmode == _mode || (network.status != CONNECTED && newmode != UPDATING)) return;
 #if DSP_MODEL==DSP_ST7796
   if (newmode == BT_TRANSPORT) {
     DisplaySourceView source{};
@@ -656,7 +731,8 @@ void Display::_swichMode(displayMode_e newmode) {
   if (_mode == PLAYER && newmode != PLAYER) _a0ScrollMode(false);
   else if (_mode != PLAYER && newmode == PLAYER) _a0ScrollMode(true);
 #endif
-  if (_mode == STATIONS || _mode == BT_TRANSPORT) timekeeper.cancelReturnPlayer();
+  if (_mode == STATIONS || _mode == BT_TRANSPORT || newmode == UPDATING)
+    timekeeper.cancelReturnPlayer();
   _mode = newmode;
 #if DSP_MODEL==DSP_ST7789_76
   if(_volip) _volip->lock(newmode == PLAYER);
@@ -778,6 +854,7 @@ void Display::_drawNextStationNum(uint16_t num) {
 
 void Display::putRequest(displayRequestType_e type, int payload){
   if(displayQueue==NULL) return;
+  if (updateLockActive() && !(type == NEWMODE && payload == UPDATING)) return;
   requestParams_t request;
   request.type = type;
   request.payload = payload;
@@ -877,7 +954,24 @@ void Display::loop() {
     _bootScreen();
     return;
   }
-  if(displayQueue==NULL || _locked) return;
+  if(displayQueue==NULL || (_locked && !updateLockActive())) return;
+  const UpdateProgressSnapshot update = updateProgress();
+  if (_bootStep == 2 && updateScreenOwnsDisplay(update)) {
+    if (_mode != UPDATING) {
+      resetQueue();
+      _swichMode(UPDATING);
+    }
+    _updateUpdateScreen(update);
+    requestParams_t ignored;
+    xQueueReceive(displayQueue, &ignored, 0);
+    _pager->loop();
+    dsp.loop();
+    return;
+  }
+  if (_bootStep == 2 && _mode == UPDATING && updateScreenReturnsToPlayer(update)) {
+    resetQueue();
+    _swichMode(PLAYER);
+  }
 #if DSP_MODEL==DSP_ST7789_76
   if(_mode == PLAYER && !systemUpdateAudioBlocked()) ScrollWidget::nextX0ScrollFrame();
 #endif

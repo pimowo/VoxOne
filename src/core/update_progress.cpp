@@ -26,6 +26,12 @@ void setUpdatePhase(UpdateTarget target, UpdatePhase phase) {
   portEXIT_CRITICAL(&updateMux);
 }
 
+void setUpdateActivity(UpdateTarget target, UpdateActivity activity) {
+  portENTER_CRITICAL(&updateMux);
+  if (matches(target)) updateState.activity(activity);
+  portEXIT_CRITICAL(&updateMux);
+}
+
 void setUpdateProgress(UpdateTarget target, uint32_t done, uint32_t total) {
   portENTER_CRITICAL(&updateMux);
   if (matches(target)) updateState.progress(done, total);

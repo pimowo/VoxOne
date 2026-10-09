@@ -134,7 +134,9 @@ SystemOperationState systemOperationState;
 UpdateRuntimeGuard updateRuntimeGuard;
 
 bool quiesceForUpdate() {
-  if (!updateRuntimeGuard.needsQuiesce(updateProgress())) return true;
+  const UpdateProgressSnapshot snapshot = updateProgress();
+  if (!updateRuntimeGuard.needsQuiesce(snapshot)) return true;
+  setUpdateActivity(snapshot.target, UpdateActivity::StoppingAudio);
   network.lostPlaying = false;
   bool audioReady = true;
 #if VOXONE_HAS_BT && VOXONE_PIN_MAP_COMPLETE
@@ -2040,6 +2042,9 @@ void NetServer::serviceBtFirmwareUpdate() {
                  static_cast<uint16_t>(progress.error));
   } else {
     setUpdatePhase(UpdateTarget::VoxOneBtFirmware, phase);
+    setUpdateActivity(UpdateTarget::VoxOneBtFirmware,
+                      btUpdateActivity(progress,
+                          btLink.state().otaState == BtOtaState::PendingVerify));
     if (phase == UpdatePhase::Sending)
       setUpdateProgress(UpdateTarget::VoxOneBtFirmware,
                         progress.confirmedBytes, progress.totalBytes);
@@ -2247,6 +2252,7 @@ void handleWebUpdateUpload(AsyncWebServerRequest *request, const String& filenam
       session->error = "Could not stop Bluetooth audio output";
       return;
     }
+    setUpdateActivity(updateTarget, UpdateActivity::PreparingUpdate);
     display.putRequest(NEWMODE, UPDATING);
     const uint32_t stopStarted = millis();
     while (!systemOperationState.isRadioStopped() && millis() - stopStarted < 2000)
@@ -2256,6 +2262,7 @@ void handleWebUpdateUpload(AsyncWebServerRequest *request, const String& filenam
       return;
     }
     if (session->target == U_SPIFFS) {
+      setUpdateActivity(updateTarget, UpdateActivity::BackingUpSettings);
       if (!backupWebUpdateData(session->error)) return;
       systemOperationState.filesystemUnmounting();
       SPIFFS.end();
@@ -2269,6 +2276,8 @@ void handleWebUpdateUpload(AsyncWebServerRequest *request, const String& filenam
     }
     session->started = true;
     setUpdatePhase(updateTarget, UpdatePhase::Writing);
+    setUpdateActivity(updateTarget, session->target == U_FLASH
+        ? UpdateActivity::WritingFirmware : UpdateActivity::WritingFilesystem);
     Serial.printf("Web Update started: %s, %u bytes, limit %u\n",
                   session->target == U_FLASH ? "firmware" : "SPIFFS",
                   static_cast<unsigned>(session->expected),
@@ -2298,6 +2307,7 @@ void handleWebUpdateUpload(AsyncWebServerRequest *request, const String& filenam
       Update.abort();
     } else {
       setUpdatePhase(updateTarget, UpdatePhase::Verifying);
+      setUpdateActivity(updateTarget, UpdateActivity::Verifying);
     }
     if (!session->error && !Update.end(session->expected == 0)) {
       Serial.printf("Web Update end failed: %s\n", Update.errorString());
