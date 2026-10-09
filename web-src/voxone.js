@@ -510,9 +510,16 @@
           "/" + progress.totalBytes + " B (" + progress.percent + "%).");
       } else if (btUpdateBusy) {
         btUpdateBusy = false;
-        if (progress.state === 10) setUpdateStatus("Aktualizacja VoxOneBT zakończona; wersja potwierdzona po restarcie.");
-        else setUpdateStatus("Aktualizacja VoxOneBT nie powiodła się: " +
-          (progress.startError || "błąd sendera " + progress.error), true);
+        // BtFirmwareSender::State: Success=9, Error=10, Aborted=11.
+        if (progress.state === 9) {
+          setUpdateStatus("Aktualizacja VoxOneBT zakończona; wersja potwierdzona po restarcie.");
+        } else if (progress.state === 11) {
+          setUpdateStatus("Aktualizacja VoxOneBT przerwana.", true);
+        } else {
+          const reason = progress.startError ||
+            (progress.error ? "błąd sendera " + progress.error : "brak kodu błędu sendera");
+          setUpdateStatus("Aktualizacja VoxOneBT nie powiodła się: " + reason, true);
+        }
       }
       renderUpdateFiles();
     } catch (_) { /* A disconnect does not cancel a transfer owned by MAIN. */ }

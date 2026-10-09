@@ -75,11 +75,21 @@ class MockUpdateRequest {
   send(body) { this.body = body; this.status = 202; this.responseText = 'STAGED'; this.handlers.load(); }
 }
 window.XMLHttpRequest = MockUpdateRequest;
+window.btUpdateResponses = [];
+const originalFetch = window.fetch.bind(window);
+window.fetch = (url, options) => url === '/api/bt/update'
+  ? Promise.resolve({ok:true, json:() => Promise.resolve(window.btUpdateResponses.shift() || {state:0})})
+  : originalFetch(url, options);
+const originalSetInterval = window.setInterval.bind(window);
+window.setInterval = (handler, delay, ...args) => {
+  if (delay === 1500) { window.btPollTest = handler; return 1; }
+  return originalSetInterval(handler, delay, ...args);
+};
 </script>
 """
 CHECK = r"""
 <script>
-setTimeout(() => {
+setTimeout(async () => {
   const result = document.getElementById('headless-result');
   const get = id => document.getElementById(id);
   const check = (ok, message) => { if (!ok) throw Error(message); };
@@ -261,10 +271,36 @@ setTimeout(() => {
     get('update-bt-file').files = btTransfer.files;
     get('update-bt-file').dispatchEvent(new Event('change'));
     check(!get('update-bt-button').disabled, 'A0 enables BT upload only with capability, resources and link');
+    btUpdateResponses.push({receiving:false, pending:false, active:true,
+      state:3, phase:1, error:0, confirmedBytes:1024, totalBytes:2048, percent:50});
     get('update-bt-button').click();
     check(btUpdateRequest.url === '/update/bt' && btUpdateRequest.method === 'POST', 'dedicated BT endpoint');
     check(btUpdateRequest.body.get('filesize') === '5', 'declared image size');
     check(get('update-status').textContent.includes('sendera'), 'accepted staging waits for sender');
+    await new Promise(resolve => setTimeout(resolve, 0));
+    check(get('update-status').textContent.includes('ACK 1024/2048'), 'BT transfer progress');
+    btUpdateResponses.push({receiving:false, pending:false, active:false,
+      state:9, phase:5, error:0, confirmedBytes:2048, totalBytes:2048, percent:100});
+    await btPollTest();
+    check(get('update-status').textContent.includes('zakończona') &&
+      !get('update-status').textContent.includes('błąd sendera 0') &&
+      get('update-status').dataset.kind === 'status', 'BT Success=9 with error=None');
+    for (const [terminalState, errorCode, expected] of [
+      [10, 11, 'błąd sendera 11'], [10, 0, 'brak kodu błędu sendera'],
+      [11, 19, 'przerwana']
+    ]) {
+      btUpdateResponses.push({receiving:false, pending:false, active:true,
+        state:3, phase:1, error:0, confirmedBytes:0, totalBytes:2048, percent:0});
+      get('update-bt-button').click();
+      await new Promise(resolve => setTimeout(resolve, 0));
+      btUpdateResponses.push({receiving:false, pending:false, active:false,
+        state:terminalState, phase:6, error:errorCode,
+        confirmedBytes:0, totalBytes:2048, percent:0});
+      await btPollTest();
+      check(get('update-status').textContent.includes(expected) &&
+        !get('update-status').textContent.includes('błąd sendera 0') &&
+        get('update-status').dataset.kind === 'error', 'BT terminal state ' + terminalState);
+    }
     btTestSocket.close();
     check(selector.querySelectorAll('button').length === 0 &&
       get('current-station-name').textContent === '—' && get('source').textContent === '—',
