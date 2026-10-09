@@ -1,6 +1,7 @@
 #include "../src/core/update_progress.h"
 #include "../src/core/update_runtime_guard.h"
 #include "../src/core/bt_update_progress.h"
+#include "../src/core/update_restart_coordinator.h"
 
 #include <assert.h>
 #include <fstream>
@@ -14,7 +15,71 @@ static std::string readSource(const char* path) {
   return {std::istreambuf_iterator<char>(input), std::istreambuf_iterator<char>()};
 }
 
+static void testRestartForTarget(UpdateTarget target) {
+  UpdateProgressState update;
+  UpdateRestartCoordinator coordinator;
+  using Action = UpdateRestartCoordinator::Action;
+  assert(coordinator.tick(update.snapshot(), 10) == Action::None);
+  assert(update.begin(target, UpdatePhase::Preparing, 1024));
+  assert(coordinator.tick(update.snapshot(), 20) == Action::None);
+  update.phase(UpdatePhase::Verifying);
+  assert(coordinator.tick(update.snapshot(), 30) == Action::None);
+  update.terminal(UpdatePhase::Success);
+  assert(update.snapshot().activity == UpdateActivity::Completed && update.locked());
+  assert(!update.begin(UpdateTarget::Filesystem, UpdatePhase::Preparing));
+  assert(coordinator.tick(update.snapshot(), 100) == Action::None);
+  assert(coordinator.tick(update.snapshot(), 1299) == Action::None);
+  assert(coordinator.tick(update.snapshot(), 1300) == Action::ShowPreparingRestart);
+  update.restarting();
+  assert(update.snapshot().activity == UpdateActivity::PreparingRestart);
+  assert(update.locked());
+  assert(coordinator.tick(update.snapshot(), 1699) == Action::None);
+  assert(coordinator.tick(update.snapshot(), 1700) == Action::Restart);
+  assert(coordinator.tick(update.snapshot(), 2000) == Action::None);  // One shot.
+  assert(update.locked());
+  assert(!update.begin(UpdateTarget::VoxOneFirmware, UpdatePhase::Preparing));
+}
+
 int main() {
+  testRestartForTarget(UpdateTarget::VoxOneFirmware);
+  testRestartForTarget(UpdateTarget::Filesystem);
+  testRestartForTarget(UpdateTarget::VoxOneBtFirmware);
+
+  using RestartAction = UpdateRestartCoordinator::Action;
+  UpdateRestartCoordinator failedRestart;
+  UpdateProgressState failedUpdate;
+  assert(failedUpdate.begin(UpdateTarget::VoxOneFirmware, UpdatePhase::Writing));
+  failedUpdate.terminal(UpdatePhase::Error);
+  assert(failedRestart.tick(failedUpdate.snapshot(), 5000) == RestartAction::None);
+  assert(!failedUpdate.locked());
+  assert(failedUpdate.begin(UpdateTarget::Filesystem, UpdatePhase::Writing));
+  failedUpdate.terminal(UpdatePhase::Aborted);
+  assert(failedRestart.tick(failedUpdate.snapshot(), 7000) == RestartAction::None);
+  assert(!failedUpdate.locked());
+
+  UpdateProgressState btPending;
+  UpdateRestartCoordinator btRestart;
+  assert(btPending.begin(UpdateTarget::VoxOneBtFirmware, UpdatePhase::Sending));
+  btPending.phase(UpdatePhase::Restarting);  // FW_OK, V0 has restarted.
+  assert(btRestart.tick(btPending.snapshot(), 100) == RestartAction::None);
+  btPending.phase(UpdatePhase::HealthCheck);  // PENDING_VERIFY, not VALID.
+  assert(btRestart.tick(btPending.snapshot(), 100000) == RestartAction::None);
+  btPending.terminal(UpdatePhase::Success);  // Only after OTA_STATE VALID.
+  assert(btRestart.tick(btPending.snapshot(), 100001) == RestartAction::None);
+  assert(btRestart.tick(btPending.snapshot(), 101201) == RestartAction::ShowPreparingRestart);
+
+  UpdateProgressState wrapping;
+  UpdateRestartCoordinator wrapRestart;
+  assert(wrapping.begin(UpdateTarget::Filesystem, UpdatePhase::Writing));
+  wrapping.terminal(UpdatePhase::Success);
+  const uint32_t nearWrap = 0xfffffff0u;
+  assert(wrapRestart.tick(wrapping.snapshot(), nearWrap) == RestartAction::None);
+  assert(wrapRestart.tick(wrapping.snapshot(), nearWrap + 1199u) == RestartAction::None);
+  assert(wrapRestart.tick(wrapping.snapshot(), nearWrap + 1200u) == RestartAction::ShowPreparingRestart);
+  wrapping.restarting();
+  assert(wrapRestart.tick(wrapping.snapshot(), nearWrap + 1599u) == RestartAction::None);
+  assert(wrapRestart.tick(wrapping.snapshot(), nearWrap + 1600u) == RestartAction::Restart);
+
   UpdateProgressState state;
   auto s = state.snapshot();
   assert(s.target == UpdateTarget::None && s.phase == UpdatePhase::Idle);
@@ -167,4 +232,7 @@ int main() {
   assert(controls.find("if(updateLockActive() || display.mode()==UPDATING") != std::string::npos);
   assert(mainLoop.find("btLink.loop();") != std::string::npos);
   assert(mainLoop.find("netserver.serviceBtFirmwareUpdate();") != std::string::npos);
+  assert(mainLoop.find("netserver.serviceUpdateRestart();") != std::string::npos);
+  assert(server.find("scheduleSystemRestart(\"UPDATE\")") == std::string::npos);
+  assert(server.find("updateRestartCoordinator.tick(snapshot, millis())") != std::string::npos);
 }

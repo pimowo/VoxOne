@@ -110,7 +110,7 @@ public:
     ++state_.revision;
   }
 
-  // MAIN/FS already schedule reboot; BT will do so in a later stage.
+  // The shared restart coordinator advances every successful target here.
   void restarting() {
     if (!state_.locked) return;
     state_.phase = UpdatePhase::Restarting;

@@ -1,6 +1,7 @@
 #include "options.h"
 #include "system_operation_state.h"
 #include "update_progress.h"
+#include "update_restart_coordinator.h"
 #include "update_runtime_guard.h"
 #include "bt_update_progress.h"
 #include "source_manager.h"
@@ -132,6 +133,7 @@ uint32_t webUpdateRebootAt = 0;
 namespace {
 SystemOperationState systemOperationState;
 UpdateRuntimeGuard updateRuntimeGuard;
+UpdateRestartCoordinator updateRestartCoordinator;
 
 bool quiesceForUpdate() {
   const UpdateProgressSnapshot snapshot = updateProgress();
@@ -2058,6 +2060,21 @@ void NetServer::serviceBtFirmwareUpdate() {
 #endif
 }
 
+void NetServer::serviceUpdateRestart() {
+  const UpdateProgressSnapshot snapshot = updateProgress();
+  switch (updateRestartCoordinator.tick(snapshot, millis())) {
+    case UpdateRestartCoordinator::Action::ShowPreparingRestart:
+      restartingUpdate(snapshot.target);
+      break;
+    case UpdateRestartCoordinator::Action::Restart:
+      Serial.println("##[UPDATE]# restarting VoxOne after successful update");
+      ESP.restart();
+      break;
+    case UpdateRestartCoordinator::Action::None:
+      break;
+  }
+}
+
 void NetServer::onWsMessage(void *arg, uint8_t *data, size_t len, uint32_t clientId) {
   AwsFrameInfo *info = (AwsFrameInfo*)arg;
 #if defined(VOXONE_PROFILE_A0)
@@ -2316,8 +2333,6 @@ void handleWebUpdateUpload(AsyncWebServerRequest *request, const String& filenam
       session->finished = true;
       finishUpdate(updateTarget, UpdatePhase::Success, 0, "Image finalized");
       Serial.printf("##[UPDATE]# upload complete: %u bytes\n", static_cast<unsigned>(index + len));
-      scheduleSystemRestart("UPDATE");
-      restartingUpdate(updateTarget);
     }
     if (session->finished) activeUpdateRequest = nullptr;
   }
