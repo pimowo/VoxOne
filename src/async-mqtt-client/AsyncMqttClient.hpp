@@ -76,6 +76,7 @@ class AsyncMqttClient {
   AsyncMqttClient& onPublish(AsyncMqttClientInternals::OnPublishUserCallback callback);
 
   bool connected() const;
+  bool tcpActive();
   void connect();
   void disconnect(bool force = false);
   uint16_t subscribe(const char* topic, uint8_t qos);

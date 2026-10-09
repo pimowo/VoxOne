@@ -881,11 +881,12 @@ void AsyncWebSocket::_handleEvent(AsyncWebSocketClient * client, AwsEventType ty
 }
 
 void AsyncWebSocket::_addClient(AsyncWebSocketClient * client){
+  AsyncWebLockGuard guard(_clientsLock);
   _clients.add(client);
 }
 
 void AsyncWebSocket::_handleDisconnect(AsyncWebSocketClient * client){
-  
+  AsyncWebLockGuard guard(_clientsLock);
   _clients.remove_first([=](AsyncWebSocketClient * c){
     return c->id() == client->id();
   });
@@ -913,6 +914,7 @@ bool AsyncWebSocket::hasQueuedMessages(){
 }
 
 size_t AsyncWebSocket::count() const {
+  AsyncWebLockGuard guard(_clientsLock);
   return _clients.count_if([](AsyncWebSocketClient * c){
     return c->status() == WS_CONNECTED;
   });
@@ -935,6 +937,7 @@ void AsyncWebSocket::close(uint32_t id, uint16_t code, const char * message){
 }
 
 void AsyncWebSocket::closeAll(uint16_t code, const char * message){
+  AsyncWebLockGuard guard(_clientsLock);
   for(const auto& c: _clients){
     if(c->status() == WS_CONNECTED)
       c->close(code, message);

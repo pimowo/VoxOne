@@ -8,13 +8,19 @@ class UpdateRestartCoordinator {
 public:
   static constexpr uint32_t CompletedHoldMs = 1200;
   static constexpr uint32_t PreparingHoldMs = 400;
+  static constexpr uint32_t NetworkQuietMs = 100;
+  static constexpr uint32_t ShutdownTimeoutMs = 5000;
 
-  enum class Action : uint8_t { None, ShowPreparingRestart, Restart };
+  enum class Action : uint8_t {
+    None, BeginNetworkQuiesce, Restart, RestartAfterTimeout
+  };
 
-  Action tick(const UpdateProgressSnapshot& snapshot, uint32_t now) {
+  Action tick(const UpdateProgressSnapshot& snapshot, uint32_t now,
+              bool networkReady = false) {
     if (stage_ != Stage::Idle &&
         (!snapshot.locked || snapshot.acquisition != acquisition_)) {
       stage_ = Stage::Idle;
+      readyObserved_ = false;
     }
     if (stage_ == Stage::Idle) {
       if (snapshot.locked && snapshot.phase == UpdatePhase::Success) {
@@ -28,12 +34,26 @@ public:
         static_cast<uint32_t>(now - started_) >= CompletedHoldMs) {
       started_ = now;
       stage_ = Stage::Preparing;
-      return Action::ShowPreparingRestart;
+      readyObserved_ = false;
+      return Action::BeginNetworkQuiesce;
     }
-    if (stage_ == Stage::Preparing &&
-        static_cast<uint32_t>(now - started_) >= PreparingHoldMs) {
-      stage_ = Stage::Done;
-      return Action::Restart;
+    if (stage_ == Stage::Preparing) {
+      if (networkReady && !readyObserved_) {
+        readyObserved_ = true;
+        readySince_ = now;
+      } else if (!networkReady) {
+        readyObserved_ = false;
+      }
+      const uint32_t elapsed = static_cast<uint32_t>(now - started_);
+      if (elapsed >= PreparingHoldMs && readyObserved_ &&
+          static_cast<uint32_t>(now - readySince_) >= NetworkQuietMs) {
+        stage_ = Stage::Done;
+        return Action::Restart;
+      }
+      if (elapsed >= ShutdownTimeoutMs) {
+        stage_ = Stage::Done;
+        return Action::RestartAfterTimeout;
+      }
     }
     return Action::None;
   }
@@ -43,6 +63,8 @@ private:
   Stage stage_ = Stage::Idle;
   uint32_t acquisition_ = 0;
   uint32_t started_ = 0;
+  uint32_t readySince_ = 0;
+  bool readyObserved_ = false;
 };
 
 #endif

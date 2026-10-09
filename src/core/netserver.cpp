@@ -88,6 +88,9 @@ NetServer netserver;
 portMUX_TYPE netserverVolumeMux = portMUX_INITIALIZER_UNLOCKED;
 static portMUX_TYPE netserverLoopMux = portMUX_INITIALIZER_UNLOCKED;
 static bool netserverLoopActive = false;
+static std::atomic<bool> updateNetworkQuiescing{false};
+static std::atomic<uint32_t> webSocketSessions{0};
+static bool updateNetworkShutdownStarted = false;  // MAIN-loop owner.
 
 static bool parseToneValue(const char* value, int8_t& bass, int8_t& middle, int8_t& trebble) {
   int8_t* fields[] = {&bass, &middle, &trebble};
@@ -1981,7 +1984,7 @@ void NetServer::loop() {
     Serial.println("Rebooting...");
     ESP.restart();
   }
-  if (systemOperationState.blocksRequests()) return;
+  if (systemOperationState.blocksRequests() || updateNetworkQuiescing.load()) return;
   // DspTask and the player task can both call loop(); only one may use wsBuf.
   portENTER_CRITICAL(&netserverLoopMux);
   if (netserverLoopActive) {
@@ -2061,12 +2064,40 @@ void NetServer::serviceBtFirmwareUpdate() {
 }
 
 void NetServer::serviceUpdateRestart() {
+  if (updateNetworkQuiescing.load() && !updateNetworkShutdownStarted) {
+    portENTER_CRITICAL(&netserverLoopMux);
+    const bool loopBusy = netserverLoopActive;
+    portEXIT_CRITICAL(&netserverLoopMux);
+    if (!loopBusy) {
+      updateNetworkShutdownStarted = true;
+      // Stop accepts first; end() closes the listener, not accepted clients.
+      webserver.end();
+      websocket.closeAll(1001, "VoxOne restarting");
+    }
+  }
+  const uint32_t wsCount = webSocketSessions.load();
+  const uint32_t httpCount = webserver.activeRequestCount();
+  const bool mqttReady = mqttUpdateShutdownComplete();
   const UpdateProgressSnapshot snapshot = updateProgress();
-  switch (updateRestartCoordinator.tick(snapshot, millis())) {
-    case UpdateRestartCoordinator::Action::ShowPreparingRestart:
+  const bool webReady = updateNetworkShutdownStarted && wsCount == 0 && httpCount == 0;
+  const bool networkReady = mqttReady && webReady;
+  switch (updateRestartCoordinator.tick(snapshot, millis(), networkReady)) {
+    case UpdateRestartCoordinator::Action::BeginNetworkQuiesce:
       restartingUpdate(snapshot.target);
+      mqttBeginUpdateShutdown();
+      updateNetworkQuiescing.store(true);
+      Serial.println("##[UPDATE-NET]# network quiesce requested");
       break;
     case UpdateRestartCoordinator::Action::Restart:
+      Serial.println("##[UPDATE-NET]# network quiesce complete");
+      Serial.println("##[UPDATE]# restarting VoxOne after successful update");
+      ESP.restart();
+      break;
+    case UpdateRestartCoordinator::Action::RestartAfterTimeout:
+      Serial.printf("##[UPDATE-NET]# network quiesce timeout mqttConnected=%u mqttTcpActive=%u websocket=%lu http=%lu\n",
+                    mqttIsConnected() ? 1u : 0u, mqttTcpActive() ? 1u : 0u,
+                    static_cast<unsigned long>(wsCount),
+                    static_cast<unsigned long>(httpCount));
       Serial.println("##[UPDATE]# restarting VoxOne after successful update");
       ESP.restart();
       break;
@@ -2351,9 +2382,19 @@ void handleUpload(AsyncWebServerRequest *request, String filename, size_t index,
 
 void onWsEvent(AsyncWebSocket *server, AsyncWebSocketClient *client, AwsEventType type, void *arg, uint8_t *data, size_t len) {
   switch (type) {
-    case WS_EVT_CONNECT: if (config.store.audioinfo) Serial.printf("[WEBSOCKET] client #%lu connected from %s\n", client->id(), config.ipToStr(client->remoteIP())); break;
-    case WS_EVT_DISCONNECT: if (config.store.audioinfo) Serial.printf("[WEBSOCKET] client #%lu disconnected\n", client->id()); break;
-    case WS_EVT_DATA: if (!systemOperationState.blocksRequests()) netserver.onWsMessage(arg, data, len, client->id()); break;
+    case WS_EVT_CONNECT:
+      webSocketSessions.fetch_add(1);
+      if (config.store.audioinfo) Serial.printf("[WEBSOCKET] client #%lu connected from %s\n", client->id(), config.ipToStr(client->remoteIP()));
+      if (updateNetworkQuiescing.load()) client->close(1001, "VoxOne restarting");
+      break;
+    case WS_EVT_DISCONNECT:
+      if (config.store.audioinfo) Serial.printf("[WEBSOCKET] client #%lu disconnected\n", client->id());
+      webSocketSessions.fetch_sub(1);
+      break;
+    case WS_EVT_DATA:
+      if (!systemOperationState.blocksRequests() && !updateNetworkQuiescing.load())
+        netserver.onWsMessage(arg, data, len, client->id());
+      break;
     case WS_EVT_PONG:
     case WS_EVT_ERROR:
       break;

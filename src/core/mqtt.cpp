@@ -7,6 +7,7 @@
 #include "player.h"
 #include "commandhandler.h"
 #include "update_progress.h"
+#include "mqtt_update_shutdown_state.h"
 
 AsyncMqttClient mqttClient;
 TimerHandle_t mqttReconnectTimer = nullptr;
@@ -18,6 +19,7 @@ bool runtimeEnabled = false;
 bool wifiAvailable = false;
 char effectiveRoot[64];
 IPAddress publishedPlaylistIp;
+MqttUpdateShutdownState updateShutdown;
 
 bool makeTopic(const char* suffix) {
   const int length = snprintf(topic, sizeof(topic), "%s/%s", effectiveRoot, suffix);
@@ -28,9 +30,24 @@ bool makeTopic(const char* suffix) {
 bool mqttActive() { return runtimeEnabled; }
 
 void connectToMqtt() {
-  if (!runtimeEnabled || !wifiAvailable || !WiFi.isConnected()) return;
+  if (!updateShutdown.reconnectAllowed() || !runtimeEnabled || !wifiAvailable || !WiFi.isConnected()) return;
   if (mqttReconnectTimer) xTimerStop(mqttReconnectTimer, 0);
+  if (!updateShutdown.reconnectAllowed()) return;
   mqttClient.connect();
+}
+
+void mqttBeginUpdateShutdown() {
+  if (!updateShutdown.begin()) return;
+  if (mqttReconnectTimer) xTimerStop(mqttReconnectTimer, 0);
+  // Force-close any current MQTT TCP socket; never change persistent settings.
+  if (runtimeEnabled) mqttClient.disconnect(true);
+}
+
+bool mqttIsConnected() { return runtimeEnabled && mqttClient.connected(); }
+bool mqttTcpActive() { return runtimeEnabled && mqttClient.tcpActive(); }
+
+bool mqttUpdateShutdownComplete() {
+  return updateShutdown.complete(mqttTcpActive());
 }
 
 void mqttInit() {
@@ -56,6 +73,7 @@ void mqttInit() {
 
 void mqttWifiConnected() {
   wifiAvailable = true;
+  if (!updateShutdown.reconnectAllowed()) return;
   if (!initialized) mqttInit();
   if (!runtimeEnabled) return;
   if (mqttClient.connected()) {
@@ -67,7 +85,7 @@ void mqttWifiConnected() {
 
 void mqttWifiDisconnected() {
   wifiAvailable = false;
-  if (!runtimeEnabled) return;
+  if (!runtimeEnabled || updateShutdown.requested()) return;
   if (mqttReconnectTimer) xTimerStop(mqttReconnectTimer, 0);
   mqttClient.disconnect(true);
 }
@@ -78,6 +96,10 @@ void zeroBuffer() {
 }
 
 void onMqttConnect(bool sessionPresent) {
+  if (updateShutdown.requested()) {
+    mqttClient.disconnect(true);
+    return;
+  }
   if (!runtimeEnabled) return;
   zeroBuffer();
   if (makeTopic("command")) mqttClient.subscribe(topic, 2);
@@ -122,7 +144,8 @@ void mqttPublishVolume() {
 }
 
 void onMqttDisconnect(AsyncMqttClientDisconnectReason reason) {
-  if (runtimeEnabled && wifiAvailable && WiFi.isConnected() && mqttReconnectTimer)
+  if (updateShutdown.reconnectAllowed() && runtimeEnabled && wifiAvailable &&
+      WiFi.isConnected() && mqttReconnectTimer)
     xTimerStart(mqttReconnectTimer, 0);
 }
 

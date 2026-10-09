@@ -1,4 +1,5 @@
 #include "../src/core/update_display_view.h"
+#include "../src/core/update_bar_render_state.h"
 #include "../src/core/bt_update_progress.h"
 
 #include <cassert>
@@ -14,6 +15,28 @@ static std::string readSource(const char* path) {
 }
 
 int main() {
+  UpdateBarRenderState bar;
+  auto delta = bar.apply({false, 0});
+  assert(delta.reset && delta.fillX == 0 && delta.fillWidth == 56);
+  delta = bar.step();
+  assert(!delta.reset && delta.clearX == 0 && delta.clearWidth == 56 &&
+         delta.fillX == 12 && delta.fillWidth == 56);
+  delta = bar.apply({true, 25});
+  assert(delta.reset && delta.fillX == 0 && delta.fillWidth == 89);
+  delta = bar.apply({true, 26});
+  assert(!delta.reset && delta.clearWidth == 0 &&
+         delta.fillX == 89 && delta.fillWidth == 3);
+  delta = bar.apply({true, 10});
+  assert(!delta.reset && delta.clearX == 35 && delta.clearWidth == 57 &&
+         delta.fillWidth == 0);
+  delta = bar.apply({false, 0});
+  assert(delta.reset && delta.fillX == 0 && delta.fillWidth == 56);
+  bar.reset();  // New acquisition redraws the frame, even for the same value.
+  delta = bar.apply({false, 0});
+  assert(delta.reset && delta.fillWidth == 56);
+  delta = bar.apply({true, 100});
+  assert(delta.reset && delta.fillWidth == 356);
+
   assert(std::strcmp(updateTargetDisplayName(UpdateTarget::None), "") == 0);
   assert(std::strcmp(updateTargetDisplayName(UpdateTarget::VoxOneFirmware),
                      "VoxOne Firmware") == 0);

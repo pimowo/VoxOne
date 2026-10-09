@@ -15,6 +15,7 @@
 #include "netserver.h"
 #include "system_operation_state.h"
 #include "update_progress.h"
+#include "update_bar_render_state.h"
 #include "timekeeper.h"
 #include "ui_timeout_config.h"
 #if DSP_MODEL==DSP_ST7796 && VOXONE_HAS_BT && VOXONE_PIN_MAP_COMPLETE
@@ -110,11 +111,14 @@ class A0UpdateProgressWidget : public Widget {
     Widget::init({60, 190, 1, WA_LEFT}, 0xFFFF, 0x0000);
   }
 
-  void setProgress(UpdateDisplayProgress progress) {
-    if (progress.determinate == progress_.determinate &&
-        progress.percent == progress_.percent) return;
+  void setProgress(UpdateDisplayProgress progress, uint32_t acquisition) {
+    if (acquisition != acquisition_) {
+      acquisition_ = acquisition;
+      bar_.reset();
+    } else if (progress.determinate == progress_.determinate &&
+               progress.percent == progress_.percent) return;
     progress_ = progress;
-    _draw();
+    if (_active) render(bar_.apply(progress_));
   }
 
   void loop() override {
@@ -122,25 +126,30 @@ class A0UpdateProgressWidget : public Widget {
     const uint32_t now = millis();
     if (static_cast<uint32_t>(now - lastStepMs_) < 100) return;
     lastStepMs_ = now;
-    segmentX_ = (segmentX_ + 12) % 300;
-    _draw();
+    render(bar_.step());
   }
 
  private:
   UpdateDisplayProgress progress_{};
-  uint16_t segmentX_ = 0;
+  UpdateBarRenderState bar_{};
+  uint32_t acquisition_ = 0;
   uint32_t lastStepMs_ = 0;
 
   void _draw() override {
     if (!_active) return;
-    dsp.fillRect(60, 190, 360, 22, 0x0000);
-    dsp.drawRect(60, 190, 360, 22, 0xFFFF);
-    if (progress_.determinate) {
-      const uint16_t width = static_cast<uint16_t>(356u * progress_.percent / 100u);
-      if (width) dsp.fillRect(62, 192, width, 18, 0x07FF);
-    } else {
-      dsp.fillRect(62 + segmentX_, 192, 56, 18, 0x07FF);
+    bar_.reset();
+    render(bar_.apply(progress_));
+  }
+
+  void render(const UpdateBarRenderDelta& delta) {
+    if (delta.reset) {
+      dsp.fillRect(60, 190, 360, 22, 0x0000);
+      dsp.drawRect(60, 190, 360, 22, 0xFFFF);
     }
+    if (delta.clearWidth)
+      dsp.fillRect(62 + delta.clearX, 192, delta.clearWidth, 18, 0x0000);
+    if (delta.fillWidth)
+      dsp.fillRect(62 + delta.fillX, 192, delta.fillWidth, 18, 0x07FF);
   }
 };
 
@@ -702,7 +711,7 @@ void Display::_updateUpdateScreen(const UpdateProgressSnapshot& snapshot) {
   if (_a0UpdateTarget) _a0UpdateTarget->setText(updateTargetDisplayName(snapshot.target));
   if (_a0UpdateActivity)
     _a0UpdateActivity->setText(updateActivityDisplayText(snapshot.activity));
-  if (_a0UpdateBar) _a0UpdateBar->setProgress(progress);
+  if (_a0UpdateBar) _a0UpdateBar->setProgress(progress, snapshot.acquisition);
   if (_a0UpdatePercent) {
     if (progress.determinate) _a0UpdatePercent->setText(progress.percent, "%d%%");
     else _a0UpdatePercent->setText("");

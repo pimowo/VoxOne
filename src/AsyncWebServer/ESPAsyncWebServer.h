@@ -24,6 +24,7 @@
 #include "Arduino.h"
 
 #include <functional>
+#include <atomic>
 #include "FS.h"
 
 #include "StringArray.h"
@@ -395,11 +396,13 @@ typedef std::function<void(AsyncWebServerRequest *request, const String& filenam
 typedef std::function<void(AsyncWebServerRequest *request, uint8_t *data, size_t len, size_t index, size_t total)> ArBodyHandlerFunction;
 
 class AsyncWebServer {
+  friend class AsyncWebServerRequest;
   protected:
     AsyncServer _server;
     LinkedList<AsyncWebRewrite*> _rewrites;
     LinkedList<AsyncWebHandler*> _handlers;
     AsyncCallbackWebHandler* _catchAllHandler;
+    std::atomic<uint32_t> _activeRequests{0};
 
   public:
     AsyncWebServer(uint16_t port);
@@ -407,6 +410,7 @@ class AsyncWebServer {
 
     void begin();
     void end();
+    uint32_t activeRequestCount() const { return _activeRequests.load(); }
 
 #if ASYNC_TCP_SSL_ENABLED
     void onSslFileRequest(AcSSlFileHandler cb, void* arg);

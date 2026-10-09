@@ -249,6 +249,7 @@ class AsyncWebSocket: public AsyncWebHandler {
   private:
     String _url;
     AsyncWebSocketClientLinkedList _clients;
+    mutable AsyncWebLock _clientsLock;
     uint32_t _cNextId;
     AwsEventHandler _eventHandler;
     bool _enabled;

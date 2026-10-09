@@ -185,6 +185,11 @@ void AsyncMqttClient::_clear() {
 
 /* TCP */
 void AsyncMqttClient::_onConnect() {
+  // DNS/TCP may finish after a forced update shutdown; never start MQTT then.
+  if (_state == DISCONNECTED) {
+    _client.close(true);
+    return;
+  }
   log_i("TCP conn, MQTT CONNECT");
 #if ASYNC_TCP_SSL_ENABLED
   if (_secure && _secureServerFingerprints.size() > 0) {
@@ -679,6 +684,10 @@ void AsyncMqttClient::_sendPing() {
 
 bool AsyncMqttClient::connected() const {
   return _state == CONNECTED;
+}
+
+bool AsyncMqttClient::tcpActive() {
+  return _client.state() != 0;
 }
 
 void AsyncMqttClient::connect() {
