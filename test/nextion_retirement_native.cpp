@@ -45,7 +45,9 @@ int main() {
   const auto btLink = readFile("src/core/bt_link.cpp");
   assert(btLink.find("serial_(1)") != std::string::npos);
   assert(btLink.find("currentHardware().btUart") != std::string::npos);
-  assert(btLink.find("serial_.begin(115200, SERIAL_8N1, uart.rx, uart.tx)") !=
+  assert(btLink.find("static constexpr uint32_t BtLinkBaud = 921600") !=
+         std::string::npos);
+  assert(btLink.find("serial_.begin(BtLinkBaud, SERIAL_8N1, uart.rx, uart.tx)") !=
          std::string::npos);
   const auto a0 = readFile("profiles/a0.h");
   assert(a0.find("#define VOXONE_BT_UART_RX_PIN 15") != std::string::npos);

@@ -7,6 +7,10 @@
 #include "../hardware/hardware_descriptor.h"
 #include "source_manager.h"
 
+namespace {
+static constexpr uint32_t BtLinkBaud = 921600;
+}
+
 BtLink btLink;
 
 BtLink::BtLink()
@@ -41,7 +45,7 @@ void BtLink::abortFirmwareUpdate() {
 void BtLink::begin() {
   const auto& uart = voxone::hardware::currentHardware().btUart;
   serial_.setRxBufferSize(1024);
-  serial_.begin(115200, SERIAL_8N1, uart.rx, uart.tx);
+  serial_.begin(BtLinkBaud, SERIAL_8N1, uart.rx, uart.tx);
   if (!serial_) {
     serialCli.printf("##[BT]# UART init failed RX=%d TX=%d\n",
                      uart.rx, uart.tx);
@@ -49,8 +53,8 @@ void BtLink::begin() {
   }
   started_ = true;
   runtimeActive_ = true;
-  serialCli.printf("##[BT]# UART RX=%d TX=%d baud=115200\n",
-                   uart.rx, uart.tx);
+  serialCli.printf("##[BT]# UART RX=%d TX=%d baud=%lu\n",
+                   uart.rx, uart.tx, static_cast<unsigned long>(BtLinkBaud));
   protocol_.begin(millis());
 }
 
