@@ -95,6 +95,8 @@
 - [POST-STABLE] Znormalizować poziom BT względem RADIO dopiero po pomiarach toru cyfrowego i analogowego.
 - [POST-STABLE] Dokończyć aktualizację VoxOneBT: podłączyć istniejący sender UART do wspólnego UpdateProgress i UI (BT-FW-6); osobno sprawdzić przerwanie UART, brak powrotu BT, błędną `FW_VERSION` oraz ciągłą pracę MAIN. Utrzymać warunek sukcesu po OTA/flash i powrocie VoxOneBT online z oczekiwaną wersją; MAIN nie restartuje się. VoxOneBT pozostaje osobnym repozytorium.
 - BT-FW-7 — PHYSICAL PASS / zakończony: OTA V0 `0.6.1-dev` → `0.6.3-dev`; realny `FRAME_CRC`/NACK i skuteczny retry; `PENDING_VERIFY` → `VALID`; po ręcznym restarcie nadal `0.6.3-dev`.
+- BT-UART-SPEED-1 — PHYSICAL PASS / zakończony: link MAIN ↔ VoxOneBT `921600 8N1`, PROTO 2, audio, PLAY/PAUSE, volume, metadata, VU i disconnect/reconnect; pełne OTA `0.6.3-dev` → `0.6.4-dev`, `FW_VERIFY`, `FW_OK`, `PENDING_VERIFY` → `VALID`, wersja zachowana po ręcznym restarcie V0. Wynik WWW i assety SPIFFS na A0 potwierdzone fizycznie (`Success=9`, `Error=10`, `Aborted=11`).
+- [POST-STABLE] BT-UART-SPEED-2 — zmierzyć i zoptymalizować throughput sendera OTA przy stabilnym fizycznie `921600`; samo zwiększenie baud nie rozwiązało wolnego transferu.
 
 ## DLNA
 
