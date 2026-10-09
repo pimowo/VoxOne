@@ -41,10 +41,14 @@ struct Image : BtFirmwareImage {
 struct Transport : BtFirmwareTransport {
   std::vector<uint8_t> sent;
   int space = 17;
+  size_t maxAccepted = SIZE_MAX;
+  size_t lastRequested = 0;
   int availableForWrite() override { return space; }
   size_t write(const uint8_t* bytes, size_t n) override {
-    sent.insert(sent.end(), bytes, bytes + n);
-    return n;
+    lastRequested = n;
+    const size_t accepted = std::min(n, maxAccepted);
+    sent.insert(sent.end(), bytes, bytes + accepted);
+    return accepted;
   }
   void clear() { sent.clear(); }
   std::string text() const { return std::string(sent.begin(), sent.end()); }
@@ -168,6 +172,58 @@ void identitySnapshot(ProtocolRig& protocol, uint32_t& now,
 int main() {
   using State = BtFirmwareSender::State;
   using Error = BtFirmwareSender::Error;
+  {
+    Rig r(2048);
+    r.tx.space = 1024;
+    assert(r.sender.start(r.image, r.pre(), r.now));
+    r.pump(State::WaitReady);
+    r.tx.clear();
+    assert(r.sender.onLine("FW_READY 1024", r.now));
+    r.sender.tick(r.now++);
+    assert(r.tx.sent.size() == 512 && r.tx.lastRequested == 512);
+    assert(r.sender.progress().state == State::SendingData);
+    assert(r.sender.progress().confirmedBytes == 0);
+    r.sender.tick(r.now++);
+    assert(r.tx.sent.size() == 1024);
+    r.sender.tick(r.now++);
+    assert(r.tx.lastRequested == 13 && r.tx.sent.size() == 1037);
+    assert(r.sender.progress().state == State::WaitAck);
+    checkFrame(r.tx.sent, 1, 0, 1024);
+    const auto first = r.tx.sent;
+    r.now += 4000;
+    r.sender.tick(r.now);
+    assert(r.tx.sent == first);  // No second frame without ACK.
+    assert(r.sender.onLine("FW_NACK 0 FRAME_CRC", r.now));
+    r.tx.clear();
+    r.pump(State::WaitAck);
+    assert(r.tx.sent == first);  // Retransmission is byte-for-byte identical.
+  }
+  {
+    Rig r(1024);
+    r.tx.space = 1024;
+    assert(r.sender.start(r.image, r.pre(), r.now));
+    r.pump(State::WaitReady);
+    r.tx.clear();
+    assert(r.sender.onLine("FW_READY 1024", r.now));
+    r.tx.space = 80;
+    r.sender.tick(r.now++);
+    assert(r.tx.sent.size() == 80 && r.tx.lastRequested == 80);
+    r.tx.space = 0;
+    r.sender.tick(r.now++);
+    assert(r.tx.sent.size() == 80 && r.sender.progress().state == State::SendingData);
+    r.tx.space = 1024;
+    r.tx.maxAccepted = 73;
+    r.sender.tick(r.now++);
+    assert(r.tx.lastRequested == 512 && r.tx.sent.size() == 153);
+    assert(r.sender.progress().state == State::SendingData);
+    r.tx.maxAccepted = 0;
+    r.sender.tick(r.now++);
+    assert(r.tx.sent.size() == 153 && r.sender.progress().state == State::SendingData);
+    r.tx.maxAccepted = 512;
+    r.pump(State::WaitAck);
+    checkFrame(r.tx.sent, 1, 0, 1024);
+    assert(r.sender.progress().confirmedBytes == 0);
+  }
   {
     auto reach971 = [](Rig& r) {
       r.begin();

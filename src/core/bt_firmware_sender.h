@@ -28,7 +28,7 @@ class BtFirmwareSender {
   using DiagnosticLogger = void (*)(void* context, const char* message);
   static constexpr size_t PayloadSize = 1024;
   static constexpr size_t FrameSize = 9 + PayloadSize + 4;
-  static constexpr size_t MaxTxPerTick = 64;
+  static constexpr size_t MaxTxPerTick = 512;
   static constexpr uint32_t ReplyTimeoutMs = 5000;
   static constexpr uint32_t IdentityTimeoutMs = 30000;
   static constexpr uint32_t OtaStatusProbeIntervalMs = 750;

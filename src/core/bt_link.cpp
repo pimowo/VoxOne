@@ -45,6 +45,7 @@ void BtLink::abortFirmwareUpdate() {
 void BtLink::begin() {
   const auto& uart = voxone::hardware::currentHardware().btUart;
   serial_.setRxBufferSize(1024);
+  serial_.setTxBufferSize(1024);
   serial_.begin(BtLinkBaud, SERIAL_8N1, uart.rx, uart.tx);
   if (!serial_) {
     serialCli.printf("##[BT]# UART init failed RX=%d TX=%d\n",
