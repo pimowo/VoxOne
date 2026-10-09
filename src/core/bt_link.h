@@ -42,6 +42,7 @@ class BtLink : private BtFirmwareTransport {
 
  private:
   static void sendCommand(void* context, const char* command);
+  static void onFirmwareDiagnostic(void* context, const char* message);
   static void onEvent(void* context, BtLinkEvent event);
   static bool onLine(void* context, const char* line, uint32_t nowMs);
   int availableForWrite() override;

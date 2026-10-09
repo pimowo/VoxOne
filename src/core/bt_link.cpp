@@ -13,6 +13,7 @@ BtLink::BtLink()
     : serial_(1), protocol_(&BtLink::sendCommand, &BtLink::onEvent, this),
       sender_(*this) {
   protocol_.setLineObserver(&BtLink::onLine);
+  sender_.setDiagnosticLogger(&BtLink::onFirmwareDiagnostic, this);
 }
 
 int BtLink::availableForWrite() { return serial_.availableForWrite(); }
@@ -115,17 +116,24 @@ void BtLink::sendCommand(void* context, const char* command) {
   link->serial_.println(command);
 }
 
+void BtLink::onFirmwareDiagnostic(void*, const char* message) {
+  serialCli.printf("##[BT FW]# %s\n", message);
+}
+
 void BtLink::onEvent(void* context, BtLinkEvent event) {
   BtLink* link = static_cast<BtLink*>(context);
   const BtLinkState& state = link->protocol_.state();
   switch (event) {
     case BtLinkEvent::Online:
-      link->sender_.onIdentity(state.runtimeAvailable, state.protocolVersion,
-                               state.firmwareVersion, state.capabilities);
       serialCli.printf("##[BT]# online proto=%u fw=%s name=%s\n",
                        state.protocolVersion, state.firmwareVersion,
                        state.btName);
       netserver.requestOnChange(WEBSTATUS, 0);
+      break;
+    case BtLinkEvent::UpdateIdentity:
+      link->sender_.onIdentity(state.runtimeAvailable, state.protocolVersion,
+                               state.firmwareVersion, state.capabilities,
+                               state.otaState);
       break;
     case BtLinkEvent::Offline:
       serialCli.printf("##[BT]# module offline\n");

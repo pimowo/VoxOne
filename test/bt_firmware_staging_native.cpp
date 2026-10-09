@@ -122,7 +122,14 @@ int main() {
   assert(heap.live == 0 && !stage.ready());
 
   assert(validate(image()) == Error::None);
-  auto mutated = image(); mutated[18] = 0; assert(validate(mutated) == Error::ManifestCount); // magic
+  auto mutated = image(); mutated[18 + 32 + 4] = '2';
+  refreshManifestCrc(mutated, 18);
+  assert(stage.prepare(mutated.size(), 8 * 1024 * 1024, true, true) == Error::None);
+  assert(stage.append(0, mutated.data(), mutated.size()) == Error::None);
+  assert(stage.finalize() == Error::None);
+  assert(std::strcmp(stage.version(), "0.6.2-dev") == 0);
+  stage.clear();
+  mutated = image(); mutated[18] = 0; assert(validate(mutated) == Error::ManifestCount); // magic
   mutated = image(); mutated[34] ^= 1; assert(validate(mutated) == Error::ManifestCount); // CRC
   const size_t fields[] = {34, 36, 38, 42, 43, 44, 46};
   const uint8_t wrong[] = {2, 59, 2, 'A', 1, 2, 3};

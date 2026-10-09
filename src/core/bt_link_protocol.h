@@ -3,13 +3,17 @@
 
 #include <stddef.h>
 #include <stdint.h>
+#include "bt_ota_state.h"
 
 enum class BtPlayback : uint8_t { Stopped, Playing, Paused };
-enum class BtLinkEvent : uint8_t { Online, Offline, Diagnostics, UnsupportedProtocol };
+enum class BtLinkEvent : uint8_t {
+  Online, Offline, Diagnostics, UnsupportedProtocol, UpdateIdentity
+};
 
 struct BtLinkState {
   bool runtimeAvailable = false;
   uint8_t protocolVersion = 0;
+  BtOtaState otaState = BtOtaState::Missing;
   char firmwareVersion[48]{};
   char btName[97]{};
   char capabilities[129]{};
@@ -83,11 +87,14 @@ class BtLinkProtocol {
   bool updateExclusive_ = false;
   void* context_;
   BtLinkState state_{};
+  BtLinkState statusBackup_{};
   BtLinkDiagnostics diagnostics_{};
   char line_[MaxLineLength + 1]{};
   size_t lineLength_ = 0;
   bool discardingLine_ = false;
   bool statusOpen_ = false;
+  uint8_t statusIdentityFields_ = 0;
+  bool statusOtaMalformed_ = false;
   bool diagnosticsOpen_ = false;
   bool protocolSeen_ = false;
   bool unsupportedProtocolReported_ = false;

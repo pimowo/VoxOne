@@ -43,6 +43,8 @@ void BtLinkProtocol::begin(uint32_t nowMs) {
   lineLength_ = 0;
   discardingLine_ = false;
   statusOpen_ = false;
+  statusIdentityFields_ = 0;
+  statusOtaMalformed_ = false;
   diagnosticsOpen_ = false;
   protocolSeen_ = false;
   unsupportedProtocolReported_ = false;
@@ -115,8 +117,11 @@ void BtLinkProtocol::goOffline() {
   state_.firmwareVersion[0] = '\0';
   state_.btName[0] = '\0';
   state_.capabilities[0] = '\0';
+  state_.otaState = BtOtaState::Missing;
   clearSession();
   statusOpen_ = false;
+  statusIdentityFields_ = 0;
+  statusOtaMalformed_ = false;
   diagnosticsOpen_ = false;
   protocolSeen_ = false;
   diagnosticsRequested_ = false;
@@ -172,14 +177,27 @@ bool BtLinkProtocol::handleLine(uint32_t nowMs) {
   }
 
   if (strcmp(line_, "STATUS_BEGIN") == 0) {
+    if (updateExclusive_) statusBackup_ = state_;
     clearSession();
     statusOpen_ = true;
+    statusIdentityFields_ = 0;
+    statusOtaMalformed_ = false;
+    state_.otaState = BtOtaState::Missing;
     return true;
   }
   if (strcmp(line_, "STATUS_END") == 0) {
     if (!statusOpen_) return false;
     statusOpen_ = false;
-    if (protocolSeen_ && state_.protocolVersion == 2 &&
+    const bool completeOtaIdentity = statusIdentityFields_ == 0x0f &&
+                                     !statusOtaMalformed_;
+    if (updateExclusive_ && !completeOtaIdentity) {
+      state_ = statusBackup_;  // A partial OTA snapshot is not a disconnect.
+      return true;
+    }
+    // OTA identity must come from this complete post-READY snapshot, not
+    // from startup announcements or fields retained from an older snapshot.
+    if ((!updateExclusive_ || completeOtaIdentity) &&
+        protocolSeen_ && state_.protocolVersion == 2 &&
         !state_.runtimeAvailable) {
       state_.runtimeAvailable = true;
       lastPingMs_ = nowMs;
@@ -189,6 +207,9 @@ bool BtLinkProtocol::handleLine(uint32_t nowMs) {
         diagnosticsRequested_ = true;
       }
     }
+    if (updateExclusive_ && completeOtaIdentity && state_.runtimeAvailable &&
+        state_.protocolVersion == 2)
+      notify(BtLinkEvent::UpdateIdentity);
     return true;
   }
 
@@ -248,14 +269,46 @@ bool BtLinkProtocol::handleLine(uint32_t nowMs) {
       protocolSeen_ = true;
       unsupportedProtocolReported_ = false;
     }
+    if (statusOpen_) statusIdentityFields_ |= 0x01;
     return true;
   }
-  if ((value = fieldValue(line_, "FW_VERSION ")) != nullptr)
-    return copyField(state_.firmwareVersion, value);
+  if ((value = fieldValue(line_, "FW_VERSION ")) != nullptr) {
+    if (!copyField(state_.firmwareVersion, value)) return false;
+    if (statusOpen_) statusIdentityFields_ |= 0x02;
+    return true;
+  }
   if ((value = fieldValue(line_, "BT_NAME ")) != nullptr)
     return copyField(state_.btName, value);
-  if ((value = fieldValue(line_, "CAPS ")) != nullptr)
-    return copyField(state_.capabilities, value);
+  if ((value = fieldValue(line_, "CAPS ")) != nullptr) {
+    if (!copyField(state_.capabilities, value)) return false;
+    if (statusOpen_) statusIdentityFields_ |= 0x04;
+    return true;
+  }
+  if (strncmp(line_, "OTA_STATE", 9) == 0 &&
+      (line_[9] == ' ' || line_[9] == '\0')) {
+    if (!statusOpen_) return false;
+    if ((statusIdentityFields_ & 0x08) != 0 || line_[9] != ' ') {
+      statusOtaMalformed_ = true;
+      return true;
+    }
+    value = line_ + 10;
+    if (strcmp(value, "NOT_PENDING") == 0)
+      state_.otaState = BtOtaState::NotPending;
+    else if (strcmp(value, "PENDING_VERIFY") == 0)
+      state_.otaState = BtOtaState::PendingVerify;
+    else if (strcmp(value, "VALID") == 0)
+      state_.otaState = BtOtaState::Valid;
+    else if (strcmp(value, "CONFIRM_FAILED") == 0)
+      state_.otaState = BtOtaState::ConfirmFailed;
+    else if (strcmp(value, "UNKNOWN") == 0)
+      state_.otaState = BtOtaState::Unknown;
+    else {
+      statusOtaMalformed_ = true;
+      return true;
+    }
+    statusIdentityFields_ |= 0x08;
+    return true;
+  }
   if ((value = fieldValue(line_, "DEVICE ")) != nullptr)
     return copyField(state_.peerName, value);
   if ((value = fieldValue(line_, "ARTIST ")) != nullptr)

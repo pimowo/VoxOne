@@ -50,6 +50,18 @@ struct Transport : BtFirmwareTransport {
   std::string text() const { return std::string(sent.begin(), sent.end()); }
 };
 
+struct DiagnosticCapture {
+  std::vector<std::string> lines;
+  static void log(void* context, const char* message) {
+    static_cast<DiagnosticCapture*>(context)->lines.emplace_back(message);
+  }
+  bool contains(const char* fragment) const {
+    for (const auto& line : lines)
+      if (line.find(fragment) != std::string::npos) return true;
+    return false;
+  }
+};
+
 struct Rig {
   Transport tx;
   BtFirmwareSender sender{tx};
@@ -99,20 +111,164 @@ void checkFrame(const std::vector<uint8_t>& frame, uint8_t type,
 struct ProtocolRig {
   std::vector<std::string> commands;
   BtLinkProtocol link{send, event, this};
+  BtFirmwareSender* sender = nullptr;
   static void send(void* c, const char* text) {
     static_cast<ProtocolRig*>(c)->commands.push_back(text);
   }
-  static void event(void*, BtLinkEvent) {}
+  static void event(void* c, BtLinkEvent kind) {
+    auto& rig = *static_cast<ProtocolRig*>(c);
+    if (kind == BtLinkEvent::UpdateIdentity && rig.sender) {
+      const auto& state = rig.link.state();
+      rig.sender->onIdentity(state.runtimeAvailable, state.protocolVersion,
+                             state.firmwareVersion, state.capabilities,
+                             state.otaState);
+    }
+  }
+  static bool observedLine(void* c, const char* value, uint32_t now) {
+    auto& rig = *static_cast<ProtocolRig*>(c);
+    return rig.sender && rig.sender->onLine(value, now);
+  }
+  void observe(BtFirmwareSender& source) {
+    sender = &source;
+    link.setLineObserver(observedLine);
+  }
   void line(const char* text, uint32_t now) {
     for (const char* p = text; *p; ++p) link.feed(*p, now);
     link.feed('\n', now);
   }
 };
+
+void prepareIdentity(Rig& rig, ProtocolRig& protocol) {
+  rig.begin();
+  assert(rig.sender.onLine("FW_ACK 0 1", rig.now));
+  rig.pump(BtFirmwareSender::State::WaitVerify);
+  assert(rig.sender.onLine("FW_VERIFY", rig.now));
+  assert(rig.sender.onLine("FW_OK", rig.now));
+  protocol.link.begin(0);
+  protocol.commands.clear();
+  protocol.observe(rig.sender);
+  protocol.link.setUpdateExclusive(true);
+  protocol.line("READY", rig.now + 1);
+  assert(rig.sender.takeStatusProbe());
+  protocol.link.requestStatus(rig.now + 1);
+  assert(protocol.commands.size() == 1 && protocol.commands.back() == "GET_STATUS");
+}
+
+void identitySnapshot(ProtocolRig& protocol, uint32_t& now,
+                      const char* version, const char* otaState) {
+  protocol.line("STATUS_BEGIN", now++);
+  protocol.line("PROTO 2", now++);
+  protocol.line(version, now++);
+  protocol.line("CAPS A2DP FW_UPDATE", now++);
+  if (otaState) protocol.line(otaState, now++);
+  protocol.line("STATUS_END", now++);
+}
 }  // namespace
 
 int main() {
   using State = BtFirmwareSender::State;
   using Error = BtFirmwareSender::Error;
+  {
+    auto reach971 = [](Rig& r) {
+      r.begin();
+      for (uint32_t seq = 0; seq < 971; ++seq) {
+        char ack[48];
+        snprintf(ack, sizeof(ack), "FW_ACK %lu %lu",
+                 static_cast<unsigned long>(seq),
+                 static_cast<unsigned long>((seq + 1) * 1024));
+        assert(r.sender.onLine(ack, r.now));
+        r.tx.clear();
+        r.pump(State::WaitAck);
+      }
+      assert(r.sender.progress().confirmedBytes == 994304);
+    };
+    Rig ack(1138000);
+    reach971(ack);
+    DiagnosticCapture log;
+    ack.sender.setDiagnosticLogger(&DiagnosticCapture::log, &log);
+    assert(ack.sender.onLine("FW_ACK 971 995328", ack.now));
+    assert(ack.sender.progress().confirmedBytes == 995328);
+    assert(ack.sender.progress().state == State::SendingData);
+    assert(log.contains("state=WaitAck seq=971 confirmed=994304 line=\"FW_ACK 971 995328\""));
+
+    Rig nack(1138000);
+    reach971(nack);
+    nack.sender.setDiagnosticLogger(&DiagnosticCapture::log, &log);
+    log.lines.clear();
+    assert(nack.sender.onLine("FW_NACK 971 FRAME_CRC", nack.now));
+    assert(nack.sender.progress().state == State::SendingData);
+    nack.pump(State::WaitAck);
+    assert(nack.sender.onLine("FW_NACK 971 WRONG_SEQUENCE", nack.now));
+    assert(nack.sender.progress().state == State::SendingData);
+    assert(nack.sender.progress().error == Error::None);
+    assert(log.contains("FW_NACK 971 FRAME_CRC"));
+    assert(log.contains("FW_NACK 971 WRONG_SEQUENCE"));
+  }
+  {
+    auto sendAlmostAllOfSecondFrame = [](Rig& r) {
+      r.begin();
+      assert(r.sender.onLine("FW_ACK 0 1024", r.now));
+      r.tx.clear();
+      for (int i = 0; i < 60; ++i) r.sender.tick(r.now++);
+      assert(r.tx.sent.size() == 1020);
+      assert(r.sender.progress().state == State::SendingData);
+      assert(r.sender.progress().confirmedBytes == 1024);
+    };
+    Rig nack(3072);
+    sendAlmostAllOfSecondFrame(nack);
+    assert(nack.sender.onLine("FW_NACK 1 FRAME_CRC", nack.now));
+    assert(nack.sender.progress().error == Error::None);
+    assert(nack.sender.progress().state == State::SendingData);
+    assert(nack.tx.sent.size() == 1020);  // No retry before the first frame is complete.
+    nack.sender.tick(nack.now++);
+    assert(nack.tx.sent.size() == 1037);
+    const auto firstAttempt = nack.tx.sent;
+    assert(nack.sender.progress().state == State::SendingData);
+    nack.pump(State::WaitAck);
+    assert(nack.tx.sent.size() == firstAttempt.size() * 2);
+    assert(std::equal(firstAttempt.begin(), firstAttempt.end(),
+                      nack.tx.sent.begin() + firstAttempt.size()));
+    assert(nack.sender.progress().confirmedBytes == 1024);
+    assert(nack.sender.progress().error == Error::None);
+
+    Rig ack(3072);
+    sendAlmostAllOfSecondFrame(ack);
+    assert(ack.sender.onLine("FW_ACK 1 2048", ack.now));
+    assert(ack.sender.progress().confirmedBytes == 1024);
+    assert(ack.tx.sent.size() == 1020);
+    ack.sender.tick(ack.now++);
+    assert(ack.tx.sent.size() == 1037);
+    assert(ack.sender.progress().confirmedBytes == 2048);
+    assert(ack.sender.progress().state == State::SendingData);
+    ack.tx.clear();
+    ack.pump(State::WaitAck);
+    checkFrame(ack.tx.sent, 1, 2, 1024);
+  }
+  {
+    const struct { const char* line; const char* category; } malformed[] = {
+      {"FW_ACK 0", "BT FW malformed FW_ACK"},
+      {"FW_ACK 0 1024x", "BT FW malformed FW_ACK"},
+      {"FW_NACK 0 ", "BT FW malformed FW_NACK"},
+      {"FW_VERIFY", "BT FW unexpected FW_* while waiting ACK"}
+    };
+    for (const auto& sample : malformed) {
+      Rig r(2048); r.begin();
+      DiagnosticCapture log;
+      r.sender.setDiagnosticLogger(&DiagnosticCapture::log, &log);
+      assert(r.sender.onLine(sample.line, r.now));
+      assert(r.sender.progress().error == Error::InvalidResponse);
+      assert(log.contains(sample.category));
+      assert(log.contains("BT FW invalid response: state=WaitAck seq=0 confirmed=0"));
+      assert(log.contains(sample.line));
+    }
+    Rig r(2048); r.begin();
+    DiagnosticCapture log;
+    r.sender.setDiagnosticLogger(&DiagnosticCapture::log, &log);
+    const std::string longLine = "FW_ACK " + std::string(200, '9');
+    assert(r.sender.onLine(longLine.c_str(), r.now));
+    assert(log.contains("[truncated]"));
+    for (const auto& line : log.lines) assert(line.size() < 192);
+  }
   {
     Rig r(1);
     auto p = r.pre();
@@ -174,9 +330,130 @@ int main() {
     assert(!r.sender.onLine("READY", r.now));
     assert(r.sender.takeStatusProbe());
     assert(!r.sender.takeStatusProbe());
-    r.sender.onIdentity(true, 2, "0.6.1-dev", "A2DP FW_UPDATE");
+    r.sender.onIdentity(true, 2, "0.6.1-dev", "A2DP FW_UPDATE", BtOtaState::Valid);
     assert(r.sender.progress().state == State::Success);
     assert(!r.sender.exclusive());
+  }
+  {
+    Rig stale(1);
+    stale.image.label = "0.6.2-dev";
+    DiagnosticCapture log;
+    stale.sender.setDiagnosticLogger(&DiagnosticCapture::log, &log);
+    stale.begin();
+    assert(log.contains("identity start: expectedVersion=\"0.6.2-dev\""));
+    assert(stale.sender.onLine("FW_ACK 0 1", stale.now));
+    stale.pump(State::WaitVerify);
+    assert(stale.sender.onLine("FW_VERIFY", stale.now));
+    assert(stale.sender.onLine("FW_OK", stale.now));
+    assert(log.contains("identity FW_OK: expectedVersion=\"0.6.2-dev\""));
+    stale.sender.onIdentity(true, 2, "0.6.1-dev", "FW_UPDATE", BtOtaState::Valid);
+    assert(stale.sender.progress().state == State::WaitIdentity);  // No READY yet.
+    assert(!stale.sender.onLine("READY", stale.now));
+    stale.sender.onIdentity(true, 2, "0.6.1-dev", "FW_UPDATE", BtOtaState::Valid);
+    assert(stale.sender.progress().error == Error::VersionMismatch);
+    assert(log.contains("reportedVersion=\"0.6.1-dev\""));
+
+    Rig fresh(1);
+    fresh.image.label = "0.6.2-dev";
+    fresh.begin();
+    assert(fresh.sender.onLine("FW_ACK 0 1", fresh.now));
+    fresh.pump(State::WaitVerify);
+    assert(fresh.sender.onLine("FW_VERIFY", fresh.now));
+    assert(fresh.sender.onLine("FW_OK", fresh.now));
+    assert(!fresh.sender.onLine("READY", fresh.now));
+    fresh.sender.onIdentity(true, 2, "0.6.2-dev", "FW_UPDATE", BtOtaState::Valid);
+    assert(fresh.sender.progress().state == State::Success);
+    assert(fresh.sender.start(fresh.image, fresh.pre(), fresh.now));
+    assert(fresh.sender.progress().state == State::SendingBegin);
+    assert(fresh.sender.progress().error == Error::None);
+  }
+  {
+    Rig rig(1);
+    rig.image.label = "0.6.2-dev";
+    ProtocolRig protocol;
+    DiagnosticCapture log;
+    rig.sender.setDiagnosticLogger(&DiagnosticCapture::log, &log);
+    prepareIdentity(rig, protocol);
+    uint32_t now = 1000;
+    identitySnapshot(protocol, now, "FW_VERSION 0.6.2-dev", "OTA_STATE PENDING_VERIFY");
+    assert(rig.sender.progress().state == State::WaitIdentity);
+    assert(rig.sender.progress().phase == BtFirmwareSender::Phase::WaitingForBt);
+    assert(log.contains("otaState=PENDING_VERIFY snapshotComplete=1"));
+    const uint32_t firstSnapshotAt = now - 1;
+    rig.sender.tick(firstSnapshotAt + BtFirmwareSender::OtaStatusProbeIntervalMs - 1);
+    assert(!rig.sender.takeStatusProbe());
+    rig.sender.tick(firstSnapshotAt + BtFirmwareSender::OtaStatusProbeIntervalMs);
+    assert(rig.sender.takeStatusProbe());
+    protocol.link.requestStatus(now++);
+    assert(protocol.commands.size() == 2 && protocol.commands.back() == "GET_STATUS");
+    identitySnapshot(protocol, now, "FW_VERSION 0.6.2-dev", "OTA_STATE PENDING_VERIFY");
+    assert(rig.sender.progress().state == State::WaitIdentity);
+    assert(!rig.sender.takeStatusProbe());
+    const uint32_t secondSnapshotAt = now - 1;
+    rig.sender.tick(secondSnapshotAt + BtFirmwareSender::OtaStatusProbeIntervalMs);
+    assert(rig.sender.takeStatusProbe());
+    protocol.link.requestStatus(now++);
+    identitySnapshot(protocol, now, "FW_VERSION 0.6.2-dev", "OTA_STATE VALID");
+    assert(rig.sender.progress().state == State::Success);
+    assert(rig.sender.progress().phase == BtFirmwareSender::Phase::Success);
+    assert(log.contains("otaState=VALID snapshotComplete=1"));
+  }
+  {
+    const struct { const char* state; Error error; } terminal[] = {
+      {"OTA_STATE CONFIRM_FAILED", Error::OtaConfirmFailed},
+      {"OTA_STATE UNKNOWN", Error::OtaStateUnknown},
+      {"OTA_STATE NOT_PENDING", Error::OtaNotPending}
+    };
+    for (const auto& sample : terminal) {
+      Rig rig(1); rig.image.label = "0.6.2-dev";
+      ProtocolRig protocol;
+      prepareIdentity(rig, protocol);
+      uint32_t now = 1000;
+      identitySnapshot(protocol, now, "FW_VERSION 0.6.2-dev", sample.state);
+      assert(rig.sender.progress().state == State::Error);
+      assert(rig.sender.progress().error == sample.error);
+      assert(!rig.sender.exclusive());  // No binary ABORT after FW_OK.
+      assert(!rig.sender.takeStatusProbe());
+    }
+    Rig wrong(1); wrong.image.label = "0.6.2-dev";
+    ProtocolRig protocol;
+    prepareIdentity(wrong, protocol);
+    uint32_t now = 1000;
+    identitySnapshot(protocol, now, "FW_VERSION 0.6.1-dev", "OTA_STATE VALID");
+    assert(wrong.sender.progress().error == Error::VersionMismatch);
+  }
+  {
+    Rig rig(1); rig.image.label = "0.6.2-dev";
+    ProtocolRig protocol;
+    prepareIdentity(rig, protocol);
+    uint32_t now = 1000;
+    protocol.line("PROTO 2", now++);
+    protocol.line("FW_VERSION 0.6.2-dev", now++);
+    protocol.line("CAPS FW_UPDATE", now++);
+    protocol.line("STATUS_BEGIN", now++);
+    protocol.line("OTA_STATE VALID", now++);
+    protocol.line("STATUS_END", now++);
+    assert(rig.sender.progress().state == State::WaitIdentity);
+    identitySnapshot(protocol, now, "FW_VERSION 0.6.2-dev", nullptr);
+    assert(rig.sender.progress().state == State::WaitIdentity);  // Old V0.
+    identitySnapshot(protocol, now, "FW_VERSION 0.6.2-dev", "OTA_STATE VALID");
+    assert(rig.sender.progress().state == State::Success);
+  }
+  {
+    Rig rig(1); rig.image.label = "0.6.2-dev";
+    rig.now = UINT32_MAX - 10000U;
+    ProtocolRig protocol;
+    prepareIdentity(rig, protocol);
+    const uint32_t fwOkAt = rig.now;
+    uint32_t now = fwOkAt + 1000U;
+    identitySnapshot(protocol, now, "FW_VERSION 0.6.2-dev", "OTA_STATE PENDING_VERIFY");
+    now = fwOkAt + 10000U;
+    identitySnapshot(protocol, now, "FW_VERSION 0.6.2-dev", "OTA_STATE PENDING_VERIFY");
+    now = fwOkAt + 29000U;
+    identitySnapshot(protocol, now, "FW_VERSION 0.6.2-dev", "OTA_STATE PENDING_VERIFY");
+    rig.sender.tick(fwOkAt + BtFirmwareSender::IdentityTimeoutMs);
+    assert(rig.sender.progress().error == Error::IdentityTimeout);
+    assert(!rig.sender.takeStatusProbe());
   }
   {
     Rig r(1); r.begin();
@@ -251,7 +528,7 @@ int main() {
     r.sender.onLine("FW_VERIFY", r.now);
     r.sender.onLine("FW_OK", r.now);
     r.sender.onLine("READY", r.now);
-    r.sender.onIdentity(true, 2, "WRONG", "FW_UPDATE");
+    r.sender.onIdentity(true, 2, "WRONG", "FW_UPDATE", BtOtaState::Valid);
     assert(r.sender.progress().error == Error::VersionMismatch);
   }
   {

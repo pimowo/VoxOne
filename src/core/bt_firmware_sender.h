@@ -3,6 +3,7 @@
 
 #include <stddef.h>
 #include <stdint.h>
+#include "bt_ota_state.h"
 
 // The caller retains ownership for the entire transfer. read() must support
 // random access so an identical frame can be retransmitted without staging.
@@ -24,11 +25,13 @@ class BtFirmwareTransport {
 
 class BtFirmwareSender {
  public:
+  using DiagnosticLogger = void (*)(void* context, const char* message);
   static constexpr size_t PayloadSize = 1024;
   static constexpr size_t FrameSize = 9 + PayloadSize + 4;
   static constexpr size_t MaxTxPerTick = 64;
   static constexpr uint32_t ReplyTimeoutMs = 5000;
   static constexpr uint32_t IdentityTimeoutMs = 30000;
+  static constexpr uint32_t OtaStatusProbeIntervalMs = 750;
   static constexpr uint8_t MaxRetransmissions = 3;
 
   enum class State : uint8_t {
@@ -43,7 +46,8 @@ class BtFirmwareSender {
     None, Busy, Offline, Unsupported, ActiveBtSource, InvalidImage,
     ReadFailed, Transport, ReadyTimeout, InvalidReady, RemoteError,
     InvalidResponse, AckSequence, AckBytes, RetryLimit, VerifyTimeout,
-    IdentityTimeout, VersionMismatch, IdentityMismatch, Aborted
+    IdentityTimeout, VersionMismatch, IdentityMismatch, Aborted,
+    OtaConfirmFailed, OtaStateUnknown, OtaNotPending
   };
   struct Preconditions {
     bool online = false;
@@ -69,12 +73,16 @@ class BtFirmwareSender {
   void tick(uint32_t nowMs);
   bool onLine(const char* line, uint32_t nowMs);
   void onIdentity(bool online, uint8_t protocol, const char* version,
-                  const char* capabilities);
+                  const char* capabilities, BtOtaState otaState);
   void abort();
   bool exclusive() const;
   bool takeStatusProbe();
   Progress progress() const;
   static bool hasCapability(const char* capabilities, const char* token);
+  void setDiagnosticLogger(DiagnosticLogger logger, void* context) {
+    diagnosticLogger_ = logger;
+    diagnosticContext_ = context;
+  }
 
  private:
   bool prepareData();
@@ -84,10 +92,18 @@ class BtFirmwareSender {
   void transmit(uint32_t nowMs);
   void retry(uint32_t nowMs);
   void fail(Error error, bool abortRemote);
+  void logFirmwareLine(const char* label, const char* line) const;
+  void logIdentity(const char* phase, bool online, uint8_t protocol,
+                   const char* reportedVersion,
+                   BtOtaState otaState = BtOtaState::Missing,
+                   bool snapshotComplete = false) const;
 
   BtFirmwareTransport& transport_;
+  DiagnosticLogger diagnosticLogger_ = nullptr;
+  void* diagnosticContext_ = nullptr;
   BtFirmwareImage* image_ = nullptr;
   uint8_t frame_[FrameSize]{};
+  char pendingReply_[257]{};  // One UART line (BtLinkProtocol limit: 256 chars).
   char expectedVersion_[25]{};
   size_t txLength_ = 0;
   size_t txOffset_ = 0;
@@ -97,12 +113,14 @@ class BtFirmwareSender {
   uint32_t deadlineStartMs_ = 0;
   uint32_t abortProgressMs_ = 0;
   uint32_t nowMs_ = 0;
+  uint32_t lastIdentitySnapshotMs_ = 0;
   uint8_t retransmissions_ = 0;
   State state_ = State::Idle;
   Phase phase_ = Phase::Prepare;
   Error error_ = Error::None;
   bool readySeen_ = false;
   bool statusProbe_ = false;
+  bool pendingVerifyProbe_ = false;
   bool abortTx_ = false;
 };
 

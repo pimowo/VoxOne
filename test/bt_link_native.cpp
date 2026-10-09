@@ -221,6 +221,118 @@ int main() {
   assert(!fragmented.link.state().runtimeAvailable);
   assert(fragmented.sent.back() == "GET_STATUS");
 
+  // During OTA recovery, startup identity and incomplete STATUS snapshots
+  // must not generate Online (and thus cannot confirm the sender).
+  LinkHarness otaIdentity;
+  otaIdentity.link.begin(0);
+  otaIdentity.link.setUpdateExclusive(true);
+  otaIdentity.line("READY", 1);
+  otaIdentity.line("PROTO 2", 2);
+  otaIdentity.line("FW_VERSION 0.6.1-dev", 3);
+  otaIdentity.line("CAPS FW_UPDATE", 4);
+  otaIdentity.line("STATUS_BEGIN", 5);
+  otaIdentity.line("STATUS_END", 6);
+  assert(!otaIdentity.link.state().runtimeAvailable);
+  otaIdentity.line("STATUS_BEGIN", 7);
+  otaIdentity.line("PROTO 2", 8);
+  otaIdentity.line("FW_VERSION 0.6.2-dev", 9);
+  otaIdentity.line("STATUS_END", 10);  // CAPS missing from this snapshot.
+  assert(!otaIdentity.link.state().runtimeAvailable);
+  otaIdentity.line("STATUS_BEGIN", 11);
+  otaIdentity.line("FW_VERSION 0.6.2-dev", 12);
+  otaIdentity.line("CAPS FW_UPDATE", 13);
+  otaIdentity.line("STATUS_END", 14);  // PROTO missing.
+  assert(!otaIdentity.link.state().runtimeAvailable);
+  otaIdentity.line("STATUS_BEGIN", 15);
+  otaIdentity.line("PROTO 2", 16);
+  otaIdentity.line("CAPS FW_UPDATE", 17);
+  otaIdentity.line("STATUS_END", 18);  // FW_VERSION missing.
+  assert(!otaIdentity.link.state().runtimeAvailable);
+  otaIdentity.line("STATUS_BEGIN", 19);
+  otaIdentity.line("PROTO 2", 20);
+  otaIdentity.line("FW_VERSION 0.6.2-dev", 21);
+  otaIdentity.line("CAPS FW_UPDATE", 22);
+  otaIdentity.line("OTA_STATE VALID", 23);
+  otaIdentity.line("STATUS_END", 24);
+  assert(otaIdentity.link.state().runtimeAvailable);
+  assert(otaIdentity.link.state().otaState == BtOtaState::Valid);
+  assert(std::strcmp(otaIdentity.link.state().firmwareVersion, "0.6.2-dev") == 0);
+  assert(otaIdentity.events.size() == 2 && otaIdentity.events[0] == BtLinkEvent::Online &&
+         otaIdentity.events[1] == BtLinkEvent::UpdateIdentity);
+
+  const struct { const char* line; BtOtaState expected; } otaStates[] = {
+    {"OTA_STATE NOT_PENDING", BtOtaState::NotPending},
+    {"OTA_STATE PENDING_VERIFY", BtOtaState::PendingVerify},
+    {"OTA_STATE VALID", BtOtaState::Valid},
+    {"OTA_STATE CONFIRM_FAILED", BtOtaState::ConfirmFailed},
+    {"OTA_STATE UNKNOWN", BtOtaState::Unknown}
+  };
+  for (const auto& sample : otaStates) {
+    LinkHarness parsed;
+    parsed.link.begin(0);
+    parsed.link.setUpdateExclusive(true);
+    parsed.line("READY", 1);
+    parsed.line("STATUS_BEGIN", 2);
+    parsed.line("PROTO 2", 3);
+    parsed.line("FW_VERSION 0.6.2-dev", 4);
+    parsed.line("CAPS FW_UPDATE", 5);
+    parsed.line(sample.line, 6);
+    parsed.line("STATUS_END", 7);
+    assert(parsed.link.state().otaState == sample.expected);
+    assert(parsed.events.size() == 2 && parsed.events.back() == BtLinkEvent::UpdateIdentity);
+  }
+  const struct { const char* first; const char* second; } rejectedOta[] = {
+    {nullptr, nullptr},
+    {"OTA_STATE FUTURE", nullptr},
+    {"OTA_STATE", nullptr},
+    {"OTA_STATE VALID", "OTA_STATE VALID"},
+    {"OTA_STATE PENDING_VERIFY", "OTA_STATE VALID"}
+  };
+  for (const auto& sample : rejectedOta) {
+    LinkHarness parsed;
+    parsed.link.begin(0);
+    parsed.link.setUpdateExclusive(true);
+    parsed.line("READY", 1);
+    parsed.line("OTA_STATE VALID", 2);  // Outside STATUS cannot count.
+    parsed.line("STATUS_BEGIN", 3);
+    parsed.line("PROTO 2", 4);
+    parsed.line("FW_VERSION 0.6.2-dev", 5);
+    parsed.line("CAPS FW_UPDATE", 6);
+    if (sample.first) parsed.line(sample.first, 7);
+    if (sample.second) parsed.line(sample.second, 8);
+    parsed.line("STATUS_END", 9);
+    assert(!parsed.link.state().runtimeAvailable && parsed.events.empty());
+    parsed.line("STATUS_BEGIN", 10);
+    parsed.line("PROTO 2", 11);
+    parsed.line("FW_VERSION 0.6.2-dev", 12);
+    parsed.line("CAPS FW_UPDATE", 13);
+    parsed.line("OTA_STATE VALID", 14);
+    parsed.line("STATUS_END", 15);
+    assert(parsed.link.state().runtimeAvailable &&
+           parsed.events.back() == BtLinkEvent::UpdateIdentity);
+  }
+  LinkHarness partialAfterOnline;
+  partialAfterOnline.link.begin(0);
+  partialAfterOnline.link.setUpdateExclusive(true);
+  partialAfterOnline.line("READY", 1);
+  partialAfterOnline.line("STATUS_BEGIN", 2);
+  partialAfterOnline.line("PROTO 2", 3);
+  partialAfterOnline.line("FW_VERSION 0.6.2-dev", 4);
+  partialAfterOnline.line("CAPS FW_UPDATE", 5);
+  partialAfterOnline.line("OTA_STATE PENDING_VERIFY", 6);
+  partialAfterOnline.line("CONNECTED", 7);
+  partialAfterOnline.line("STATUS_END", 8);
+  assert(partialAfterOnline.link.state().runtimeAvailable &&
+         partialAfterOnline.link.state().connected);
+  const size_t completeEvents = partialAfterOnline.events.size();
+  partialAfterOnline.line("STATUS_BEGIN", 9);
+  partialAfterOnline.line("DISCONNECTED", 10);
+  partialAfterOnline.line("STATUS_END", 11);
+  assert(partialAfterOnline.events.size() == completeEvents);
+  assert(partialAfterOnline.link.state().runtimeAvailable &&
+         partialAfterOnline.link.state().connected);
+  assert(partialAfterOnline.link.state().otaState == BtOtaState::PendingVerify);
+
   // The currently checked-out VoxOneBT source is protocol v1. Its repeated
   // READY must neither mark v2 available nor flood GET_STATUS requests.
   LinkHarness v1;

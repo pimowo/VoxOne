@@ -57,6 +57,40 @@ bool BtFirmwareSender::hasCapability(const char* caps, const char* token) {
   return false;
 }
 
+void BtFirmwareSender::logFirmwareLine(const char* label, const char* line) const {
+  if (!diagnosticLogger_) return;
+  static const char* const stateNames[] = {
+    "Idle", "SendingBegin", "WaitReady", "SendingData", "WaitAck", "SendingEnd",
+    "WaitVerify", "WaitOk", "WaitIdentity", "Success", "Error", "Aborted"
+  };
+  char bounded[81];
+  size_t length = 0;
+  while (line[length] && length < sizeof(bounded) - 1) {
+    const unsigned char c = static_cast<unsigned char>(line[length]);
+    bounded[length] = c < 0x20 || c > 0x7e || c == '"' || c == '\\' ? '?' : static_cast<char>(c);
+    ++length;
+  }
+  bounded[length] = '\0';
+  char message[192];
+  snprintf(message, sizeof(message), "%s: state=%s seq=%lu confirmed=%lu line=\"%s\"%s",
+           label, stateNames[static_cast<unsigned>(state_)], static_cast<unsigned long>(sequence_),
+           static_cast<unsigned long>(confirmed_), bounded, line[length] ? " [truncated]" : "");
+  diagnosticLogger_(diagnosticContext_, message);
+}
+
+void BtFirmwareSender::logIdentity(const char* phase, bool online,
+                                   uint8_t protocol, const char* reportedVersion,
+                                   BtOtaState otaState, bool snapshotComplete) const {
+  if (!diagnosticLogger_) return;
+  char message[192];
+  snprintf(message, sizeof(message),
+           "BT FW identity %s: expectedVersion=\"%.24s\" reportedVersion=\"%.24s\" online=%u proto=%u otaState=%s snapshotComplete=%u",
+           phase, expectedVersion_, reportedVersion ? reportedVersion : "",
+           static_cast<unsigned>(online), static_cast<unsigned>(protocol),
+           btOtaStateName(otaState), static_cast<unsigned>(snapshotComplete));
+  diagnosticLogger_(diagnosticContext_, message);
+}
+
 bool BtFirmwareSender::start(BtFirmwareImage& image,
                              const Preconditions& p, uint32_t nowMs) {
   if (exclusive()) { error_ = Error::Busy; return false; }
@@ -64,6 +98,7 @@ bool BtFirmwareSender::start(BtFirmwareImage& image,
   phase_ = Phase::Prepare;
   error_ = Error::None;
   txLength_ = txOffset_ = 0;
+  pendingReply_[0] = '\0';
   total_ = confirmed_ = sequence_ = 0;
   nowMs_ = nowMs;
   if (!p.online) { fail(Error::Offline, false); return false; }
@@ -88,11 +123,12 @@ bool BtFirmwareSender::start(BtFirmwareImage& image,
   total_ = image.size();
   confirmed_ = sequence_ = 0;
   retransmissions_ = 0;
-  readySeen_ = statusProbe_ = abortTx_ = false;
+  readySeen_ = statusProbe_ = pendingVerifyProbe_ = abortTx_ = false;
   txLength_ = static_cast<size_t>(length);
   txOffset_ = 0;
   deadlineStartMs_ = nowMs;
   state_ = State::SendingBegin;
+  logIdentity("start", p.online, p.protocol, nullptr);
   return true;
 }
 
@@ -137,6 +173,7 @@ void BtFirmwareSender::fail(Error error, bool abortRemote) {
   error_ = error;
   phase_ = Phase::Error;
   state_ = State::Error;
+  statusProbe_ = pendingVerifyProbe_ = false;
   image_ = nullptr;
   txLength_ = txOffset_ = 0;
   abortTx_ = false;
@@ -176,7 +213,15 @@ void BtFirmwareSender::transmit(uint32_t nowMs) {
   if (abortTx_) { abortTx_ = false; txLength_ = txOffset_ = 0; return; }
   deadlineStartMs_ = nowMs;
   if (state_ == State::SendingBegin) state_ = State::WaitReady;
-  else if (state_ == State::SendingData) state_ = State::WaitAck;
+  else if (state_ == State::SendingData) {
+    state_ = State::WaitAck;
+    if (pendingReply_[0] != '\0') {
+      // RX is serviced before tick(): finish queuing this frame before
+      // interpreting an ACK/NACK or starting a retransmission.
+      onLine(pendingReply_, nowMs);
+      pendingReply_[0] = '\0';
+    }
+  }
   else if (state_ == State::SendingEnd) state_ = State::WaitVerify;
 }
 
@@ -219,9 +264,16 @@ void BtFirmwareSender::tick(uint32_t nowMs) {
   else if ((state_ == State::WaitVerify || state_ == State::WaitOk) &&
            static_cast<uint32_t>(nowMs - deadlineStartMs_) >= ReplyTimeoutMs)
     fail(Error::VerifyTimeout, true);
-  else if (state_ == State::WaitIdentity &&
-           static_cast<uint32_t>(nowMs - deadlineStartMs_) >= IdentityTimeoutMs)
-    fail(Error::IdentityTimeout, false);
+  else if (state_ == State::WaitIdentity) {
+    if (static_cast<uint32_t>(nowMs - deadlineStartMs_) >= IdentityTimeoutMs)
+      fail(Error::IdentityTimeout, false);
+    else if (pendingVerifyProbe_ &&
+             static_cast<uint32_t>(nowMs - lastIdentitySnapshotMs_) >=
+                 OtaStatusProbeIntervalMs) {
+      statusProbe_ = true;
+      pendingVerifyProbe_ = false;
+    }
+  }
 }
 
 bool BtFirmwareSender::onLine(const char* line, uint32_t nowMs) {
@@ -230,12 +282,28 @@ bool BtFirmwareSender::onLine(const char* line, uint32_t nowMs) {
   if (strcmp(line, "READY") == 0 && state_ == State::WaitIdentity) {
     readySeen_ = true;
     statusProbe_ = true;
+    pendingVerifyProbe_ = false;
     phase_ = Phase::WaitingForBt;
     return false;  // BtLinkProtocol still handles READY and offline state.
   }
   if (strncmp(line, "FW_", 3) != 0 || !exclusive()) return false;
+  logFirmwareLine("BT FW RX", line);
+  if (state_ == State::WaitIdentity && strncmp(line, "FW_VERSION ", 11) == 0)
+    return false;  // Identity belongs to the complete STATUS snapshot parser.
   if (strncmp(line, "FW_ERR ", 7) == 0) {
     fail(Error::RemoteError, false);
+    return true;
+  }
+  if (state_ == State::SendingData &&
+      (strncmp(line, "FW_ACK ", 7) == 0 ||
+       strncmp(line, "FW_NACK ", 8) == 0)) {
+    const size_t length = strlen(line);
+    if (pendingReply_[0] != '\0' || length >= sizeof(pendingReply_)) {
+      logFirmwareLine("BT FW invalid response", line);
+      fail(Error::InvalidResponse, true);
+    } else {
+      memcpy(pendingReply_, line, length + 1);
+    }
     return true;
   }
   if (state_ == State::WaitReady) {
@@ -252,6 +320,8 @@ bool BtFirmwareSender::onLine(const char* line, uint32_t nowMs) {
     uint32_t seq = 0, bytes = 0;
     if (!decimal(p, seq) || *p++ != ' ' ||
         (ack ? (!decimal(p, bytes) || *p != '\0') : (*p == '\0'))) {
+      logFirmwareLine(ack ? "BT FW malformed FW_ACK" : "BT FW malformed FW_NACK", line);
+      logFirmwareLine("BT FW invalid response", line);
       fail(Error::InvalidResponse, true); return true;
     }
     if (seq != sequence_) { fail(Error::AckSequence, true); return true; }
@@ -278,25 +348,48 @@ bool BtFirmwareSender::onLine(const char* line, uint32_t nowMs) {
     state_ = State::WaitIdentity;
     phase_ = Phase::RestartingBt;
     deadlineStartMs_ = nowMs;
+    logIdentity("FW_OK", false, 0, nullptr);
     return true;
   }
   if (strcmp(line, "FW_ABORTED") == 0) {
+    if (state_ == State::WaitAck)
+      logFirmwareLine("BT FW unexpected FW_* while waiting ACK", line);
     fail(Error::RemoteError, false);
     return true;
   }
+  if (state_ == State::WaitAck)
+    logFirmwareLine("BT FW unexpected FW_* while waiting ACK", line);
+  logFirmwareLine("BT FW invalid response", line);
   fail(Error::InvalidResponse,
        state_ != State::WaitIdentity && state_ != State::WaitReady);
   return true;
 }
 
 void BtFirmwareSender::onIdentity(bool online, uint8_t protocol,
-                                   const char* version, const char* caps) {
+                                   const char* version, const char* caps,
+                                   BtOtaState otaState) {
+  logIdentity("reported", online, protocol, version, otaState, true);
   if (state_ != State::WaitIdentity || !readySeen_ || !online) return;
   if (protocol != 2 || !hasCapability(caps, "FW_UPDATE")) {
     fail(Error::IdentityMismatch, false); return;
   }
   if (version == nullptr || strcmp(version, expectedVersion_) != 0) {
     fail(Error::VersionMismatch, false); return;
+  }
+  if (otaState == BtOtaState::PendingVerify) {
+    lastIdentitySnapshotMs_ = nowMs_;
+    pendingVerifyProbe_ = true;
+    phase_ = Phase::WaitingForBt;
+    return;
+  }
+  if (otaState == BtOtaState::ConfirmFailed) {
+    fail(Error::OtaConfirmFailed, false); return;
+  }
+  if (otaState == BtOtaState::NotPending) {
+    fail(Error::OtaNotPending, false); return;
+  }
+  if (otaState != BtOtaState::Valid) {
+    fail(Error::OtaStateUnknown, false); return;
   }
   state_ = State::Success;
   phase_ = Phase::Success;
