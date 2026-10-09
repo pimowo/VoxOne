@@ -1,4 +1,4 @@
-# VoxOne regression gate for desk, din and salon.
+# VoxOne regression gate for X0, B0 and A0.
 [CmdletBinding()]
 param(
  [string]$PlatformIo,
@@ -104,7 +104,7 @@ Invoke-Step 'Native tests' {
   $name=$test.BaseName
   $sources=@($test.FullName)
   if($nativeSources.ContainsKey($name)) { $sources+=@($nativeSources[$name] | ForEach-Object { Join-Path $root $_ }) }
-  $variants=if($name -eq 'hardware_descriptor_native') { @('DESK','DIN','SALON') } elseif($name -eq 'build_identity_native') { @('','DESK','DIN','SALON','CLEAN','DIRTY') } else { @('') }
+  $variants=if($name -eq 'hardware_descriptor_native') { @('X0','B0','A0') } elseif($name -eq 'build_identity_native') { @('','X0','B0','A0','CLEAN','DIRTY') } else { @('') }
   foreach($variant in $variants) {
    $label=if($variant) { "$name-$variant" } else { $name }
    $exe=Join-Path $work ($label+$(if($onWindows) { '.exe' } else { '' }))
@@ -135,8 +135,8 @@ Invoke-Step 'Web Update headless' {
 }
 $initialAssets=Get-AssetHashes
 Invoke-Step 'SPIFFS' {
- Invoke-Pio 'salon-buildfs' @('run','-e','salon','-t','buildfs')
- $image=Join-Path $root '.pio/build/salon/spiffs.bin'
+ Invoke-Pio 'a0-buildfs' @('run','-e','a0','-t','buildfs')
+ $image=Join-Path $root '.pio/build/a0/spiffs.bin'
  if(-not (Test-Path -LiteralPath $image)) { throw 'Missing spiffs.bin' }
  $sizes['SPIFFS']=(Get-Item -LiteralPath $image).Length
 }
@@ -146,7 +146,7 @@ Invoke-Step 'WWW assets' {
  $changed=@($initialAssets.Keys | Where-Object { $initialAssets[$_] -ne $script:generatedAssets[$_] })
  if($changed.Count -gt 0) { Write-Host ("  normalized generated assets: " + ($changed -join ', ')) }
 }
-foreach($target in @('desk','din','salon')) {
+foreach($target in @('x0','b0','a0')) {
  $envName=$target
  Invoke-Step ($envName.ToUpperInvariant()) {
   Invoke-Pio "$envName-firmware" @('run','-e',$envName)

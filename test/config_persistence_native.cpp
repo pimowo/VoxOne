@@ -118,7 +118,7 @@ int main() {
       BtRuntime bt(supports);
       assert(bt.configureBeforeStart(result.btEnabled));
       assert(bt.start() == (supports && enabled));
-      // A later ordinary save must preserve stored true even on DESK.
+      // A later ordinary save must preserve stored true even on X0.
       assert(restart.persist(reloaded, backend) == W::OK);
       assert(stored(backend).btEnabled == enabled);
     }

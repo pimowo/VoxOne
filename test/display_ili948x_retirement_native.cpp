@@ -49,7 +49,7 @@ int main() {
                            "src/displays/displayST7796.h"}) {
     assert(std::ifstream(path).good());
   }
-  const auto salon = readFile("src/displays/displayST7796.h");
-  assert(salon.find("fonts/dsfont70.h") != std::string::npos);
-  assert(salon.find("fonts/bootlogo99x64.h") != std::string::npos);
+  const auto a0 = readFile("src/displays/displayST7796.h");
+  assert(a0.find("fonts/dsfont70.h") != std::string::npos);
+  assert(a0.find("fonts/bootlogo99x64.h") != std::string::npos);
 }

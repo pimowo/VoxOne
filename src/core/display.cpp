@@ -54,7 +54,7 @@ QueueHandle_t displayQueue;
 portMUX_TYPE displayVolumeMux = portMUX_INITIALIZER_UNLOCKED;
 
 #if DSP_MODEL==DSP_ST7789_76 || DSP_MODEL==DSP_ST7796
-constexpr uint32_t DESK_UI_RETURN_TIMEOUT_S = 10;
+constexpr uint32_t X0_UI_RETURN_TIMEOUT_S = 10;
 #endif
 
 static void loopDspTask(void * pvParameters){
@@ -91,7 +91,7 @@ uint32_t displayTaskStackHighWaterMark() {
 
 #ifndef DUMMYDISPLAY
 //============================================================================================================================
-#if defined(VOXONE_PROFILE_DESK) || defined(VOXONE_PROFILE_SALON)
+#if defined(VOXONE_PROFILE_X0) || defined(VOXONE_PROFILE_A0)
 constexpr uint16_t kDisplayVolumeMax = 100;
 static uint8_t displayedVolume() { return config.userVolume; }
 #else
@@ -102,9 +102,9 @@ static uint8_t displayedVolume() { return config.store.volume; }
 DspCore dsp;
 
 #if DSP_MODEL==DSP_ST7796
-class SalonVolumeWidget : public Widget {
+class A0VolumeWidget : public Widget {
  public:
-  SalonVolumeWidget(WidgetConfig position, uint16_t color, uint16_t background) {
+  A0VolumeWidget(WidgetConfig position, uint16_t color, uint16_t background) {
     Widget::init(position, color, background);
   }
 
@@ -159,9 +159,9 @@ class SalonVolumeWidget : public Widget {
   }
 };
 
-class SalonLabelFrameWidget : public Widget {
+class A0LabelFrameWidget : public Widget {
  public:
-  SalonLabelFrameWidget(FillConfig frame, uint16_t color, uint16_t background,
+  A0LabelFrameWidget(FillConfig frame, uint16_t color, uint16_t background,
                         bool rounded = false)
       : width_(frame.width), height_(frame.height), rounded_(rounded) {
     Widget::init(frame.widget, color, background);
@@ -200,9 +200,9 @@ class SalonLabelFrameWidget : public Widget {
   }
 };
 
-class SalonPlaybackIconWidget : public Widget {
+class A0PlaybackIconWidget : public Widget {
  public:
-  SalonPlaybackIconWidget(FillConfig frame, uint16_t color, uint16_t background)
+  A0PlaybackIconWidget(FillConfig frame, uint16_t color, uint16_t background)
       : width_(frame.width), height_(frame.height) {
     Widget::init(frame.widget, color, background);
   }
@@ -246,9 +246,9 @@ class SalonPlaybackIconWidget : public Widget {
   }
 };
 
-class SalonBluetoothWidget : public Widget {
+class A0BluetoothWidget : public Widget {
  public:
-  SalonBluetoothWidget(WidgetConfig position, uint16_t color, uint16_t background) {
+  A0BluetoothWidget(WidgetConfig position, uint16_t color, uint16_t background) {
     Widget::init(position, color, background);
   }
 
@@ -311,8 +311,8 @@ void Display::init() {
   analogSetAttenuation(ADC_0db);
 #endif
   _bootStep = 0;
-#if defined(VOXONE_PROFILE_SALON) && DSP_MODEL==DSP_ST7796
-  _salonPlayerReady = false;
+#if defined(VOXONE_PROFILE_A0) && DSP_MODEL==DSP_ST7796
+  _a0PlayerReady = false;
 #endif
   _volumePending = false;
   _volumeModePending = false;
@@ -367,12 +367,12 @@ void Display::_bootScreen(){
 void Display::_buildPager(){
   _meta->init("*", metaConf, config.theme.meta, config.theme.metabg);
   #if DSP_MODEL==DSP_ST7789_76
-  _deskStation = new ScrollWidget("*", deskStationConf, config.theme.meta, config.theme.metabg);
+  _x0Station = new ScrollWidget("*", x0StationConf, config.theme.meta, config.theme.metabg);
 #endif
   _title1->init("*", title1Conf, config.theme.title1, config.theme.background);
   _clock->init(clockConf, 0, 0);
 #if DSP_MODEL==DSP_ST7796
-  _plcurrent->init("*", salonStationConf, config.theme.plcurrent, config.theme.plcurrentbg);
+  _plcurrent->init("*", a0StationConf, config.theme.plcurrent, config.theme.plcurrentbg);
   #else
     _plcurrent->init("*", playlistConf, config.theme.plcurrent, config.theme.plcurrentbg);
   #endif
@@ -382,9 +382,9 @@ void Display::_buildPager(){
   _plplaying = new TextWidget(playlistPlayingConf, 8, config.theme.meta, config.theme.background);
   _plheader->setText("WEB - STACJA");
 #elif DSP_MODEL==DSP_ST7796
-  _plheader = new TextWidget(salonPlaylistHeaderConf, 30, config.theme.meta, config.theme.metabg);
-  _plcounter = new TextWidget(salonPlaylistCounterConf, 16, config.theme.meta, config.theme.background);
-  _plplaying = new TextWidget(salonPlaylistPlayingConf, 8, config.theme.meta, config.theme.background);
+  _plheader = new TextWidget(a0PlaylistHeaderConf, 30, config.theme.meta, config.theme.metabg);
+  _plcounter = new TextWidget(a0PlaylistCounterConf, 16, config.theme.meta, config.theme.background);
+  _plplaying = new TextWidget(a0PlaylistPlayingConf, 8, config.theme.meta, config.theme.background);
   _plheader->setText("WEB - STACJA");
 #else
   _plwidget->init(_plcurrent);
@@ -393,9 +393,9 @@ void Display::_buildPager(){
   #ifndef HIDE_TITLE2
     _title2 = new ScrollWidget("*", title2Conf, config.theme.title2, config.theme.background);
   #endif
-#if defined(VOXONE_PROFILE_SALON) && DSP_MODEL==DSP_ST7796
+#if defined(VOXONE_PROFILE_A0) && DSP_MODEL==DSP_ST7796
   const auto onTextChanged = [](void* context, uint8_t row) {
-    static_cast<Display*>(context)->_salonScrollTextChanged(row);
+    static_cast<Display*>(context)->_a0ScrollTextChanged(row);
   };
   _meta->setChangeObserver(this, 0, onTextChanged);
   _title1->setChangeObserver(this, 1, onTextChanged);
@@ -419,8 +419,8 @@ void Display::_buildPager(){
   #endif
   #ifndef HIDE_VOL
 #if DSP_MODEL==DSP_ST7796
-    _salonVolume = new SalonVolumeWidget(voltxtConf, config.theme.meta, config.theme.background);
-    _salonVolume->setVolume(displayedVolume(), player.isMuted());
+    _a0Volume = new A0VolumeWidget(voltxtConf, config.theme.meta, config.theme.background);
+    _a0Volume->setVolume(displayedVolume(), player.isMuted());
 #else
     _voltxt = new TextWidget(voltxtConf, 10, config.theme.vol, config.theme.background);
 #endif
@@ -432,26 +432,26 @@ void Display::_buildPager(){
     _rssi = new TextWidget(rssiConf, 20, config.theme.rssi, config.theme.background);
   #endif
 #if DSP_MODEL==DSP_ST7796
-  _salonPlayback = new SalonPlaybackIconWidget(salonPlaybackFrameConf, config.theme.meta,
+  _a0Playback = new A0PlaybackIconWidget(a0PlaybackFrameConf, config.theme.meta,
                                                config.theme.background);
-  _salonLoud = new SalonLabelFrameWidget(salonLoudFrameConf, config.theme.meta,
+  _a0Loud = new A0LabelFrameWidget(a0LoudFrameConf, config.theme.meta,
                                          config.theme.background, true);
-  _salonLoud->setLabel(displayLoudLabel(false));
-  _salonSource = new SalonLabelFrameWidget(salonSourceFrameConf, config.theme.meta,
+  _a0Loud->setLabel(displayLoudLabel(false));
+  _a0Source = new A0LabelFrameWidget(a0SourceFrameConf, config.theme.meta,
                                            config.theme.background, true);
-  _salonSource->setLabel("WEB");
-  _salonEq = new SalonLabelFrameWidget(salonEqFrameConf, config.theme.meta,
+  _a0Source->setLabel("WEB");
+  _a0Eq = new A0LabelFrameWidget(a0EqFrameConf, config.theme.meta,
                                        config.theme.background, true);
-  _salonEq->setLabel(eqPresetLabel(config.store.bass, config.store.middle, config.store.trebble));
-  _salonMode = new SalonLabelFrameWidget(salonModeFrameConf, config.theme.meta,
+  _a0Eq->setLabel(eqPresetLabel(config.store.bass, config.store.middle, config.store.trebble));
+  _a0Mode = new A0LabelFrameWidget(a0ModeFrameConf, config.theme.meta,
                                          config.theme.background, true);
-  _salonMode->setLabel(displayDlnaModeLabel(DisplayDlnaMode::Unavailable));
-  _salonBluetoothIcon = new SalonBluetoothWidget(salonBluetoothIconConf, config.theme.meta, config.theme.background);
+  _a0Mode->setLabel(displayDlnaModeLabel(DisplayDlnaMode::Unavailable));
+  _a0BluetoothIcon = new A0BluetoothWidget(a0BluetoothIconConf, config.theme.meta, config.theme.background);
 #endif
 #if DSP_MODEL==DSP_ST7789_76
-  _deskRssi = new TextWidget(deskRssiConf, 16, config.theme.rssi, config.theme.background);
-  _deskVolume = new TextWidget(deskVolumeConf, 12, config.theme.vol, config.theme.background);
-  _deskClock = new TextWidget(deskClockConf, 8, config.theme.clock, config.theme.background);
+  _x0Rssi = new TextWidget(x0RssiConf, 16, config.theme.rssi, config.theme.background);
+  _x0Volume = new TextWidget(x0VolumeConf, 12, config.theme.vol, config.theme.background);
+  _x0Clock = new TextWidget(x0ClockConf, 8, config.theme.clock, config.theme.background);
 #endif
   _nums->init(numConf, 10, config.theme.digit, config.theme.background);
   
@@ -463,8 +463,8 @@ void Display::_buildPager(){
 #endif
   
 #if DSP_MODEL==DSP_ST7789_76
-  pages[PG_PLAYER]->addWidget(new FillWidget(deskStationBandConf, config.theme.metabg));
-  pages[PG_PLAYER]->addWidget(_deskStation);
+  pages[PG_PLAYER]->addWidget(new FillWidget(x0StationBandConf, config.theme.metabg));
+  pages[PG_PLAYER]->addWidget(_x0Station);
 #else
   if(_metabackground) pages[PG_PLAYER]->addWidget( _metabackground);
   pages[PG_PLAYER]->addWidget(_meta);
@@ -472,7 +472,7 @@ void Display::_buildPager(){
   pages[PG_PLAYER]->addWidget(_title1);
   if(_title2) pages[PG_PLAYER]->addWidget(_title2);
 #if DSP_MODEL==DSP_ST7796
-  pages[PG_PLAYER]->addWidget(new FillWidget(salonLowerDividerConf, config.theme.div));
+  pages[PG_PLAYER]->addWidget(new FillWidget(a0LowerDividerConf, config.theme.div));
 #endif
   #if BITRATE_FULL
     _fullbitrate = new BitrateWidget(fullbitrateConf, config.theme.bitrate, config.theme.background);
@@ -487,20 +487,20 @@ void Display::_buildPager(){
   #endif
   if(_vuwidget) pages[PG_PLAYER]->addWidget( _vuwidget);
 #if DSP_MODEL==DSP_ST7789_76
-  pages[PG_PLAYER]->addWidget(new FillWidget(deskDividerConf, config.theme.div));
-  pages[PG_PLAYER]->addWidget(_deskRssi);
-  pages[PG_PLAYER]->addWidget(_deskVolume);
-  pages[PG_PLAYER]->addWidget(_deskClock);
+  pages[PG_PLAYER]->addWidget(new FillWidget(x0DividerConf, config.theme.div));
+  pages[PG_PLAYER]->addWidget(_x0Rssi);
+  pages[PG_PLAYER]->addWidget(_x0Volume);
+  pages[PG_PLAYER]->addWidget(_x0Clock);
 #else
   pages[PG_PLAYER]->addWidget(_clock);
 #if DSP_MODEL==DSP_ST7796
-  if(_salonVolume) pages[PG_PLAYER]->addWidget(_salonVolume);
-  pages[PG_PLAYER]->addWidget(_salonPlayback);
-  pages[PG_PLAYER]->addWidget(_salonLoud);
-  pages[PG_PLAYER]->addWidget(_salonEq);
-  pages[PG_PLAYER]->addWidget(_salonSource);
-  pages[PG_PLAYER]->addWidget(_salonMode);
-  pages[PG_PLAYER]->addWidget(_salonBluetoothIcon);
+  if(_a0Volume) pages[PG_PLAYER]->addWidget(_a0Volume);
+  pages[PG_PLAYER]->addWidget(_a0Playback);
+  pages[PG_PLAYER]->addWidget(_a0Loud);
+  pages[PG_PLAYER]->addWidget(_a0Eq);
+  pages[PG_PLAYER]->addWidget(_a0Source);
+  pages[PG_PLAYER]->addWidget(_a0Mode);
+  pages[PG_PLAYER]->addWidget(_a0BluetoothIcon);
   if(_rssi) pages[PG_PLAYER]->addWidget(_rssi);
 #else
   pages[PG_PLAYER]->addPage(_footer);
@@ -558,14 +558,14 @@ void Display::_buildPager(){
   for(const auto& p: pages) _pager->addPage(p);
   #if DSP_MODEL==DSP_ST7796
   _pager->addPage(_btTransportPage);
-  _salonUpdatePage = new Page();
+  _a0UpdatePage = new Page();
   TextWidget* updateTitle = new TextWidget({0, 144, 4, WA_CENTER}, 32, 0xF800, 0x0000);
   updateTitle->setText("AKTUALIZACJA");
-  _salonUpdatePage->addWidget(updateTitle);
-  _pager->addPage(_salonUpdatePage);
+  _a0UpdatePage->addWidget(updateTitle);
+  _pager->addPage(_a0UpdatePage);
   #endif
-#if defined(VOXONE_PROFILE_SALON) && DSP_MODEL==DSP_ST7796
-  _salonPlayerReady = true;
+#if defined(VOXONE_PROFILE_A0) && DSP_MODEL==DSP_ST7796
+  _a0PlayerReady = true;
 #endif
 }
 
@@ -601,8 +601,8 @@ void Display::_start() {
     return;
   }
   _buildPager();
-#if defined(VOXONE_PROFILE_SALON) && DSP_MODEL==DSP_ST7796
-  _salonScrollMode(true);
+#if defined(VOXONE_PROFILE_A0) && DSP_MODEL==DSP_ST7796
+  _a0ScrollMode(true);
 #endif
   _mode = PLAYER;
   config.setTitle(LANG::const_PlReady);
@@ -650,9 +650,9 @@ void Display::_swichMode(displayMode_e newmode) {
         source.kind != DisplaySourceKind::Bluetooth || !source.connected) return;
   }
 #endif
-#if defined(VOXONE_PROFILE_SALON) && DSP_MODEL==DSP_ST7796
-  if (_mode == PLAYER && newmode != PLAYER) _salonScrollMode(false);
-  else if (_mode != PLAYER && newmode == PLAYER) _salonScrollMode(true);
+#if defined(VOXONE_PROFILE_A0) && DSP_MODEL==DSP_ST7796
+  if (_mode == PLAYER && newmode != PLAYER) _a0ScrollMode(false);
+  else if (_mode != PLAYER && newmode == PLAYER) _a0ScrollMode(true);
 #endif
   if (_mode == STATIONS || _mode == BT_TRANSPORT) timekeeper.cancelReturnPlayer();
   _mode = newmode;
@@ -676,7 +676,7 @@ void Display::_swichMode(displayMode_e newmode) {
     _meta->setAlign(metaConf.widget.align);
     _station();
 #if DSP_MODEL==DSP_ST7789_76
-    _deskStation->setText(config.station.name);
+    _x0Station->setText(config.station.name);
 #endif
     _nums->setText("");
     config.isScreensaver = false;
@@ -701,7 +701,7 @@ void Display::_swichMode(displayMode_e newmode) {
   }
   if (newmode == VOL) {
 #if DSP_MODEL==DSP_ST7789_76
-    timekeeper.waitAndReturnPlayer(DESK_UI_RETURN_TIMEOUT_S);
+    timekeeper.waitAndReturnPlayer(X0_UI_RETURN_TIMEOUT_S);
 #elif DSP_MODEL==DSP_ST7796
     timekeeper.waitAndReturnPlayer(3);
 #endif
@@ -716,7 +716,7 @@ void Display::_swichMode(displayMode_e newmode) {
   if (newmode == LOST)      _showDialog(LANG::const_DlgLost);
   if (newmode == UPDATING) {
 #if DSP_MODEL==DSP_ST7796
-    _pager->setPage(_salonUpdatePage, true);
+    _pager->setPage(_a0UpdatePage, true);
 #else
     _showDialog(LANG::const_DlgUpdate);
 #endif
@@ -827,44 +827,44 @@ void Display::_updatePlaybackStatus() {
           : (player.isRunning() ? DisplayPlaybackState::Playing
                                 : DisplayPlaybackState::Stopped);
   const char* label = displayPlaybackLabel(playback);
-  _salonPlayback->setState(playback);
+  _a0Playback->setState(playback);
   _btTransportPlayback->setText(label);
 }
 #endif
 
-#if defined(VOXONE_PROFILE_SALON) && DSP_MODEL==DSP_ST7796
-void Display::_salonScrollMode(bool playerMode) {
+#if defined(VOXONE_PROFILE_A0) && DSP_MODEL==DSP_ST7796
+void Display::_a0ScrollMode(bool playerMode) {
   ScrollWidget* rows[3] = {_meta, _title1, _title2};
-  if (!_salonPlayerReady || !rows[0] || !rows[1] || !rows[2]) {
-    _salonScroll.leave();
+  if (!_a0PlayerReady || !rows[0] || !rows[1] || !rows[2]) {
+    _a0Scroll.leave();
     return;
   }
-  if (playerMode) _salonScroll.enter();
-  else _salonScroll.leave();
+  if (playerMode) _a0Scroll.enter();
+  else _a0Scroll.leave();
   for (ScrollWidget* row : rows) row->setExternallyScheduled(playerMode);
 }
 
-void Display::_salonScrollTextChanged(uint8_t row) {
+void Display::_a0ScrollTextChanged(uint8_t row) {
   ScrollWidget* rows[3] = {_meta, _title1, _title2};
-  if (!salonPlayerScrollReady(_salonPlayerReady, _mode == PLAYER,
-                              _salonScroll.enabled(), rows[0], rows[1], rows[2])) return;
+  if (!a0PlayerScrollReady(_a0PlayerReady, _mode == PLAYER,
+                              _a0Scroll.enabled(), rows[0], rows[1], rows[2])) return;
   for (ScrollWidget* widget : rows)
     if (dsp.getScrollId() == widget) dsp.setScrollId(NULL);
-  _salonScroll.textChanged(row);
+  _a0Scroll.textChanged(row);
 }
 
-void Display::_salonScrollTick() {
+void Display::_a0ScrollTick() {
   ScrollWidget* rows[3] = {_meta, _title1, _title2};
-  if (!salonPlayerScrollReady(_salonPlayerReady, _mode == PLAYER,
-                              _salonScroll.enabled(), rows[0], rows[1], rows[2])) return;
+  if (!a0PlayerScrollReady(_a0PlayerReady, _mode == PLAYER,
+                              _a0Scroll.enabled(), rows[0], rows[1], rows[2])) return;
   const bool needsScroll[3] = {
       rows[0]->scrollNeeded(), rows[1]->scrollNeeded(), rows[2]->scrollNeeded()};
-  const SalonPlayerScroll::Event event = _salonScroll.tick(millis(), needsScroll);
-  if (event.action == SalonPlayerScroll::Action::Start) {
+  const A0PlayerScroll::Event event = _a0Scroll.tick(millis(), needsScroll);
+  if (event.action == A0PlayerScroll::Action::Start) {
     rows[event.row]->startScheduledTurn();
-  } else if (event.action == SalonPlayerScroll::Action::Step &&
-             rows[event.row]->stepScheduledTurn(SalonPlayerScroll::kStepPixels)) {
-    _salonScroll.cycleFinished();
+  } else if (event.action == A0PlayerScroll::Action::Step &&
+             rows[event.row]->stepScheduledTurn(A0PlayerScroll::kStepPixels)) {
+    _a0Scroll.cycleFinished();
   }
 }
 #endif
@@ -877,28 +877,28 @@ void Display::loop() {
   }
   if(displayQueue==NULL || _locked) return;
 #if DSP_MODEL==DSP_ST7789_76
-  if(_mode == PLAYER) ScrollWidget::nextDeskScrollFrame();
+  if(_mode == PLAYER) ScrollWidget::nextX0ScrollFrame();
 #endif
-#if defined(VOXONE_PROFILE_SALON) && DSP_MODEL==DSP_ST7796
-  if (_salonPlayerReady && _mode == PLAYER) _salonScrollTick();
+#if defined(VOXONE_PROFILE_A0) && DSP_MODEL==DSP_ST7796
+  if (_a0PlayerReady && _mode == PLAYER) _a0ScrollTick();
 #endif
   _pager->loop();
 #if DSP_MODEL==DSP_ST7796
   if (_bootStep == 2) {
-    if (_salonVolume) _salonVolume->setDacMuted(dacMute.logicalMuted());
-    if (_salonEq)
-      _salonEq->setLabel(eqPresetLabel(config.store.bass, config.store.middle, config.store.trebble));
-    if (_salonSource) {
+    if (_a0Volume) _a0Volume->setDacMuted(dacMute.logicalMuted());
+    if (_a0Eq)
+      _a0Eq->setLabel(eqPresetLabel(config.store.bass, config.store.middle, config.store.trebble));
+    if (_a0Source) {
       DisplaySourceView source{};
-      _salonSource->setLabel(displaySourceLabel(
+      _a0Source->setLabel(displaySourceLabel(
           getDisplaySourceView && getDisplaySourceView(source)
               ? source.kind : DisplaySourceKind::Radio));
     }
   }
 #endif
 #if DSP_MODEL==DSP_ST7796 && VOXONE_HAS_BT && VOXONE_PIN_MAP_COMPLETE
-  if (_salonBluetoothIcon)
-    _salonBluetoothIcon->setConnected(bluetoothPhysicallyConnected());
+  if (_a0BluetoothIcon)
+    _a0BluetoothIcon->setConnected(bluetoothPhysicallyConnected());
 #endif
   requestParams_t request;
   if(xQueueReceive(displayQueue, &request, DSP_QUEUE_TICKS)){
@@ -1028,18 +1028,18 @@ void Display::loop() {
 
 void Display::_setRSSI(int rssi) {
 #if DSP_MODEL==DSP_ST7789_76
-  static bool deskRssiDisplayed = false;
+  static bool x0RssiDisplayed = false;
   static int lastDisplayedRssi = 0;
   static uint32_t lastRssiDisplayMs = 0;
   const uint32_t now = millis();
   const int rssiDelta = rssi - lastDisplayedRssi;
-  if(_deskRssi && (!deskRssiDisplayed ||
+  if(_x0Rssi && (!x0RssiDisplayed ||
       ((uint32_t)(now - lastRssiDisplayMs) >= 10000 &&
        (rssiDelta >= 2 || rssiDelta <= -2)))) {
-    _deskRssi->setText(rssi, "RSSI %ddBm");
+    _x0Rssi->setText(rssi, "RSSI %ddBm");
     lastDisplayedRssi = rssi;
     lastRssiDisplayMs = now;
-    deskRssiDisplayed = true;
+    x0RssiDisplayed = true;
   }
   if(_mode == VOL) return;
 #endif
@@ -1071,7 +1071,7 @@ void Display::_station() {
   _meta->setText(config.station.name);
 #endif
 #if DSP_MODEL==DSP_ST7789_76
-  if(_deskStation) _deskStation->setText(config.station.name);
+  if(_x0Station) _x0Station->setText(config.station.name);
 #endif
 }
 
@@ -1083,7 +1083,7 @@ char *split(char *str, const char *delim) {
 }
 
 #if DSP_MODEL==DSP_ST7789_76 || DSP_MODEL==DSP_ST7796
-static uint32_t deskNextCodepoint(const char*& text, const char* end) {
+static uint32_t displayNextCodepoint(const char*& text, const char* end) {
   const uint8_t first = static_cast<uint8_t>(*text++);
   if(first < 0x80) return first;
   const uint8_t extra = (first & 0xE0) == 0xC0 ? 1 :
@@ -1100,7 +1100,7 @@ static uint32_t deskNextCodepoint(const char*& text, const char* end) {
   return codepoint;
 }
 
-static uint32_t deskFoldCodepoint(uint32_t value) {
+static uint32_t displayFoldCodepoint(uint32_t value) {
   if(value >= 'A' && value <= 'Z') return value + ('a' - 'A');
   if((value >= 0xC0 && value <= 0xD6) || (value >= 0xD8 && value <= 0xDE) ||
      (value >= 0x410 && value <= 0x42F)) return value + 0x20;
@@ -1113,7 +1113,7 @@ static uint32_t deskFoldCodepoint(uint32_t value) {
   }
 }
 
-static bool deskArtistIsStation(const char* artist, const char* station) {
+static bool displayArtistIsStation(const char* artist, const char* station) {
   const char* artistEnd = artist + strlen(artist);
   const char* stationEnd = station + strlen(station);
   while(artist < artistEnd && isspace(static_cast<unsigned char>(*artist))) ++artist;
@@ -1121,8 +1121,8 @@ static bool deskArtistIsStation(const char* artist, const char* station) {
   while(artistEnd > artist && isspace(static_cast<unsigned char>(artistEnd[-1]))) --artistEnd;
   while(stationEnd > station && isspace(static_cast<unsigned char>(stationEnd[-1]))) --stationEnd;
   while(artist < artistEnd && station < stationEnd) {
-    if(deskFoldCodepoint(deskNextCodepoint(artist, artistEnd)) !=
-       deskFoldCodepoint(deskNextCodepoint(station, stationEnd))) return false;
+    if(displayFoldCodepoint(displayNextCodepoint(artist, artistEnd)) !=
+       displayFoldCodepoint(displayNextCodepoint(station, stationEnd))) return false;
   }
   return artist == artistEnd && station == stationEnd;
 }
@@ -1154,7 +1154,7 @@ void Display::_title() {
     stationMetaCopy(title, sizeof(title), parts.title, parts.titleLength);
     if(parts.split && _title2){
 #if DSP_MODEL==DSP_ST7789_76 || DSP_MODEL==DSP_ST7796
-      _title1->setText(deskArtistIsStation(artist, config.station.name) ? "" : artist);
+      _title1->setText(displayArtistIsStation(artist, config.station.name) ? "" : artist);
 #else
       _title1->setText(artist);
 #endif
@@ -1163,9 +1163,9 @@ void Display::_title() {
 #if DSP_MODEL==DSP_ST7789_76 || DSP_MODEL==DSP_ST7796
       if (_title2) {
         _title1->setText(artist);
-        _title2->setText(deskArtistIsStation(title, config.station.name) ? "" : title);
+        _title2->setText(displayArtistIsStation(title, config.station.name) ? "" : title);
       } else {
-        _title1->setText(deskArtistIsStation(title, config.station.name) ? "" : title);
+        _title1->setText(displayArtistIsStation(title, config.station.name) ? "" : title);
       }
 #else
       char whole[BUFLEN + 1];
@@ -1204,10 +1204,10 @@ void Display::_time(bool redraw) {
   }
   _clock->draw(redraw);
 #if DSP_MODEL==DSP_ST7789_76
-  if(_mode==PLAYER && _deskClock) {
+  if(_mode==PLAYER && _x0Clock) {
     char timeText[6];
     strftime(timeText, sizeof(timeText), "%H:%M", &network.timeinfo);
-    _deskClock->setText(timeText);
+    _x0Clock->setText(timeText);
   }
 #endif
 }
@@ -1216,14 +1216,14 @@ void Display::_volume() {
   _setVuVisibility(activeSourceVuVisible());
   if(_volbar) _volbar->setValue(displayedVolume());
 #if DSP_MODEL==DSP_ST7789_76
-  if(_deskVolume) {
+  if(_x0Volume) {
     char volumeText[12];
-    _deskVolume->setText(displayDeskVolumeText(displayedVolume(), player.isMuted(),
+    _x0Volume->setText(displayX0VolumeText(displayedVolume(), player.isMuted(),
                                                volumeText, sizeof(volumeText)));
   }
 #endif
 #if DSP_MODEL==DSP_ST7796
-  if(_salonVolume) _salonVolume->setVolume(displayedVolume(), player.isMuted());
+  if(_a0Volume) _a0Volume->setVolume(displayedVolume(), player.isMuted());
 #else
   #ifndef HIDE_VOL
     if(_voltxt) _voltxt->setText(displayedVolume(), voltxtFmt);
@@ -1231,7 +1231,7 @@ void Display::_volume() {
 #endif
   if(_mode==VOL) {
 #if DSP_MODEL==DSP_ST7789_76
-    timekeeper.waitAndReturnPlayer(DESK_UI_RETURN_TIMEOUT_S);
+    timekeeper.waitAndReturnPlayer(X0_UI_RETURN_TIMEOUT_S);
 #else
     timekeeper.waitAndReturnPlayer(3);
 #endif

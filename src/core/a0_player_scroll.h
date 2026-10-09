@@ -1,17 +1,17 @@
-#ifndef VOXONE_SALON_PLAYER_SCROLL_H
-#define VOXONE_SALON_PLAYER_SCROLL_H
+#ifndef VOXONE_A0_PLAYER_SCROLL_H
+#define VOXONE_A0_PLAYER_SCROLL_H
 
 #include <stdint.h>
 
-inline bool salonPlayerScrollReady(bool playerPageReady, bool playerMode,
+inline bool a0PlayerScrollReady(bool playerPageReady, bool playerMode,
                                    bool schedulerEnabled, const void* meta,
                                    const void* title1, const void* title2) {
   return playerPageReady && playerMode && schedulerEnabled && meta && title1 && title2;
 }
 
-class SalonPlayerScroll {
+class A0PlayerScroll {
  public:
-  static constexpr uint32_t kStartDelayMs = 2500;
+  static constexpr uint32_t kStartDelayMs = 2500;  // Existing A0 timing.
   static constexpr uint32_t kStepIntervalMs = 50;
   static constexpr uint8_t kStepPixels = 2;
 

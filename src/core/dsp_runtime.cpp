@@ -1,6 +1,6 @@
 #include "dsp_runtime.h"
 
-#if defined(VOXONE_PROFILE_SALON)
+#if defined(VOXONE_PROFILE_A0)
 #include <Arduino.h>
 
 namespace voxone {

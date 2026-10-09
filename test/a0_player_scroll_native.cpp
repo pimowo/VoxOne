@@ -1,27 +1,27 @@
-#include "../src/core/salon_player_scroll.h"
+#include "../src/core/a0_player_scroll.h"
 #include "../src/displays/widgets/scroll_text_state.h"
 
 #include <cassert>
 #include <cstdio>
 #include <cstring>
 
-using Action = SalonPlayerScroll::Action;
+using Action = A0PlayerScroll::Action;
 
-static void expect(SalonPlayerScroll::Event event, Action action, int row) {
+static void expect(A0PlayerScroll::Event event, Action action, int row) {
   assert(event.action == action && event.row == row);
 }
 
 int main() {
   // AP startup reports bootStep 2 without creating the PLAYER page.
   int meta = 0, title1 = 0, title2 = 0;
-  assert(!salonPlayerScrollReady(false, true, false, &meta, &title1, nullptr));
-  assert(!salonPlayerScrollReady(false, true, true, &meta, &title1, nullptr));
-  assert(!salonPlayerScrollReady(true, true, true, &meta, &title1, nullptr));
-  assert(!salonPlayerScrollReady(true, true, false, &meta, &title1, &title2));
-  assert(salonPlayerScrollReady(true, true, true, &meta, &title1, &title2));
-  assert(!salonPlayerScrollReady(true, false, true, &meta, &title1, &title2));
+  assert(!a0PlayerScrollReady(false, true, false, &meta, &title1, nullptr));
+  assert(!a0PlayerScrollReady(false, true, true, &meta, &title1, nullptr));
+  assert(!a0PlayerScrollReady(true, true, true, &meta, &title1, nullptr));
+  assert(!a0PlayerScrollReady(true, true, false, &meta, &title1, &title2));
+  assert(a0PlayerScrollReady(true, true, true, &meta, &title1, &title2));
+  assert(!a0PlayerScrollReady(true, false, true, &meta, &title1, &title2));
 
-  SalonPlayerScroll scroll;
+  A0PlayerScroll scroll;
   const bool allLong[3] = {true, true, true};
   const bool stationOnly[3] = {true, false, false};
   const bool skipArtist[3] = {true, false, true};
@@ -79,15 +79,15 @@ int main() {
   expect(scroll.tick(10200, allLong), Action::Start, 0);
 
   // A framebuffer frame needs one more byte than the old MAX_WIDTH-based
-  // allocation on SALON (27 bytes requested for a 460 px row at 18 px/char).
-  const size_t salonCapacity = scrollWindowCapacity(480, 18);
-  const size_t salonFrame = scrollWindowPrintCapacity(salonCapacity, 460, 18, 2);
-  assert(salonCapacity == 28 && salonFrame == 27);
+  // A0 allocation (27 bytes requested for a 460 px row at 18 px/char).
+  const size_t a0Capacity = scrollWindowCapacity(480, 18);
+  const size_t a0Frame = scrollWindowPrintCapacity(a0Capacity, 460, 18, 2);
+  assert(a0Capacity == 28 && a0Frame == 27);
   char window[29];
   std::memset(window, '#', sizeof(window));
-  std::snprintf(window, salonFrame, "%s", "abcdefghijklmnopqrstuvwxyz");
-  assert(window[salonFrame - 1] == '\0');
-  assert(window[salonCapacity] == '#');
+  std::snprintf(window, a0Frame, "%s", "abcdefghijklmnopqrstuvwxyz");
+  assert(window[a0Frame - 1] == '\0');
+  assert(window[a0Capacity] == '#');
   assert(scrollWindowPrintCapacity(scrollWindowCapacity(284, 12), 280, 12, 1) == 24);
   assert(scrollWindowPrintCapacity(scrollWindowCapacity(480, 30), 480, 30, 2) == 18);
 
@@ -105,5 +105,5 @@ int main() {
   assert(titleOffset == 0);
   titleOffset = -9;
   assert(scrollTextChangedAndResetOffset("Old title", "New title", titleOffset, 2));
-  assert(titleOffset == 2);  // DESK starts at its row's left edge.
+  assert(titleOffset == 2);  // X0 starts at its row's left edge.
 }

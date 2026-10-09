@@ -21,12 +21,12 @@ int main() {
 #endif
   assert(std::strcmp(VOXONE_BUILD_SHA, expectedBuild) == 0);
 
-#if defined(VOXONE_PROFILE_DESK)
-  const char* expectedProfile = "DESK";
-#elif defined(VOXONE_PROFILE_DIN)
-  const char* expectedProfile = "DIN";
-#elif defined(VOXONE_PROFILE_SALON)
-  const char* expectedProfile = "SALON";
+#if defined(VOXONE_PROFILE_X0)
+  const char* expectedProfile = "X0";
+#elif defined(VOXONE_PROFILE_B0)
+  const char* expectedProfile = "B0";
+#elif defined(VOXONE_PROFILE_A0)
+  const char* expectedProfile = "A0";
 #else
   const char* expectedProfile = "unknown";
 #endif

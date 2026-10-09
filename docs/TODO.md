@@ -8,7 +8,7 @@
 
 ### RADIO
 
-- [STABLE] Wykonać na fizycznym SALON minimum czterogodzinny endurance RADIO: jedna stabilna stacja przez co najmniej 2 h, minimum trzy zmiany stacji i dalsze granie do minimum 4 h.
+- [STABLE] Wykonać na fizycznym A0 minimum czterogodzinny endurance RADIO: jedna stabilna stacja przez co najmniej 2 h, minimum trzy zmiany stacji i dalsze granie do minimum 4 h.
 - [STABLE] Zebrać log z uptime, heap/minimum heap/largest block, PSRAM/minimum PSRAM, stack HWM głównej pętli i DisplayTask, `loopMaxUs`, `audioBuffer`, reconnectami, Wi-Fi oraz RSSI; ocenić trend pamięci, stack, blokady pętli, watchdog/reboot i serie reconnectów.
 - [STABLE] Podczas endurance potwierdzić brak trwałych stall/dropout, poprawne ponowne uruchamianie streamu oraz ciągłą reakcję LCD i VU.
 - [STABLE] Przetestować realne strumienie MP3, AAC/AAC+ i FLAC oraz SHOUTcast/Icecast, `ICY 200`, MIME `audio/aacp`, HTTP/HTTPS, metadata/brak metadata, reconnect i dead stream.
@@ -39,7 +39,7 @@
 - [POST-STABLE] Ujednolicić postęp MAIN, SPIFFS/WWW i VoxOneBT w jednym modelu `target`, `phase`, `totalBytes`, `writtenBytes`/`confirmedBytes`, opcjonalny `percent` i `result`/`error`; nie tworzyć osobnych systemów postępu.
 - [POST-STABLE] Dla MAIN i SPIFFS stosować fazy PREPARE, WRITING, FINALIZING, SUCCESS, ERROR i RESTART. Procent liczyć z bajtów dopiero po udanym `Update.write`; 100% zapisu nie oznacza SUCCESS, który następuje po `Update.end`. Przy nieznanym rozmiarze firmware pokazywać „ZAPIS...”; SPIFFS wymaga znanego pełnego rozmiaru obrazu.
 - [POST-STABLE] Przekazywać update progress ze współdzielonego stanu/backendu do DisplayTask; backend nie rysuje LCD. Ograniczyć publikacje do zmiany procentu i maksymalnie jednej na ok. 100–250 ms, z natychmiastowym przekazaniem faz PREPARE, FINALIZING, SUCCESS i ERROR.
-- [POST-STABLE] Pokazać na SALON „AKTUALIZACJA”, pasek, procent i krótki status; na DESK wykorzystać istniejący ekran aktualizacji i pokazać procent albo „ZAPIS...”, bez przebudowy layoutu.
+- [POST-STABLE] Pokazać na A0 „AKTUALIZACJA”, pasek, procent i krótki status; na X0 wykorzystać istniejący ekran aktualizacji i pokazać procent albo „ZAPIS...”, bez przebudowy layoutu.
 - [POST-STABLE] Udostępnić ten sam rzeczywisty stan zapisu MAIN/SPIFFS w WWW; obecny postęp HTTP uploadu pozostawić jako pomocniczy, wyraźnie odróżniony od postępu zapisu flash.
 - [POST-STABLE] Zachować wspólny backend MAIN/SPIFFS dla `/update` i `/emergency`; progress awaryjnej aktualizacji nie może zależeć od assetów WWW ani zamontowanego SPIFFS.
 - [POST-STABLE] Dodać testy modelu postępu MAIN: 0–100%, unknown total, finalizacja, sukces i błąd. Dla SPIFFS sprawdzić backup, unmount, wymagany pełny rozmiar, zapis, remount po błędzie oraz sukces/restart.
@@ -50,17 +50,17 @@
 
 ### Targety i release gate
 
-- [STABLE] Wykonać fizyczną regresję DESK, DIN i SALON; dla DIN sprawdzić PCM5102A GPIO1/2/3, VoxOneBT, WWW, MQTT/HA i NoDisplay.
-- [STABLE] Na DESK sprawdzić ukrycie suwaka jasności, restart z WWW, powrót Wi-Fi bez utraty stacji/config oraz osobno ekran aktualizacji bez regresji ScrollWidget/HOLD.
-- [STABLE] Fizycznie zweryfikować aktualne WWW na SALON i DESK (gdy bezpieczna aktualizacja DESK będzie możliwa): MUTE, selector RADIO/BT, oznaczenie BT offline, manual source priority, reconnect/resnapshot, favicon bez 404 oraz build identity w SYSTEM i AKTUALIZACJA.
-- [HARDWARE] Przypisać GPIO XSMT PCM5102A na SALON i fizycznie sprawdzić LOW przy PAUZA/STOP, HIGH przy PLAY, ciszę podczas przejść i Web Update oraz czerwoną ramkę VOL bez zmiany semantyki MUTE.
-- [STABLE] Fizycznie sprawdzić MQTT/Home Assistant na SALON; MQTT pozostaje wspierane w pierwszym stable.
+- [STABLE] Wykonać fizyczną regresję X0, B0 i A0; dla B0 sprawdzić PCM5102A GPIO1/2/3, VoxOneBT, WWW, MQTT/HA i NoDisplay.
+- [STABLE] Na X0 sprawdzić ukrycie suwaka jasności, restart z WWW, powrót Wi-Fi bez utraty stacji/config oraz osobno ekran aktualizacji bez regresji ScrollWidget/HOLD.
+- [STABLE] Fizycznie zweryfikować aktualne WWW na A0 i X0 (gdy bezpieczna aktualizacja X0 będzie możliwa): MUTE, selector RADIO/BT, oznaczenie BT offline, manual source priority, reconnect/resnapshot, favicon bez 404 oraz build identity w SYSTEM i AKTUALIZACJA.
+- [HARDWARE] Przypisać GPIO XSMT PCM5102A na A0 i fizycznie sprawdzić LOW przy PAUZA/STOP, HIGH przy PLAY, ciszę podczas przejść i Web Update oraz czerwoną ramkę VOL bez zmiany semantyki MUTE.
+- [STABLE] Fizycznie sprawdzić MQTT/Home Assistant na A0; MQTT pozostaje wspierane w pierwszym stable.
 - [STABLE] Uzupełnić dokumentację aktywnych profili, API, MQTT/HA, Source Managera, VoxOneBT oraz update/recovery; oznaczyć historyczne baseline'y i usunąć z dokumentów bieżącego stanu opisy sprzeczne z aktualnym runtime.
 - [DECISION] Przed stable ustalić minimalny zakres uwierzytelniania, CSRF i ochrony mutujących REST/WebSocket oraz ekspozycji danych.
 
 ### Definition of Stable
 
-- [STABLE] Zamknąć release gate: FULL VERIFY PASS; fizyczny DESK, DIN i SALON PASS; RADIO endurance PASS; BT phone i LG TV PASS; SourceManager switching/reconnect PASS; TTS RADIO/BT restore PASS; firmware i SPIFFS update PASS; recovery PASS; Config v7 persistence PASS; L/R i VU PASS; brak otwartych błędów P0/P1.
+- [STABLE] Zamknąć release gate: FULL VERIFY PASS; fizyczny X0, B0 i A0 PASS; RADIO endurance PASS; BT phone i LG TV PASS; SourceManager switching/reconnect PASS; TTS RADIO/BT restore PASS; firmware i SPIFFS update PASS; recovery PASS; Config v7 persistence PASS; L/R i VU PASS; brak otwartych błędów P0/P1.
 
 ## Znane błędy i pomiary
 
@@ -175,16 +175,17 @@
 
 - [POST-STABLE] Dopracować import/export yoRadio: preview, walidacja, raport błędnych rekordów i ewentualny import URL.
 - [STABLE] Sprawdzić listy 50/100/250 stacji, power loss, brak miejsca SPIFFS, `current/lastStation`, usunięcie aktywnej stacji, reorder i zachowanie po restarcie.
-- [STABLE] Zweryfikować eksport/import między DESK i SALON: ID, kolejność, OVOL, A↔T, odświeżenie WWW oraz backup/restore przez Web Update.
-- [STABLE] Fizycznie przetestować Radio Directory na SALON i DESK: dodanie, odtwarzanie, restart, pamięć i brak zakłóceń audio.
+- [STABLE] Zweryfikować eksport/import między X0 i A0: ID, kolejność, OVOL, A↔T, odświeżenie WWW oraz backup/restore przez Web Update.
+- [STABLE] Fizycznie przetestować Radio Directory na A0 i X0: dodanie, odtwarzanie, restart, pamięć i brak zakłóceń audio.
 - [POST-STABLE] Sprawdzić prezentację A↔T na LCD/WWW/MQTT oraz zachowanie po reorder i usunięciu stacji.
 
 ## Hardware targets
 
-- [STABLE] Utrzymać DESK, DIN i SALON bez zmiany architektury do pierwszego stable; ESP32 legacy pozostaje stabilnym legacy targetem.
-- [HARDWARE] Po stable zaprojektować A-family/MAX na ESP32-S3 N16R8, B-family/MINI na ESP32-S3 Zero oraz C-family/PORTABLE na ESP32-S3 Zero portable.
-- [HARDWARE] Potwierdzić GPIO, rewizje PCB, opcjonalne LCD/BT/DSP oraz warianty wyjścia PCM5102A, MAX98357 portable i DSPmini.
+- [STABLE] Utrzymać X0, B0 i A0 bez zmiany architektury do pierwszego stable; klasyczny ESP32 pozostaje stabilnym legacy targetem.
+- [HARDWARE] Po stable zaprojektować pierwsze PCB A1/B1/C1/D1 oraz prototypy C0/D0; mapy GPIO i złącza mogą różnić się od rewizji 0 bez zmiany logiki produktu.
+- [HARDWARE] Potwierdzić GPIO, rewizje PCB, opcjonalne LCD/BT/DSP oraz warianty wyjścia PCM5102A, MAX98357 dla C-family i DSPmini.
 - [POST-STABLE] Utrzymać zasadę jednego builda firmware na target PCB zamiast buildów dla każdej kombinacji opcji; `HardwareDescriptor` i capabilities są źródłem prawdy.
+- [POST-STABLE] Aktualizację VoxOneBT przez MAIN na Ax/Bx/Cx/Dx dopuścić tylko przy obecnym module BT, odpowiednim capability oraz zasobach PSRAM/staging; na Xx aktualizować VoxOneBT wyłącznie bezpośrednio przez USB. Nie dodawać stagingu na Xx.
 
 ## Installer, first boot i release
 
@@ -207,7 +208,7 @@
 - P4 — VoxOneBT hardening
 - P5 — DLNA / AUX
 - P6 — native HA
-- P7 — A/MAX, B/MINI, C/PORTABLE + capabilities
+- P7 — A1/B1/C1/D1 + capabilities
 - P8 — DSPmini
 - P9 — Installer + pełna konfiguracja LCD
 - P10 — W5500 / dalsze rozszerzenia

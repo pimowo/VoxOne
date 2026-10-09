@@ -1,28 +1,38 @@
-# Hardware targets i descriptor PCB
+# Hardware naming contract i targety PCB
 
-Target opisuje konkretne PCB: MCU, przypisane GPIO, magistrale i mo?liwo?ci fizyczne. Rodzina MCU sama w sobie nie identyfikuje PCB. Ustawienia runtime, takie jak wyb?r LCD, BT, preset DSP lub preferencje u?ytkownika, nie tworz? nowego targetu. Nowe PCB dostaje nowy descriptor; inna obsada tego samego PCB nie wymaga nowego targetu, je?li opis pin?w i mo?liwo?ci nadal jest prawdziwy.
+Produkty nazywają się VoxOne i VoxOneBT. Litera identyfikuje rodzinę PCB, a cyfra rewizję: `0` oznacza prototyp przed pierwszą właściwą PCB, `1` pierwszą wersję PCB. Dlatego A0 i A1 należą do tej samej rodziny o wspólnej logice produktu, lecz mogą różnić się mapą GPIO, magistralami, złączami, LCD, enkoderem i zasilaniem. Nazwa rodziny ani rewizji nie jest capability.
 
-Warstwa src/hardware/hardware_descriptor.h rozdziela to?samo?? PCB, magistrale SPI/I2C, linie I2S/UART, piny urz?dze? (LCD, enkoder, DAC) oraz mo?liwo?ci. kNoPin reprezentuje brak przypisanego GPIO; adapter fromLegacyPin t?umaczy dotychczasowe 255 i -1. Zero w polu rozmiaru pami?ci oznacza brak potwierdzonej warto?ci. Runtime odczytuje descriptor w dac_mute, rtcsupport, bt_link, bt_audio_input, dla pin?w enkodera w controls oraz dla CS/DC/RST w sterownikach ST7789 i ST7796. Pozosta?e modu?y nadal korzystaj? z makr profiles/ i Config.
+| Family | Prototype | MCU | Current role |
+|---|---|---|---|
+| A | A0 | ESP32-S3 N16R8 | VoxOne, główny prototyp z LCD ST7796S |
+| B | B0 | ESP32-S3 Zero | VoxOne, kompaktowy prototyp bez LCD |
+| C | C0 | ESP32-S3 Zero | VoxOne, przyszły prototyp przenośny |
+| D | D0 | ESP32-S3 Zero | VoxOne, przyszły prototyp głosowy |
+| X | X0 | klasyczny ESP32 | VoxOne, aktywny prototyp legacy |
+| V | V0 | Wemos D1 mini ESP32 | VoxOneBT, prototyp w osobnym repozytorium |
 
-## Obecne targety migracyjne
+Pierwsze finalne PCB to odpowiednio A1, B1, C1, D1, X1 i V1. Aktywne środowiska PlatformIO w tym repozytorium to `a0`, `b0`, `x0`. C0/D0 nie mają jeszcze buildów ani potwierdzonych map GPIO; V0 należy do repozytorium VoxOneBT. Nazwa produktu VoxOneBT pozostaje bez zmian.
 
-| Target | MCU | Potwierdzone elementy |
-|---|---|---|
-| DESK | ESP32 | ST7789 284?76, enkoder, PCM5102A; brak BT |
-| DIN | ESP32-S3 | bez LCD i enkodera, PCM5102A, VoxOneBT UART; piny BT I2S s? zarezerwowane, lecz RX jest wy??czony |
-| SALON | ESP32-S3 | ST7796S 480?320, enkoder, PCM5102A, DS3231 na I2C, VoxOneBT UART i BT I2S RX |
+Jednorazowa uwaga migracyjna: A0 = formerly SALON, B0 = formerly DIN, X0 = formerly DESK. Nazwy sprzed migracji nie są już identyfikatorami buildów ani nazwami pokazywanymi użytkownikowi.
 
-Descriptor bierze znane piny z aktywnego profilu. Niepotwierdzone piny domy?lnego SPI DESK pozostaj? kNoPin; znane SPI SALON (SCK 12, MOSI 11, MISO 13) opisuje magistral? tylko raz. Sterowniki LCD nadal korzystaj? z domy?lnej inicjalizacji magistrali SPI; nie ustawiaj? jej pin?w z descriptora. Pod?wietlenie SALON (GPIO 14) jest opisane w descriptorze, lecz nadal steruje nim Config. DS3231 i przysz?e urz?dzenie I2C mog? wsp??dzieli? jedn? par? SDA/SCL bez powielania pin?w w descriptorze. Pin XSMT SALON nadal jest nieprzypisany. Mo?liwo?? fizycznego DSP i MAX98357 dla obecnych trzech PCB pozostaje wy??czona. Stary profil SALON_DSP nie ma kompletnej mapy i nadal nie jest targetem builda.
+## Aktywne prototypy
 
-Runtime BT rozdziela supportsVoxOneBt (mo?liwo?? PCB), btEnabled (logiczne w??czenie), btOnline (odpowied? modu?u) i btConnected (po??czenie telefonu). btEnabled domy?lnie odpowiada supportsVoxOneBt i nie jest zapisywany trwale ani udost?pniany w WWW. W 1D.2 mo?na go zmieni? programowo w runtime. BT OFF maskuje surowy stan ??cza dla reszty systemu; Source Manager traktuje BT jak offline, pomija je w cyklu i wraca z aktywnego BT do RADIO STOP. Uruchomiony przy starcie UART pozostaje fizycznie zainicjalizowany; BT audio jest zatrzymywane przez istniej?c? p?tl?. Po ponownym ON ??cze pobiera ?wie?y status. Start z BT OFF nie inicjalizuje UART ani I2S; p??niejsze logiczne ON wymaga osobnej obs?ugi fizycznego hot-startu.
+| Target | Potwierdzone elementy |
+|---|---|
+| X0 | ESP32, ST7789 284×76, enkoder, PCM5102A, bez BT i PSRAM |
+| B0 | ESP32-S3 Zero, bez LCD i enkodera, PCM5102A, VoxOneBT UART; BT I2S piny zarezerwowane, RX wyłączony |
+| A0 | ESP32-S3 N16R8, ST7796S 480×320, enkoder, PCM5102A, DS3231/I2C, VoxOneBT UART i BT I2S RX |
 
-## Docelowy plan
+`src/hardware/hardware_descriptor.h` oddziela tożsamość PCB (`family`, `revision`, `name`, MCU), magistrale, GPIO i capabilities. `kNoPin` oznacza brak przypisania; `fromLegacyPin` tłumaczy dawne `255`/`-1`. Zero w rozmiarze pamięci oznacza brak potwierdzonej wartości, nie brak fizycznej pamięci. Runtime korzysta z descriptora dla DAC mute, RTC, BT UART/I2S, enkodera i pinów LCD; część modułów nadal korzysta z `profiles/` i Config. Różnice A0→A1, B0→B1 itd. powinny mieścić się w descriptorze/profilu, bez rozgałęzień logiki funkcjonalnej według rewizji.
 
-| Planowany target | MCU | Docelowa obsada audio |
-|---|---|---|
-| N16R8_MAIN | ESP32-S3 N16R8 | PCM5102A albo DSPmini na jednym PCB |
-| S3_ZERO_DIN | ESP32-S3 Zero 4 MB flash / 2 MB PSRAM | PCM5102A |
-| S3_ZERO_PORTABLE | ESP32-S3 Zero 4 MB flash / 2 MB PSRAM | PCM5102A albo MAX98357 na jednym PCB |
-| ESP32_LEGACY | ESP32 | PCM5102A; utrzymywany do stable |
+X0 nie deklaruje pinów domyślnego SPI. A0 deklaruje SCK 12, MOSI 11, MISO 13 jako jedną magistralę; sterownik LCD nadal używa domyślnej inicjalizacji SPI. Podświetlenie A0 to GPIO14 sterowane przez Config. DS3231 i przyszłe urządzenie I2C mogą współdzielić SDA/SCL. XSMT A0 nie ma przypisanego GPIO. Fizyczny DSP i MAX98357 są wyłączone na aktualnych trzech targetach. Niekompletny wariant `a0_dsp` nie jest targetem weryfikacyjnym i nie ma potwierdzonej mapy pinów.
 
-Dla trzech nowych PCB nie ma jeszcze potwierdzonych map GPIO, wi?c nie maj? gotowych descriptor?w. Planowane klasy wy?wietlaczy to wsp?lny UI 128?64 dla SSD1306 0,96?, SH1106 1,3? i SSD1309 2,4?, a osobne klasy dla SSD1322 256?64, GC9A01 240?240, ST7789 320?240 i ST7796S 480?320. Obecny ST7789 284?76 pozostaje legacy do stable. Ten etap nie dodaje DisplayManagera, driver?w ani prze??czania wy?wietlacza.
+Capabilities, a nie oznaczenie A/B/C/D/X lub numer rewizji, decydują o dostępności LCD, BT, PSRAM, DSP, RTC i przyszłych funkcji. Przykładowo A0 ma LCD/BT/RTC i zasoby PSRAM, B0 ma BT i PSRAM bez LCD, a X0 nie ma PSRAM. `supportsVoxOneBt` opisuje możliwość PCB, podczas gdy `btEnabled`, `btOnline` i `btConnected` to odrębne stany runtime. Start z BT OFF nie uruchamia UART ani I2S; późniejsze fizyczne hot-start wymaga osobnej obsługi. Nie należy wywodzić nowej funkcji tylko z `family == 'A'`.
+
+## Aktualizacja VoxOneBT
+
+Rodziny Ax/Bx/Cx/Dx mogą docelowo aktualizować VoxOneBT przez `WWW → MAIN → UART → VoxOneBT`, lecz wyłącznie gdy konkretny profil ma moduł VoxOneBT, odpowiednie capability aktualizacji i wystarczające zasoby PSRAM/staging. Sama rodzina S3 nie daje takiej zgody. Obecny sender BT-FW-4 pozostaje capability-driven; ten etap nie dodaje stagingu ani uploadu WWW. Dla Xx aktualizacja VoxOneBT odbywa się wyłącznie bezpośrednio przez USB. Nie projektujemy stagingu dla Xx.
+
+## Planowane PCB i LCD
+
+A1 może używać PCM5102A lub DSPmini; B1 jest kompaktowe; C1 może używać PCM5102A albo MAX98357; D1 jest wariantem głosowym. Ich mapy GPIO, peryferia i capabilities wymagają potwierdzenia. Planowane klasy LCD: wspólne 128×64 dla SSD1306/SH1106, osobne SSD1322 256×64, GC9A01 240×240, ST7789 320×240 i ST7796S 480×320. SSD1309 i utrzymanie legacy ST7789 284×76 wymagają osobnej decyzji. Ten etap nie dodaje DisplayManagera ani sterowników.

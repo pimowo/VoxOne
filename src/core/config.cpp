@@ -9,7 +9,7 @@
 #include "player.h"
 #include "network.h"
 #include "netserver.h"
-#if defined(VOXONE_PROFILE_SALON)
+#if defined(VOXONE_PROFILE_A0)
 #include "dsp_transport_runtime.h"
 #endif
 #include "controls.h"
@@ -526,7 +526,7 @@ void Config::setStartupFixedVolume(uint8_t user) {
 }
 
 bool Config::setTone(int8_t bass, int8_t middle, int8_t trebble) {
-#if defined(VOXONE_PROFILE_SALON)
+#if defined(VOXONE_PROFILE_A0)
   const bool toneLocked = voxone::dsp::lockDspToneMutation();
 #endif
   WriteLock lock(_persistMutex);
@@ -543,7 +543,7 @@ bool Config::setTone(int8_t bass, int8_t middle, int8_t trebble) {
   }
   player.setTone(store.bass, store.middle, store.trebble);
   netserver.requestOnChange(EQUALIZER, 0);
-#if defined(VOXONE_PROFILE_SALON)
+#if defined(VOXONE_PROFILE_A0)
   voxone::dsp::dspTransportToneChanged({store.bass, store.middle, store.trebble});
   if (toneLocked) voxone::dsp::unlockDspToneMutation();
 #endif

@@ -288,7 +288,7 @@ void controlsEvent(bool toRight, int8_t volDelta) {
       display.putRequest(NEWMODE, VOL);
     #endif
     if(volDelta!=0){
-#if defined(VOXONE_PROFILE_DESK) || defined(VOXONE_PROFILE_SALON)
+#if defined(VOXONE_PROFILE_X0) || defined(VOXONE_PROFILE_A0)
       player.stepUserVol(volDelta);
 #else
       int nv = config.store.volume+volDelta;

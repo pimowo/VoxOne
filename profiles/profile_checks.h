@@ -36,12 +36,12 @@ static_assert(!activeProfile.capabilities.hasLocalUi ||
 static_assert(activeProfile.capabilities.hasVu == displaySupportsVu(activeProfile.display),
               "Profile capability hasVu does not match the selected display VU configuration");
 
-#if defined(VOXONE_PROFILE_SALON_DSP)
+#if defined(VOXONE_PROFILE_A0_DSP)
 static_assert(activeProfile.capabilities.hasTda7719,
-              "SALON_DSP profile requires hasTda7719=true");
+              "A0_DSP profile requires hasTda7719=true");
 #else
 static_assert(!activeProfile.capabilities.hasTda7719,
-              "hasTda7719=true is only valid for the SALON_DSP profile");
+              "hasTda7719=true is only valid for the A0_DSP profile");
 #endif
 
 static_assert(!activeProfile.capabilities.hasTda7719 ||

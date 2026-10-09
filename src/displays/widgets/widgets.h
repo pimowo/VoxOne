@@ -112,8 +112,8 @@ class ScrollWidget: public TextWidget {
       _changeObserver = observer;
     }
 #if DSP_MODEL==DSP_ST7789_76
-    void setDeskScrollSlot(uint8_t slot);
-    static void nextDeskScrollFrame();
+    void setX0ScrollSlot(uint8_t slot);
+    static void nextX0ScrollFrame();
 #endif
   private:
     char *_sep;
@@ -132,8 +132,8 @@ class ScrollWidget: public TextWidget {
     uint8_t _changeRow = 0;
     void (*_changeObserver)(void*, uint8_t) = nullptr;
 #if DSP_MODEL==DSP_ST7789_76
-    bool _deskIndependentScroll = false;
-    uint8_t _deskScrollSlot = 0;
+    bool _x0IndependentScroll = false;
+    uint8_t _x0ScrollSlot = 0;
 #endif
   private:
     void _setTextParams();

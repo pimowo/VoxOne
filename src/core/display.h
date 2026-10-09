@@ -3,8 +3,8 @@
 #include <stdint.h>
 #include <stdio.h>
 #include "common.h"
-#if defined(VOXONE_PROFILE_SALON) && DSP_MODEL==DSP_ST7796
-#include "salon_player_scroll.h"
+#if defined(VOXONE_PROFILE_A0) && DSP_MODEL==DSP_ST7796
+#include "a0_player_scroll.h"
 #endif
 
 enum class DisplaySourceKind : uint8_t { Radio, Bluetooth, Dlna, Aux, Spdif, Tts };
@@ -22,7 +22,7 @@ inline const char* displaySourceLabel(DisplaySourceKind kind) {
 inline bool displayVolumeMuted(uint8_t userVolume, bool muted = false) {
     return muted || userVolume == 0;
 }
-inline const char* displayDeskVolumeText(uint8_t userVolume, bool muted,
+inline const char* displayX0VolumeText(uint8_t userVolume, bool muted,
                                          char* buffer, size_t bufferSize) {
     if (displayVolumeMuted(userVolume, muted)) return "MUTE";
     snprintf(buffer, bufferSize, "\023 %u", static_cast<unsigned>(userVolume));
@@ -96,10 +96,10 @@ class NumWidget;
 class ClockWidget;
 class TextWidget;
 #if DSP_MODEL==DSP_ST7796
-class SalonVolumeWidget;
-class SalonBluetoothWidget;
-class SalonLabelFrameWidget;
-class SalonPlaybackIconWidget;
+class A0VolumeWidget;
+class A0BluetoothWidget;
+class A0LabelFrameWidget;
+class A0PlaybackIconWidget;
 #endif
     
 class Display {
@@ -142,21 +142,21 @@ class Display {
     TextWidget *_bootstring, *_volip, *_voltxt, *_rssi, *_bitrate;
 #if DSP_MODEL==DSP_ST7796
     TextWidget *_btTransportPlayback;
-    SalonPlaybackIconWidget *_salonPlayback = nullptr;
-    SalonVolumeWidget *_salonVolume;
-    SalonBluetoothWidget *_salonBluetoothIcon;
-    SalonLabelFrameWidget *_salonSource = nullptr, *_salonEq = nullptr;
-    SalonLabelFrameWidget *_salonLoud = nullptr, *_salonMode = nullptr;
+    A0PlaybackIconWidget *_a0Playback = nullptr;
+    A0VolumeWidget *_a0Volume;
+    A0BluetoothWidget *_a0BluetoothIcon;
+    A0LabelFrameWidget *_a0Source = nullptr, *_a0Eq = nullptr;
+    A0LabelFrameWidget *_a0Loud = nullptr, *_a0Mode = nullptr;
     ScrollWidget *_btTransportArtist, *_btTransportTitle;
     Page *_btTransportPage;
-    Page *_salonUpdatePage = nullptr;
+    Page *_a0UpdatePage = nullptr;
 #endif
 #if DSP_MODEL==DSP_ST7789_76 || DSP_MODEL==DSP_ST7796
     TextWidget *_plheader, *_plcounter, *_plplaying;
 #endif
 #if DSP_MODEL==DSP_ST7789_76
-    ScrollWidget *_deskStation;
-    TextWidget *_deskRssi, *_deskVolume, *_deskClock;
+    ScrollWidget *_x0Station;
+    TextWidget *_x0Rssi, *_x0Volume, *_x0Clock;
 #endif
     bool _locked = false;
     volatile bool _volumePending = false;
@@ -181,12 +181,12 @@ class Display {
 #if DSP_MODEL==DSP_ST7796
     void _updatePlaybackStatus();
 #endif
-#if defined(VOXONE_PROFILE_SALON) && DSP_MODEL==DSP_ST7796
-    SalonPlayerScroll _salonScroll;
-    bool _salonPlayerReady = false;
-    void _salonScrollTextChanged(uint8_t row);
-    void _salonScrollTick();
-    void _salonScrollMode(bool playerMode);
+#if defined(VOXONE_PROFILE_A0) && DSP_MODEL==DSP_ST7796
+    A0PlayerScroll _a0Scroll;
+    bool _a0PlayerReady = false;
+    void _a0ScrollTextChanged(uint8_t row);
+    void _a0ScrollTick();
+    void _a0ScrollMode(bool playerMode);
 #endif
 };
 

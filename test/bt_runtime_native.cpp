@@ -3,12 +3,12 @@
 #include <cassert>
 
 int main() {
-  BtRuntime desk(false);
-  assert(!desk.available());
-  assert(desk.configureBeforeStart(true));
-  assert(!desk.start());
-  assert(!desk.physicalStarted() && !desk.available());
-  const BtRuntimeStatus noHardware = desk.status(true, true);
+  BtRuntime x0(false);
+  assert(!x0.available());
+  assert(x0.configureBeforeStart(true));
+  assert(!x0.start());
+  assert(!x0.physicalStarted() && !x0.available());
+  const BtRuntimeStatus noHardware = x0.status(true, true);
   assert(!noHardware.supportsBt && noHardware.btEnabled);
   assert(!noHardware.btOnline && !noHardware.btConnected);
 

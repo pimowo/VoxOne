@@ -4,10 +4,11 @@
 namespace voxone {
 namespace hardware {
 namespace {
-#if defined(VOXONE_PROFILE_DESK)
-constexpr BoardId kBoardId = BoardId::Desk;
+#if defined(VOXONE_PROFILE_X0)
+constexpr BoardId kBoardId = BoardId::BoardX0;
+constexpr char kBoardFamily = 'X';
 constexpr DisplayKind kDisplayKind = DisplayKind::St7789_284x76;
-// The legacy DESK profile does not state its default SPI bus pins.
+// The legacy X0 profile does not state its default SPI bus pins.
 constexpr SpiBusPins kSpi = {kNoPin, kNoPin, kNoPin};
 constexpr I2cBusPins kI2c = {kNoPin, kNoPin};
 constexpr UartPins kBtUart = {kNoPin, kNoPin};
@@ -15,8 +16,9 @@ constexpr Pin kBacklight = kNoPin;
 constexpr Pin kDacXsmt = kNoPin;
 constexpr uint32_t kFlashBytes = 0;
 constexpr uint32_t kPsramBytes = 0;
-#elif defined(VOXONE_PROFILE_DIN)
-constexpr BoardId kBoardId = BoardId::Din;
+#elif defined(VOXONE_PROFILE_B0)
+constexpr BoardId kBoardId = BoardId::BoardB0;
+constexpr char kBoardFamily = 'B';
 constexpr DisplayKind kDisplayKind = DisplayKind::None;
 constexpr SpiBusPins kSpi = {kNoPin, kNoPin, kNoPin};
 constexpr I2cBusPins kI2c = {kNoPin, kNoPin};
@@ -26,10 +28,11 @@ constexpr Pin kBacklight = kNoPin;
 constexpr Pin kDacXsmt = kNoPin;
 constexpr uint32_t kFlashBytes = 4u * 1024u * 1024u;
 constexpr uint32_t kPsramBytes = 0;  // Size not established by the current profile.
-#elif defined(VOXONE_PROFILE_SALON)
-constexpr BoardId kBoardId = BoardId::Salon;
+#elif defined(VOXONE_PROFILE_A0)
+constexpr BoardId kBoardId = BoardId::BoardA0;
+constexpr char kBoardFamily = 'A';
 constexpr DisplayKind kDisplayKind = DisplayKind::St7796_480x320;
-// SPI defaults are stated in salon.h; MISO belongs to the bus, not to LCD.
+// SPI defaults are stated in a0.h; MISO belongs to the bus, not to LCD.
 constexpr SpiBusPins kSpi = {12, 11, 13};
 constexpr I2cBusPins kI2c = {fromLegacyPin(RTC_SDA), fromLegacyPin(RTC_SCL)};
 constexpr UartPins kBtUart = {fromLegacyPin(VOXONE_BT_UART_RX_PIN),
@@ -39,12 +42,12 @@ constexpr Pin kDacXsmt = fromLegacyPin(VOXONE_DAC_XSMT_PIN);
 constexpr uint32_t kFlashBytes = 16u * 1024u * 1024u;
 constexpr uint32_t kPsramBytes = 0;  // Size not established by the current profile.
 #else
-// The unfinished salon_dsp profile has no verified complete pin map.
-#error "HardwareDescriptor requires a complete DESK, DIN or SALON profile"
+// The unfinished a0_dsp profile has no verified complete pin map.
+#error "HardwareDescriptor requires a complete X0, B0 or A0 profile"
 #endif
 
 constexpr HardwareDescriptor kCurrent = {
-  {kBoardId, VOXONE_PROFILE_NAME,
+  {kBoardId, VOXONE_PROFILE_NAME, kBoardFamily, 0,
    VOXONE_PROFILE_MCU == Mcu::Esp32 ? McuFamily::Esp32 : McuFamily::Esp32S3,
    kFlashBytes, kPsramBytes},
   kDisplayKind,

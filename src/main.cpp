@@ -115,10 +115,10 @@ void setupOTA(){
 
 void setup() {
   Serial.begin(115200);
-#if defined(VOXONE_PROFILE_SALON)
+#if defined(VOXONE_PROFILE_A0)
   dacMute.begin();
 #endif
-#if defined(VOXONE_PROFILE_SALON) && defined(RGB_BUILTIN) && \
+#if defined(VOXONE_PROFILE_A0) && defined(RGB_BUILTIN) && \
     defined(PIN_NEOPIXEL) && PIN_NEOPIXEL == 48
   neopixelWrite(RGB_BUILTIN, 0, 0, 0);
 #endif
@@ -126,7 +126,7 @@ void setup() {
   if (yoradio_on_setup) yoradio_on_setup();
   config.init();
   btRuntime.start();
-#if defined(VOXONE_PROFILE_SALON)
+#if defined(VOXONE_PROFILE_A0)
   voxone::dsp::initDspRuntime({config.store.bass, config.store.middle,
                               config.store.trebble});
 #endif
@@ -188,7 +188,7 @@ void loop() {
     ArduinoOTA.handle();
 #endif
   }
-#if defined(VOXONE_PROFILE_SALON)
+#if defined(VOXONE_PROFILE_A0)
   const BtLinkState& bt = btLink.state();
   const BtRuntimeStatus btStatus = btRuntime.status(bt.runtimeAvailable,
                                                     bt.connected);

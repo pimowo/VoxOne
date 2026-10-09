@@ -44,7 +44,7 @@ def resolve_chrome():
 
 MOCK = r"""
 <script>
-window.voxOneProfile = 'salon';
+window.voxOneProfile = 'a0';
 window.voxOneVersion = '0.2.0';
 window.voxOneChannel = 'dev';
 window.voxOneBuild = '192a400';
@@ -167,7 +167,7 @@ setTimeout(() => {
     const logo = document.querySelector('header img[src*="voxone-logo.svg"]');
     check(icon?.type === 'image/svg+xml' && !!logo, 'VoxOne SVG favicon and header logo');
     check(icon.getAttribute('href') === logo.getAttribute('src'), 'favicon reuses header logo');
-    check(get('footer-details').textContent === 'VoxOne 0.2.0 · SALON', 'footer identity');
+    check(get('footer-details').textContent === 'VoxOne 0.2.0 · A0', 'footer identity');
     check(get('footer-connection').textContent === 'Połączono', 'footer WebSocket connected');
     check(get('system').querySelector('h3').textContent === 'VoxOne', 'VoxOne system card');
     check([...get('system').querySelectorAll('h3')].some(node => node.textContent === 'VoxOneBT'), 'VoxOneBT system card');
@@ -189,11 +189,11 @@ setTimeout(() => {
       btModule:{online:true, firmware:'0.6.1-dev', protocol:2,
                 name:'VoxOneBT-EFF35A', capabilities:'AVRCP,VU'}};
     btTestSocket.receive(status);
-    btTestSocket.receiveNetwork({hostname:'voxone-salon', activeSsid:'HomeNet', profiles:[
+    btTestSocket.receiveNetwork({hostname:'voxone-a0', activeSsid:'HomeNet', profiles:[
       {ssid:'HomeNet', passwordSet:true, password:'secret', order:1},
       {ssid:'backup', passwordSet:false, order:2}
     ]});
-    check(get('network-hostname').textContent === 'voxone-salon', 'network hostname');
+    check(get('network-hostname').textContent === 'voxone-a0', 'network hostname');
     check(get('network-active-ssid').textContent === 'HomeNet', 'active Wi-Fi SSID');
     check(get('network-profiles').textContent.includes('Hasło: zapisane'), 'passwordSet true');
     check(get('network-profiles').textContent.includes('Hasło: brak'), 'passwordSet false');
@@ -213,13 +213,13 @@ setTimeout(() => {
     check(btTestSocket.sent.some(item => item === 'getrssi=1'), 'system RSSI request');
     btTestSocket.onmessage({data:JSON.stringify({ipaddr:'192.168.1.42',
       payload:[{id:'rssi',value:-57}]})});
-    check(get('footer-details').textContent === 'VoxOne 0.2.0 · SALON · 192.168.1.42', 'footer IP');
+    check(get('footer-details').textContent === 'VoxOne 0.2.0 · A0 · 192.168.1.42', 'footer IP');
     check(get('system-version').textContent === '0.2.0-dev', 'identity firmware fallback');
     check(get('system-build').textContent === '192a400', 'identity build');
     check(get('update-version').textContent === 'VoxOne 0.2.0-dev', 'update firmware');
     check(get('update-build').textContent === '192a400', 'update build');
-    check(get('update-profile').textContent === 'SALON', 'update profile');
-    check(get('system-profile').textContent === 'SALON', 'identity profile fallback');
+    check(get('update-profile').textContent === 'A0', 'update profile');
+    check(get('system-profile').textContent === 'A0', 'identity profile fallback');
     check(get('system-ip').textContent === '192.168.1.42', 'legacy IP field');
     check(get('system-rssi').textContent === '-57 dBm', 'legacy RSSI field');
     check(get('system-psram').textContent !== 'Brak', 'missing snapshot is not no-PSRAM');
@@ -229,7 +229,7 @@ setTimeout(() => {
       capabilities:'DISPLAY, ENCODER, BT, VU, RTC'};
     btTestSocket.receiveSystem(systemInfo);
     check(get('system-version').textContent === '0.2.0-dev', 'system firmware');
-    check(get('system-profile').textContent === 'SALON', 'system profile');
+    check(get('system-profile').textContent === 'A0', 'system profile');
     check(get('system-ip').textContent === '192.168.1.42', 'system IP');
     check(get('system-rssi').textContent === '-57 dBm', 'system RSSI');
     check(get('system-uptime').textContent === '04:31:18', 'formatted uptime below one day');
@@ -246,7 +246,7 @@ setTimeout(() => {
       'disconnect clears stale source and metadata');
     check(muteButtons.every(button => button.disabled && button.getAttribute('aria-pressed') === 'false'), 'disconnect clears mute state');
     check(get('footer-connection').textContent === 'Rozłączono', 'footer WebSocket disconnected');
-    check(get('footer-details').textContent === 'VoxOne 0.2.0 · SALON', 'offline footer hides stale IP');
+    check(get('footer-details').textContent === 'VoxOne 0.2.0 · A0', 'offline footer hides stale IP');
     check(get('network-active-ssid').textContent === '—', 'offline network info cleared');
     const transfer = new DataTransfer();
     transfer.items.add(new File(['image'], 'voxonebt.bin', {type:'application/octet-stream'}));

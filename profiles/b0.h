@@ -1,7 +1,7 @@
-#ifndef VOXONE_PROFILE_DIN_H
-#define VOXONE_PROFILE_DIN_H
+#ifndef VOXONE_PROFILE_B0_H
+#define VOXONE_PROFILE_B0_H
 
-#define VOXONE_PROFILE_NAME "din"
+#define VOXONE_PROFILE_NAME "B0"
 #define VOXONE_PROFILE_MCU voxone::Mcu::Esp32S3
 #define VOXONE_PROFILE_DISPLAY voxone::Display::None
 #define VOXONE_PROFILE_AUDIO voxone::AudioOutput::Pcm5102a

@@ -56,8 +56,10 @@ int main() {
   assert(validateDescriptor(d));
   assert(!hasPinConflicts(d));
 
-#if defined(VOXONE_PROFILE_DESK)
-  assert(d.board.id == BoardId::Desk);
+#if defined(VOXONE_PROFILE_X0)
+  assert(d.board.id == BoardId::BoardX0);
+  assert(d.board.family == 'X' && d.board.revision == 0);
+  assert(std::strcmp(d.board.name, "X0") == 0);
   assert(d.board.mcu == McuFamily::Esp32);
   assert(d.displayKind == DisplayKind::St7789_284x76);
   assert(d.capabilities.supportsDisplay);
@@ -66,7 +68,7 @@ int main() {
   assert(d.audioOut.dout == 27 && d.audioOut.bclk == 26 && d.audioOut.ws == 25);
   assert(d.encoder.a == 33 && d.encoder.b == 35 && d.encoder.button == 32);
   assert(!d.encoder.internalPullup && d.encoder.stepsPerDetent == 4);
-  // The legacy DESK profile does not specify default SPI bus pins.
+  // The legacy X0 profile does not specify default SPI bus pins.
   assert(d.spi.sck == kNoPin && d.spi.mosi == kNoPin &&
          d.spi.miso == kNoPin);
   assert(!d.capabilities.supportsVoxOneBt);
@@ -74,8 +76,10 @@ int main() {
   assert(d.btAudioIn.bclk == kNoPin && d.btAudioIn.ws == kNoPin &&
          d.btAudioIn.din == kNoPin && !d.btAudioRxEnabled);
   assert(d.dacXsmt == kNoPin);
-#elif defined(VOXONE_PROFILE_DIN)
-  assert(d.board.id == BoardId::Din);
+#elif defined(VOXONE_PROFILE_B0)
+  assert(d.board.id == BoardId::BoardB0);
+  assert(d.board.family == 'B' && d.board.revision == 0);
+  assert(std::strcmp(d.board.name, "B0") == 0);
   assert(d.displayKind == DisplayKind::None);
   assert(!d.capabilities.supportsDisplay);
   assert(d.spi.sck == kNoPin && d.spi.mosi == kNoPin &&
@@ -93,8 +97,10 @@ int main() {
   assert(d.encoder.a == kNoPin && d.encoder.b == kNoPin &&
          d.encoder.button == kNoPin);
   assert(d.dacXsmt == kNoPin);
-#elif defined(VOXONE_PROFILE_SALON)
-  assert(d.board.id == BoardId::Salon);
+#elif defined(VOXONE_PROFILE_A0)
+  assert(d.board.id == BoardId::BoardA0);
+  assert(d.board.family == 'A' && d.board.revision == 0);
+  assert(std::strcmp(d.board.name, "A0") == 0);
   assert(d.displayKind == DisplayKind::St7796_480x320);
   assert(d.capabilities.supportsDisplay);
   assert(d.spi.mosi == 11 && d.spi.sck == 12 && d.spi.miso == 13);

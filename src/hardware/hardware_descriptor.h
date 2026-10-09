@@ -14,14 +14,16 @@ constexpr Pin fromLegacyPin(int value) {
 }
 constexpr bool hasPin(Pin value) { return value != kNoPin; }
 
-enum class BoardId { Desk, Din, Salon };
+enum class BoardId { BoardX0, BoardB0, BoardA0 };
 enum class McuFamily { Esp32, Esp32S3 };
 enum class DisplayKind { None, St7789_284x76, St7796_480x320 };
 enum class BusKind { None, Spi, I2c };
 
 struct BoardIdentity {
   BoardId id;
-  const char* name;
+  const char* name;  // Display name, e.g. A0.
+  char family;
+  uint8_t revision;
   McuFamily mcu;
   uint32_t flashBytes;  // 0 means unconfirmed.
   uint32_t psramBytes;  // 0 means unconfirmed.

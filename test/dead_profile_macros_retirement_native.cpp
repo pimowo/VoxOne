@@ -24,8 +24,8 @@ int main() {
 
   std::string activeSurface = readFile("src/core/options.h");
   for (const char* path : {"profiles/unavailable_hardware.h",
-                           "profiles/desk.h", "profiles/din.h",
-                           "profiles/salon.h", "profiles/salon_dsp.h",
+                           "profiles/x0.h", "profiles/b0.h",
+                           "profiles/a0.h", "profiles/a0_dsp.h",
                            "profiles/profile.h", "profiles/profile_checks.h",
                            "src/hardware/hardware_descriptor.h",
                            "src/hardware/hardware_descriptor.cpp",
@@ -43,8 +43,8 @@ int main() {
     assert(!contains(activeSurface, token));
   }
 
-  for (const char* token : {"VOXONE_PROFILE_DESK", "VOXONE_PROFILE_DIN",
-                            "VOXONE_PROFILE_SALON", "BOARD_HAS_PSRAM",
+  for (const char* token : {"VOXONE_PROFILE_X0", "VOXONE_PROFILE_B0",
+                            "VOXONE_PROFILE_A0", "BOARD_HAS_PSRAM",
                             "ARDUINO_ESP32_DEV", "ARDUINO_ESP32S3_DEV",
                             "ARDUINO_ESP32C3_DEV", "CONFIG_IDF_TARGET_ESP32",
                             "CONFIG_IDF_TARGET_ESP32S3", "DSP_HSPI",

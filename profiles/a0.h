@@ -1,7 +1,7 @@
-#ifndef VOXONE_PROFILE_SALON_H
-#define VOXONE_PROFILE_SALON_H
+#ifndef VOXONE_PROFILE_A0_H
+#define VOXONE_PROFILE_A0_H
 
-#define VOXONE_PROFILE_NAME "salon"
+#define VOXONE_PROFILE_NAME "A0"
 #define VOXONE_PROFILE_MCU voxone::Mcu::Esp32S3
 #define VOXONE_PROFILE_DISPLAY voxone::Display::St7796_480x320
 #define VOXONE_PROFILE_AUDIO voxone::AudioOutput::Pcm5102a
@@ -16,7 +16,7 @@
 #define VOXONE_HAS_LOCAL_UI 1
 #define VOXONE_PIN_MAP_COMPLETE 1
 
-// ST7796S uses the default ESP32-S3 SPI bus: MOSI 11, SCK 12, SS 10.
+// A0 ST7796S uses the default ESP32-S3 SPI bus: MOSI 11, SCK 12, SS 10.
 // MISO 13 belongs to that bus but is not connected to the LCD.
 #define DSP_MODEL DSP_ST7796
 #define DSP_HSPI false

@@ -47,9 +47,9 @@ int main() {
   assert(btLink.find("currentHardware().btUart") != std::string::npos);
   assert(btLink.find("serial_.begin(115200, SERIAL_8N1, uart.rx, uart.tx)") !=
          std::string::npos);
-  const auto salon = readFile("profiles/salon.h");
-  assert(salon.find("#define VOXONE_BT_UART_RX_PIN 15") != std::string::npos);
-  assert(salon.find("#define VOXONE_BT_UART_TX_PIN 16") != std::string::npos);
+  const auto a0 = readFile("profiles/a0.h");
+  assert(a0.find("#define VOXONE_BT_UART_RX_PIN 15") != std::string::npos);
+  assert(a0.find("#define VOXONE_BT_UART_TX_PIN 16") != std::string::npos);
 
   const auto options = readFile("src/core/options.h");
   const auto selectors = readFile("src/displays/dspcore.h");

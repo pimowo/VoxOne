@@ -8,7 +8,7 @@ web interface.
 Building a release:
 
 ```powershell
-pio run -e yoradio_esp32 -t fullimage
+pio run -e x0 -t fullimage
 ```
 
 The target builds the current firmware and SPIFFS before invoking Espressif
@@ -20,7 +20,7 @@ The target builds the current firmware and SPIFFS before invoking Espressif
 Replace `<version>` and the serial port if necessary:
 
 ```powershell
-C:\Users\piotrek\.platformio\penv\Scripts\python.exe C:\Users\piotrek\.platformio\packages\tool-esptoolpy@2.40900.250804\esptool.py --chip esp32 --port COM10 --baud 921600 --before default_reset --after hard_reset write_flash -z --flash_mode dio --flash_freq 40m --flash_size 4MB 0x0 .pio\build\yoradio_esp32\VoxOne-<version>-full.bin
+C:\Users\piotrek\.platformio\penv\Scripts\python.exe C:\Users\piotrek\.platformio\packages\tool-esptoolpy@2.40900.250804\esptool.py --chip esp32 --port COM10 --baud 921600 --before default_reset --after hard_reset write_flash -z --flash_mode dio --flash_freq 40m --flash_size 4MB 0x0 .pio\build\x0\VoxOne-<version>-full.bin
 ```
 
 This writes the complete 4 MB flash image from offset `0x0`. It can overwrite

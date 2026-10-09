@@ -1,7 +1,7 @@
 #ifndef VOXONE_DSP_TRANSPORT_RUNTIME_H
 #define VOXONE_DSP_TRANSPORT_RUNTIME_H
 
-#if defined(VOXONE_PROFILE_SALON)
+#if defined(VOXONE_PROFILE_A0)
 #include "dsp_model.h"
 
 #include <cstddef>

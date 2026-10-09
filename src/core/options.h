@@ -75,7 +75,7 @@ The connection tables are located here https://github.com/e2002/yoradio#connecti
 
 /*        I2S DAC                 */
 #ifndef I2S_DOUT
-  #define I2S_DOUT      27  // DIN connection
+  #define I2S_DOUT      27  // I2S data input connection
 #endif
 #ifndef I2S_BCLK
   #define I2S_BCLK      26  // BCLK Bit clock

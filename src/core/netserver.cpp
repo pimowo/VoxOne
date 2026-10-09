@@ -19,7 +19,7 @@
 #include <climits>
 #include <cstdlib>
 #include "config.h"
-#if defined(VOXONE_PROFILE_SALON)
+#if defined(VOXONE_PROFILE_A0)
 #include "dsp_transport_runtime.h"
 #endif
 #include "ap_wifi_recovery.h"
@@ -315,7 +315,7 @@ bool NetServer::begin(bool quiet) {
   _lastVolumeUpdate = millis() - NS_VOLUME_INTERVAL_MS;
   nsQueue = xQueueCreate( 20, sizeof( nsRequestParams_t ) );
   while(nsQueue==NULL){;}
-#if defined(VOXONE_PROFILE_SALON)
+#if defined(VOXONE_PROFILE_A0)
   if (!voxone::dsp::beginDspTransport())
     Serial.println("[DSP] transport queue unavailable");
 #endif
@@ -341,7 +341,7 @@ bool NetServer::begin(bool quiet) {
   webserver.on("/favicon.ico", HTTP_GET, [](AsyncWebServerRequest* request) {
     request->redirect("/voxone-logo.svg");
   });
-#if defined(VOXONE_PROFILE_SALON)
+#if defined(VOXONE_PROFILE_A0)
   webserver.on("/api/dsp/state", HTTP_GET, voxone::dsp::handleDspState);
 #endif
   webserver.onNotFound(handleNotFound);
@@ -1777,7 +1777,7 @@ void NetServer::loop() {
   netserverLoopActive = true;
   portEXIT_CRITICAL(&netserverLoopMux);
   processQueue();
-#if defined(VOXONE_PROFILE_SALON)
+#if defined(VOXONE_PROFILE_A0)
   voxone::dsp::processDspTransportQueue();
 #endif
   processVolumeUpdate();
@@ -1790,7 +1790,7 @@ void NetServer::loop() {
 
 void NetServer::onWsMessage(void *arg, uint8_t *data, size_t len, uint32_t clientId) {
   AwsFrameInfo *info = (AwsFrameInfo*)arg;
-#if defined(VOXONE_PROFILE_SALON)
+#if defined(VOXONE_PROFILE_A0)
   if (info->index == 0 &&
       voxone::dsp::handleDspWsFrame(data, len, clientId,
           info->final && info->len == len && info->opcode == WS_TEXT)) return;

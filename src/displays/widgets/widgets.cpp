@@ -102,15 +102,15 @@ void TextWidget::_draw() {
       SCROLL WIDGET
  ************************/
 #if DSP_MODEL==DSP_ST7789_76
-static uint8_t deskScrollFrameSlot = 2;
+static uint8_t x0ScrollFrameSlot = 2;
 
-void ScrollWidget::setDeskScrollSlot(uint8_t slot) {
-  _deskIndependentScroll = true;
-  _deskScrollSlot = slot;
+void ScrollWidget::setX0ScrollSlot(uint8_t slot) {
+  _x0IndependentScroll = true;
+  _x0ScrollSlot = slot;
 }
 
-void ScrollWidget::nextDeskScrollFrame() {
-  deskScrollFrameSlot = (deskScrollFrameSlot + 1) % 3;
+void ScrollWidget::nextX0ScrollFrame() {
+  x0ScrollFrameSlot = (x0ScrollFrameSlot + 1) % 3;
 }
 #endif
 
@@ -230,8 +230,8 @@ void ScrollWidget::loop() {
   if (_externallyScheduled) return;
   if (!_doscroll || _config.textsize == 0) return;
 #if DSP_MODEL==DSP_ST7789_76
-  if (_deskIndependentScroll) {
-    if (_deskScrollSlot != deskScrollFrameSlot) return;
+  if (_x0IndependentScroll) {
+    if (_x0ScrollSlot != x0ScrollFrameSlot) return;
   } else
 #endif
   if (dsp.getScrollId() != NULL && dsp.getScrollId() != this) return;
@@ -334,12 +334,12 @@ void ScrollWidget::_calcX(uint8_t pixels) {
   if (-_x > _textwidth + _sepwidth - fbl) {
     _x = fbl;
 #if DSP_MODEL==DSP_ST7789_76
-    if (!_deskIndependentScroll)
+    if (!_x0IndependentScroll)
 #endif
     dsp.setScrollId(NULL);
   } else {
 #if DSP_MODEL==DSP_ST7789_76
-    if (!_deskIndependentScroll)
+    if (!_x0IndependentScroll)
 #endif
     dsp.setScrollId(this);
   }
@@ -356,7 +356,7 @@ bool ScrollWidget::_checkDelay(int m, uint32_t &tstamp) {
 
 void ScrollWidget::_reset(){
 #if DSP_MODEL==DSP_ST7789_76
-  if (!_deskIndependentScroll)
+  if (!_x0IndependentScroll)
 #endif
   dsp.setScrollId(NULL);
   _x = _fb->ready()?0:_config.left;
