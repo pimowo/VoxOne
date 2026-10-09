@@ -7,6 +7,7 @@
 #include "display.h"
 #include "network.h"
 #include "netserver.h"
+#include "update_progress.h"
 #include "../hardware/hardware_descriptor.h"
 
 long encOldPosition  = 0;
@@ -101,7 +102,7 @@ void initControls() {
 }
 
 void loopControls() {
-  if(display.mode()==UPDATING || display.mode()==LOST) return;
+  if(updateLockActive() || display.mode()==UPDATING || display.mode()==LOST) return;
   if(ctrls_on_loop) ctrls_on_loop();
 #if ENC_BTNL!=255
   encoder1Loop();

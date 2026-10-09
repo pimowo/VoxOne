@@ -6,6 +6,7 @@
 #include "player.h"
 #include "network.h"
 #include "serialcli.h"
+#include "update_progress.h"
 
 SerialCli serialCli;
 
@@ -73,6 +74,10 @@ void SerialCli::printHeapFragmentationInfo(uint8_t id){
 }
 void SerialCli::on_input(const char* str, uint8_t clientId) {
   if (strlen(str) == 0) return;
+  if (updateLockActive() &&
+      strcmp(str, "cli.info") != 0 && strcmp(str, "info") != 0 &&
+      strcmp(str, "sys.version") != 0 && strcmp(str, "version") != 0 &&
+      strcmp(str, "wifi.status") != 0 && strcmp(str, "status") != 0) return;
   if(network.status == CONNECTED){
     if (strcmp(str, "cli.prev") == 0 || strcmp(str, "prev") == 0) {
       player.prev();

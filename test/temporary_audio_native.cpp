@@ -85,6 +85,20 @@ struct Scenario {
 
 int main() {
   auditTransport();
+  // Update STOP cancels an active announcement without changing smartstart
+  // or restoring the previous RADIO intent after the lock is released.
+  {
+    Scenario s;
+    s.radio(true);
+    const auto token = s.temporary.begin();
+    assert(s.temporary.suppressRadioRestore());
+    s.source.stopForUpdate(s.bt);
+    assert(!radioStopUpdatesSmartStart(RadioStopReason::SourceSwitch, false));
+    assert(s.temporary.finish(token));
+    s.restore(true, true);
+    s.restore();
+    assert(s.resumes == 0 && !s.source.radioPlayIntent() && !s.temporary.busy());
+  }
   // RADIO PLAY/STOP: TTS never becomes selected source or radio PLAY intent.
   for (bool playing : {false, true}) {
     Scenario s;

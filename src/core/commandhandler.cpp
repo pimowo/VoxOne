@@ -14,6 +14,7 @@
 #include "source_manager.h"
 #include "source_manager_state.h"
 #include "web_transport.h"
+#include "update_progress.h"
 
 #if DSP_MODEL==DSP_DUMMY
 #define DUMMYDISPLAY
@@ -40,6 +41,11 @@ static bool parseTimeInterval(const char* value, long minimum, long maximum, uin
 }
 
 bool CommandHandler::exec(const char *command, const char *value, uint32_t cid) {
+  if (updateLockActive() &&
+      !strEquals(command, "getsystem") &&
+      !strEquals(command, "getwebstatus") &&
+      !strEquals(command, "getrssi") &&
+      !strEquals(command, "getscreen")) return false;
   if (cid != 0 && strEquals(command, "source")) {
     if (!value) return false;
     ActiveSource target;

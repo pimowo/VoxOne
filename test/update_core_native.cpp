@@ -1,8 +1,18 @@
 #include "../src/core/update_progress.h"
+#include "../src/core/update_runtime_guard.h"
 #include "../src/core/bt_update_progress.h"
 
 #include <assert.h>
+#include <fstream>
+#include <iterator>
+#include <string>
 #include <string.h>
+
+static std::string readSource(const char* path) {
+  std::ifstream input(path, std::ios::binary);
+  assert(input.good());
+  return {std::istreambuf_iterator<char>(input), std::istreambuf_iterator<char>()};
+}
 
 int main() {
   UpdateProgressState state;
@@ -106,4 +116,55 @@ int main() {
   btAborted.terminal(btUpdatePhase(bt));
   assert(btAborted.snapshot().phase == UpdatePhase::Aborted && !btAborted.locked());
   assert(btAborted.begin(UpdateTarget::VoxOneFirmware, UpdatePhase::Preparing));
+
+  // Each lock acquisition quiesces once, regardless of progress callbacks.
+  UpdateRuntimeGuard guard;
+  UpdateProgressState runtime;
+  assert(!guard.needsQuiesce(runtime.snapshot()));
+  assert(runtime.begin(UpdateTarget::VoxOneFirmware, UpdatePhase::Preparing));
+  const uint32_t first = runtime.snapshot().acquisition;
+  unsigned quiesceCount = 0;
+  if (guard.needsQuiesce(runtime.snapshot())) ++quiesceCount;
+  runtime.phase(UpdatePhase::Writing);
+  runtime.progress(1, 10);
+  if (guard.needsQuiesce(runtime.snapshot())) ++quiesceCount;
+  assert(quiesceCount == 1);
+  runtime.terminal(UpdatePhase::Success);
+  assert(!guard.needsQuiesce(runtime.snapshot()));
+  assert(!runtime.begin(UpdateTarget::Filesystem, UpdatePhase::Preparing));
+  UpdateProgressState afterRestart;
+  UpdateRuntimeGuard freshGuard;
+  assert(!freshGuard.needsQuiesce(afterRestart.snapshot()));
+
+  UpdateProgressState failures;
+  assert(failures.begin(UpdateTarget::VoxOneBtFirmware, UpdatePhase::Preparing));
+  assert(freshGuard.needsQuiesce(failures.snapshot()));
+  failures.terminal(UpdatePhase::Error);
+  assert(!freshGuard.needsQuiesce(failures.snapshot()));
+  assert(failures.begin(UpdateTarget::Filesystem, UpdatePhase::Preparing));
+  assert(failures.snapshot().acquisition == first + 1);
+  assert(freshGuard.needsQuiesce(failures.snapshot()));
+  failures.terminal(UpdatePhase::Aborted);
+  assert(failures.begin(UpdateTarget::VoxOneFirmware, UpdatePhase::Preparing));
+  assert(freshGuard.needsQuiesce(failures.snapshot()));
+
+  // Firmware wiring: quiesce is shared by Web Update and BT OTA, while the
+  // UART/status loop remains live and only normal Player commands are gated.
+  const auto server = readSource("src/core/netserver.cpp");
+  const auto player = readSource("src/core/player.cpp");
+  const auto source = readSource("src/core/source_manager.cpp");
+  const auto mainLoop = readSource("src/main.cpp");
+  const auto controls = readSource("src/core/controls.cpp");
+  assert(server.find("UpdateRuntimeGuard updateRuntimeGuard;") != std::string::npos);
+  assert(server.find("if (!updateRuntimeGuard.needsQuiesce(updateProgress())) return true;") != std::string::npos);
+  assert(server.find("player.sendCommand({PR_UPDATE_STOP, 0});") != std::string::npos);
+  assert(server.find("if (!quiesceForUpdate()) btLink.abortFirmwareUpdate();") != std::string::npos);
+  assert(server.find("session->audioBlocked = true;\n    if (!quiesceForUpdate())") != std::string::npos);
+  assert(player.find("request.type != PR_UPDATE_STOP") != std::string::npos);
+  assert(player.find("requestP.type != PR_UPDATE_STOP") != std::string::npos);
+  assert(player.find("case PR_UPDATE_STOP:") != std::string::npos);
+  assert(source.find("if (systemUpdateAudioBlocked()) return;") != std::string::npos);
+  assert(controls.find("if(updateLockActive() || display.mode()==UPDATING") != std::string::npos);
+  assert(mainLoop.find("btLink.loop();") != std::string::npos);
+  assert(mainLoop.find("netserver.serviceBtFirmwareUpdate();") != std::string::npos);
 }

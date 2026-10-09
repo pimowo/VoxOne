@@ -1,6 +1,7 @@
 #include "options.h"
 #include "system_operation_state.h"
 #include "update_progress.h"
+#include "update_runtime_guard.h"
 #include "bt_update_progress.h"
 #include "source_manager.h"
 #include "bt_link.h"
@@ -130,16 +131,27 @@ uint32_t webUpdateRebootAt = 0;
 //Ticker mqttplaylistticker;
 namespace {
 SystemOperationState systemOperationState;
+UpdateRuntimeGuard updateRuntimeGuard;
+
+bool quiesceForUpdate() {
+  if (!updateRuntimeGuard.needsQuiesce(updateProgress())) return true;
+  network.lostPlaying = false;
+  bool audioReady = true;
+#if VOXONE_HAS_BT && VOXONE_PIN_MAP_COMPLETE
+  sourceManagerStopForUpdate();
+#if VOXONE_BT_I2S_RX_ENABLED
+  audioReady = btAudioInput.blockForUpdate();
+#endif
+#endif
+  player.suppressTemporaryRadioRestore();
+  player.resetQueue();
+  player.sendCommand({PR_UPDATE_STOP, 0});
+  return audioReady;
+}
 
 void finishFailedUpdateAudio(bool aborted = false) {
   if (!systemOperationState.audioBlocked() || systemOperationState.restartPending() ||
       !systemOperationState.blocksRequests()) return;
-  systemOperationState.awaitRadioStop();
-  player.resetQueue();
-  player.sendCommand({PR_STOP, 0});
-#if VOXONE_HAS_BT && VOXONE_PIN_MAP_COMPLETE
-  sourceManagerStopForUpdate();
-#endif
   display.putRequest(NEWMODE, PLAYER);
   systemOperationState.updateFailed();
   const UpdateProgressSnapshot snapshot = updateProgress();
@@ -447,7 +459,9 @@ bool backupWebUpdateData(const char*& error) {
 }  // namespace
 
 bool systemRestartPending() { return systemOperationState.restartPending(); }
-bool systemUpdateAudioBlocked() { return systemOperationState.audioBlocked(); }
+bool systemUpdateAudioBlocked() {
+  return systemOperationState.audioBlocked() || updateLockActive();
+}
 void systemUpdateRadioStopped() { systemOperationState.radioStopped(); }
 
 void requestSystemRestart() { scheduleSystemRestart("SYSTEM"); }
@@ -2013,6 +2027,7 @@ void NetServer::serviceBtFirmwareUpdate() {
       delete next;
       return;
     }
+    if (!quiesceForUpdate()) btLink.abortFirmwareUpdate();
   }
   if (!activeBtImage) return;
   const BtFirmwareSender::Progress progress = btLink.firmwareUpdateProgress();
@@ -2228,18 +2243,10 @@ void handleWebUpdateUpload(AsyncWebServerRequest *request, const String& filenam
       return;
     }
     session->audioBlocked = true;
-    network.lostPlaying = false;
-#if VOXONE_HAS_BT && VOXONE_PIN_MAP_COMPLETE
-    sourceManagerStopForUpdate();
-#if VOXONE_BT_I2S_RX_ENABLED
-    if (!btAudioInput.blockForUpdate()) {
+    if (!quiesceForUpdate()) {
       session->error = "Could not stop Bluetooth audio output";
       return;
     }
-#endif
-#endif
-    player.resetQueue();
-    player.sendCommand({PR_STOP, 0});
     display.putRequest(NEWMODE, UPDATING);
     const uint32_t stopStarted = millis();
     while (!systemOperationState.isRadioStopped() && millis() - stopStarted < 2000)

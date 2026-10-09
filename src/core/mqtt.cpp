@@ -6,6 +6,7 @@
 #include "WiFi.h"
 #include "player.h"
 #include "commandhandler.h"
+#include "update_progress.h"
 
 AsyncMqttClient mqttClient;
 TimerHandle_t mqttReconnectTimer = nullptr;
@@ -127,7 +128,7 @@ void onMqttDisconnect(AsyncMqttClientDisconnectReason reason) {
 
 void onMqttMessage(char* receivedTopic, char* payload, AsyncMqttClientMessageProperties properties,
                    size_t len, size_t index, size_t total) {
-  if (!runtimeEnabled || len == 0 || index != 0 || len != total) return;
+  if (!runtimeEnabled || updateLockActive() || len == 0 || index != 0 || len != total) return;
   if (len < 20) {
     char buf[20];
     memcpy(buf, payload, len);

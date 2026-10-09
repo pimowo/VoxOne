@@ -13,6 +13,7 @@
 #include "station_metadata.h"
 #include "network.h"
 #include "netserver.h"
+#include "system_operation_state.h"
 #include "timekeeper.h"
 #include "ui_timeout_config.h"
 #if DSP_MODEL==DSP_ST7796 && VOXONE_HAS_BT && VOXONE_PIN_MAP_COMPLETE
@@ -636,6 +637,7 @@ void Display::_showDialog(const char *title){
 }
 
 static bool activeSourceVuVisible() {
+  if (systemUpdateAudioBlocked()) return false;
   DisplaySourceView source{};
   return getDisplaySourceView && getDisplaySourceView(source)
       ? displaySourceVuVisible(source) : player.isRunning();
@@ -877,10 +879,10 @@ void Display::loop() {
   }
   if(displayQueue==NULL || _locked) return;
 #if DSP_MODEL==DSP_ST7789_76
-  if(_mode == PLAYER) ScrollWidget::nextX0ScrollFrame();
+  if(_mode == PLAYER && !systemUpdateAudioBlocked()) ScrollWidget::nextX0ScrollFrame();
 #endif
 #if defined(VOXONE_PROFILE_A0) && DSP_MODEL==DSP_ST7796
-  if (_a0PlayerReady && _mode == PLAYER) _a0ScrollTick();
+  if (_a0PlayerReady && _mode == PLAYER && !systemUpdateAudioBlocked()) _a0ScrollTick();
 #endif
   _pager->loop();
 #if DSP_MODEL==DSP_ST7796
@@ -922,8 +924,11 @@ void Display::loop() {
         case CLOCK: 
           if(_mode==PLAYER || _mode==SCREENSAVER) _time(request.payload==1); 
           break;
-        case NEWTITLE: _title(); _layoutChange(activeSourceVuVisible()); break;
+        case NEWTITLE:
+          if (!systemUpdateAudioBlocked()) { _title(); _layoutChange(activeSourceVuVisible()); }
+          break;
         case NEWSTATION:
+          if (systemUpdateAudioBlocked()) break;
           _station();
 #if DSP_MODEL==DSP_ST7789_76 || DSP_MODEL==DSP_ST7796
           if(_mode==STATIONS && _plplaying) _plplaying->setText(player.isRunning() && currentPlItem == config.lastStation() ? "GRA" : "");

@@ -147,10 +147,7 @@ void sourceManagerBegin() {
 }
 
 void sourceManagerLoop() {
-  if (systemUpdateAudioBlocked()) {
-    sourceManagerStopForUpdate();
-    return;
-  }
+  if (systemUpdateAudioBlocked()) return;
   portENTER_CRITICAL(&sourceMux);
   const SourceUpdate update = sourceState.observe(btLink.state());
   const ActiveSource active = sourceState.active();
@@ -222,6 +219,7 @@ bool bluetoothPhysicallyConnected() {
 
 #if VOXONE_BT_I2S_RX_ENABLED
 uint16_t sourceManagerGetVuLevel(uint16_t dimension, bool& playing) {
+  if (systemUpdateAudioBlocked()) { playing = false; return 0; }
   bool bluetoothActive = false;
   bool bluetoothPlaying = false;
   uint16_t vuLeft = 0;
@@ -273,6 +271,7 @@ bool bluetoothTransportAvailable() {
 }
 
 bool sourceManagerStepBluetoothVolume(int8_t delta) {
+  if (systemUpdateAudioBlocked()) return false;
   portENTER_CRITICAL(&sourceMux);
   const bool available = sourceState.canControlBluetooth();
   portEXIT_CRITICAL(&sourceMux);
@@ -288,6 +287,7 @@ bool sourceManagerStepBluetoothVolume(int8_t delta) {
 }
 
 void sourceManagerTransport(BtTransportInput input) {
+  if (systemUpdateAudioBlocked()) return;
   DisplaySourceView source{};
   portENTER_CRITICAL(&sourceMux);
   sourceState.displayView(source);
@@ -303,6 +303,7 @@ void sourceManagerTransport(BtTransportInput input) {
 }
 
 void cycleNextSource() {
+  if (systemUpdateAudioBlocked()) return;
   portENTER_CRITICAL(&sourceMux);
   const SourceUpdate update = sourceState.cycle(btLink.state());
   const ActiveSource active = sourceState.active();
@@ -312,6 +313,7 @@ void cycleNextSource() {
 }
 
 bool sourceManagerSelectSource(ActiveSource source) {
+  if (systemUpdateAudioBlocked()) return false;
   portENTER_CRITICAL(&sourceMux);
   const SourceUpdate update = sourceState.select(source, btLink.state());
   const ActiveSource active = sourceState.active();

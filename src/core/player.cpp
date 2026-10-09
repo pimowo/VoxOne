@@ -58,8 +58,7 @@ void Player::init() {
 
 void Player::sendCommand(playerRequestParams_t request){
   if(playerQueue==NULL) return;
-  if(systemUpdateAudioBlocked() && request.type != PR_STOP &&
-     request.type != PR_RADIO_SUSPEND) return;
+  if(systemUpdateAudioBlocked() && request.type != PR_UPDATE_STOP) return;
   if(xQueueSend(playerQueue, &request, PLQ_SEND_DELAY) != pdPASS) return;
   if(request.type == PR_PLAY || request.type == PR_STOP)
     sourceManagerRadioCommandQueued(request.type == PR_PLAY,
@@ -160,9 +159,14 @@ void Player::loop() {
   }
   playerRequestParams_t requestP;
   if(xQueueReceive(playerQueue, &requestP, isRunning()?PL_QUEUE_TICKS:PL_QUEUE_TICKS_ST)){
-    if (systemUpdateAudioBlocked() && requestP.type != PR_STOP &&
-        requestP.type != PR_RADIO_SUSPEND) return;
+    if (systemUpdateAudioBlocked() && requestP.type != PR_UPDATE_STOP) return;
     switch (requestP.type){
+      case PR_UPDATE_STOP:
+        if (_temporaryUrls) xQueueReset(_temporaryUrls);
+        suppressTemporaryRadioRestore();
+        if (temporaryActive()) finishTemporary();
+        else _stop(false, RadioStopReason::SourceSwitch);
+        break;
       case PR_STOP:
         if (_temporaryUrls) xQueueReset(_temporaryUrls);
         if (temporaryBusy()) {
@@ -362,6 +366,7 @@ void Player::browseUrl(const char* url){
 }
 
 void Player::prev() {
+  if (systemUpdateAudioBlocked()) return;
   uint16_t lastStation = config.lastStation();
   const uint16_t count = config.playlistLength();
   if (count == 0) return;
@@ -370,6 +375,7 @@ void Player::prev() {
 }
 
 void Player::next() {
+  if (systemUpdateAudioBlocked()) return;
   uint16_t lastStation = config.lastStation();
   const uint16_t count = config.playlistLength();
   if (count == 0) return;
@@ -379,6 +385,7 @@ void Player::next() {
 }
 
 void Player::toggle() {
+  if (systemUpdateAudioBlocked()) return;
   if (temporaryBusy() ? sourceManagerRadioPlayIntent() : _status == PLAYING) {
     sendCommand({PR_STOP, 0});
   } else {
@@ -389,6 +396,7 @@ void Player::toggle() {
 }
 
 void Player::stepVol(bool up) {
+  if (systemUpdateAudioBlocked()) return;
   if (up) {
     if (config.store.volume <= 254 - config.store.volsteps) {
       setVol(config.store.volume + config.store.volsteps);
@@ -414,6 +422,7 @@ void Player::_loadVol(uint8_t volume) {
 }
 
 void Player::setMuted(bool muted) {
+  if (systemUpdateAudioBlocked()) return;
   if (_mute.active() == muted) return;
   _mute.set(muted);
   portENTER_CRITICAL(&playerVolumeMux);
@@ -431,6 +440,7 @@ bool Player::outputSilent() const {
 }
 
 void Player::setVol(uint8_t volume) {
+  if (systemUpdateAudioBlocked()) return;
   _volTicks = millis();
   _volTimer = true;
   portENTER_CRITICAL(&playerVolumeMux);
@@ -441,6 +451,7 @@ void Player::setVol(uint8_t volume) {
 }
 
 void Player::setUserVol(uint8_t user) {
+  if (systemUpdateAudioBlocked()) return;
   if (user > 100) user = 100;
   _volTicks = millis();
   _volTimer = true;
@@ -454,6 +465,7 @@ void Player::setUserVol(uint8_t user) {
 }
 
 void Player::stepUserVol(int8_t direction) {
+  if (systemUpdateAudioBlocked()) return;
   portENTER_CRITICAL(&playerVolumeMux);
   const uint8_t user = _mute.stepUserVolume(config.userVolume, direction);
   config.userVolume = user;

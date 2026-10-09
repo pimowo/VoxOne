@@ -15,7 +15,7 @@
   #define PLQ_SEND_DELAY pdMS_TO_TICKS(1000) //portMAX_DELAY
 #endif
 
-enum playerRequestType_e : uint8_t { PR_PLAY = 1, PR_STOP = 2, PR_PREV = 3, PR_NEXT = 4, PR_VOL = 5, PR_VUTONUS = 7, PR_BURL = 8, PR_TOGGLE = 9, PR_RADIO_SUSPEND = 10, PR_RADIO_RESUME = 11 };
+enum playerRequestType_e : uint8_t { PR_PLAY = 1, PR_STOP = 2, PR_PREV = 3, PR_NEXT = 4, PR_VOL = 5, PR_VUTONUS = 7, PR_BURL = 8, PR_TOGGLE = 9, PR_RADIO_SUSPEND = 10, PR_RADIO_RESUME = 11, PR_UPDATE_STOP = 12 };
 struct playerRequestParams_t
 {
   playerRequestType_e type;

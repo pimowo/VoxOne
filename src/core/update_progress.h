@@ -24,6 +24,7 @@ struct UpdateProgressSnapshot {
   uint8_t percent = 0;
   uint16_t errorCode = 0;
   uint32_t revision = 0;
+  uint32_t acquisition = 0;
   char status[80]{};
 };
 
@@ -33,8 +34,10 @@ public:
   bool begin(UpdateTarget target, UpdatePhase phase, uint32_t total = 0) {
     if (state_.locked || target == UpdateTarget::None) return false;
     const uint32_t revision = state_.revision + 1;
+    const uint32_t acquisition = state_.acquisition + 1;
     state_ = UpdateProgressSnapshot{};
     state_.revision = revision;
+    state_.acquisition = acquisition;
     state_.target = target;
     state_.phase = phase;
     state_.active = state_.locked = true;

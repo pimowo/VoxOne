@@ -219,6 +219,11 @@ class SourceManagerState {
 
   void stopForUpdate(const BtLinkState& bt) {
     active_ = ActiveSource::Radio;
+    radioPlayIntent_ = false;
+    pendingRadioStation_ = 0;
+    pendingRadioStop_ = false;
+    rawVuLeft_ = rawVuRight_ = 0;
+    rawVuLastMs_ = 0;
     observedConnected_ = bt.runtimeAvailable && bt.connected;
     observedVolumeRevision_ = bt.volumeRevision;
   }
