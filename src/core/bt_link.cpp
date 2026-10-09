@@ -5,11 +5,37 @@
 #include "serialcli.h"
 #include "netserver.h"
 #include "../hardware/hardware_descriptor.h"
+#include "source_manager.h"
 
 BtLink btLink;
 
 BtLink::BtLink()
-    : serial_(1), protocol_(&BtLink::sendCommand, &BtLink::onEvent, this) {}
+    : serial_(1), protocol_(&BtLink::sendCommand, &BtLink::onEvent, this),
+      sender_(*this) {
+  protocol_.setLineObserver(&BtLink::onLine);
+}
+
+int BtLink::availableForWrite() { return serial_.availableForWrite(); }
+size_t BtLink::write(const uint8_t* bytes, size_t length) {
+  return serial_.write(bytes, length);
+}
+
+bool BtLink::startFirmwareUpdate(BtFirmwareImage& image) {
+  const BtLinkState& current = state();
+  BtFirmwareSender::Preconditions p;
+  p.online = started_ && btRuntime.available() && current.runtimeAvailable;
+  p.protocol = current.protocolVersion;
+  p.capabilities = current.capabilities;
+  p.activeBtSource = bluetoothSourceSelected();
+  const bool started = sender_.start(image, p, millis());
+  protocol_.setUpdateExclusive(sender_.exclusive());
+  return started;
+}
+
+void BtLink::abortFirmwareUpdate() {
+  sender_.abort();
+  protocol_.setUpdateExclusive(sender_.exclusive());
+}
 
 void BtLink::begin() {
   const auto& uart = voxone::hardware::currentHardware().btUart;
@@ -31,6 +57,8 @@ void BtLink::loop() {
   if (!started_) return;
   const bool enabled = btRuntime.available();
   if (!enabled) {
+    if (sender_.exclusive()) sender_.onLine("FW_ERR LINK_UNAVAILABLE", millis());
+    protocol_.setUpdateExclusive(false);
     if (runtimeActive_) protocol_.suspend();
     runtimeActive_ = false;
     return;
@@ -42,6 +70,7 @@ void BtLink::loop() {
     protocol_.begin(millis());
     runtimeActive_ = true;
   }
+  protocol_.setUpdateExclusive(sender_.exclusive());
   // Bound work per main loop so a busy UART cannot starve the radio player.
   uint16_t remaining = 512;
   while (remaining-- != 0 && serial_.available() > 0) {
@@ -49,28 +78,36 @@ void BtLink::loop() {
     if (byte < 0) break;
     protocol_.feed(static_cast<char>(byte), millis());
   }
+  if (sender_.takeStatusProbe()) protocol_.requestStatus(millis());
+  sender_.tick(millis());
+  protocol_.setUpdateExclusive(sender_.exclusive());
   protocol_.tick(millis());
 }
 
 void BtLink::requestStatus() {
-  if (started_ && btRuntime.available()) protocol_.requestStatus(millis());
+  if (started_ && btRuntime.available() && !sender_.exclusive())
+    protocol_.requestStatus(millis());
 }
 
 void BtLink::requestDiag() {
-  if (started_ && btRuntime.available()) protocol_.requestDiag();
+  if (started_ && btRuntime.available() && !sender_.exclusive()) protocol_.requestDiag();
 }
 
 void BtLink::ping() {
-  if (started_ && btRuntime.available()) protocol_.ping(millis());
+  if (started_ && btRuntime.available() && !sender_.exclusive()) protocol_.ping(millis());
 }
 
-bool BtLink::play() { return started_ && btRuntime.available() && protocol_.play(); }
-bool BtLink::pause() { return started_ && btRuntime.available() && protocol_.pause(); }
-bool BtLink::next() { return started_ && btRuntime.available() && protocol_.next(); }
-bool BtLink::prev() { return started_ && btRuntime.available() && protocol_.prev(); }
+bool BtLink::play() { return started_ && btRuntime.available() && !sender_.exclusive() && protocol_.play(); }
+bool BtLink::pause() { return started_ && btRuntime.available() && !sender_.exclusive() && protocol_.pause(); }
+bool BtLink::next() { return started_ && btRuntime.available() && !sender_.exclusive() && protocol_.next(); }
+bool BtLink::prev() { return started_ && btRuntime.available() && !sender_.exclusive() && protocol_.prev(); }
 bool BtLink::setVolume(uint8_t absoluteVolume) {
-  return started_ && btRuntime.available() &&
+  return started_ && btRuntime.available() && !sender_.exclusive() &&
          protocol_.setVolume(absoluteVolume);
+}
+
+bool BtLink::onLine(void* context, const char* line, uint32_t nowMs) {
+  return static_cast<BtLink*>(context)->sender_.onLine(line, nowMs);
 }
 
 void BtLink::sendCommand(void* context, const char* command) {
@@ -79,10 +116,12 @@ void BtLink::sendCommand(void* context, const char* command) {
 }
 
 void BtLink::onEvent(void* context, BtLinkEvent event) {
-  const BtLink* link = static_cast<const BtLink*>(context);
+  BtLink* link = static_cast<BtLink*>(context);
   const BtLinkState& state = link->protocol_.state();
   switch (event) {
     case BtLinkEvent::Online:
+      link->sender_.onIdentity(state.runtimeAvailable, state.protocolVersion,
+                               state.firmwareVersion, state.capabilities);
       serialCli.printf("##[BT]# online proto=%u fw=%s name=%s\n",
                        state.protocolVersion, state.firmwareVersion,
                        state.btName);

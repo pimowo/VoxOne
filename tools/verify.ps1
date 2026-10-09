@@ -83,6 +83,7 @@ function Assert-WebAssets {
 }
 $nativeSources=@{
  bt_link_native=@('src/core/bt_link_protocol.cpp')
+ bt_firmware_sender_native=@('src/core/bt_firmware_sender.cpp','src/core/bt_link_protocol.cpp')
  bt_volume_native=@('src/core/bt_link_protocol.cpp')
  config_format_native=@('src/core/config_format.cpp','src/core/volume_map.cpp')
  config_startup_native=@('src/core/config_format.cpp','src/core/volume_map.cpp')

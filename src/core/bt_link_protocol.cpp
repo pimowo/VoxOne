@@ -70,7 +70,7 @@ void BtLinkProtocol::requestStatus(uint32_t nowMs) {
 void BtLinkProtocol::requestDiag() { send("GET_DIAG"); }
 
 bool BtLinkProtocol::sendTransport(const char* command) {
-  if (!state_.runtimeAvailable || !state_.connected || statusOpen_) return false;
+  if (updateExclusive_ || !state_.runtimeAvailable || !state_.connected || statusOpen_) return false;
   send(command);
   return true;
 }
@@ -81,7 +81,7 @@ bool BtLinkProtocol::next() { return sendTransport("NEXT"); }
 bool BtLinkProtocol::prev() { return sendTransport("PREV"); }
 
 bool BtLinkProtocol::setVolume(uint8_t absoluteVolume) {
-  if (absoluteVolume > 127 || !state_.runtimeAvailable ||
+  if (updateExclusive_ || absoluteVolume > 127 || !state_.runtimeAvailable ||
       !state_.connected || statusOpen_) return false;
   char command[16];
   snprintf(command, sizeof(command), "SET_VOLUME %u", absoluteVolume);
@@ -130,6 +130,7 @@ void BtLinkProtocol::suspend() {
 }
 
 void BtLinkProtocol::tick(uint32_t nowMs) {
+  if (updateExclusive_) return;
   if (state_.runtimeAvailable && nowMs - lastRxMs_ >= OfflineTimeoutMs) {
     goOffline();
   }
@@ -145,7 +146,8 @@ void BtLinkProtocol::feed(char byte, uint32_t nowMs) {
   if (byte == '\n') {
     if (!discardingLine_ && lineLength_ != 0) {
       line_[lineLength_] = '\0';
-      if (handleLine(nowMs)) lastRxMs_ = nowMs;
+      if ((lineObserver_ != nullptr && lineObserver_(context_, line_, nowMs)) ||
+          handleLine(nowMs)) lastRxMs_ = nowMs;
     }
     lineLength_ = 0;
     discardingLine_ = false;
@@ -165,7 +167,7 @@ bool BtLinkProtocol::handleLine(uint32_t nowMs) {
   if (strcmp(line_, "READY") == 0) {
     goOffline();
     // Protocol v1 repeats READY in every GET_STATUS response. Rate-limit it.
-    if (nowMs - lastProbeMs_ >= 1000) requestStatus(nowMs);
+    if (!updateExclusive_ && nowMs - lastProbeMs_ >= 1000) requestStatus(nowMs);
     return true;
   }
 
@@ -182,7 +184,7 @@ bool BtLinkProtocol::handleLine(uint32_t nowMs) {
       state_.runtimeAvailable = true;
       lastPingMs_ = nowMs;
       notify(BtLinkEvent::Online);
-      if (!diagnosticsRequested_) {
+      if (!updateExclusive_ && !diagnosticsRequested_) {
         requestDiag();
         diagnosticsRequested_ = true;
       }

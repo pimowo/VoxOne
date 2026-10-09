@@ -39,6 +39,7 @@ class BtLinkProtocol {
  public:
   using SendCommand = void (*)(void* context, const char* command);
   using OnEvent = void (*)(void* context, BtLinkEvent event);
+  using OnLine = bool (*)(void* context, const char* line, uint32_t nowMs);
 
   static constexpr size_t MaxLineLength = 256;
   static constexpr uint32_t ProbeIntervalMs = 2000;
@@ -48,6 +49,8 @@ class BtLinkProtocol {
   BtLinkProtocol(SendCommand sendCommand, OnEvent onEvent, void* context);
 
   void begin(uint32_t nowMs);
+  void setLineObserver(OnLine observer) { lineObserver_ = observer; }
+  void setUpdateExclusive(bool exclusive) { updateExclusive_ = exclusive; }
   void suspend();
   void feed(char byte, uint32_t nowMs);
   void tick(uint32_t nowMs);
@@ -76,6 +79,8 @@ class BtLinkProtocol {
 
   SendCommand sendCommand_;
   OnEvent onEvent_;
+  OnLine lineObserver_ = nullptr;
+  bool updateExclusive_ = false;
   void* context_;
   BtLinkState state_{};
   BtLinkDiagnostics diagnostics_{};

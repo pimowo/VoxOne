@@ -171,7 +171,8 @@ void loop() {
       btLink.loop();
       // STATUS_BEGIN clears session fields before STATUS_END completes them.
       // Do not let consumers treat that partial snapshot as a disconnect.
-      if (!btLink.hasIncompleteOnlineSnapshot()) sourceManagerLoop();
+      if (!btLink.firmwareUpdateInProgress() &&
+          !btLink.hasIncompleteOnlineSnapshot()) sourceManagerLoop();
     }
   #endif
   #if VOXONE_HAS_BT && VOXONE_PIN_MAP_COMPLETE && VOXONE_BT_I2S_RX_ENABLED
