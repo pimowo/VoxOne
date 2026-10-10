@@ -2,6 +2,7 @@
 #include <Arduino.h>
 #include "source_manager_state.h"
 #include "temporary_audio_state.h"
+#include "ui_state.h"
 
 namespace {
 SourceManagerState sourceState;
@@ -180,8 +181,8 @@ void sourceManagerLoop() {
                      sourceName(active), sourceReason(update.reason));
 #if VOXONE_HAS_DISPLAY
   if (update.activeChanged && active == ActiveSource::Radio &&
-      display.mode() == BT_TRANSPORT)
-    display.putRequest(NEWMODE, PLAYER);
+      uiState.mode() == BT_TRANSPORT)
+    transitionUiMode(PLAYER);
 #endif
   refreshDisplay(update);
   if (update.activeChanged || update.stationChanged || update.titleChanged ||

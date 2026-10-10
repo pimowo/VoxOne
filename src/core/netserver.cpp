@@ -53,6 +53,7 @@
 #include "volume_map.h"
 #include "timekeeper.h"
 #include "ui_timeout_config.h"
+#include "ui_state.h"
 #include "rtcsupport.h"
 #include "../displays/dspcore.h"
 #include "../displays/widgets/widgetsconfig.h" //BitrateFormat
@@ -159,7 +160,7 @@ bool quiesceForUpdate() {
 void finishFailedUpdateAudio(bool aborted = false) {
   if (!systemOperationState.audioBlocked() || systemOperationState.restartPending() ||
       !systemOperationState.blocksRequests()) return;
-  display.putRequest(NEWMODE, PLAYER);
+  transitionUiMode(PLAYER);
   systemOperationState.updateFailed();
   const UpdateProgressSnapshot snapshot = updateProgress();
   if (snapshot.target == UpdateTarget::VoxOneFirmware ||
@@ -2309,7 +2310,7 @@ void handleWebUpdateUpload(AsyncWebServerRequest *request, const String& filenam
       return;
     }
     setUpdateActivity(updateTarget, UpdateActivity::PreparingUpdate);
-    display.putRequest(NEWMODE, UPDATING);
+    transitionUiMode(UPDATING);
     const uint32_t stopStarted = millis();
     while (!systemOperationState.isRadioStopped() && millis() - stopStarted < 2000)
       delay(1);

@@ -10,6 +10,7 @@
 #include "source_manager.h"
 #include "network.h"
 #include "bt_audio_input.h"
+#include "ui_state.h"
 #if I2S_DOUT!=255
 #include <driver/i2s.h>
 #endif
@@ -91,7 +92,7 @@ void Player::_stop(bool alreadyStopped, RadioStopReason reason){
   log_i("%s called", __func__);
   _status = STOPPED;
   setOutputPins(false);
-  if(!_hasError) config.setTitle((display.mode()==LOST || display.mode()==UPDATING)?"":LANG::const_PlStopped);
+  if(!_hasError) config.setTitle((uiState.mode()==LOST || uiState.mode()==UPDATING)?"":LANG::const_PlStopped);
   config.station.bitrate = 0;
   config.setBitrateFormat(BF_UNKNOWN);
   setDefaults();

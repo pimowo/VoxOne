@@ -3,6 +3,7 @@
 #include <stdint.h>
 #include <stdio.h>
 #include "common.h"
+#include "ui_state.h"
 #include "update_display_view.h"
 #if defined(VOXONE_PROFILE_A0) && DSP_MODEL==DSP_ST7796
 #include "a0_player_scroll.h"
@@ -120,20 +121,16 @@ class C0UpdateProgressWidget;
     
 class Display {
   public:
-    uint16_t currentPlItem;
-    uint16_t numOfNextStation;
-    displayMode_e _mode;
-  public:
     Display() {};
     ~Display();
-    displayMode_e mode() { return _mode; }
-    void mode(displayMode_e m) { _mode=m; }
+    displayMode_e mode() const { return uiState.mode(); }
     void init();
     void loop();
     void _start();
     bool ready() { return _bootStep==2; }
     void resetQueue();
     void putRequest(displayRequestType_e type, int payload=0);
+    void queueModeRender(displayMode_e mode);
     void flip();
     void invert();
     bool deepsleep();
@@ -189,13 +186,14 @@ class Display {
     volatile bool _volumeModePending = false;
     uint32_t _lastVolumeDraw = 0;
     uint8_t _bootStep;
+    displayMode_e _renderedMode = PLAYER;
     UpdateDisplayProgressState _updateDisplayProgress;
     uint32_t _updateDisplayRevision = 0;
     uint32_t _updateDisplayAcquisition = 0;
     void _updateUpdateScreen(const UpdateProgressSnapshot& snapshot);
     void _time(bool redraw = false);
     void _apScreen();
-    void _swichMode(displayMode_e newmode);
+    void _renderMode(displayMode_e newmode);
     void _drawPlaylist();
     void _volume();
     void _title();
@@ -224,16 +222,12 @@ class Display {
 
 class Display {
   public:
-    uint16_t currentPlItem;
-    uint16_t numOfNextStation;
-    displayMode_e _mode;
-  public:
     Display() {};
-    displayMode_e mode() { return _mode; }
-    void mode(displayMode_e m) { _mode=m; }
+    displayMode_e mode() const { return uiState.mode(); }
     void init();
     void _start();
     void putRequest(displayRequestType_e type, int payload=0);
+    void queueModeRender(displayMode_e mode) {}
     void loop(){}
     bool ready() { return true; }
     void resetQueue(){}

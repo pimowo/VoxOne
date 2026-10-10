@@ -14,6 +14,7 @@
 #include "source_manager.h"
 #include "radio_source_policy.h"
 #include "timekeeper.h"
+#include "ui_state.h"
 #include <sys/time.h>
 #include <atomic>
 #include <freertos/task.h>
@@ -36,8 +37,8 @@ void MyNetwork::WiFiReconnected(WiFiEvent_t event, WiFiEventInfo_t info){
   network.beginReconnect = false;
   player.lockOutput = false;
   delay(100);
-  display.putRequest(NEWMODE, PLAYER);
-  display.putRequest(NEWMODE, PLAYER);
+  transitionUiMode(PLAYER);
+  transitionUiMode(PLAYER);
   if (player.temporaryBusy()) network.lostPlaying = false;
 #if VOXONE_HAS_BT && VOXONE_PIN_MAP_COMPLETE
   if (radioWifiReconnectShouldPlay(network.lostPlaying,
@@ -75,7 +76,7 @@ void MyNetwork::WiFiLostConnection(WiFiEvent_t event, WiFiEventInfo_t info){
       player.sendCommand({PR_STOP, 0});
 #endif
     }
-    display.putRequest(NEWMODE, LOST);
+    transitionUiMode(LOST);
   }
   network.beginReconnect = true;
   mqttWifiDisconnected();

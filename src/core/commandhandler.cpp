@@ -15,6 +15,7 @@
 #include "source_manager_state.h"
 #include "web_transport.h"
 #include "update_progress.h"
+#include "ui_state.h"
 
 #if DSP_MODEL==DSP_DUMMY
 #define DUMMYDISPLAY
@@ -162,12 +163,12 @@ bool CommandHandler::exec(const char *command, const char *value, uint32_t cid) 
     netserver.requestOnChange(GETSCREEN, 0);
     return true;
   }
-  if (strEquals(command, "numplaylist"))  { config.saveValue(&config.store.numplaylist, static_cast<bool>(atoi(value))); display.putRequest(NEWMODE, CLEAR); display.putRequest(NEWMODE, PLAYER); return true; }
+  if (strEquals(command, "numplaylist"))  { config.saveValue(&config.store.numplaylist, static_cast<bool>(atoi(value))); transitionUiMode(CLEAR); transitionUiMode(PLAYER); return true; }
   if (strEquals(command, "flipscreen")) {
     config.saveValue(&config.store.flipscreen, static_cast<bool>(atoi(value)));
     display.flip();
-    display.putRequest(NEWMODE, CLEAR);
-    display.putRequest(NEWMODE, PLAYER);
+    transitionUiMode(CLEAR);
+    transitionUiMode(PLAYER);
     netserver.requestOnChange(GETSCREEN, 0);
     return true;
   }

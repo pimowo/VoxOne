@@ -7,6 +7,7 @@
 #include "network.h"
 #include "update_progress.h"
 #include "ui_input.h"
+#include "ui_state.h"
 #include "../hardware/hardware_descriptor.h"
 
 long encOldPosition  = 0;
@@ -96,7 +97,7 @@ void initControls() {
 }
 
 void loopControls() {
-  if(updateLockActive() || display.mode()==UPDATING || display.mode()==LOST) {
+  if(updateLockActive() || uiState.mode()==UPDATING || uiState.mode()==LOST) {
 #if ENC_BTNL!=255
     // The ISR is hardware-only. Drain accumulated motion while core input is
     // locked so it cannot become a delayed UI event after the lock ends.
@@ -151,7 +152,7 @@ void onBtnLongPressStart(int id) {
       }
     case EVT_BTNMODE: {
         //config.doSleepW();
-        display.putRequest(NEWMODE, SLEEPING);
+        transitionUiMode(SLEEPING);
         break;
       }
     default: break;
@@ -200,10 +201,10 @@ void onBtnDuringLongPress(int id) {
         }
       case EVT_BTNUP:
       case EVT_BTNDOWN: {
-          if (display.mode() == PLAYER) {
-            display.putRequest(NEWMODE, STATIONS);
+          if (uiState.mode() == PLAYER) {
+            transitionUiMode(STATIONS);
           }
-          if (display.mode() == STATIONS) {
+          if (uiState.mode() == STATIONS) {
             controlsEvent(id == EVT_BTNDOWN);
           }
           break;
@@ -249,7 +250,7 @@ void onBtnClick(int id) {
             player.prev();
           }
         } else {
-          if (display.mode() == PLAYER) {
+          if (uiState.mode() == PLAYER) {
             if(config.store.skipPlaylistUpDown){
               if (id == EVT_BTNUP) {
                 player.prev();
@@ -257,10 +258,10 @@ void onBtnClick(int id) {
                 player.next();
               }
             }else{
-              display.putRequest(NEWMODE, STATIONS);
+              transitionUiMode(STATIONS);
             }
           }
-          if (display.mode() == STATIONS) {
+          if (uiState.mode() == STATIONS) {
             controlsEvent(id == EVT_BTNDOWN);
           }
         }
@@ -273,11 +274,11 @@ void onBtnClick(int id) {
 void onBtnDoubleClick(int id) {
   switch ((controlEvt_e)id) {
     case EVT_BTNLEFT: {
-        if (display.mode() == SCREENSAVER || display.mode() == SCREENBLANK) {
-          display.putRequest(NEWMODE, PLAYER);
+        if (uiState.mode() == SCREENSAVER || uiState.mode() == SCREENBLANK) {
+          transitionUiMode(PLAYER);
           return;
         }
-        if (display.mode() != PLAYER) return;
+        if (uiState.mode() != PLAYER) return;
         if (network.status != CONNECTED) return;
         player.prev();
         break;
@@ -291,11 +292,11 @@ void onBtnDoubleClick(int id) {
         break;
       }
     case EVT_BTNRIGHT: {
-        if (display.mode() == SCREENSAVER || display.mode() == SCREENBLANK) {
-          display.putRequest(NEWMODE, PLAYER);
+        if (uiState.mode() == SCREENSAVER || uiState.mode() == SCREENBLANK) {
+          transitionUiMode(PLAYER);
           return;
         }
-        if (display.mode() != PLAYER) return;
+        if (uiState.mode() != PLAYER) return;
         if (network.status != CONNECTED) return;
         player.next();
         break;

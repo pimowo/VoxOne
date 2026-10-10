@@ -304,7 +304,7 @@ int main() {
   assert(player.find("requestP.type != PR_UPDATE_STOP") != std::string::npos);
   assert(player.find("case PR_UPDATE_STOP:") != std::string::npos);
   assert(source.find("if (systemUpdateAudioBlocked()) return;") != std::string::npos);
-  assert(controls.find("if(updateLockActive() || display.mode()==UPDATING") != std::string::npos);
+  assert(controls.find("if(updateLockActive() || uiState.mode()==UPDATING") != std::string::npos);
   assert(mainLoop.find("btLink.loop();") != std::string::npos);
   assert(mainLoop.find("netserver.serviceBtFirmwareUpdate();") != std::string::npos);
   assert(mainLoop.find("netserver.serviceUpdateRestart();") != std::string::npos);

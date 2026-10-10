@@ -19,6 +19,7 @@
 #include "volume_map.h"
 #include "mqtt_config.h"
 #include "ui_timeout_config.h"
+#include "ui_state.h"
 #include "www_readiness.h"
 #include "ap_wifi_recovery.h"
 #include "../displays/tools/l10n.h"
@@ -201,7 +202,7 @@ bool Config::prepareForPlaying(uint16_t stationId, bool sourceResume){
   display.putRequest(DBITRATE);
   netserver.requestOnChange(BITRATE, 0);
   display.putRequest(NEWSTATION);
-  display.putRequest(NEWMODE, PLAYER);
+  transitionUiMode(PLAYER);
   netserver.requestOnChange(STATION, 0);
   netserver.requestOnChange(MODE, 0);
   netserver.loop();
@@ -213,7 +214,7 @@ bool Config::prepareForPlaying(uint16_t stationId, bool sourceResume){
 void Config::configPostPlaying(){
   if(store.smartstart!=2) setSmartStart(1);
   netserver.requestOnChange(MODE, 0);
-  //display.putRequest(NEWMODE, PLAYER);
+  //transitionUiMode(PLAYER);
   display.putRequest(PSTART);
 }
 void Config::initRadioPlaylist(){
@@ -293,29 +294,29 @@ void Config::reset(){
 }
 void Config::enableScreensaver(bool val){
   saveValue(&store.screensaverEnabled, val);
-  display.putRequest(NEWMODE, PLAYER);
+  transitionUiMode(PLAYER);
 }
 void Config::setScreensaverTimeout(uint16_t val){
   val=constrain(val,5,65520);
   saveValue(&store.screensaverTimeout, val);
-  display.putRequest(NEWMODE, PLAYER);
+  transitionUiMode(PLAYER);
 }
 void Config::setScreensaverBlank(bool val){
   saveValue(&store.screensaverBlank, val);
-  display.putRequest(NEWMODE, PLAYER);
+  transitionUiMode(PLAYER);
 }
 void Config::setScreensaverPlayingEnabled(bool val){
   saveValue(&store.screensaverPlayingEnabled, val);
-  display.putRequest(NEWMODE, PLAYER);
+  transitionUiMode(PLAYER);
 }
 void Config::setScreensaverPlayingTimeout(uint16_t val){
   val=constrain(val,1,1080);
   config.saveValue(&config.store.screensaverPlayingTimeout, val);
-  display.putRequest(NEWMODE, PLAYER);
+  transitionUiMode(PLAYER);
 }
 void Config::setScreensaverPlayingBlank(bool val){
   saveValue(&store.screensaverPlayingBlank, val);
-  display.putRequest(NEWMODE, PLAYER);
+  transitionUiMode(PLAYER);
 }
 void Config::setSntpOne(const char *val){
   if (strlen(val) == 0) return;
@@ -333,7 +334,7 @@ void Config::resetSystem(const char *val, uint8_t clientId){
     saveValue(&store.watchdog, true);
     _makeDefaultMdnsName(tmpBuf, sizeof(tmpBuf));
     saveValue(store.mdnsname, tmpBuf, MDNS_LENGTH, true, true);
-    display.putRequest(NEWMODE, CLEAR); display.putRequest(NEWMODE, PLAYER);
+    transitionUiMode(CLEAR); transitionUiMode(PLAYER);
     netserver.requestOnChange(GETSYSTEM, clientId);
     return;
   }
@@ -352,7 +353,7 @@ void Config::resetSystem(const char *val, uint8_t clientId){
     saveValue(&store.screensaverPlayingEnabled, false);
     saveValue(&store.screensaverPlayingTimeout, (uint16_t)5);
     saveValue(&store.screensaverPlayingBlank, false);
-    display.putRequest(NEWMODE, CLEAR); display.putRequest(NEWMODE, PLAYER);
+    transitionUiMode(CLEAR); transitionUiMode(PLAYER);
     uiTimeoutReset();
     netserver.requestOnChange(GETSCREEN, clientId);
     return;

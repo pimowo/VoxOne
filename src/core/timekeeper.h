@@ -2,7 +2,6 @@
 #define timekeeper_h
 #pragma once
 #include <atomic>
-#include "return_player_timeout.h"
 
 void _syncTask(void * pvParameters);
 
@@ -26,9 +25,6 @@ class TimeKeeper {
     bool loop1();
     void timeTask();
     void watchNtp();
-    void waitAndReturnPlayer(uint32_t time_s);
-    void waitAndReturnPlayerForMode(displayMode_e mode, uint32_t time_s);
-    void cancelReturnPlayer();
     void waitAndDo(uint32_t time_s, void (*callback)(), DelayedActionSlot slot);
   private:
     struct DelayedAction {
@@ -36,7 +32,6 @@ class TimeKeeper {
       uint32_t delayMs;
       void (*callback)();
     };
-    ReturnPlayerTimeout _returnPlayerTimer;
     DelayedAction _delayedActions[static_cast<uint8_t>(DelayedActionSlot::COUNT)];
     void _upRSSI();
     void _upClock();

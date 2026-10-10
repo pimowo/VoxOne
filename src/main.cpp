@@ -19,6 +19,7 @@
 #include "core/system_operation_state.h"
 #include "core/nvs_diagnostics.h"
 #include "core/dsp_runtime.h"
+#include "core/ui_state.h"
 #include <esp_heap_caps.h>
 #include <esp_timer.h>
 
@@ -85,7 +86,7 @@ void setupOTA(){
   ArduinoOTA
     .onStart([]() {
       player.sendCommand({PR_STOP, 0});
-      display.putRequest(NEWMODE, UPDATING);
+      transitionUiMode(UPDATING);
       serialCli.printf("Start OTA updating %s\n", ArduinoOTA.getCommand() == U_FLASH?"firmware":"filesystem");
     })
     .onEnd([]() {
@@ -164,6 +165,9 @@ void setup() {
 
 void loop() {
   const uint32_t loopStartedUs = micros();
+  displayMode_e systemMode;
+  if (uiSystemModeRequest(updateProgress(), systemMode))
+    transitionUiMode(systemMode);
   timekeeper.loop1();
   serialCli.loop();
   #if VOXONE_HAS_BT && VOXONE_PIN_MAP_COMPLETE

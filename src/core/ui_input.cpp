@@ -6,6 +6,7 @@
 #include "network.h"
 #include "player.h"
 #include "source_manager.h"
+#include "ui_state.h"
 #include "../hardware/hardware_descriptor.h"
 
 namespace {
@@ -20,7 +21,7 @@ UiInputContext currentUiInputContext() {
     bluetoothConnected = bluetoothTransportAvailable();
   }
 #endif
-  return {display.mode(), network.status == CONNECTED,
+  return {uiState.mode(), network.status == CONNECTED,
           capabilities.hasLocalDisplay(), capabilities.supportsVoxOneBt,
           bluetoothSelected, bluetoothConnected};
 }
@@ -44,27 +45,25 @@ void stepVolume(UiInputAction action, int8_t steps) {
     const int8_t step = wasMuted ? (direction > 0 ? 1 : -1) : direction;
     if (sourceManagerStepBluetoothVolume(step)) {
       player.setMuted(false);
-      display.putRequest(NEWMODE, VOL);
+      transitionUiMode(VOL);
       display.putRequest(DRAWVOL);
     } else if (wasMuted) {
       player.stepUserVol(step);
-      display.putRequest(NEWMODE, VOL);
+      transitionUiMode(VOL);
     }
     return;
   }
 #endif
   if (voxone::hardware::hardwareCapabilities().hasLocalDisplay())
-    display.putRequest(NEWMODE, VOL);
+    transitionUiMode(VOL);
   player.stepUserVol(direction);
 }
 
 void moveStation(bool next) {
   display.resetQueue();
-  int item = next ? display.currentPlItem + 1 : display.currentPlItem - 1;
   const uint16_t count = config.playlistLength();
-  if (item < 1) item = count;
-  if (item > count) item = 1;
-  display.currentPlItem = item;
+  const uint16_t item = uiState.moveStationSelection(next ? 1 : -1, count);
+  resetUiReturnTimeout();
   display.putRequest(DRAWPLAYLIST, item);
 }
 
@@ -73,8 +72,8 @@ void moveStation(bool next) {
 void dispatchUiInput(UiInputEvent event, int8_t steps) {
   const UiInputDecision decision = resolveUiInput(currentUiInputContext(), event);
   if (decision.cancelNumberEntry) {
-    display.numOfNextStation = 0;
-    display.putRequest(NEWMODE, PLAYER);
+    uiState.clearPendingStationNumber();
+    transitionUiMode(PLAYER);
   }
 
   switch (decision.action) {
@@ -88,10 +87,15 @@ void dispatchUiInput(UiInputEvent event, int8_t steps) {
     case UiInputAction::StationNext:
       moveStation(true);
       break;
-    case UiInputAction::StationSelect:
-      display.putRequest(NEWMODE, PLAYER);
-      display.putRequest(CLOSEPLAYLIST, display.currentPlItem);
+    case UiInputAction::StationSelect: {
+      // The playlist can change after STATIONS was opened. Revalidate against
+      // a fresh length snapshot before committing the selected station.
+      normalizeUiStationSelection();
+      const uint16_t selected = uiState.selectedStation();
+      transitionUiMode(PLAYER);
+      if (selected != 0) display.putRequest(CLOSEPLAYLIST, selected);
       break;
+    }
     case UiInputAction::TogglePlayback:
       player.toggle();
       break;
@@ -112,25 +116,25 @@ void dispatchUiInput(UiInputEvent event, int8_t steps) {
       break;
     case UiInputAction::BluetoothToggle:
 #if VOXONE_HAS_BT && VOXONE_PIN_MAP_COMPLETE
-      if (display.mode() == BT_TRANSPORT) display.putRequest(RESETIDLE);
+      if (uiState.mode() == BT_TRANSPORT) display.putRequest(RESETIDLE);
       sourceManagerTransport(BtTransportInput::Toggle);
 #endif
       break;
     case UiInputAction::CycleSource:
 #if VOXONE_HAS_BT && VOXONE_PIN_MAP_COMPLETE
       cycleNextSource();
-      display.putRequest(NEWMODE, PLAYER);
+      transitionUiMode(PLAYER);
 #endif
       break;
     case UiInputAction::OpenStations:
-      display.putRequest(NEWMODE, STATIONS);
+      transitionUiMode(STATIONS);
       break;
     case UiInputAction::OpenBluetoothTransport:
-      display.putRequest(NEWMODE, BT_TRANSPORT);
+      transitionUiMode(BT_TRANSPORT);
       break;
     case UiInputAction::ShowPlayer:
     case UiInputAction::WakePlayer:
-      display.putRequest(NEWMODE, PLAYER);
+      transitionUiMode(PLAYER);
       break;
     case UiInputAction::None:
       break;

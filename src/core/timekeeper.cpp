@@ -5,6 +5,7 @@
 #include "network.h"
 #include "display.h"
 #include "player.h"
+#include "ui_state.h"
 #include "netserver.h"
 #include "rtcsupport.h"
 #include <esp_sntp.h>
@@ -17,7 +18,6 @@
 #define SYNC_TASK_PRIORITY    3
 
 namespace {
-portMUX_TYPE returnPlayerMux = portMUX_INITIALIZER_UNLOCKED;
 constexpr uint32_t secondsToMillis(uint32_t seconds) {
   return seconds > UINT32_MAX / 1000UL ? UINT32_MAX : seconds * 1000UL;
 }
@@ -171,27 +171,9 @@ bool TimeKeeper::loop1(){ // core1 (player)
   return true; // just in case
 }
 
-void TimeKeeper::waitAndReturnPlayer(uint32_t time_s){
-  portENTER_CRITICAL(&returnPlayerMux);
-  _returnPlayerTimer.arm(millis(), time_s);
-  portEXIT_CRITICAL(&returnPlayerMux);
-}
-void TimeKeeper::waitAndReturnPlayerForMode(displayMode_e mode, uint32_t time_s){
-  portENTER_CRITICAL(&returnPlayerMux);
-  _returnPlayerTimer.armForMode(millis(), time_s, mode);
-  portEXIT_CRITICAL(&returnPlayerMux);
-}
-void TimeKeeper::cancelReturnPlayer(){
-  portENTER_CRITICAL(&returnPlayerMux);
-  _returnPlayerTimer.cancel();
-  portEXIT_CRITICAL(&returnPlayerMux);
-}
 void TimeKeeper::_returnPlayer(){
-  portENTER_CRITICAL(&returnPlayerMux);
-  const bool due = _returnPlayerTimer.poll(millis(), display.mode());
-  portEXIT_CRITICAL(&returnPlayerMux);
-  if(due){
-    display.putRequest(NEWMODE, PLAYER);
+  if(uiReturnToPlayerDue(millis())){
+    transitionUiMode(PLAYER);
   }
 }
 
@@ -230,24 +212,24 @@ void TimeKeeper::_upClock(){
 
 void TimeKeeper::_upScreensaver(){
   if(!display.ready()) return;
-  if(config.store.screensaverEnabled && display.mode()==PLAYER && !player.isRunning()){
+  if(config.store.screensaverEnabled && uiState.mode()==PLAYER && !player.isRunning()){
     config.screensaverTicks++;
     if(config.screensaverTicks > config.store.screensaverTimeout+SCREENSAVERSTARTUPDELAY){
       if(config.store.screensaverBlank){
-        display.putRequest(NEWMODE, SCREENBLANK);
+        transitionUiMode(SCREENBLANK);
       }else{
-        display.putRequest(NEWMODE, SCREENSAVER);
+        transitionUiMode(SCREENSAVER);
       }
       config.screensaverTicks=SCREENSAVERSTARTUPDELAY;
     }
   }
-  if(config.store.screensaverPlayingEnabled && display.mode()==PLAYER && player.isRunning()){
+  if(config.store.screensaverPlayingEnabled && uiState.mode()==PLAYER && player.isRunning()){
     config.screensaverPlayingTicks++;
     if(config.screensaverPlayingTicks > config.store.screensaverPlayingTimeout*60+SCREENSAVERSTARTUPDELAY){
       if(config.store.screensaverPlayingBlank){
-        display.putRequest(NEWMODE, SCREENBLANK);
+        transitionUiMode(SCREENBLANK);
       }else{
-        display.putRequest(NEWMODE, SCREENSAVER);
+        transitionUiMode(SCREENSAVER);
       }
       config.screensaverPlayingTicks=SCREENSAVERSTARTUPDELAY;
     }

@@ -145,14 +145,19 @@ int main() {
   bt.state = State::Success;
   assert(btUpdateActivity(bt, true) == UpdateActivity::Completed);
 
-  // Existing DisplayTask owns the LCD while locked; queue/timeouts cannot
-  // overwrite the page, and the no-display profile has its own no-op class.
+  // DisplayTask owns only LCD rendering while locked. Core UiState owns the
+  // semantic mode and decides when update returns to PLAYER.
   const auto display = readSource("src/core/display.cpp");
+  const auto uiState = readSource("src/core/ui_state.cpp");
+  const auto mainLoop = readSource("src/main.cpp");
   assert(display.find("updateScreenOwnsDisplay(update)") != std::string::npos);
-  assert(display.find("_swichMode(UPDATING);") != std::string::npos);
-  assert(display.find("updateScreenAllowsMode(updateProgress(), newmode == UPDATING)") != std::string::npos);
-  assert(display.find("updateScreenReturnsToPlayer(update)") != std::string::npos);
-  assert(display.find("if (updateLockActive() && !(type == NEWMODE && payload == UPDATING)) return;") != std::string::npos);
+  assert(display.find("_renderMode(UPDATING);") != std::string::npos);
+  assert(display.find("_swichMode") == std::string::npos);
+  assert(uiState.find("updateScreenReturnsToPlayer(update)") != std::string::npos);
+  assert(uiState.find("updateScreenOwnsDisplay(update)") != std::string::npos);
+  assert(mainLoop.find("uiSystemModeRequest(updateProgress(), systemMode)") != std::string::npos);
+  assert(display.find("if (updateLockActive()) return;") != std::string::npos);
+  assert(uiState.find("const UiModeContext context{network.status == CONNECTED, update.locked") != std::string::npos);
   assert(display.find("class A0UpdateProgressWidget") != std::string::npos);
   assert(display.find("class C0UpdateProgressWidget") != std::string::npos);
   assert(display.find("progress_.determinate") != std::string::npos);

@@ -20,10 +20,6 @@
 #include "update_bar_render_state.h"
 #include "station_selection_view.h"
 #include "timekeeper.h"
-#include "ui_timeout_config.h"
-#if DSP_MODEL==DSP_ST7796 && VOXONE_HAS_BT && VOXONE_PIN_MAP_COMPLETE
-#include "source_manager.h"
-#endif
 #include "../displays/dspcore.h"
 #include "../displays/widgets/widgets.h"
 #include "../displays/widgets/pages.h"
@@ -61,10 +57,6 @@ static TaskHandle_t displayTaskHandle = nullptr;
 
 QueueHandle_t displayQueue;
 portMUX_TYPE displayVolumeMux = portMUX_INITIALIZER_UNLOCKED;
-
-#if DSP_MODEL==DSP_ST7789_76 || DSP_MODEL==DSP_ST7796
-constexpr uint32_t X0_UI_RETURN_TIMEOUT_S = 10;
-#endif
 
 static void loopDspTask(void * pvParameters){
   while(true){
@@ -539,7 +531,7 @@ Page *pages[] = { new Page(), new Page(), new Page(), new Page() };
 
 
 void returnPlayer(){
-  display.putRequest(NEWMODE, PLAYER);
+  transitionUiMode(PLAYER);
 }
 
 Display::~Display() {
@@ -926,7 +918,7 @@ void Display::_start() {
 #if defined(VOXONE_PROFILE_A0) && DSP_MODEL==DSP_ST7796
   _a0ScrollMode(true);
 #endif
-  _mode = PLAYER;
+  _renderedMode = PLAYER;
   config.setTitle(LANG::const_PlReady);
 
   if(_vuwidget) _vuwidget->lock();
@@ -999,23 +991,13 @@ void Display::_updateUpdateScreen(const UpdateProgressSnapshot& snapshot) {
 #endif
 }
 
-void Display::_swichMode(displayMode_e newmode) {
-  if (!updateScreenAllowsMode(updateProgress(), newmode == UPDATING) ||
-      newmode == _mode || (network.status != CONNECTED && newmode != UPDATING)) return;
-#if DSP_MODEL==DSP_ST7796
-  if (newmode == BT_TRANSPORT) {
-    DisplaySourceView source{};
-    if (!getDisplaySourceView || !getDisplaySourceView(source) ||
-        source.kind != DisplaySourceKind::Bluetooth || !source.connected) return;
-  }
-#endif
+void Display::_renderMode(displayMode_e newmode) {
+  if (newmode == _renderedMode) return;
 #if defined(VOXONE_PROFILE_A0) && DSP_MODEL==DSP_ST7796
-  if (_mode == PLAYER && newmode != PLAYER) _a0ScrollMode(false);
-  else if (_mode != PLAYER && newmode == PLAYER) _a0ScrollMode(true);
+  if (_renderedMode == PLAYER && newmode != PLAYER) _a0ScrollMode(false);
+  else if (_renderedMode != PLAYER && newmode == PLAYER) _a0ScrollMode(true);
 #endif
-  if (_mode == STATIONS || _mode == BT_TRANSPORT || newmode == UPDATING)
-    timekeeper.cancelReturnPlayer();
-  _mode = newmode;
+  _renderedMode = newmode;
 #if DSP_MODEL==DSP_ST7789_76
   if(_volip) _volip->lock(newmode == PLAYER);
   if(_rssi) _rssi->lock(newmode == VOL);
@@ -1029,7 +1011,6 @@ void Display::_swichMode(displayMode_e newmode) {
       if(clockMove.width<0) _clock->moveBack(); else _clock->moveTo(clockMove);
     else
       _clock->moveBack();
-    numOfNextStation = 0;
     #ifdef META_MOVE
       _meta->moveBack();
     #endif
@@ -1060,11 +1041,6 @@ void Display::_swichMode(displayMode_e newmode) {
     config.isScreensaver = false;
   }
   if (newmode == VOL) {
-#if DSP_MODEL==DSP_ST7789_76
-    timekeeper.waitAndReturnPlayer(X0_UI_RETURN_TIMEOUT_S);
-#elif DSP_MODEL==DSP_ST7796
-    timekeeper.waitAndReturnPlayer(3);
-#endif
     #ifndef HIDE_IP
       _showDialog(LANG::const_DlgVolume);
     #else
@@ -1095,12 +1071,10 @@ void Display::_swichMode(displayMode_e newmode) {
   if (newmode == STATIONS) {
     _pager->setPage( pages[PG_PLAYLIST]);
     _plcurrent->setText("");
-    currentPlItem = config.lastStation();
     _drawPlaylist();
   }
 #if DSP_MODEL==DSP_ST7796
   if (newmode == BT_TRANSPORT) {
-    timekeeper.waitAndReturnPlayerForMode(BT_TRANSPORT, uiTimeoutConfig().btTransportSeconds);
     _title();
     _pager->setPage(_btTransportPage);
   }
@@ -1115,8 +1089,7 @@ void Display::resetQueue(){
 void Display::_drawPlaylist() {
   const uint16_t total = config.playlistLength();
   const StationSelectionView view = stationSelectionView(
-      total, currentPlItem, config.lastStation(), player.isRunning());
-  currentPlItem = view.selected;
+      total, uiState.selectedStation(), config.lastStation(), player.isRunning());
   if(view.empty()) {
 #if DSP_MODEL==DSP_ST7789_76 || DSP_MODEL==DSP_ST7796 || defined(VOXONE_PROFILE_C0)
     _plcurrent->setText("BRAK STACJI");
@@ -1127,7 +1100,7 @@ void Display::_drawPlaylist() {
     _plcounter->setText("0/0");
     _plplaying->setText("");
 #else
-    _plwidget->drawPlaylist(currentPlItem);
+    _plwidget->drawPlaylist(view.selected);
 #endif
   } else {
 #if defined(VOXONE_PROFILE_C0)
@@ -1148,22 +1121,31 @@ void Display::_drawPlaylist() {
     _plplaying->setText(view.selectedIsPlaying() ? "GRA" : "");
 #endif
   }
-#if DSP_MODEL==DSP_ST7789_76 || DSP_MODEL==DSP_ST7796 || defined(VOXONE_PROFILE_C0)
-  timekeeper.waitAndReturnPlayerForMode(STATIONS, uiTimeoutConfig().stationListSeconds);
-#else
-  timekeeper.waitAndReturnPlayer(30);
-#endif
 }
 
 void Display::_drawNextStationNum(uint16_t num) {
-  timekeeper.waitAndReturnPlayer(30);
   _meta->setText(config.stationByNum(num));
   _nums->setText(num, "%d");
 }
 
 void Display::putRequest(displayRequestType_e type, int payload){
+  if (type == NEWMODE) {
+    transitionUiMode(static_cast<displayMode_e>(payload));
+    return;
+  }
+  if (type == RESETIDLE) {
+    resetUiReturnTimeout();
+    return;
+  }
+  if (type == DRAWPLAYLIST && uiState.mode() == STATIONS) {
+    normalizeUiStationSelection();
+    resetUiReturnTimeout();
+  }
+  if (type == DRAWVOL && uiState.mode() == VOL)
+    resetUiReturnTimeout();
+  if (type == NEXTSTATION) armUiReturnTimeout(30);
   if(displayQueue==NULL) return;
-  if (updateLockActive() && !(type == NEWMODE && payload == UPDATING)) return;
+  if (updateLockActive()) return;
   requestParams_t request;
   request.type = type;
   request.payload = payload;
@@ -1173,21 +1155,26 @@ void Display::putRequest(displayRequestType_e type, int payload){
     portEXIT_CRITICAL(&displayVolumeMux);
     return;
   }
-  bool volumeModeRequest = type == NEWMODE && payload == VOL;
-  if(volumeModeRequest){
+  xQueueSend(displayQueue, &request, DSQ_SEND_DELAY);
+}
+
+void Display::queueModeRender(displayMode_e mode) {
+  if(displayQueue==NULL) return;
+  const bool volumeModeRequest = mode == VOL;
+  if (volumeModeRequest) {
     bool skipRequest;
     portENTER_CRITICAL(&displayVolumeMux);
-    skipRequest = _volumeModePending || _mode == VOL;
+    skipRequest = _volumeModePending;
     if(!skipRequest) _volumeModePending = true;
     portEXIT_CRITICAL(&displayVolumeMux);
     if(skipRequest) return;
   }
+  const requestParams_t request{NEWMODE, static_cast<int>(mode)};
   if(xQueueSend(displayQueue, &request, DSQ_SEND_DELAY) != pdPASS && volumeModeRequest){
     portENTER_CRITICAL(&displayVolumeMux);
     _volumeModePending = false;
     portEXIT_CRITICAL(&displayVolumeMux);
     Serial.println("##ERROR#:\tdisplay queue full for volume mode");
-    return;
   }
 }
 
@@ -1230,7 +1217,7 @@ void Display::_a0ScrollMode(bool playerMode) {
 
 void Display::_a0ScrollTextChanged(uint8_t row) {
   ScrollWidget* rows[3] = {_meta, _title1, _title2};
-  if (!a0PlayerScrollReady(_a0PlayerReady, _mode == PLAYER,
+  if (!a0PlayerScrollReady(_a0PlayerReady, _renderedMode == PLAYER,
                               _a0Scroll.enabled(), rows[0], rows[1], rows[2])) return;
   for (ScrollWidget* widget : rows)
     if (dsp.getScrollId() == widget) dsp.setScrollId(NULL);
@@ -1239,7 +1226,7 @@ void Display::_a0ScrollTextChanged(uint8_t row) {
 
 void Display::_a0ScrollTick() {
   ScrollWidget* rows[3] = {_meta, _title1, _title2};
-  if (!a0PlayerScrollReady(_a0PlayerReady, _mode == PLAYER,
+  if (!a0PlayerScrollReady(_a0PlayerReady, _renderedMode == PLAYER,
                               _a0Scroll.enabled(), rows[0], rows[1], rows[2])) return;
   const bool needsScroll[3] = {
       rows[0]->scrollNeeded(), rows[1]->scrollNeeded(), rows[2]->scrollNeeded()};
@@ -1262,9 +1249,9 @@ void Display::loop() {
   if(displayQueue==NULL || (_locked && !updateLockActive())) return;
   const UpdateProgressSnapshot update = updateProgress();
   if (_bootStep == 2 && updateScreenOwnsDisplay(update)) {
-    if (_mode != UPDATING) {
+    if (_renderedMode != UPDATING) {
       resetQueue();
-      _swichMode(UPDATING);
+      _renderMode(UPDATING);
     }
     _updateUpdateScreen(update);
     requestParams_t ignored;
@@ -1273,15 +1260,11 @@ void Display::loop() {
     dsp.loop();
     return;
   }
-  if (_bootStep == 2 && _mode == UPDATING && updateScreenReturnsToPlayer(update)) {
-    resetQueue();
-    _swichMode(PLAYER);
-  }
 #if DSP_MODEL==DSP_ST7789_76
-  if(_mode == PLAYER && !systemUpdateAudioBlocked()) ScrollWidget::nextX0ScrollFrame();
+  if(_renderedMode == PLAYER && !systemUpdateAudioBlocked()) ScrollWidget::nextX0ScrollFrame();
 #endif
 #if defined(VOXONE_PROFILE_A0) && DSP_MODEL==DSP_ST7796
-  if (_a0PlayerReady && _mode == PLAYER && !systemUpdateAudioBlocked()) _a0ScrollTick();
+  if (_a0PlayerReady && _renderedMode == PLAYER && !systemUpdateAudioBlocked()) _a0ScrollTick();
 #endif
   _pager->loop();
 #if DSP_MODEL==DSP_ST7796
@@ -1301,7 +1284,7 @@ void Display::loop() {
   if(xQueueReceive(displayQueue, &request, DSP_QUEUE_TICKS)){
     switch (request.type){
         case NEWMODE: {
-          _swichMode((displayMode_e)request.payload);
+          _renderMode((displayMode_e)request.payload);
           if(request.payload == VOL){
             portENTER_CRITICAL(&displayVolumeMux);
             _volumeModePending = false;
@@ -1309,15 +1292,10 @@ void Display::loop() {
           }
           break;
         }
-        case RESETIDLE:
-          if (_mode == BT_TRANSPORT)
-            timekeeper.waitAndReturnPlayerForMode(BT_TRANSPORT, uiTimeoutConfig().btTransportSeconds);
-          else if (_mode == STATIONS)
-            timekeeper.waitAndReturnPlayerForMode(STATIONS, uiTimeoutConfig().stationListSeconds);
-          break;
+        case RESETIDLE: break;
         case CLOSEPLAYLIST: player.sendCommand({PR_PLAY, request.payload}); break;
         case CLOCK: 
-          if(_mode==PLAYER || _mode==SCREENSAVER) _time(request.payload==1); 
+          if(_renderedMode==PLAYER || _renderedMode==SCREENSAVER) _time(request.payload==1);
           break;
         case NEWTITLE:
           if (!systemUpdateAudioBlocked()) { _title(); _layoutChange(activeSourceVuVisible()); }
@@ -1326,7 +1304,7 @@ void Display::loop() {
           if (systemUpdateAudioBlocked()) break;
           _station();
 #if DSP_MODEL==DSP_ST7789_76 || DSP_MODEL==DSP_ST7796 || defined(VOXONE_PROFILE_C0)
-          if(_mode==STATIONS && _plplaying) _plplaying->setText(player.isRunning() && currentPlItem == config.lastStation() ? "GRA" : "");
+          if(_renderedMode==STATIONS && _plplaying) _plplaying->setText(player.isRunning() && uiState.selectedStation() == config.lastStation() ? "GRA" : "");
 #endif
           break;
         case NEXTSTATION: _drawNextStationNum(request.payload); break;
@@ -1375,27 +1353,27 @@ void Display::loop() {
         case PSTART:
           _layoutChange(activeSourceVuVisible());
 #if defined(VOXONE_PROFILE_C0)
-          if (_mode == PLAYER) _station();
+          if (_renderedMode == PLAYER) _station();
 #endif
 #if DSP_MODEL==DSP_ST7796
           _station();
           _updatePlaybackStatus();
 #endif
 #if DSP_MODEL==DSP_ST7789_76 || DSP_MODEL==DSP_ST7796 || defined(VOXONE_PROFILE_C0)
-          if(_mode==STATIONS && _plplaying) _plplaying->setText(currentPlItem == config.lastStation() ? "GRA" : "");
+          if(_renderedMode==STATIONS && _plplaying) _plplaying->setText(uiState.selectedStation() == config.lastStation() ? "GRA" : "");
 #endif
           break;
         case PSTOP:
           _layoutChange(activeSourceVuVisible());
 #if defined(VOXONE_PROFILE_C0)
-          if (_mode == PLAYER) _station();
+          if (_renderedMode == PLAYER) _station();
 #endif
 #if DSP_MODEL==DSP_ST7796
           _station();
           _updatePlaybackStatus();
 #endif
 #if DSP_MODEL==DSP_ST7789_76 || DSP_MODEL==DSP_ST7796 || defined(VOXONE_PROFILE_C0)
-          if(_mode==STATIONS && _plplaying) _plplaying->setText("");
+          if(_renderedMode==STATIONS && _plplaying) _plplaying->setText("");
 #endif
           break;
         case DSP_START: _start();  break;
@@ -1452,7 +1430,7 @@ void Display::_setRSSI(int rssi) {
     lastRssiDisplayMs = now;
     x0RssiDisplayed = true;
   }
-  if(_mode == VOL) return;
+  if(_renderedMode == VOL) return;
 #endif
   if(!_rssi) return;
 #if RSSI_DIGIT
@@ -1565,7 +1543,7 @@ void Display::_time(bool redraw) {
   }
   _clock->draw(redraw);
 #if DSP_MODEL==DSP_ST7789_76
-  if(_mode==PLAYER && _x0Clock) {
+  if(_renderedMode==PLAYER && _x0Clock) {
     char timeText[6];
     strftime(timeText, sizeof(timeText), "%H:%M", &network.timeinfo);
     _x0Clock->setText(timeText);
@@ -1594,12 +1572,7 @@ void Display::_volume() {
     if(_voltxt) _voltxt->setText(displayedVolume(), voltxtFmt);
   #endif
 #endif
-  if(_mode==VOL) {
-#if DSP_MODEL==DSP_ST7789_76
-    timekeeper.waitAndReturnPlayer(X0_UI_RETURN_TIMEOUT_S);
-#else
-    timekeeper.waitAndReturnPlayer(3);
-#endif
+  if(_renderedMode==VOL) {
 #if defined(VOXONE_PROFILE_C0) || DSP_MODEL==DSP_ST7796
     PlayerDisplayView view{};
     capturePlayerDisplayView(view, WiFi.RSSI());
@@ -1643,7 +1616,8 @@ void Display::_start(){
 
 void Display::putRequest(displayRequestType_e type, int payload){
   if(type==DSP_START) _start();
-  if(type==NEWMODE) mode((displayMode_e)payload);
+  if(type==NEWMODE) transitionUiMode((displayMode_e)payload);
+  if(type==RESETIDLE) resetUiReturnTimeout();
 }
 //============================================================================================================================
 #endif // DUMMYDISPLAY
