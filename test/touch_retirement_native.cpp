@@ -59,17 +59,20 @@ int main() {
                      "getPoint", ".touched()"});
   hasNone(build, {"XPT2046"});
 
-  // Encoder 1, source cycling and Bluetooth transport remain wired as before.
+  // Encoder 1 remains wired and emits normalized events.
   for (const char* token : {"yoEncoder encoder", "void encoder1Loop()",
                             "attachClick", "attachDoubleClick",
                             "attachLongPressStart", "attachLongPressStop"}) {
     assert(controls.find(token) != std::string::npos);
   }
-  for (const char* token : {"cycleNextSource()", "sourceManagerTransport",
-                            "BT_TRANSPORT", "btEncoderClickAction",
-                            "btEncoderLongPressAction"}) {
+  for (const char* token : {"dispatchUiInput", "EncoderInput::Clockwise",
+                            "EncoderInput::Click", "EncoderInput::LongPress"})
     assert(controls.find(token) != std::string::npos);
-  }
+
+  const auto uiInput = readFile("src/core/ui_input.cpp");
+  for (const char* token : {"cycleNextSource()", "sourceManagerTransport",
+                            "BT_TRANSPORT", "hardwareCapabilities()"})
+    assert(uiInput.find(token) != std::string::npos);
 
   const auto sourceManager = readFile("src/core/source_manager.cpp");
   assert(sourceManager.find("SourceManager") != std::string::npos);

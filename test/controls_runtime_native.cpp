@@ -31,10 +31,12 @@ int main() {
   const std::string events = readFile("src/core/common.h");
   const std::string player = readFile("src/core/player.cpp");
   const std::string display = readFile("src/core/display.cpp");
+  const std::string uiInput = readFile("src/core/ui_input.cpp");
+  const std::string uiInputHeader = readFile("src/core/ui_input.h");
 
   assert(implementation.find("void encoder1Loop()") != std::string::npos);
   assert(implementation.find("encoder.readEncoder_ISR()") != std::string::npos);
-  assert(implementation.find("controlsEvent(encoderDelta > 0, encoderDelta)") !=
+  assert(implementation.find("dispatchUiInput(uiInputEvent(encoderDelta > 0") !=
          std::string::npos);
   assert(implementation.find("case EVT_ENCBTNB") != std::string::npos);
   assert(implementation.find("void onBtnClick(int id)") != std::string::npos);
@@ -42,13 +44,21 @@ int main() {
          std::string::npos);
   assert(implementation.find("void onBtnLongPressStart(int id)") !=
          std::string::npos);
-  assert(implementation.find("cycleNextSource()") != std::string::npos);
-  assert(implementation.find("sourceManagerTransport(") != std::string::npos);
-  assert(implementation.find("btEncoderClickAction(") != std::string::npos);
-  assert(implementation.find("player.stepUserVol(encoderDelta)") !=
-         std::string::npos);
-  assert(implementation.find("player.stepUserVol(volDelta)") !=
-         std::string::npos);
+  assert(uiInput.find("cycleNextSource()") != std::string::npos);
+  assert(uiInput.find("sourceManagerTransport(") != std::string::npos);
+  assert(uiInput.find("player.stepUserVol(direction)") != std::string::npos);
+  assert(uiInputHeader.find("enum class UiInputEvent") != std::string::npos);
+  assert(uiInputHeader.find("VeryLong") != std::string::npos);
+  const std::string isrStart = implementation.substr(
+      implementation.find("void IRAM_ATTR readEncoderISR()"), 120);
+  assertMissing(isrStart, "display.mode()");
+  const std::string encoderLoop = implementation.substr(
+      implementation.find("void encoder1Loop()"),
+      implementation.find("void onBtnLongPressStart") -
+          implementation.find("void encoder1Loop()"));
+  assertMissing(encoderLoop, "display.mode()");
+  assertMissing(encoderLoop, "player.");
+  assertMissing(encoderLoop, "sourceManager");
   assertMissing(implementation, "config.store.volume+encoderDelta");
   assertMissing(implementation, "config.store.volume+volDelta");
   assertMissing(implementation, "VOXONE_PROFILE_X0) || defined(VOXONE_PROFILE_A0) || defined(VOXONE_PROFILE_C0)");

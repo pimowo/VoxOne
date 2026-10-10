@@ -15,7 +15,6 @@ int main() {
   source.displayView(view);
   assert(source.active() == ActiveSource::Radio);
   assert(view.playback == DisplayPlaybackState::Stopped);
-  assert(btEncoderClickAction(PLAYER, false) == BtEncoderClickAction::RadioToggle);
   assert(!dacXsmtHigh(dacPlaybackForSource(false, false, false,
                                          BtPlayback::Stopped), false));
 

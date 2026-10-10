@@ -226,8 +226,6 @@ int main() {
   sources.bluetoothRawVu(rawLeft, rawRight, rawMs);
   assert(rawLeft == 12000 && rawRight == 3000 && rawMs == 100);
   assert(std::strcmp(displayPlaybackLabel(view.playback), "PLAY") == 0);
-  assert(btTransportInputForRotation(-1) == BtTransportInput::Previous);
-  assert(btTransportInputForRotation(1) == BtTransportInput::Next);
   assert(btTransportAction(BtTransportInput::Previous, view) == BtTransportAction::Previous);
   assert(btTransportAction(BtTransportInput::Next, view) == BtTransportAction::Next);
   assert(btTransportAction(BtTransportInput::Toggle, view) == BtTransportAction::Pause);

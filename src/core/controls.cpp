@@ -3,19 +3,14 @@
 #include "controls.h"
 #include "config.h"
 #include "player.h"
-#include "volume_map.h"
 #include "display.h"
 #include "network.h"
-#include "netserver.h"
 #include "update_progress.h"
+#include "ui_input.h"
 #include "../hardware/hardware_descriptor.h"
 
 long encOldPosition  = 0;
 int lpId = -1;
-
-#if VOXONE_HAS_BT && VOXONE_HAS_ENCODER && VOXONE_PIN_MAP_COMPLETE
-#include "source_manager.h"
-#endif
 
 #if DSP_MODEL==DSP_DUMMY
 #define DUMMYDISPLAY
@@ -67,7 +62,6 @@ constexpr uint8_t nrOfButtons = sizeof(buttons) / sizeof(buttons[0]);
 #if ENC_BTNL!=255
 void IRAM_ATTR readEncoderISR()
 {
-  if(display.mode()==LOST || display.mode()==UPDATING) return;
   encoder.readEncoder_ISR();
 }
 #endif
@@ -102,7 +96,14 @@ void initControls() {
 }
 
 void loopControls() {
-  if(updateLockActive() || display.mode()==UPDATING || display.mode()==LOST) return;
+  if(updateLockActive() || display.mode()==UPDATING || display.mode()==LOST) {
+#if ENC_BTNL!=255
+    // The ISR is hardware-only. Drain accumulated motion while core input is
+    // locked so it cannot become a delayed UI event after the lock ends.
+    (void)encoder.encoderChanged();
+#endif
+    return;
+  }
   if(ctrls_on_loop) ctrls_on_loop();
 #if ENC_BTNL!=255
   encoder1Loop();
@@ -120,31 +121,13 @@ void loopControls() {
 }
 #if ENC_BTNL!=255
 void encoder1Loop() {
-  if (network.status != CONNECTED) return;
-  if(display.mode()==LOST) return;
   int8_t encoderDelta = encoder.encoderChanged();
   if (encoderDelta!=0)
   {
-#if VOXONE_HAS_BT && VOXONE_HAS_ENCODER && VOXONE_PIN_MAP_COMPLETE
-    if (display.mode() == BT_TRANSPORT) {
-      display.putRequest(RESETIDLE);
-      sourceManagerTransport(btTransportInputForRotation(encoderDelta));
-      return;
-    }
-#endif
-    uint8_t encBtnState = HIGH;
-#if ENC_BTNB!=255
-    encBtnState = digitalRead(voxone::hardware::currentHardware().encoder.button);
-#endif
-#   if defined(DUMMYDISPLAY)
-    if(encBtnState){
-      player.stepUserVol(encoderDelta);
-    }else{
-      if(encoderDelta > 0) player.next(); else player.prev();
-    }
-#   else
-    controlsEvent(encoderDelta > 0, encoderDelta);
-#   endif
+    dispatchUiInput(uiInputEvent(encoderDelta > 0
+                                     ? EncoderInput::Clockwise
+                                     : EncoderInput::CounterClockwise),
+                    encoderDelta);
   }
 }
 #endif
@@ -159,36 +142,11 @@ void onBtnLongPressStart(int id) {
         break;
       }
     case EVT_BTNCENTER: {
-#       if defined(DUMMYDISPLAY)
-        break;
-#       endif
-        display.putRequest(NEWMODE, display.mode() == PLAYER ? STATIONS : PLAYER);
+        dispatchUiInput(uiInputEvent(Buttons3Input::OkLongPress));
         break;
       }
     case EVT_ENCBTNB: {
-#if VOXONE_HAS_BT && VOXONE_HAS_ENCODER && VOXONE_PIN_MAP_COMPLETE && DSP_MODEL==DSP_ST7796
-        if (display.mode() == PLAYER || display.mode() == BT_TRANSPORT) {
-          DisplaySourceView source{};
-          if (!getDisplaySourceView || !getDisplaySourceView(source)) break;
-          switch (btEncoderLongPressAction(display.mode(), source)) {
-            case BtEncoderLongPressAction::Stations:
-              display.putRequest(NEWMODE, STATIONS);
-              break;
-            case BtEncoderLongPressAction::Transport:
-              display.putRequest(NEWMODE, BT_TRANSPORT);
-              break;
-            case BtEncoderLongPressAction::Player:
-              display.putRequest(NEWMODE, PLAYER);
-              break;
-            case BtEncoderLongPressAction::None: break;
-          }
-          break;
-        }
-#endif
-#       if defined(DUMMYDISPLAY)
-        break;
-#       endif
-        display.putRequest(NEWMODE, display.mode() == PLAYER ? STATIONS : PLAYER);
+        dispatchUiInput(uiInputEvent(EncoderInput::LongPress));
         break;
       }
     case EVT_BTNMODE: {
@@ -257,104 +215,33 @@ void onBtnDuringLongPress(int id) {
 }
 
 void controlsEvent(bool toRight, int8_t volDelta) {
-#if VOXONE_HAS_BT && VOXONE_HAS_ENCODER && VOXONE_PIN_MAP_COMPLETE
-  if (display.mode() == BT_TRANSPORT) return;
-#endif
-  if (display.mode() == NUMBERS) {
-    display.numOfNextStation = 0;
-    display.putRequest(NEWMODE, PLAYER);
-  }
-  if (display.mode() != STATIONS) {
-#if VOXONE_HAS_BT && VOXONE_HAS_ENCODER && VOXONE_PIN_MAP_COMPLETE
-    if (bluetoothSourceSelected()) {
-      const int8_t direction = volDelta != 0 ? volDelta : (toRight ? 1 : -1);
-      const bool wasMuted = player.isMuted();
-      const int8_t step = wasMuted ? (direction > 0 ? 1 : -1) : direction;
-      if (sourceManagerStepBluetoothVolume(step)) {
-        player.setMuted(false);
-        display.putRequest(NEWMODE, VOL);
-        display.putRequest(DRAWVOL);
-      } else if (wasMuted) {
-        // Keep the remembered USER volume adjustable while BT waits for a phone.
-        player.stepUserVol(step);
-        display.putRequest(NEWMODE, VOL);
-      }
-      return;
-    }
-#endif
-    #if !defined(DUMMYDISPLAY)
-      display.putRequest(NEWMODE, VOL);
-    #endif
-    if(volDelta!=0){
-      player.stepUserVol(volDelta);
-    }else{
-      player.stepVol(toRight);
-    }
-  }
-  if (display.mode() == STATIONS) {
-    display.resetQueue();
-    int p = toRight ? display.currentPlItem + 1 : display.currentPlItem - 1;
-    uint16_t cs = config.playlistLength();
-    if (p < 1) p = cs;
-    if (p > cs) p = 1;
-    display.currentPlItem = p;
-    display.putRequest(DRAWPLAYLIST, p);
-  }
+  const bool right = volDelta != 0 ? volDelta > 0 : toRight;
+  dispatchUiInput(right ? UiInputEvent::Right : UiInputEvent::Left,
+                  volDelta == 0 ? 1 : volDelta);
 }
 
 void onBtnClick(int id) {
-#if VOXONE_HAS_BT && VOXONE_HAS_ENCODER && VOXONE_PIN_MAP_COMPLETE
-  if ((controlEvt_e)id == EVT_ENCBTNB) {
-    switch (btEncoderClickAction(display.mode(), bluetoothSourceSelected())) {
-      case BtEncoderClickAction::BluetoothToggle:
-        if (display.mode() == BT_TRANSPORT) display.putRequest(RESETIDLE);
-        sourceManagerTransport(BtTransportInput::Toggle);
-        return;
-      case BtEncoderClickAction::None:
-        return;
-      case BtEncoderClickAction::RadioToggle:
-      case BtEncoderClickAction::Legacy:
-        break;
-    }
-  }
-#endif
-  bool passBnCenter = (controlEvt_e)id==EVT_BTNCENTER || (controlEvt_e)id==EVT_ENCBTNB;
   controlEvt_e btnid = static_cast<controlEvt_e>(id);
-  if (network.status != CONNECTED && !passBnCenter) return;
   switch (btnid) {
     case EVT_BTNLEFT: {
-        controlsEvent(false);
+        dispatchUiInput(uiInputEvent(Buttons3Input::Left));
         break;
       }
-    case EVT_BTNCENTER:
+    case EVT_BTNCENTER: {
+        dispatchUiInput(uiInputEvent(Buttons3Input::OkClick));
+        break;
+      }
     case EVT_ENCBTNB: {
-        if (btnid == EVT_ENCBTNB && display.mode() == VOL) {
-          player.toggleMute();
-          break;
-        }
-        if (display.mode() == NUMBERS) {
-          display.numOfNextStation = 0;
-          display.putRequest(NEWMODE, PLAYER);
-        }
-        if (display.mode() == PLAYER) {
-          player.toggle();
-        }
-        if (display.mode() == SCREENSAVER || display.mode() == SCREENBLANK) {
-          display.putRequest(NEWMODE, PLAYER);
-        }
-        if (display.mode() == STATIONS) {
-          display.putRequest(NEWMODE, PLAYER);
-          display.putRequest(CLOSEPLAYLIST, display.currentPlItem);
-          //player.sendCommand({PR_PLAY, display.currentPlItem});
-        }
+        dispatchUiInput(uiInputEvent(EncoderInput::Click));
         break;
       }
     case EVT_BTNRIGHT: {
-        controlsEvent(true);
+        dispatchUiInput(uiInputEvent(Buttons3Input::Right));
         break;
       }
     case EVT_BTNUP:
     case EVT_BTNDOWN: {
+        if (network.status != CONNECTED) return;
         if (DSP_MODEL == DSP_DUMMY) {
           if (id == EVT_BTNUP) {
             player.next();
@@ -384,40 +271,30 @@ void onBtnClick(int id) {
 }
 
 void onBtnDoubleClick(int id) {
-#if VOXONE_HAS_BT && VOXONE_HAS_ENCODER && VOXONE_PIN_MAP_COMPLETE
-  if ((controlEvt_e)id == EVT_ENCBTNB) {
-    if (!btTransportDoubleClickCyclesSource(display.mode())) return;
-    cycleNextSource();
-    display.putRequest(NEWMODE, PLAYER);
-    return;
-  }
-#endif
-  if (display.mode() == SCREENSAVER || display.mode() == SCREENBLANK) {
-    display.putRequest(NEWMODE, PLAYER);
-    return;
-  }
   switch ((controlEvt_e)id) {
     case EVT_BTNLEFT: {
+        if (display.mode() == SCREENSAVER || display.mode() == SCREENBLANK) {
+          display.putRequest(NEWMODE, PLAYER);
+          return;
+        }
         if (display.mode() != PLAYER) return;
         if (network.status != CONNECTED) return;
         player.prev();
         break;
       }
-    case EVT_BTNCENTER:
-#if !(VOXONE_HAS_BT && VOXONE_HAS_ENCODER && VOXONE_PIN_MAP_COMPLETE)
-    case EVT_ENCBTNB:
-#endif
-    {
-        //display.putRequest(NEWMODE, display.mode() == PLAYER ? VOL : PLAYER);
-        onBtnClick(EVT_BTNMODE);
+    case EVT_BTNCENTER: {
+        dispatchUiInput(uiInputEvent(Buttons3Input::OkDoubleClick));
         break;
       }
-#if VOXONE_HAS_BT && VOXONE_HAS_ENCODER && VOXONE_PIN_MAP_COMPLETE
     case EVT_ENCBTNB: {
+        dispatchUiInput(uiInputEvent(EncoderInput::DoubleClick));
         break;
       }
-#endif
     case EVT_BTNRIGHT: {
+        if (display.mode() == SCREENSAVER || display.mode() == SCREENBLANK) {
+          display.putRequest(NEWMODE, PLAYER);
+          return;
+        }
         if (display.mode() != PLAYER) return;
         if (network.status != CONNECTED) return;
         player.next();

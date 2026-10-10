@@ -1,23 +1,33 @@
 #include "../src/core/source_manager_state.h"
 #include "../src/core/bt_transport.h"
+#include "../src/core/ui_input.h"
 
 #include <cassert>
 
-static displayMode_e longPress(displayMode_e mode, const SourceManagerState& sources) {
+static UiInputContext context(displayMode_e mode,
+                              const SourceManagerState& sources) {
   DisplaySourceView view{};
   sources.displayView(view);
-  switch (btEncoderLongPressAction(mode, view)) {
-    case BtEncoderLongPressAction::Stations: return STATIONS;
-    case BtEncoderLongPressAction::Transport: return BT_TRANSPORT;
-    case BtEncoderLongPressAction::Player: return PLAYER;
-    case BtEncoderLongPressAction::None: return mode;
+  return {mode, true, true, true,
+          sources.active() == ActiveSource::Bluetooth,
+          view.kind == DisplaySourceKind::Bluetooth && view.connected};
+}
+
+static displayMode_e longPress(displayMode_e mode,
+                               const SourceManagerState& sources) {
+  switch (resolveUiInput(context(mode, sources), UiInputEvent::Long).action) {
+    case UiInputAction::OpenStations: return STATIONS;
+    case UiInputAction::OpenBluetoothTransport: return BT_TRANSPORT;
+    case UiInputAction::ShowPlayer: return PLAYER;
+    default: return mode;
   }
-  return mode;
 }
 
 static displayMode_e doubleClick(displayMode_e mode, SourceManagerState& sources,
                                  const BtLinkState& bt, unsigned& cycleCalls) {
-  if (!btTransportDoubleClickCyclesSource(mode)) return mode;
+  if (resolveUiInput(context(mode, sources), UiInputEvent::Double).action !=
+      UiInputAction::CycleSource)
+    return mode;
   ++cycleCalls;
   sources.cycle(bt);
   return PLAYER;
@@ -31,12 +41,11 @@ struct ClickCalls {
 
 static void click(displayMode_e mode, const SourceManagerState& sources,
                   ClickCalls& calls) {
-  const bool bluetoothSelected = sources.active() == ActiveSource::Bluetooth;
-  switch (btEncoderClickAction(mode, bluetoothSelected)) {
-    case BtEncoderClickAction::RadioToggle:
+  switch (resolveUiInput(context(mode, sources), UiInputEvent::Ok).action) {
+    case UiInputAction::TogglePlayback:
       ++calls.radioToggle;
       break;
-    case BtEncoderClickAction::BluetoothToggle: {
+    case UiInputAction::BluetoothToggle: {
       DisplaySourceView view{};
       sources.displayView(view);
       switch (btTransportAction(BtTransportInput::Toggle, view)) {
@@ -83,8 +92,10 @@ int main() {
   DisplaySourceView view{};
   sources.displayView(view);
   assert(view.playback == DisplayPlaybackState::Playing);
-  assert(btTransportInputForRotation(-1) == BtTransportInput::Previous);
-  assert(btTransportInputForRotation(1) == BtTransportInput::Next);
+  assert(resolveUiInput(context(BT_TRANSPORT, sources), UiInputEvent::Left).action ==
+         UiInputAction::BluetoothPrevious);
+  assert(resolveUiInput(context(BT_TRANSPORT, sources), UiInputEvent::Right).action ==
+         UiInputAction::BluetoothNext);
   assert(btTransportAction(BtTransportInput::Previous, view) == BtTransportAction::Previous);
   assert(btTransportAction(BtTransportInput::Next, view) == BtTransportAction::Next);
   assert(btTransportAction(BtTransportInput::Toggle, view) == BtTransportAction::Pause);
