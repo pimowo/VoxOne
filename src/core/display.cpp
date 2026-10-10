@@ -100,13 +100,8 @@ uint32_t displayTaskStackHighWaterMark() {
 
 #ifndef DUMMYDISPLAY
 //============================================================================================================================
-#if defined(VOXONE_PROFILE_X0) || defined(VOXONE_PROFILE_A0) || defined(VOXONE_PROFILE_C0)
 constexpr uint16_t kDisplayVolumeMax = 100;
 static uint8_t displayedVolume() { return config.userVolume; }
-#else
-constexpr uint16_t kDisplayVolumeMax = 254;
-static uint8_t displayedVolume() { return config.store.volume; }
-#endif
 
 DspCore dsp;
 

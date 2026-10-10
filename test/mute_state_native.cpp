@@ -25,6 +25,13 @@ int main() {
   assert(displayVolumeMuted(0, true));
   assert(!displayVolumeMuted(50, false));
   assert(displayVolumeMuted(50, true));
+  MuteState muteContract;
+  muteContract.set(false);
+  assert(muteContract.outputVolume(0) == 0);
+  assert(muteContract.outputVolume(50) == 50);
+  muteContract.set(true);
+  assert(muteContract.outputVolume(0) == 0);
+  assert(muteContract.outputVolume(50) == 0);
   assert(std::strcmp(x0Text(0, true), "MUTE") == 0);
   assert(std::strcmp(x0Text(50, false), "\023 50") == 0);
   assert(std::strcmp(x0Text(50, true), "MUTE") == 0);

@@ -138,10 +138,7 @@ void encoder1Loop() {
 #endif
 #   if defined(DUMMYDISPLAY)
     if(encBtnState){
-      int nv = config.store.volume+encoderDelta;
-      if(nv<0) nv=0;
-      if(nv>254) nv=254;
-      player.setVol((uint8_t)nv);  
+      player.stepUserVol(encoderDelta);
     }else{
       if(encoderDelta > 0) player.next(); else player.prev();
     }
@@ -289,14 +286,7 @@ void controlsEvent(bool toRight, int8_t volDelta) {
       display.putRequest(NEWMODE, VOL);
     #endif
     if(volDelta!=0){
-#if defined(VOXONE_PROFILE_X0) || defined(VOXONE_PROFILE_A0) || defined(VOXONE_PROFILE_C0)
       player.stepUserVol(volDelta);
-#else
-      int nv = config.store.volume+volDelta;
-      if(nv<0) nv=0;
-      if(nv>254) nv=254;
-      player.setVol((uint8_t)nv);
-#endif
     }else{
       player.stepVol(toRight);
     }

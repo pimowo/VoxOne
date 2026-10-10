@@ -29,6 +29,8 @@ int main() {
   const std::string implementation = readFile("src/core/controls.cpp");
   const std::string interface = readFile("src/core/controls.h");
   const std::string events = readFile("src/core/common.h");
+  const std::string player = readFile("src/core/player.cpp");
+  const std::string display = readFile("src/core/display.cpp");
 
   assert(implementation.find("void encoder1Loop()") != std::string::npos);
   assert(implementation.find("encoder.readEncoder_ISR()") != std::string::npos);
@@ -43,6 +45,21 @@ int main() {
   assert(implementation.find("cycleNextSource()") != std::string::npos);
   assert(implementation.find("sourceManagerTransport(") != std::string::npos);
   assert(implementation.find("btEncoderClickAction(") != std::string::npos);
+  assert(implementation.find("player.stepUserVol(encoderDelta)") !=
+         std::string::npos);
+  assert(implementation.find("player.stepUserVol(volDelta)") !=
+         std::string::npos);
+  assertMissing(implementation, "config.store.volume+encoderDelta");
+  assertMissing(implementation, "config.store.volume+volDelta");
+  assertMissing(implementation, "VOXONE_PROFILE_X0) || defined(VOXONE_PROFILE_A0) || defined(VOXONE_PROFILE_C0)");
+  assert(player.find("void Player::stepVol(bool up) {\n  stepUserVol(up ? 1 : -1);\n}") !=
+         std::string::npos);
+  assert(display.find("constexpr uint16_t kDisplayVolumeMax = 100;") !=
+         std::string::npos);
+  assert(display.find("static uint8_t displayedVolume() { return config.userVolume; }") !=
+         std::string::npos);
+  assertMissing(display, "kDisplayVolumeMax = 254");
+  assertMissing(display, "displayedVolume() { return config.store.volume; }");
 
   for (const char* token : {"IRrecv", "decode_results", "irrecv", "irResults",
                             "irLoop", "irVolRepeat", "irBlink", "irNumber",

@@ -396,20 +396,7 @@ void Player::toggle() {
 }
 
 void Player::stepVol(bool up) {
-  if (systemUpdateAudioBlocked()) return;
-  if (up) {
-    if (config.store.volume <= 254 - config.store.volsteps) {
-      setVol(config.store.volume + config.store.volsteps);
-    }else{
-      setVol(254);
-    }
-  } else {
-    if (config.store.volume >= config.store.volsteps) {
-      setVol(config.store.volume - config.store.volsteps);
-    }else{
-      setVol(0);
-    }
-  }
+  stepUserVol(up ? 1 : -1);
 }
 
 uint8_t Player::volToI2S(uint8_t volume) {

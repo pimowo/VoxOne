@@ -186,6 +186,7 @@
 - [HARDWARE] Po stable zaprojektować pierwsze PCB A1/B1/C1/D1 oraz prototypy C0/D0; mapy GPIO i złącza mogą różnić się od rewizji 0 bez zmiany logiki produktu.
 - [HARDWARE] Potwierdzić GPIO, rewizje PCB, opcjonalne LCD/BT/DSP oraz warianty wyjścia PCM5102A, MAX98357 dla C-family i DSPmini. C0: PCM5102A GPIO1/2/3, SSD1306 128×64 I2C GPIO7/8 i SSD1309 128×64 I2C GPIO7/8 PHYSICAL PASS; EC11 GPIO4/5/6 kierunek oraz krok volume 1 detent = 1 punkt PHYSICAL PASS; pozostałe OLED-y 128×64 później.
 - [POST-STABLE] CAPABILITIES-CORE-1 — BUILD PASS: jeden autorytatywny model możliwości PCB w `HardwareDescriptor` przygotowuje architekturę pod zasadę 1 PCB = 1 BIN. OPEN / FUTURE: `RuntimeConfig`, wybór hardware z WWW, DisplayProfile, normalized input, UI core state oraz jeden rzeczywisty BIN C0 z dynamicznym wyborem OLED.
+- [POST-STABLE] VOLUME-CONTRACT-1 — BUILD PASS: `userVolume` 0–100 jest globalnym kontraktem VoxOne, RAW 0–254 pozostaje wewnętrzną reprezentacją audio/legacy compatibility, a nazwa profilu PCB nie zmienia semantyki głośności. INPUT-EVENTS-1 pozostaje osobnym przyszłym etapem.
 - [POST-STABLE] Aktualizację VoxOneBT przez MAIN na Ax/Bx/Cx/Dx dopuścić tylko przy obecnym module BT, odpowiednim capability oraz zasobach PSRAM/staging; na Xx aktualizować VoxOneBT wyłącznie bezpośrednio przez USB. Nie dodawać stagingu na Xx.
 
 ## Installer, first boot i release
