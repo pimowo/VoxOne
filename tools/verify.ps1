@@ -95,6 +95,7 @@ $nativeSources=@{
  dsp_transport_native=@('src/core/dsp_model.cpp','src/core/dsp_storage_format.cpp','src/core/dsp_service.cpp','src/core/dsp_transport_protocol.cpp')
  dsp_state_json_native=@('src/core/dsp_model.cpp','src/core/dsp_storage_format.cpp','src/core/dsp_service.cpp','src/core/dsp_state_json.cpp')
  mqtt_config_native=@('src/core/volume_map.cpp')
+ runtime_hardware_config_native=@('src/hardware/runtime_hardware_config.cpp')
  station_directory_native=@('src/core/station_directory_format.cpp')
  volume_limits_native=@('src/core/volume_map.cpp')
 }
@@ -105,7 +106,7 @@ Invoke-Step 'Native tests' {
   $name=$test.BaseName
   $sources=@($test.FullName)
   if($nativeSources.ContainsKey($name)) { $sources+=@($nativeSources[$name] | ForEach-Object { Join-Path $root $_ }) }
-  $variants=if($name -eq 'hardware_descriptor_native') { @('X0','B0','C0','C0_SSD1309','A0') } elseif($name -eq 'build_identity_native') { @('','X0','B0','C0','A0','CLEAN','DIRTY') } else { @('') }
+  $variants=if($name -eq 'hardware_descriptor_native' -or $name -eq 'runtime_hardware_config_native') { @('X0','B0','C0','C0_SSD1309','A0') } elseif($name -eq 'build_identity_native') { @('','X0','B0','C0','A0','CLEAN','DIRTY') } else { @('') }
   foreach($variant in $variants) {
    $label=if($variant) { "$name-$variant" } else { $name }
    $exe=Join-Path $work ($label+$(if($onWindows) { '.exe' } else { '' }))
@@ -115,7 +116,7 @@ Invoke-Step 'Native tests' {
     if($variant -eq 'CLEAN' -or $variant -eq 'DIRTY') { $compileArgs+="-DBUILD_ID_TEST_$variant=1" }
     elseif($variant -eq 'C0_SSD1309') { $compileArgs+=@('-DVOXONE_PROFILE_C0=1','-DVOXONE_C0_DISPLAY_SSD1309=1') }
     else { $compileArgs+="-DVOXONE_PROFILE_$variant=1" }
-    $sourcesForVariant=if($name -eq 'hardware_descriptor_native') { $sources+@(Join-Path $root 'src/hardware/hardware_descriptor.cpp') } else { $sources }
+    $sourcesForVariant=if($name -eq 'hardware_descriptor_native' -or $name -eq 'runtime_hardware_config_native') { $sources+@(Join-Path $root 'src/hardware/hardware_descriptor.cpp') } else { $sources }
    } else { $sourcesForVariant=$sources }
    $compileArgs+=@('-o',$exe)+$sourcesForVariant
    $oldPreference=$ErrorActionPreference

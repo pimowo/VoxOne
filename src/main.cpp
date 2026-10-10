@@ -20,6 +20,7 @@
 #include "core/nvs_diagnostics.h"
 #include "core/dsp_runtime.h"
 #include "core/ui_state.h"
+#include "hardware/runtime_hardware_config.h"
 #include <esp_heap_caps.h>
 #include <esp_timer.h>
 
@@ -116,6 +117,11 @@ void setupOTA(){
 
 void setup() {
   Serial.begin(115200);
+  const auto runtimeHardwareStatus =
+      voxone::hardware::loadRuntimeHardwareConfig();
+  Serial.printf("##[BOOT]#\truntime hardware: %s (model only; build-time drivers active)\n",
+                voxone::hardware::runtimeHardwareLoadStatusName(
+                    runtimeHardwareStatus));
 #if defined(VOXONE_PROFILE_A0)
   dacMute.begin();
 #endif
