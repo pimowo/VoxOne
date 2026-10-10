@@ -139,9 +139,9 @@ RuntimeHardwareSaveStatus saveRuntimeHardwareConfig(
     const RuntimeHardwareConfig& requested,
     const HardwareCapabilities& capabilities);
 
-// Device API. The selected values are persisted and diagnosed, but the
-// current build-time display/input/audio drivers remain authoritative until
-// the later one-board-one-firmware activation stage.
+// Device API. C0 activates the selected SSD1306/SSD1309 display backend.
+// Input and audio drivers, and display drivers on other boards, remain
+// build-time choices until their later activation stages.
 const RuntimeHardwareConfig& runtimeHardwareConfig();
 RuntimeHardwareLoadStatus loadRuntimeHardwareConfig();
 RuntimeHardwareSaveStatus saveRuntimeHardwareConfig(

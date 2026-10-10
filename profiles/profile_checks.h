@@ -31,8 +31,15 @@ static_assert(bool(VOXONE_HAS_DISPLAY) == (VOXONE_PROFILE_DISPLAY != Display::No
               "Display compile gate must match selected display backend");
 static_assert(bool(VOXONE_HAS_DISPLAY) == (DSP_MODEL != DSP_DUMMY),
               "Display compile gate must match legacy DSP_MODEL");
+#if defined(VOXONE_RUNTIME_OLED_128X64_BACKENDS)
+static_assert(DSP_MODEL == DSP_SSD1306,
+              "Runtime OLED builds use SSD1306 only as the legacy OLED compile gate");
+static_assert(VOXONE_DISPLAY_PROFILE == VOXONE_DISPLAY_PROFILE_OLED_128X64,
+              "Runtime OLED backends require the shared OLED 128x64 profile");
+#else
 static_assert(displayMatchesLegacy(VOXONE_PROFILE_DISPLAY, DSP_MODEL),
               "Selected display backend does not match legacy DSP_MODEL");
+#endif
 
 static_assert(!VOXONE_PIN_MAP_COMPLETE ||
               (VOXONE_PROFILE_DISPLAY != Display::St7789_284x76 &&

@@ -2,7 +2,12 @@
 #define dspcore_h
 #pragma once
 
-#if DSP_MODEL==DSP_DUMMY
+#if defined(VOXONE_RUNTIME_OLED_128X64_BACKENDS)
+  #define TIME_SIZE           2
+  #define DSP_OLED
+  #include "displayOLED128x64Runtime.h"
+
+#elif DSP_MODEL==DSP_DUMMY
   #define DUMMYDISPLAY
   #define DSP_NOT_FLIPPED
 

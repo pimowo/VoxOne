@@ -32,7 +32,10 @@ Display display;
 static TaskHandle_t displayTaskHandle = nullptr;
 
 #ifndef CORE_STACK_SIZE
-  #define CORE_STACK_SIZE  1024*4
+  // ESP-IDF expresses task stack sizes and high-water marks in bytes.
+  // Rendering and NetServer::loop() share this task and exceed 4 KiB under
+  // combined OLED/metadata/volume/station activity.
+  #define CORE_STACK_SIZE  1024*6
 #endif
 #ifndef DSP_TASK_PRIORITY
   #define DSP_TASK_PRIORITY  2
@@ -151,10 +154,10 @@ class Oled128x64PlayerStatusWidget : public Widget {
       dsp.setTextSize(2);
       char digits[3];
       snprintf(digits, sizeof(digits), "%02u", static_cast<unsigned>(hour));
-      dsp.setCursor(34, 33);
+      dsp.setCursor(34, player128x64::clockDigitTop);
       dsp.print(digits);
       snprintf(digits, sizeof(digits), "%02u", static_cast<unsigned>(minute));
-      dsp.setCursor(70, 33);
+      dsp.setCursor(70, player128x64::clockDigitTop);
       dsp.print(digits);
       dsp.setTextSize(1);
       const char* codec = view.audioCodecLabel;
@@ -172,12 +175,14 @@ class Oled128x64PlayerStatusWidget : public Widget {
       }
     }
     if (middleChanged || colonVisible != colonVisible_) {
-      dsp.fillRect(58, 33, 12, 16, BLACK);
+      dsp.fillRect(58, player128x64::clockDigitTop, 12, 16, BLACK);
       if (colonVisible) {
         dsp.setFont();
-        dsp.setTextColor(WHITE, BLACK);
+        // Transparent background avoids the +1 px shift erasing MM at x=70.
+        dsp.setTextColor(WHITE);
         dsp.setTextSize(2);
-        dsp.setCursor(58, 33);
+        dsp.setCursor(player128x64::clockColonLeft,
+                      player128x64::clockColonTop);
         dsp.print(':');
       }
     }
@@ -562,11 +567,9 @@ void Display::init() {
   displayQueue=NULL;
   displayQueue = xQueueCreate( 5, sizeof( requestParams_t ) );
   while(displayQueue==NULL){;}
-  _createDspTask();
-  while(!_bootStep==0) { delay(10); }
-  //_pager.begin();
-  //_bootScreen();
   _pager = new Pager();
+  _createDspTask();
+  while(_bootStep == 0) { delay(10); }
   _footer = new Page();
 #if VOXONE_DISPLAY_PROFILE == VOXONE_DISPLAY_PROFILE_ST7789_284X76 || VOXONE_DISPLAY_PROFILE == VOXONE_DISPLAY_PROFILE_ST7796_480X320 || (VOXONE_DISPLAY_PROFILE == VOXONE_DISPLAY_PROFILE_OLED_128X64)
   _plwidget = nullptr;
@@ -597,11 +600,21 @@ uint16_t Display::height(){ return dsp.height(); }
 
 void Display::_bootScreen(){
   _boot = new Page();
+#if (VOXONE_DISPLAY_PROFILE == VOXONE_DISPLAY_PROFILE_OLED_128X64)
+  TextWidget* bootBrand = new TextWidget(startup128x64::brand, startup128x64::brandChars + 1, WHITE, BLACK);
+  bootBrand->setText(startup128x64::brandText);
+  _boot->addWidget(bootBrand);
+  _boot->addWidget(new ProgressWidget(startup128x64::progress, bootPrgConf, WHITE, BLACK));
+  _bootstring = (TextWidget*) &_boot->addWidget(new TextWidget(startup128x64::ssid, startup128x64::ssidBufferSize, WHITE, BLACK));
+#else
   _boot->addWidget(new ProgressWidget(bootWdtConf, bootPrgConf, config.theme.title2, config.theme.background));
   _bootstring = (TextWidget*) &_boot->addWidget(new TextWidget(bootstrConf, 50, config.theme.meta, config.theme.background));
+#endif
   _pager->addPage(_boot);
   _pager->setPage(_boot, true);
+#if (VOXONE_DISPLAY_PROFILE != VOXONE_DISPLAY_PROFILE_OLED_128X64)
   dsp.drawLogo(bootLogoTop);
+#endif
   _bootStep = 1;
 }
 
@@ -618,7 +631,7 @@ void Display::_buildPager(){
 #endif
   _clock->init(clockConf, 0, 0);
 #if (VOXONE_DISPLAY_PROFILE == VOXONE_DISPLAY_PROFILE_OLED_128X64)
-  _plcurrent->init("*", stations128x64::selected, BLACK, WHITE);
+  _plcurrent->init("*", stations128x64::selected, WHITE, BLACK);
 #elif VOXONE_DISPLAY_PROFILE == VOXONE_DISPLAY_PROFILE_ST7796_480X320
   _plcurrent->init("*", st7796StationConf, config.theme.plcurrent, config.theme.plcurrentbg);
   #else
@@ -628,8 +641,6 @@ void Display::_buildPager(){
   _plheader = new TextWidget(stations128x64::header, 24, WHITE, BLACK);
   _plcounter = new TextWidget(stations128x64::counter, 16, WHITE, BLACK);
   _plplaying = new TextWidget(stations128x64::playing, 8, WHITE, BLACK);
-  _oled128x64PlaylistPrevious = new TextWidget(stations128x64::previous, 140, WHITE, BLACK);
-  _oled128x64PlaylistNext = new TextWidget(stations128x64::next, 140, WHITE, BLACK);
   _plheader->setText("WEB - STACJA");
 #elif VOXONE_DISPLAY_PROFILE == VOXONE_DISPLAY_PROFILE_ST7789_284X76
   _plheader = new TextWidget(playlistHeaderConf, 30, config.theme.meta, config.theme.metabg);
@@ -805,9 +816,7 @@ void Display::_buildPager(){
   #endif
 #if (VOXONE_DISPLAY_PROFILE == VOXONE_DISPLAY_PROFILE_OLED_128X64)
   pages[PG_PLAYLIST]->addWidget(_plheader);
-  pages[PG_PLAYLIST]->addWidget(_oled128x64PlaylistPrevious);
   pages[PG_PLAYLIST]->addWidget(_plcurrent);
-  pages[PG_PLAYLIST]->addWidget(_oled128x64PlaylistNext);
   pages[PG_PLAYLIST]->addWidget(_plplaying);
   pages[PG_PLAYLIST]->addWidget(_plcounter);
 #elif VOXONE_DISPLAY_PROFILE == VOXONE_DISPLAY_PROFILE_ST7789_284X76 || VOXONE_DISPLAY_PROFILE == VOXONE_DISPLAY_PROFILE_ST7796_480X320
@@ -1093,10 +1102,6 @@ void Display::_drawPlaylist() {
   if(view.empty()) {
 #if VOXONE_DISPLAY_PROFILE == VOXONE_DISPLAY_PROFILE_ST7789_284X76 || VOXONE_DISPLAY_PROFILE == VOXONE_DISPLAY_PROFILE_ST7796_480X320 || (VOXONE_DISPLAY_PROFILE == VOXONE_DISPLAY_PROFILE_OLED_128X64)
     _plcurrent->setText("BRAK STACJI");
-#if (VOXONE_DISPLAY_PROFILE == VOXONE_DISPLAY_PROFILE_OLED_128X64)
-    _oled128x64PlaylistPrevious->setText("");
-    _oled128x64PlaylistNext->setText("");
-#endif
     _plcounter->setText("0/0");
     _plplaying->setText("");
 #else
@@ -1104,11 +1109,7 @@ void Display::_drawPlaylist() {
 #endif
   } else {
 #if (VOXONE_DISPLAY_PROFILE == VOXONE_DISPLAY_PROFILE_OLED_128X64)
-    _oled128x64PlaylistPrevious->setText(
-        config.stationByNum(stationSelectionRelative(view, -1)));
     _plcurrent->setText(config.stationByNum(view.selected));
-    _oled128x64PlaylistNext->setText(
-        config.stationByNum(stationSelectionRelative(view, 1)));
 #elif VOXONE_DISPLAY_PROFILE == VOXONE_DISPLAY_PROFILE_ST7789_284X76 || VOXONE_DISPLAY_PROFILE == VOXONE_DISPLAY_PROFILE_ST7796_480X320
     _plcurrent->setText(config.stationByNum(view.selected));
 #else
@@ -1346,7 +1347,13 @@ void Display::loop() {
           break;
         }
         case BOOTSTRING: {
-          if(_bootstring) _bootstring->setText(config.ssids[request.payload].ssid, LANG::bootstrFmt);
+          if(_bootstring) {
+#if (VOXONE_DISPLAY_PROFILE == VOXONE_DISPLAY_PROFILE_OLED_128X64)
+            _bootstring->setText(config.ssids[request.payload].ssid);
+#else
+            _bootstring->setText(config.ssids[request.payload].ssid, LANG::bootstrFmt);
+#endif
+          }
           break;
         }
         case DSPRSSI: if(_rssi){ _setRSSI(request.payload); } break;

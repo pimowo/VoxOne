@@ -7,6 +7,37 @@
 #include "network.h"
 #include "serialcli.h"
 #include "update_progress.h"
+#include "../hardware/runtime_hardware_config.h"
+
+namespace {
+
+const char* runtimeDisplayName(voxone::hardware::RuntimeDisplay display) {
+  switch (display) {
+    case voxone::hardware::RuntimeDisplay::None: return "none";
+    case voxone::hardware::RuntimeDisplay::Ssd1306_128x64: return "ssd1306";
+    case voxone::hardware::RuntimeDisplay::Ssd1309_128x64: return "ssd1309";
+    case voxone::hardware::RuntimeDisplay::St7789_284x76: return "st7789";
+    case voxone::hardware::RuntimeDisplay::St7796s_480x320: return "st7796s";
+  }
+  return "unknown";
+}
+
+const char* runtimeHardwareSaveStatusName(
+    voxone::hardware::RuntimeHardwareSaveStatus status) {
+  switch (status) {
+    case voxone::hardware::RuntimeHardwareSaveStatus::Saved: return "saved";
+    case voxone::hardware::RuntimeHardwareSaveStatus::Unchanged:
+      return "unchanged";
+    case voxone::hardware::RuntimeHardwareSaveStatus::Invalid: return "invalid";
+    case voxone::hardware::RuntimeHardwareSaveStatus::Unsupported:
+      return "unsupported";
+    case voxone::hardware::RuntimeHardwareSaveStatus::StorageError:
+      return "storage-error";
+  }
+  return "unknown";
+}
+
+}  // namespace
 
 SerialCli serialCli;
 
@@ -78,6 +109,37 @@ void SerialCli::on_input(const char* str, uint8_t clientId) {
       strcmp(str, "cli.info") != 0 && strcmp(str, "info") != 0 &&
       strcmp(str, "sys.version") != 0 && strcmp(str, "version") != 0 &&
       strcmp(str, "wifi.status") != 0 && strcmp(str, "status") != 0) return;
+  if (strcmp(str, "hw show") == 0) {
+    const auto& selected = voxone::hardware::runtimeHardwareConfig();
+    const auto diagnostics = voxone::hardware::runtimeHardwareDiagnostics();
+    printf(clientId, "Runtime HW display: %s\n", runtimeDisplayName(selected.display));
+    printf(clientId, "Runtime HW load: %s\n> ",
+           voxone::hardware::runtimeHardwareLoadStatusName(
+               diagnostics.loadStatus));
+    return;
+  }
+  voxone::hardware::RuntimeDisplay requestedDisplay;
+  bool setRuntimeDisplay = false;
+  if (strcmp(str, "hw display ssd1306") == 0) {
+    requestedDisplay = voxone::hardware::RuntimeDisplay::Ssd1306_128x64;
+    setRuntimeDisplay = true;
+  } else if (strcmp(str, "hw display ssd1309") == 0) {
+    requestedDisplay = voxone::hardware::RuntimeDisplay::Ssd1309_128x64;
+    setRuntimeDisplay = true;
+  }
+  if (setRuntimeDisplay) {
+    auto requested = voxone::hardware::runtimeHardwareConfig();
+    requested.display = requestedDisplay;
+    const auto status =
+        voxone::hardware::saveRuntimeHardwareConfig(requested);
+    printf(clientId, "Runtime HW display %s: %s\n",
+           runtimeDisplayName(requestedDisplay),
+           runtimeHardwareSaveStatusName(status));
+    if (status == voxone::hardware::RuntimeHardwareSaveStatus::Saved)
+      printf(clientId, "Restart required to activate display backend.\n");
+    printf(clientId, "> ");
+    return;
+  }
   if(network.status == CONNECTED){
     if (strcmp(str, "cli.prev") == 0 || strcmp(str, "prev") == 0) {
       player.prev();

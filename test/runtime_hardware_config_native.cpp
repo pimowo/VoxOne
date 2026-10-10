@@ -208,12 +208,14 @@ int main() {
   assert(loaded.config == defaults);
 
 #if defined(VOXONE_PROFILE_C0) && !defined(VOXONE_C0_DISPLAY_SSD1309)
-  RuntimeHardwareConfig boardSupportedButNotBuilt = defaults;
-  boardSupportedButNotBuilt.display = RuntimeDisplay::Ssd1309_128x64;
-  putRecord(storage, boardSupportedButNotBuilt);
+  RuntimeHardwareConfig boardSupportedAlternative = defaults;
+  boardSupportedAlternative.display = RuntimeDisplay::Ssd1309_128x64;
+  putRecord(storage, boardSupportedAlternative);
   loaded = loadRuntimeHardwareConfig(storage, hardware);
   assert(loaded.status == RuntimeHardwareLoadStatus::Loaded);
-  assert(loaded.config == boardSupportedButNotBuilt);
+  assert(loaded.config == boardSupportedAlternative);
+  // HardwareDescriptor continues to describe the build default. The display
+  // activation layer consumes loaded.config separately.
   assert(currentHardware().displayKind == DisplayKind::Ssd1306_128x64);
 #endif
 

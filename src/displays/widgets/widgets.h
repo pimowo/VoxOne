@@ -206,7 +206,8 @@ class ProgressWidget: public TextWidget {
     void init(WidgetConfig conf, ProgressConfig pconf, uint16_t fgcolor, uint16_t bgcolor){
       TextWidget::init(conf, pconf.width, fgcolor, bgcolor);
       _speed = pconf.speed; _width = pconf.width; _barwidth = pconf.barwidth;
-      _pg = 0; 
+      _pg = 0;
+      _scrolldelay = millis();
     }
     void loop();
   private:

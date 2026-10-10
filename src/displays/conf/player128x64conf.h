@@ -4,22 +4,39 @@
 #include <stdint.h>
 #include "../widgets/widgetsconfig.h"
 
+// OLED 128x64 STARTUP coordinates shared by SSD1306 and SSD1309.
+// The four 16-pixel bands are kept visually independent: brand in the top
+// half, progress in band 3, and the attempted SSID in band 4.
+namespace startup128x64 {
+constexpr char brandText[] = "VoxONE";
+constexpr WidgetConfig brand = {0, 8, 2, WA_CENTER};
+constexpr WidgetConfig progress = {0, 36, 1, WA_CENTER};
+constexpr WidgetConfig ssid = {0, 52, 1, WA_CENTER};
+constexpr uint16_t brandChars = sizeof(brandText) - 1;
+constexpr uint16_t maxSsidChars = 21;
+constexpr uint16_t ssidBufferSize = maxSsidChars + 1;
+}
+
 // OLED 128x64 PLAYER coordinates shared by SSD1306 and SSD1309.
 namespace player128x64 {
 constexpr ScrollConfig station = {{0, 0, 1, WA_LEFT}, 140, 128, 5000, 2, 35};
 constexpr ScrollConfig artist = {{0, 10, 1, WA_LEFT}, 140, 128, 5000, 2, 35};
 constexpr ScrollConfig title = {{0, 20, 1, WA_LEFT}, 140, 128, 5000, 2, 35};
 constexpr WidgetConfig wifi = {0, 56, 1, WA_RIGHT};
-constexpr WidgetConfig volumeNumber = {0, 26, 0, WA_CENTER};
+constexpr WidgetConfig volumeNumber = {0, 24, 0, WA_CENTER};
 constexpr WidgetConfig volumeIp = {0, 56, 1, WA_CENTER};
+constexpr uint16_t clockDigitTop = 33;
+constexpr uint16_t clockColonLeft = 59;
+// In the classic 5x7 font at size 2, digits occupy bitmap rows 0..6 while
+// ':' occupies rows 2..6. Moving its cursor up by two pixels aligns the
+// centers of the visible pixels without moving HH or MM.
+constexpr uint16_t clockColonTop = 31;
 }
 
 // OLED 128x64 STATIONS coordinates shared by SSD1306 and SSD1309.
 namespace stations128x64 {
 constexpr WidgetConfig header = {0, 0, 1, WA_CENTER};
-constexpr WidgetConfig previous = {2, 10, 1, WA_LEFT};
-constexpr ScrollConfig selected = {{0, 21, 2, WA_LEFT}, 140, 128, 1200, 2, 35};
-constexpr WidgetConfig next = {2, 44, 1, WA_LEFT};
+constexpr ScrollConfig selected = {{0, 24, 2, WA_CENTER}, 140, 128, 1200, 2, 35};
 constexpr WidgetConfig playing = {2, 56, 1, WA_LEFT};
 constexpr WidgetConfig counter = {2, 56, 1, WA_RIGHT};
 }

@@ -169,7 +169,6 @@ class Display {
     St7796UpdateProgressWidget *_st7796UpdateBar = nullptr;
 #endif
 #if (VOXONE_DISPLAY_PROFILE == VOXONE_DISPLAY_PROFILE_OLED_128X64)
-    TextWidget *_oled128x64PlaylistPrevious = nullptr, *_oled128x64PlaylistNext = nullptr;
     Page *_oled128x64UpdatePage = nullptr;
     TextWidget *_oled128x64UpdateTarget = nullptr, *_oled128x64UpdatePercent = nullptr;
     TextWidget *_oled128x64UpdateActivity = nullptr;

@@ -9,20 +9,80 @@ constexpr uint16_t bottom(const WidgetConfig& widget) {
 }
 
 int main() {
-  static_assert(bottom(stations128x64::header) <= stations128x64::previous.top,
-                "STATIONS header overlaps previous row");
-  static_assert(bottom(stations128x64::previous) <=
+  constexpr uint16_t charWidth = 6;
+  constexpr uint16_t charHeight = 8;
+  constexpr uint16_t brandWidth = startup128x64::brandChars * charWidth *
+                                  startup128x64::brand.textsize;
+  constexpr uint16_t brandLeft = (128 - brandWidth) / 2;
+  constexpr uint16_t maxSsidWidth = startup128x64::maxSsidChars * charWidth;
+  constexpr uint16_t maxSsidLeft = (128 - maxSsidWidth) / 2;
+
+  static_assert(startup128x64::brand.top == 8 &&
+                    startup128x64::brand.textsize == 2 &&
+                    startup128x64::brand.align == WA_CENTER,
+                "STARTUP brand must be centered in the top half");
+  static_assert(startup128x64::brandChars == 6 &&
+                    startup128x64::brandText[0] == 'V' &&
+                    startup128x64::brandText[1] == 'o' &&
+                    startup128x64::brandText[2] == 'x' &&
+                    startup128x64::brandText[3] == 'O' &&
+                    startup128x64::brandText[4] == 'N' &&
+                    startup128x64::brandText[5] == 'E',
+                "STARTUP brand spelling must remain VoxONE");
+  static_assert(brandLeft == 28 && brandWidth == 72 &&
+                    bottom(startup128x64::brand) == 24,
+                "STARTUP brand bounds changed unexpectedly");
+  static_assert(startup128x64::progress.top == 36 &&
+                    startup128x64::progress.textsize == 1 &&
+                    startup128x64::progress.align == WA_CENTER &&
+                    bottom(startup128x64::progress) == 44,
+                "STARTUP progress must be centered in band 3");
+  static_assert(startup128x64::ssid.top == 52 &&
+                    startup128x64::ssid.textsize == 1 &&
+                    startup128x64::ssid.align == WA_CENTER &&
+                    bottom(startup128x64::ssid) == 60,
+                "STARTUP SSID must be centered in band 4");
+  static_assert(startup128x64::ssidBufferSize ==
+                    startup128x64::maxSsidChars + 1,
+                "STARTUP SSID buffer must include the terminator");
+  static_assert(maxSsidLeft == 1 && maxSsidWidth == 126,
+                "STARTUP SSID must fit within the OLED width");
+  static_assert(charHeight == 8, "OLED classic font metrics changed");
+
+  static_assert(bottom(stations128x64::header) <=
                     stations128x64::selected.widget.top,
-                "STATIONS previous row overlaps selection");
+                "STATIONS header overlaps selection");
   static_assert(bottom(stations128x64::selected.widget) <=
-                    stations128x64::next.top,
-                "STATIONS selection overlaps next row");
-  static_assert(bottom(stations128x64::next) <= stations128x64::playing.top,
-                "STATIONS next row overlaps footer");
+                    stations128x64::playing.top,
+                "STATIONS selection overlaps footer");
   static_assert(bottom(stations128x64::playing) <= 64,
                 "STATIONS footer exceeds OLED");
+  static_assert(stations128x64::header.textsize == 1 &&
+                    stations128x64::playing.textsize == 1 &&
+                    stations128x64::counter.textsize == 1,
+                "STATIONS header and footer must use the same small font");
+  static_assert(stations128x64::header.align == WA_CENTER &&
+                    stations128x64::selected.widget.align == WA_CENTER,
+                "STATIONS header and selection must be centered");
+  static_assert(stations128x64::selected.widget.top == 24 &&
+                    stations128x64::selected.widget.textsize == 2,
+                "STATIONS selection must be centered between header and footer");
   static_assert(stations128x64::selected.width == 128,
                 "STATIONS selected row must clip to OLED width");
+
+  static_assert(player128x64::volumeNumber.top == 24 &&
+                    player128x64::volumeNumber.align == WA_CENTER,
+                "VOL value must be centered in the middle band");
+  static_assert(player128x64::volumeIp.textsize ==
+                    stations128x64::header.textsize,
+                "VOL IP and STATIONS header must use the same font");
+  static_assert(player128x64::station.widget.textsize ==
+                    stations128x64::header.textsize,
+                "VOL header and STATIONS header must use the same font");
+  static_assert(player128x64::clockColonLeft == 59 &&
+                    player128x64::clockDigitTop == 33 &&
+                    player128x64::clockColonTop == 31,
+                "PLAYER clock colon position changed unexpectedly");
 
   static_assert(bottom(update128x64::title) <= update128x64::target.top,
                 "UPDATE title overlaps target");
