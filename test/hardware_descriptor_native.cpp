@@ -63,14 +63,14 @@ int main() {
   assert(!d.btAudioRxEnabled ||
          (hasPin(d.btAudioIn.bclk) && hasPin(d.btAudioIn.ws) &&
           hasPin(d.btAudioIn.din)));
-#if defined(VOXONE_PROFILE_C0)
+#if defined(VOXONE_RUNTIME_OLED_128X64_BACKENDS)
   assert(d.i2c.sda == fromLegacyPin(I2C_SDA));
   assert(d.i2c.scl == fromLegacyPin(I2C_SCL));
 #else
   assert(d.i2c.sda == fromLegacyPin(RTC_SDA));
   assert(d.i2c.scl == fromLegacyPin(RTC_SCL));
 #endif
-#if defined(VOXONE_PROFILE_A0)
+#if defined(VOXONE_PROFILE_L0)
   assert(caps.supportsRtc);
 #else
   assert(!caps.supportsRtc);
@@ -80,10 +80,30 @@ int main() {
   assert(validateDescriptor(d));
   assert(!hasPinConflicts(d));
 
-#if defined(VOXONE_PROFILE_X0)
-  assert(d.board.id == BoardId::BoardX0);
-  assert(d.board.family == 'X' && d.board.revision == 0);
-  assert(std::strcmp(d.board.name, "X0") == 0);
+  // A neutral no-display descriptor exercises the hardware contract without
+  // introducing a product profile for a board that is no longer supported.
+  HardwareDescriptor noDisplay = d;
+  noDisplay.displayKind = DisplayKind::None;
+  noDisplay.display = {kNoPin, kNoPin, kNoPin, kNoPin, BusKind::None};
+  noDisplay.encoder = {kNoPin, kNoPin, kNoPin, false, false, 1};
+  noDisplay.capabilities.supportedDisplays = 0;
+  noDisplay.capabilities.supportsEncoder = false;
+  noDisplay.capabilities.supportsLocalUi = false;
+  assert(!noDisplay.capabilities.hasLocalDisplay());
+  assert(validateDescriptor(noDisplay));
+  assert(!hasPinConflicts(noDisplay));
+#if defined(VOXONE_PROFILE_L0)
+  assert(noDisplay.capabilities.supportsVoxOneBt);
+  assert(noDisplay.capabilities.supportsBtFirmwareUpdate);
+  assert(noDisplay.btUart.rx == 15 && noDisplay.btUart.tx == 16);
+#endif
+  noDisplay.capabilities.supportsLocalUi = true;
+  assert(!validateDescriptor(noDisplay));
+
+#if defined(VOXONE_PROFILE_W0)
+  assert(d.board.id == BoardId::BoardW0);
+  assert(d.board.family == 'W' && d.board.revision == 0);
+  assert(std::strcmp(d.board.name, "W0") == 0);
   assert(d.board.mcu == McuFamily::Esp32);
   assert(d.displayKind == DisplayKind::St7789_284x76);
   assert(activeProfile() == ProfileId::St7789_284x76);
@@ -97,7 +117,7 @@ int main() {
   assert(d.encoder.a == 33 && d.encoder.b == 35 && d.encoder.button == 32);
   assert(!d.encoder.internalPullup && d.encoder.stepsPerDetent == 4);
   assert(!d.encoder.buttonInternalPullup);
-  // The legacy X0 profile does not specify default SPI bus pins.
+  // The W0 profile does not specify default SPI bus pins.
   assert(d.spi.sck == kNoPin && d.spi.mosi == kNoPin &&
          d.spi.miso == kNoPin);
   assert(!caps.supportsVoxOneBt);
@@ -107,38 +127,10 @@ int main() {
   assert(d.btAudioIn.bclk == kNoPin && d.btAudioIn.ws == kNoPin &&
          d.btAudioIn.din == kNoPin && !d.btAudioRxEnabled);
   assert(d.dacXsmt == kNoPin);
-#elif defined(VOXONE_PROFILE_B0)
-  assert(d.board.id == BoardId::BoardB0);
-  assert(d.board.family == 'B' && d.board.revision == 0);
-  assert(std::strcmp(d.board.name, "B0") == 0);
-  assert(d.displayKind == DisplayKind::None);
-  assert(activeProfile() == ProfileId::None);
-  assert(activeController() == ControllerId::None);
-  assert(layout.width == 0 && layout.height == 0 && !layout.monochrome);
-  assert(!caps.hasLocalDisplay());
-  assert(caps.supportedDisplays == 0);
-  assert(d.spi.sck == kNoPin && d.spi.mosi == kNoPin &&
-         d.spi.miso == kNoPin);
-  assert(d.audioOut.bclk == 1 && d.audioOut.dout == 2 && d.audioOut.ws == 3);
-  assert(d.btAudioIn.bclk == 4 && d.btAudioIn.ws == 5 && d.btAudioIn.din == 6);
-  assert(!d.btAudioRxEnabled);  // Reserved wiring; runtime RX stays disabled.
-  assert(d.btUart.rx == 7 && d.btUart.tx == 8);
-  assert(d.btUart.rx == fromLegacyPin(VOXONE_BT_UART_RX_PIN));
-  assert(d.btUart.tx == fromLegacyPin(VOXONE_BT_UART_TX_PIN));
-  assert(caps.supportsVoxOneBt);
-  assert(!caps.supportsBtAudioRx);
-  assert(caps.supportsBtFirmwareUpdate);
-  assert(caps.supportsPsram);
-  assert(d.display.cs == kNoPin && d.display.dc == kNoPin &&
-         d.display.rst == kNoPin && d.display.backlight == kNoPin);
-  assert(!caps.supportsEncoder && !caps.supportsLocalUi);
-  assert(d.encoder.a == kNoPin && d.encoder.b == kNoPin &&
-         d.encoder.button == kNoPin);
-  assert(d.dacXsmt == kNoPin);
-#elif defined(VOXONE_PROFILE_A0)
-  assert(d.board.id == BoardId::BoardA0);
-  assert(d.board.family == 'A' && d.board.revision == 0);
-  assert(std::strcmp(d.board.name, "A0") == 0);
+#elif defined(VOXONE_PROFILE_L0)
+  assert(d.board.id == BoardId::BoardL0);
+  assert(d.board.family == 'L' && d.board.revision == 0);
+  assert(std::strcmp(d.board.name, "L0") == 0);
   assert(d.displayKind == DisplayKind::St7796_480x320);
   assert(activeProfile() == ProfileId::St7796_480x320);
   assert(activeController() == ControllerId::St7796);
@@ -164,20 +156,74 @@ int main() {
   assert(d.btAudioIn.bclk == 1 && d.btAudioIn.ws == 2 && d.btAudioIn.din == 17);
   assert(d.dacXsmt == kNoPin);
   assert(d.dacXsmt == fromLegacyPin(VOXONE_DAC_XSMT_PIN));
-#elif defined(VOXONE_PROFILE_C0)
-  assert(d.board.id == BoardId::BoardC0);
-  assert(d.board.family == 'C' && d.board.revision == 0);
+#elif defined(VOXONE_PROFILE_M0)
+  assert(d.board.id == BoardId::BoardM0);
+  assert(d.board.family == 'M' && d.board.revision == 0);
   assert(d.board.flashBytes == 4u * 1024u * 1024u);
   assert(d.board.psramBytes == 2u * 1024u * 1024u);
-#if defined(VOXONE_C0_DISPLAY_SSD1309)
-  assert(VOXONE_PROFILE_DISPLAY == Display::Ssd1309_128x64);
-  assert(d.displayKind == DisplayKind::Ssd1309_128x64);
-  assert(activeController() == ControllerId::Ssd1309);
-#else
   assert(VOXONE_PROFILE_DISPLAY == Display::Ssd1306_128x64);
   assert(d.displayKind == DisplayKind::Ssd1306_128x64);
   assert(activeController() == ControllerId::Ssd1306);
-#endif
+  assert(activeProfile() == ProfileId::Oled128x64);
+  assert(layout.width == 128 && layout.height == 64 && layout.monochrome);
+  assert(d.display.bus == BusKind::I2c);
+  assert(caps.supportedDisplays ==
+         (displaySupport(DisplayKind::Ssd1306_128x64) |
+          displaySupport(DisplayKind::Ssd1309_128x64)));
+  assert(caps.supportsDisplay(DisplayKind::Ssd1306_128x64));
+  assert(caps.supportsDisplay(DisplayKind::Ssd1309_128x64));
+  assert(d.i2c.sda == 7 && d.i2c.scl == 8);
+  assert(d.display.cs == kNoPin && d.display.dc == kNoPin);
+  assert(d.audioOut.bclk == 1 && d.audioOut.ws == 3 && d.audioOut.dout == 2);
+  assert(d.encoder.a == 5 && d.encoder.b == 6 && d.encoder.button == 4);
+  assert(!d.encoder.internalPullup);
+  assert(d.encoder.buttonInternalPullup);
+  assert(!caps.supportsRtc);
+  assert(!caps.supportsVoxOneBt);
+  assert(!caps.supportsBtFirmwareUpdate);
+  assert(caps.supportsEncoder && caps.supportsLocalUi);
+  assert(caps.supportsPsram);
+  assert(d.btUart.rx == kNoPin && d.btUart.tx == kNoPin);
+  assert(d.btAudioIn.bclk == kNoPin && d.btAudioIn.ws == kNoPin &&
+         d.btAudioIn.din == kNoPin && !d.btAudioRxEnabled);
+#elif defined(VOXONE_PROFILE_S0)
+  assert(d.board.id == BoardId::BoardS0);
+  assert(d.board.family == 'S' && d.board.revision == 0);
+  assert(d.board.flashBytes == 4u * 1024u * 1024u);
+  assert(d.board.psramBytes == 2u * 1024u * 1024u);
+  assert(VOXONE_PROFILE_DISPLAY == Display::Ssd1306_128x64);
+  assert(d.displayKind == DisplayKind::Ssd1306_128x64);
+  assert(activeController() == ControllerId::Ssd1306);
+  assert(activeProfile() == ProfileId::Oled128x64);
+  assert(layout.width == 128 && layout.height == 64 && layout.monochrome);
+  assert(d.display.bus == BusKind::I2c);
+  assert(caps.supportedDisplays ==
+         (displaySupport(DisplayKind::Ssd1306_128x64) |
+          displaySupport(DisplayKind::Ssd1309_128x64)));
+  assert(caps.supportsDisplay(DisplayKind::Ssd1306_128x64));
+  assert(caps.supportsDisplay(DisplayKind::Ssd1309_128x64));
+  assert(d.i2c.sda == 7 && d.i2c.scl == 8);
+  assert(d.display.cs == kNoPin && d.display.dc == kNoPin);
+  assert(d.audioOut.bclk == 1 && d.audioOut.ws == 3 && d.audioOut.dout == 2);
+  assert(d.encoder.a == 5 && d.encoder.b == 6 && d.encoder.button == 4);
+  assert(!d.encoder.internalPullup);
+  assert(d.encoder.buttonInternalPullup);
+  assert(!caps.supportsRtc);
+  assert(!caps.supportsVoxOneBt);
+  assert(!caps.supportsBtFirmwareUpdate);
+  assert(caps.supportsEncoder && caps.supportsLocalUi);
+  assert(caps.supportsPsram);
+  assert(d.btUart.rx == kNoPin && d.btUart.tx == kNoPin);
+  assert(d.btAudioIn.bclk == kNoPin && d.btAudioIn.ws == kNoPin &&
+         d.btAudioIn.din == kNoPin && !d.btAudioRxEnabled);
+#elif defined(VOXONE_PROFILE_DIN0)
+  assert(d.board.id == BoardId::BoardDIN0);
+  assert(d.board.family == 'D' && d.board.revision == 0);
+  assert(d.board.flashBytes == 4u * 1024u * 1024u);
+  assert(d.board.psramBytes == 2u * 1024u * 1024u);
+  assert(VOXONE_PROFILE_DISPLAY == Display::Ssd1306_128x64);
+  assert(d.displayKind == DisplayKind::Ssd1306_128x64);
+  assert(activeController() == ControllerId::Ssd1306);
   assert(activeProfile() == ProfileId::Oled128x64);
   assert(layout.width == 128 && layout.height == 64 && layout.monochrome);
   assert(d.display.bus == BusKind::I2c);
@@ -247,9 +293,5 @@ int main() {
   bad.capabilities.supportsEncoder = true;
   bad.encoder.stepsPerDetent = 0;
   assert(!validateDescriptor(bad));
-#if defined(VOXONE_C0_DISPLAY_SSD1309)
-  std::printf("PASS hardware_descriptor_native (C0 SSD1309)\n");
-#else
   std::printf("PASS hardware_descriptor_native (%s)\n", d.board.name);
-#endif
 }

@@ -24,8 +24,8 @@ int main() {
 
   std::string activeDefinitions = readFile("src/core/options.h");
   for (const char* path : {"profiles/unavailable_hardware.h",
-                           "profiles/x0.h", "profiles/b0.h",
-                           "profiles/a0.h", "profiles/a0_dsp.h"}) {
+                           "profiles/w0.h",
+                           "profiles/l0.h"}) {
     activeDefinitions += readFile(path);
   }
 

@@ -1,0 +1,39 @@
+#ifndef VOXONE_PROFILE_S0_H
+#define VOXONE_PROFILE_S0_H
+
+// Current ESP32-S3 Zero test hardware; future PCB capabilities are not enabled.
+#define VOXONE_PROFILE_NAME "S0"
+#define VOXONE_PROFILE_MCU voxone::Mcu::Esp32S3
+#define VOXONE_RUNTIME_OLED_128X64_BACKENDS 1
+#define VOXONE_PROFILE_DISPLAY voxone::Display::Ssd1306_128x64
+#define VOXONE_DISPLAY_CONTROLLER VOXONE_DISPLAY_CONTROLLER_SSD1306
+#define DSP_MODEL DSP_SSD1306
+#define VOXONE_DISPLAY_PROFILE VOXONE_DISPLAY_PROFILE_OLED_128X64
+#define VOXONE_PROFILE_AUDIO voxone::AudioOutput::Pcm5102a
+
+#define VOXONE_HAS_DISPLAY 1
+#define VOXONE_HAS_ENCODER 1
+#define VOXONE_HAS_VU 0
+#define VOXONE_HAS_BT 0
+#define VOXONE_HAS_AUX 0
+#define VOXONE_HAS_SPDIF 0
+#define VOXONE_HAS_TDA7719 false
+#define VOXONE_HAS_LOCAL_UI 1
+#define VOXONE_PIN_MAP_COMPLETE 1
+
+#define I2S_BCLK 1
+#define I2S_DOUT 2
+#define I2S_LRC 3
+
+#define ENC_BTNB 4
+#define ENC_BTNR 6
+#define ENC_BTNL 5
+#define ENC_INTERNALPULLUP false
+#define ENC_BUTTON_INTERNALPULLUP true
+
+#define I2C_SDA 7
+#define I2C_SCL 8
+#define I2C_RST -1
+#define SCREEN_ADDRESS 0x3C
+
+#endif

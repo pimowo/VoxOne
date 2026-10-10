@@ -1,7 +1,7 @@
-#ifndef VOXONE_PROFILE_A0_H
-#define VOXONE_PROFILE_A0_H
+#ifndef VOXONE_PROFILE_L0_H
+#define VOXONE_PROFILE_L0_H
 
-#define VOXONE_PROFILE_NAME "A0"
+#define VOXONE_PROFILE_NAME "L0"
 #define VOXONE_PROFILE_MCU voxone::Mcu::Esp32S3
 #define VOXONE_PROFILE_DISPLAY voxone::Display::St7796_480x320
 #define VOXONE_DISPLAY_PROFILE VOXONE_DISPLAY_PROFILE_ST7796_480X320
@@ -18,7 +18,7 @@
 #define VOXONE_HAS_LOCAL_UI 1
 #define VOXONE_PIN_MAP_COMPLETE 1
 
-// A0 ST7796S uses the default ESP32-S3 SPI bus: MOSI 11, SCK 12, SS 10.
+// L0 ST7796S uses the default ESP32-S3 SPI bus: MOSI 11, SCK 12, SS 10.
 // MISO 13 belongs to that bus but is not connected to the LCD.
 #define DSP_MODEL DSP_ST7796
 #define DSP_HSPI false

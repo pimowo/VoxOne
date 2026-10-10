@@ -63,7 +63,7 @@ int main() {
   BtFirmwareStaging stage(FakeHeap::alloc, FakeHeap::release, &heap);
   assert(stage.prepare(0, 8 * 1024 * 1024, true, true) == Error::InvalidSize);
   assert(stage.prepare(BtFirmwareStaging::MaxImageSize + 1, 8 * 1024 * 1024, true, true) == Error::InvalidSize);
-  assert(stage.prepare(101, 8 * 1024 * 1024, false, true) == Error::Unsupported); // X0
+  assert(stage.prepare(101, 8 * 1024 * 1024, false, true) == Error::Unsupported); // W0
   assert(stage.prepare(101, 0, true, false) == Error::NoPsram);
   assert(stage.prepare(1310720, 1500000, true, true) == Error::InsufficientPsram);
   assert(stage.prepare(101, BtFirmwareStaging::PsramReserve + 100, true, true) == Error::InsufficientPsram);

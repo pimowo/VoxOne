@@ -1,38 +1,31 @@
-# Hardware naming contract i targety PCB
+# Rodziny sprzętowe VoxOne
 
-Produkty nazywają się VoxOne i VoxOneBT. Litera identyfikuje rodzinę PCB, a cyfra rewizję: `0` oznacza prototyp przed pierwszą właściwą PCB, `1` pierwszą wersję PCB. Dlatego A0 i A1 należą do tej samej rodziny o wspólnej logice produktu, lecz mogą różnić się mapą GPIO, magistralami, złączami, LCD, enkoderem i zasilaniem. Nazwa rodziny ani rewizji nie jest capability.
+Litera oznacza rodzinę, cyfra rewizję: `0` to prototyp, `1` pierwsza docelowa PCB, `2..n` następne rewizje tej samej rodziny. Rewizje mogą mieć różne GPIO. Capability wynika z konkretnego profilu i potwierdzonego sprzętu, a nie z nazwy rodziny. VoxOneBT jest osobnym projektem/repo i posiada własną rodzinę sprzętową Vx.
 
-| Family | Prototype | MCU | Current role |
-|---|---|---|---|
-| A | A0 | ESP32-S3 N16R8 | VoxOne, główny prototyp z LCD ST7796S |
-| B | B0 | ESP32-S3 Zero | VoxOne, kompaktowy prototyp bez LCD |
-| C | C0 | ESP32-S3 Zero | VoxOne, przyszły prototyp przenośny |
-| D | D0 | ESP32-S3 Zero | VoxOne, przyszły prototyp głosowy |
-| X | X0 | klasyczny ESP32 | VoxOne, aktywny prototyp legacy |
-| V | V0 | Wemos D1 mini ESP32 | VoxOneBT, prototyp w osobnym repozytorium |
+| Rodzina | Przeznaczenie | Docelowe elementy rodziny — roadmapa, nie deklaracja rewizji 0 |
+|---|---|---|
+| Lx | rozbudowana | ESP32-S3 N16R8, PCM5102, DSPmini, W5500, SSD1306/SSD1309/CH1116/SH1106/ST7290 128×64, ST7789V 320×240, SSD1322 256×64, ST7796S 480×320, GC9A01 240×240, EC11, 3×SW, VoxOneBT, DS3231 |
+| Mx | uniwersalna | ESP32-S3 Zero, PCM5102, MAX98357A, SSD1306/SSD1309/CH1116/SH1106/ST7290 128×64, ST7789V 320×240, SSD1322 256×64, ST7796S 480×320, GC9A01 240×240, EC11, 3×SW, pomiar baterii, VoxOneBT, DS3231 |
+| Sx | mini | ESP32-S3 Zero, MAX98357A, SSD1306 128×32/128×64, EC11, 3×SW, pomiar baterii, VoxOneBT, DS3231 |
+| DINx | szyna DIN | ESP32-S3 Zero, PCM5102, SSD1306 128×32/128×64, EC11, 3×SW, VoxOneBT |
+| Wx | wspierany klasyczny ESP32 DevKit | ESP32 DevKit, PCM5102, SSD1306/SSD1309/CH1116/SH1106 128×64, ST7789V 320×240, ST7789 284×76, EC11, 3×SW, VoxOneBT |
 
-Pierwsze finalne PCB to odpowiednio A1, B1, C1, D1, X1 i V1. Aktywne środowiska PlatformIO w tym repozytorium to `a0`, `b0`, `x0`. C0/D0 nie mają jeszcze buildów ani potwierdzonych map GPIO; V0 należy do repozytorium VoxOneBT. Nazwa produktu VoxOneBT pozostaje bez zmian.
+## Bieżące profile i prototypy
 
-Jednorazowa uwaga migracyjna: A0 = formerly SALON, B0 = formerly DIN, X0 = formerly DESK. Nazwy sprzed migracji nie są już identyfikatorami buildów ani nazwami pokazywanymi użytkownikowi.
+| Profil / env | Sprzęt testowy | Aktualne możliwości w kodzie |
+|---|---|---|
+| `l0` | prototyp ESP32-S3 N16R8 | ST7796S 480×320, PCM5102A, EC11, VoxOneBT UART/I2S RX i firmware update, RTC, VU; dotychczasowe GPIO |
+| `m0` | ESP32-S3 Zero | PCM5102A GPIO1/2/3, EC11 GPIO4/5/6, SSD1306 i SSD1309 128×64 I2C GPIO7/8, `OLED_128X64`, runtime display selection; oba OLED miały PHYSICAL PASS na jednym BIN przed rename |
+| `s0` | obecny prototyp ESP32-S3 Zero | osobny profil, na razie ten sam roboczy pinout i zaimplementowane PCM5102A, EC11, OLED 128×64 oraz runtime selection; sprzęt kierunku mini wymaga przyszłej PCB/driverów |
+| `din0` | obecny prototyp ESP32-S3 Zero | osobny profil, na razie ten sam roboczy pinout i zaimplementowane PCM5102A, EC11, OLED 128×64 oraz runtime selection; wyposażenie DIN wymaga przyszłej PCB/driverów |
+| `w0` | prototyp klasyczny ESP32 DevKit | PCM5102A, ST7789 284×76, EC11 i dotychczasowe GPIO |
 
-## Aktywne prototypy
+L0 zachowuje SPI SCK12/MOSI11/MISO13, ST7796S CS10/DC9/backlight14, EC11 GPIO41/40/39, I2S GPIO4/5/6, RTC SDA8/SCL7 i VoxOneBT UART15/16 oraz I2S RX1/2/17. W0 zachowuje ST7789 CS5/DC4, I2S 27/26/25 i EC11 33/35/32. Żadne GPIO działających prototypów nie zostało zmienione przez rename.
 
-| Target | Potwierdzone elementy |
-|---|---|
-| X0 | ESP32, ST7789 284×76, enkoder, PCM5102A, bez BT i PSRAM |
-| B0 | ESP32-S3 Zero, bez LCD i enkodera, PCM5102A, VoxOneBT UART; BT I2S piny zarezerwowane, RX wyłączony |
-| A0 | ESP32-S3 N16R8, ST7796S 480×320, enkoder, PCM5102A, DS3231/I2C, VoxOneBT UART i BT I2S RX |
+`HardwareDescriptor` podaje tożsamość PCB, magistrale, GPIO i aktualne capabilities. `RuntimeHardwareConfig` wybiera na M0/S0/DIN0 jeden z dwóch skompilowanych backendów OLED w tym samym BIN. Nowe warianty wymagają fizycznej weryfikacji i osobnych capabilities. W szczególności MAX98357A, OLED 128×32, pomiar baterii, 3×SW, DS3231 i VoxOneBT na S0/DIN0 nie są teraz deklarowane jako działające.
 
-`src/hardware/hardware_descriptor.h` oddziela tożsamość PCB (`family`, `revision`, `name`, MCU), magistrale, GPIO i capabilities. `kNoPin` oznacza brak przypisania; `fromLegacyPin` tłumaczy dawne `255`/`-1`. Zero w rozmiarze pamięci oznacza brak potwierdzonej wartości, nie brak fizycznej pamięci. Runtime korzysta z descriptora dla DAC mute, RTC, BT UART/I2S, enkodera i pinów LCD; część modułów nadal korzysta z `profiles/` i Config. Różnice A0→A1, B0→B1 itd. powinny mieścić się w descriptorze/profilu, bez rozgałęzień logiki funkcjonalnej według rewizji.
+Wariant display nazywamy `STEROWNIK_ROZDZIELCZOŚĆ` (np. `SSD1306_128X64`, `SSD1309_128X64`, `ST7796S_480X320`). Layout `OLED_128X64` jest wspólny dla SSD1306 i SSD1309. Oznaczenie `ST7290_128X64` wymaga sprawdzenia kontrolera na fizycznym module przed nazwaniem backendu.
 
-X0 nie deklaruje pinów domyślnego SPI. A0 deklaruje SCK 12, MOSI 11, MISO 13 jako jedną magistralę; sterownik LCD nadal używa domyślnej inicjalizacji SPI. Podświetlenie A0 to GPIO14 sterowane przez Config. DS3231 i przyszłe urządzenie I2C mogą współdzielić SDA/SCL. XSMT A0 nie ma przypisanego GPIO. Fizyczny DSP i MAX98357 są wyłączone na aktualnych trzech targetach. Niekompletny wariant `a0_dsp` nie jest targetem weryfikacyjnym i nie ma potwierdzonej mapy pinów.
+Dla przyszłego wariantu `SSD1306_128X32` wspólny `DisplayProfile`/layout nosi nazwę `OLED_128X32`; specyfikację ekranów PLAYER, STATIONS i VOL zawiera sekcja Hardware targets w [TODO.md](TODO.md).
 
-Capabilities, a nie oznaczenie A/B/C/D/X lub numer rewizji, decydują o dostępności LCD, BT, PSRAM, DSP, RTC i przyszłych funkcji. Przykładowo A0 ma LCD/BT/RTC i zasoby PSRAM, B0 ma BT i PSRAM bez LCD, a X0 nie ma PSRAM. `supportsVoxOneBt` opisuje możliwość PCB, podczas gdy `btEnabled`, `btOnline` i `btConnected` to odrębne stany runtime. Start z BT OFF nie uruchamia UART ani I2S; późniejsze fizyczne hot-start wymaga osobnej obsługi. Nie należy wywodzić nowej funkcji tylko z `family == 'A'`.
-
-## Aktualizacja VoxOneBT
-
-Rodziny Ax/Bx/Cx/Dx mogą aktualizować VoxOneBT przez `WWW → MAIN → UART → VoxOneBT` wyłącznie gdy konkretny profil ma moduł VoxOneBT, jawne capability aktualizacji i wystarczające zasoby PSRAM/staging. Sama rodzina S3 nie daje takiej zgody. BT-FW-5 dodaje staging i upload dla obecnych A0/B0, z obowiązkowym sprawdzeniem zasobów runtime; nie oznacza to potwierdzenia PSRAM na fizycznym B0. Dla Xx aktualizacja VoxOneBT odbywa się wyłącznie bezpośrednio przez USB. Nie ma stagingu dla Xx.
-
-## Planowane PCB i LCD
-
-A1 może używać PCM5102A lub DSPmini; B1 jest kompaktowe; C1 może używać PCM5102A albo MAX98357; D1 jest wariantem głosowym. Ich mapy GPIO, peryferia i capabilities wymagają potwierdzenia. Planowane klasy LCD: wspólne 128×64 dla SSD1306/SH1106, osobne SSD1322 256×64, GC9A01 240×240, ST7789 320×240 i ST7796S 480×320. SSD1309 i utrzymanie legacy ST7789 284×76 wymagają osobnej decyzji. Ten etap nie dodaje DisplayManagera ani sterowników.
+Aktualizacja VoxOneBT przez MAIN wymaga modułu, capability BT firmware update oraz PSRAM/staging. Na Wx przewidziana jest aktualizacja bezpośrednio przez USB. Zadania i decyzje pozostają wyłącznie w [TODO.md](TODO.md).

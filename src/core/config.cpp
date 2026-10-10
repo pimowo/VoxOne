@@ -9,7 +9,7 @@
 #include "player.h"
 #include "network.h"
 #include "netserver.h"
-#if defined(VOXONE_PROFILE_A0)
+#if defined(VOXONE_PROFILE_L0)
 #include "dsp_transport_runtime.h"
 #endif
 #include "controls.h"
@@ -25,7 +25,7 @@
 #include "../displays/tools/l10n.h"
 #include <cstddef>
 #include <nvs.h>
-#if defined(VOXONE_PROFILE_C0)
+#if defined(VOXONE_RUNTIME_OLED_128X64_BACKENDS)
 #include <esp_system.h>
 #endif
 
@@ -530,7 +530,7 @@ void Config::setStartupFixedVolume(uint8_t user) {
 }
 
 bool Config::setTone(int8_t bass, int8_t middle, int8_t trebble) {
-#if defined(VOXONE_PROFILE_A0)
+#if defined(VOXONE_PROFILE_L0)
   const bool toneLocked = voxone::dsp::lockDspToneMutation();
 #endif
   WriteLock lock(_persistMutex);
@@ -547,7 +547,7 @@ bool Config::setTone(int8_t bass, int8_t middle, int8_t trebble) {
   }
   player.setTone(store.bass, store.middle, store.trebble);
   netserver.requestOnChange(EQUALIZER, 0);
-#if defined(VOXONE_PROFILE_A0)
+#if defined(VOXONE_PROFILE_L0)
   voxone::dsp::dspTransportToneChanged({store.bass, store.middle, store.trebble});
   if (toneLocked) voxone::dsp::unlockDspToneMutation();
 #endif
@@ -917,7 +917,7 @@ void Config::sleepForAfter(uint16_t sf, uint16_t sa){
 
 void Config::bootInfo() {
   BOOTLOG("************************************************");
-#if defined(VOXONE_PROFILE_C0)
+#if defined(VOXONE_RUNTIME_OLED_128X64_BACKENDS)
   BOOTLOG("reset reason:\t%d", static_cast<int>(esp_reset_reason()));
 #endif
   BOOTLOG("VoxOne v%s-%s", VOXONE_VERSION, VOXONE_BUILD_CHANNEL);

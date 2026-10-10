@@ -1,6 +1,6 @@
 #include "dsp_transport_runtime.h"
 
-#if defined(VOXONE_PROFILE_A0)
+#if defined(VOXONE_PROFILE_L0)
 #include "dsp_runtime.h"
 #include "dsp_state_json.h"
 #include "dsp_transport_protocol.h"

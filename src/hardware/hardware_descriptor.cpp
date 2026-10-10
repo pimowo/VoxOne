@@ -4,11 +4,11 @@
 namespace voxone {
 namespace hardware {
 namespace {
-#if defined(VOXONE_PROFILE_X0)
-constexpr BoardId kBoardId = BoardId::BoardX0;
-constexpr char kBoardFamily = 'X';
+#if defined(VOXONE_PROFILE_W0)
+constexpr BoardId kBoardId = BoardId::BoardW0;
+constexpr char kBoardFamily = 'W';
 constexpr DisplayKind kDisplayKind = DisplayKind::St7789_284x76;
-// The legacy X0 profile does not state its default SPI bus pins.
+// The W0 profile does not state its default SPI bus pins.
 constexpr SpiBusPins kSpi = {kNoPin, kNoPin, kNoPin};
 constexpr I2cBusPins kI2c = {kNoPin, kNoPin};
 constexpr UartPins kBtUart = {kNoPin, kNoPin};
@@ -22,32 +22,10 @@ constexpr HardwareCapabilities kCapabilities = {
   true, true, false, false, false, false, false, false, false,
   false, false, false, false
 };
-#elif defined(VOXONE_PROFILE_B0)
-constexpr BoardId kBoardId = BoardId::BoardB0;
-constexpr char kBoardFamily = 'B';
-constexpr DisplayKind kDisplayKind = DisplayKind::None;
-constexpr SpiBusPins kSpi = {kNoPin, kNoPin, kNoPin};
-constexpr I2cBusPins kI2c = {kNoPin, kNoPin};
-constexpr UartPins kBtUart = {fromLegacyPin(VOXONE_BT_UART_RX_PIN),
-                               fromLegacyPin(VOXONE_BT_UART_TX_PIN)};
-constexpr Pin kBacklight = kNoPin;
-constexpr Pin kDacXsmt = kNoPin;
-constexpr uint32_t kFlashBytes = 4u * 1024u * 1024u;
-constexpr uint32_t kPsramBytes = 0;  // Size not established by the current profile.
-constexpr HardwareCapabilities kCapabilities = {
-  0,
-  audioOutputSupport(AudioOutputKind::Pcm5102a),
-  false, false, true, false, true, false, false, true, false,
-  false, false, false, false
-};
-#elif defined(VOXONE_PROFILE_C0)
-constexpr BoardId kBoardId = BoardId::BoardC0;
-constexpr char kBoardFamily = 'C';
-#if defined(VOXONE_C0_DISPLAY_SSD1309)
-constexpr DisplayKind kDisplayKind = DisplayKind::Ssd1309_128x64;
-#else
+#elif defined(VOXONE_PROFILE_M0)
+constexpr BoardId kBoardId = BoardId::BoardM0;
+constexpr char kBoardFamily = 'M';
 constexpr DisplayKind kDisplayKind = DisplayKind::Ssd1306_128x64;
-#endif
 constexpr SpiBusPins kSpi = {kNoPin, kNoPin, kNoPin};
 constexpr I2cBusPins kI2c = {fromLegacyPin(I2C_SDA), fromLegacyPin(I2C_SCL)};
 constexpr UartPins kBtUart = {kNoPin, kNoPin};
@@ -62,11 +40,47 @@ constexpr HardwareCapabilities kCapabilities = {
   true, true, false, false, false, false, false, true, false,
   false, false, false, false
 };
-#elif defined(VOXONE_PROFILE_A0)
-constexpr BoardId kBoardId = BoardId::BoardA0;
-constexpr char kBoardFamily = 'A';
+#elif defined(VOXONE_PROFILE_S0)
+constexpr BoardId kBoardId = BoardId::BoardS0;
+constexpr char kBoardFamily = 'S';
+constexpr DisplayKind kDisplayKind = DisplayKind::Ssd1306_128x64;
+constexpr SpiBusPins kSpi = {kNoPin, kNoPin, kNoPin};
+constexpr I2cBusPins kI2c = {fromLegacyPin(I2C_SDA), fromLegacyPin(I2C_SCL)};
+constexpr UartPins kBtUart = {kNoPin, kNoPin};
+constexpr Pin kBacklight = kNoPin;
+constexpr Pin kDacXsmt = kNoPin;
+constexpr uint32_t kFlashBytes = 4u * 1024u * 1024u;
+constexpr uint32_t kPsramBytes = 2u * 1024u * 1024u;
+constexpr HardwareCapabilities kCapabilities = {
+  displaySupport(DisplayKind::Ssd1306_128x64) |
+      displaySupport(DisplayKind::Ssd1309_128x64),
+  audioOutputSupport(AudioOutputKind::Pcm5102a),
+  true, true, false, false, false, false, false, true, false,
+  false, false, false, false
+};
+#elif defined(VOXONE_PROFILE_DIN0)
+constexpr BoardId kBoardId = BoardId::BoardDIN0;
+constexpr char kBoardFamily = 'D';
+constexpr DisplayKind kDisplayKind = DisplayKind::Ssd1306_128x64;
+constexpr SpiBusPins kSpi = {kNoPin, kNoPin, kNoPin};
+constexpr I2cBusPins kI2c = {fromLegacyPin(I2C_SDA), fromLegacyPin(I2C_SCL)};
+constexpr UartPins kBtUart = {kNoPin, kNoPin};
+constexpr Pin kBacklight = kNoPin;
+constexpr Pin kDacXsmt = kNoPin;
+constexpr uint32_t kFlashBytes = 4u * 1024u * 1024u;
+constexpr uint32_t kPsramBytes = 2u * 1024u * 1024u;
+constexpr HardwareCapabilities kCapabilities = {
+  displaySupport(DisplayKind::Ssd1306_128x64) |
+      displaySupport(DisplayKind::Ssd1309_128x64),
+  audioOutputSupport(AudioOutputKind::Pcm5102a),
+  true, true, false, false, false, false, false, true, false,
+  false, false, false, false
+};
+#elif defined(VOXONE_PROFILE_L0)
+constexpr BoardId kBoardId = BoardId::BoardL0;
+constexpr char kBoardFamily = 'L';
 constexpr DisplayKind kDisplayKind = DisplayKind::St7796_480x320;
-// SPI defaults are stated in a0.h; MISO belongs to the bus, not to LCD.
+// SPI defaults are stated in l0.h; MISO belongs to the bus, not to LCD.
 constexpr SpiBusPins kSpi = {12, 11, 13};
 constexpr I2cBusPins kI2c = {fromLegacyPin(RTC_SDA), fromLegacyPin(RTC_SCL)};
 constexpr UartPins kBtUart = {fromLegacyPin(VOXONE_BT_UART_RX_PIN),
@@ -82,8 +96,8 @@ constexpr HardwareCapabilities kCapabilities = {
   false, false, false, false
 };
 #else
-// The unfinished a0_dsp profile has no verified complete pin map.
-#error "HardwareDescriptor requires a complete X0, B0, C0 or A0 profile"
+// No matching hardware profile.
+#error "HardwareDescriptor requires a complete W0, M0, S0, DIN0 or L0 profile"
 #endif
 
 constexpr HardwareDescriptor kCurrent = {

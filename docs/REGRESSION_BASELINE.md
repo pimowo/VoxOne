@@ -1,6 +1,6 @@
 ﻿# PROJECT-CLEANUP-1A — baza regresji
 
-Punkt odniesienia: VoxOne commit 4436dce4d71ad1bb7d3d9d9b785c2825a33ee086, tag voxone-dsp-web-live-1. Baza została zmierzona w oddzielnym worktree VoxOne-cleanup na branchu project-cleanup-1. Archiwalny build prototypu A0 pozostaje fizycznie sprawdzonym punktem odniesienia. Poniższe rozmiary są historyczne, a nazwy targetów dostosowano do obecnej nomenklatury.
+Punkt odniesienia: VoxOne commit 4436dce4d71ad1bb7d3d9d9b785c2825a33ee086, tag voxone-dsp-web-live-1. Baza została zmierzona w oddzielnym worktree VoxOne-cleanup na branchu project-cleanup-1. Archiwalny build prototypu A0 pozostaje fizycznie sprawdzonym punktem odniesienia. Poniższe rozmiary i nazwy targetów są zapisem historycznym tego checkpointu, nie listą obecnych env.
 
 ## Uruchomienie
 
@@ -8,7 +8,7 @@ W katalogu VoxOne-cleanup:
 
     powershell -NoProfile -ExecutionPolicy Bypass -File .\tools\verify.ps1
 
-Skrypt uruchamia wszystkie znalezione testy *_native.cpp (28 w bazie), istniejący test Chrome Web Update, PlatformIO buildfs (wraz z generowaniem WWW), sprawdza sześć wygenerowanych gzip względem web-src i powtarzalność po kolejnych buildach, buduje x0/b0/a0, uruchamia git diff --check i zwraca niezerowy kod przy błędzie. Nie wymaga USB ani nie wykonuje uploadu. a0_dsp jest celowo wykluczony, bo obecny profil ma niekompletną mapę pinów i jawny błąd kompilacji.
+Skrypt uruchamia wszystkie znalezione testy *_native.cpp (28 w bazie), istniejący test Chrome Web Update, PlatformIO buildfs (wraz z generowaniem WWW), sprawdza sześć wygenerowanych gzip względem web-src i powtarzalność po kolejnych buildach, buduje x0/b0/a0, uruchamia git diff --check i zwraca niezerowy kod przy błędzie. Nie wymaga USB ani nie wykonuje uploadu. a0_dsp był wtedy wykluczony, bo profil miał niekompletną mapę pinów i jawny błąd kompilacji.
 
 ## Rozmiary referencyjne
 

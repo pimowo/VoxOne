@@ -8,11 +8,9 @@
 
 ### RADIO
 
-- [STABLE] Wykonać na fizycznym A0 minimum czterogodzinny endurance RADIO: jedna stabilna stacja przez co najmniej 2 h, minimum trzy zmiany stacji i dalsze granie do minimum 4 h.
+- [STABLE] Wykonać na fizycznym L0 minimum czterogodzinny endurance RADIO: jedna stabilna stacja przez co najmniej 2 h, minimum trzy zmiany stacji i dalsze granie do minimum 4 h.
 - [STABLE] Zebrać log z uptime, heap/minimum heap/largest block, PSRAM/minimum PSRAM, stack HWM głównej pętli i DisplayTask, `loopMaxUs`, `audioBuffer`, reconnectami, Wi-Fi oraz RSSI; ocenić trend pamięci, stack, blokady pętli, watchdog/reboot i serie reconnectów.
 - [STABLE] Podczas endurance potwierdzić brak trwałych stall/dropout, poprawne ponowne uruchamianie streamu oraz ciągłą reakcję LCD i VU.
-- [STABLE] Przetestować realne strumienie MP3, AAC/AAC+ i FLAC oraz SHOUTcast/Icecast, `ICY 200`, MIME `audio/aacp`, HTTP/HTTPS, metadata/brak metadata, reconnect i dead stream.
-- [STABLE] Przetestować playlisty M3U/PLS, redirect, final URL, limit rekurencji i ochronę przed pętlą.
 - [BUG] Jeśli na realnym streamie nadal wystąpi `Truncated MP3 frame`, przeanalizować ICY stripping, buforowanie, MP3 sync/frame length i Helix przed zmianą dekodowania.
 
 ### Bluetooth i VoxOneBT
@@ -46,17 +44,17 @@
 
 ### Targety i release gate
 
-- [STABLE] Wykonać fizyczną regresję X0, B0 i A0; B0 (NoDisplay): full image, first boot/AP/Wi-Fi/WWW, RADIO, PCM5102A GPIO1/2/3 i restart PHYSICAL PASS; VoxOneBT oraz MQTT/HA na B0 PHYSICAL NOT TESTED.
-- [STABLE] Na X0 sprawdzić ukrycie suwaka jasności, restart z WWW, powrót Wi-Fi bez utraty stacji/config oraz osobno ekran aktualizacji bez regresji ScrollWidget/HOLD.
-- [STABLE] Fizycznie zweryfikować aktualne WWW na A0 i X0 (gdy bezpieczna aktualizacja X0 będzie możliwa): MUTE, selector RADIO/BT, oznaczenie BT offline, manual source priority, reconnect/resnapshot, favicon bez 404 oraz build identity w SYSTEM i AKTUALIZACJA.
-- [HARDWARE] Przypisać GPIO XSMT PCM5102A na A0 i fizycznie sprawdzić LOW przy PAUZA/STOP, HIGH przy PLAY, ciszę podczas przejść i Web Update oraz czerwoną ramkę VOL bez zmiany semantyki MUTE.
-- [STABLE] Fizycznie sprawdzić MQTT/Home Assistant na A0; MQTT pozostaje wspierane w pierwszym stable.
+- [STABLE] Wykonać fizyczną regresję W0, L0 i M0 po zmianie nazewnictwa: full image, first boot/AP/Wi-Fi/WWW, RADIO, audio, wyświetlacz, enkoder i restart. Na L0 sprawdzić VoxOneBT oraz MQTT/HA; S0/DIN0 wymagają osobnej weryfikacji na docelowym sprzęcie.
+- [STABLE] Na W0 sprawdzić ukrycie suwaka jasności, restart z WWW, powrót Wi-Fi bez utraty stacji/config oraz osobno ekran aktualizacji bez regresji ScrollWidget/HOLD.
+- [STABLE] Fizycznie zweryfikować aktualne WWW na L0 i W0 (gdy bezpieczna aktualizacja W0 będzie możliwa): MUTE, selector RADIO/BT, oznaczenie BT offline, manual source priority, reconnect/resnapshot, favicon bez 404 oraz build identity w SYSTEM i AKTUALIZACJA.
+- [HARDWARE] Przypisać GPIO XSMT PCM5102A na L0 i fizycznie sprawdzić LOW przy PAUZA/STOP, HIGH przy PLAY, ciszę podczas przejść i Web Update oraz czerwoną ramkę VOL bez zmiany semantyki MUTE.
+- [STABLE] Fizycznie sprawdzić MQTT/Home Assistant na L0; MQTT pozostaje wspierane w pierwszym stable.
 - [STABLE] Uzupełnić dokumentację aktywnych profili, API, MQTT/HA, Source Managera, VoxOneBT oraz update/recovery; oznaczyć historyczne baseline'y i usunąć z dokumentów bieżącego stanu opisy sprzeczne z aktualnym runtime.
 - [DECISION] Przed stable ustalić minimalny zakres uwierzytelniania, CSRF i ochrony mutujących REST/WebSocket oraz ekspozycji danych.
 
 ### Definition of Stable
 
-- [STABLE] Zamknąć release gate: FULL VERIFY PASS; fizyczny X0, B0 i A0 PASS; RADIO endurance PASS; BT phone i LG TV PASS; SourceManager switching/reconnect PASS; TTS RADIO/BT restore PASS; firmware i SPIFFS update PASS; recovery PASS; Config v7 persistence PASS; L/R i VU PASS; brak otwartych błędów P0/P1.
+- [STABLE] Zamknąć release gate: FULL VERIFY PASS; fizyczny W0, L0 i M0 PASS; RADIO endurance PASS; BT phone i LG TV PASS; SourceManager switching/reconnect PASS; TTS RADIO/BT restore PASS; firmware i SPIFFS update PASS; recovery PASS; Config v7 persistence PASS; L/R i VU PASS; brak otwartych błędów P0/P1.
 
 ## Znane błędy i pomiary
 
@@ -66,9 +64,8 @@
 
 ## Audio, RADIO i kodeki
 
-- [STABLE] Utrzymywać MP3, AAC/AAC+, FLAC oraz M4A wyłącznie jako kontener AAC; dokończyć detekcję AAC/AAC+ i `audio/aacp`, aby danych AAC nie kierować do dekodera MP3.
-- [STABLE] Na realnych stacjach sprawdzić AAC+, w tym RMF DLA DZIECI.
-- [STABLE] Dokończyć obsługę M3U, PLS, redirect i final URL streamu z limitem rekurencji i ochroną przed pętlą.
+- [STABLE] Utrzymywać MP3, AAC/AAC+, FLAC oraz M4A wyłącznie jako kontener AAC; dokończyć detekcję AAC/AAC+ i `audio/aacp`, aby danych AAC nie kierować do dekodera MP3; przetestować MP3, AAC/AAC+ (w tym RMF DLA DZIECI), FLAC, SHOUTcast/Icecast, `ICY 200`, HTTP/HTTPS, metadata/brak metadata, reconnect i dead stream.
+- [STABLE] Dokończyć obsługę M3U, PLS, redirect i final URL streamu z limitem rekurencji i ochroną przed pętlą; zweryfikować te ścieżki na rzeczywistych playlistach.
 - [DECISION] Po stable ocenić usunięcie WAV, OGG/Vorbis remnants i Opus enum/remnants oraz potrzebę ASX, M3U8, HLS i TS na podstawie realnych consumerów. Nie traktować ich jako nowych planowanych funkcji.
 - [DECISION] Ustalić źródło wiarygodnego kodeka i bitrate A2DP; publikować je dopiero, gdy VoxOneBT lub A2DP udostępni realne dane.
 
@@ -90,10 +87,6 @@
 - [POST-STABLE] W VoxOneBT utrzymać A2DP audio state jako sterowanie I2S, a AVRCP wyłącznie jako transport/UI; uzupełnić status PLAY/PAUSE/STOP, reconnect, preferred peer, pairing window, discoverability, metadata, ograniczenia TV i realny codec/bitrate, jeśli stos udostępnia dane.
 - [POST-STABLE] Znormalizować poziom BT względem RADIO dopiero po pomiarach toru cyfrowego i analogowego.
 - [STABLE] Fizycznie sprawdzić negatywne ścieżki aktualizacji VoxOneBT: przerwanie UART, brak powrotu modułu, nieoczekiwaną `FW_VERSION`, timeout identity, uszkodzony/błędny obraz oraz Error/Aborted z odzyskaniem sterowania i zwolnieniem UPDATE_LOCK.
-- BT-FW-7 — PHYSICAL PASS / zakończony: OTA V0 `0.6.1-dev` → `0.6.3-dev`; realny `FRAME_CRC`/NACK i skuteczny retry; `PENDING_VERIFY` → `VALID`; po ręcznym restarcie nadal `0.6.3-dev`.
-- BT-UART-SPEED-1 — PHYSICAL PASS / zakończony: link MAIN ↔ VoxOneBT `921600 8N1`, PROTO 2, audio, PLAY/PAUSE, volume, metadata, VU i disconnect/reconnect; pełne OTA `0.6.3-dev` → `0.6.4-dev`, `FW_VERIFY`, `FW_OK`, `PENDING_VERIFY` → `VALID`, wersja zachowana po ręcznym restarcie V0. Wynik WWW i assety SPIFFS na A0 potwierdzone fizycznie (`Success=9`, `Error=10`, `Aborted=11`).
-- BT-UART-SPEED-2 — PHYSICAL PASS / zakończony: TX burst 512 B, V0 RX buffer 2048 B; OTA `0.6.5-dev` → `0.6.6-dev` PASS, `PENDING_VERIFY` → `VALID`, po ręcznym restarcie nadal `0.6.6-dev`; throughput ok. 18 kB/s (ok. 3× szybciej).
-- UPDATE-SYSTEM-1 — PHYSICAL PASS / zakończony: MAIN, SPIFFS i VoxOneBT OTA przez wspólny UpdateProgress/UPDATE_LOCK; ekran ST7796 i płynny pasek; VoxOneBT `0.6.6-dev` → `0.6.7-dev`, `PENDING_VERIFY` → `VALID`; MQTT/HTTP/WS quiesce i czysty restart MAIN bez heap corruption.
 
 ## DLNA
 
@@ -120,18 +113,17 @@
 
 ## Local UI / LCD
 
-- [POST-STABLE] Zaimplementować przenośne menu konfiguracji obsługiwane jednym enkoderem, z jednym wspólnym drzewem/modelami pozycji i jednym `MenuController`/modelem stanu dla wszystkich wyświetlaczy. Logika menu nie może zależeć od rozdzielczości ani mieć osobnej implementacji dla każdego LCD; osobne renderery ST7796, ST7789, SSD1306 i pozostałych klas wyłącznie prezentują ten sam stan. Na dużych/średnich ekranach pokazywać u góry kontekst/ścieżkę (np. `KONFIGURACJA > AUDIO`, `DSP > CROSSOVER`), a na małych dopuszczać krótkie etykiety. Środkowy wiersz jest zawsze aktywną pozycją; poprzednia i następna są przygaszone, mogą być puste na granicach. Obrót przewija listę, utrzymując aktywną pozycję pośrodku; klik wybiera ją. Submenu używa tego samego układu i modelu. Obsłużyć uniwersalne typy `SUBMENU`, `TOGGLE`, `ENUM`, `NUMBER`, `ACTION` i `INFO`; capabilities urządzenia określają dostępne pozycje, bez zmiany wspólnego modelu. Ten sam model ma objąć konfigurację oraz przyszłe menu DSP (preset, tryb, PEQ, crossover, subwoofer, outputs i edycję parametrów pasma).
+- [POST-STABLE] Zaimplementować przenośne menu konfiguracji, aby urządzenie można było konfigurować bez WWW, obsługiwane jednym enkoderem, z jednym wspólnym drzewem/modelami pozycji i jednym `MenuController`/modelem stanu dla wszystkich wyświetlaczy. Logika menu nie może zależeć od rozdzielczości ani mieć osobnej implementacji dla każdego LCD; osobne renderery ST7796, ST7789, SSD1306 i pozostałych klas wyłącznie prezentują ten sam stan. Na dużych/średnich ekranach pokazywać u góry kontekst/ścieżkę (np. `KONFIGURACJA > AUDIO`, `DSP > CROSSOVER`), a na małych dopuszczać krótkie etykiety. Środkowy wiersz jest zawsze aktywną pozycją; poprzednia i następna są przygaszone, mogą być puste na granicach. Obrót przewija listę, utrzymując aktywną pozycję pośrodku; klik wybiera ją. Submenu używa tego samego układu i modelu. Obsłużyć uniwersalne typy `SUBMENU`, `TOGGLE`, `ENUM`, `NUMBER`, `ACTION` i `INFO`; capabilities urządzenia określają dostępne pozycje, bez zmiany wspólnego modelu. Ten sam model ma objąć konfigurację oraz przyszłe menu DSP (preset, tryb, PEQ, crossover, subwoofer, outputs i edycję parametrów pasma).
 - [POST-STABLE] W menu krótki klik otwiera submenu albo rozpoczyna edycję. Podczas edycji obrót zmienia wartość, a klik zatwierdza ją wyłącznie do konfiguracji roboczej i wraca do listy. Rozróżniać konfigurację bieżącą, working copy i stan dirty; obracanie lub klikanie podczas nawigacji nie może samo powodować trwałego zapisu. Pokazywać kontekstową dolną belkę: przy braku zmian `WRÓĆ`, przy zmianach `ANULUJ` i `ZAPISZ`. Przytrzymanie `LONG` przenosi fokus z listy/edycji na belkę; obrót wybiera jej akcję, klik ją wykonuje. `WRÓĆ` wraca o poziom lub wychodzi zgodnie z kontekstem, `ANULUJ` odrzuca zmiany robocze, a `ZAPISZ` zatwierdza je zgodnie z polityką danej opcji. Nie wykonywać auto-save przy wyjściu. Zastosowanie runtime i kontrolowany zapis ustawień wymagających restartu muszą respektować istniejące zasady VoxOne; szczegółów persistence nie projektować w tym zadaniu.
 - [POST-STABLE] Menu konfiguracji otwierać osobnym gestem `VERY_LONG` enkodera wyłącznie z głównych ekranów PLAYER, początkowo około 2,5 s; wejście do menu nie zatrzymuje audio ani nie zmienia source. Istniejący `LONG` zachowuje akcje zależne od źródła (RADIO — lista stacji, BT — sterowanie BT). Gesture manager musi rozstrzygać gest tak, aby przytrzymanie zakończone jako `VERY_LONG` nie uruchomiło wcześniej akcji `LONG`. Wstępne przedziały do późniejszego dopracowania: `CLICK` < ok. 0,7 s, `LONG` ok. 0,7–2,5 s, `VERY_LONG` ≥ ok. 2,5 s; progi nie są jeszcze finalne. Po około 30 s bezczynności automatycznie wrócić do PLAYER, odrzucić working changes bez zapisu i bez ukrytych akcji. Każdy obrót, klik i przytrzymanie resetuje timeout. Wartość 30 s jest domyślna; jej późniejsza konfigurowalność może być oceniona osobno.
 - [POST-STABLE] Dzielić implementację menu na małe etapy: `MENU-CORE` (wspólne drzewo, typy pozycji, working copy i stan dirty), `MENU-INPUT` (enkoder, fokus belki, CLICK/LONG/VERY_LONG i timeout), `MENU-RENDER` (renderery klas LCD korzystające wyłącznie ze wspólnego stanu), `MENU-CONFIG` (pozycje konfiguracji i kontrolowane zastosowanie/zapis) oraz `MENU-DSP` (pozycje DSP po dostępności odpowiednich capabilities). Każdy etap zachowuje jeden model logiki; różnice małych LCD dotyczą wyłącznie prezentacji i skrótów etykiet.
 - [POST-STABLE] Przebudować PLAYER: podnieść PLAY/PAUSE/STOP oraz bitrate/audio info, a niżej dodać czytelną ramkę faktycznego trybu wyjścia 2.0/2.1/2.2 pochodzącego z konfiguracji audio/DSP.
 - [POST-STABLE] Ustalić wspólną lub jawnie przypisaną szybkość przewijania dla stacji, artysty, utworu i list; usunąć przypadkowo różne timingi rendererów.
 - [POST-STABLE] Dodać source-aware PLAYER, ekran TTS, przyszłą przeglądarkę DLNA oraz konfigurację DSP.
-- [HARDWARE] C0 SSD1306 i SSD1309: OLED, symetryczny STARTUP, PLAYER, VOL (skala 0–100), STATIONS, UPDATE, input/audio oraz stabilność finalnego HIL PHYSICAL PASS. SSD1309 selection zachowuje się po zwykłym restarcie. Oba kontrolery zweryfikowane na tym samym C0 BIN (`8d28439b8b9d92f43a52a3772e947e4bfbab227b460b63f9983844f3f90667e6`). VoxOneBT i MQTT/HA na C0 PHYSICAL NOT TESTED (BT poza obecnym C0); pozostałe OLED-y 128×64 później.
+- [HARDWARE] Na M0/S0/DIN0 fizycznie sprawdzić dalszą stabilność OLED, input i audio po zmianie tożsamości buildów; wcześniejszy PHYSICAL PASS SSD1306 i SSD1309 na tym samym prototypie pozostaje baseline. VoxOneBT i MQTT/HA na tych profilach nie mają PHYSICAL PASS.
 - [POST-STABLE] Przygotować wspólne `assets/branding` jako źródło logo WWW, splash/logo LCD i favicon; później użyć tych samych materiałów w README/GitHub.
 - [POST-STABLE] Rozważyć opcjonalną skórkę YAMAHA AMBER: czarne tło i jeden bursztynowy kolor, punkt startowy `#FF9A1F` / RGB565 `0xFCC3`.
-- [POST-STABLE] Rozwijać klasy display: wspólne 128×64 dla SSD1306 i SH1106, osobne SSD1322 256×64, GC9A01 240×240, ST7789 320×240 i ST7796S 480×320.
-- [DECISION] Po stable zdecydować o SSD1309 w klasie 128×64 oraz o dalszym utrzymaniu legacy ST7789 284×76.
+- [DECISION] Rozstrzygnąć zakres dalszego wsparcia ST7789 284×76 na rodzinie Wx.
 - [POST-STABLE] Uporządkować duplikację `_charSize` w widgetach tylko przy pracy nad rendererem; nie robić osobnego refaktoru bez korzyści testowej.
 - [HARDWARE] Ocenić opcjonalny czujnik światła dopiero po ustaleniu docelowych PCB i display.
 
@@ -139,9 +131,9 @@
 
 - [POST-STABLE] Zaprojektować włączanie/wyłączanie VoxOne z rozróżnieniem reboot, standby, audio mute i pełnego wyłączenia.
 - [HARDWARE] Dodać sterowanie `AMP_POWER` z anti-pop: mute/fade przed wyłączeniem, opóźnienie po włączeniu i unmute/fade po stabilizacji.
-- [POST-STABLE] Dodać auto standby/auto power-off po konfigurowanym czasie bez dźwięku, ustawienie czasu w WWW i możliwość OFF; zdefiniować aktywność osobno dla RADIO, BT, DLNA, AUX i TTS, tak aby komunikat TTS nie został zablokowany.
-- [POST-STABLE] Skonsolidować configurable boot source, boot station, startup PLAY/STOP, LAST/FIXED startup volume, max physical volume i MUTE semantics. Zachować rozdział technicznego checkpointu od release version.
-- [POST-STABLE] Dodać alarm: czas, dni, stacja, volume, ON/OFF oraz tryb „włącz radio” albo „graj przez X”.
+- [POST-STABLE] Dodać auto standby/auto power-off po konfigurowanym czasie bez dźwięku, ustawienie czasu w WWW i możliwość OFF; zdefiniować aktywność osobno dla RADIO, BT, DLNA, AUX i TTS, tak aby komunikat TTS nie został zablokowany. Osobno dopracować screensaver, display ON/OFF, sleep timer i wybudzanie: określić ekran oraz zachowanie audio w stanach PLAY/STOP i podczas sleep; deep sleep tylko przy rzeczywistej potrzebie.
+- [POST-STABLE] Skonsolidować configurable boot source, boot station, startup PLAY/STOP, LAST/FIXED startup volume, max physical volume i MUTE semantics. Określić bezpieczny fallback, gdy zapisane źródło nie istnieje na danym PCB, oraz przetestować cold boot. Zachować rozdział technicznego checkpointu od release version.
+- [POST-STABLE] Dodać alarm: czas, dni, stacja, volume, ON/OFF oraz tryb „włącz radio” albo „graj przez X”; określić fade-in, czas odtwarzania i powiązanie ze sleep/wake.
 
 ## DSPmini
 
@@ -175,31 +167,43 @@
 
 - [POST-STABLE] Dopracować import/export yoRadio: preview, walidacja, raport błędnych rekordów i ewentualny import URL.
 - [STABLE] Sprawdzić listy 50/100/250 stacji, power loss, brak miejsca SPIFFS, `current/lastStation`, usunięcie aktywnej stacji, reorder i zachowanie po restarcie.
-- [STABLE] Zweryfikować eksport/import między X0 i A0: ID, kolejność, OVOL, A↔T, odświeżenie WWW oraz backup/restore przez Web Update.
-- [STABLE] Fizycznie przetestować Radio Directory na A0 i X0: dodanie, odtwarzanie, restart, pamięć i brak zakłóceń audio.
+- [STABLE] Zweryfikować eksport/import między W0 i L0: ID, kolejność, OVOL, A↔T, odświeżenie WWW oraz backup/restore przez Web Update.
+- [STABLE] Fizycznie przetestować Radio Directory na L0 i W0: dodanie, odtwarzanie, restart, pamięć i brak zakłóceń audio.
 - [POST-STABLE] Sprawdzić prezentację A↔T na LCD/WWW/MQTT oraz zachowanie po reorder i usunięciu stacji.
 
 ## Hardware targets
 
-- [STABLE] Utrzymać X0, B0 i A0 bez zmiany architektury do pierwszego stable; klasyczny ESP32 pozostaje stabilnym legacy targetem.
-- [HARDWARE] Po stable zaprojektować pierwsze PCB A1/B1/C1/D1 oraz prototypy C0/D0; mapy GPIO i złącza mogą różnić się od rewizji 0 bez zmiany logiki produktu.
-- [HARDWARE] Potwierdzić GPIO, rewizje PCB, opcjonalne LCD/BT/DSP oraz warianty wyjścia PCM5102A, MAX98357 dla C-family i DSPmini. C0: PCM5102A GPIO1/2/3, SSD1306 128×64 I2C GPIO7/8 i SSD1309 128×64 I2C GPIO7/8 PHYSICAL PASS; EC11 GPIO4/5/6 kierunek oraz krok volume 1 detent = 1 punkt PHYSICAL PASS; pozostałe OLED-y 128×64 później.
-- [POST-STABLE] CAPABILITIES-CORE-1 — BUILD PASS: jeden autorytatywny model możliwości PCB w `HardwareDescriptor` przygotowuje architekturę pod zasadę 1 PCB = 1 BIN. OPEN / FUTURE: wybór hardware z WWW oraz C0-ONE-BIN-1 z usunięciem przejściowego env po fizycznym potwierdzeniu runtime OLED.
-- [POST-STABLE] VOLUME-CONTRACT-1 — BUILD PASS: `userVolume` 0–100 jest globalnym kontraktem VoxOne, RAW 0–254 pozostaje wewnętrzną reprezentacją audio/legacy compatibility, a nazwa profilu PCB nie zmienia semantyki głośności.
-- [POST-STABLE] INPUT-EVENTS-1 — BUILD PASS: EC11 emituje wspólne zdarzenia `LEFT/RIGHT/OK/DOUBLE/LONG`, `VERY_LONG` jest zarezerwowane bez nowej akcji, a semantyka Player/SourceManager/UI należy do wspólnego dispatchera core i zależy od stanu/capabilities, nie od nazwy PCB. Adapter 3×SW ma ten sam kontrakt `LEFT/OK/RIGHT`, lecz nie jest aktywowany ani PHYSICAL PASS; docelowo EC11 i 3×SW użyją tych samych GPIO A/B/KEY, wybieranych później przez RuntimeConfig/WWW, z zewnętrznym podciąganiem i filtracją. OPEN / FUTURE: runtime driver 3×SW, RuntimeConfig, wybór EC11/3×SW z WWW oraz wspólny runtime gesture engine dla 3×SW.
-- [POST-STABLE] UI-CORE-STATE-1 — BUILD PASS: semantyczny tryb UI, wybór stacji i przejścia timeout → PLAYER należą do wspólnego `UiState`; dispatcher inputu czyta stan core, a Display jedynie konsumuje stan i utrzymuje techniczny cache ostatnio renderowanego trybu. OPEN / FUTURE: RuntimeConfig, wybór hardware z WWW, runtime 3×SW, menu konfiguracji, ewentualne ujednolicenie wartości timeoutów X0/A0/C0 oraz cleanup sygnałów timeoutu compatibility w `Display::putRequest()`.
-- [POST-STABLE] DISPLAY-PROFILE-1 — BUILD PASS: layout renderera nie zależy od nazwy PCB; wspólny `OLED_128X64` obsługuje backendy SSD1306 i SSD1309, `ST7796_480X320` jest niezależny od A0, `ST7789_284X76` od X0, a B0 wybiera `NONE`. BoardProfile wskazuje wybrany profil/controller oraz capabilities/resources, ale nie zawiera geometrii, fontów ani semantyki ekranów. C0 wybiera SSD1306/SSD1309 runtime bez zmiany layoutu. OPEN / FUTURE: runtime display selection poza C0, konfiguracja hardware z WWW, 1 PCB = 1 BIN, przyszłe backendy/layouty display oraz konwencja nazw fizycznych wariantów `STEROWNIK_ROZDZIELCZOŚĆ` (np. `SSD1306_128X64`, `SSD1309_128X64`, `ST7796S_480X320`, `ST7789_284X76`, przyszły `ST7920_128X64`) przy zachowaniu osobnej warstwy wspólnego layoutu, np. `OLED_128X64`/`MONO_128X64`.
-- [POST-STABLE] RUNTIME-HARDWARE-CONFIG-1 — BUILD PASS: oddzielny, wersjonowany `RuntimeHardwareConfig` modeluje wybrany fizyczny display, input i audio, waliduje selection względem `HardwareCapabilities`, używa bezpiecznych defaults zgodnych z bieżącym buildem oraz osobnego rekordu NVS poza Config v7/UserSettings; brak, uszkodzenie, nieobsługiwana wersja lub selection daje diagnostyczny status i bezpieczny default bez zapisu przy boot. C0 aktywuje runtime selection SSD1306/SSD1309; pozostałe display oraz input/audio nadal używają build-time driverów. OPEN / FUTURE: konfiguracja hardware z WWW, dalsza runtime activation selection, 1 PCB = 1 BIN, runtime driver 3×SW, jawny `supportedInputs` capability/mask, jeśli różne PCB będą tego wymagać, opcjonalne flagi installed/enabled dla VoxOneBT/RTC/AUX/SPDIF/DSP oraz finalne nazewnictwo PCB XL/L/M/S/XS/V.
-- [POST-STABLE] RUNTIME-DISPLAY-ACTIVATION-1 — PHYSICAL PASS: jeden C0 BIN (`8d28439b8b9d92f43a52a3772e947e4bfbab227b460b63f9983844f3f90667e6`) zawiera backendy SSD1306 i SSD1309, `RuntimeHardwareConfig.display` wybiera jedyny inicjalizowany backend, oba używają wspólnego `OLED_128X64`, UPDATE jest PHYSICAL PASS, a wybór SSD1309 pozostaje zachowany po restarcie; `c0` i `c0_ssd1309` różnią się defaultem i pozostają tymczasowo jako dwa env. Powiązany fix DspTask 4096 → 6144 B jest PHYSICAL PASS: przed fixem minimum HWM 360 B i stack overflow, po fixie minimum HWM 2056 B podczas stress 10 min 33 s, bez resetu, stack overflow, watchdog, brownout ani panic. OPEN / FUTURE: C0-ONE-BIN-1, usunięcie `c0_ssd1309`, WWW hardware setup, runtime input activation i Buttons3, runtime audio selection, brightness 0–100 dla TFT/OLED, OLED_128X32 oraz nowe rodziny L/M/S/DIN/W/V.
-- [POST-STABLE] Aktualizację VoxOneBT przez MAIN na Ax/Bx/Cx/Dx dopuścić tylko przy obecnym module BT, odpowiednim capability oraz zasobach PSRAM/staging; na Xx aktualizować VoxOneBT wyłącznie bezpośrednio przez USB. Nie dodawać stagingu na Xx.
+VoxOneBT jest osobnym projektem/repo i posiada własną rodzinę sprzętową Vx.
+
+- [HARDWARE] Potwierdzić GPIO, rewizje PCB, opcjonalne LCD/BT/DSP oraz przyszłe warianty wyjścia PCM5102A, MAX98357A i DSPmini. Na nowych PCB zweryfikować GPIO, audio, OLED i EC11; wcześniejszy fizyczny baseline M0 obejmuje PCM5102A GPIO1/2/3, oba OLED I2C GPIO7/8 oraz EC11 GPIO4/5/6. Pozostałe OLED-y 128×64 wymagają driverów i testów.
+- [HARDWARE] Zweryfikować na fizycznych prototypach S0 i DIN0 osobne profile i docelowe wyposażenie. Dzisiejsze buildy używają roboczego pinoutu M0, PCM5102A, OLED 128×64 i EC11; nie są dowodem działania przyszłych modułów.
+- [POST-STABLE] Dodać runtime input activation, wybór EC11/Buttons3 i jawny `supportedInputs` mask. Driver 3×SW ma emitować wspólne zdarzenia `LEFT/OK/RIGHT` przez istniejący kontrakt `UiInputEvent`, używać tych samych logicznych linii A/B/KEY co EC11 oraz uwzględniać zewnętrzne podciąganie i filtrację; gesty CLICK/DOUBLE/LONG/VERY_LONG mają być rozstrzygane bez przedwczesnego wywołania krótszego gestu.
+- [POST-STABLE] Dodać runtime audio activation; nowe driver/backendy włączać tylko na PCB z potwierdzonymi capabilities.
+- [POST-STABLE] Dodać konfigurację sprzętu w WWW na podstawie `RuntimeHardwareConfig`: wybór display, wejścia EC11/Buttons3 i audio filtrowany przez `HardwareCapabilities`, kontrolowany zapis i restart tam, gdzie zmiana wymaga restartu. Później rozważyć osobne installed/enabled dla modułów opcjonalnych. Jeden profil PCB ma dostarczać jeden BIN; wybory użytkownika nie tworzą nowych env.
+- [POST-STABLE] Dodać backendy wyświetlaczy z macierzy rodzin oraz layout `OLED_128X32` dla SSD1306_128X32. PLAYER: góra nazwa stacji, dół belka info jak w OLED_128X64, bez artist/title/dużego zegara. STATIONS: góra wybrana stacja, dół `GRA` po lewej i `x/N` po prawej, bez nagłówka. VOL: góra duże 0–100 lub MUTE, dół IP, bez nagłówka.
+- [POST-STABLE] Wprowadzić jeden parametr `Jasność` 0–100% w WWW i menu lokalnym: TFT przez PWM podświetlenia, OLED przez contrast/current, 0% wygasza display.
+- [DECISION] Ustalić, czy rzeczywista zmiana `userVolume` z WWW, HA lub BT wywołana przez użytkownika otwiera ekran VOL; snapshot, restore i synchronizacja nie mogą go otwierać przypadkowo.
+- [DECISION] Ustalić, czy ekran VOL dostaje pasek 0–100; przy MUTE pasek ma pokazywać zapamiętane `userVolume`, ponieważ MUTE nie oznacza volume 0.
+- [HARDWARE] Zaprojektować osobne docelowe PCB L1/M1/S1/DIN1; każda rewizja wymaga własnego pinoutu i capabilities bez współdzielonego BoardProfile. Potwierdzić GPIO i capabilities każdej płytki.
+- [POST-STABLE] Aktualizację VoxOneBT przez MAIN dopuścić tylko przy obecnym module, capability BT firmware update i wystarczającym PSRAM/staging. Na przyszłym Wx z modułem BT aktualizację modułu prowadzić bezpośrednio przez USB, bez stagingu na MAIN.
+
+### Architecture baseline
+
+Obecny baseline: dane i widoki display są rozdzielone; `HardwareCapabilities` jest autorytatywnym opisem możliwości PCB; globalny `userVolume` ma zakres 0–100; wejście UI emituje znormalizowane zdarzenia, a `UiState` należy do core. `DisplayProfile` jest oddzielony od PCB, a `RuntimeHardwareConfig` od `UserSettings`. M0 ma jeden BIN z backendami SSD1306_128X64 i SSD1309_128X64; wybór przez `RuntimeHardwareConfig` i oba OLED mają wcześniejszy PHYSICAL PASS na tym samym prototypie. To stan architektury, nie backlog.
+
+Nazwy wariantów display: `STEROWNIK_ROZDZIELCZOŚĆ`, np. `SSD1306_128X32`, `SSD1306_128X64`, `SSD1309_128X64`, `CH1116_128X64`, `SH1106_128X64`, `ST7789V_320X240`, `ST7789_284X76`, `SSD1322_256X64`, `ST7796S_480X320`, `GC9A01_240X240`. Dla modułu opisanego `ST7290_128X64` lub ST7920-compatible trzeba potwierdzić fizyczny kontroler i protokół przed nazwaniem backendu.
 
 ## Installer, first boot i release
 
-- [POST-STABLE] Przygotować VoxOne Installer dla Windows jako portable EXE dla VoxOne/VoxOneBT: wybór PCB A1/B1/C1 lub V1/V2, embedded stable factory binaries, install, erase/install, auto COM, auto chip i brak ręcznych offsetów.
+- [POST-STABLE] Przygotować VoxOne Installer dla Windows jako portable EXE dla VoxOne: wybór rodziny L/M/S/DIN/W i właściwej rewizji PCB, embedded stable factory binaries, install, erase/install, auto COM, auto chip i brak ręcznych offsetów.
 - [POST-STABLE] Zaprojektować first boot AP `VoxOne-XXXXXX` i captive wizard do Wi-Fi oraz podstawowego hardware/config; dalsza konfiguracja ma być dostępna przez WWW i LCD.
 - [POST-STABLE] Docelowy przepływ produkcyjny ma po flashu nie wymagać VS Code ani edycji kodu.
 - [STABLE] Przed release potwierdzić artefakty firmware/SPIFFS/full image, instrukcję instalacji i recovery oraz zasady zachowania NVS/config.
 - [STABLE] Po przejściu wszystkich gate'ów przygotować stable release i merge `project-cleanup-1` → `main`; dopiero release otrzymuje decyzję o zmianie `VOXONE_VERSION`.
+
+## Dystrybucja
+
+- [DECISION] Przed dystrybucją rozstrzygnąć, czy VoxOne ma używać licencji offline powiązanej z konkretnym ESP. Omówiony, niezatwierdzony wariant: Installer zbiera dane urządzenia, użytkownik przekazuje je z adresem email autorowi, a autor odsyła aktywację; przy jej braku LCD pokazuje logo VoxOne, „Brak licencji” i kontakt `pimowo@voxone.pl`. Ocenić zgodność wariantu z licencją projektu i zależnościami przed ewentualnym projektem mechanizmu.
 
 ## Compatibility i małe decyzje techniczne
 
@@ -211,10 +215,10 @@
 - P1 — BUGFIXES znalezione podczas stable
 - P2 — STABLE RELEASE + merge `project-cleanup-1` → `main`
 - P3 — UX/polish
-- P4 — VoxOneBT hardening
+- P4 — integracja VoxOneBT
 - P5 — DLNA / AUX
 - P6 — native HA
-- P7 — A1/B1/C1/D1 + capabilities
+- P7 — L1/M1/S1/DIN1 + capabilities
 - P8 — DSPmini
 - P9 — Installer + pełna konfiguracja LCD
 - P10 — W5500 / dalsze rozszerzenia

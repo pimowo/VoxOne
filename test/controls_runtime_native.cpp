@@ -61,7 +61,7 @@ int main() {
   assertMissing(encoderLoop, "sourceManager");
   assertMissing(implementation, "config.store.volume+encoderDelta");
   assertMissing(implementation, "config.store.volume+volDelta");
-  assertMissing(implementation, "VOXONE_PROFILE_X0) || defined(VOXONE_PROFILE_A0) || defined(VOXONE_PROFILE_C0)");
+  assertMissing(implementation, "VOXONE_PROFILE_W0) || defined(VOXONE_PROFILE_L0) || defined(VOXONE_PROFILE_M0)");
   assert(player.find("void Player::stepVol(bool up) {\n  stepUserVol(up ? 1 : -1);\n}") !=
          std::string::npos);
   assert(display.find("constexpr uint16_t kDisplayVolumeMax = 100;") !=

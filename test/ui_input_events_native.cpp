@@ -101,8 +101,8 @@ int main() {
   assert(action(radio(), UiInputEvent::VeryLong) == UiInputAction::None);
 
   const std::string implementation = readFile("src/core/ui_input.cpp");
-  for (const char* profile : {"PROFILE_A0", "PROFILE_B0", "PROFILE_C0",
-                              "PROFILE_X0", "VOXONE_PROFILE_"})
+  for (const char* profile : {"PROFILE_L0", "PROFILE_M0",
+                              "PROFILE_W0", "VOXONE_PROFILE_"})
     assert(implementation.find(profile) == std::string::npos);
   assert(implementation.find("hardwareCapabilities()") != std::string::npos);
 }

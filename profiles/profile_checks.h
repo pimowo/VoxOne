@@ -65,13 +65,8 @@ static_assert(!VOXONE_HAS_LOCAL_UI ||
 static_assert(bool(VOXONE_HAS_VU) == displaySupportsVu(VOXONE_PROFILE_DISPLAY),
               "VU compile gate does not match the selected display configuration");
 
-#if defined(VOXONE_PROFILE_A0_DSP)
-static_assert(VOXONE_HAS_TDA7719,
-              "A0_DSP profile requires VOXONE_HAS_TDA7719=true");
-#else
 static_assert(!VOXONE_HAS_TDA7719,
-              "VOXONE_HAS_TDA7719=true is only valid for A0_DSP");
-#endif
+              "TDA7719 is unavailable on current hardware profiles");
 
 static_assert(!VOXONE_HAS_TDA7719 ||
               VOXONE_PROFILE_AUDIO == AudioOutput::Pcm5102a,

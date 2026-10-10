@@ -26,7 +26,7 @@ accepts success only when the new online snapshot has `PROTO 2`, the expected
 version. Ordinary BT commands, polling, and source observation are suppressed
 while the sender owns UART; normal operation resumes on success/error/abort.
 The progress snapshot exposes target VoxOneBT, phase, total bytes, ACK-confirmed
-bytes, percent and error. Hardware UART/OTA testing remains outstanding.
+bytes, percent and error. Positive-path UART/OTA tests were physically verified; negative-path recovery tests remain in `docs/TODO.md`.
 
 The wire frame layout and VoxOneBT responses are specified by the separate
 VoxOneBT repository's `docs/UART_PROTOCOL.md`; this document describes only
@@ -35,22 +35,22 @@ MAIN ownership and success policy.
 ## BT-FW-5 upload and staging
 
 `POST /update/bt` accepts one `.bin` with a declared byte length; it does not
-use the MAIN/SPIFFS `/update` endpoint. The A0/B0 hardware capability gates
+use the MAIN/SPIFFS `/update` endpoint. The L0 hardware capability gates
 the feature, and runtime PSRAM, module status, PROTO 2, `FW_UPDATE`, and source
-other than BT are also required. X0 has no BT upload runtime and uses direct
-USB for VoxOneBT. Future Ax/Bx/Cx/Dx profiles may opt in only with the same
-capability and sufficient resources. Vx is the module family; V0 is the
-current compatible revision. B0 PSRAM size is not assumed by its profile.
+other than BT are also required. W0 has no BT upload runtime; its external
+VoxOneBT module is updated directly over USB. Future Lx/Mx/Sx/DINx profiles
+may opt in only with the same capability and sufficient resources. VoxOneBT
+is a separate project/repo with its own Vx hardware family.
 
 The image occupies up to 80 separately allocated 16 KiB PSRAM blocks (last
 block may be shorter). A 384 KiB free-PSRAM reserve is enforced before and
-after allocation. The V0 OTA-slot maximum is 1,310,720 bytes; the receiver
+after allocation. The currently supported VoxOneBT OTA-slot maximum is 1,310,720 bytes; the receiver
 checks its real slot again. Bookkeeping is at most 80 pointers (320 B on
 ESP32-S3) plus small counters. Upload writes update whole-image
 CRC-32/ISO-HDLC incrementally. A complete image must start with ESP magic
 `0xE9` and contain exactly one valid 60-byte VoxOneImageManifest v1 at any
 offset. MAIN independently checks the documented magic, little-endian fields,
-V0 identity, PROTO 2, bounded version, zero reserved bytes and manifest CRC.
+supported module identity, PROTO 2, bounded version, zero reserved bytes and manifest CRC.
 The sender's expected `FW_VERSION` comes solely from that validated manifest.
 
 An interrupted HTTP upload frees staging without sending `FW_BEGIN`. After
@@ -59,5 +59,5 @@ cancel the UART update. MAIN starts the existing sender and retains staging
 through retries until SUCCESS, ERROR or ABORT. A rejected start frees it at
 once. `GET /api/bt/update` reports a snapshot of the existing sender progress;
 `systemInfo.btFirmwareUpdateSupported` reports profile capability. The WWW
-uses this as a minimal status; common MAIN/SPIFFS/BT progress UI is BT-FW-6.
-Physical OTA and fault-injection validation remain BT-FW-7.
+uses this as a minimal status; common MAIN/SPIFFS/BT progress UI is implemented. Positive-path OTA was
+physically verified; negative-path recovery remains in `docs/TODO.md`.

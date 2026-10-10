@@ -1,7 +1,7 @@
-#ifndef VOXONE_PROFILE_X0_H
-#define VOXONE_PROFILE_X0_H
+#ifndef VOXONE_PROFILE_W0_H
+#define VOXONE_PROFILE_W0_H
 
-#define VOXONE_PROFILE_NAME "X0"
+#define VOXONE_PROFILE_NAME "W0"
 #define VOXONE_PROFILE_MCU voxone::Mcu::Esp32
 #define VOXONE_PROFILE_DISPLAY voxone::Display::St7789_284x76
 #define VOXONE_DISPLAY_PROFILE VOXONE_DISPLAY_PROFILE_ST7789_284X76
@@ -18,7 +18,7 @@
 #define VOXONE_HAS_LOCAL_UI 1
 #define VOXONE_PIN_MAP_COMPLETE 1
 
-// Existing, physically verified X0 pin map.
+// Existing, physically verified W0 pin map.
 #define DSP_MODEL DSP_ST7789_76
 #define TFT_CS 5
 #define TFT_DC 4

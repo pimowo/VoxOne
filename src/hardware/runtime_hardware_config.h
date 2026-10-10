@@ -139,7 +139,7 @@ RuntimeHardwareSaveStatus saveRuntimeHardwareConfig(
     const RuntimeHardwareConfig& requested,
     const HardwareCapabilities& capabilities);
 
-// Device API. C0 activates the selected SSD1306/SSD1309 display backend.
+// Device API. M0/S0/DIN0 activate the selected SSD1306/SSD1309 display backend.
 // Input and audio drivers, and display drivers on other boards, remain
 // build-time choices until their later activation stages.
 const RuntimeHardwareConfig& runtimeHardwareConfig();

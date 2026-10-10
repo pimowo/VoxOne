@@ -256,7 +256,7 @@
     updateBtFile.disabled = updateBusy || btUpdateBusy || !supported;
     updateBtButton.disabled = updateBusy || btUpdateBusy || !file || !ready ||
       !file.size || file.size > 1310720;
-    updateBtHint.textContent = !supported ? "Aktualizacja VoxOneBT: bezpośrednio przez USB (X0)." :
+    updateBtHint.textContent = !supported ? "Aktualizacja VoxOneBT: bezpośrednio przez USB (W0)." :
       !info.psramTotal ? "PSRAM niedostępny; upload przez MAIN jest wyłączony." :
       "Wymaga wolnego PSRAM (obraz + 384 KiB), VoxOneBT online, PROTO 2, FW_UPDATE i źródła innego niż BT.";
   }

@@ -68,23 +68,37 @@ int main() {
   assert(validateRuntimeHardwareConfig(defaults, capabilities) ==
          RuntimeHardwareValidation::Valid);
 
-#if defined(VOXONE_PROFILE_X0)
+#if defined(VOXONE_PROFILE_W0)
   assert(defaults.display == RuntimeDisplay::St7789_284x76);
   assert(defaults.input == RuntimeInput::Ec11);
-#elif defined(VOXONE_PROFILE_B0)
-  assert(defaults.display == RuntimeDisplay::None);
-  assert(defaults.input == RuntimeInput::None);
-#elif defined(VOXONE_PROFILE_C0)
-#if defined(VOXONE_C0_DISPLAY_SSD1309)
-  assert(defaults.display == RuntimeDisplay::Ssd1309_128x64);
-#else
+#elif defined(VOXONE_RUNTIME_OLED_128X64_BACKENDS)
   assert(defaults.display == RuntimeDisplay::Ssd1306_128x64);
-#endif
   assert(defaults.input == RuntimeInput::Ec11);
-#elif defined(VOXONE_PROFILE_A0)
+#elif defined(VOXONE_PROFILE_L0)
   assert(defaults.display == RuntimeDisplay::St7796s_480x320);
   assert(defaults.input == RuntimeInput::Ec11);
 #endif
+
+  HardwareDescriptor noDisplay = hardware;
+  noDisplay.displayKind = DisplayKind::None;
+  noDisplay.display = {kNoPin, kNoPin, kNoPin, kNoPin, BusKind::None};
+  noDisplay.encoder = {kNoPin, kNoPin, kNoPin, false, false, 1};
+  noDisplay.capabilities.supportedDisplays = 0;
+  noDisplay.capabilities.supportsEncoder = false;
+  noDisplay.capabilities.supportsLocalUi = false;
+  const RuntimeHardwareConfig noDisplayDefaults =
+      defaultRuntimeHardwareConfig(noDisplay);
+  assert(noDisplayDefaults.display == RuntimeDisplay::None);
+  assert(noDisplayDefaults.input == RuntimeInput::None);
+  assert(noDisplayDefaults.audio == RuntimeAudioOutput::Pcm5102a);
+  assert(validateRuntimeHardwareConfig(noDisplayDefaults,
+                                       noDisplay.capabilities) ==
+         RuntimeHardwareValidation::Valid);
+  RuntimeHardwareConfig unavailableInput = noDisplayDefaults;
+  unavailableInput.input = RuntimeInput::Ec11;
+  assert(validateRuntimeHardwareConfig(unavailableInput,
+                                       noDisplay.capabilities) ==
+         RuntimeHardwareValidation::Unsupported);
 
   assert(runtimeDisplayProfile(RuntimeDisplay::Ssd1306_128x64) ==
          ProfileId::Oled128x64);
@@ -207,7 +221,7 @@ int main() {
   assert(loaded.validation == RuntimeHardwareValidation::Unsupported);
   assert(loaded.config == defaults);
 
-#if defined(VOXONE_PROFILE_C0) && !defined(VOXONE_C0_DISPLAY_SSD1309)
+#if defined(VOXONE_RUNTIME_OLED_128X64_BACKENDS)
   RuntimeHardwareConfig boardSupportedAlternative = defaults;
   boardSupportedAlternative.display = RuntimeDisplay::Ssd1309_128x64;
   putRecord(storage, boardSupportedAlternative);

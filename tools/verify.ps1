@@ -1,4 +1,4 @@
-# VoxOne regression gate for X0, B0 and A0.
+# VoxOne regression gate for L0, M0, S0, DIN0 and W0.
 [CmdletBinding()]
 param(
  [string]$PlatformIo,
@@ -107,7 +107,7 @@ Invoke-Step 'Native tests' {
   $name=$test.BaseName
   $sources=@($test.FullName)
   if($nativeSources.ContainsKey($name)) { $sources+=@($nativeSources[$name] | ForEach-Object { Join-Path $root $_ }) }
-  $variants=if($name -eq 'hardware_descriptor_native' -or $name -eq 'runtime_hardware_config_native' -or $name -eq 'runtime_display_activation_native') { @('X0','B0','C0','C0_SSD1309','A0') } elseif($name -eq 'build_identity_native') { @('','X0','B0','C0','A0','CLEAN','DIRTY') } else { @('') }
+  $variants=if($name -eq 'hardware_descriptor_native' -or $name -eq 'runtime_hardware_config_native' -or $name -eq 'runtime_display_activation_native') { @('L0','M0','S0','DIN0','W0') } elseif($name -eq 'build_identity_native') { @('','L0','M0','S0','DIN0','W0','CLEAN','DIRTY') } else { @('') }
   foreach($variant in $variants) {
    $label=if($variant) { "$name-$variant" } else { $name }
    $exe=Join-Path $work ($label+$(if($onWindows) { '.exe' } else { '' }))
@@ -115,7 +115,6 @@ Invoke-Step 'Native tests' {
    $compileArgs=@('-std=c++11','-O2','-Wall','-Wextra','-Werror','-Wno-unused-parameter')
    if($variant) {
     if($variant -eq 'CLEAN' -or $variant -eq 'DIRTY') { $compileArgs+="-DBUILD_ID_TEST_$variant=1" }
-    elseif($variant -eq 'C0_SSD1309') { $compileArgs+=@('-DVOXONE_PROFILE_C0=1','-DVOXONE_C0_DISPLAY_SSD1309=1') }
     else { $compileArgs+="-DVOXONE_PROFILE_$variant=1" }
     $sourcesForVariant=if($name -eq 'hardware_descriptor_native' -or $name -eq 'runtime_hardware_config_native' -or $name -eq 'runtime_display_activation_native') { $sources+@(Join-Path $root 'src/hardware/hardware_descriptor.cpp') } else { $sources }
    } else { $sourcesForVariant=$sources }
@@ -139,8 +138,8 @@ Invoke-Step 'Web Update headless' {
 }
 $initialAssets=Get-AssetHashes
 Invoke-Step 'SPIFFS' {
- Invoke-Pio 'a0-buildfs' @('run','-e','a0','-t','buildfs')
- $image=Join-Path $root '.pio/build/a0/spiffs.bin'
+ Invoke-Pio 'l0-buildfs' @('run','-e','l0','-t','buildfs')
+ $image=Join-Path $root '.pio/build/l0/spiffs.bin'
  if(-not (Test-Path -LiteralPath $image)) { throw 'Missing spiffs.bin' }
  $sizes['SPIFFS']=(Get-Item -LiteralPath $image).Length
 }
@@ -150,7 +149,7 @@ Invoke-Step 'WWW assets' {
  $changed=@($initialAssets.Keys | Where-Object { $initialAssets[$_] -ne $script:generatedAssets[$_] })
  if($changed.Count -gt 0) { Write-Host ("  normalized generated assets: " + ($changed -join ', ')) }
 }
-foreach($target in @('x0','b0','a0')) {
+foreach($target in @('l0','m0','s0','din0','w0')) {
  $envName=$target
  Invoke-Step ($envName.ToUpperInvariant()) {
   Invoke-Pio "$envName-firmware" @('run','-e',$envName)

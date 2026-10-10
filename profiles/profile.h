@@ -11,35 +11,29 @@ using AudioOutput = hardware::AudioOutputKind;
 
 }  // namespace voxone
 
-#if (defined(VOXONE_PROFILE_X0) + defined(VOXONE_PROFILE_B0) + \
-     defined(VOXONE_PROFILE_C0) + \
-     defined(VOXONE_PROFILE_A0) + defined(VOXONE_PROFILE_A0_DSP)) != 1
+#if (defined(VOXONE_PROFILE_W0) + defined(VOXONE_PROFILE_M0) + \
+     defined(VOXONE_PROFILE_S0) + \
+     defined(VOXONE_PROFILE_DIN0) + defined(VOXONE_PROFILE_L0)) != 1
 #error "Select exactly one VoxOne hardware profile"
 #endif
 
-#if defined(VOXONE_PROFILE_X0)
-#include "x0.h"
-#elif defined(VOXONE_PROFILE_B0)
-#include "b0.h"
-#elif defined(VOXONE_PROFILE_C0)
-#include "c0.h"
-#elif defined(VOXONE_PROFILE_A0)
-#include "a0.h"
-#elif defined(VOXONE_PROFILE_A0_DSP)
-#include "a0_dsp.h"
+#if defined(VOXONE_PROFILE_W0)
+#include "w0.h"
+#elif defined(VOXONE_PROFILE_M0)
+#include "m0.h"
+#elif defined(VOXONE_PROFILE_S0)
+#include "s0.h"
+#elif defined(VOXONE_PROFILE_DIN0)
+#include "din0.h"
+#elif defined(VOXONE_PROFILE_L0)
+#include "l0.h"
 #endif
 
 #include "unavailable_hardware.h"
 #include "../src/displays/display_profile.h"
 
 #if !VOXONE_PIN_MAP_COMPLETE
-  #if defined(VOXONE_PROFILE_B0)
-    #error "B0 profile is not buildable: pin map incomplete"
-  #elif defined(VOXONE_PROFILE_A0)
-    #error "A0 profile is not buildable: ST7796S, encoder and PCM5102A pin maps are not documented"
-  #elif defined(VOXONE_PROFILE_A0_DSP)
-    #error "A0_DSP profile is not buildable: ST7796S, encoder, PCM5102A and TDA7719 pin maps are not documented"
-  #endif
+#error "Selected hardware profile has an incomplete pin map"
 #endif
 
 #endif

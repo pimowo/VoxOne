@@ -27,7 +27,7 @@ int main() {
   turn(1); assert(encoderUser == 51);
   turn(-1); assert(encoderUser == 50);
   turn(-1); assert(encoderUser == 49);
-  // RADIO uses the sign of a batched encoder delta, as on A0.
+  // RADIO uses the sign of a batched encoder delta, as on L0.
   encoderUser = 50;
   turn(3); assert(encoderUser == 51);
   assert(volumeStateFromUser(50, 100).raw == 103);

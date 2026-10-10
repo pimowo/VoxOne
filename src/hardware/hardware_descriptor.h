@@ -14,7 +14,7 @@ constexpr Pin fromLegacyPin(int value) {
 }
 constexpr bool hasPin(Pin value) { return value != kNoPin; }
 
-enum class BoardId { BoardX0, BoardB0, BoardC0, BoardA0 };
+enum class BoardId { BoardW0, BoardM0, BoardS0, BoardDIN0, BoardL0 };
 enum class McuFamily { Esp32, Esp32S3 };
 enum class DisplayKind { None, Ssd1306_128x64, Ssd1309_128x64, St7789_284x76, St7796_480x320 };
 enum class AudioOutputKind { None, Pcm5102a, Max98357, DspMini };
@@ -33,7 +33,7 @@ constexpr AudioOutputSupportMask audioOutputSupport(AudioOutputKind kind) {
 
 struct BoardIdentity {
   BoardId id;
-  const char* name;  // Display name, e.g. A0.
+  const char* name;  // Display name, e.g. L0.
   char family;
   uint8_t revision;
   McuFamily mcu;
@@ -93,7 +93,7 @@ struct HardwareDescriptor {
   HardwareCapabilities capabilities;
 };
 
-// Describes the current legacy profile values for runtime consumers.
+// Describes the current profile values for runtime consumers.
 const HardwareDescriptor& currentHardware();
 const HardwareCapabilities& hardwareCapabilities();
 bool hasPinConflicts(const HardwareDescriptor& descriptor);
