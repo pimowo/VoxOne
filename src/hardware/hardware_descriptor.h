@@ -17,7 +17,19 @@ constexpr bool hasPin(Pin value) { return value != kNoPin; }
 enum class BoardId { BoardX0, BoardB0, BoardC0, BoardA0 };
 enum class McuFamily { Esp32, Esp32S3 };
 enum class DisplayKind { None, Ssd1306_128x64, Ssd1309_128x64, St7789_284x76, St7796_480x320 };
+enum class AudioOutputKind { None, Pcm5102a, Max98357, DspMini };
 enum class BusKind { None, Spi, I2c };
+
+using DisplaySupportMask = uint32_t;
+using AudioOutputSupportMask = uint32_t;
+constexpr DisplaySupportMask displaySupport(DisplayKind kind) {
+  return kind == DisplayKind::None ? 0u :
+      (1u << static_cast<uint8_t>(kind));
+}
+constexpr AudioOutputSupportMask audioOutputSupport(AudioOutputKind kind) {
+  return kind == AudioOutputKind::None ? 0u :
+      (1u << static_cast<uint8_t>(kind));
+}
 
 struct BoardIdentity {
   BoardId id;
@@ -39,19 +51,36 @@ struct EncoderPins {
   uint8_t stepsPerDetent;
 };
 struct DisplayPins { Pin cs, dc, rst, backlight; BusKind bus; };
-struct Capabilities {
-  bool supportsDisplay;
-  bool supportsVoxOneBt;
-  bool supportsBtFirmwareUpdate;
-  bool supportsPcm5102;
-  bool supportsDsp;
-  bool supportsMax98357;
+struct HardwareCapabilities {
+  DisplaySupportMask supportedDisplays;
+  AudioOutputSupportMask supportedAudioOutputs;
   bool supportsEncoder;
+  bool supportsLocalUi;
+  bool supportsVoxOneBt;
+  bool supportsBtAudioRx;
+  bool supportsBtFirmwareUpdate;
   bool supportsRtc;
+  bool supportsVu;
+  bool supportsPsram;
+  bool supportsDacHardwareMute;
+  bool supportsDsp;
+  bool supportsAux;
+  bool supportsSpdif;
+  bool supportsTda7719;
+
+  constexpr bool hasLocalDisplay() const { return supportedDisplays != 0; }
+  constexpr bool supportsDisplay(DisplayKind kind) const {
+    return (supportedDisplays & displaySupport(kind)) != 0;
+  }
+  constexpr bool supportsAudioOutput(AudioOutputKind kind) const {
+    return (supportedAudioOutputs & audioOutputSupport(kind)) != 0;
+  }
 };
 struct HardwareDescriptor {
   BoardIdentity board;
+  // Selected by the transitional build env. This is not persisted RuntimeConfig.
   DisplayKind displayKind;
+  AudioOutputKind audioOutputKind;
   SpiBusPins spi;
   I2cBusPins i2c;
   I2sPins audioOut;
@@ -61,11 +90,12 @@ struct HardwareDescriptor {
   EncoderPins encoder;
   DisplayPins display;
   Pin dacXsmt;
-  Capabilities capabilities;
+  HardwareCapabilities capabilities;
 };
 
 // Describes the current legacy profile values for runtime consumers.
 const HardwareDescriptor& currentHardware();
+const HardwareCapabilities& hardwareCapabilities();
 bool hasPinConflicts(const HardwareDescriptor& descriptor);
 bool validateDescriptor(const HardwareDescriptor& descriptor);
 

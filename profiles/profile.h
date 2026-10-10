@@ -1,44 +1,13 @@
 #ifndef VOXONE_PROFILE_H
 #define VOXONE_PROFILE_H
 
+#include "../src/hardware/hardware_descriptor.h"
+
 namespace voxone {
 
-enum class Mcu {
-  Esp32,
-  Esp32S3
-};
-
-enum class Display {
-  None,
-  Ssd1306_128x64,
-  Ssd1309_128x64,
-  St7789_284x76,
-  St7796_480x320
-};
-
-enum class AudioOutput {
-  Pcm5102a
-};
-
-struct Capabilities {
-  bool hasDisplay;
-  bool hasEncoder;
-  bool hasVu;
-  bool hasBt;
-  bool hasAux;
-  bool hasSpdif;
-  bool hasTda7719;
-  bool hasLocalUi;
-};
-
-struct HardwareProfile {
-  const char* name;
-  Mcu mcu;
-  Display display;
-  AudioOutput audio;
-  Capabilities capabilities;
-  bool pinMapComplete;
-};
+using Mcu = hardware::McuFamily;
+using Display = hardware::DisplayKind;
+using AudioOutput = hardware::AudioOutputKind;
 
 }  // namespace voxone
 
@@ -61,28 +30,6 @@ struct HardwareProfile {
 #endif
 
 #include "unavailable_hardware.h"
-
-namespace voxone {
-
-static constexpr HardwareProfile activeProfile = {
-  VOXONE_PROFILE_NAME,
-  VOXONE_PROFILE_MCU,
-  VOXONE_PROFILE_DISPLAY,
-  VOXONE_PROFILE_AUDIO,
-  {
-    VOXONE_HAS_DISPLAY,
-    VOXONE_HAS_ENCODER,
-    VOXONE_HAS_VU,
-    VOXONE_HAS_BT,
-    VOXONE_HAS_AUX,
-    VOXONE_HAS_SPDIF,
-    VOXONE_HAS_TDA7719,
-    VOXONE_HAS_LOCAL_UI
-  },
-  VOXONE_PIN_MAP_COMPLETE
-};
-
-}  // namespace voxone
 
 #if !VOXONE_PIN_MAP_COMPLETE
   #if defined(VOXONE_PROFILE_B0)

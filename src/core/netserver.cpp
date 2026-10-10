@@ -277,7 +277,7 @@ void handleBtUpload(AsyncWebServerRequest* request, const String& filename,
       session->error = "Another update is already running";
       return;
     }
-    if (!voxone::hardware::currentHardware().capabilities.supportsBtFirmwareUpdate) {
+    if (!voxone::hardware::hardwareCapabilities().supportsBtFirmwareUpdate) {
       session->error = "Profile does not support VoxOneBT update";
       return;
     }
@@ -814,7 +814,7 @@ static void formatWebStatus(char* output, size_t capacity) {
       btOnline ? "true" : "false", btProtocol,
       status.bitrate, static_cast<unsigned long>(status.sampleRate),
       btPhoneConnected ? "true" : "false",
-      voxone::activeProfile.capabilities.hasBt ? ",\"bt\"" : "",
+      voxone::hardware::hardwareCapabilities().supportsVoxOneBt ? ",\"bt\"" : "",
       config.userVolume, player.isMuted() ? "true" : "false");
   if (tail < 0 || static_cast<size_t>(tail) >= capacity - used) output[0] = '\0';
 }
@@ -1845,15 +1845,23 @@ void NetServer::processQueue(){
 
         char capabilities[128] = "";
         size_t capabilityLength = 0;
+        const auto& boardCapabilities = voxone::hardware::hardwareCapabilities();
         const struct { bool enabled; const char* name; } profileCapabilities[] = {
-          {voxone::activeProfile.capabilities.hasDisplay, "DISPLAY"},
-          {voxone::activeProfile.capabilities.hasEncoder, "ENCODER"},
-          {voxone::activeProfile.capabilities.hasBt, "BT"},
-          {voxone::activeProfile.capabilities.hasVu, "VU"},
-          {RTCSUPPORTED, "RTC"},
-          {voxone::activeProfile.capabilities.hasAux, "AUX"},
-          {voxone::activeProfile.capabilities.hasSpdif, "SPDIF"},
-          {voxone::activeProfile.capabilities.hasTda7719, "TDA7719"}
+          {boardCapabilities.hasLocalDisplay(), "DISPLAY"},
+          {boardCapabilities.supportsEncoder, "ENCODER"},
+          {boardCapabilities.supportsLocalUi, "LOCAL_UI"},
+          {boardCapabilities.supportsVoxOneBt, "BT"},
+          {boardCapabilities.supportsBtAudioRx, "BT_AUDIO_RX"},
+          {boardCapabilities.supportsVu, "VU"},
+          {boardCapabilities.supportsRtc, "RTC"},
+          {boardCapabilities.supportsAudioOutput(
+              voxone::hardware::AudioOutputKind::Pcm5102a), "PCM5102A"},
+          {boardCapabilities.supportsPsram, "PSRAM"},
+          {boardCapabilities.supportsDacHardwareMute, "DAC_XSMT"},
+          {boardCapabilities.supportsDsp, "DSP"},
+          {boardCapabilities.supportsAux, "AUX"},
+          {boardCapabilities.supportsSpdif, "SPDIF"},
+          {boardCapabilities.supportsTda7719, "TDA7719"}
         };
         for (const auto& capability : profileCapabilities) {
           if (!capability.enabled || capabilityLength >= sizeof(capabilities)) continue;
@@ -1875,7 +1883,7 @@ void NetServer::processQueue(){
         const int prefixLength = snprintf(wsBuf, sizeof(wsBuf),
             "{\"sst\":%d,\"vu\":%d,\"canVu\":%d,\"softr\":%d,\"vut\":%d,\"mdns\":\"%s\",\"ipaddr\":\"%s\",\"abuff\":%d,\"systemInfo\":{\"version\":\"%s\",\"channel\":\"%s\",\"build\":\"%s\",\"profile\":\"%s\",\"mac\":\"%s\",\"rssi\":%d,\"uptimeSeconds\":%llu,\"freeHeap\":%lu,\"minimumFreeHeap\":%lu,\"psramTotal\":%lu,\"psramFree\":%lu,\"btFirmwareUpdateSupported\":%s,\"capabilities\":\"%s\"},\"networkInfo\":",
             config.store.smartstart != 2, config.store.vumeter,
-            voxone::activeProfile.capabilities.hasVu, config.store.softapdelay,
+            boardCapabilities.supportsVu, config.store.softapdelay,
             config.vuThreshold, config.store.mdnsname, ipText, config.store.abuff,
             VOXONE_VERSION, VOXONE_BUILD_CHANNEL, VOXONE_BUILD_SHA,
             VOXONE_BUILD_PROFILE, macText, wifiRssi,
@@ -1883,7 +1891,7 @@ void NetServer::processQueue(){
             static_cast<unsigned long>(minimumFreeHeap),
             static_cast<unsigned long>(psramTotal),
             static_cast<unsigned long>(psramFree),
-            voxone::hardware::currentHardware().capabilities.supportsBtFirmwareUpdate ? "true" : "false",
+            boardCapabilities.supportsBtFirmwareUpdate ? "true" : "false",
             capabilities);
         if (prefixLength < 0 || static_cast<size_t>(prefixLength) >= sizeof(wsBuf)) {
           wsBuf[0] = '\0';
@@ -1896,7 +1904,7 @@ void NetServer::processQueue(){
       }
       case GETSCREEN:     snprintf (wsBuf, sizeof(wsBuf), "{\"flip\":%d,\"canFlip\":%d,\"canBrightness\":%d,\"br\":%d,\"nump\":%d,\"dspon\":%d,\"con\":%d,\"scre\":%d,\"scrt\":%d,\"scrb\":%d,\"scrpe\":%d,\"scrpt\":%d,\"scrpb\":%d,\"stationListTimeout\":%u,\"btTransportTimeout\":%u,\"canBtTransport\":%d}",
                                   config.store.flipscreen,
-                                  voxone::activeProfile.display != voxone::Display::None,
+                                  voxone::hardware::hardwareCapabilities().hasLocalDisplay(),
                                   BRIGHTNESS_PIN != 255,
                                   config.store.brightness,
                                   config.store.numplaylist,

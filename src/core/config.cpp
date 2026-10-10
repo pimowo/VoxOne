@@ -122,7 +122,7 @@ void Config::init() {
     for (size_t i = 0; i < sizeof(configArea); ++i)
       configArea[i] = EEPROM.read(EEPROM_START + i);
   }
-  const bool supportsBt = voxone::hardware::currentHardware().capabilities.supportsVoxOneBt;
+  const bool supportsBt = voxone::hardware::hardwareCapabilities().supportsVoxOneBt;
   const auto loaded = voxone::config_format::loadStartupConfig(
       eepromReady ? configArea : nullptr, sizeof(configArea), supportsBt, store,
       [this](config_t&) { _applyDefaults(); });
@@ -445,7 +445,7 @@ bool Config::persistV7() {
 bool Config::setBtEnabled(bool enabled) {
   WriteLock lock(_persistMutex);
   _storage.setStoredBtEnabled(enabled);
-  const bool effective = voxone::hardware::currentHardware().capabilities.supportsVoxOneBt && enabled;
+  const bool effective = voxone::hardware::hardwareCapabilities().supportsVoxOneBt && enabled;
   btRuntime.setEnabled(effective);
   if (!_storage.dirty()) return _storage.mode() == voxone::config_format::ConfigStorageMode::V7;
   return persistV7();
@@ -454,7 +454,7 @@ bool Config::setBtEnabled(bool enabled) {
 bool Config::setDefaults() {
   WriteLock lock(_persistMutex);
   ConfigEepromStorage backend;
-  const bool supportsBt = voxone::hardware::currentHardware().capabilities.supportsVoxOneBt;
+  const bool supportsBt = voxone::hardware::hardwareCapabilities().supportsVoxOneBt;
   const auto result = _storage.factoryReset(store, supportsBt, backend,
       [this](config_t&) { _applyDefaults(); });
   if (result != voxone::config_format::ConfigWriteStatus::BLOCKED) {
