@@ -1,5 +1,6 @@
 #ifndef widgets_h
 #define widgets_h
+#include "../display_profile.h"
 #if DSP_MODEL!=DSP_DUMMY
 #include "widgetsconfig.h"
 
@@ -111,9 +112,9 @@ class ScrollWidget: public TextWidget {
       _changeRow = row;
       _changeObserver = observer;
     }
-#if DSP_MODEL==DSP_ST7789_76
-    void setX0ScrollSlot(uint8_t slot);
-    static void nextX0ScrollFrame();
+#if VOXONE_DISPLAY_PROFILE == VOXONE_DISPLAY_PROFILE_ST7789_284X76
+    void setSt7789ScrollSlot(uint8_t slot);
+    static void nextSt7789ScrollFrame();
 #endif
   private:
     char *_sep;
@@ -131,9 +132,9 @@ class ScrollWidget: public TextWidget {
     void* _changeContext = nullptr;
     uint8_t _changeRow = 0;
     void (*_changeObserver)(void*, uint8_t) = nullptr;
-#if DSP_MODEL==DSP_ST7789_76
-    bool _x0IndependentScroll = false;
-    uint8_t _x0ScrollSlot = 0;
+#if VOXONE_DISPLAY_PROFILE == VOXONE_DISPLAY_PROFILE_ST7789_284X76
+    bool _st7789IndependentScroll = false;
+    uint8_t _st7789ScrollSlot = 0;
 #endif
   private:
     void _setTextParams();
@@ -292,6 +293,5 @@ class PlayListWidget: public Widget {
 
 #endif
 #endif
-
 
 

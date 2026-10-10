@@ -5,22 +5,22 @@
 #include <cstring>
 
 int main() {
-  char x0Volume[12];
-  const auto x0Text = [&](uint8_t volume, bool muted) {
-    return displayX0VolumeText(volume, muted, x0Volume, sizeof(x0Volume));
+  char st7789Volume[12];
+  const auto st7789Text = [&](uint8_t volume, bool muted) {
+    return displaySt7789VolumeText(volume, muted, st7789Volume, sizeof(st7789Volume));
   };
-  assert(std::strcmp(x0Text(27, false), "\023 27") == 0);
-  assert(std::strcmp(x0Text(27, true), "MUTE") == 0);
-  assert(std::strcmp(x0Text(28, true), "MUTE") == 0);
-  assert(std::strcmp(x0Text(28, false), "\023 28") == 0);
+  assert(std::strcmp(st7789Text(27, false), "\023 27") == 0);
+  assert(std::strcmp(st7789Text(27, true), "MUTE") == 0);
+  assert(std::strcmp(st7789Text(28, true), "MUTE") == 0);
+  assert(std::strcmp(st7789Text(28, false), "\023 28") == 0);
   // The same current state is used after a refresh and on return from VOL.
-  assert(std::strcmp(x0Text(28, true), "MUTE") == 0);
+  assert(std::strcmp(st7789Text(28, true), "MUTE") == 0);
   assert(displayVolumeMuted(28, true));
-  assert(std::strcmp(x0Text(28, false), "\023 28") == 0);
-  assert(std::strcmp(x0Text(0, false), "\023 0") == 0);
+  assert(std::strcmp(st7789Text(28, false), "\023 28") == 0);
+  assert(std::strcmp(st7789Text(0, false), "\023 0") == 0);
 
-  // A0 displays MUTE only for the explicit mute state; C0 uses that state
-  // directly and otherwise prints the unchanged user volume.
+  // ST7796 and OLED 128x64 display MUTE only for the explicit mute state;
+  // otherwise they print the unchanged user volume.
   assert(!displayVolumeMuted(0, false));
   assert(displayVolumeMuted(0, true));
   assert(!displayVolumeMuted(50, false));
@@ -32,9 +32,9 @@ int main() {
   muteContract.set(true);
   assert(muteContract.outputVolume(0) == 0);
   assert(muteContract.outputVolume(50) == 0);
-  assert(std::strcmp(x0Text(0, true), "MUTE") == 0);
-  assert(std::strcmp(x0Text(50, false), "\023 50") == 0);
-  assert(std::strcmp(x0Text(50, true), "MUTE") == 0);
+  assert(std::strcmp(st7789Text(0, true), "MUTE") == 0);
+  assert(std::strcmp(st7789Text(50, false), "\023 50") == 0);
+  assert(std::strcmp(st7789Text(50, true), "MUTE") == 0);
 
   MuteState mute;
   uint8_t userVolume = 27;

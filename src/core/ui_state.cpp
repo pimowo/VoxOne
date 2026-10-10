@@ -23,7 +23,7 @@ bool bluetoothTransportAvailableForUi() {
 
 uint32_t returnTimeoutForMode(displayMode_e mode) {
   if (mode == VOL) {
-#if DSP_MODEL==DSP_ST7789_76
+#if VOXONE_DISPLAY_PROFILE == VOXONE_DISPLAY_PROFILE_ST7789_284X76
     return 10;
 #else
     return 3;

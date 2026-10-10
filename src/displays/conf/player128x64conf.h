@@ -4,7 +4,7 @@
 #include <stdint.h>
 #include "../widgets/widgetsconfig.h"
 
-// C0 PLAYER coordinates shared by SSD1306 and SSD1309.
+// OLED 128x64 PLAYER coordinates shared by SSD1306 and SSD1309.
 namespace player128x64 {
 constexpr ScrollConfig station = {{0, 0, 1, WA_LEFT}, 140, 128, 5000, 2, 35};
 constexpr ScrollConfig artist = {{0, 10, 1, WA_LEFT}, 140, 128, 5000, 2, 35};
@@ -14,7 +14,7 @@ constexpr WidgetConfig volumeNumber = {0, 26, 0, WA_CENTER};
 constexpr WidgetConfig volumeIp = {0, 56, 1, WA_CENTER};
 }
 
-// C0 STATIONS coordinates shared by SSD1306 and SSD1309.
+// OLED 128x64 STATIONS coordinates shared by SSD1306 and SSD1309.
 namespace stations128x64 {
 constexpr WidgetConfig header = {0, 0, 1, WA_CENTER};
 constexpr WidgetConfig previous = {2, 10, 1, WA_LEFT};
@@ -24,7 +24,7 @@ constexpr WidgetConfig playing = {2, 56, 1, WA_LEFT};
 constexpr WidgetConfig counter = {2, 56, 1, WA_RIGHT};
 }
 
-// C0 UPDATE coordinates shared by SSD1306 and SSD1309.
+// OLED 128x64 UPDATE coordinates shared by SSD1306 and SSD1309.
 namespace update128x64 {
 constexpr WidgetConfig title = {0, 0, 1, WA_CENTER};
 constexpr WidgetConfig target = {0, 10, 1, WA_CENTER};

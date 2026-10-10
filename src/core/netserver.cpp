@@ -1919,7 +1919,9 @@ void NetServer::processQueue(){
                                   config.store.screensaverPlayingBlank,
                                   uiTimeoutConfig().stationListSeconds,
                                   uiTimeoutConfig().btTransportSeconds,
-                                  VOXONE_HAS_BT && DSP_MODEL == DSP_ST7796);
+                                  VOXONE_HAS_BT &&
+                                      VOXONE_DISPLAY_PROFILE ==
+                                          VOXONE_DISPLAY_PROFILE_ST7796_480X320);
                                   break;
       case STATION:       requestOnChange(STATIONNAME, clientId); requestOnChange(ITEM, clientId); break;
       case STATIONNAME:   formatWsTextPayload(wsBuf, sizeof(wsBuf), "nameset", config.station.name); break;

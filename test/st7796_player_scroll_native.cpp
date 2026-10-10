@@ -1,27 +1,27 @@
-#include "../src/core/a0_player_scroll.h"
+#include "../src/core/st7796_player_scroll.h"
 #include "../src/displays/widgets/scroll_text_state.h"
 
 #include <cassert>
 #include <cstdio>
 #include <cstring>
 
-using Action = A0PlayerScroll::Action;
+using Action = St7796PlayerScroll::Action;
 
-static void expect(A0PlayerScroll::Event event, Action action, int row) {
+static void expect(St7796PlayerScroll::Event event, Action action, int row) {
   assert(event.action == action && event.row == row);
 }
 
 int main() {
   // AP startup reports bootStep 2 without creating the PLAYER page.
   int meta = 0, title1 = 0, title2 = 0;
-  assert(!a0PlayerScrollReady(false, true, false, &meta, &title1, nullptr));
-  assert(!a0PlayerScrollReady(false, true, true, &meta, &title1, nullptr));
-  assert(!a0PlayerScrollReady(true, true, true, &meta, &title1, nullptr));
-  assert(!a0PlayerScrollReady(true, true, false, &meta, &title1, &title2));
-  assert(a0PlayerScrollReady(true, true, true, &meta, &title1, &title2));
-  assert(!a0PlayerScrollReady(true, false, true, &meta, &title1, &title2));
+  assert(!st7796PlayerScrollReady(false, true, false, &meta, &title1, nullptr));
+  assert(!st7796PlayerScrollReady(false, true, true, &meta, &title1, nullptr));
+  assert(!st7796PlayerScrollReady(true, true, true, &meta, &title1, nullptr));
+  assert(!st7796PlayerScrollReady(true, true, false, &meta, &title1, &title2));
+  assert(st7796PlayerScrollReady(true, true, true, &meta, &title1, &title2));
+  assert(!st7796PlayerScrollReady(true, false, true, &meta, &title1, &title2));
 
-  A0PlayerScroll scroll;
+  St7796PlayerScroll scroll;
   const bool allLong[3] = {true, true, true};
   const bool stationOnly[3] = {true, false, false};
   const bool skipArtist[3] = {true, false, true};
@@ -79,15 +79,15 @@ int main() {
   expect(scroll.tick(10200, allLong), Action::Start, 0);
 
   // A framebuffer frame needs one more byte than the old MAX_WIDTH-based
-  // A0 allocation (27 bytes requested for a 460 px row at 18 px/char).
-  const size_t a0Capacity = scrollWindowCapacity(480, 18);
-  const size_t a0Frame = scrollWindowPrintCapacity(a0Capacity, 460, 18, 2);
-  assert(a0Capacity == 28 && a0Frame == 27);
+  // ST7796 allocation (27 bytes requested for a 460 px row at 18 px/char).
+  const size_t st7796Capacity = scrollWindowCapacity(480, 18);
+  const size_t st7796Frame = scrollWindowPrintCapacity(st7796Capacity, 460, 18, 2);
+  assert(st7796Capacity == 28 && st7796Frame == 27);
   char window[29];
   std::memset(window, '#', sizeof(window));
-  std::snprintf(window, a0Frame, "%s", "abcdefghijklmnopqrstuvwxyz");
-  assert(window[a0Frame - 1] == '\0');
-  assert(window[a0Capacity] == '#');
+  std::snprintf(window, st7796Frame, "%s", "abcdefghijklmnopqrstuvwxyz");
+  assert(window[st7796Frame - 1] == '\0');
+  assert(window[st7796Capacity] == '#');
   assert(scrollWindowPrintCapacity(scrollWindowCapacity(284, 12), 280, 12, 1) == 24);
   assert(scrollWindowPrintCapacity(scrollWindowCapacity(480, 30), 480, 30, 2) == 18);
 
@@ -105,5 +105,5 @@ int main() {
   assert(titleOffset == 0);
   titleOffset = -9;
   assert(scrollTextChangedAndResetOffset("Old title", "New title", titleOffset, 2));
-  assert(titleOffset == 2);  // X0 starts at its row's left edge.
+  assert(titleOffset == 2);  // ST7789 284x76 starts at its row's left edge.
 }

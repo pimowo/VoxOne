@@ -16,6 +16,17 @@ constexpr bool displaySupportsVu(Display display) {
   return display == Display::St7796_480x320;
 }
 
+static_assert(display_profile::activeProfile() ==
+                  display_profile::profileFor(VOXONE_PROFILE_DISPLAY),
+              "Display layout profile must match the selected backend");
+static_assert(display_profile::activeController() ==
+                  display_profile::controllerFor(VOXONE_PROFILE_DISPLAY),
+              "Display controller must match the selected backend");
+static_assert((display_profile::activeProfile() ==
+                   display_profile::ProfileId::None) ==
+                  !bool(VOXONE_HAS_DISPLAY),
+              "Headless display profile must match the display compile gate");
+
 static_assert(bool(VOXONE_HAS_DISPLAY) == (VOXONE_PROFILE_DISPLAY != Display::None),
               "Display compile gate must match selected display backend");
 static_assert(bool(VOXONE_HAS_DISPLAY) == (DSP_MODEL != DSP_DUMMY),

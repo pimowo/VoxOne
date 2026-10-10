@@ -7,6 +7,7 @@
 
 using namespace voxone;
 using namespace voxone::hardware;
+using namespace voxone::display_profile;
 
 int main() {
   const HardwareDescriptor& d = currentHardware();
@@ -40,6 +41,9 @@ int main() {
   assert(d.display.rst == fromLegacyPin(TFT_RST));
   assert((d.displayKind == DisplayKind::None) == !caps.hasLocalDisplay());
   assert(d.displayKind == DisplayKind::None || caps.supportsDisplay(d.displayKind));
+  assert(activeProfile() == profileFor(d.displayKind));
+  assert(activeController() == controllerFor(d.displayKind));
+  const Descriptor layout = activeDescriptor();
   assert(d.display.bus ==
          ((d.displayKind == DisplayKind::Ssd1306_128x64 ||
            d.displayKind == DisplayKind::Ssd1309_128x64) ? BusKind::I2c :
@@ -82,6 +86,9 @@ int main() {
   assert(std::strcmp(d.board.name, "X0") == 0);
   assert(d.board.mcu == McuFamily::Esp32);
   assert(d.displayKind == DisplayKind::St7789_284x76);
+  assert(activeProfile() == ProfileId::St7789_284x76);
+  assert(activeController() == ControllerId::St7789);
+  assert(layout.width == 284 && layout.height == 76 && !layout.monochrome);
   assert(caps.hasLocalDisplay());
   assert(caps.supportedDisplays == displaySupport(DisplayKind::St7789_284x76));
   assert(d.display.cs == 5 && d.display.dc == 4);
@@ -105,6 +112,9 @@ int main() {
   assert(d.board.family == 'B' && d.board.revision == 0);
   assert(std::strcmp(d.board.name, "B0") == 0);
   assert(d.displayKind == DisplayKind::None);
+  assert(activeProfile() == ProfileId::None);
+  assert(activeController() == ControllerId::None);
+  assert(layout.width == 0 && layout.height == 0 && !layout.monochrome);
   assert(!caps.hasLocalDisplay());
   assert(caps.supportedDisplays == 0);
   assert(d.spi.sck == kNoPin && d.spi.mosi == kNoPin &&
@@ -130,6 +140,9 @@ int main() {
   assert(d.board.family == 'A' && d.board.revision == 0);
   assert(std::strcmp(d.board.name, "A0") == 0);
   assert(d.displayKind == DisplayKind::St7796_480x320);
+  assert(activeProfile() == ProfileId::St7796_480x320);
+  assert(activeController() == ControllerId::St7796);
+  assert(layout.width == 480 && layout.height == 320 && !layout.monochrome);
   assert(caps.hasLocalDisplay());
   assert(caps.supportedDisplays == displaySupport(DisplayKind::St7796_480x320));
   assert(d.spi.mosi == 11 && d.spi.sck == 12 && d.spi.miso == 13);
@@ -159,10 +172,14 @@ int main() {
 #if defined(VOXONE_C0_DISPLAY_SSD1309)
   assert(VOXONE_PROFILE_DISPLAY == Display::Ssd1309_128x64);
   assert(d.displayKind == DisplayKind::Ssd1309_128x64);
+  assert(activeController() == ControllerId::Ssd1309);
 #else
   assert(VOXONE_PROFILE_DISPLAY == Display::Ssd1306_128x64);
   assert(d.displayKind == DisplayKind::Ssd1306_128x64);
+  assert(activeController() == ControllerId::Ssd1306);
 #endif
+  assert(activeProfile() == ProfileId::Oled128x64);
+  assert(layout.width == 128 && layout.height == 64 && layout.monochrome);
   assert(d.display.bus == BusKind::I2c);
   assert(caps.supportedDisplays ==
          (displaySupport(DisplayKind::Ssd1306_128x64) |

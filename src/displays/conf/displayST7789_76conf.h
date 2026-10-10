@@ -22,7 +22,7 @@
 
 /* SROLLS  */                            /* {{ left, top, fontsize, align }, buffsize, width, scrolldelay, scrolldelta, scrolltime } */
 const ScrollConfig metaConf       PROGMEM = {{ TFT_FRAMEWDT+1, TFT_FRAMEWDT+1, 2, WA_LEFT }, 140, MAX_WIDTH-2, 5000, 2, 25 };
-const ScrollConfig x0StationConf PROGMEM = {{ TFT_FRAMEWDT, 2, 2, WA_LEFT }, 140, MAX_WIDTH, 5000, 1, 9 };
+const ScrollConfig st7789StationConf PROGMEM = {{ TFT_FRAMEWDT, 2, 2, WA_LEFT }, 140, MAX_WIDTH, 5000, 1, 9 };
 const ScrollConfig title1Conf     PROGMEM = {{ TFT_FRAMEWDT, 21, 2, WA_LEFT }, 140, MAX_WIDTH, 5000, 1, 9 };
 const ScrollConfig title2Conf     PROGMEM = {{ TFT_FRAMEWDT, 40, 2, WA_LEFT }, 140, MAX_WIDTH, 5000, 1, 9 };
 const ScrollConfig playlistConf   PROGMEM = {{ TFT_FRAMEWDT, 31, 2, WA_CENTER }, 140, MAX_WIDTH, 500, 2, 25 };
@@ -38,9 +38,9 @@ const FillConfig  playlBGConf     PROGMEM = {{ 0, 0, 0, WA_LEFT }, DSP_WIDTH, 19
 /* WIDGETS  */                           /* { left, top, fontsize, align } */
 const WidgetConfig bootstrConf    PROGMEM = { 0, DSP_HEIGHT-10, 1, WA_CENTER };
 const WidgetConfig bitrateConf    PROGMEM = { TFT_FRAMEWDT, 64, 1, WA_LEFT };
-const WidgetConfig x0RssiConf   PROGMEM = { 174, 64, 1, WA_LEFT };
-const WidgetConfig x0VolumeConf PROGMEM = { 0, 64, 1, WA_CENTER };
-const WidgetConfig x0ClockConf  PROGMEM = { TFT_FRAMEWDT, 64, 1, WA_RIGHT };
+const WidgetConfig st7789RssiConf   PROGMEM = { 174, 64, 1, WA_LEFT };
+const WidgetConfig st7789VolumeConf PROGMEM = { 0, 64, 1, WA_CENTER };
+const WidgetConfig st7789ClockConf  PROGMEM = { TFT_FRAMEWDT, 64, 1, WA_RIGHT };
 //const WidgetConfig voltxtConf     PROGMEM = { 32, 108, 1, WA_RIGHT };
 const WidgetConfig  iptxtConf     PROGMEM = { TFT_FRAMEWDT, 64, 1, WA_LEFT };
 const WidgetConfig   rssiConf     PROGMEM = { TFT_FRAMEWDT, 64-11-10, 1, WA_LEFT };
@@ -71,7 +71,7 @@ const char        bitrateFmt[]    PROGMEM = "%d kBs";
 /* MOVES  */                             /* { left, top, width } */
 const MoveConfig    clockMove     PROGMEM = { 0, 0, -1 };
 
-const FillConfig x0StationBandConf PROGMEM = {{ 0, 0, 0, WA_LEFT }, DSP_WIDTH, 19, false };
-const FillConfig x0DividerConf     PROGMEM = {{ 0, 59, 0, WA_LEFT }, DSP_WIDTH, 1, false };
+const FillConfig st7789StationBandConf PROGMEM = {{ 0, 0, 0, WA_LEFT }, DSP_WIDTH, 19, false };
+const FillConfig st7789DividerConf     PROGMEM = {{ 0, 59, 0, WA_LEFT }, DSP_WIDTH, 1, false };
 
 #endif

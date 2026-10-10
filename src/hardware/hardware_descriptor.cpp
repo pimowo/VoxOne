@@ -115,6 +115,10 @@ constexpr HardwareDescriptor kCurrent = {
 
 static_assert(bool(VOXONE_HAS_DISPLAY) == kCapabilities.hasLocalDisplay(),
               "Display compile gate must match board capabilities");
+static_assert(kDisplayKind == DisplayKind::None
+                  ? !kCapabilities.hasLocalDisplay()
+                  : kCapabilities.supportsDisplay(kDisplayKind),
+              "Selected display backend must be supported by board capabilities");
 static_assert(bool(VOXONE_HAS_ENCODER) == kCapabilities.supportsEncoder,
               "Encoder compile gate must match board capabilities");
 static_assert(bool(VOXONE_HAS_LOCAL_UI) == kCapabilities.supportsLocalUi,

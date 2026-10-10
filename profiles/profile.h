@@ -30,6 +30,7 @@ using AudioOutput = hardware::AudioOutputKind;
 #endif
 
 #include "unavailable_hardware.h"
+#include "../src/displays/display_profile.h"
 
 #if !VOXONE_PIN_MAP_COMPLETE
   #if defined(VOXONE_PROFILE_B0)

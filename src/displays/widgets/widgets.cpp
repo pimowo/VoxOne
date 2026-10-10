@@ -101,16 +101,16 @@ void TextWidget::_draw() {
 /************************
       SCROLL WIDGET
  ************************/
-#if DSP_MODEL==DSP_ST7789_76
-static uint8_t x0ScrollFrameSlot = 2;
+#if VOXONE_DISPLAY_PROFILE == VOXONE_DISPLAY_PROFILE_ST7789_284X76
+static uint8_t st7789ScrollFrameSlot = 2;
 
-void ScrollWidget::setX0ScrollSlot(uint8_t slot) {
-  _x0IndependentScroll = true;
-  _x0ScrollSlot = slot;
+void ScrollWidget::setSt7789ScrollSlot(uint8_t slot) {
+  _st7789IndependentScroll = true;
+  _st7789ScrollSlot = slot;
 }
 
-void ScrollWidget::nextX0ScrollFrame() {
-  x0ScrollFrameSlot = (x0ScrollFrameSlot + 1) % 3;
+void ScrollWidget::nextSt7789ScrollFrame() {
+  st7789ScrollFrameSlot = (st7789ScrollFrameSlot + 1) % 3;
 }
 #endif
 
@@ -229,12 +229,12 @@ void ScrollWidget::loop() {
   if(_locked) return;
   if (_externallyScheduled) return;
   if (!_doscroll || _config.textsize == 0) return;
-#if DSP_MODEL==DSP_ST7789_76
-  if (_x0IndependentScroll) {
-    if (_x0ScrollSlot != x0ScrollFrameSlot) return;
+#if VOXONE_DISPLAY_PROFILE == VOXONE_DISPLAY_PROFILE_ST7789_284X76
+  if (_st7789IndependentScroll) {
+    if (_st7789ScrollSlot != st7789ScrollFrameSlot) return;
   } else
 #endif
-#if !defined(VOXONE_PROFILE_C0)
+#if !(VOXONE_DISPLAY_PROFILE == VOXONE_DISPLAY_PROFILE_OLED_128X64)
   if (dsp.getScrollId() != NULL && dsp.getScrollId() != this) return;
 #endif
   uint16_t fbl = _fb->ready()?0:_config.left;
@@ -335,16 +335,16 @@ void ScrollWidget::_calcX(uint8_t pixels) {
   uint16_t fbl = _fb->ready()?0:_config.left;
   if (-_x > _textwidth + _sepwidth - fbl) {
     _x = fbl;
-#if DSP_MODEL==DSP_ST7789_76
-    if (!_x0IndependentScroll)
+#if VOXONE_DISPLAY_PROFILE == VOXONE_DISPLAY_PROFILE_ST7789_284X76
+    if (!_st7789IndependentScroll)
 #endif
-#if !defined(VOXONE_PROFILE_C0)
+#if !(VOXONE_DISPLAY_PROFILE == VOXONE_DISPLAY_PROFILE_OLED_128X64)
     dsp.setScrollId(NULL);
 #endif
   } else {
-#if !defined(VOXONE_PROFILE_C0)
-#if DSP_MODEL==DSP_ST7789_76
-    if (!_x0IndependentScroll)
+#if !(VOXONE_DISPLAY_PROFILE == VOXONE_DISPLAY_PROFILE_OLED_128X64)
+#if VOXONE_DISPLAY_PROFILE == VOXONE_DISPLAY_PROFILE_ST7789_284X76
+    if (!_st7789IndependentScroll)
 #endif
     dsp.setScrollId(this);
 #endif
@@ -361,8 +361,8 @@ bool ScrollWidget::_checkDelay(int m, uint32_t &tstamp) {
 }
 
 void ScrollWidget::_reset(){
-#if DSP_MODEL==DSP_ST7789_76
-  if (!_x0IndependentScroll)
+#if VOXONE_DISPLAY_PROFILE == VOXONE_DISPLAY_PROFILE_ST7789_284X76
+  if (!_st7789IndependentScroll)
 #endif
   dsp.setScrollId(NULL);
   _x = _fb->ready()?0:_config.left;
@@ -608,7 +608,7 @@ void NumWidget::setText(int val, const char *format){
 }
 
 void NumWidget::_getBounds() {
-#if DSP_MODEL==DSP_ST7796
+#if VOXONE_DISPLAY_PROFILE == VOXONE_DISPLAY_PROFILE_ST7796_480X320
   if (strcmp(_text, "MUTE") == 0) {
     _textwidth = 4 * CHARWIDTH * 8;
     return;
@@ -618,7 +618,7 @@ void NumWidget::_getBounds() {
 }
 
 void NumWidget::_draw() {
-#if DSP_MODEL==DSP_ST7796
+#if VOXONE_DISPLAY_PROFILE == VOXONE_DISPLAY_PROFILE_ST7796_480X320
   if (strcmp(_text, "MUTE") == 0) {
     if (!_active) return;
     dsp.setFont();
@@ -923,7 +923,7 @@ void BitrateWidget::_draw(){
     }
   }
 
-#if DSP_MODEL==DSP_ST7796
+#if VOXONE_DISPLAY_PROFILE == VOXONE_DISPLAY_PROFILE_ST7796_480X320
   dsp.fillRoundRect(_config.left, _config.top, _frameWidth, _dimension, 3, _fgcolor);
   dsp.fillRoundRect(_config.left + 1, _config.top + 1,
                     _frameWidth - 2, _dimension - 2, 2, _bgcolor);

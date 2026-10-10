@@ -158,7 +158,7 @@ int main() {
   assert(mainLoop.find("uiSystemModeRequest(updateProgress(), systemMode)") != std::string::npos);
   assert(display.find("if (updateLockActive()) return;") != std::string::npos);
   assert(uiState.find("const UiModeContext context{network.status == CONNECTED, update.locked") != std::string::npos);
-  assert(display.find("class A0UpdateProgressWidget") != std::string::npos);
-  assert(display.find("class C0UpdateProgressWidget") != std::string::npos);
+  assert(display.find("class St7796UpdateProgressWidget") != std::string::npos);
+  assert(display.find("class Oled128x64UpdateProgressWidget") != std::string::npos);
   assert(display.find("progress_.determinate") != std::string::npos);
 }

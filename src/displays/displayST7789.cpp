@@ -17,7 +17,7 @@ DspCore::DspCore(): Adafruit_ST7789(
 #endif
 
 void DspCore::initDisplay() {
-  if(DSP_MODEL==DSP_ST7789_76){
+  if(VOXONE_DISPLAY_PROFILE == VOXONE_DISPLAY_PROFILE_ST7789_284X76){
     init(76,284);
   }else{
     init(240,320);

@@ -5,8 +5,9 @@
 #include "common.h"
 #include "ui_state.h"
 #include "update_display_view.h"
-#if defined(VOXONE_PROFILE_A0) && DSP_MODEL==DSP_ST7796
-#include "a0_player_scroll.h"
+#include "../displays/display_profile.h"
+#if VOXONE_DISPLAY_PROFILE == VOXONE_DISPLAY_PROFILE_ST7796_480X320
+#include "st7796_player_scroll.h"
 #endif
 
 enum class DisplaySourceKind : uint8_t { Radio, Bluetooth, Dlna, Aux, Spdif, Tts };
@@ -24,7 +25,7 @@ inline const char* displaySourceLabel(DisplaySourceKind kind) {
 inline bool displayVolumeMuted(uint8_t /*userVolume*/, bool muted = false) {
     return muted;
 }
-inline const char* displayX0VolumeText(uint8_t userVolume, bool muted,
+inline const char* displaySt7789VolumeText(uint8_t userVolume, bool muted,
                                          char* buffer, size_t bufferSize) {
     if (displayVolumeMuted(userVolume, muted)) return "MUTE";
     snprintf(buffer, bufferSize, "\023 %u", static_cast<unsigned>(userVolume));
@@ -108,15 +109,15 @@ class VuWidget;
 class NumWidget;
 class ClockWidget;
 class TextWidget;
-#if DSP_MODEL==DSP_ST7796
-class A0VolumeWidget;
-class A0UpdateProgressWidget;
-class A0BluetoothWidget;
-class A0LabelFrameWidget;
-class A0PlaybackIconWidget;
+#if VOXONE_DISPLAY_PROFILE == VOXONE_DISPLAY_PROFILE_ST7796_480X320
+class St7796VolumeWidget;
+class St7796UpdateProgressWidget;
+class St7796BluetoothWidget;
+class St7796LabelFrameWidget;
+class St7796PlaybackIconWidget;
 #endif
-#if defined(VOXONE_PROFILE_C0)
-class C0UpdateProgressWidget;
+#if (VOXONE_DISPLAY_PROFILE == VOXONE_DISPLAY_PROFILE_OLED_128X64)
+class Oled128x64UpdateProgressWidget;
 #endif
     
 class Display {
@@ -153,33 +154,33 @@ class Display {
     ClockWidget *_clock;
     Page *_boot;
     TextWidget *_bootstring, *_volip, *_voltxt, *_rssi, *_bitrate;
-#if DSP_MODEL==DSP_ST7796
+#if VOXONE_DISPLAY_PROFILE == VOXONE_DISPLAY_PROFILE_ST7796_480X320
     TextWidget *_btTransportPlayback;
-    A0PlaybackIconWidget *_a0Playback = nullptr;
-    A0VolumeWidget *_a0Volume;
-    A0BluetoothWidget *_a0BluetoothIcon;
-    A0LabelFrameWidget *_a0Source = nullptr, *_a0Eq = nullptr;
-    A0LabelFrameWidget *_a0Loud = nullptr, *_a0Mode = nullptr;
+    St7796PlaybackIconWidget *_st7796Playback = nullptr;
+    St7796VolumeWidget *_st7796Volume;
+    St7796BluetoothWidget *_st7796BluetoothIcon;
+    St7796LabelFrameWidget *_st7796Source = nullptr, *_st7796Eq = nullptr;
+    St7796LabelFrameWidget *_st7796Loud = nullptr, *_st7796Mode = nullptr;
     ScrollWidget *_btTransportArtist, *_btTransportTitle;
     Page *_btTransportPage;
-    Page *_a0UpdatePage = nullptr;
-    TextWidget *_a0UpdateTarget = nullptr, *_a0UpdatePercent = nullptr;
-    TextWidget *_a0UpdateActivity = nullptr;
-    A0UpdateProgressWidget *_a0UpdateBar = nullptr;
+    Page *_st7796UpdatePage = nullptr;
+    TextWidget *_st7796UpdateTarget = nullptr, *_st7796UpdatePercent = nullptr;
+    TextWidget *_st7796UpdateActivity = nullptr;
+    St7796UpdateProgressWidget *_st7796UpdateBar = nullptr;
 #endif
-#if defined(VOXONE_PROFILE_C0)
-    TextWidget *_c0PlaylistPrevious = nullptr, *_c0PlaylistNext = nullptr;
-    Page *_c0UpdatePage = nullptr;
-    TextWidget *_c0UpdateTarget = nullptr, *_c0UpdatePercent = nullptr;
-    TextWidget *_c0UpdateActivity = nullptr;
-    C0UpdateProgressWidget *_c0UpdateBar = nullptr;
+#if (VOXONE_DISPLAY_PROFILE == VOXONE_DISPLAY_PROFILE_OLED_128X64)
+    TextWidget *_oled128x64PlaylistPrevious = nullptr, *_oled128x64PlaylistNext = nullptr;
+    Page *_oled128x64UpdatePage = nullptr;
+    TextWidget *_oled128x64UpdateTarget = nullptr, *_oled128x64UpdatePercent = nullptr;
+    TextWidget *_oled128x64UpdateActivity = nullptr;
+    Oled128x64UpdateProgressWidget *_oled128x64UpdateBar = nullptr;
 #endif
-#if DSP_MODEL==DSP_ST7789_76 || DSP_MODEL==DSP_ST7796 || defined(VOXONE_PROFILE_C0)
+#if VOXONE_DISPLAY_PROFILE == VOXONE_DISPLAY_PROFILE_ST7789_284X76 || VOXONE_DISPLAY_PROFILE == VOXONE_DISPLAY_PROFILE_ST7796_480X320 || (VOXONE_DISPLAY_PROFILE == VOXONE_DISPLAY_PROFILE_OLED_128X64)
     TextWidget *_plheader, *_plcounter, *_plplaying;
 #endif
-#if DSP_MODEL==DSP_ST7789_76
-    ScrollWidget *_x0Station;
-    TextWidget *_x0Rssi, *_x0Volume, *_x0Clock;
+#if VOXONE_DISPLAY_PROFILE == VOXONE_DISPLAY_PROFILE_ST7789_284X76
+    ScrollWidget *_st7789Station;
+    TextWidget *_st7789Rssi, *_st7789Volume, *_st7789Clock;
 #endif
     bool _locked = false;
     volatile bool _volumePending = false;
@@ -206,15 +207,15 @@ class Display {
     void _layoutChange(bool played);
     void _setVuVisibility(bool sourceVisible);
     void _setRSSI(int rssi);
-#if DSP_MODEL==DSP_ST7796
+#if VOXONE_DISPLAY_PROFILE == VOXONE_DISPLAY_PROFILE_ST7796_480X320
     void _updatePlaybackStatus();
 #endif
-#if defined(VOXONE_PROFILE_A0) && DSP_MODEL==DSP_ST7796
-    A0PlayerScroll _a0Scroll;
-    bool _a0PlayerReady = false;
-    void _a0ScrollTextChanged(uint8_t row);
-    void _a0ScrollTick();
-    void _a0ScrollMode(bool playerMode);
+#if VOXONE_DISPLAY_PROFILE == VOXONE_DISPLAY_PROFILE_ST7796_480X320
+    St7796PlayerScroll _st7796Scroll;
+    bool _st7796PlayerReady = false;
+    void _st7796ScrollTextChanged(uint8_t row);
+    void _st7796ScrollTick();
+    void _st7796ScrollMode(bool playerMode);
 #endif
 };
 
