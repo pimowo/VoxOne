@@ -234,7 +234,9 @@ void ScrollWidget::loop() {
     if (_x0ScrollSlot != x0ScrollFrameSlot) return;
   } else
 #endif
+#if !defined(VOXONE_PROFILE_C0)
   if (dsp.getScrollId() != NULL && dsp.getScrollId() != this) return;
+#endif
   uint16_t fbl = _fb->ready()?0:_config.left;
   if (_checkDelay(_x == fbl ? _startscrolldelay : _scrolltime, _scrolldelay)) {
     _calcX(_scrolldelta);
@@ -336,12 +338,16 @@ void ScrollWidget::_calcX(uint8_t pixels) {
 #if DSP_MODEL==DSP_ST7789_76
     if (!_x0IndependentScroll)
 #endif
+#if !defined(VOXONE_PROFILE_C0)
     dsp.setScrollId(NULL);
+#endif
   } else {
+#if !defined(VOXONE_PROFILE_C0)
 #if DSP_MODEL==DSP_ST7789_76
     if (!_x0IndependentScroll)
 #endif
     dsp.setScrollId(this);
+#endif
   }
 }
 

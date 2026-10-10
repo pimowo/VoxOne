@@ -16,15 +16,20 @@ struct UpdateBarRenderDelta {
   uint16_t fillWidth;
 };
 
-// Coordinates are relative to the 356-pixel interior of the A0 update bar.
 class UpdateBarRenderState {
 public:
+  UpdateBarRenderState(uint16_t width = 356, uint16_t segmentWidth = 56,
+                       uint16_t step = 12)
+      : width_(width), segmentWidth_(segmentWidth > width ? width : segmentWidth),
+        step_(step), segmentTravel_(width_ - segmentWidth_) {}
+
   void reset() { initialized_ = false; }
 
   UpdateBarRenderDelta apply(UpdateDisplayProgress progress) {
     const uint16_t width = progress.determinate
-        ? static_cast<uint16_t>(356u * (progress.percent > 100 ? 100 : progress.percent) / 100u)
-        : 56;
+        ? static_cast<uint16_t>(static_cast<uint32_t>(width_) *
+                                (progress.percent > 100 ? 100 : progress.percent) / 100u)
+        : segmentWidth_;
     if (!initialized_ || progress.determinate != determinate_) {
       initialized_ = true;
       determinate_ = progress.determinate;
@@ -45,11 +50,16 @@ public:
   UpdateBarRenderDelta step() {
     if (!initialized_ || determinate_) return {};
     const uint16_t previous = segmentX_;
-    segmentX_ = static_cast<uint16_t>((segmentX_ + 12u) % 300u);
-    return {false, previous, 56, segmentX_, 56};
+    segmentX_ = segmentTravel_ == 0
+        ? 0 : static_cast<uint16_t>((segmentX_ + step_) % segmentTravel_);
+    return {false, previous, segmentWidth_, segmentX_, segmentWidth_};
   }
 
 private:
+  uint16_t width_;
+  uint16_t segmentWidth_;
+  uint16_t step_;
+  uint16_t segmentTravel_;
   bool initialized_ = false;
   bool determinate_ = false;
   uint16_t filledWidth_ = 0;

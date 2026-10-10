@@ -46,7 +46,7 @@
 
 ### Targety i release gate
 
-- [STABLE] Wykonać fizyczną regresję X0, B0 i A0; B0 (NoDisplay): full image, first boot/AP/Wi-Fi/WWW, RADIO, PCM5102A GPIO1/2/3 i restart PHYSICAL PASS; na B0 pozostają VoxOneBT oraz MQTT/HA.
+- [STABLE] Wykonać fizyczną regresję X0, B0 i A0; B0 (NoDisplay): full image, first boot/AP/Wi-Fi/WWW, RADIO, PCM5102A GPIO1/2/3 i restart PHYSICAL PASS; VoxOneBT oraz MQTT/HA na B0 PHYSICAL NOT TESTED.
 - [STABLE] Na X0 sprawdzić ukrycie suwaka jasności, restart z WWW, powrót Wi-Fi bez utraty stacji/config oraz osobno ekran aktualizacji bez regresji ScrollWidget/HOLD.
 - [STABLE] Fizycznie zweryfikować aktualne WWW na A0 i X0 (gdy bezpieczna aktualizacja X0 będzie możliwa): MUTE, selector RADIO/BT, oznaczenie BT offline, manual source priority, reconnect/resnapshot, favicon bez 404 oraz build identity w SYSTEM i AKTUALIZACJA.
 - [HARDWARE] Przypisać GPIO XSMT PCM5102A na A0 i fizycznie sprawdzić LOW przy PAUZA/STOP, HIGH przy PLAY, ciszę podczas przejść i Web Update oraz czerwoną ramkę VOL bez zmiany semantyki MUTE.
@@ -60,6 +60,7 @@
 
 ## Znane błędy i pomiary
 
+- [BUG] C0: zbadać sporadyczny reset podczas obracania enkodera głośności; programowy stress wspólnej ścieżki volume/display nie odtworzył resetu. Zebrać pełny log panic/backtrace lub watchdog/brownout, `reset reason` i `displayStackHwm` z fizycznego testu.
 - [BUG] Sprawdzić bezpieczeństwo bufora/okna i clipping w `ScrollWidget`, szczególnie przy długich metadata; powiązać wynik z błędem czyszczenia i nie zmieniać timingu bez testu rendererów.
 - [HARDWARE] Wykonać kontrolowane porównanie poziomu RADIO i BT na tym samym materiale PCM. Użytkownik zmienił rezystory z 22 Ω na 41 Ω, ale trzeba nadal zmierzyć digital gain, BT Absolute Volume, VoxOneBT PCM, MAIN RX i poziom wyjścia.
 - [BUG] Zbadać pstryknięcie lub glitch audio podczas mutacji playlisty/stacji.
@@ -127,6 +128,7 @@
 - [POST-STABLE] Przebudować PLAYER: podnieść PLAY/PAUSE/STOP oraz bitrate/audio info, a niżej dodać czytelną ramkę faktycznego trybu wyjścia 2.0/2.1/2.2 pochodzącego z konfiguracji audio/DSP.
 - [POST-STABLE] Ustalić wspólną lub jawnie przypisaną szybkość przewijania dla stacji, artysty, utworu i list; usunąć przypadkowo różne timingi rendererów.
 - [POST-STABLE] Dodać source-aware PLAYER, ekran TTS, przyszłą przeglądarkę DLNA oraz konfigurację DSP.
+- [HARDWARE] C0 SSD1306 i SSD1309: OLED, PLAYER oraz VOL (skala 0–100) PHYSICAL PASS. Wspólne layouty 128×64 STATIONS i UPDATE są zaimplementowane i zweryfikowane buildem/native testami, ale PHYSICAL NOT TESTED na obu OLED-ach. Fizycznie sprawdzić STATIONS i UPDATE na SSD1306 oraz SSD1309. VoxOneBT i MQTT/HA na C0 PHYSICAL NOT TESTED (BT poza obecnym C0); pozostałe OLED-y 128×64 później.
 - [POST-STABLE] Przygotować wspólne `assets/branding` jako źródło logo WWW, splash/logo LCD i favicon; później użyć tych samych materiałów w README/GitHub.
 - [POST-STABLE] Rozważyć opcjonalną skórkę YAMAHA AMBER: czarne tło i jeden bursztynowy kolor, punkt startowy `#FF9A1F` / RGB565 `0xFCC3`.
 - [POST-STABLE] Rozwijać klasy display: wspólne 128×64 dla SSD1306 i SH1106, osobne SSD1322 256×64, GC9A01 240×240, ST7789 320×240 i ST7796S 480×320.
@@ -182,7 +184,7 @@
 
 - [STABLE] Utrzymać X0, B0 i A0 bez zmiany architektury do pierwszego stable; klasyczny ESP32 pozostaje stabilnym legacy targetem.
 - [HARDWARE] Po stable zaprojektować pierwsze PCB A1/B1/C1/D1 oraz prototypy C0/D0; mapy GPIO i złącza mogą różnić się od rewizji 0 bez zmiany logiki produktu.
-- [HARDWARE] Potwierdzić GPIO, rewizje PCB, opcjonalne LCD/BT/DSP oraz warianty wyjścia PCM5102A, MAX98357 dla C-family i DSPmini. C0: PCM5102A GPIO1/2/3, EC11 GPIO4/5/6 i SSD1306 128×64 I2C GPIO7/8 PHYSICAL PASS; SSD1309 128×64 I2C GPIO7/8 PHYSICAL PASS; pozostałe OLED-y 128×64 później.
+- [HARDWARE] Potwierdzić GPIO, rewizje PCB, opcjonalne LCD/BT/DSP oraz warianty wyjścia PCM5102A, MAX98357 dla C-family i DSPmini. C0: PCM5102A GPIO1/2/3, SSD1306 128×64 I2C GPIO7/8 i SSD1309 128×64 I2C GPIO7/8 PHYSICAL PASS; EC11 GPIO4/5/6 kierunek oraz krok volume 1 detent = 1 punkt PHYSICAL PASS; pozostałe OLED-y 128×64 później.
 - [POST-STABLE] Utrzymać zasadę jednego builda firmware na target PCB zamiast buildów dla każdej kombinacji opcji; `HardwareDescriptor` i capabilities są źródłem prawdy.
 - [POST-STABLE] Aktualizację VoxOneBT przez MAIN na Ax/Bx/Cx/Dx dopuścić tylko przy obecnym module BT, odpowiednim capability oraz zasobach PSRAM/staging; na Xx aktualizować VoxOneBT wyłącznie bezpośrednio przez USB. Nie dodawać stagingu na Xx.
 

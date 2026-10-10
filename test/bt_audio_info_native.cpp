@@ -35,6 +35,19 @@ int main() {
   sources.displayView(view);
   expectRadio(view, 320, BF_MP3, "320 MP3");
   expectRadio(view, 128, BF_AAC, "128 AAC");
+  view.kind = DisplaySourceKind::Dlna;
+  DisplayAudioInfo unimplemented = selectDisplayAudioInfo(view, 128, BF_AAC);
+  assert(!unimplemented.bluetooth && unimplemented.radioBitrate == 0 &&
+         unimplemented.radioFormat == BF_UNKNOWN);
+  char emptyInfo[20];
+  formatDisplayAudioInfo(emptyInfo, sizeof(emptyInfo), view, 128, BF_AAC);
+  assert(emptyInfo[0] == '\0');
+  view.kind = DisplaySourceKind::Aux;
+  unimplemented = selectDisplayAudioInfo(view, 128, BF_AAC);
+  assert(!unimplemented.bluetooth && unimplemented.radioBitrate == 0);
+  formatDisplayAudioInfo(emptyInfo, sizeof(emptyInfo), view, 128, BF_AAC);
+  assert(emptyInfo[0] == '\0');
+  sources.displayView(view);
   expectRadio(view, 999, BF_FLAC, "999 FLAC");
   expectRadio(view, 1000, BF_FLAC, "1000 FLAC");
   expectRadio(view, 1411, BF_FLAC, "1411 FLAC");

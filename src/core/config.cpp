@@ -24,6 +24,9 @@
 #include "../displays/tools/l10n.h"
 #include <cstddef>
 #include <nvs.h>
+#if defined(VOXONE_PROFILE_C0)
+#include <esp_system.h>
+#endif
 
 namespace {
 static_assert(CONFIG_VERSION == voxone::config_format::kConfigV7,
@@ -913,6 +916,9 @@ void Config::sleepForAfter(uint16_t sf, uint16_t sa){
 
 void Config::bootInfo() {
   BOOTLOG("************************************************");
+#if defined(VOXONE_PROFILE_C0)
+  BOOTLOG("reset reason:\t%d", static_cast<int>(esp_reset_reason()));
+#endif
   BOOTLOG("VoxOne v%s-%s", VOXONE_VERSION, VOXONE_BUILD_CHANNEL);
   BOOTLOG("build: %s", VOXONE_BUILD_SHA);
   BOOTLOG("profile: %s", VOXONE_BUILD_PROFILE);
@@ -937,7 +943,8 @@ void Config::bootInfo() {
   BOOTLOG("invertdisplay:\t%s", store.invertdisplay?"true":"false");
   BOOTLOG("buttons:\tleft=%d, center=%d, right=%d, up=%d, down=%d, mode=%d, pullup=%s", 
           BTN_LEFT, BTN_CENTER, BTN_RIGHT, BTN_UP, BTN_DOWN, BTN_MODE, BTN_INTERNALPULLUP?"true":"false");
-  BOOTLOG("encoder:\tl=%d, b=%d, r=%d, pullup=%s",
-          ENC_BTNL, ENC_BTNB, ENC_BTNR, ENC_INTERNALPULLUP?"true":"false");
+  BOOTLOG("encoder:\tl=%d, b=%d, r=%d, pullup=%s, buttonPullup=%s",
+          ENC_BTNL, ENC_BTNB, ENC_BTNR, ENC_INTERNALPULLUP?"true":"false",
+          ENC_BUTTON_INTERNALPULLUP?"true":"false");
   BOOTLOG("------------------------------------------------");
 }

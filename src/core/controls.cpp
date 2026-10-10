@@ -41,7 +41,7 @@ ButtonBinding buttons[] {
 #endif
 #if ENC_BTNB!=255
   {{voxone::hardware::currentHardware().encoder.button, true,
-    voxone::hardware::currentHardware().encoder.internalPullup}, EVT_ENCBTNB},
+    voxone::hardware::currentHardware().encoder.buttonInternalPullup}, EVT_ENCBTNB},
 #endif
 #if BTN_UP!=255
   {{BTN_UP, true, BTN_INTERNALPULLUP}, EVT_BTNUP},
@@ -289,7 +289,7 @@ void controlsEvent(bool toRight, int8_t volDelta) {
       display.putRequest(NEWMODE, VOL);
     #endif
     if(volDelta!=0){
-#if defined(VOXONE_PROFILE_X0) || defined(VOXONE_PROFILE_A0)
+#if defined(VOXONE_PROFILE_X0) || defined(VOXONE_PROFILE_A0) || defined(VOXONE_PROFILE_C0)
       player.stepUserVol(volDelta);
 #else
       int nv = config.store.volume+volDelta;

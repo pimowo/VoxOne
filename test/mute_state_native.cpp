@@ -17,7 +17,17 @@ int main() {
   assert(std::strcmp(x0Text(28, true), "MUTE") == 0);
   assert(displayVolumeMuted(28, true));
   assert(std::strcmp(x0Text(28, false), "\023 28") == 0);
-  assert(std::strcmp(x0Text(0, false), "MUTE") == 0);
+  assert(std::strcmp(x0Text(0, false), "\023 0") == 0);
+
+  // A0 displays MUTE only for the explicit mute state; C0 uses that state
+  // directly and otherwise prints the unchanged user volume.
+  assert(!displayVolumeMuted(0, false));
+  assert(displayVolumeMuted(0, true));
+  assert(!displayVolumeMuted(50, false));
+  assert(displayVolumeMuted(50, true));
+  assert(std::strcmp(x0Text(0, true), "MUTE") == 0);
+  assert(std::strcmp(x0Text(50, false), "\023 50") == 0);
+  assert(std::strcmp(x0Text(50, true), "MUTE") == 0);
 
   MuteState mute;
   uint8_t userVolume = 27;
@@ -44,7 +54,7 @@ int main() {
 
   userVolume = 0;
   assert(mute.outputSilent(userVolume) && !mute.active());
-  assert(displayVolumeMuted(userVolume, mute.active()));
+  assert(!displayVolumeMuted(userVolume, mute.active()));
   assert(mute.stepUserVolume(userVolume, 1) == 1);
   mute.set(true);
   assert(mute.outputSilent(50));

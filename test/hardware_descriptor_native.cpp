@@ -39,6 +39,7 @@ int main() {
   assert(d.encoder.b == fromLegacyPin(ENC_BTNR));
   assert(d.encoder.button == fromLegacyPin(ENC_BTNB));
   assert(d.encoder.internalPullup == bool(ENC_INTERNALPULLUP));
+  assert(d.encoder.buttonInternalPullup == bool(ENC_BUTTON_INTERNALPULLUP));
   assert(d.encoder.stepsPerDetent ==
          (ENC_HALFQUARD == 255 ? 1 : (ENC_HALFQUARD ? 2 : 4)));
   assert(d.btAudioIn.bclk == fromLegacyPin(VOXONE_BT_I2S_BCLK_PIN));
@@ -78,6 +79,7 @@ int main() {
   assert(d.audioOut.dout == 27 && d.audioOut.bclk == 26 && d.audioOut.ws == 25);
   assert(d.encoder.a == 33 && d.encoder.b == 35 && d.encoder.button == 32);
   assert(!d.encoder.internalPullup && d.encoder.stepsPerDetent == 4);
+  assert(!d.encoder.buttonInternalPullup);
   // The legacy X0 profile does not specify default SPI bus pins.
   assert(d.spi.sck == kNoPin && d.spi.mosi == kNoPin &&
          d.spi.miso == kNoPin);
@@ -121,6 +123,7 @@ int main() {
   assert(d.display.backlight == fromLegacyPin(BRIGHTNESS_PIN));
   assert(d.encoder.a == 41 && d.encoder.b == 40 && d.encoder.button == 39);
   assert(!d.encoder.internalPullup && d.encoder.stepsPerDetent == 4);
+  assert(!d.encoder.buttonInternalPullup);
   assert(d.audioOut.dout == 4 && d.audioOut.bclk == 5 && d.audioOut.ws == 6);
   assert(d.i2c.sda == 8 && d.i2c.scl == 7);
   assert(d.btUart.rx == 15 && d.btUart.tx == 16);
@@ -148,7 +151,8 @@ int main() {
   assert(d.display.cs == kNoPin && d.display.dc == kNoPin);
   assert(d.audioOut.bclk == 1 && d.audioOut.ws == 3 && d.audioOut.dout == 2);
   assert(d.encoder.a == 5 && d.encoder.b == 6 && d.encoder.button == 4);
-  assert(d.encoder.internalPullup);
+  assert(!d.encoder.internalPullup);
+  assert(d.encoder.buttonInternalPullup);
   assert(!d.capabilities.supportsRtc);
   assert(!d.capabilities.supportsVoxOneBt);
   assert(!d.capabilities.supportsBtFirmwareUpdate);

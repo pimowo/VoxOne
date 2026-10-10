@@ -22,8 +22,8 @@ int main() {
   assert(!frameRed(sourcePlayback(true, false, true, BtPlayback::Playing)));
   assert(displayVolumeFrameRed(27, true, false));
   assert(displayVolumeMuted(27, true));
-  assert(displayVolumeFrameRed(0, false, false));
-  assert(displayVolumeMuted(0, false));
+  assert(!displayVolumeFrameRed(0, false, false));
+  assert(!displayVolumeMuted(0, false));
 
   assert(dacXsmtHigh(DacPlaybackState::Playing, false));
   assert(!dacXsmtHigh(DacPlaybackState::Paused, false));

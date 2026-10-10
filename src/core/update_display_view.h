@@ -33,6 +33,36 @@ inline const char* updateActivityDisplayText(UpdateActivity activity) {
   return "";
 }
 
+inline const char* updateActivityCompactDisplayText(UpdateActivity activity) {
+  switch (activity) {
+    case UpdateActivity::PreparingUpdate: return "PRZYGOTOWANIE";
+    case UpdateActivity::StoppingAudio: return "STOP AUDIO";
+    case UpdateActivity::BackingUpSettings: return "BACKUP";
+    case UpdateActivity::WritingFirmware:
+    case UpdateActivity::WritingFilesystem: return "ZAPIS";
+    case UpdateActivity::SendingToBt: return "WYSYLANIE";
+    case UpdateActivity::Verifying: return "WERYFIKACJA";
+    case UpdateActivity::RestartingBt: return "RESTART BT";
+    case UpdateActivity::WaitingForBt: return "OCZEKIWANIE";
+    case UpdateActivity::HealthCheck: return "TEST";
+    case UpdateActivity::Completed: return "GOTOWE";
+    case UpdateActivity::PreparingRestart: return "RESTART";
+    case UpdateActivity::Failed: return "BLAD";
+    case UpdateActivity::None: return "";
+  }
+  return "";
+}
+
+inline const char* updateTargetCompactDisplayName(UpdateTarget target) {
+  switch (target) {
+    case UpdateTarget::VoxOneFirmware: return "MAIN";
+    case UpdateTarget::Filesystem: return "SPIFFS";
+    case UpdateTarget::VoxOneBtFirmware: return "VoxOneBT";
+    case UpdateTarget::None: return "";
+  }
+  return "";
+}
+
 inline bool updateScreenOwnsDisplay(const UpdateProgressSnapshot& snapshot) {
   return snapshot.locked;
 }

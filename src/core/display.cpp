@@ -11,11 +11,14 @@
 #include "player.h"
 #include "volume_map.h"
 #include "station_metadata.h"
+#include "player_display_metadata.h"
+#include "player_display_view.h"
 #include "network.h"
 #include "netserver.h"
 #include "system_operation_state.h"
 #include "update_progress.h"
 #include "update_bar_render_state.h"
+#include "station_selection_view.h"
 #include "timekeeper.h"
 #include "ui_timeout_config.h"
 #if DSP_MODEL==DSP_ST7796 && VOXONE_HAS_BT && VOXONE_PIN_MAP_COMPLETE
@@ -25,6 +28,9 @@
 #include "../displays/widgets/widgets.h"
 #include "../displays/widgets/pages.h"
 #include "../displays/tools/l10n.h"
+#if defined(VOXONE_PROFILE_C0)
+#include "../displays/conf/player128x64conf.h"
+#endif
 
 Display display;
 static TaskHandle_t displayTaskHandle = nullptr;
@@ -94,7 +100,7 @@ uint32_t displayTaskStackHighWaterMark() {
 
 #ifndef DUMMYDISPLAY
 //============================================================================================================================
-#if defined(VOXONE_PROFILE_X0) || defined(VOXONE_PROFILE_A0)
+#if defined(VOXONE_PROFILE_X0) || defined(VOXONE_PROFILE_A0) || defined(VOXONE_PROFILE_C0)
 constexpr uint16_t kDisplayVolumeMax = 100;
 static uint8_t displayedVolume() { return config.userVolume; }
 #else
@@ -103,6 +109,203 @@ static uint8_t displayedVolume() { return config.store.volume; }
 #endif
 
 DspCore dsp;
+
+#if defined(VOXONE_PROFILE_C0)
+// 8x8 monochrome speaker: small body, widening cone, two wave pixels.
+static const uint8_t c0SpeakerBitmap[] PROGMEM = {
+  0x00, 0x30, 0x7A, 0xFD, 0xFD, 0x7A, 0x30, 0x00
+};
+
+class C0PlayerStatusWidget : public Widget {
+ public:
+  C0PlayerStatusWidget() { Widget::init({0, 30, 1, WA_LEFT}, WHITE, BLACK); }
+
+  void loop() override {
+    if (!_active || static_cast<uint32_t>(millis() - lastCheck_) < 100) return;
+    lastCheck_ = millis();
+    render(false);
+  }
+
+ private:
+  bool drawn_ = false;
+  uint32_t lastCheck_ = 0;
+  uint8_t hour_ = 255, minute_ = 255, volume_ = 255;
+  bool colonVisible_ = false;
+  uint16_t bitrate_ = 0;
+  uint32_t sampleRate_ = 0;
+  BitrateFormat format_ = BF_UNKNOWN;
+  DisplaySourceKind source_ = DisplaySourceKind::Radio;
+  DisplayPlaybackState playback_ = DisplayPlaybackState::None;
+  bool muted_ = false, btConnected_ = false;
+
+  void _draw() override { if (_active) render(true); }
+
+  void render(bool force) {
+    PlayerDisplayView view{};
+    capturePlayerDisplayView(view, WiFi.RSSI());
+    const uint8_t hour = network.timeinfo.tm_hour;
+    const uint8_t minute = network.timeinfo.tm_min;
+    const uint8_t volume = view.userVolume;
+    const bool muted = view.muted;
+    const bool connected = view.btConnected;
+    const DisplayAudioInfo& audioInfo = view.audioInfo;
+    const BitrateFormat format = audioInfo.radioFormat;
+    const uint16_t bitrate = audioInfo.radioBitrate;
+    const bool colonVisible = (millis() / 500) % 2 == 0;
+    const bool middleChanged = force || !drawn_ || hour != hour_ ||
+                               minute != minute_ || format != format_ ||
+                               bitrate != bitrate_ || view.sampleRate != sampleRate_ ||
+                               view.source != source_;
+
+    if (middleChanged) {
+      dsp.fillRect(0, 30, 128, 24, BLACK);
+      dsp.setFont();
+      dsp.setTextColor(WHITE, BLACK);
+      dsp.setTextSize(2);
+      char digits[3];
+      snprintf(digits, sizeof(digits), "%02u", static_cast<unsigned>(hour));
+      dsp.setCursor(34, 33);
+      dsp.print(digits);
+      snprintf(digits, sizeof(digits), "%02u", static_cast<unsigned>(minute));
+      dsp.setCursor(70, 33);
+      dsp.print(digits);
+      dsp.setTextSize(1);
+      const char* codec = view.audioCodecLabel;
+      dsp.setCursor(128 - strlen(codec) * 6, 32);
+      dsp.print(codec);
+      if (audioInfo.bluetooth) {
+        dsp.setCursor(128 - strlen(audioInfo.bottom) * 6, 42);
+        dsp.print(audioInfo.bottom);
+      } else if (bitrate) {
+        char rateText[6];
+        snprintf(rateText, sizeof(rateText), "%u",
+                 static_cast<unsigned>(bitrate));
+        dsp.setCursor(128 - strlen(rateText) * 6, 42);
+        dsp.print(rateText);
+      }
+    }
+    if (middleChanged || colonVisible != colonVisible_) {
+      dsp.fillRect(58, 33, 12, 16, BLACK);
+      if (colonVisible) {
+        dsp.setFont();
+        dsp.setTextColor(WHITE, BLACK);
+        dsp.setTextSize(2);
+        dsp.setCursor(58, 33);
+        dsp.print(':');
+      }
+    }
+
+    if (force || !drawn_ || source_ != view.source || playback_ != view.playback ||
+        volume_ != volume || muted_ != muted || btConnected_ != connected) {
+      // x=116..127 belongs to the existing graphical Wi-Fi widget.
+      dsp.fillRect(0, 56, 116, 8, BLACK);
+      switch (view.playback) {
+        case DisplayPlaybackState::Playing:
+          dsp.fillTriangle(0, 56, 0, 63, 7, 59, WHITE);
+          break;
+        case DisplayPlaybackState::Paused:
+          dsp.fillRect(1, 56, 2, 8, WHITE);
+          dsp.fillRect(5, 56, 2, 8, WHITE);
+          break;
+        case DisplayPlaybackState::Stopped:
+          dsp.fillRect(1, 57, 6, 6, WHITE);
+          break;
+        case DisplayPlaybackState::None:
+          break;
+      }
+      const char* label = displaySourceLabel(view.source);
+      dsp.setFont();
+      dsp.setTextSize(1);
+      dsp.setTextColor(WHITE, BLACK);
+      dsp.setCursor(12, 56);
+      dsp.print('[');
+      dsp.print(label);
+      dsp.print(']');
+      dsp.drawBitmap(58, 56, c0SpeakerBitmap, 8, 8, WHITE);
+      dsp.setCursor(70, 56);
+      if (muted) dsp.print('X');
+      else dsp.print(volume);
+      if (connected) {
+        dsp.fillRect(99, 56, 16, 8, WHITE);
+        dsp.setTextColor(BLACK, WHITE);
+        dsp.setCursor(101, 56);
+        dsp.print("BT");
+      }
+    }
+
+    drawn_ = true;
+    hour_ = hour;
+    minute_ = minute;
+    volume_ = volume;
+    muted_ = muted;
+    source_ = view.source;
+    playback_ = view.playback;
+    btConnected_ = connected;
+    format_ = format;
+    bitrate_ = bitrate;
+    sampleRate_ = view.sampleRate;
+    colonVisible_ = colonVisible;
+  }
+};
+
+class C0UpdateProgressWidget : public Widget {
+ public:
+  C0UpdateProgressWidget()
+      : bar_(update128x64::barInteriorWidth,
+             update128x64::indeterminateWidth,
+             update128x64::indeterminateStep) {
+    Widget::init({update128x64::barLeft, update128x64::barTop, 1, WA_LEFT},
+                 WHITE, BLACK);
+  }
+
+  void setProgress(UpdateDisplayProgress progress, uint32_t acquisition) {
+    if (acquisition != acquisition_) {
+      acquisition_ = acquisition;
+      bar_.reset();
+    } else if (progress.determinate == progress_.determinate &&
+               progress.percent == progress_.percent) return;
+    progress_ = progress;
+    if (_active) render(bar_.apply(progress_));
+  }
+
+  void loop() override {
+    if (!_active || progress_.determinate) return;
+    const uint32_t now = millis();
+    if (static_cast<uint32_t>(now - lastStepMs_) < 100) return;
+    lastStepMs_ = now;
+    render(bar_.step());
+  }
+
+ private:
+  UpdateDisplayProgress progress_{};
+  UpdateBarRenderState bar_;
+  uint32_t acquisition_ = 0;
+  uint32_t lastStepMs_ = 0;
+
+  void _draw() override {
+    if (!_active) return;
+    bar_.reset();
+    render(bar_.apply(progress_));
+  }
+
+  void render(const UpdateBarRenderDelta& delta) {
+    const uint16_t innerLeft = update128x64::barLeft + update128x64::barInset;
+    const uint16_t innerTop = update128x64::barTop + update128x64::barInset;
+    if (delta.reset) {
+      dsp.fillRect(update128x64::barLeft, update128x64::barTop,
+                   update128x64::barWidth, update128x64::barHeight, BLACK);
+      dsp.drawRect(update128x64::barLeft, update128x64::barTop,
+                   update128x64::barWidth, update128x64::barHeight, WHITE);
+    }
+    if (delta.clearWidth)
+      dsp.fillRect(innerLeft + delta.clearX, innerTop, delta.clearWidth,
+                   update128x64::barInteriorHeight, BLACK);
+    if (delta.fillWidth)
+      dsp.fillRect(innerLeft + delta.fillX, innerTop, delta.fillWidth,
+                   update128x64::barInteriorHeight, WHITE);
+  }
+};
+#endif
 
 #if DSP_MODEL==DSP_ST7796
 class A0UpdateProgressWidget : public Widget {
@@ -378,7 +581,7 @@ void Display::init() {
   //_bootScreen();
   _pager = new Pager();
   _footer = new Page();
-#if DSP_MODEL==DSP_ST7789_76 || DSP_MODEL==DSP_ST7796
+#if DSP_MODEL==DSP_ST7789_76 || DSP_MODEL==DSP_ST7796 || defined(VOXONE_PROFILE_C0)
   _plwidget = nullptr;
 #else
   _plwidget = new PlayListWidget();
@@ -416,18 +619,32 @@ void Display::_bootScreen(){
 }
 
 void Display::_buildPager(){
+#if defined(VOXONE_PROFILE_C0)
+  _meta->init("*", player128x64::station, WHITE, BLACK);
+  _title1->init("*", player128x64::artist, WHITE, BLACK);
+#else
   _meta->init("*", metaConf, config.theme.meta, config.theme.metabg);
   #if DSP_MODEL==DSP_ST7789_76
   _x0Station = new ScrollWidget("*", x0StationConf, config.theme.meta, config.theme.metabg);
 #endif
   _title1->init("*", title1Conf, config.theme.title1, config.theme.background);
+#endif
   _clock->init(clockConf, 0, 0);
-#if DSP_MODEL==DSP_ST7796
+#if defined(VOXONE_PROFILE_C0)
+  _plcurrent->init("*", stations128x64::selected, BLACK, WHITE);
+#elif DSP_MODEL==DSP_ST7796
   _plcurrent->init("*", a0StationConf, config.theme.plcurrent, config.theme.plcurrentbg);
   #else
     _plcurrent->init("*", playlistConf, config.theme.plcurrent, config.theme.plcurrentbg);
   #endif
-#if DSP_MODEL==DSP_ST7789_76
+#if defined(VOXONE_PROFILE_C0)
+  _plheader = new TextWidget(stations128x64::header, 24, WHITE, BLACK);
+  _plcounter = new TextWidget(stations128x64::counter, 16, WHITE, BLACK);
+  _plplaying = new TextWidget(stations128x64::playing, 8, WHITE, BLACK);
+  _c0PlaylistPrevious = new TextWidget(stations128x64::previous, 140, WHITE, BLACK);
+  _c0PlaylistNext = new TextWidget(stations128x64::next, 140, WHITE, BLACK);
+  _plheader->setText("WEB - STACJA");
+#elif DSP_MODEL==DSP_ST7789_76
   _plheader = new TextWidget(playlistHeaderConf, 30, config.theme.meta, config.theme.metabg);
   _plcounter = new TextWidget(playlistCounterConf, 16, config.theme.meta, config.theme.background);
   _plplaying = new TextWidget(playlistPlayingConf, 8, config.theme.meta, config.theme.background);
@@ -442,7 +659,11 @@ void Display::_buildPager(){
     _plcurrent->moveTo({TFT_FRAMEWDT, (uint16_t)(_plwidget->currentTop()), (int16_t)playlistConf.width});
 #endif
   #ifndef HIDE_TITLE2
+#if defined(VOXONE_PROFILE_C0)
+    _title2 = new ScrollWidget("*", player128x64::title, WHITE, BLACK);
+#else
     _title2 = new ScrollWidget("*", title2Conf, config.theme.title2, config.theme.background);
+#endif
   #endif
 #if defined(VOXONE_PROFILE_A0) && DSP_MODEL==DSP_ST7796
   const auto onTextChanged = [](void* context, uint8_t row) {
@@ -465,22 +686,32 @@ void Display::_buildPager(){
   #ifndef HIDE_VU
     _vuwidget = new VuWidget(vuConf, bandsConf, config.theme.vumax, config.theme.vumin, config.theme.background);
   #endif
-  #ifndef HIDE_VOLBAR
+  #if !defined(HIDE_VOLBAR) && !defined(VOXONE_PROFILE_C0)
     _volbar = new SliderWidget(volbarConf, config.theme.volbarin, config.theme.background, kDisplayVolumeMax, config.theme.volbarout);
   #endif
   #ifndef HIDE_VOL
 #if DSP_MODEL==DSP_ST7796
     _a0Volume = new A0VolumeWidget(voltxtConf, config.theme.meta, config.theme.background);
-    _a0Volume->setVolume(displayedVolume(), player.isMuted());
+    PlayerDisplayView initialView{};
+    capturePlayerDisplayView(initialView, WiFi.RSSI());
+    _a0Volume->setVolume(initialView.userVolume, initialView.muted);
 #else
     _voltxt = new TextWidget(voltxtConf, 10, config.theme.vol, config.theme.background);
 #endif
   #endif
   #ifndef HIDE_IP
+#if defined(VOXONE_PROFILE_C0)
+    _volip = new TextWidget(player128x64::volumeIp, 30, WHITE, BLACK);
+#else
     _volip = new TextWidget(iptxtConf, 30, config.theme.ip, config.theme.background);
+#endif
   #endif
   #ifndef HIDE_RSSI
+#if defined(VOXONE_PROFILE_C0)
+    _rssi = new TextWidget(player128x64::wifi, 20, WHITE, BLACK);
+#else
     _rssi = new TextWidget(rssiConf, 20, config.theme.rssi, config.theme.background);
+#endif
   #endif
 #if DSP_MODEL==DSP_ST7796
   _a0Playback = new A0PlaybackIconWidget(a0PlaybackFrameConf, config.theme.meta,
@@ -504,20 +735,28 @@ void Display::_buildPager(){
   _x0Volume = new TextWidget(x0VolumeConf, 12, config.theme.vol, config.theme.background);
   _x0Clock = new TextWidget(x0ClockConf, 8, config.theme.clock, config.theme.background);
 #endif
+#if defined(VOXONE_PROFILE_C0)
+  _nums->init(player128x64::volumeNumber, 10, config.theme.digit, config.theme.background);
+#else
   _nums->init(numConf, 10, config.theme.digit, config.theme.background);
+#endif
   
 #if DSP_MODEL!=DSP_ST7796
   if(_volbar)   _footer->addWidget( _volbar);
   if(_voltxt)   _footer->addWidget( _voltxt);
   if(_volip)    _footer->addWidget( _volip);
+#if !defined(VOXONE_PROFILE_C0)
   if(_rssi)     _footer->addWidget( _rssi);
+#endif
 #endif
   
 #if DSP_MODEL==DSP_ST7789_76
   pages[PG_PLAYER]->addWidget(new FillWidget(x0StationBandConf, config.theme.metabg));
   pages[PG_PLAYER]->addWidget(_x0Station);
 #else
+#if !defined(VOXONE_PROFILE_C0)
   if(_metabackground) pages[PG_PLAYER]->addWidget( _metabackground);
+#endif
   pages[PG_PLAYER]->addWidget(_meta);
 #endif
   pages[PG_PLAYER]->addWidget(_title1);
@@ -525,7 +764,10 @@ void Display::_buildPager(){
 #if DSP_MODEL==DSP_ST7796
   pages[PG_PLAYER]->addWidget(new FillWidget(a0LowerDividerConf, config.theme.div));
 #endif
-  #if BITRATE_FULL
+#if defined(VOXONE_PROFILE_C0)
+  pages[PG_PLAYER]->addWidget(new C0PlayerStatusWidget());
+  if (_rssi) pages[PG_PLAYER]->addWidget(_rssi);
+  #elif BITRATE_FULL
     _fullbitrate = new BitrateWidget(fullbitrateConf, config.theme.bitrate, config.theme.background);
 #if DSP_MODEL==DSP_ST7796
     _fullbitrate->setFrameWidth(fullbitrateWidth);
@@ -536,6 +778,7 @@ void Display::_buildPager(){
     _bitrate = new TextWidget(bitrateConf, 30, config.theme.bitrate, config.theme.background);
     pages[PG_PLAYER]->addWidget( _bitrate);
   #endif
+#if !defined(VOXONE_PROFILE_C0)
   if(_vuwidget) pages[PG_PLAYER]->addWidget( _vuwidget);
 #if DSP_MODEL==DSP_ST7789_76
   pages[PG_PLAYER]->addWidget(new FillWidget(x0DividerConf, config.theme.div));
@@ -557,9 +800,12 @@ void Display::_buildPager(){
   pages[PG_PLAYER]->addPage(_footer);
 #endif
 #endif
+#endif
   pages[PG_SCREENSAVER]->addWidget(_clock);
 
+#if !defined(VOXONE_PROFILE_C0)
   if(_metabackground) pages[PG_DIALOG]->addWidget( _metabackground);
+#endif
   pages[PG_DIALOG]->addWidget(_meta);
   pages[PG_DIALOG]->addWidget(_nums);
 #if DSP_MODEL==DSP_ST7796
@@ -570,7 +816,14 @@ void Display::_buildPager(){
   #if DSP_MODEL!=DSP_ST7796
     pages[PG_DIALOG]->addPage(_footer);
   #endif
-#if DSP_MODEL==DSP_ST7789_76 || DSP_MODEL==DSP_ST7796
+#if defined(VOXONE_PROFILE_C0)
+  pages[PG_PLAYLIST]->addWidget(_plheader);
+  pages[PG_PLAYLIST]->addWidget(_c0PlaylistPrevious);
+  pages[PG_PLAYLIST]->addWidget(_plcurrent);
+  pages[PG_PLAYLIST]->addWidget(_c0PlaylistNext);
+  pages[PG_PLAYLIST]->addWidget(_plplaying);
+  pages[PG_PLAYLIST]->addWidget(_plcounter);
+#elif DSP_MODEL==DSP_ST7789_76 || DSP_MODEL==DSP_ST7796
 #if DSP_MODEL==DSP_ST7789_76
   if(_plbackground) pages[PG_PLAYLIST]->addWidget(_plbackground);
 #endif
@@ -623,6 +876,21 @@ void Display::_buildPager(){
   _a0UpdatePage->addWidget(_a0UpdateActivity);
   _pager->addPage(_a0UpdatePage);
   #endif
+#if defined(VOXONE_PROFILE_C0)
+  _c0UpdatePage = new Page();
+  TextWidget* updateTitle = new TextWidget(update128x64::title, 16, WHITE, BLACK);
+  updateTitle->setText("UPDATE");
+  _c0UpdatePage->addWidget(updateTitle);
+  _c0UpdateTarget = new TextWidget(update128x64::target, 16, WHITE, BLACK);
+  _c0UpdatePage->addWidget(_c0UpdateTarget);
+  _c0UpdatePercent = new TextWidget(update128x64::percent, 8, WHITE, BLACK);
+  _c0UpdatePage->addWidget(_c0UpdatePercent);
+  _c0UpdateBar = new C0UpdateProgressWidget();
+  _c0UpdatePage->addWidget(_c0UpdateBar);
+  _c0UpdateActivity = new TextWidget(update128x64::activity, 24, WHITE, BLACK);
+  _c0UpdatePage->addWidget(_c0UpdateActivity);
+  _pager->addPage(_c0UpdatePage);
+#endif
 #if defined(VOXONE_PROFILE_A0) && DSP_MODEL==DSP_ST7796
   _a0PlayerReady = true;
 #endif
@@ -716,6 +984,16 @@ void Display::_updateUpdateScreen(const UpdateProgressSnapshot& snapshot) {
     if (progress.determinate) _a0UpdatePercent->setText(progress.percent, "%d%%");
     else _a0UpdatePercent->setText("");
   }
+#elif defined(VOXONE_PROFILE_C0)
+  if (_c0UpdateTarget)
+    _c0UpdateTarget->setText(updateTargetCompactDisplayName(snapshot.target));
+  if (_c0UpdateActivity)
+    _c0UpdateActivity->setText(updateActivityCompactDisplayText(snapshot.activity));
+  if (_c0UpdateBar) _c0UpdateBar->setProgress(progress, snapshot.acquisition);
+  if (_c0UpdatePercent) {
+    if (progress.determinate) _c0UpdatePercent->setText(progress.percent, "%d%%");
+    else _c0UpdatePercent->setText("...");
+  }
 #elif DSP_MODEL==DSP_ST7789_76
   if (_nums) {
     if (progress.determinate) _nums->setText(progress.percent, "%d%%");
@@ -797,13 +1075,22 @@ void Display::_swichMode(displayMode_e newmode) {
     #else
       _showDialog(config.ipToStr(WiFi.localIP()));
     #endif
+#if defined(VOXONE_PROFILE_C0) || DSP_MODEL==DSP_ST7796
+    PlayerDisplayView view{};
+    capturePlayerDisplayView(view, WiFi.RSSI());
+    if (view.muted) _nums->setText("MUTE");
+    else _nums->setText(view.userVolume, numtxtFmt);
+#else
     if (player.isMuted()) _nums->setText("MUTE");
     else _nums->setText(displayedVolume(), numtxtFmt);
+#endif
   }
   if (newmode == LOST)      _showDialog(LANG::const_DlgLost);
   if (newmode == UPDATING) {
 #if DSP_MODEL==DSP_ST7796
     _pager->setPage(_a0UpdatePage, true);
+#elif defined(VOXONE_PROFILE_C0)
+    _pager->setPage(_c0UpdatePage, true);
 #else
     _showDialog(LANG::const_DlgUpdate);
 #endif
@@ -831,24 +1118,42 @@ void Display::resetQueue(){
 }
 
 void Display::_drawPlaylist() {
-#if DSP_MODEL==DSP_ST7789_76 || DSP_MODEL==DSP_ST7796
   const uint16_t total = config.playlistLength();
-  if(total == 0) {
+  const StationSelectionView view = stationSelectionView(
+      total, currentPlItem, config.lastStation(), player.isRunning());
+  currentPlItem = view.selected;
+  if(view.empty()) {
+#if DSP_MODEL==DSP_ST7789_76 || DSP_MODEL==DSP_ST7796 || defined(VOXONE_PROFILE_C0)
     _plcurrent->setText("BRAK STACJI");
+#if defined(VOXONE_PROFILE_C0)
+    _c0PlaylistPrevious->setText("");
+    _c0PlaylistNext->setText("");
+#endif
     _plcounter->setText("0/0");
     _plplaying->setText("");
-  } else {
-    if(currentPlItem < 1 || currentPlItem > total) currentPlItem = 1;
-    _plcurrent->setText(config.stationByNum(currentPlItem));
-    char counter[16];
-    snprintf(counter, sizeof(counter), "%u/%u", currentPlItem, total);
-    _plcounter->setText(counter);
-    _plplaying->setText(player.isRunning() && currentPlItem == config.lastStation() ? "GRA" : "");
-  }
 #else
-  _plwidget->drawPlaylist(currentPlItem);
+    _plwidget->drawPlaylist(currentPlItem);
 #endif
-#if DSP_MODEL==DSP_ST7789_76 || DSP_MODEL==DSP_ST7796
+  } else {
+#if defined(VOXONE_PROFILE_C0)
+    _c0PlaylistPrevious->setText(
+        config.stationByNum(stationSelectionRelative(view, -1)));
+    _plcurrent->setText(config.stationByNum(view.selected));
+    _c0PlaylistNext->setText(
+        config.stationByNum(stationSelectionRelative(view, 1)));
+#elif DSP_MODEL==DSP_ST7789_76 || DSP_MODEL==DSP_ST7796
+    _plcurrent->setText(config.stationByNum(view.selected));
+#else
+    _plwidget->drawPlaylist(view.selected);
+#endif
+#if DSP_MODEL==DSP_ST7789_76 || DSP_MODEL==DSP_ST7796 || defined(VOXONE_PROFILE_C0)
+    char counter[16];
+    snprintf(counter, sizeof(counter), "%u/%u", view.selected, view.total);
+    _plcounter->setText(counter);
+    _plplaying->setText(view.selectedIsPlaying() ? "GRA" : "");
+#endif
+  }
+#if DSP_MODEL==DSP_ST7789_76 || DSP_MODEL==DSP_ST7796 || defined(VOXONE_PROFILE_C0)
   timekeeper.waitAndReturnPlayerForMode(STATIONS, uiTimeoutConfig().stationListSeconds);
 #else
   timekeeper.waitAndReturnPlayer(30);
@@ -908,14 +1213,10 @@ void Display::_layoutChange(bool played){
 
 #if DSP_MODEL==DSP_ST7796
 void Display::_updatePlaybackStatus() {
-  DisplaySourceView source{};
-  const DisplayPlaybackState playback =
-      getDisplaySourceView && getDisplaySourceView(source)
-          ? source.playback
-          : (player.isRunning() ? DisplayPlaybackState::Playing
-                                : DisplayPlaybackState::Stopped);
-  const char* label = displayPlaybackLabel(playback);
-  _a0Playback->setState(playback);
+  PlayerDisplayView view{};
+  capturePlayerDisplayView(view, WiFi.RSSI());
+  const char* label = displayPlaybackLabel(view.playback);
+  _a0Playback->setState(view.playback);
   _btTransportPlayback->setText(label);
 }
 #endif
@@ -990,20 +1291,16 @@ void Display::loop() {
   _pager->loop();
 #if DSP_MODEL==DSP_ST7796
   if (_bootStep == 2) {
+    PlayerDisplayView view{};
+    capturePlayerDisplayView(view, WiFi.RSSI());
     if (_a0Volume) _a0Volume->setDacMuted(dacMute.logicalMuted());
     if (_a0Eq)
       _a0Eq->setLabel(eqPresetLabel(config.store.bass, config.store.middle, config.store.trebble));
-    if (_a0Source) {
-      DisplaySourceView source{};
-      _a0Source->setLabel(displaySourceLabel(
-          getDisplaySourceView && getDisplaySourceView(source)
-              ? source.kind : DisplaySourceKind::Radio));
-    }
-  }
+    if (_a0Source) _a0Source->setLabel(displaySourceLabel(view.source));
+#if VOXONE_HAS_BT && VOXONE_PIN_MAP_COMPLETE
+    if (_a0BluetoothIcon) _a0BluetoothIcon->setConnected(view.btConnected);
 #endif
-#if DSP_MODEL==DSP_ST7796 && VOXONE_HAS_BT && VOXONE_PIN_MAP_COMPLETE
-  if (_a0BluetoothIcon)
-    _a0BluetoothIcon->setConnected(bluetoothPhysicallyConnected());
+  }
 #endif
   requestParams_t request;
   if(xQueueReceive(displayQueue, &request, DSP_QUEUE_TICKS)){
@@ -1033,7 +1330,7 @@ void Display::loop() {
         case NEWSTATION:
           if (systemUpdateAudioBlocked()) break;
           _station();
-#if DSP_MODEL==DSP_ST7789_76 || DSP_MODEL==DSP_ST7796
+#if DSP_MODEL==DSP_ST7789_76 || DSP_MODEL==DSP_ST7796 || defined(VOXONE_PROFILE_C0)
           if(_mode==STATIONS && _plplaying) _plplaying->setText(player.isRunning() && currentPlItem == config.lastStation() ? "GRA" : "");
 #endif
           break;
@@ -1041,10 +1338,16 @@ void Display::loop() {
         case DRAWPLAYLIST: _drawPlaylist(); break;
         case DRAWVOL: _volume(); break;
         case DBITRATE: {
+#if DSP_MODEL==DSP_ST7789_76 || DSP_MODEL==DSP_ST7796 || defined(VOXONE_PROFILE_C0)
+            PlayerDisplayView view{};
+            capturePlayerDisplayView(view, WiFi.RSSI());
+            const DisplayAudioInfo& info = view.audioInfo;
+#else
             DisplaySourceView source{};
             if (getDisplaySourceView) getDisplaySourceView(source);
             const DisplayAudioInfo info = selectDisplayAudioInfo(
                 source, config.station.bitrate, config.configFmt);
+#endif
             if (_fullbitrate) {
               if (info.bluetooth)
                 _fullbitrate->setCustomText(info.top, info.bottom);
@@ -1055,8 +1358,7 @@ void Display::loop() {
             } else if (_bitrate) {
                 char buf[20];
 #if DSP_MODEL==DSP_ST7789_76
-              formatDisplayAudioInfo(buf, sizeof(buf), source,
-                                     config.station.bitrate, config.configFmt);
+              snprintf(buf, sizeof(buf), "%s", view.audioText);
 #else
               snprintf(buf, sizeof(buf), bitrateFmt, config.station.bitrate);
 #endif
@@ -1077,21 +1379,27 @@ void Display::loop() {
         case DSPRSSI: if(_rssi){ _setRSSI(request.payload); } break;
         case PSTART:
           _layoutChange(activeSourceVuVisible());
+#if defined(VOXONE_PROFILE_C0)
+          if (_mode == PLAYER) _station();
+#endif
 #if DSP_MODEL==DSP_ST7796
           _station();
           _updatePlaybackStatus();
 #endif
-#if DSP_MODEL==DSP_ST7789_76 || DSP_MODEL==DSP_ST7796
+#if DSP_MODEL==DSP_ST7789_76 || DSP_MODEL==DSP_ST7796 || defined(VOXONE_PROFILE_C0)
           if(_mode==STATIONS && _plplaying) _plplaying->setText(currentPlItem == config.lastStation() ? "GRA" : "");
 #endif
           break;
         case PSTOP:
           _layoutChange(activeSourceVuVisible());
+#if defined(VOXONE_PROFILE_C0)
+          if (_mode == PLAYER) _station();
+#endif
 #if DSP_MODEL==DSP_ST7796
           _station();
           _updatePlaybackStatus();
 #endif
-#if DSP_MODEL==DSP_ST7789_76 || DSP_MODEL==DSP_ST7796
+#if DSP_MODEL==DSP_ST7789_76 || DSP_MODEL==DSP_ST7796 || defined(VOXONE_PROFILE_C0)
           if(_mode==STATIONS && _plplaying) _plplaying->setText("");
 #endif
           break;
@@ -1157,24 +1465,28 @@ void Display::_setRSSI(int rssi) {
   return;
 #endif
   char rssiG[3];
-  int rssi_steps[] = {RSSI_STEPS};
-  if(rssi >= rssi_steps[0]) strlcpy(rssiG, "\004\006", 3);
-  if(rssi >= rssi_steps[1] && rssi < rssi_steps[0]) strlcpy(rssiG, "\004\005", 3);
-  if(rssi >= rssi_steps[2] && rssi < rssi_steps[1]) strlcpy(rssiG, "\004\002", 3);
-  if(rssi >= rssi_steps[3] && rssi < rssi_steps[2]) strlcpy(rssiG, "\003\002", 3);
-  if(rssi <  rssi_steps[3] || rssi >=  0) strlcpy(rssiG, "\001\002", 3);
+  uint8_t level = playerWifiLevel(rssi);
+#if defined(VOXONE_PROFILE_C0) || DSP_MODEL==DSP_ST7796
+  PlayerDisplayView view{};
+  capturePlayerDisplayView(view, rssi);
+  level = view.wifiLevel;
+#endif
+  switch (level) {
+    case 4: strlcpy(rssiG, "\004\006", sizeof(rssiG)); break;
+    case 3: strlcpy(rssiG, "\004\005", sizeof(rssiG)); break;
+    case 2: strlcpy(rssiG, "\004\002", sizeof(rssiG)); break;
+    case 1: strlcpy(rssiG, "\003\002", sizeof(rssiG)); break;
+    default: strlcpy(rssiG, "\001\002", sizeof(rssiG)); break;
+  }
   _rssi->setText(rssiG);
 }
 
 void Display::_station() {
   _meta->setAlign(metaConf.widget.align);
-#if DSP_MODEL==DSP_ST7796
-  DisplaySourceView source{};
-  if(getDisplaySourceView && getDisplaySourceView(source) && source.kind == DisplaySourceKind::Bluetooth) {
-    _meta->setText(source.peerName ? source.peerName : "Bluetooth");
-  } else {
-    _meta->setText(player.isRunning() ? config.station.name : "WEB Radio");
-  }
+#if defined(VOXONE_PROFILE_C0) || DSP_MODEL==DSP_ST7796
+  PlayerDisplayView view{};
+  capturePlayerDisplayView(view, WiFi.RSSI());
+  _meta->setText(view.station);
 #else
   _meta->setText(config.station.name);
 #endif
@@ -1190,105 +1502,51 @@ char *split(char *str, const char *delim) {
   return dmp + strlen(delim);
 }
 
-#if DSP_MODEL==DSP_ST7789_76 || DSP_MODEL==DSP_ST7796
-static uint32_t displayNextCodepoint(const char*& text, const char* end) {
-  const uint8_t first = static_cast<uint8_t>(*text++);
-  if(first < 0x80) return first;
-  const uint8_t extra = (first & 0xE0) == 0xC0 ? 1 :
-                        (first & 0xF0) == 0xE0 ? 2 :
-                        (first & 0xF8) == 0xF0 ? 3 : 0;
-  if(extra == 0 || end - text < extra) return first;
-  uint32_t codepoint = first & (0x7F >> extra);
-  for(uint8_t i = 0; i < extra; ++i) {
-    const uint8_t next = static_cast<uint8_t>(text[i]);
-    if((next & 0xC0) != 0x80) return first;
-    codepoint = (codepoint << 6) | (next & 0x3F);
-  }
-  text += extra;
-  return codepoint;
-}
-
-static uint32_t displayFoldCodepoint(uint32_t value) {
-  if(value >= 'A' && value <= 'Z') return value + ('a' - 'A');
-  if((value >= 0xC0 && value <= 0xD6) || (value >= 0xD8 && value <= 0xDE) ||
-     (value >= 0x410 && value <= 0x42F)) return value + 0x20;
-  switch(value) {
-    case 0x104: case 0x106: case 0x118: case 0x141:
-    case 0x143: case 0x15A: case 0x179: case 0x17B:
-      return value + 1;
-    case 0x401: return 0x451;
-    default: return value;
-  }
-}
-
-static bool displayArtistIsStation(const char* artist, const char* station) {
-  const char* artistEnd = artist + strlen(artist);
-  const char* stationEnd = station + strlen(station);
-  while(artist < artistEnd && isspace(static_cast<unsigned char>(*artist))) ++artist;
-  while(station < stationEnd && isspace(static_cast<unsigned char>(*station))) ++station;
-  while(artistEnd > artist && isspace(static_cast<unsigned char>(artistEnd[-1]))) --artistEnd;
-  while(stationEnd > station && isspace(static_cast<unsigned char>(stationEnd[-1]))) --stationEnd;
-  while(artist < artistEnd && station < stationEnd) {
-    if(displayFoldCodepoint(displayNextCodepoint(artist, artistEnd)) !=
-       displayFoldCodepoint(displayNextCodepoint(station, stationEnd))) return false;
-  }
-  return artist == artistEnd && station == stationEnd;
-}
-#endif
-
 void Display::_title() {
+#if DSP_MODEL==DSP_ST7789_76 || DSP_MODEL==DSP_ST7796 || defined(VOXONE_PROFILE_C0)
 #if DSP_MODEL==DSP_ST7796
   _updatePlaybackStatus();
-  DisplaySourceView source{};
-  if(getDisplaySourceView && getDisplaySourceView(source) && source.kind == DisplaySourceKind::Bluetooth) {
-    _title1->setText(source.artist ? source.artist : "");
-    if(_title2) _title2->setText(source.title ? source.title : "");
-    _btTransportArtist->setText(source.artist ? source.artist : "");
-    _btTransportTitle->setText(source.title ? source.title : "");
-    return;
+#endif
+  PlayerDisplayView view{};
+  capturePlayerDisplayView(view, WiFi.RSSI());
+  _title1->setText(view.artist);
+  if (_title2) _title2->setText(view.title);
+#if DSP_MODEL==DSP_ST7796
+  // BT transport is a separate screen and keeps the original raw fields.
+  if (view.source == DisplaySourceKind::Bluetooth) {
+    DisplaySourceView source{};
+    if (getDisplaySourceView && getDisplaySourceView(source)) {
+      _btTransportArtist->setText(source.artist ? source.artist : "");
+      _btTransportTitle->setText(source.title ? source.title : "");
+    }
   }
 #endif
-  if (strlen(config.station.title) > 0) {
-#if DSP_MODEL==DSP_ST7789_76 || DSP_MODEL==DSP_ST7796
-    const StationMetadataParts parts = playerStationMetadata(
-        config.station.title, config.station.metadataMode == STATION_META_SWAP);
+  if (view.source != DisplaySourceKind::Bluetooth && player_on_track_change)
+    player_on_track_change();
 #else
+  if (strlen(config.station.title) > 0) {
     const StationMetadataParts parts = parseStationMetadata(
         config.station.title, config.station.metadataMode == STATION_META_SWAP);
-#endif
     char artist[BUFLEN];
     char title[BUFLEN];
     stationMetaCopy(artist, sizeof(artist), parts.artist, parts.artistLength);
     stationMetaCopy(title, sizeof(title), parts.title, parts.titleLength);
-    if(parts.split && _title2){
-#if DSP_MODEL==DSP_ST7789_76 || DSP_MODEL==DSP_ST7796
-      _title1->setText(displayArtistIsStation(artist, config.station.name) ? "" : artist);
-#else
-      _title1->setText(artist);
-#endif
-      _title2->setText(title);
-    }else{
-#if DSP_MODEL==DSP_ST7789_76 || DSP_MODEL==DSP_ST7796
-      if (_title2) {
-        _title1->setText(artist);
-        _title2->setText(displayArtistIsStation(title, config.station.name) ? "" : title);
-      } else {
-        _title1->setText(displayArtistIsStation(title, config.station.name) ? "" : title);
-      }
-#else
+    const auto shown = normalizePlayerMetadataForDisplay(artist, title);
+    if (_title2) {
+      _title1->setText(shown.displayArtist);
+      _title2->setText(shown.displayTitle);
+    } else {
       char whole[BUFLEN + 1];
       stationMetaDisplay(config.station.title, config.station.metadataMode == STATION_META_SWAP,
                          whole, sizeof(whole));
       _title1->setText(whole);
-      if(_title2) _title2->setText("");
-#endif
     }
-    
-  }else{
+  } else {
     _title1->setText("");
-    if(_title2) _title2->setText("");
+    if (_title2) _title2->setText("");
   }
   if (player_on_track_change) player_on_track_change();
+#endif
 }
 
 void Display::_time(bool redraw) {
@@ -1331,7 +1589,11 @@ void Display::_volume() {
   }
 #endif
 #if DSP_MODEL==DSP_ST7796
-  if(_a0Volume) _a0Volume->setVolume(displayedVolume(), player.isMuted());
+  if(_a0Volume) {
+    PlayerDisplayView view{};
+    capturePlayerDisplayView(view, WiFi.RSSI());
+    _a0Volume->setVolume(view.userVolume, view.muted);
+  }
 #else
   #ifndef HIDE_VOL
     if(_voltxt) _voltxt->setText(displayedVolume(), voltxtFmt);
@@ -1343,8 +1605,15 @@ void Display::_volume() {
 #else
     timekeeper.waitAndReturnPlayer(3);
 #endif
+#if defined(VOXONE_PROFILE_C0) || DSP_MODEL==DSP_ST7796
+    PlayerDisplayView view{};
+    capturePlayerDisplayView(view, WiFi.RSSI());
+    if (view.muted) _nums->setText("MUTE");
+    else _nums->setText(view.userVolume, numtxtFmt);
+#else
     if (player.isMuted()) _nums->setText("MUTE");
     else _nums->setText(displayedVolume(), numtxtFmt);
+#endif
   }
 }
 

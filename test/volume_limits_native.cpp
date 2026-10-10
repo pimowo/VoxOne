@@ -1,12 +1,41 @@
 #include "../src/core/volume_map.h"
+#include "../src/core/mute_state.h"
 #include <cassert>
 #include <cstdint>
 
 int main() {
+  MuteState encoderMute;
+  uint8_t encoderUser = 0;
+  const auto turn = [&](int8_t delta) {
+    encoderUser = encoderMute.stepUserVolume(encoderUser, delta);
+    const VolumeState state = volumeStateFromUser(encoderUser, 100);
+    assert(state.user == encoderUser);
+    assert(state.raw == volumeUserToRaw(encoderUser));
+    assert(state.raw <= volumeRawMaximum(100));
+  };
+  turn(-1); assert(encoderUser == 0);
+  turn(1); assert(encoderUser == 1);
+  turn(1); assert(encoderUser == 2);
+  encoderUser = 49;
+  turn(1); assert(encoderUser == 50);
+  turn(1); assert(encoderUser == 51);
+  turn(-1); assert(encoderUser == 50);
+  turn(-1); assert(encoderUser == 49);
+  encoderUser = 99;
+  turn(1); assert(encoderUser == 100);
+  turn(1); assert(encoderUser == 100);
+  // RADIO uses the sign of a batched encoder delta, as on A0.
+  encoderUser = 50;
+  turn(3); assert(encoderUser == 51);
+  assert(volumeStateFromUser(50, 100).raw == 103);
+  assert(volumeStateFromUser(51, 100).raw == 106);
+  assert(volumeStateFromUser(99, 100).raw == 251);
+  assert(volumeStateFromUser(100, 100).raw == 254);
+
   for (int user = 0; user <= 100; ++user) {
     assert(volumeUserToRaw(user, 100) == volumeUserToRaw(user));
   }
-  const uint8_t users[] = {0, 1, 25, 50, 75, 100};
+  const uint8_t users[] = {0, 1, 25, 50, 75, 99, 100};
   uint8_t previous = 0;
   for (uint8_t user : users) {
     const VolumeState state = volumeStateFromUser(user, 60);
@@ -14,6 +43,8 @@ int main() {
     assert(state.raw >= previous && state.raw <= volumeRawMaximum(60));
     previous = state.raw;
   }
+  for (int raw = 0; raw <= 254; ++raw)
+    assert(volumeStateFromRaw(static_cast<uint8_t>(raw), 100).user <= 100);
   assert(volumeRawMaximum(60) == 131);
   assert(volumeStateFromUser(0, 60).raw == 0);
   assert(volumeStateFromUser(1, 60).raw == 1);

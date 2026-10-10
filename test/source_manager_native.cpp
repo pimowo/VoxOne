@@ -1,12 +1,84 @@
 #include "../src/core/source_manager_state.h"
 #include "../src/core/bt_transport.h"
 #include "../src/core/bt_runtime.h"
+#include "../src/core/player_display_view.h"
 
 #include <cassert>
 #include <cstring>
 #include <initializer_list>
 
 int main() {
+  PlayerDisplayView playerView{};
+  DisplaySourceView raw{};
+  raw.kind = DisplaySourceKind::Radio;
+  raw.playback = DisplayPlaybackState::Playing;
+  makePlayerDisplayView(playerView, raw, "Radio One", "Italove - Magic Night",
+                        false, 0, false, false, -50, 320, BF_MP3);
+  assert(std::strcmp(playerView.station, "Radio One") == 0);
+  assert(std::strcmp(playerView.artist, "Italove") == 0);
+  assert(std::strcmp(playerView.title, "Magic Night") == 0);
+  makePlayerDisplayView(playerView, raw, "Radio One", "Radio One - Magic Night",
+                        false, 0, false, false, -50, 320, BF_MP3);
+  assert(std::strcmp(playerView.artist, "Magic Night") == 0 && playerView.title[0] == '\0');
+  assert(playerView.source == DisplaySourceKind::Radio &&
+         playerView.playback == DisplayPlaybackState::Playing);
+  assert(playerView.userVolume == 0 && !playerView.muted);
+  assert(playerView.wifiLevel == 4 && playerView.audioInfo.radioBitrate == 320 &&
+         playerView.audioInfo.radioFormat == BF_MP3 &&
+         std::strcmp(playerView.audioText, "320 MP3") == 0);
+  makePlayerDisplayView(playerView, raw, "Radio One", "", false,
+                        50, false, true, -50, 320, BF_MP3);
+  assert(playerView.source == DisplaySourceKind::Radio && playerView.btConnected);
+  raw.playback = DisplayPlaybackState::Stopped;
+  makePlayerDisplayView(playerView, raw, "Radio One", "Radio One", false,
+                        0, true, false, -81, 0, BF_UNKNOWN);
+  assert(std::strcmp(playerView.station, "WEB Radio") == 0);
+  assert(playerView.artist[0] == '\0' && playerView.title[0] == '\0');
+  assert(playerView.userVolume == 0 && playerView.muted && playerView.wifiLevel == 0);
+  makePlayerDisplayView(playerView, raw, "", "Magic Night", false,
+                        50, false, false, -60, 0, BF_UNKNOWN);
+  assert(std::strcmp(playerView.station, "WEB Radio") == 0);
+  assert(std::strcmp(playerView.artist, "Magic Night") == 0 && playerView.title[0] == '\0');
+  makePlayerDisplayView(playerView, raw, "Radio One", "Italove - ", false,
+                        50, true, false, -70, 0, BF_UNKNOWN);
+  assert(std::strcmp(playerView.artist, "Italove") == 0 && playerView.title[0] == '\0');
+  makePlayerDisplayView(playerView, raw, "Radio One", "", false,
+                        50, false, false, -80, 0, BF_UNKNOWN);
+  assert(playerView.artist[0] == '\0' && playerView.title[0] == '\0');
+  raw.kind = DisplaySourceKind::Bluetooth;
+  raw.connected = true;
+  raw.peerName = "Telefon";
+  raw.artist = "";
+  raw.title = "Magic Night";
+  raw.sampleRate = 44100;
+  makePlayerDisplayView(playerView, raw, "Radio One", "Radio metadata", false,
+                        50, false, true, -51, 320, BF_MP3);
+  assert(std::strcmp(playerView.station, "Telefon") == 0);
+  assert(std::strcmp(playerView.artist, "Magic Night") == 0 && playerView.title[0] == '\0');
+  assert(playerView.btConnected && playerView.wifiLevel == 3 &&
+         playerView.audioInfo.bluetooth &&
+         std::strcmp(playerView.audioText, "44.1 kHz") == 0);
+  raw.peerName = "";
+  makePlayerDisplayView(playerView, raw, "Radio One", "", false,
+                        50, false, true, -61, 0, BF_UNKNOWN);
+  assert(std::strcmp(playerView.station, "Bluetooth") == 0 && playerView.wifiLevel == 2);
+  raw.connected = false;
+  raw.peerName = "Stale peer";
+  makePlayerDisplayView(playerView, raw, "Radio One", "", false,
+                        50, false, false, -71, 0, BF_UNKNOWN);
+  assert(std::strcmp(playerView.station, "Bluetooth") == 0 &&
+         !playerView.btConnected && playerView.wifiLevel == 1);
+  raw.kind = DisplaySourceKind::Dlna;
+  makePlayerDisplayView(playerView, raw, "Radio One", "", false,
+                        50, false, false, 0, 320, BF_MP3);
+  assert(std::strcmp(playerView.station, "DLNA") == 0 && playerView.audioText[0] == '\0');
+  raw.kind = DisplaySourceKind::Aux;
+  makePlayerDisplayView(playerView, raw, "Radio One", "", false,
+                        50, false, false, -49, 320, BF_MP3);
+  assert(std::strcmp(playerView.station, "AUX") == 0 && playerView.audioText[0] == '\0');
+  assert(playerWifiLevel(-59) == 3 && playerWifiLevel(-69) == 2 &&
+         playerWifiLevel(-79) == 1 && playerWifiLevel(-81) == 0);
+
   SourceManagerState sources;
   BtLinkState bt{};
   DisplaySourceView view{};
@@ -34,13 +106,32 @@ int main() {
     assert(!web.observe(webBt).activeChanged && web.active() == ActiveSource::Radio);
   sources.displayView(view);
   assert(view.kind == DisplaySourceKind::Radio);
+  assert(std::strcmp(displayPlayerStationText(view, "Radio One"), "WEB Radio") == 0);
+  assert(std::strcmp(displayPlayerStationText(view, ""), "WEB Radio") == 0);
+  sources.displayView(view, true);
+  assert(std::strcmp(displayPlayerStationText(view, "Radio One"), "Radio One") == 0);
+  assert(std::strcmp(displayPlayerStationText(view, ""), "WEB Radio") == 0);
+  view.kind = DisplaySourceKind::Bluetooth;
+  view.connected = true;
+  view.peerName = "Telefon";
+  assert(std::strcmp(displayPlayerStationText(view, "Radio One"), "Telefon") == 0);
+  view.peerName = "";
+  assert(std::strcmp(displayPlayerStationText(view, "Radio One"), "Bluetooth") == 0);
+  view.connected = false;
+  view.peerName = "Stale peer";
+  assert(std::strcmp(displayPlayerStationText(view, "Radio One"), "Bluetooth") == 0);
+  view.kind = DisplaySourceKind::Dlna;
+  assert(std::strcmp(displayPlayerStationText(view, "Radio One"), "DLNA") == 0);
+  view.kind = DisplaySourceKind::Aux;
+  assert(std::strcmp(displayPlayerStationText(view, "Radio One"), "AUX") == 0);
+  sources.displayView(view);
   assert(std::strcmp(displaySourceLabel(view.kind), "WEB") == 0);
   assert(std::strcmp(displaySourceLabel(DisplaySourceKind::Bluetooth), "BT") == 0);
   assert(std::strcmp(displaySourceLabel(DisplaySourceKind::Dlna), "DLNA") == 0);
   assert(std::strcmp(displaySourceLabel(DisplaySourceKind::Aux), "AUX") == 0);
   assert(std::strcmp(displaySourceLabel(DisplaySourceKind::Spdif), "SPDIF") == 0);
   assert(std::strcmp(displaySourceLabel(DisplaySourceKind::Tts), "TTS") == 0);
-  assert(displayVolumeMuted(0));
+  assert(!displayVolumeMuted(0));
   assert(!displayVolumeMuted(1));
   assert(displayVolumeMuted(50, true));
   assert(!displayVolumeFrameRed(27, false, false));
@@ -48,8 +139,8 @@ int main() {
   assert(!displayVolumeMuted(27, false));
   assert(displayVolumeFrameRed(27, true, false));
   assert(displayVolumeMuted(27, true));
-  assert(displayVolumeFrameRed(0, false, false));
-  assert(displayVolumeMuted(0, false));
+  assert(!displayVolumeFrameRed(0, false, false));
+  assert(!displayVolumeMuted(0, false));
   assert(!displaySlotVisible(displayLoudLabel(false)));
   assert(std::strcmp(displayLoudLabel(true), "LOUD") == 0);
   assert(displaySlotVisible(displayLoudLabel(true)));

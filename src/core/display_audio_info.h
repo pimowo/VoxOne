@@ -16,6 +16,17 @@ inline const char* bluetoothSampleRateTop(uint32_t sampleRate) {
   }
 }
 
+inline const char* displayRadioFormatLabel(BitrateFormat format) {
+  switch (format) {
+    case BF_MP3: return "MP3";
+    case BF_AAC: return "AAC";
+    case BF_FLAC: return "FLAC";
+    case BF_OGG: return "OGG";
+    case BF_WAV: return "WAV";
+    default: return "";
+  }
+}
+
 struct DisplayAudioInfo {
   bool bluetooth;
   uint16_t radioBitrate;
@@ -32,7 +43,7 @@ inline DisplayAudioInfo selectDisplayAudioInfo(const DisplaySourceView& source,
   if (info.bluetooth) {
     info.top = bluetoothSampleRateTop(source.sampleRate);
     info.bottom = info.top[0] ? "kHz" : "";
-  } else {
+  } else if (source.kind == DisplaySourceKind::Radio) {
     info.radioBitrate = radioBitrate;
     info.radioFormat = radioFormat;
     info.top = "";
@@ -57,19 +68,15 @@ inline void formatDisplayAudioInfo(char* output, size_t capacity,
     snprintf(output, capacity, "%s", bluetoothSampleRateLabel(source.sampleRate));
     return;
   }
+  if (source.kind != DisplaySourceKind::Radio) {
+    output[0] = '\0';
+    return;
+  }
   if (radioBitrate == 0) {
     output[0] = '\0';
     return;
   }
-  const char* codec = "";
-  switch (radioFormat) {
-    case BF_MP3: codec = "MP3"; break;
-    case BF_AAC: codec = "AAC"; break;
-    case BF_FLAC: codec = "FLAC"; break;
-    case BF_OGG: codec = "OGG"; break;
-    case BF_WAV: codec = "WAV"; break;
-    default: break;
-  }
+  const char* codec = displayRadioFormatLabel(radioFormat);
   if (codec[0])
     snprintf(output, capacity, "%u %s", radioBitrate, codec);
   else

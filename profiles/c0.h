@@ -29,7 +29,8 @@
 #define ENC_BTNB 4
 #define ENC_BTNR 6
 #define ENC_BTNL 5
-#define ENC_INTERNALPULLUP true
+#define ENC_INTERNALPULLUP false
+#define ENC_BUTTON_INTERNALPULLUP true
 
 #define I2C_SDA 7
 #define I2C_SCL 8

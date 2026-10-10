@@ -35,6 +35,7 @@ struct UartPins { Pin rx, tx; };
 struct EncoderPins {
   Pin a, b, button;
   bool internalPullup;
+  bool buttonInternalPullup;
   uint8_t stepsPerDetent;
 };
 struct DisplayPins { Pin cs, dc, rst, backlight; BusKind bus; };

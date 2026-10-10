@@ -1,4 +1,5 @@
 #include "../src/core/station_metadata.h"
+#include "../src/core/player_display_metadata.h"
 #include <cassert>
 #include <cstring>
 
@@ -36,4 +37,21 @@ int main() {
   const auto playerShort = playerStationMetadata("New", false);
   stationMetaCopy(output, sizeof(output), playerShort.title, playerShort.titleLength);
   assert(std::strcmp(output, "New") == 0 && output[3] == '\0');
+
+  const char rawArtist[] = "Italove";
+  const char rawTitle[] = "Magic Night";
+  const auto both = normalizePlayerMetadataForDisplay(rawArtist, rawTitle);
+  assert(std::strcmp(both.displayArtist, "Italove") == 0);
+  assert(std::strcmp(both.displayTitle, "Magic Night") == 0);
+  const auto artistOnly = normalizePlayerMetadataForDisplay(rawArtist, "");
+  assert(std::strcmp(artistOnly.displayArtist, "Italove") == 0);
+  assert(std::strcmp(artistOnly.displayTitle, "") == 0);
+  const auto titleOnly = normalizePlayerMetadataForDisplay("", rawTitle);
+  assert(std::strcmp(titleOnly.displayArtist, "Magic Night") == 0);
+  assert(std::strcmp(titleOnly.displayTitle, "") == 0);
+  const auto neither = normalizePlayerMetadataForDisplay("", "");
+  assert(std::strcmp(neither.displayArtist, "") == 0);
+  assert(std::strcmp(neither.displayTitle, "") == 0);
+  assert(std::strcmp(rawArtist, "Italove") == 0);
+  assert(std::strcmp(rawTitle, "Magic Night") == 0);
 }

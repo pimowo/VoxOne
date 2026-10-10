@@ -37,6 +37,16 @@ int main() {
   delta = bar.apply({true, 100});
   assert(delta.reset && delta.fillWidth == 356);
 
+  UpdateBarRenderState oledBar(116, 18, 4);
+  delta = oledBar.apply({false, 0});
+  assert(delta.reset && delta.fillWidth == 18);
+  delta = oledBar.step();
+  assert(delta.clearWidth == 18 && delta.fillX == 4 && delta.fillWidth == 18);
+  delta = oledBar.apply({true, 50});
+  assert(delta.reset && delta.fillWidth == 58);
+  delta = oledBar.apply({true, 100});
+  assert(delta.fillX == 58 && delta.fillWidth == 58);
+
   assert(std::strcmp(updateTargetDisplayName(UpdateTarget::None), "") == 0);
   assert(std::strcmp(updateTargetDisplayName(UpdateTarget::VoxOneFirmware),
                      "VoxOne Firmware") == 0);
@@ -63,6 +73,19 @@ int main() {
   };
   for (const auto& label : labels)
     assert(std::strcmp(updateActivityDisplayText(label.activity), label.text) == 0);
+
+  assert(std::strcmp(updateTargetCompactDisplayName(UpdateTarget::VoxOneFirmware),
+                     "MAIN") == 0);
+  assert(std::strcmp(updateTargetCompactDisplayName(UpdateTarget::Filesystem),
+                     "SPIFFS") == 0);
+  assert(std::strcmp(updateTargetCompactDisplayName(UpdateTarget::VoxOneBtFirmware),
+                     "VoxOneBT") == 0);
+  assert(std::strcmp(updateActivityCompactDisplayText(UpdateActivity::WritingFirmware),
+                     "ZAPIS") == 0);
+  assert(std::strcmp(updateActivityCompactDisplayText(UpdateActivity::Completed),
+                     "GOTOWE") == 0);
+  assert(std::strcmp(updateActivityCompactDisplayText(UpdateActivity::Failed),
+                     "BLAD") == 0);
 
   UpdateProgressState state;
   UpdateDisplayProgressState view;
@@ -131,5 +154,6 @@ int main() {
   assert(display.find("updateScreenReturnsToPlayer(update)") != std::string::npos);
   assert(display.find("if (updateLockActive() && !(type == NEWMODE && payload == UPDATING)) return;") != std::string::npos);
   assert(display.find("class A0UpdateProgressWidget") != std::string::npos);
+  assert(display.find("class C0UpdateProgressWidget") != std::string::npos);
   assert(display.find("progress_.determinate") != std::string::npos);
 }

@@ -84,7 +84,7 @@ constexpr HardwareDescriptor kCurrent = {
   VOXONE_BT_I2S_RX_ENABLED != 0,
   kBtUart,
   {fromLegacyPin(ENC_BTNL), fromLegacyPin(ENC_BTNR),
-   fromLegacyPin(ENC_BTNB), ENC_INTERNALPULLUP,
+   fromLegacyPin(ENC_BTNB), ENC_INTERNALPULLUP, ENC_BUTTON_INTERNALPULLUP,
    ENC_HALFQUARD == 255 ? 1 : (ENC_HALFQUARD ? 2 : 4)},
   {fromLegacyPin(TFT_CS), fromLegacyPin(TFT_DC),
    fromLegacyPin(TFT_RST), kBacklight,

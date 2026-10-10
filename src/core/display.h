@@ -20,8 +20,8 @@ inline const char* displaySourceLabel(DisplaySourceKind kind) {
     }
     return "";
 }
-inline bool displayVolumeMuted(uint8_t userVolume, bool muted = false) {
-    return muted || userVolume == 0;
+inline bool displayVolumeMuted(uint8_t /*userVolume*/, bool muted = false) {
+    return muted;
 }
 inline const char* displayX0VolumeText(uint8_t userVolume, bool muted,
                                          char* buffer, size_t bufferSize) {
@@ -68,6 +68,17 @@ struct DisplaySourceView {
     const char* title;
     uint32_t sampleRate = 0;
 };
+inline const char* displayPlayerStationText(const DisplaySourceView& source,
+                                            const char* radioStationName) {
+    if (source.kind == DisplaySourceKind::Bluetooth)
+        return source.connected && source.peerName && source.peerName[0]
+                   ? source.peerName : "Bluetooth";
+    if (source.kind == DisplaySourceKind::Radio)
+        return source.playback == DisplayPlaybackState::Playing &&
+                       radioStationName && radioStationName[0]
+                   ? radioStationName : "WEB Radio";
+    return displaySourceLabel(source.kind);
+}
 inline bool displaySourceVuVisible(const DisplaySourceView& source) {
     return source.playback == DisplayPlaybackState::Playing ||
            (source.kind == DisplaySourceKind::Bluetooth &&
@@ -102,6 +113,9 @@ class A0UpdateProgressWidget;
 class A0BluetoothWidget;
 class A0LabelFrameWidget;
 class A0PlaybackIconWidget;
+#endif
+#if defined(VOXONE_PROFILE_C0)
+class C0UpdateProgressWidget;
 #endif
     
 class Display {
@@ -156,7 +170,14 @@ class Display {
     TextWidget *_a0UpdateActivity = nullptr;
     A0UpdateProgressWidget *_a0UpdateBar = nullptr;
 #endif
-#if DSP_MODEL==DSP_ST7789_76 || DSP_MODEL==DSP_ST7796
+#if defined(VOXONE_PROFILE_C0)
+    TextWidget *_c0PlaylistPrevious = nullptr, *_c0PlaylistNext = nullptr;
+    Page *_c0UpdatePage = nullptr;
+    TextWidget *_c0UpdateTarget = nullptr, *_c0UpdatePercent = nullptr;
+    TextWidget *_c0UpdateActivity = nullptr;
+    C0UpdateProgressWidget *_c0UpdateBar = nullptr;
+#endif
+#if DSP_MODEL==DSP_ST7789_76 || DSP_MODEL==DSP_ST7796 || defined(VOXONE_PROFILE_C0)
     TextWidget *_plheader, *_plcounter, *_plplaying;
 #endif
 #if DSP_MODEL==DSP_ST7789_76
