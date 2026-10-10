@@ -18,7 +18,6 @@ Selection select(const hardware::RuntimeHardwareConfig& requested,
                  const hardware::HardwareDescriptor& hardware,
                  CompiledBackends compiled) {
   const Selection fallback = buildDefault(hardware);
-  if (!compiled.runtimeSelection) return fallback;
   if (hardware::validateRuntimeHardwareConfig(requested,
                                                hardware.capabilities) !=
       hardware::RuntimeHardwareValidation::Valid)
@@ -26,6 +25,10 @@ Selection select(const hardware::RuntimeHardwareConfig& requested,
 
   const display_profile::ControllerId controller =
       hardware::runtimeDisplayController(requested.display);
+  if (controller == display_profile::ControllerId::None)
+    return Selection{hardware::RuntimeDisplay::None, controller,
+                     display_profile::ProfileId::None, false};
+  if (!compiled.runtimeSelection) return fallback;
   if (!compiled.contains(controller)) return fallback;
 
   return Selection{requested.display, controller,

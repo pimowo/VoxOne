@@ -48,6 +48,10 @@ public:
    */
   OneButton(const int pin, const boolean activeLow = true, const bool pullupActive = true);
 
+  /** Initialize a default-constructed button without touching GPIO earlier. */
+  void setup(const int pin, const boolean activeLow = true,
+             const bool pullupActive = true);
+
   // ----- Set runtime parameters -----
 
   /**
@@ -64,6 +68,9 @@ public:
    * set # millisec after press is assumed.
    */
   void setPressTicks(const int ticks);
+
+  /** Set the hold duration that emits the reserved very-long event. */
+  void setVeryLongPressTicks(const int ticks);
 
   /**
    * Attach an event to be called when a single click is detected.
@@ -106,6 +113,11 @@ public:
    */
   void attachDuringLongPress(callbackFunction newFunction);
   void attachDuringLongPress(parameterizedCallbackFunction newFunction, void *parameter);
+
+  /** Attach an event emitted once when the very-long threshold is crossed. */
+  void attachVeryLongPressStart(callbackFunction newFunction);
+  void attachVeryLongPressStart(parameterizedCallbackFunction newFunction,
+                                void *parameter);
 
   // ----- State machine functions -----
 
@@ -153,8 +165,9 @@ private:
   unsigned int _debounceTicks = 50; // number of ticks for debounce times.
   unsigned int _clickTicks = 400;   // number of msecs before a click is detected.
   unsigned int _pressTicks = 800;   // number of msecs before a long button press is detected
+  unsigned int _veryLongPressTicks = 4000;
 
-  int _buttonPressed;
+  int _buttonPressed = LOW;
 
   // These variables will hold functions acting as event source.
   callbackFunction _clickFunc = NULL;
@@ -180,6 +193,11 @@ private:
   callbackFunction _duringLongPressFunc = NULL;
   parameterizedCallbackFunction _paramDuringLongPressFunc = NULL;
   void *_duringLongPressFuncParam = NULL;
+
+  callbackFunction _veryLongPressStartFunc = NULL;
+  parameterizedCallbackFunction _paramVeryLongPressStartFunc = NULL;
+  void *_veryLongPressStartFuncParam = NULL;
+  bool _veryLongTriggered = false;
 
   // These variables that hold information across the upcoming tick calls.
   // They are initialized once on program start and are updated every time the

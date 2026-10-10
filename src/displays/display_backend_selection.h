@@ -35,6 +35,20 @@ struct Selection {
   bool usedBuildDefault;
 };
 
+struct ActivationPlan {
+  bool initializeBackend;
+  bool allocateFramebuffer;
+  bool runRenderer;
+  bool createDisplayTask;
+};
+
+constexpr ActivationPlan activationPlan(const Selection& selection) {
+  // DisplayTask also services timekeeper.loop0() and netserver.loop().
+  return selection.controller == display_profile::ControllerId::None
+             ? ActivationPlan{false, false, false, true}
+             : ActivationPlan{true, true, true, true};
+}
+
 constexpr CompiledBackends compiledBackends() {
 #if defined(VOXONE_RUNTIME_OLED_128X64_BACKENDS)
   return CompiledBackends{

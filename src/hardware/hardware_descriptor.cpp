@@ -19,7 +19,8 @@ constexpr uint32_t kPsramBytes = 0;
 constexpr HardwareCapabilities kCapabilities = {
   displaySupport(DisplayKind::St7789_284x76),
   audioOutputSupport(AudioOutputKind::Pcm5102a),
-  true, true, false, false, false, false, false, false, false,
+  inputSupport(LocalInputKind::Ec11) | inputSupport(LocalInputKind::Buttons3),
+  true, false, false, false, false, false, false, false,
   false, false, false, false
 };
 #elif defined(VOXONE_PROFILE_M0)
@@ -37,7 +38,8 @@ constexpr HardwareCapabilities kCapabilities = {
   displaySupport(DisplayKind::Ssd1306_128x64) |
       displaySupport(DisplayKind::Ssd1309_128x64),
   audioOutputSupport(AudioOutputKind::Pcm5102a),
-  true, true, false, false, false, false, false, true, false,
+  inputSupport(LocalInputKind::Ec11) | inputSupport(LocalInputKind::Buttons3),
+  true, false, false, false, false, false, true, false,
   false, false, false, false
 };
 #elif defined(VOXONE_PROFILE_S0)
@@ -55,7 +57,8 @@ constexpr HardwareCapabilities kCapabilities = {
   displaySupport(DisplayKind::Ssd1306_128x64) |
       displaySupport(DisplayKind::Ssd1309_128x64),
   audioOutputSupport(AudioOutputKind::Pcm5102a),
-  true, true, false, false, false, false, false, true, false,
+  inputSupport(LocalInputKind::Ec11) | inputSupport(LocalInputKind::Buttons3),
+  true, false, false, false, false, false, true, false,
   false, false, false, false
 };
 #elif defined(VOXONE_PROFILE_DIN0)
@@ -73,7 +76,8 @@ constexpr HardwareCapabilities kCapabilities = {
   displaySupport(DisplayKind::Ssd1306_128x64) |
       displaySupport(DisplayKind::Ssd1309_128x64),
   audioOutputSupport(AudioOutputKind::Pcm5102a),
-  true, true, false, false, false, false, false, true, false,
+  inputSupport(LocalInputKind::Ec11) | inputSupport(LocalInputKind::Buttons3),
+  true, false, false, false, false, false, true, false,
   false, false, false, false
 };
 #elif defined(VOXONE_PROFILE_L0)
@@ -92,7 +96,8 @@ constexpr uint32_t kPsramBytes = 0;  // Size not established by the current prof
 constexpr HardwareCapabilities kCapabilities = {
   displaySupport(DisplayKind::St7796_480x320),
   audioOutputSupport(AudioOutputKind::Pcm5102a),
-  true, true, true, true, true, true, true, true, false,
+  inputSupport(LocalInputKind::Ec11) | inputSupport(LocalInputKind::Buttons3),
+  true, true, true, true, true, true, true, false,
   false, false, false, false
 };
 #else
@@ -116,7 +121,7 @@ constexpr HardwareDescriptor kCurrent = {
   VOXONE_BT_I2S_RX_ENABLED != 0,
   kBtUart,
   {fromLegacyPin(ENC_BTNL), fromLegacyPin(ENC_BTNR),
-   fromLegacyPin(ENC_BTNB), ENC_INTERNALPULLUP, ENC_BUTTON_INTERNALPULLUP,
+   fromLegacyPin(ENC_BTNB),
    ENC_HALFQUARD == 255 ? 1 : (ENC_HALFQUARD ? 2 : 4)},
   {fromLegacyPin(TFT_CS), fromLegacyPin(TFT_DC),
    fromLegacyPin(TFT_RST), kBacklight,
@@ -133,7 +138,8 @@ static_assert(kDisplayKind == DisplayKind::None
                   ? !kCapabilities.hasLocalDisplay()
                   : kCapabilities.supportsDisplay(kDisplayKind),
               "Selected display backend must be supported by board capabilities");
-static_assert(bool(VOXONE_HAS_ENCODER) == kCapabilities.supportsEncoder,
+static_assert(bool(VOXONE_HAS_ENCODER) ==
+                  kCapabilities.supportsInput(LocalInputKind::Ec11),
               "Encoder compile gate must match board capabilities");
 static_assert(bool(VOXONE_HAS_LOCAL_UI) == kCapabilities.supportsLocalUi,
               "Local UI compile gate must match board capabilities");
@@ -185,7 +191,7 @@ bool hasPinConflicts(const HardwareDescriptor& d) {
     d.audioOut.bclk, d.audioOut.ws, d.audioOut.dout, d.audioOut.din,
     d.btAudioIn.bclk, d.btAudioIn.ws, d.btAudioIn.dout, d.btAudioIn.din,
     d.btUart.rx, d.btUart.tx,
-    d.encoder.a, d.encoder.b, d.encoder.button,
+    d.localInput.a, d.localInput.b, d.localInput.key,
     d.display.cs, d.display.dc, d.display.rst, d.display.backlight,
     d.dacXsmt
   };
@@ -212,7 +218,8 @@ bool validateDescriptor(const HardwareDescriptor& d) {
       d.capabilities.supportsDacHardwareMute != hasPin(d.dacXsmt) ||
       (d.board.psramBytes != 0 && !d.capabilities.supportsPsram) ||
       (d.capabilities.supportsLocalUi &&
-       (!d.capabilities.hasLocalDisplay() || !d.capabilities.supportsEncoder)))
+       (!d.capabilities.hasLocalDisplay() ||
+        !d.capabilities.hasLocalInput())))
     return false;
   if (d.displayKind == DisplayKind::Ssd1306_128x64 ||
       d.displayKind == DisplayKind::Ssd1309_128x64) {
@@ -222,9 +229,11 @@ bool validateDescriptor(const HardwareDescriptor& d) {
     if (!hasPin(d.display.cs) || !hasPin(d.display.dc) ||
         d.display.bus != BusKind::Spi) return false;
   } else if (d.display.bus != BusKind::None) return false;
-  if (d.capabilities.supportsEncoder &&
-      (!hasPin(d.encoder.a) || !hasPin(d.encoder.b) ||
-       !hasPin(d.encoder.button) || d.encoder.stepsPerDetent == 0)) return false;
+  if (d.capabilities.hasLocalInput() &&
+      (!hasPin(d.localInput.a) || !hasPin(d.localInput.b) ||
+       !hasPin(d.localInput.key))) return false;
+  if (d.capabilities.supportsInput(LocalInputKind::Ec11) &&
+      d.localInput.ec11StepsPerDetent == 0) return false;
   if (d.btAudioRxEnabled != d.capabilities.supportsBtAudioRx ||
       (d.btAudioRxEnabled &&
       (!d.capabilities.supportsVoxOneBt || !hasPin(d.btAudioIn.bclk) ||
@@ -233,7 +242,8 @@ bool validateDescriptor(const HardwareDescriptor& d) {
     d.spi.sck, d.spi.mosi, d.spi.miso, d.i2c.sda, d.i2c.scl,
     d.audioOut.bclk, d.audioOut.ws, d.audioOut.dout, d.audioOut.din,
     d.btAudioIn.bclk, d.btAudioIn.ws, d.btAudioIn.dout, d.btAudioIn.din,
-    d.btUart.rx, d.btUart.tx, d.encoder.a, d.encoder.b, d.encoder.button,
+    d.btUart.rx, d.btUart.tx,
+    d.localInput.a, d.localInput.b, d.localInput.key,
     d.display.cs, d.display.dc, d.display.rst, d.display.backlight, d.dacXsmt
   };
   for (unsigned i = 0; i < sizeof(pins) / sizeof(pins[0]); ++i)

@@ -116,8 +116,11 @@ RuntimeHardwareConfig defaultRuntimeHardwareConfig(
 RuntimeHardwareConfig defaultRuntimeHardwareConfig();
 
 bool runtimeDisplayKind(RuntimeDisplay selection, DisplayKind& output);
+bool runtimeInputKind(RuntimeInput selection, LocalInputKind& output);
 bool runtimeAudioOutputKind(RuntimeAudioOutput selection,
                             AudioOutputKind& output);
+RuntimeInput effectiveRuntimeInput(const RuntimeHardwareConfig& config,
+                                   const HardwareDescriptor& hardware);
 display_profile::ProfileId runtimeDisplayProfile(RuntimeDisplay selection);
 display_profile::ControllerId runtimeDisplayController(
     RuntimeDisplay selection);
@@ -140,8 +143,8 @@ RuntimeHardwareSaveStatus saveRuntimeHardwareConfig(
     const HardwareCapabilities& capabilities);
 
 // Device API. M0/S0/DIN0 activate the selected SSD1306/SSD1309 display backend.
-// Input and audio drivers, and display drivers on other boards, remain
-// build-time choices until their later activation stages.
+// Every current board activates the selected local input backend at startup.
+// Audio and display drivers on other boards remain build-time choices.
 const RuntimeHardwareConfig& runtimeHardwareConfig();
 RuntimeHardwareLoadStatus loadRuntimeHardwareConfig();
 RuntimeHardwareSaveStatus saveRuntimeHardwareConfig(

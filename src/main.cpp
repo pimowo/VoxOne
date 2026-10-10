@@ -121,14 +121,9 @@ void setup() {
   const auto runtimeHardwareStatus =
       voxone::hardware::loadRuntimeHardwareConfig();
   Serial.printf("##[BOOT]#\truntime hardware: %s "
-#if defined(VOXONE_RUNTIME_OLED_128X64_BACKENDS)
-                "(display selection active; build-time input/audio drivers active)\n",
-#else
-                "(model only; build-time drivers active)\n",
-#endif
+                "(display/input selection active; build-time audio driver active)\n",
                 voxone::hardware::runtimeHardwareLoadStatusName(
                     runtimeHardwareStatus));
-#if defined(VOXONE_RUNTIME_OLED_128X64_BACKENDS)
   const auto displaySelection = voxone::display_backend::select(
       voxone::hardware::runtimeHardwareConfig(),
       voxone::hardware::currentHardware(),
@@ -141,7 +136,8 @@ void setup() {
                     displaySelection.controller));
   Serial.printf("##[BOOT]#\tDisplay profile: %s\n",
                 voxone::display_backend::profileName(displaySelection.profile));
-#endif
+  display.configureRuntime(
+      voxone::display_backend::activationPlan(displaySelection).runRenderer);
 #if defined(VOXONE_PROFILE_L0)
   dacMute.begin();
 #endif

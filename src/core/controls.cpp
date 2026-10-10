@@ -8,7 +8,10 @@
 #include "update_progress.h"
 #include "ui_input.h"
 #include "ui_state.h"
+#include "local_input_backend.h"
 #include "../hardware/hardware_descriptor.h"
+#include "../hardware/runtime_hardware_config.h"
+#include "../OneButton/OneButton.h"
 
 long encOldPosition  = 0;
 int lpId = -1;
@@ -17,9 +20,8 @@ int lpId = -1;
 #define DUMMYDISPLAY
 #endif
 
-#define ISPUSHBUTTONS BTN_LEFT!=255 || BTN_CENTER!=255 || BTN_RIGHT!=255 || ENC_BTNB!=255 || BTN_UP!=255 || BTN_DOWN!=255 || BTN_MODE!=255
+#define ISPUSHBUTTONS BTN_LEFT!=255 || BTN_CENTER!=255 || BTN_RIGHT!=255 || BTN_UP!=255 || BTN_DOWN!=255 || BTN_MODE!=255
 #if ISPUSHBUTTONS
-#include "../OneButton/OneButton.h"
 struct ButtonBinding {
   OneButton button;
   controlEvt_e event;
@@ -34,10 +36,6 @@ ButtonBinding buttons[] {
 #endif
 #if BTN_RIGHT!=255
   {{BTN_RIGHT, true, BTN_INTERNALPULLUP}, EVT_BTNRIGHT},
-#endif
-#if ENC_BTNB!=255
-  {{voxone::hardware::currentHardware().encoder.button, true,
-    voxone::hardware::currentHardware().encoder.buttonInternalPullup}, EVT_ENCBTNB},
 #endif
 #if BTN_UP!=255
   {{BTN_UP, true, BTN_INTERNALPULLUP}, EVT_BTNUP},
@@ -54,11 +52,46 @@ constexpr uint8_t nrOfButtons = sizeof(buttons) / sizeof(buttons[0]);
 
 #if ENC_BTNL!=255 && ENC_BTNR!=255
   #include "../yoEncoder/yoEncoder.h"
-  yoEncoder encoder = yoEncoder(voxone::hardware::currentHardware().encoder.a,
-                                voxone::hardware::currentHardware().encoder.b,
-                                voxone::hardware::currentHardware().encoder.stepsPerDetent,
-                                voxone::hardware::currentHardware().encoder.internalPullup);
+  yoEncoder encoder = yoEncoder(
+      voxone::hardware::currentHardware().localInput.a,
+      voxone::hardware::currentHardware().localInput.b,
+      voxone::hardware::currentHardware().localInput.ec11StepsPerDetent);
 #endif
+
+namespace {
+voxone::input::Activation activeLocalInput =
+    voxone::input::activationFor(voxone::hardware::RuntimeInput::None);
+OneButton localInputButtons[3];
+UiInputEvent localInputEvents[] = {
+    UiInputEvent::Left, UiInputEvent::Right, UiInputEvent::Ok,
+    UiInputEvent::Double, UiInputEvent::Long, UiInputEvent::VeryLong};
+
+void dispatchLocalInputEvent(void* event) {
+  dispatchUiInput(*static_cast<UiInputEvent*>(event));
+}
+
+void configureDirectionButton(OneButton& button, voxone::hardware::Pin pin,
+                              UiInputEvent& event) {
+  button.setup(pin, true, false);
+  button.attachClick(dispatchLocalInputEvent, &event);
+  button.setClickTicks(BTN_CLICK_TICKS);
+  button.setPressTicks(BTN_PRESS_TICKS);
+}
+
+void configureOkButton(OneButton& button, voxone::hardware::Pin pin) {
+  button.setup(pin, true, false);
+  button.attachClick(dispatchLocalInputEvent, &localInputEvents[2]);
+  button.attachDoubleClick(dispatchLocalInputEvent, &localInputEvents[3]);
+  button.attachLongPressStart(dispatchLocalInputEvent, &localInputEvents[4]);
+  button.attachVeryLongPressStart(dispatchLocalInputEvent,
+                                  &localInputEvents[5]);
+  button.setClickTicks(BTN_CLICK_TICKS);
+  button.setPressTicks(BTN_PRESS_TICKS);
+  // Keep existing click/long timings. The reserved VeryLong event uses a
+  // derived threshold and still resolves to no action in the current UI.
+  button.setVeryLongPressTicks(BTN_PRESS_TICKS * 5);
+}
+}  // namespace
 
 #if ENC_BTNL!=255
 void IRAM_ATTR readEncoderISR()
@@ -67,13 +100,29 @@ void IRAM_ATTR readEncoderISR()
 }
 #endif
 void initControls() {
-  
+  const auto& hardware = voxone::hardware::currentHardware();
+  const auto selected = voxone::hardware::effectiveRuntimeInput(
+      voxone::hardware::runtimeHardwareConfig(), hardware);
+  activeLocalInput = voxone::input::activationFor(selected);
+
 #if ENC_BTNL!=255
-  encoder.begin();
-  encoder.setup(readEncoderISR);
-  encoder.setBoundaries(0, 254, true);
-  encoder.setAcceleration(config.store.encacc);
+  if (activeLocalInput.ec11) {
+    encoder.begin();
+    encoder.setup(readEncoderISR);
+    encoder.setBoundaries(0, 254, true);
+    encoder.setAcceleration(config.store.encacc);
+    configureOkButton(localInputButtons[2], hardware.localInput.key);
+  }
 #endif
+  if (activeLocalInput.buttons3) {
+    configureDirectionButton(localInputButtons[0], hardware.localInput.a,
+                             localInputEvents[0]);
+    configureDirectionButton(localInputButtons[1], hardware.localInput.b,
+                             localInputEvents[1]);
+    configureOkButton(localInputButtons[2], hardware.localInput.key);
+  }
+  Serial.printf("##[BOOT]#\tLocal input backend: %s\n",
+                voxone::input::backendName(activeLocalInput.backend));
 #if ISPUSHBUTTONS
   for (int i = 0; i < nrOfButtons; i++)
   {
@@ -99,16 +148,26 @@ void initControls() {
 void loopControls() {
   if(updateLockActive() || uiState.mode()==UPDATING || uiState.mode()==LOST) {
 #if ENC_BTNL!=255
-    // The ISR is hardware-only. Drain accumulated motion while core input is
-    // locked so it cannot become a delayed UI event after the lock ends.
-    (void)encoder.encoderChanged();
+    if (activeLocalInput.ec11) {
+      // The ISR is hardware-only. Drain accumulated motion while core input is
+      // locked so it cannot become a delayed UI event after the lock ends.
+      (void)encoder.encoderChanged();
+    }
 #endif
     return;
   }
   if(ctrls_on_loop) ctrls_on_loop();
 #if ENC_BTNL!=255
-  encoder1Loop();
+  if (activeLocalInput.ec11) {
+    encoder1Loop();
+    localInputButtons[2].tick();
+  }
 #endif
+  if (activeLocalInput.buttons3) {
+    localInputButtons[0].tick();
+    localInputButtons[1].tick();
+    localInputButtons[2].tick();
+  }
 #if ISPUSHBUTTONS
   for (unsigned i = 0; i < nrOfButtons; i++)
   {

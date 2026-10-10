@@ -43,6 +43,10 @@ constexpr int8_t TONE_MAX = 6;
 constexpr int8_t BALANCE_MIN = -16;
 constexpr int8_t BALANCE_MAX = 16;
 
+bool localDisplayInstalled() {
+  return display.active();
+}
+
 // The existing Arduino EEPROM object uses namespace/key "eeprom".
 // Read-back uses that same blob, not a second configuration store and not
 // EEPROM.read(), which only returns the write cache in this framework.
@@ -237,8 +241,10 @@ void Config::initRadioPlaylist(){
 void Config::_initHW(){
   loadTheme();
   #if BRIGHTNESS_PIN!=255
-    pinMode(BRIGHTNESS_PIN, OUTPUT);
-    setBrightness(false);
+    if (localDisplayInstalled()) {
+      pinMode(BRIGHTNESS_PIN, OUTPUT);
+      setBrightness(false);
+    }
   #endif
 }
 
@@ -857,6 +863,7 @@ bool Config::initNetwork() {
 
 void Config::setBrightness(bool dosave){
 #if BRIGHTNESS_PIN!=255
+  if (!localDisplayInstalled()) return;
   if(!store.dspon && dosave) {
     display.wakeup();
   }
@@ -877,6 +884,7 @@ void Config::setDspOn(bool dspon, bool saveval){
     store.dspon = dspon;
     saveValue(&store.dspon, store.dspon, true, true);
   }
+  if (!localDisplayInstalled()) return;
   if(!dspon){
 #if BRIGHTNESS_PIN!=255
   analogWrite(BRIGHTNESS_PIN, 0);
@@ -891,7 +899,7 @@ void Config::setDspOn(bool dspon, bool saveval){
 }
 
 void Config::doSleep(){
-  if(BRIGHTNESS_PIN!=255) analogWrite(BRIGHTNESS_PIN, 0);
+  if(BRIGHTNESS_PIN!=255 && localDisplayInstalled()) analogWrite(BRIGHTNESS_PIN, 0);
   display.deepsleep();
 #if !defined(ARDUINO_ESP32C3_DEV)
   if(WAKE_PIN!=255) esp_sleep_enable_ext0_wakeup((gpio_num_t)WAKE_PIN, LOW);
@@ -901,7 +909,7 @@ void Config::doSleep(){
 }
 
 void Config::doSleepW(){
-  if(BRIGHTNESS_PIN!=255) analogWrite(BRIGHTNESS_PIN, 0);
+  if(BRIGHTNESS_PIN!=255 && localDisplayInstalled()) analogWrite(BRIGHTNESS_PIN, 0);
   display.deepsleep();
 #if !defined(ARDUINO_ESP32C3_DEV)
   if(WAKE_PIN!=255) esp_sleep_enable_ext0_wakeup((gpio_num_t)WAKE_PIN, LOW);

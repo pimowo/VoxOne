@@ -64,9 +64,16 @@ portMUX_TYPE displayVolumeMux = portMUX_INITIALIZER_UNLOCKED;
 static void loopDspTask(void * pvParameters){
   while(true){
   #ifndef DUMMYDISPLAY
-    if(displayQueue==NULL) break;
-    if(timekeeper.loop0()){
-      display.loop();
+    if(display.active()) {
+      if(displayQueue==NULL) break;
+      if(timekeeper.loop0()){
+        display.loop();
+      #ifndef NETSERVER_LOOP1
+        netserver.loop();
+      #endif
+      }
+    } else {
+      timekeeper.loop0();
     #ifndef NETSERVER_LOOP1
       netserver.loop();
     #endif
@@ -553,6 +560,12 @@ Display::~Display() {
 
 void Display::init() {
   Serial.print("##[BOOT]#\tdisplay.init\t");
+  if (!_runtimeEnabled) {
+    _bootStep = 2;
+    _createDspTask();
+    Serial.println("disabled (runtime NONE)");
+    return;
+  }
 #if LIGHT_SENSOR!=255
   analogSetAttenuation(ADC_0db);
 #endif
@@ -584,8 +597,8 @@ void Display::init() {
   Serial.println("done");
 }
 
-uint16_t Display::width(){ return dsp.width(); }
-uint16_t Display::height(){ return dsp.height(); }
+uint16_t Display::width(){ return _runtimeEnabled ? dsp.width() : 0; }
+uint16_t Display::height(){ return _runtimeEnabled ? dsp.height() : 0; }
 #if TIME_SIZE>19
   #if DSP_MODEL==DSP_SSD1322
     #define BOOT_PRG_COLOR    WHITE
@@ -1592,13 +1605,14 @@ void Display::_volume() {
   }
 }
 
-void Display::flip(){ dsp.flip(); }
+void Display::flip(){ if (_runtimeEnabled) dsp.flip(); }
 
-void Display::invert(){ dsp.invert(); }
+void Display::invert(){ if (_runtimeEnabled) dsp.invert(); }
 
 void  Display::setContrast(){}
 
 bool Display::deepsleep(){
+  if (!_runtimeEnabled) return true;
 #if defined(DSP_OLED) || BRIGHTNESS_PIN!=255
   dsp.sleep();
   return true;
@@ -1607,6 +1621,7 @@ bool Display::deepsleep(){
 }
 
 void Display::wakeup(){
+  if (!_runtimeEnabled) return;
 #if defined(DSP_OLED) || BRIGHTNESS_PIN!=255
   dsp.wake();
 #endif

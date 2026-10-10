@@ -113,8 +113,8 @@ RuntimeHardwareConfig defaultRuntimeHardwareConfig(
   return RuntimeHardwareConfig{
       kRuntimeHardwareConfigVersion,
       runtimeDisplayFromKind(hardware.displayKind),
-      hardware.capabilities.supportsEncoder ? RuntimeInput::Ec11
-                                            : RuntimeInput::None,
+      hardware.capabilities.supportsInput(LocalInputKind::Ec11)
+          ? RuntimeInput::Ec11 : RuntimeInput::None,
       runtimeAudioFromKind(hardware.audioOutputKind)};
 }
 
@@ -135,6 +135,25 @@ bool runtimeDisplayKind(RuntimeDisplay selection, DisplayKind& output) {
       output = DisplayKind::St7796_480x320; return true;
   }
   return false;
+}
+
+bool runtimeInputKind(RuntimeInput selection, LocalInputKind& output) {
+  switch (selection) {
+    case RuntimeInput::None: output = LocalInputKind::None; return true;
+    case RuntimeInput::Ec11: output = LocalInputKind::Ec11; return true;
+    case RuntimeInput::Buttons3: output = LocalInputKind::Buttons3; return true;
+  }
+  return false;
+}
+
+RuntimeInput effectiveRuntimeInput(const RuntimeHardwareConfig& config,
+                                   const HardwareDescriptor& hardware) {
+  LocalInputKind kind = LocalInputKind::None;
+  if (config.version == kRuntimeHardwareConfigVersion &&
+      runtimeInputKind(config.input, kind) &&
+      hardware.capabilities.supportsInput(kind)) return config.input;
+  const RuntimeHardwareConfig defaults = defaultRuntimeHardwareConfig(hardware);
+  return defaults.input;
 }
 
 bool runtimeAudioOutputKind(RuntimeAudioOutput selection,
@@ -175,8 +194,10 @@ RuntimeHardwareValidation validateRuntimeHardwareConfig(
     return RuntimeHardwareValidation::Invalid;
 
   DisplayKind display = DisplayKind::None;
+  LocalInputKind input = LocalInputKind::None;
   AudioOutputKind audio = AudioOutputKind::None;
   if (!runtimeDisplayKind(config.display, display) ||
+      !runtimeInputKind(config.input, input) ||
       !runtimeAudioOutputKind(config.audio, audio))
     return RuntimeHardwareValidation::Invalid;
 
@@ -186,12 +207,7 @@ RuntimeHardwareValidation validateRuntimeHardwareConfig(
        !capabilities.supportsAudioOutput(audio)))
     return RuntimeHardwareValidation::Unsupported;
 
-  if (config.input == RuntimeInput::Ec11 && !capabilities.supportsEncoder)
-    return RuntimeHardwareValidation::Unsupported;
-  // Buttons3 will reuse the same A/B/KEY local-input lines. This validates
-  // physical board support only; no Buttons3 runtime driver is activated yet.
-  if (config.input == RuntimeInput::Buttons3 &&
-      (!capabilities.supportsLocalUi || !capabilities.supportsEncoder))
+  if (!capabilities.supportsInput(input))
     return RuntimeHardwareValidation::Unsupported;
 
   return RuntimeHardwareValidation::Valid;

@@ -22,6 +22,15 @@ const char* runtimeDisplayName(voxone::hardware::RuntimeDisplay display) {
   return "unknown";
 }
 
+const char* runtimeInputName(voxone::hardware::RuntimeInput input) {
+  switch (input) {
+    case voxone::hardware::RuntimeInput::None: return "none";
+    case voxone::hardware::RuntimeInput::Ec11: return "ec11";
+    case voxone::hardware::RuntimeInput::Buttons3: return "buttons3";
+  }
+  return "unknown";
+}
+
 const char* runtimeHardwareSaveStatusName(
     voxone::hardware::RuntimeHardwareSaveStatus status) {
   switch (status) {
@@ -113,6 +122,7 @@ void SerialCli::on_input(const char* str, uint8_t clientId) {
     const auto& selected = voxone::hardware::runtimeHardwareConfig();
     const auto diagnostics = voxone::hardware::runtimeHardwareDiagnostics();
     printf(clientId, "Runtime HW display: %s\n", runtimeDisplayName(selected.display));
+    printf(clientId, "Runtime HW input: %s\n", runtimeInputName(selected.input));
     printf(clientId, "Runtime HW load: %s\n> ",
            voxone::hardware::runtimeHardwareLoadStatusName(
                diagnostics.loadStatus));
@@ -120,7 +130,10 @@ void SerialCli::on_input(const char* str, uint8_t clientId) {
   }
   voxone::hardware::RuntimeDisplay requestedDisplay;
   bool setRuntimeDisplay = false;
-  if (strcmp(str, "hw display ssd1306") == 0) {
+  if (strcmp(str, "hw display none") == 0) {
+    requestedDisplay = voxone::hardware::RuntimeDisplay::None;
+    setRuntimeDisplay = true;
+  } else if (strcmp(str, "hw display ssd1306") == 0) {
     requestedDisplay = voxone::hardware::RuntimeDisplay::Ssd1306_128x64;
     setRuntimeDisplay = true;
   } else if (strcmp(str, "hw display ssd1309") == 0) {
@@ -137,6 +150,31 @@ void SerialCli::on_input(const char* str, uint8_t clientId) {
            runtimeHardwareSaveStatusName(status));
     if (status == voxone::hardware::RuntimeHardwareSaveStatus::Saved)
       printf(clientId, "Restart required to activate display backend.\n");
+    printf(clientId, "> ");
+    return;
+  }
+  voxone::hardware::RuntimeInput requestedInput;
+  bool setRuntimeInput = false;
+  if (strcmp(str, "hw input ec11") == 0) {
+    requestedInput = voxone::hardware::RuntimeInput::Ec11;
+    setRuntimeInput = true;
+  } else if (strcmp(str, "hw input buttons3") == 0) {
+    requestedInput = voxone::hardware::RuntimeInput::Buttons3;
+    setRuntimeInput = true;
+  } else if (strcmp(str, "hw input none") == 0) {
+    requestedInput = voxone::hardware::RuntimeInput::None;
+    setRuntimeInput = true;
+  }
+  if (setRuntimeInput) {
+    auto requested = voxone::hardware::runtimeHardwareConfig();
+    requested.input = requestedInput;
+    const auto status =
+        voxone::hardware::saveRuntimeHardwareConfig(requested);
+    printf(clientId, "Runtime HW input %s: %s\n",
+           runtimeInputName(requestedInput),
+           runtimeHardwareSaveStatusName(status));
+    if (status == voxone::hardware::RuntimeHardwareSaveStatus::Saved)
+      printf(clientId, "Restart required to activate input backend.\n");
     printf(clientId, "> ");
     return;
   }

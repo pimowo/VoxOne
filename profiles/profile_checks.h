@@ -55,8 +55,8 @@ static_assert(!VOXONE_PIN_MAP_COMPLETE ||
               "Complete I2C OLED profile requires I2C_SDA and I2C_SCL pins");
 
 static_assert(!VOXONE_PIN_MAP_COMPLETE || !VOXONE_HAS_ENCODER ||
-              (ENC_BTNL != 255 && ENC_BTNR != 255),
-              "Encoder compile gate requires ENC_BTNL and ENC_BTNR");
+              (ENC_BTNL != 255 && ENC_BTNR != 255 && ENC_BTNB != 255),
+              "EC11 compile gate requires local input A, B and KEY pins");
 
 static_assert(!VOXONE_HAS_LOCAL_UI ||
               (VOXONE_HAS_DISPLAY && VOXONE_HAS_ENCODER),

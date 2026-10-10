@@ -1849,7 +1849,10 @@ void NetServer::processQueue(){
         const auto& boardCapabilities = voxone::hardware::hardwareCapabilities();
         const struct { bool enabled; const char* name; } profileCapabilities[] = {
           {boardCapabilities.hasLocalDisplay(), "DISPLAY"},
-          {boardCapabilities.supportsEncoder, "ENCODER"},
+          {boardCapabilities.supportsInput(
+              voxone::hardware::LocalInputKind::Ec11), "ENCODER"},
+          {boardCapabilities.supportsInput(
+              voxone::hardware::LocalInputKind::Buttons3), "BUTTONS3"},
           {boardCapabilities.supportsLocalUi, "LOCAL_UI"},
           {boardCapabilities.supportsVoxOneBt, "BT"},
           {boardCapabilities.supportsBtAudioRx, "BT_AUDIO_RX"},

@@ -79,16 +79,13 @@ void IRAM_ATTR yoEncoder::readEncoder_ISR()
 }
 
 
-yoEncoder::yoEncoder(uint8_t encoder_APin, uint8_t encoder_BPin, uint8_t encoderSteps, bool internalPullup)
+yoEncoder::yoEncoder(uint8_t encoder_APin, uint8_t encoder_BPin, uint8_t encoderSteps)
 {
 	this->old_AB = 0;
 
 	this->encoderAPin = encoder_APin;
 	this->encoderBPin = encoder_BPin;
 	this->encoderSteps = encoderSteps;
-
-	pinMode(this->encoderAPin, internalPullup?INPUT_PULLUP:INPUT);
-	pinMode(this->encoderBPin, internalPullup?INPUT_PULLUP:INPUT);
 }
 
 void yoEncoder::setBoundaries(long minEncoderValue, long maxEncoderValue, bool circleValues)
@@ -127,6 +124,8 @@ void yoEncoder::setup(void (*ISR_callback)(void))
 
 void yoEncoder::begin()
 {
+	pinMode(this->encoderAPin, INPUT);
+	pinMode(this->encoderBPin, INPUT);
 	this->lastReadEncoder0Pos = 0;
 }
 

@@ -17,11 +17,13 @@ int main() {
   assert(d.board.mcu == (VOXONE_PROFILE_MCU == Mcu::Esp32 ?
                          McuFamily::Esp32 : McuFamily::Esp32S3));
   assert(caps.hasLocalDisplay() == bool(VOXONE_HAS_DISPLAY));
-  assert(caps.supportsEncoder == bool(VOXONE_HAS_ENCODER));
+  assert(caps.supportsInput(LocalInputKind::Ec11) == bool(VOXONE_HAS_ENCODER));
+  assert(caps.supportsInput(LocalInputKind::Buttons3));
+  assert(caps.supportsInput(LocalInputKind::None));
   assert(caps.supportsLocalUi == bool(VOXONE_HAS_LOCAL_UI));
-  assert(caps.supportsEncoder ==
-         (hasPin(d.encoder.a) && hasPin(d.encoder.b) &&
-          hasPin(d.encoder.button)));
+  assert(caps.hasLocalInput() ==
+         (hasPin(d.localInput.a) && hasPin(d.localInput.b) &&
+          hasPin(d.localInput.key)));
   assert(caps.supportsVoxOneBt == bool(VOXONE_HAS_BT));
   assert(caps.supportsVoxOneBt ==
          (hasPin(d.btUart.rx) && hasPin(d.btUart.tx)));
@@ -48,12 +50,12 @@ int main() {
          ((d.displayKind == DisplayKind::Ssd1306_128x64 ||
            d.displayKind == DisplayKind::Ssd1309_128x64) ? BusKind::I2c :
           (caps.hasLocalDisplay() ? BusKind::Spi : BusKind::None)));
-  assert(d.encoder.a == fromLegacyPin(ENC_BTNL));
-  assert(d.encoder.b == fromLegacyPin(ENC_BTNR));
-  assert(d.encoder.button == fromLegacyPin(ENC_BTNB));
-  assert(d.encoder.internalPullup == bool(ENC_INTERNALPULLUP));
-  assert(d.encoder.buttonInternalPullup == bool(ENC_BUTTON_INTERNALPULLUP));
-  assert(d.encoder.stepsPerDetent ==
+  assert(d.localInput.a == fromLegacyPin(ENC_BTNL));
+  assert(d.localInput.b == fromLegacyPin(ENC_BTNR));
+  assert(d.localInput.key == fromLegacyPin(ENC_BTNB));
+  assert(!bool(ENC_INTERNALPULLUP));
+  assert(!bool(ENC_BUTTON_INTERNALPULLUP));
+  assert(d.localInput.ec11StepsPerDetent ==
          (ENC_HALFQUARD == 255 ? 1 : (ENC_HALFQUARD ? 2 : 4)));
   assert(d.btAudioIn.bclk == fromLegacyPin(VOXONE_BT_I2S_BCLK_PIN));
   assert(d.btAudioIn.ws == fromLegacyPin(VOXONE_BT_I2S_WS_PIN));
@@ -85,9 +87,9 @@ int main() {
   HardwareDescriptor noDisplay = d;
   noDisplay.displayKind = DisplayKind::None;
   noDisplay.display = {kNoPin, kNoPin, kNoPin, kNoPin, BusKind::None};
-  noDisplay.encoder = {kNoPin, kNoPin, kNoPin, false, false, 1};
+  noDisplay.localInput = {kNoPin, kNoPin, kNoPin, 1};
   noDisplay.capabilities.supportedDisplays = 0;
-  noDisplay.capabilities.supportsEncoder = false;
+  noDisplay.capabilities.supportedInputs = 0;
   noDisplay.capabilities.supportsLocalUi = false;
   assert(!noDisplay.capabilities.hasLocalDisplay());
   assert(validateDescriptor(noDisplay));
@@ -114,9 +116,9 @@ int main() {
   assert(d.display.cs == 5 && d.display.dc == 4);
   assert(d.display.rst == kNoPin && d.display.backlight == kNoPin);
   assert(d.audioOut.dout == 27 && d.audioOut.bclk == 26 && d.audioOut.ws == 25);
-  assert(d.encoder.a == 33 && d.encoder.b == 35 && d.encoder.button == 32);
-  assert(!d.encoder.internalPullup && d.encoder.stepsPerDetent == 4);
-  assert(!d.encoder.buttonInternalPullup);
+  assert(d.localInput.a == 33 && d.localInput.b == 35 &&
+         d.localInput.key == 32);
+  assert(d.localInput.ec11StepsPerDetent == 4);
   // The W0 profile does not specify default SPI bus pins.
   assert(d.spi.sck == kNoPin && d.spi.mosi == kNoPin &&
          d.spi.miso == kNoPin);
@@ -141,9 +143,9 @@ int main() {
   assert(d.display.cs == 10 && d.display.dc == 9 && d.display.backlight == 14);
   assert(d.display.rst == kNoPin);
   assert(d.display.backlight == fromLegacyPin(BRIGHTNESS_PIN));
-  assert(d.encoder.a == 41 && d.encoder.b == 40 && d.encoder.button == 39);
-  assert(!d.encoder.internalPullup && d.encoder.stepsPerDetent == 4);
-  assert(!d.encoder.buttonInternalPullup);
+  assert(d.localInput.a == 41 && d.localInput.b == 40 &&
+         d.localInput.key == 39);
+  assert(d.localInput.ec11StepsPerDetent == 4);
   assert(d.audioOut.dout == 4 && d.audioOut.bclk == 5 && d.audioOut.ws == 6);
   assert(d.i2c.sda == 8 && d.i2c.scl == 7);
   assert(d.btUart.rx == 15 && d.btUart.tx == 16);
@@ -175,13 +177,14 @@ int main() {
   assert(d.i2c.sda == 7 && d.i2c.scl == 8);
   assert(d.display.cs == kNoPin && d.display.dc == kNoPin);
   assert(d.audioOut.bclk == 1 && d.audioOut.ws == 3 && d.audioOut.dout == 2);
-  assert(d.encoder.a == 5 && d.encoder.b == 6 && d.encoder.button == 4);
-  assert(!d.encoder.internalPullup);
-  assert(d.encoder.buttonInternalPullup);
+  assert(d.localInput.a == 5 && d.localInput.b == 6 && d.localInput.key == 4);
+  assert(!bool(ENC_INTERNALPULLUP));
+  assert(!bool(ENC_BUTTON_INTERNALPULLUP));
   assert(!caps.supportsRtc);
   assert(!caps.supportsVoxOneBt);
   assert(!caps.supportsBtFirmwareUpdate);
-  assert(caps.supportsEncoder && caps.supportsLocalUi);
+  assert(caps.supportsInput(LocalInputKind::Ec11) &&
+         caps.supportsInput(LocalInputKind::Buttons3) && caps.supportsLocalUi);
   assert(caps.supportsPsram);
   assert(d.btUart.rx == kNoPin && d.btUart.tx == kNoPin);
   assert(d.btAudioIn.bclk == kNoPin && d.btAudioIn.ws == kNoPin &&
@@ -205,13 +208,14 @@ int main() {
   assert(d.i2c.sda == 7 && d.i2c.scl == 8);
   assert(d.display.cs == kNoPin && d.display.dc == kNoPin);
   assert(d.audioOut.bclk == 1 && d.audioOut.ws == 3 && d.audioOut.dout == 2);
-  assert(d.encoder.a == 5 && d.encoder.b == 6 && d.encoder.button == 4);
-  assert(!d.encoder.internalPullup);
-  assert(d.encoder.buttonInternalPullup);
+  assert(d.localInput.a == 5 && d.localInput.b == 6 && d.localInput.key == 4);
+  assert(!bool(ENC_INTERNALPULLUP));
+  assert(!bool(ENC_BUTTON_INTERNALPULLUP));
   assert(!caps.supportsRtc);
   assert(!caps.supportsVoxOneBt);
   assert(!caps.supportsBtFirmwareUpdate);
-  assert(caps.supportsEncoder && caps.supportsLocalUi);
+  assert(caps.supportsInput(LocalInputKind::Ec11) &&
+         caps.supportsInput(LocalInputKind::Buttons3) && caps.supportsLocalUi);
   assert(caps.supportsPsram);
   assert(d.btUart.rx == kNoPin && d.btUart.tx == kNoPin);
   assert(d.btAudioIn.bclk == kNoPin && d.btAudioIn.ws == kNoPin &&
@@ -235,13 +239,14 @@ int main() {
   assert(d.i2c.sda == 7 && d.i2c.scl == 8);
   assert(d.display.cs == kNoPin && d.display.dc == kNoPin);
   assert(d.audioOut.bclk == 1 && d.audioOut.ws == 3 && d.audioOut.dout == 2);
-  assert(d.encoder.a == 5 && d.encoder.b == 6 && d.encoder.button == 4);
-  assert(!d.encoder.internalPullup);
-  assert(d.encoder.buttonInternalPullup);
+  assert(d.localInput.a == 5 && d.localInput.b == 6 && d.localInput.key == 4);
+  assert(!bool(ENC_INTERNALPULLUP));
+  assert(!bool(ENC_BUTTON_INTERNALPULLUP));
   assert(!caps.supportsRtc);
   assert(!caps.supportsVoxOneBt);
   assert(!caps.supportsBtFirmwareUpdate);
-  assert(caps.supportsEncoder && caps.supportsLocalUi);
+  assert(caps.supportsInput(LocalInputKind::Ec11) &&
+         caps.supportsInput(LocalInputKind::Buttons3) && caps.supportsLocalUi);
   assert(caps.supportsPsram);
   assert(d.btUart.rx == kNoPin && d.btUart.tx == kNoPin);
   assert(d.btAudioIn.bclk == kNoPin && d.btAudioIn.ws == kNoPin &&
@@ -286,12 +291,12 @@ int main() {
       d.capabilities.supportsRtc)
     assert(!validateDescriptor(bad));
   bad = d;
-  bad.capabilities.supportsEncoder = true;
-  bad.encoder.button = kNoPin;
+  bad.capabilities.supportedInputs = inputSupport(LocalInputKind::Ec11);
+  bad.localInput.key = kNoPin;
   assert(!validateDescriptor(bad));
   bad = d;
-  bad.capabilities.supportsEncoder = true;
-  bad.encoder.stepsPerDetent = 0;
+  bad.capabilities.supportedInputs = inputSupport(LocalInputKind::Ec11);
+  bad.localInput.ec11StepsPerDetent = 0;
   assert(!validateDescriptor(bad));
   std::printf("PASS hardware_descriptor_native (%s)\n", d.board.name);
 }

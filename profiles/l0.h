@@ -32,6 +32,7 @@
 #define ENC_BTNL 41
 #define ENC_BTNB 39
 #define ENC_INTERNALPULLUP false
+#define ENC_BUTTON_INTERNALPULLUP false
 #define ENC_HALFQUARD false
 #define USE_BUILTIN_LED false
 

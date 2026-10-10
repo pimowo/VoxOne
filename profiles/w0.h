@@ -35,6 +35,7 @@
 #define ENC_BTNB 32
 #define ENC_BTNR 35
 #define ENC_INTERNALPULLUP false
+#define ENC_BUTTON_INTERNALPULLUP false
 #define ENC_HALFQUARD false
 
 #endif

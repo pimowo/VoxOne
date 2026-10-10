@@ -48,8 +48,7 @@ public:
 	yoEncoder(
 		uint8_t encoderAPin,
 		uint8_t encoderBPin,
-		uint8_t encoderSteps,
-		bool    internalPullup = true);
+		uint8_t encoderSteps);
 	void setBoundaries(long minValue = -100, long maxValue = 100, bool circleValues = false);
 	void readEncoder_ISR();
 

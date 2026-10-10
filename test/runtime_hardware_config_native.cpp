@@ -82,9 +82,9 @@ int main() {
   HardwareDescriptor noDisplay = hardware;
   noDisplay.displayKind = DisplayKind::None;
   noDisplay.display = {kNoPin, kNoPin, kNoPin, kNoPin, BusKind::None};
-  noDisplay.encoder = {kNoPin, kNoPin, kNoPin, false, false, 1};
+  noDisplay.localInput = {kNoPin, kNoPin, kNoPin, 1};
   noDisplay.capabilities.supportedDisplays = 0;
-  noDisplay.capabilities.supportsEncoder = false;
+  noDisplay.capabilities.supportedInputs = 0;
   noDisplay.capabilities.supportsLocalUi = false;
   const RuntimeHardwareConfig noDisplayDefaults =
       defaultRuntimeHardwareConfig(noDisplay);
@@ -96,6 +96,10 @@ int main() {
          RuntimeHardwareValidation::Valid);
   RuntimeHardwareConfig unavailableInput = noDisplayDefaults;
   unavailableInput.input = RuntimeInput::Ec11;
+  assert(validateRuntimeHardwareConfig(unavailableInput,
+                                       noDisplay.capabilities) ==
+         RuntimeHardwareValidation::Unsupported);
+  unavailableInput.input = RuntimeInput::Buttons3;
   assert(validateRuntimeHardwareConfig(unavailableInput,
                                        noDisplay.capabilities) ==
          RuntimeHardwareValidation::Unsupported);
@@ -129,13 +133,17 @@ int main() {
   assert(validateRuntimeHardwareConfig(candidate, capabilities) ==
          RuntimeHardwareValidation::Unsupported);
   candidate = defaults;
+  candidate.input = RuntimeInput::None;
+  assert(validateRuntimeHardwareConfig(candidate, capabilities) ==
+         RuntimeHardwareValidation::Valid);
   candidate.input = RuntimeInput::Ec11;
   assert(validateRuntimeHardwareConfig(candidate, capabilities) ==
-         (capabilities.supportsEncoder ? RuntimeHardwareValidation::Valid
-                                      : RuntimeHardwareValidation::Unsupported));
+         (capabilities.supportsInput(LocalInputKind::Ec11)
+              ? RuntimeHardwareValidation::Valid
+              : RuntimeHardwareValidation::Unsupported));
   candidate.input = RuntimeInput::Buttons3;
   assert(validateRuntimeHardwareConfig(candidate, capabilities) ==
-         (capabilities.supportsEncoder && capabilities.supportsLocalUi
+         (capabilities.supportsInput(LocalInputKind::Buttons3)
               ? RuntimeHardwareValidation::Valid
               : RuntimeHardwareValidation::Unsupported));
   candidate = defaults;
@@ -163,7 +171,7 @@ int main() {
   assert(storage.writes == writesBeforeInvalid);
 
   RuntimeHardwareConfig alternate = defaults;
-  if (capabilities.supportsEncoder)
+  if (capabilities.supportsInput(LocalInputKind::Buttons3))
     alternate.input = RuntimeInput::Buttons3;
   else
     alternate.audio = RuntimeAudioOutput::None;
@@ -175,6 +183,14 @@ int main() {
   loaded = loadRuntimeHardwareConfig(storage, hardware);
   assert(loaded.status == RuntimeHardwareLoadStatus::Loaded);
   assert(loaded.config == alternate);
+
+  RuntimeHardwareConfig invalidInput = defaults;
+  invalidInput.input = static_cast<RuntimeInput>(0xff);
+  assert(effectiveRuntimeInput(invalidInput, hardware) == defaults.input);
+  RuntimeHardwareConfig unsupportedInput = noDisplayDefaults;
+  unsupportedInput.input = RuntimeInput::Buttons3;
+  assert(effectiveRuntimeInput(unsupportedInput, noDisplay) ==
+         RuntimeInput::None);
 
   candidate = defaults;
   candidate.display = unsupportedDisplay(capabilities);

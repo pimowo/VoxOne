@@ -128,7 +128,9 @@ class Display {
     void init();
     void loop();
     void _start();
-    bool ready() { return _bootStep==2; }
+    void configureRuntime(bool enabled) { _runtimeEnabled = enabled; }
+    bool active() const { return _runtimeEnabled; }
+    bool ready() { return !_runtimeEnabled || _bootStep==2; }
     void resetQueue();
     void putRequest(displayRequestType_e type, int payload=0);
     void queueModeRender(displayMode_e mode);
@@ -182,6 +184,7 @@ class Display {
     TextWidget *_st7789Rssi, *_st7789Volume, *_st7789Clock;
 #endif
     bool _locked = false;
+    bool _runtimeEnabled = true;
     volatile bool _volumePending = false;
     volatile bool _volumeModePending = false;
     uint32_t _lastVolumeDraw = 0;
@@ -224,6 +227,8 @@ class Display {
   public:
     Display() {};
     displayMode_e mode() const { return uiState.mode(); }
+    void configureRuntime(bool enabled) { (void)enabled; }
+    bool active() const { return false; }
     void init();
     void _start();
     void putRequest(displayRequestType_e type, int payload=0);

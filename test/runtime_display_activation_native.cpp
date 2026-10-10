@@ -1,4 +1,5 @@
 #include "../profiles/profile.h"
+#include "../src/core/local_input_backend.h"
 #include "../src/displays/display_backend_selection.h"
 
 #include <cassert>
@@ -30,7 +31,49 @@ int main() {
   assert(selected.controller == runtimeDisplayController(defaults.display));
   assert(selected.profile == runtimeDisplayProfile(defaults.display));
 
+  RuntimeHardwareConfig noneDisplay = defaults;
+  noneDisplay.display = RuntimeDisplay::None;
+  assert(validateRuntimeHardwareConfig(noneDisplay, hardware.capabilities) ==
+         RuntimeHardwareValidation::Valid);
+  selected = select(noneDisplay, hardware, compiled);
+  assert(!selected.usedBuildDefault);
+  assert(selected.display == RuntimeDisplay::None);
+  assert(selected.controller == ControllerId::None);
+  assert(selected.profile == ProfileId::None);
+  const ActivationPlan headlessPlan = activationPlan(selected);
+  assert(!headlessPlan.initializeBackend);
+  assert(!headlessPlan.allocateFramebuffer);
+  assert(!headlessPlan.runRenderer);
+  assert(headlessPlan.createDisplayTask);
+
+  RuntimeHardwareConfig noneInput = defaults;
+  noneInput.input = RuntimeInput::None;
+  assert(validateRuntimeHardwareConfig(noneInput, hardware.capabilities) ==
+         RuntimeHardwareValidation::Valid);
+  const auto noInputActivation =
+      voxone::input::activationFor(noneInput.input);
+  assert(!noInputActivation.ec11 && !noInputActivation.buttons3);
+
+  RuntimeHardwareConfig noneBoth = noneDisplay;
+  noneBoth.input = RuntimeInput::None;
+  assert(validateRuntimeHardwareConfig(noneBoth, hardware.capabilities) ==
+         RuntimeHardwareValidation::Valid);
+  assert(select(noneBoth, hardware, compiled).controller ==
+         ControllerId::None);
+
+  RuntimeHardwareConfig noDisplayEc11 = noneDisplay;
+  noDisplayEc11.input = RuntimeInput::Ec11;
+  assert(validateRuntimeHardwareConfig(noDisplayEc11,
+                                       hardware.capabilities) ==
+         RuntimeHardwareValidation::Valid);
+  RuntimeHardwareConfig displayNoInput = defaults;
+  displayNoInput.input = RuntimeInput::None;
+  assert(validateRuntimeHardwareConfig(displayNoInput,
+                                       hardware.capabilities) ==
+         RuntimeHardwareValidation::Valid);
+
 #if defined(VOXONE_RUNTIME_OLED_128X64_BACKENDS)
+  selected = select(defaults, hardware, compiled);
   assert(compiled.runtimeSelection);
   assert(compiled.contains(ControllerId::Ssd1306));
   assert(compiled.contains(ControllerId::Ssd1309));
@@ -58,6 +101,7 @@ int main() {
   const std::string facade =
       readFile("src/displays/displayOLED128x64Runtime.cpp");
   const std::string renderer = readFile("src/core/display.cpp");
+  const std::string controls = readFile("src/core/controls.cpp");
   const std::string widgets =
       readFile("src/displays/widgets/widgets.h");
   const std::string m0Profile = readFile("profiles/m0.h");
@@ -67,6 +111,13 @@ int main() {
   assert(facade.find("tools/oledcolorfix.h") != std::string::npos);
   assert(widgets.find("_scrolldelay = millis();") != std::string::npos);
   assert(renderer.find("VOXONE_PROFILE_M0") == std::string::npos);
+  const size_t noneGuard = renderer.find("if (!_runtimeEnabled)");
+  const size_t backendInit = renderer.find("dsp.initDisplay()");
+  const size_t rendererAllocation = renderer.find("_pager = new Pager()");
+  assert(noneGuard != std::string::npos && backendInit != std::string::npos &&
+         rendererAllocation != std::string::npos);
+  assert(noneGuard < backendInit && backendInit < rendererAllocation);
+  assert(controls.find("activationFor(selected)") != std::string::npos);
   assert(m0Profile.find("#define VOXONE_RUNTIME_OLED_128X64_BACKENDS 1") !=
          std::string::npos);
 #else
@@ -87,11 +138,11 @@ int main() {
   noDisplay.displayKind = DisplayKind::None;
   noDisplay.display = {kNoPin, kNoPin, kNoPin, kNoPin, BusKind::None};
   noDisplay.capabilities.supportedDisplays = 0;
-  noDisplay.capabilities.supportsEncoder = false;
+  noDisplay.capabilities.supportedInputs = 0;
   noDisplay.capabilities.supportsLocalUi = false;
   const RuntimeHardwareConfig none = defaultRuntimeHardwareConfig(noDisplay);
   const Selection headless = select(none, noDisplay, CompiledBackends{0, false});
-  assert(headless.usedBuildDefault);
+  assert(!headless.usedBuildDefault);
   assert(headless.display == RuntimeDisplay::None);
   assert(headless.controller == ControllerId::None);
   assert(headless.profile == ProfileId::None);

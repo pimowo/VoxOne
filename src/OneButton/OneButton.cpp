@@ -36,7 +36,12 @@ OneButton::OneButton()
  */
 OneButton::OneButton(const int pin, const boolean activeLow, const bool pullupActive)
 {
-  // OneButton();
+  setup(pin, activeLow, pullupActive);
+} // OneButton
+
+
+void OneButton::setup(const int pin, const boolean activeLow, const bool pullupActive)
+{
   _pin = pin;
 
   if (activeLow) {
@@ -55,7 +60,8 @@ OneButton::OneButton(const int pin, const boolean activeLow, const bool pullupAc
     // use the given pin as input
     pinMode(pin, INPUT);
   } // if
-} // OneButton
+  reset();
+} // setup
 
 
 // explicitly set the number of millisec that have to pass by before a click is assumed stable.
@@ -77,6 +83,12 @@ void OneButton::setPressTicks(const int ticks)
 {
   _pressTicks = ticks;
 } // setPressTicks
+
+
+void OneButton::setVeryLongPressTicks(const int ticks)
+{
+  _veryLongPressTicks = ticks > 0 ? ticks : _pressTicks;
+} // setVeryLongPressTicks
 
 
 // save function for click event
@@ -173,12 +185,27 @@ void OneButton::attachDuringLongPress(parameterizedCallbackFunction newFunction,
 } // attachDuringLongPress
 
 
+void OneButton::attachVeryLongPressStart(callbackFunction newFunction)
+{
+  _veryLongPressStartFunc = newFunction;
+} // attachVeryLongPressStart
+
+
+void OneButton::attachVeryLongPressStart(
+    parameterizedCallbackFunction newFunction, void *parameter)
+{
+  _paramVeryLongPressStartFunc = newFunction;
+  _veryLongPressStartFuncParam = parameter;
+} // attachVeryLongPressStart
+
+
 void OneButton::reset(void)
 {
   _state = OneButton::OCS_INIT;
   _lastState = OneButton::OCS_INIT;
   _nClicks = 0;
   _startTime = 0;
+  _veryLongTriggered = false;
 }
 
 
@@ -302,6 +329,12 @@ void OneButton::tick(bool activeLevel)
 
     } else {
       // still the button is pressed
+      if (!_veryLongTriggered && waitTime > _veryLongPressTicks) {
+        _veryLongTriggered = true;
+        if (_veryLongPressStartFunc) _veryLongPressStartFunc();
+        if (_paramVeryLongPressStartFunc)
+          _paramVeryLongPressStartFunc(_veryLongPressStartFuncParam);
+      }
       if (_duringLongPressFunc) _duringLongPressFunc();
       if (_paramDuringLongPressFunc) _paramDuringLongPressFunc(_duringLongPressFuncParam);
     } // if

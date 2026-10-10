@@ -18,16 +18,22 @@ enum class BoardId { BoardW0, BoardM0, BoardS0, BoardDIN0, BoardL0 };
 enum class McuFamily { Esp32, Esp32S3 };
 enum class DisplayKind { None, Ssd1306_128x64, Ssd1309_128x64, St7789_284x76, St7796_480x320 };
 enum class AudioOutputKind { None, Pcm5102a, Max98357, DspMini };
+enum class LocalInputKind { None, Ec11, Buttons3 };
 enum class BusKind { None, Spi, I2c };
 
 using DisplaySupportMask = uint32_t;
 using AudioOutputSupportMask = uint32_t;
+using InputSupportMask = uint32_t;
 constexpr DisplaySupportMask displaySupport(DisplayKind kind) {
   return kind == DisplayKind::None ? 0u :
       (1u << static_cast<uint8_t>(kind));
 }
 constexpr AudioOutputSupportMask audioOutputSupport(AudioOutputKind kind) {
   return kind == AudioOutputKind::None ? 0u :
+      (1u << static_cast<uint8_t>(kind));
+}
+constexpr InputSupportMask inputSupport(LocalInputKind kind) {
+  return kind == LocalInputKind::None ? 0u :
       (1u << static_cast<uint8_t>(kind));
 }
 
@@ -44,17 +50,15 @@ struct I2sPins { Pin bclk, ws, dout, din; };
 struct SpiBusPins { Pin sck, mosi, miso; };
 struct I2cBusPins { Pin sda, scl; };
 struct UartPins { Pin rx, tx; };
-struct EncoderPins {
-  Pin a, b, button;
-  bool internalPullup;
-  bool buttonInternalPullup;
-  uint8_t stepsPerDetent;
+struct LocalInputPins {
+  Pin a, b, key;
+  uint8_t ec11StepsPerDetent;
 };
 struct DisplayPins { Pin cs, dc, rst, backlight; BusKind bus; };
 struct HardwareCapabilities {
   DisplaySupportMask supportedDisplays;
   AudioOutputSupportMask supportedAudioOutputs;
-  bool supportsEncoder;
+  InputSupportMask supportedInputs;
   bool supportsLocalUi;
   bool supportsVoxOneBt;
   bool supportsBtAudioRx;
@@ -75,6 +79,11 @@ struct HardwareCapabilities {
   constexpr bool supportsAudioOutput(AudioOutputKind kind) const {
     return (supportedAudioOutputs & audioOutputSupport(kind)) != 0;
   }
+  constexpr bool supportsInput(LocalInputKind kind) const {
+    return kind == LocalInputKind::None ||
+        (supportedInputs & inputSupport(kind)) != 0;
+  }
+  constexpr bool hasLocalInput() const { return supportedInputs != 0; }
 };
 struct HardwareDescriptor {
   BoardIdentity board;
@@ -87,7 +96,7 @@ struct HardwareDescriptor {
   I2sPins btAudioIn;  // May be physically reserved even when runtime RX is disabled.
   bool btAudioRxEnabled;
   UartPins btUart;
-  EncoderPins encoder;
+  LocalInputPins localInput;
   DisplayPins display;
   Pin dacXsmt;
   HardwareCapabilities capabilities;
