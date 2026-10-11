@@ -2,6 +2,7 @@
 #include "../src/hardware/hardware_descriptor.h"
 
 #include <cassert>
+#include <cstdio>
 #include <cstdint>
 #include <cstring>
 #include <vector>
@@ -372,5 +373,36 @@ int main() {
   runtimeMute = 1;
   std::vector<uint8_t> afterRuntimeChange = makeBackup(source);
   assert(runtimeMute == 1 && beforeRuntimeChange == afterRuntimeChange);
+
+  // stations.idx is derived and absent from VXCF. A 250-row canonical TSV
+  // survives backup/parse and can drive the normal post-restore index rebuild.
+  std::vector<uint8_t> stations250;
+  const char* header = "#VOXONE_STATIONS\t1\n";
+  stations250.insert(stations250.end(), header, header + std::strlen(header));
+  for (unsigned i = 0; i < 250; ++i) {
+    char row[128];
+    const int length = std::snprintf(
+        row, sizeof(row), "%016llX\tRadio %03u\thttps://stream.example/%03u\t%d\t%s\n",
+        static_cast<unsigned long long>(i + 1), i, i,
+        static_cast<int>(i % 7) - 3, i % 2 ? "swap" : "normal");
+    assert(length > 0 && static_cast<std::size_t>(length) < sizeof(row));
+    stations250.insert(stations250.end(), row, row + length);
+  }
+  Data scale = source;
+  scale.config.fields.countStation = 250;
+  scale.config.fields.lastStation = 125;
+  scale.config.crc32 = calculateConfigV7Crc(scale.config);
+  scale.stations = {stations250.data(), stations250.size()};
+  const std::vector<uint8_t> scaleBackup = makeBackup(scale);
+  Data scaleParsed{};
+  assert(parse(scaleBackup.data(), scaleBackup.size(), hardwareCapabilities(),
+               scaleParsed) == Status::Ok);
+  assert(scaleParsed.stations.size == stations250.size());
+  assert(std::memcmp(scaleParsed.stations.data, stations250.data(),
+                     stations250.size()) == 0);
+  FakeStorage scaleStorage;
+  result = restore(scaleBackup.data(), scaleBackup.size(),
+                   hardwareCapabilities(), scaleStorage);
+  assert(result.status == Status::Ok && result.restartRequired);
   return 0;
 }

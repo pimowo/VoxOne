@@ -166,7 +166,7 @@
 ## Playlisty i stacje
 
 - [POST-STABLE] Dopracować import/export yoRadio: preview, walidacja, raport błędnych rekordów i ewentualny import URL.
-- [STABLE] Sprawdzić listy 50/100/250 stacji, power loss, brak miejsca SPIFFS, `current/lastStation`, usunięcie aktywnej stacji, reorder i zachowanie po restarcie.
+- [STABLE] Fizycznie sprawdzić listy 50/100/250 stacji, power loss, brak miejsca SPIFFS, `current/lastStation`, usunięcie aktywnej stacji, reorder, odtwarzanie po mutacji i zachowanie po restarcie. Deterministyczne testy software formatu, indeksu, recovery, NO_SPACE i mapowania bieżącej stacji pozostają baseline.
 - [STABLE] Zweryfikować eksport/import między W0 i L0: ID, kolejność, OVOL, A↔T, odświeżenie WWW oraz backup/restore przez Web Update.
 - [STABLE] Fizycznie przetestować Radio Directory na L0 i W0: dodanie, odtwarzanie, restart, pamięć i brak zakłóceń audio.
 - [POST-STABLE] Sprawdzić prezentację A↔T na LCD/WWW/MQTT oraz zachowanie po reorder i usunięciu stacji.

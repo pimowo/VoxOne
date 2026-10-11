@@ -123,37 +123,86 @@ bool readLegacyRows(std::vector<PlaylistRow>& rows) {
   return true;
 }
 
-bool validIndex(const char* csvPath, const char* indexPath, uint16_t* count = nullptr) {
-  std::vector<PlaylistRow> rows;
-  std::vector<uint32_t> offsets;
-  String revision;
-  if (!readRows(csvPath, rows, revision, &offsets)) return false;
-  File index = SPIFFS.open(indexPath, "r");
-  if (!index || !stationIndexSizeMatches(index.size(), offsets.size())) return false;
-  for (uint32_t expected : offsets) {
-    uint32_t actual = 0;
-    if (index.readBytes(reinterpret_cast<char*>(&actual), sizeof(actual)) != sizeof(actual) ||
-        actual != expected) return false;
+bool scanRows(const char* csvPath, String* revision,
+              const std::vector<PlaylistRow>* expectedRows,
+              File* indexOutput, File* indexInput, uint16_t* count = nullptr) {
+  File file = SPIFFS.open(csvPath, "r");
+  if (!file) return false;
+  char line[BUFLEN * 3];
+  size_t length = 0;
+  uint32_t position = 0, start = 0, crc = 0xFFFFFFFFUL;
+  uint16_t rows = 0;
+  std::vector<uint64_t> ids;
+  constexpr size_t headerSize = sizeof(kStationsHeader) - 1;
+  const size_t fileSize = file.size();
+  if (fileSize < headerSize) return false;
+  for (size_t i = 0; i < headerSize; ++i) {
+    const int value = file.read();
+    if (value < 0 || value != kStationsHeader[i]) return false;
+    crc = playlistCrcByte(crc, static_cast<uint8_t>(value));
+    ++position;
   }
-  if (count) *count = static_cast<uint16_t>(rows.size());
+  start = position;
+  auto accept = [&]() {
+    if (!length || rows == UINT16_MAX) return false;
+    line[length] = '\0';
+    PlaylistRow row;
+    if (strlen(line) != length || !parseLine(line, row)) return false;
+    for (uint64_t id : ids) if (id == row.id) return false;
+    ids.push_back(row.id);
+    if (expectedRows &&
+        (rows >= expectedRows->size() || row.id != (*expectedRows)[rows].id ||
+         row.name != (*expectedRows)[rows].name ||
+         row.url != (*expectedRows)[rows].url ||
+         row.ovol != (*expectedRows)[rows].ovol ||
+         row.metadataMode != (*expectedRows)[rows].metadataMode)) return false;
+    if (indexOutput && indexOutput->write(
+            reinterpret_cast<const uint8_t*>(&start), sizeof(start)) != sizeof(start))
+      return false;
+    if (indexInput) {
+      uint32_t indexed = 0;
+      if (indexInput->readBytes(reinterpret_cast<char*>(&indexed), sizeof(indexed)) !=
+              sizeof(indexed) || indexed != start) return false;
+    }
+    ++rows;
+    length = 0;
+    start = position;
+    return true;
+  };
+  while (position < fileSize) {
+    const int value = file.read();
+    if (value < 0) return false;
+    crc = playlistCrcByte(crc, static_cast<uint8_t>(value));
+    ++position;
+    if (value == '\n') {
+      if (!accept()) return false;
+    } else {
+      if (length >= sizeof(line) - 1) return false;
+      line[length++] = static_cast<char>(value);
+    }
+  }
+  if (length && !accept()) return false;
+  if (expectedRows && rows != expectedRows->size()) return false;
+  if (indexInput && !stationIndexSizeMatches(indexInput->size(), rows)) return false;
+  if (revision) *revision = revisionOf(crc);
+  if (count) *count = rows;
   return true;
+}
+
+bool validIndex(const char* csvPath, const char* indexPath,
+                uint16_t* count = nullptr) {
+  File index = SPIFFS.open(indexPath, "r");
+  if (!index) return false;
+  const bool valid = scanRows(csvPath, nullptr, nullptr, nullptr, &index, count);
+  index.close();
+  return valid;
 }
 
 bool prepareIndex(const char* csvPath) {
   if (!removeIfPresent(kIndexTmp)) return false;
-  std::vector<PlaylistRow> rows;
-  std::vector<uint32_t> offsets;
-  String revision;
-  if (!readRows(csvPath, rows, revision, &offsets)) return false;
   File index = SPIFFS.open(kIndexTmp, "w");
   if (!index) return false;
-  bool written = true;
-  for (uint32_t offset : offsets) {
-    if (index.write(reinterpret_cast<const uint8_t*>(&offset), sizeof(offset)) != sizeof(offset)) {
-      written = false;
-      break;
-    }
-  }
+  const bool written = scanRows(csvPath, nullptr, nullptr, &index, nullptr);
   index.flush();
   index.close();
   return written && validIndex(csvPath, kIndexTmp);
@@ -236,6 +285,8 @@ bool PlaylistStore::findStationById(uint64_t id, uint16_t& position) {
 }
 
 bool PlaylistStore::snapshot(std::vector<PlaylistRow>& rows, String& revision) {
+  PlaylistGuard guard;
+  if (!guard) return false;
   if (!SPIFFS.exists(PLAYLIST_PATH)) {
     if (SPIFFS.exists(kLegacyPath)) return false; // Failed migration must stay visible as an error.
     rows.clear();
@@ -247,6 +298,8 @@ bool PlaylistStore::snapshot(std::vector<PlaylistRow>& rows, String& revision) {
 
 PlaylistReadError PlaylistStore::readImport(const char* path,
                                             std::vector<PlaylistRow>& rows) {
+  PlaylistGuard guard;
+  if (!guard) return PlaylistReadError::IO_ERROR;
   bool ioError = false;
   String ignoredRevision;
   if (readRows(path, rows, ignoredRevision, nullptr, &ioError))
@@ -267,19 +320,20 @@ bool PlaylistStore::recover() {
   if (!guard) return false;
   std::vector<PlaylistRow> rows;
   String revision;
-  bool csvValid = SPIFFS.exists(PLAYLIST_PATH) &&
-                  readRows(PLAYLIST_PATH, rows, revision);
-  if (!csvValid && SPIFFS.exists(kCsvBak)) {
-    if (!readRows(kCsvBak, rows, revision) ||
-        !removeIfPresent(PLAYLIST_PATH) ||
+  const bool activeExists = SPIFFS.exists(PLAYLIST_PATH);
+  const bool backupExists = SPIFFS.exists(kCsvBak);
+  const bool legacyExists = SPIFFS.exists(kLegacyPath);
+  const bool activeValid = activeExists &&
+                           readRows(PLAYLIST_PATH, rows, revision);
+  const bool backupValid = !activeValid && backupExists &&
+                           readRows(kCsvBak, rows, revision);
+  const StationRecoverySource source = stationRecoverySource(
+      activeExists, activeValid, backupExists, backupValid, legacyExists);
+  if (source == StationRecoverySource::Backup) {
+    if (!removeIfPresent(PLAYLIST_PATH) ||
         !SPIFFS.rename(kCsvBak, PLAYLIST_PATH)) return false;
-    csvValid = true;
     Serial.println("##[BOOT]# Playlist restored from backup");
-  }
-  if (!csvValid) {
-    if (SPIFFS.exists(PLAYLIST_PATH)) return false;
-    if (stationStoreNeedsEmptyInitialization(false, SPIFFS.exists(kCsvBak),
-                                             SPIFFS.exists(kLegacyPath))) {
+  } else if (source == StationRecoverySource::InitializeEmpty) {
       String emptyRevision;
       if (commit({}, 0, emptyRevision) != PlaylistWriteError::OK) {
         Serial.println("##[ERROR]# Empty station store initialization failed");
@@ -287,8 +341,7 @@ bool PlaylistStore::recover() {
       }
       Serial.println("##[BOOT]# Initialized empty VoxOne Stations v1 store");
       return true;
-    }
-    if (!SPIFFS.exists(kLegacyPath)) return false;
+  } else if (source == StationRecoverySource::Legacy) {
     if (!readLegacyRows(rows)) {
       Serial.println("##[ERROR]# Legacy station migration: invalid playlist");
       return false;
@@ -308,6 +361,8 @@ bool PlaylistStore::recover() {
     removeIfPresent(kLegacyPath);
     removeIfPresent(kLegacyIndex);
     return true;
+  } else if (source == StationRecoverySource::Fail) {
+    return false;
   }
   if (!validIndex(PLAYLIST_PATH, INDEX_PATH) && !rebuildIndex()) return false;
   // A valid CSV wins over a stale, uncommitted tmp or old backup.
@@ -317,6 +372,8 @@ bool PlaylistStore::recover() {
 
 PlaylistWriteError PlaylistStore::commit(const std::vector<PlaylistRow>& rows,
                                          uint16_t current, String& revision) {
+  PlaylistGuard guard;
+  if (!guard) return PlaylistWriteError::IO_ERROR;
   if (rows.size() > UINT16_MAX || current > rows.size()) return PlaylistWriteError::INVALID;
   size_t bytesNeeded = sizeof(kStationsHeader) - 1;
   for (const PlaylistRow& row : rows) {
@@ -328,9 +385,8 @@ PlaylistWriteError PlaylistStore::commit(const std::vector<PlaylistRow>& rows,
   for (size_t i = 0; i < rows.size(); ++i)
     for (size_t j = 0; j < i; ++j)
       if (rows[i].id == rows[j].id) return PlaylistWriteError::INVALID;
-  if (SPIFFS.totalBytes() < SPIFFS.usedBytes() ||
-      SPIFFS.totalBytes() - SPIFFS.usedBytes() <
-          bytesNeeded + rows.size() * sizeof(uint32_t) + 1024)
+  if (!stationCommitHasSpace(SPIFFS.totalBytes(), SPIFFS.usedBytes(),
+                             bytesNeeded, rows.size()))
     return PlaylistWriteError::NO_SPACE;
   if (!removeIfPresent(kCsvTmp) || !removeIfPresent(kIndexTmp))
     return PlaylistWriteError::IO_ERROR;
@@ -352,15 +408,9 @@ PlaylistWriteError PlaylistStore::commit(const std::vector<PlaylistRow>& rows,
   tmp.flush();
   tmp.close();
   if (!written) return PlaylistWriteError::NO_SPACE;
-  std::vector<PlaylistRow> verified;
   String newRevision;
-  if (!readRows(kCsvTmp, verified, newRevision) || verified.size() != rows.size())
+  if (!scanRows(kCsvTmp, &newRevision, &rows, nullptr, nullptr))
     return PlaylistWriteError::IO_ERROR;
-  for (size_t i = 0; i < rows.size(); ++i) {
-    if (verified[i].id != rows[i].id || verified[i].name != rows[i].name ||
-        verified[i].url != rows[i].url || verified[i].ovol != rows[i].ovol ||
-        verified[i].metadataMode != rows[i].metadataMode) return PlaylistWriteError::IO_ERROR;
-  }
   File sizeCheck = SPIFFS.open(kCsvTmp, "r");
   if (!sizeCheck || sizeCheck.size() != bytesNeeded) return PlaylistWriteError::IO_ERROR;
   sizeCheck.close();
