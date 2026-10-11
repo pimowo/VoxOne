@@ -72,9 +72,25 @@ class MockUpdateRequest {
   constructor() { this.handlers = {}; this.upload = {addEventListener() {}}; window.btUpdateRequest = this; }
   open(method, url) { this.method = method; this.url = url; }
   addEventListener(name, handler) { this.handlers[name] = handler; }
-  send(body) { this.body = body; this.status = 202; this.responseText = 'STAGED'; this.handlers.load(); }
+  send(body) {
+    this.body = body;
+    if (this.url === '/update') {
+      window.updateTransportRequests.push(this);
+      const result = window.updateTransportOutcomes.shift() ||
+        {event:'load', status:400, text:'Update rejected'};
+      this.status = result.status || 0;
+      this.responseText = result.text || '';
+      this.handlers[result.event]();
+      return;
+    }
+    this.status = 202;
+    this.responseText = 'STAGED';
+    this.handlers.load();
+  }
 }
 window.XMLHttpRequest = MockUpdateRequest;
+window.updateTransportOutcomes = [];
+window.updateTransportRequests = [];
 window.btUpdateResponses = [];
 window.hardwareRequests = [];
 window.hardwarePostResponses = [];
@@ -433,6 +449,36 @@ setTimeout(async () => {
     check(get('system-psram').textContent === '8.0 MB total / 4.0 MB free', 'PSRAM');
     check(get('system-capabilities').textContent.includes('RTC'), 'system capabilities');
     check(get('update-bt-button').disabled, 'BT update requires explicit profile capability');
+    const firmwareTransfer = new DataTransfer();
+    firmwareTransfer.items.add(new File(['firmware-image'], 'VoxOne-firmware.bin',
+      {type:'application/octet-stream'}));
+    get('update-firmware-file').files = firmwareTransfer.files;
+    get('update-firmware-file').dispatchEvent(new Event('change'));
+    updateTransportOutcomes.push({event:'error'});
+    get('update-firmware-button').click();
+    check(get('update-progress').hidden && get('update-progress').value === 0 &&
+      !get('update-firmware-button').disabled &&
+      get('update-status').textContent.includes('ponowić'),
+      'MAIN disconnect clears progress and permits retry');
+    updateTransportOutcomes.push({event:'abort'});
+    get('update-firmware-button').click();
+    check(get('update-progress').hidden && !get('update-firmware-button').disabled &&
+      get('update-status').textContent.includes('przerwana'),
+      'MAIN abort clears busy state');
+    const spiffsTransfer = new DataTransfer();
+    spiffsTransfer.items.add(new File(['spiffs-image'], 'VoxOne-spiffs.bin',
+      {type:'application/octet-stream'}));
+    get('update-spiffs-file').files = spiffsTransfer.files;
+    get('update-spiffs-file').dispatchEvent(new Event('change'));
+    updateTransportOutcomes.push({event:'load', status:400, text:'Update.write failed'});
+    get('update-spiffs-button').click();
+    check(get('update-progress').hidden && !get('update-spiffs-button').disabled &&
+      get('update-status').textContent.includes('Update.write failed'),
+      'SPIFFS Error clears busy state and permits retry');
+    check(updateTransportRequests.length === 3 &&
+      updateTransportRequests[0].body.get('updatetarget') === 'firmware' &&
+      updateTransportRequests[2].body.get('updatetarget') === 'spiffs',
+      'MAIN and SPIFFS requests remain distinct');
     systemInfo.btFirmwareUpdateSupported = true;
     btTestSocket.receiveSystem(systemInfo);
     status.btModule.capabilities = 'AVRCP VU FW_UPDATE';

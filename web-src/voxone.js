@@ -564,6 +564,13 @@
     body.append("update", file, file.name);
     const request = new XMLHttpRequest();
     request.open("POST", "/update");
+    const finishTransportFailure = message => {
+      updateBusy = false;
+      renderUpdateFiles();
+      updateProgress.hidden = true;
+      updateProgress.value = 0;
+      setUpdateStatus(message, true);
+    };
     request.upload.addEventListener("progress", event => {
       if (!event.lengthComputable) return;
       const percent = Math.min(100, Math.round(event.loaded * 100 / event.total));
@@ -580,21 +587,22 @@
         waitForUpdateRestart();
         return;
       }
-      updateBusy = false;
-      renderUpdateFiles();
-      updateProgress.hidden = true;
-      setUpdateStatus(request.responseText.trim() || "Błąd aktualizacji: HTTP " + request.status, true);
+      finishTransportFailure(request.responseText.trim() ||
+        "Błąd aktualizacji: HTTP " + request.status);
     });
     request.addEventListener("error", () => {
-      setUpdateStatus("Połączenie zostało przerwane. Sprawdź urządzenie przed ponowną próbą; odśwież stronę, aby odblokować formularz.", true);
+      finishTransportFailure("Połączenie zostało przerwane. Możesz ponowić aktualizację.");
+    });
+    request.addEventListener("abort", () => {
+      finishTransportFailure("Aktualizacja została przerwana. Możesz spróbować ponownie.");
+    });
+    request.addEventListener("timeout", () => {
+      finishTransportFailure("Upłynął czas wysyłania. Możesz spróbować ponownie.");
     });
     try {
       request.send(body);
     } catch (error) {
-      updateBusy = false;
-      renderUpdateFiles();
-      updateProgress.hidden = true;
-      setUpdateStatus("Nie udało się rozpocząć wysyłania: " + error.message, true);
+      finishTransportFailure("Nie udało się rozpocząć wysyłania: " + error.message);
     }
   }
 

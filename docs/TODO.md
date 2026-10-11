@@ -33,10 +33,9 @@
 
 ### Update, recovery i persistence
 
-- [STABLE] Fizycznie sprawdzić negatywne ścieżki Web Update MAIN i SPIFFS: błędny obraz, cancel/przerwanie lub zerwane połączenie podczas uploadu, brak auto-resume audio po Error/Aborted oraz zwolnienie UPDATE_LOCK po błędzie.
+- [STABLE] Fizycznie sprawdzić negatywne ścieżki Web Update MAIN i SPIFFS: błędny obraz, cancel/przerwanie lub zerwane połączenie podczas uploadu, brak auto-resume audio po Error/Aborted, zwolnienie UPDATE_LOCK, remount/restore danych i retry po błędzie. Deterministyczna walidacja, cleanup, recovery-only fallback oraz testy native/headless pozostają software baseline.
 - [POST-STABLE] Ograniczyć publikację postępu zapisu do zmiany procentu i nie częściej niż co ok. 100–250 ms; zmiany faz przekazywać natychmiast. Obecnie backend aktualizuje stan po kolejnych chunkach.
 - [POST-STABLE] Udostępnić ten sam rzeczywisty stan zapisu MAIN/SPIFFS w WWW; obecny postęp HTTP uploadu pozostawić jako pomocniczy, wyraźnie odróżniony od postępu zapisu flash.
-- [POST-STABLE] Uzupełnić testy negatywnych ścieżek SPIFFS update: błąd backupu, przerwanie po unmount i remount po błędzie.
 - [STABLE] Fizycznie sprawdzić backup/restore całej konfiguracji, błąd zapisu/commit, realny restart/NVS/power-cycle, zanik zasilania podczas każdej fazy restore oraz zachowanie config po firmware/SPIFFS update. Jawny schemat backupu, produkcyjny adapter NVS/SPIFFS, trwały marker, boot rollback i brak restartu po błędzie pozostają software baseline.
 - [STABLE] Sprawdzić recovery AP, `/update.html` i `/emergency` przy niedostępnym SPIFFS, błędne dane Wi-Fi, Serial CLI oraz ekran AP na telefonie.
 - [STABLE] Fizycznie zweryfikować restart i Config v7: volume, MUTE, source intent, aktywną stację oraz rozdział ustawień runtime/persistent; software backup nie serializuje MUTE ani chwilowego source/runtime state.

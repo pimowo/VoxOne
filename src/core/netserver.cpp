@@ -3,6 +3,7 @@
 #include "update_progress.h"
 #include "update_restart_coordinator.h"
 #include "update_runtime_guard.h"
+#include "web_update_state.h"
 #include "bt_update_progress.h"
 #include "source_manager.h"
 #include "bt_link.h"
@@ -168,11 +169,11 @@ bool quiesceForUpdate() {
   return audioReady;
 }
 
-void finishFailedUpdateAudio(bool aborted = false) {
+void finishFailedUpdateAudio(bool aborted = false, bool storageReady = true) {
   if (!systemOperationState.audioBlocked() || systemOperationState.restartPending() ||
       !systemOperationState.blocksRequests()) return;
   transitionUiMode(PLAYER);
-  systemOperationState.updateFailed();
+  if (storageReady) systemOperationState.updateFailed();
   const UpdateProgressSnapshot snapshot = updateProgress();
   if (snapshot.target == UpdateTarget::VoxOneFirmware ||
       snapshot.target == UpdateTarget::Filesystem)
@@ -188,13 +189,21 @@ void scheduleSystemRestart(const char* source) {
   Serial.printf("##[%s]# restart pending\n", source);
 }
 
-void remountFilesystemAfterFailedUpdate() {
-  if (!systemOperationState.filesystemUnavailable()) return;
-  if (SPIFFS.begin(false)) {
-    Serial.println("##[UPDATE]# SPIFFS remounted after failed update");
-  } else {
+bool recoverFilesystemAfterFailedUpdate(bool required) {
+  if (!required)
+    return webUpdateStorageReadyAfterFailure(false, false, false);
+  systemOperationState.filesystemUnmounting();
+  if (!SPIFFS.begin(false)) {
     Serial.println("##[ERROR]# SPIFFS remount failed after update error");
+    return webUpdateStorageReadyAfterFailure(true, false, false);
   }
+  Serial.println("##[UPDATE]# SPIFFS remounted after failed update");
+  if (!restoreWebUpdateData()) {
+    Serial.println("##[ERROR]# SPIFFS user data recovery remains pending");
+    return webUpdateStorageReadyAfterFailure(true, true, false);
+  }
+  Serial.println("##[UPDATE]# SPIFFS user data restored after failed update");
+  return webUpdateStorageReadyAfterFailure(true, true, true);
 }
 
 class WebUpdateRequestGuard : public AsyncWebHandler {
@@ -205,7 +214,8 @@ public:
   }
 
   void handleRequest(AsyncWebServerRequest* request) override {
-    if (request->method() == HTTP_GET && request->url() == "/emergency") {
+    if (request->method() == HTTP_GET &&
+        (request->url() == "/emergency" || request->url() == "/update.html")) {
 #if defined(HTTP_USER) && defined(HTTP_PASS)
       if (network.status == CONNECTED && !request->authenticate(HTTP_USER, HTTP_PASS)) {
         request->requestAuthentication();
@@ -410,10 +420,12 @@ void handleBtUpdateStatus(AsyncWebServerRequest* request) {
 struct WebUpdateSession {
   size_t expected;
   size_t limit;
+  size_t received;
   int target;
   bool started;
   bool finished;
   bool audioBlocked;
+  bool filesystemNeedsRecovery;
   const char* error;
 };
 
@@ -425,9 +437,9 @@ bool backupWebUpdateData(const char*& error) {
   }
   uint8_t pending = 0;
   if (nvs_get_u8(handle, "pending", &pending) == ESP_OK && pending) {
-    error = "Previous SPIFFS backup is pending; reboot before retry";
+    // A failed attempt may retry from the already committed OLD snapshot.
     nvs_close(handle);
-    return false;
+    return true;
   }
   if (nvs_erase_all(handle) != ESP_OK) {
     error = "Could not initialize NVS backup";
@@ -522,6 +534,46 @@ bool restoreWebUpdateData() {
   if (!cleared) Serial.println("##[ERROR]# Web Update backup cleanup failed");
   return cleared;
 }
+
+namespace {
+const char* webUpdateValidationError(WebUpdateValidation validation,
+                                     WebUpdateImageKind kind) {
+  switch (validation) {
+    case WebUpdateValidation::Ok: return nullptr;
+    case WebUpdateValidation::Empty: return "Image size is zero";
+    case WebUpdateValidation::HeaderTooShort: return "Image header is too short";
+    case WebUpdateValidation::BadImage:
+      return kind == WebUpdateImageKind::Firmware
+          ? "Invalid ESP32 firmware image header"
+          : "Invalid SPIFFS image header";
+    case WebUpdateValidation::Oversized: return "Image exceeds update partition";
+    case WebUpdateValidation::FilesystemSizeMismatch:
+      return "SPIFFS image must exactly match the partition size";
+    case WebUpdateValidation::DeclaredSizeExceedsRequest:
+      return "Declared image size exceeds upload size";
+  }
+  return "Invalid update image";
+}
+
+void cleanupFailedWebUpdate(AsyncWebServerRequest* request, bool aborted) {
+  auto* session = static_cast<WebUpdateSession*>(request->_tempObject);
+  if (activeUpdateRequest != request) return;
+  const WebUpdateFailurePolicy policy = webUpdateFailurePolicy(
+      session && session->started,
+      session && session->filesystemNeedsRecovery);
+  if (policy.abortSession) Update.abort();
+  activeUpdateRequest = nullptr;
+  const bool storageReady = recoverFilesystemAfterFailedUpdate(
+      policy.recoverFilesystem);
+  if (session && session->audioBlocked)
+    finishFailedUpdateAudio(aborted, storageReady);
+}
+
+void releaseWebUpdateSession(AsyncWebServerRequest* request) {
+  free(request->_tempObject);
+  request->_tempObject = nullptr;
+}
+}  // namespace
 
 char* updateError() {
   sprintf(netserver.nsBuf, "Update failed with error (%d)<br /> %s", (int)Update.getError(), Update.errorString());
@@ -1152,6 +1204,7 @@ struct ConfigRestoreUploadSession {
 };
 
 AsyncWebServerRequest* activeConfigRestoreUpload = nullptr;
+AsyncWebServerRequest* activeConfigBackupRequest = nullptr;
 
 void finishConfigRestoreUpload(AsyncWebServerRequest* request) {
   auto* session = static_cast<ConfigRestoreUploadSession*>(request->_tempObject);
@@ -1174,6 +1227,10 @@ void configApiReply(AsyncWebServerRequest* request, int status,
 
 void handleConfigBackup(AsyncWebServerRequest* request) {
   if (!deviceApiAuthorized(request)) return;
+  if (activeConfigBackupRequest && activeConfigBackupRequest != request) {
+    configApiReply(request, 409, R"({"error":"backup_busy"})");
+    return;
+  }
   std::shared_ptr<voxone::config_restore::ProductionBackupStream> stream =
       std::make_shared<voxone::config_restore::ProductionBackupStream>();
   voxone::config_backup::Status status = voxone::config_backup::Status::StorageReadFailed;
@@ -1182,6 +1239,10 @@ void handleConfigBackup(AsyncWebServerRequest* request) {
     configApiReply(request, 500, R"({"error":"backup_failed"})");
     return;
   }
+  activeConfigBackupRequest = request;
+  request->onDisconnect([request]() {
+    if (activeConfigBackupRequest == request) activeConfigBackupRequest = nullptr;
+  });
   const std::size_t size = stream->size();
   AsyncWebServerResponse* response = request->beginResponse(
       voxone::config_backup_web::kContentType, size,
@@ -2438,7 +2499,10 @@ void handleWebUpdateUpload(AsyncWebServerRequest *request, const String& filenam
     if (!session) return;
     request->_tempObject = session;
     session->error = nullptr;
-    if (systemOperationState.blocksRequests()) {
+    session->filesystemNeedsRecovery =
+        systemOperationState.filesystemUnavailable();
+    if (systemOperationState.blocksRequests() &&
+        !session->filesystemNeedsRecovery) {
       session->error = "Update or restart already in progress";
       return;
     }
@@ -2448,19 +2512,15 @@ void handleWebUpdateUpload(AsyncWebServerRequest *request, const String& filenam
       return;
     }
 #endif
-    if (activeUpdateRequest && activeUpdateRequest != request) {
+    if ((activeUpdateRequest && activeUpdateRequest != request) ||
+        activeConfigRestoreUpload || activeConfigBackupRequest) {
       session->error = "Another update is already running";
       return;
     }
     activeUpdateRequest = request;
     request->onDisconnect([request]() {
-      if (activeUpdateRequest == request) {
-        WebUpdateSession* abandoned = static_cast<WebUpdateSession*>(request->_tempObject);
-        Update.abort();
-        activeUpdateRequest = nullptr;
-        remountFilesystemAfterFailedUpdate();
-        if (abandoned && abandoned->audioBlocked) finishFailedUpdateAudio(true);
-      }
+      cleanupFailedWebUpdate(request, true);
+      releaseWebUpdateSession(request);
     });
     if (!request->hasParam("updatetarget", true)) {
       session->error = "Missing update target";
@@ -2490,20 +2550,6 @@ void handleWebUpdateUpload(AsyncWebServerRequest *request, const String& filenam
       session->error = "Image filename does not match the selected target";
       return;
     }
-    if (len < 8) {
-      session->error = "Image header is too short";
-      return;
-    }
-    if (session->target == U_FLASH) {
-      if (data[0] != 0xE9 || data[1] == 0 || data[1] > 16) {
-        session->error = "Invalid ESP32 firmware image header";
-        return;
-      }
-    } else if (data[0] != 0 || data[1] != 0 || data[2] != 1 ||
-               data[3] != 0 || data[4] != 1 || data[5] != 0) {
-      session->error = "Invalid SPIFFS image header";
-      return;
-    }
     const esp_partition_t* partition = session->target == U_FLASH
         ? esp_ota_get_next_update_partition(nullptr)
         : esp_partition_find_first(ESP_PARTITION_TYPE_DATA,
@@ -2523,17 +2569,13 @@ void handleWebUpdateUpload(AsyncWebServerRequest *request, const String& filenam
       }
       session->expected = static_cast<size_t>(sizeText.toInt());
     }
-    if ((session->expected == 0 && request->contentLength() > session->limit) ||
-        session->expected > session->limit) {
-      session->error = "Image exceeds update partition";
-      return;
-    }
-    if (session->target == U_SPIFFS && session->expected != session->limit) {
-      session->error = "SPIFFS image must exactly match the partition size";
-      return;
-    }
-    if (session->expected && session->expected > request->contentLength()) {
-      session->error = "Declared image size exceeds upload size";
+    const WebUpdateImageKind imageKind = session->target == U_FLASH
+        ? WebUpdateImageKind::Firmware : WebUpdateImageKind::Filesystem;
+    const WebUpdateValidation validation = validateWebUpdateStart(
+        imageKind, data, len, session->expected, request->contentLength(),
+        session->limit);
+    if (validation != WebUpdateValidation::Ok) {
+      session->error = webUpdateValidationError(validation, imageKind);
       return;
     }
     const UpdateTarget updateTarget = session->target == U_FLASH
@@ -2565,6 +2607,7 @@ void handleWebUpdateUpload(AsyncWebServerRequest *request, const String& filenam
     if (session->target == U_SPIFFS) {
       setUpdateActivity(updateTarget, UpdateActivity::BackingUpSettings);
       if (!backupWebUpdateData(session->error)) return;
+      session->filesystemNeedsRecovery = true;
       systemOperationState.filesystemUnmounting();
       SPIFFS.end();
       Serial.println("##[UPDATE]# SPIFFS unmounted");
@@ -2585,10 +2628,9 @@ void handleWebUpdateUpload(AsyncWebServerRequest *request, const String& filenam
                   static_cast<unsigned>(session->limit));
   }
   if (!session || session->error || !session->started) return;
-  if (index > session->limit || len > session->limit - index ||
-      (session->expected && (index > session->expected ||
-                             len > session->expected - index))) {
-    session->error = "Uploaded image exceeds declared size or partition";
+  if (!webUpdateChunkFits(session->received, index, len, session->expected,
+                          session->limit)) {
+    session->error = "Invalid upload offset or image exceeds declared size";
     Update.abort();
     return;
   }
@@ -2598,12 +2640,13 @@ void handleWebUpdateUpload(AsyncWebServerRequest *request, const String& filenam
     Update.abort();
     return;
   }
+  session->received += len;
   const UpdateTarget updateTarget = session->target == U_FLASH
       ? UpdateTarget::VoxOneFirmware : UpdateTarget::Filesystem;
   setUpdateProgress(updateTarget, static_cast<uint32_t>(index + len),
                     static_cast<uint32_t>(session->expected));
   if (final) {
-    if (session->expected && index + len != session->expected) {
+    if (!webUpdateUploadComplete(session->received, session->expected)) {
       session->error = "Incomplete upload: image size differs";
       Update.abort();
     } else {
@@ -2671,7 +2714,10 @@ void handleNotFound(AsyncWebServerRequest * request) {
 #endif
   if(request->url()=="/emergency") { request->send_P(200, "text/html", emergency_form); return; }
   if (request->method() == HTTP_GET && request->url() == "/update.html") {
-    request->redirect("/#update");
+    if (config.currentWwwReady)
+      request->redirect("/#update");
+    else
+      request->send_P(200, "text/html", emergency_form);
     return;
   }
   if (request->method() == HTTP_GET) {
@@ -2721,27 +2767,14 @@ void handleNotFound(AsyncWebServerRequest * request) {
     if(request->url()=="/update"){
 #if defined(HTTP_USER) && defined(HTTP_PASS)
       if (network.status == CONNECTED && !request->authenticate(HTTP_USER, HTTP_PASS)) {
-        if (activeUpdateRequest == request) {
-          Update.abort();
-          activeUpdateRequest = nullptr;
-          remountFilesystemAfterFailedUpdate();
-          WebUpdateSession* session = static_cast<WebUpdateSession*>(request->_tempObject);
-          if (session && session->audioBlocked) finishFailedUpdateAudio();
-        }
+        cleanupFailedWebUpdate(request, false);
         request->requestAuthentication();
         return;
       }
 #endif
       WebUpdateSession* session = static_cast<WebUpdateSession*>(request->_tempObject);
       const bool success = session && session->finished && !session->error;
-      if (!success) {
-        if (activeUpdateRequest == request) {
-          Update.abort();
-          activeUpdateRequest = nullptr;
-          remountFilesystemAfterFailedUpdate();
-          if (session && session->audioBlocked) finishFailedUpdateAudio();
-        }
-      }
+      if (!success) cleanupFailedWebUpdate(request, false);
       const char* message = success ? "OK" :
           (session && session->error ? session->error : "No valid update image received");
       AsyncWebServerResponse *response = request->beginResponse(

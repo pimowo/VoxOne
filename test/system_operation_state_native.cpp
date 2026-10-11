@@ -56,4 +56,13 @@ int main() {
   assert(update.updateStarted());
   update.restartRequested();
   assert(update.audioBlocked());
+
+  SystemOperationState recoveryRetry;
+  assert(recoveryRetry.updateStarted());
+  recoveryRetry.radioStopped();
+  recoveryRetry.filesystemUnmounting();
+  assert(recoveryRetry.audioBlocked() && recoveryRetry.filesystemUnavailable());
+  assert(recoveryRetry.updateStarted());
+  assert(recoveryRetry.audioBlocked() && recoveryRetry.blocksRequests());
+  assert(!recoveryRetry.restartPending());
 }

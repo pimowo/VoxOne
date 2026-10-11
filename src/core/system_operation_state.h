@@ -10,9 +10,13 @@ public:
   enum Phase : uint8_t { Ready, Updating, FilesystemUnavailable, RestartPending };
 
   bool updateStarted() {
-    if (audioBlocked_.load()) return false;
+    if (audioBlocked_.load() && phase_.load() != FilesystemUnavailable)
+      return false;
     uint8_t expected = Ready;
-    if (!phase_.compare_exchange_strong(expected, Updating)) return false;
+    if (!phase_.compare_exchange_strong(expected, Updating)) {
+      expected = FilesystemUnavailable;
+      if (!phase_.compare_exchange_strong(expected, Updating)) return false;
+    }
     audioBlocked_.store(true);
     radioStopped_.store(false);
     return true;
