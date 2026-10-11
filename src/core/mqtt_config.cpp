@@ -15,21 +15,25 @@ MqttSettings currentSettings = mqttDefaultSettings();
 bool loaded = false;
 }
 
-const MqttSettings& mqttConfig() {
-  if (loaded) return currentSettings;
-  loaded = true;
+bool mqttReadPersistent(MqttSettings& settings, bool& found) {
+  found = false;
   nvs_handle_t handle;
-  if (nvs_open(kNamespace, NVS_READONLY, &handle) != ESP_OK) return currentSettings;
+  const esp_err_t opened = nvs_open(kNamespace, NVS_READONLY, &handle);
+  if (opened == ESP_ERR_NVS_NOT_FOUND) return true;
+  if (opened != ESP_OK) return false;
   MqttRecord record{};
   size_t size = sizeof(record);
   const esp_err_t result = nvs_get_blob(handle, kRecordKey, &record, &size);
   nvs_close(handle);
-  if (result == ESP_OK && size == sizeof(record) && record.version == kSchemaVersion &&
-      mqttValidSettings(record.settings)) currentSettings = record.settings;
-  return currentSettings;
+  if (result == ESP_ERR_NVS_NOT_FOUND) return true;
+  if (result != ESP_OK || size != sizeof(record) ||
+      record.version != kSchemaVersion || !mqttValidSettings(record.settings)) return false;
+  settings = record.settings;
+  found = true;
+  return true;
 }
 
-bool mqttSaveConfig(const MqttSettings& settings) {
+bool mqttWritePersistent(const MqttSettings& settings) {
   if (!mqttValidSettings(settings)) return false;
   nvs_handle_t handle;
   if (nvs_open(kNamespace, NVS_READWRITE, &handle) != ESP_OK) return false;
@@ -40,6 +44,31 @@ bool mqttSaveConfig(const MqttSettings& settings) {
                        nvs_commit(handle) == ESP_OK;
   nvs_close(handle);
   return success;
+}
+
+bool mqttErasePersistent() {
+  nvs_handle_t handle;
+  const esp_err_t opened = nvs_open(kNamespace, NVS_READWRITE, &handle);
+  if (opened == ESP_ERR_NVS_NOT_FOUND) return true;
+  if (opened != ESP_OK) return false;
+  const esp_err_t erased = nvs_erase_key(handle, kRecordKey);
+  const bool success = (erased == ESP_OK || erased == ESP_ERR_NVS_NOT_FOUND) &&
+                       nvs_commit(handle) == ESP_OK;
+  nvs_close(handle);
+  return success;
+}
+
+const MqttSettings& mqttConfig() {
+  if (loaded) return currentSettings;
+  loaded = true;
+  MqttSettings persistent{};
+  bool found = false;
+  if (mqttReadPersistent(persistent, found) && found) currentSettings = persistent;
+  return currentSettings;
+}
+
+bool mqttSaveConfig(const MqttSettings& settings) {
+  return mqttWritePersistent(settings);
 }
 
 bool mqttClearConfig() {

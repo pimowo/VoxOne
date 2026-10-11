@@ -1,6 +1,8 @@
 #include "options.h"
 #include "config.h"
 #include "config_startup.h"
+#include "config_eeprom_storage.h"
+#include "config_restore_adapter.h"
 #include "bt_runtime.h"
 #include "../hardware/hardware_descriptor.h"
 #include "playlist_store.h"
@@ -24,7 +26,6 @@
 #include "ap_wifi_recovery.h"
 #include "../displays/tools/l10n.h"
 #include <cstddef>
-#include <nvs.h>
 #if defined(VOXONE_RUNTIME_OLED_128X64_BACKENDS)
 #include <esp_system.h>
 #endif
@@ -33,6 +34,10 @@ namespace {
 static_assert(CONFIG_VERSION == voxone::config_format::kConfigV7,
               "Persistence adapter expects v7");
 static_assert(STARTUP_LAST == 0, "Startup defaults must match STARTUP_LAST");
+static_assert(EEPROM_SIZE == voxone::config_storage::kEepromSize,
+              "EEPROM storage size changed");
+static_assert(EEPROM_START == voxone::config_storage::kConfigOffset,
+              "EEPROM config offset changed");
 static_assert(EEPROM_SIZE - EEPROM_START == voxone::config_format::kConfigEepromCapacity,
               "Config area size changed");
 constexpr char WARSAW_TZ[] = "CET-1CEST,M3.5.0/2,M10.5.0/3";
@@ -46,31 +51,6 @@ constexpr int8_t BALANCE_MAX = 16;
 bool localDisplayInstalled() {
   return display.active();
 }
-
-// The existing Arduino EEPROM object uses namespace/key "eeprom".
-// Read-back uses that same blob, not a second configuration store and not
-// EEPROM.read(), which only returns the write cache in this framework.
-struct ConfigEepromStorage {
-  bool writeRecord(const uint8_t* bytes, size_t size) {
-    if (size != voxone::config_format::kConfigV7SerializedSize ||
-        EEPROM.length() != EEPROM_SIZE) return false;
-    for (size_t i = 0; i < size; ++i) EEPROM.write(EEPROM_START + i, bytes[i]);
-    return true;
-  }
-  bool commit() { return EEPROM.commit(); }
-  bool readRecord(uint8_t* bytes, size_t size) {
-    if (size != voxone::config_format::kConfigV7SerializedSize) return false;
-    nvs_handle_t handle;
-    if (nvs_open("eeprom", NVS_READONLY, &handle) != ESP_OK) return false;
-    uint8_t stored[EEPROM_SIZE];
-    size_t length = sizeof(stored);
-    const esp_err_t result = nvs_get_blob(handle, "eeprom", stored, &length);
-    nvs_close(handle);
-    if (result != ESP_OK || length != sizeof(stored)) return false;
-    memcpy(bytes, stored + EEPROM_START, size);
-    return true;
-  }
-};
 
 int8_t clampTone(int8_t value) {
   return constrain(value, TONE_MIN, TONE_MAX);
@@ -101,7 +81,7 @@ bool Config::_hasCurrentWwwAssets() {
 void Config::init() {
   voxone::config_format::ConfigStartupReadOnlyScope readOnly(_startupReadOnly);
   if (!_persistMutex) _persistMutex = xSemaphoreCreateRecursiveMutex();
-  const bool eepromReady = _persistMutex && EEPROM.begin(EEPROM_SIZE);
+  const bool eepromReady = _persistMutex && voxone::config_storage::beginEeprom();
   mqttConfig();
   uiTimeoutConfig();
   screensaverTicks = 0;
@@ -151,7 +131,7 @@ void Config::init() {
   _normalizeAudioConfig();
   // A valid v7 boot does not rewrite the record. Legacy/default records get
   // one full write; future versions remain read-only for this entire boot.
-  ConfigEepromStorage backend;
+  voxone::config_storage::ConfigEepromStorage backend;
   const auto startupWrite = _storage.finishStartup(store, backend);
   if (startupWrite != voxone::config_format::ConfigWriteStatus::OK &&
       _storage.mode() != voxone::config_format::ConfigStorageMode::FUTURE_READ_ONLY)
@@ -164,6 +144,7 @@ void Config::init() {
   }
   spiffsMounted = true;
   BOOTLOG("SPIFFS mounted");
+  voxone::config_restore::cleanupStaleAfterStorageInit();
   if (!restoreWebUpdateData()) Serial.println("##[ERROR]# Web Update data restore incomplete");
   radioPlaylistReady = playlistStore.begin() && playlistStore.recover();
   if (!radioPlaylistReady)
@@ -440,7 +421,7 @@ void Config::_applyDefaults() {
 bool Config::persistV7() {
   WriteLock lock(_persistMutex);
   if (_startupReadOnly) return false;
-  ConfigEepromStorage backend;
+  voxone::config_storage::ConfigEepromStorage backend;
   const auto previous = _storage.lastStatus();
   const auto result = _storage.persist(store, backend);
   if (result != voxone::config_format::ConfigWriteStatus::OK &&
@@ -460,7 +441,7 @@ bool Config::setBtEnabled(bool enabled) {
 
 bool Config::setDefaults() {
   WriteLock lock(_persistMutex);
-  ConfigEepromStorage backend;
+  voxone::config_storage::ConfigEepromStorage backend;
   const bool supportsBt = voxone::hardware::hardwareCapabilities().supportsVoxOneBt;
   const auto result = _storage.factoryReset(store, supportsBt, backend,
       [this](config_t&) { _applyDefaults(); });

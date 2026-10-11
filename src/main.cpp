@@ -1,6 +1,7 @@
 #include "Arduino.h"
 #include "core/options.h"
 #include "core/config.h"
+#include "core/config_restore_adapter.h"
 #include "core/serialcli.h"
 #include "core/player.h"
 #include "core/display.h"
@@ -118,6 +119,13 @@ void setupOTA(){
 
 void setup() {
   Serial.begin(115200);
+  const auto restoreRecovery = voxone::config_restore::recoverAtBoot();
+  if (restoreRecovery == voxone::config_restore::BootRecoveryStatus::Failed) {
+    Serial.println("##[ERROR]# Config restore recovery failed; boot halted");
+    for (;;) delay(1000);
+  }
+  if (restoreRecovery == voxone::config_restore::BootRecoveryStatus::Recovered)
+    Serial.println("##[BOOT]# Incomplete config restore rolled back");
   const auto runtimeHardwareStatus =
       voxone::hardware::loadRuntimeHardwareConfig();
   Serial.printf("##[BOOT]#\truntime hardware: %s "

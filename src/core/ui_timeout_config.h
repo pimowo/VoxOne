@@ -24,5 +24,8 @@ inline bool parseUiTimeout(const char* text, uint8_t& seconds) {
 const UiTimeoutSettings& uiTimeoutConfig();
 bool uiTimeoutSave(const UiTimeoutSettings& settings);
 bool uiTimeoutReset();
+bool uiTimeoutReadPersistent(UiTimeoutSettings& settings, bool& found);
+bool uiTimeoutWritePersistent(const UiTimeoutSettings& settings);
+bool uiTimeoutErasePersistent();
 
 #endif

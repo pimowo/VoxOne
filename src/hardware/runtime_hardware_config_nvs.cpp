@@ -59,6 +59,40 @@ RuntimeHardwareDiagnostics diagnostics{
 bool loaded = false;
 }  // namespace
 
+bool readRuntimeHardwarePersistent(RuntimeHardwareConfig& config, bool& found) {
+  found = false;
+  NvsRuntimeHardwareStorage storage;
+  uint8_t record[kRuntimeHardwareConfigSerializedSize]{};
+  size_t size = 0;
+  const RuntimeHardwareStorageReadStatus status =
+      storage.read(record, sizeof(record), size);
+  if (status == RuntimeHardwareStorageReadStatus::Missing) return true;
+  if (status != RuntimeHardwareStorageReadStatus::Found ||
+      deserializeRuntimeHardwareConfig(record, size, config) !=
+          RuntimeHardwareDecodeStatus::Valid) return false;
+  found = true;
+  return true;
+}
+
+bool writeRuntimeHardwarePersistent(const RuntimeHardwareConfig& config) {
+  uint8_t record[kRuntimeHardwareConfigSerializedSize]{};
+  if (!serializeRuntimeHardwareConfig(config, record, sizeof(record))) return false;
+  NvsRuntimeHardwareStorage storage;
+  return storage.write(record, sizeof(record));
+}
+
+bool eraseRuntimeHardwarePersistent() {
+  nvs_handle_t handle;
+  const esp_err_t opened = nvs_open(kNamespace, NVS_READWRITE, &handle);
+  if (opened == ESP_ERR_NVS_NOT_FOUND) return true;
+  if (opened != ESP_OK) return false;
+  const esp_err_t erased = nvs_erase_key(handle, kRecordKey);
+  const bool result = (erased == ESP_OK || erased == ESP_ERR_NVS_NOT_FOUND) &&
+                      nvs_commit(handle) == ESP_OK;
+  nvs_close(handle);
+  return result;
+}
+
 const RuntimeHardwareConfig& runtimeHardwareConfig() { return currentConfig; }
 
 RuntimeHardwareLoadStatus loadRuntimeHardwareConfig() {

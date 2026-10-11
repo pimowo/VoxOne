@@ -18,7 +18,8 @@ void absent(const std::string& source, const char* text) {
   assert(source.find(text) == std::string::npos);
 }
 
-void configIoUsesReservedBoundary(const std::string& source, const char* call) {
+void configIoUsesReservedBoundary(const std::string& source, const char* call,
+                                  const char* boundary) {
   std::size_t position = 0;
   unsigned count = 0;
   while ((position = source.find(call, position)) != std::string::npos) {
@@ -29,7 +30,8 @@ void configIoUsesReservedBoundary(const std::string& source, const char* call) {
       position = argument;
       continue;
     }
-    assert(source.compare(argument, 12, "EEPROM_START") == 0);
+    assert(source.compare(argument, std::char_traits<char>::length(boundary),
+                          boundary) == 0);
     position = argument;
     ++count;
   }
@@ -47,6 +49,8 @@ int main() {
 
   const auto configHeader = readFile("src/core/config.h");
   const auto configCode = readFile("src/core/config.cpp");
+  const auto configStorageHeader = readFile("src/core/config_eeprom_storage.h");
+  const auto configStorageCode = readFile("src/core/config_eeprom_storage.cpp");
   const auto commands = readFile("src/core/commandhandler.cpp");
   const auto serverHeader = readFile("src/core/netserver.h");
   const auto serverCode = readFile("src/core/netserver.cpp");
@@ -59,13 +63,15 @@ int main() {
 
   assert(configHeader.find("#define EEPROM_START      500") != std::string::npos);
   assert(configHeader.find("#define EEPROM_SIZE       768") != std::string::npos);
+  assert(configStorageHeader.find("kConfigOffset = 500") != std::string::npos);
+  assert(configStorageHeader.find("kEepromSize = 768") != std::string::npos);
   assert(configHeader.find("uint8_t   irtlp;") != std::string::npos);
   for (const char* macro : {"IR_PIN", "IR_TIMEOUT", "IR_BUFSIZE"}) {
     absent(options, macro);
     absent(unavailable, macro);
   }
-  configIoUsesReservedBoundary(configCode, "EEPROM.read(");
-  configIoUsesReservedBoundary(configCode, "EEPROM.write(");
+  configIoUsesReservedBoundary(configCode, "EEPROM.read(", "EEPROM_START");
+  configIoUsesReservedBoundary(configStorageCode, "EEPROM.write(", "kConfigOffset");
 
   for (const char* token : {"ircodes_t", "ircodes", "irVals", "irindex",
                             "irchck", "setIrBtn", "saveIR", "eepromRead(",

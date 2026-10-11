@@ -135,6 +135,9 @@ inline void mqttAutoRootFromMac(const uint8_t mac[6], char output[14]) {
 const MqttSettings& mqttConfig();
 bool mqttSaveConfig(const MqttSettings& settings);
 bool mqttClearConfig();
+bool mqttReadPersistent(MqttSettings& settings, bool& found);
+bool mqttWritePersistent(const MqttSettings& settings);
+bool mqttErasePersistent();
 bool mqttAutoRoot(char output[14]);
 bool mqttEffectiveRoot(char* output, size_t capacity);
 

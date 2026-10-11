@@ -149,6 +149,9 @@ const RuntimeHardwareConfig& runtimeHardwareConfig();
 RuntimeHardwareLoadStatus loadRuntimeHardwareConfig();
 RuntimeHardwareSaveStatus saveRuntimeHardwareConfig(
     const RuntimeHardwareConfig& requested);
+bool readRuntimeHardwarePersistent(RuntimeHardwareConfig& config, bool& found);
+bool writeRuntimeHardwarePersistent(const RuntimeHardwareConfig& config);
+bool eraseRuntimeHardwarePersistent();
 RuntimeHardwareDiagnostics runtimeHardwareDiagnostics();
 const char* runtimeHardwareLoadStatusName(RuntimeHardwareLoadStatus status);
 
