@@ -1,6 +1,6 @@
 #pragma once
 
-#define VOXONE_VERSION "0.2.0"
+#define VOXONE_VERSION "0.8.0"
 #define VOXONE_BUILD_CHANNEL "dev"
 
 #ifndef VOXONE_BUILD_SHA

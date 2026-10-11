@@ -45,7 +45,7 @@ def resolve_chrome():
 MOCK = r"""
 <script>
 window.voxOneProfile = 'l0';
-window.voxOneVersion = '0.2.0';
+window.voxOneVersion = '0.8.0';
 window.voxOneChannel = 'dev';
 window.voxOneBuild = '192a400';
 window.yoRadioVersion = 'test';
@@ -240,7 +240,7 @@ setTimeout(async () => {
     const logo = document.querySelector('header img[src*="voxone-logo.svg"]');
     check(icon?.type === 'image/svg+xml' && !!logo, 'VoxOne SVG favicon and header logo');
     check(icon.getAttribute('href') === logo.getAttribute('src'), 'favicon reuses header logo');
-    check(get('footer-details').textContent === 'VoxOne 0.2.0 · L0', 'footer identity');
+    check(get('footer-details').textContent === 'VoxOne 0.8.0 · L0', 'footer identity');
     check(get('footer-connection').textContent === 'Połączono', 'footer WebSocket connected');
     check(get('system').querySelector('h3').textContent === 'VoxOne', 'VoxOne system card');
     check([...get('system').querySelectorAll('h3')].some(node => node.textContent === 'VoxOneBT'), 'VoxOneBT system card');
@@ -340,10 +340,10 @@ setTimeout(async () => {
     check(btTestSocket.sent.some(item => item === 'getrssi=1'), 'system RSSI request');
     btTestSocket.onmessage({data:JSON.stringify({ipaddr:'192.168.1.42',
       payload:[{id:'rssi',value:-57}]})});
-    check(get('footer-details').textContent === 'VoxOne 0.2.0 · L0 · 192.168.1.42', 'footer IP');
-    check(get('system-version').textContent === '0.2.0-dev', 'identity firmware fallback');
+    check(get('footer-details').textContent === 'VoxOne 0.8.0 · L0 · 192.168.1.42', 'footer IP');
+    check(get('system-version').textContent === '0.8.0-dev', 'identity firmware fallback');
     check(get('system-build').textContent === '192a400', 'identity build');
-    check(get('update-version').textContent === 'VoxOne 0.2.0-dev', 'update firmware');
+    check(get('update-version').textContent === 'VoxOne 0.8.0-dev', 'update firmware');
     check(get('update-build').textContent === '192a400', 'update build');
     check(get('update-profile').textContent === 'L0', 'update profile');
     check(get('system-profile').textContent === 'L0', 'identity profile fallback');
@@ -355,7 +355,7 @@ setTimeout(async () => {
       freeHeap:256000, minimumFreeHeap:128000, psramTotal:8388608, psramFree:4194304,
       capabilities:'DISPLAY, ENCODER, BT, VU, RTC'};
     btTestSocket.receiveSystem(systemInfo);
-    check(get('system-version').textContent === '0.2.0-dev', 'system firmware');
+    check(get('system-version').textContent === '0.8.0-dev', 'system firmware');
     check(get('system-profile').textContent === 'L0', 'system profile');
     check(get('system-ip').textContent === '192.168.1.42', 'system IP');
     check(get('system-rssi').textContent === '-57 dBm', 'system RSSI');
@@ -417,7 +417,7 @@ setTimeout(async () => {
       'disconnect clears stale source and metadata');
     check(muteButtons.every(button => button.disabled && button.getAttribute('aria-pressed') === 'false'), 'disconnect clears mute state');
     check(get('footer-connection').textContent === 'Rozłączono', 'footer WebSocket disconnected');
-    check(get('footer-details').textContent === 'VoxOne 0.2.0 · L0', 'offline footer hides stale IP');
+    check(get('footer-details').textContent === 'VoxOne 0.8.0 · L0', 'offline footer hides stale IP');
     check(get('network-active-ssid').textContent === '—', 'offline network info cleared');
     const transfer = new DataTransfer();
     transfer.items.add(new File(['image'], 'voxonebt.bin', {type:'application/octet-stream'}));

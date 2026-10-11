@@ -200,7 +200,7 @@ Nazwy wariantów display: `STEROWNIK_ROZDZIELCZOŚĆ`, np. `SSD1306_128X32`, `SS
 - [POST-STABLE] Zaprojektować first boot AP `VoxOne-XXXXXX` i captive wizard do Wi-Fi oraz podstawowego hardware/config; dalsza konfiguracja ma być dostępna przez WWW i LCD.
 - [POST-STABLE] Docelowy przepływ produkcyjny ma po flashu nie wymagać VS Code ani edycji kodu.
 - [STABLE] Przed release potwierdzić artefakty firmware/SPIFFS/full image, instrukcję instalacji i recovery oraz zasady zachowania NVS/config.
-- [STABLE] Po przejściu wszystkich gate'ów przygotować stable release i merge `project-cleanup-1` → `main`; dopiero release otrzymuje decyzję o zmianie `VOXONE_VERSION`.
+- [STABLE] Po przejściu wszystkich gate'ów przygotować pierwsze VoxOne Stable 1.0.0. Linia 0.8.x obejmuje bieżący rozwój, UX, konfigurację i stabilizację; 0.9.0 oznacza funkcjonalnie prawie kompletną wersję przed Stable, a 0.9.x poprawki, regresje i release candidates. DSPmini, DLNA, W5500 i native HA zgodnie z roadmapą nie blokują 1.0.0; nie przypisywać im jeszcze wersji 1.x.
 
 ## Dystrybucja
 

@@ -10,7 +10,7 @@
 #include <cstring>
 
 int main() {
-  assert(std::strcmp(VOXONE_VERSION, "0.2.0") == 0);
+  assert(std::strcmp(VOXONE_VERSION, "0.8.0") == 0);
   assert(std::strcmp(VOXONE_BUILD_CHANNEL, "dev") == 0);
 #if defined(BUILD_ID_TEST_CLEAN)
   const char* expectedBuild = "192a400";
@@ -42,6 +42,6 @@ int main() {
   assert(length > 0 && static_cast<size_t>(length) < sizeof(identity));
   char expectedPrefix[65];
   std::snprintf(expectedPrefix, sizeof(expectedPrefix),
-      "VoxOne v0.2.0-dev\nbuild: %s\nprofile: ", expectedBuild);
+      "VoxOne v0.8.0-dev\nbuild: %s\nprofile: ", expectedBuild);
   assert(std::strstr(identity, expectedPrefix) == identity);
 }

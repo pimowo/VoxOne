@@ -29,6 +29,10 @@ $root=(Resolve-Path (Join-Path $PSScriptRoot '..')).Path
 Set-Location -LiteralPath $root
 $work=Join-Path $root '.pio/verify'
 [void][System.IO.Directory]::CreateDirectory($work)
+$versionHeader=Get-Content -LiteralPath (Join-Path $root 'src/core/version.h') -Raw
+$versionMatch=[regex]::Match($versionHeader,'(?m)^\s*#define\s+VOXONE_VERSION\s+"(\d+\.\d+\.\d+)"\s*$')
+if(-not $versionMatch.Success) { throw 'VOXONE_VERSION must be SemVer in src/core/version.h' }
+$productVersion=$versionMatch.Groups[1].Value
 $results=[ordered]@{}
 $sizes=[ordered]@{}
 $script:failed=$false
@@ -156,6 +160,9 @@ foreach($target in @('l0','m0','s0','din0','w0')) {
   Invoke-Pio "$envName-firmware" @('run','-e',$envName)
   $bin=Join-Path $root ".pio/build/$envName/firmware.bin"
   if(-not (Test-Path -LiteralPath $bin)) { throw "Missing $envName firmware.bin" }
+  $versionedBin=Join-Path $root ".pio/build/$envName/VoxOne-$productVersion-firmware.bin"
+  if(-not (Test-Path -LiteralPath $versionedBin)) { throw "Missing versioned firmware: $versionedBin" }
+  if((Get-FileHash -LiteralPath $bin -Algorithm SHA256).Hash -ne (Get-FileHash -LiteralPath $versionedBin -Algorithm SHA256).Hash) { throw "Versioned firmware differs: $versionedBin" }
   $sizes[$envName.ToUpperInvariant()]=(Get-Item -LiteralPath $bin).Length
  }
 }

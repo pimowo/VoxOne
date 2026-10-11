@@ -16,7 +16,7 @@ Stan odniesienia: commit 4436dce4d71ad1bb7d3d9d9b785c2825a33ee086. Ten dokument 
 | profiles/, myoptions.h | Wybór l0/m0/s0/din0/w0 i piny; myoptions.h ładuje profile.h | Tak, każdy build | Oddzielić PCB od runtime/capabilities w CLEANUP-1B i później | REFACTOR |
 | src/core/options.h, DSP_MODEL, stare define | Domyślne piny i ścieżki wariantów yoRadio | Tak, szeroko w core i display | Zastępować stopniowo deskryptorem; DSP_MODEL oznacza LCD, nie audio DSP | REFACTOR |
 | src/core/options.h: YOVERSION | Informacja o bazie yoRadio 0.9.720 | Tak: bootlog, Serial CLI, Nextion i zmienna yoRadioVersion WWW | Zachować atrybucję; później oddzielić ją od wersji produktu | REFACTOR |
-| src/core/version.h: VOXONE_VERSION | Wersja produktu 0.2.0 | Tak: WWW, bootlog, User-Agent i nazwy artefaktów | Pozostawić osobnym źródłem prawdy VoxOne | KEEP |
+| src/core/version.h: VOXONE_VERSION | Wersja produktu 0.8.0 | Tak: WWW, bootlog, User-Agent i nazwy artefaktów | Pozostawić osobnym źródłem prawdy VoxOne | KEEP |
 | src/core/config.*, playlist_store.*, station_* | EEPROM, SPIFFS, stacje i migracje | Tak | Zachować format Config oraz dane użytkownika; refaktor niezależnie od relokacji | REFACTOR |
 | src/core/netserver.*, data/www/, web-src/ | API, WS, Web Update, legacy i nowa strona WWW | Tak | Zachować kontrakty; osobno ocenić zbędne endpointy | REFACTOR |
 | GET /legacy.html, stare statyczne strony w data/www | Kompatybilny interfejs yoRadio | Tak: trasy i zasoby są nadal serwowane | Osobny audyt klientów i recovery przed ewentualnym usunięciem | UNKNOWN |
