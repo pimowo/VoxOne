@@ -26,12 +26,12 @@ class ReconnectPolicy {
     return true;
   }
 
-  bool takeDue(uint32_t nowMs, bool allowed, bool networkOnline) {
+  bool takeDue(uint32_t nowMs, bool allowed, bool networkReady) {
     if (!allowed) {
       cancel();
       return false;
     }
-    if (!pending_ || !networkOnline ||
+    if (!pending_ || !networkReady ||
         static_cast<int32_t>(nowMs - dueAtMs_) < 0) return false;
     pending_ = false;
     return true;

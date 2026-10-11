@@ -5,11 +5,34 @@
 #include "station_metadata.h"
 #include "player.h"
 #include "network.h"
+#include "network_diagnostics.h"
 #include "serialcli.h"
 #include "update_progress.h"
 #include "../hardware/runtime_hardware_config.h"
+#include <esp_netif.h>
 
 namespace {
+
+void formatIpAddress(char* output, size_t outputSize, const IPAddress& address) {
+  voxone::network_diagnostics::formatIpv4(
+      output, outputSize, address[0], address[1], address[2], address[3]);
+}
+
+void formatEspIpAddress(char* output, size_t outputSize,
+                        const esp_ip4_addr_t& address) {
+  const auto* octets = reinterpret_cast<const uint8_t*>(&address.addr);
+  voxone::network_diagnostics::formatIpv4(
+      output, outputSize, octets[0], octets[1], octets[2], octets[3]);
+}
+
+const char* dhcpStatusName(esp_netif_dhcp_status_t status) {
+  switch (status) {
+    case ESP_NETIF_DHCP_INIT: return "init";
+    case ESP_NETIF_DHCP_STARTED: return "started";
+    case ESP_NETIF_DHCP_STOPPED: return "stopped";
+    default: return "unknown";
+  }
+}
 
 const char* runtimeDisplayName(voxone::hardware::RuntimeDisplay display) {
   switch (display) {
@@ -424,12 +447,49 @@ void SerialCli::on_input(const char* str, uint8_t clientId) {
     return;
   }
   if (strcmp(str, "wifi.status") == 0 || strcmp(str, "status") == 0) {
-    printf(clientId, "#WIFI.STATUS#\nStatus:\t\t%d\nMode:\t\t%s\nIP:\t\t%s\nMask:\t\t%s\nGateway:\t%s\nRSSI:\t\t%d dBm\n##WIFI.STATUS#\n> ",
+    const IPAddress ip = WiFi.getMode() == WIFI_STA
+        ? WiFi.localIP() : WiFi.softAPIP();
+    const IPAddress mask = WiFi.getMode() == WIFI_STA
+        ? WiFi.subnetMask() : IPAddress(255, 255, 255, 0);
+    const IPAddress gateway = WiFi.getMode() == WIFI_STA
+        ? WiFi.gatewayIP() : WiFi.softAPIP();
+    const IPAddress dns1 = WiFi.dnsIP(0);
+    const IPAddress dns2 = WiFi.dnsIP(1);
+    char ipText[16], maskText[16], gatewayText[16], dns1Text[16], dns2Text[16],
+        bssidText[18];
+    formatIpAddress(ipText, sizeof(ipText), ip);
+    formatIpAddress(maskText, sizeof(maskText), mask);
+    formatIpAddress(gatewayText, sizeof(gatewayText), gateway);
+    formatIpAddress(dns1Text, sizeof(dns1Text), dns1);
+    formatIpAddress(dns2Text, sizeof(dns2Text), dns2);
+    voxone::network_diagnostics::formatMac(
+        bssidText, sizeof(bssidText), WiFi.BSSID());
+
+    esp_netif_t* staNetif =
+        WiFi.getMode() == WIFI_STA
+            ? esp_netif_get_handle_from_ifkey("WIFI_STA_DEF") : nullptr;
+    esp_netif_dhcp_status_t dhcpStatus = ESP_NETIF_DHCP_INIT;
+    esp_netif_ip_info_t netifIp{};
+    const esp_err_t dhcpResult = staNetif
+        ? esp_netif_dhcpc_get_status(staNetif, &dhcpStatus)
+        : ESP_ERR_INVALID_STATE;
+    const esp_err_t ipResult = staNetif
+        ? esp_netif_get_ip_info(staNetif, &netifIp)
+        : ESP_ERR_INVALID_STATE;
+    char netifIpText[16], netifMaskText[16], netifGatewayText[16];
+    formatEspIpAddress(netifIpText, sizeof(netifIpText), netifIp.ip);
+    formatEspIpAddress(netifMaskText, sizeof(netifMaskText), netifIp.netmask);
+    formatEspIpAddress(netifGatewayText, sizeof(netifGatewayText), netifIp.gw);
+
+    printf(clientId, "#WIFI.STATUS#\nStatus:\t\t%d\nMode:\t\t%s\nIP:\t\t%s\nMask:\t\t%s\nGateway:\t%s\nDNS1:\t\t%s\nDNS2:\t\t%s\nRSSI:\t\t%d dBm\nChannel:\t%d\nBSSID:\t\t%s\n",
       WiFi.status(), WiFi.getMode()==WIFI_STA?"WIFI_STA":"WIFI_AP",
-      WiFi.getMode()==WIFI_STA?config.ipToStr(WiFi.localIP()):config.ipToStr(WiFi.softAPIP()),
-      WiFi.getMode()==WIFI_STA?config.ipToStr(WiFi.subnetMask()):"255.255.255.0",
-      WiFi.getMode()==WIFI_STA?config.ipToStr(WiFi.gatewayIP()):config.ipToStr(WiFi.softAPIP()),
-      WiFi.RSSI()
+      ipText, maskText, gatewayText, dns1Text, dns2Text, WiFi.RSSI(),
+      WiFi.channel(), bssidText);
+    printf(clientId, "Network ready:\t%u\nNetif:\t\t%s\nDHCP:\t\t%s (%d)\nNetif IP:\t%s\nNetif mask:\t%s\nNetif gateway:\t%s (%d)\n##WIFI.STATUS#\n> ",
+      network.ready() ? 1U : 0U,
+      staNetif && esp_netif_is_netif_up(staNetif) ? "up" : "down",
+      dhcpStatusName(dhcpStatus), static_cast<int>(dhcpResult), netifIpText,
+      netifMaskText, netifGatewayText, static_cast<int>(ipResult)
     );
     return;
   }

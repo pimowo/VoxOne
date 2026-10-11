@@ -200,6 +200,7 @@ void loop() {
     transitionUiMode(systemMode);
   timekeeper.loop1();
   serialCli.loop();
+  network.loop();
   #if VOXONE_HAS_BT && VOXONE_PIN_MAP_COMPLETE
     if (btRuntime.physicalStarted()) {
       btLink.loop();
@@ -218,7 +219,8 @@ void loop() {
                         bluetoothOwnsAudio(bluetoothSourceSelected(), player.temporaryActive()),
                         player.getSampleRate(), millis());
   #endif
-  if (network.status == CONNECTED || player.temporaryBusy()) {
+  if (network.status == CONNECTED || network.status == DISCONNECTED ||
+      player.temporaryBusy()) {
     player.loop();
 #if USE_OTA
     ArduinoOTA.handle();

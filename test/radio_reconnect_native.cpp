@@ -1,14 +1,70 @@
 #include "../src/core/radio_reconnect_policy.h"
 #include "../src/core/radio_source_policy.h"
+#include "../src/core/network_ready_state.h"
 
 #include <cassert>
 #include <cstring>
 #include <stdint.h>
 
 using voxone::radio::ReconnectPolicy;
+using voxone::network::Ipv4ReadinessEvidence;
+using voxone::network::NetworkReadyState;
 
 int main() {
   ReconnectPolicy retry;
+  NetworkReadyState network;
+
+  const Ipv4ReadinessEvidence validIp{
+      true, 0x7201A8C0U, 0x7201A8C0U, true, true, true, 0x7201A8C0U};
+
+  // WL_CONNECTED alone is not readiness. When the timer expires first, the
+  // retry stays pending until a coherent GOT_IP/local/netif snapshot arrives.
+  assert(!network.ready());
+  assert(retry.schedule(0));
+  assert(!retry.takeDue(1000, true, network.ready()));
+  assert(retry.pending() && retry.failures() == 1);
+  assert(network.gotIp(validIp));
+  assert(retry.takeDue(1000, true, network.ready()));
+  assert(!retry.pending());
+
+  // Disconnect always clears readiness. A mismatched netif address cannot
+  // restore it, while a later coherent GOT_IP can.
+  network.disconnected();
+  assert(!network.ready());
+  auto invalidIp = validIp;
+  invalidIp.netifIp = 0;
+  assert(!network.gotIp(invalidIp));
+  assert(!network.ready());
+  assert(network.gotIp(validIp));
+
+  // STOP while not ready cancels the pending request. A later valid GOT_IP
+  // cannot resurrect RADIO.
+  retry.reset();
+  network.disconnected();
+  assert(retry.schedule(2000));
+  assert(!retry.takeDue(5000, false, network.ready()));
+  assert(network.gotIp(validIp));
+  assert(!retry.takeDue(5000, true, network.ready()));
+
+  // A source switch to BT has the same cancellation contract.
+  retry.reset();
+  network.disconnected();
+  assert(retry.schedule(6000));
+  assert(!retry.takeDue(9000, false, network.ready()));
+  assert(network.gotIp(validIp));
+  assert(!retry.takeDue(9000, true, network.ready()));
+
+  // Duplicate disconnect/GOT_IP observations preserve one pending request and
+  // yield exactly one attempt.
+  retry.reset();
+  assert(retry.schedule(10000));
+  network.disconnected();
+  network.disconnected();
+  assert(!retry.takeDue(11000, true, network.ready()));
+  assert(network.gotIp(validIp));
+  assert(network.gotIp(validIp));
+  assert(retry.takeDue(11000, true, network.ready()));
+  assert(!retry.takeDue(11000, true, network.ready()));
 
   // 1. RADIO PLAY + offline creates one suspended recovery request. It is
   // consumed only after the network returns and the retry becomes due.

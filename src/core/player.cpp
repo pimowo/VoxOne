@@ -337,7 +337,7 @@ void Player::scheduleRadioReconnect() {
 void Player::serviceRadioReconnect() {
   const bool allowed = !temporaryBusy() && !systemUpdateAudioBlocked() &&
                        sourceManagerRadioResumeAllowed();
-  if (!_radioReconnect.takeDue(millis(), allowed, WiFi.isConnected())) return;
+  if (!_radioReconnect.takeDue(millis(), allowed, network.ready())) return;
   serialCli.printf("##[RADIO]# reconnect attempt=%u\n",
                    static_cast<unsigned>(_radioReconnect.failures()));
   _play(config.lastStation(), true);

@@ -24,7 +24,9 @@
 #include "ui_state.h"
 #include "www_readiness.h"
 #include "ap_wifi_recovery.h"
+#include "wifi_config_atomic.h"
 #include "../displays/tools/l10n.h"
+#include <algorithm>
 #include <cstddef>
 #if defined(VOXONE_RUNTIME_OLED_128X64_BACKENDS)
 #include <esp_system.h>
@@ -51,6 +53,43 @@ constexpr int8_t BALANCE_MAX = 16;
 bool localDisplayInstalled() {
   return display.active();
 }
+
+class WifiConfigSpiffsStorage {
+ public:
+  bool exists(const char* path) const { return SPIFFS.exists(path); }
+  bool remove(const char* path) { return SPIFFS.remove(path); }
+  bool rename(const char* from, const char* to) {
+    return SPIFFS.rename(from, to);
+  }
+  bool write(const char* path, const uint8_t* bytes, size_t size) {
+    File file = SPIFFS.open(path, "w");
+    if (!file) return false;
+    const bool written = (!size || file.write(bytes, size) == size);
+    file.flush();
+    file.close();
+    return written;
+  }
+  bool matches(const char* path, const uint8_t* bytes, size_t size) const {
+    File file = SPIFFS.open(path, "r");
+    if (!file || file.size() != size) {
+      file.close();
+      return false;
+    }
+    uint8_t buffer[64];
+    size_t position = 0;
+    while (position < size) {
+      const size_t count = std::min(sizeof(buffer), size - position);
+      if (file.read(buffer, count) != count ||
+          memcmp(buffer, bytes + position, count) != 0) {
+        file.close();
+        return false;
+      }
+      position += count;
+    }
+    file.close();
+    return true;
+  }
+};
 
 int8_t clampTone(int8_t value) {
   return constrain(value, TONE_MIN, TONE_MAX);
@@ -146,6 +185,9 @@ void Config::init() {
   BOOTLOG("SPIFFS mounted");
   voxone::config_restore::cleanupStaleAfterStorageInit();
   if (!restoreWebUpdateData()) Serial.println("##[ERROR]# Web Update data restore incomplete");
+  WifiConfigSpiffsStorage wifiStorage;
+  if (!voxone::wifi_config_atomic::recover(wifiStorage))
+    Serial.println("##[ERROR]# Wi-Fi credentials recovery incomplete");
   radioPlaylistReady = playlistStore.begin() && playlistStore.recover();
   if (!radioPlaylistReady)
     Serial.println("##[ERROR]# Playlist recovery incomplete");
@@ -797,21 +839,17 @@ bool Config::parseSsid(const char* line, char* ssid, char* pass) {
 
 bool Config::saveWifiCredentials(const char* ssid, const char* password) {
   if (!apWifiCredentialsValid(ssid, password)) return false;
-  constexpr char wifiTempPath[] = "/data/wifi.csv.tmp";
-  File file = SPIFFS.open(wifiTempPath, "w");
-  if (!file) return false;
   const size_t ssidLength = strlen(ssid);
   const size_t passwordLength = strlen(password);
-  const bool written = file.write(reinterpret_cast<const uint8_t*>(ssid), ssidLength) == ssidLength &&
-                       file.write(static_cast<uint8_t>('\t')) == 1 &&
-                       file.write(reinterpret_cast<const uint8_t*>(password), passwordLength) == passwordLength &&
-                       file.write(static_cast<uint8_t>('\n')) == 1;
-  file.close();
-  if (!written || !SPIFFS.rename(wifiTempPath, SSIDS_PATH)) {
-    SPIFFS.remove(wifiTempPath);
-    return false;
-  }
-  return true;
+  const size_t recordSize = ssidLength + 1 + passwordLength + 1;
+  uint8_t record[72];
+  if (recordSize > sizeof(record)) return false;
+  memcpy(record, ssid, ssidLength);
+  record[ssidLength] = '\t';
+  memcpy(record + ssidLength + 1, password, passwordLength);
+  record[recordSize - 1] = '\n';
+  WifiConfigSpiffsStorage storage;
+  return voxone::wifi_config_atomic::replace(storage, record, recordSize);
 }
 
 void Config::setTimeConf(){
