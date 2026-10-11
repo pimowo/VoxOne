@@ -90,7 +90,7 @@
 
 ## DLNA
 
-- [POST-STABLE] Dodać DLNA jako capability-filtered źródło SourceManager. Cykl po implementacji obejmuje RADIO, BT i DLNA wyłącznie tam, gdzie są dostępne według capabilities i runtime availability.
+- [POST-STABLE] Dodać DLNA jako capability-filtered źródło SourceManager. DLNA jest wymagane dla rodziny L; dla M/S/DIN/W dopuścić je tylko po potwierdzeniu budżetu Flash/RAM. Cykl po implementacji obejmuje RADIO, BT i DLNA wyłącznie tam, gdzie są dostępne według capabilities i runtime availability.
 - [POST-STABLE] Zaimplementować konfigurację IP serwera, discovery/scanning, ContentDirectory, browsing, pagination, wybór zasobu/play URL, next track i odtwarzanie folderu.
 - [POST-STABLE] Zachować UX PLAYER: klik PLAY/PAUSE, dwuklik następne źródło, trójklik ALL/RND/ONE, przytrzymanie biblioteka.
 - [POST-STABLE] W przeglądarce folderów: obrót wybiera, klik wchodzi/odtwarza, „ODTWÓRZ FOLDER” zaczyna od pierwszego utworu, dwuklik wraca poziom wyżej, przytrzymanie wraca do PLAYER, a timeout około 15 s wraca do PLAYER.
@@ -137,14 +137,14 @@
 
 ## DSPmini
 
-- [HARDWARE] Docelowy DSP to moduł klasy ADAU1401/ADAU1701/ADAU1702. Ustalić schemat DSPmini, cztery wyjścia i workflow inicjalizacji/programowania z ESP bez drogiego USBi.
+- [HARDWARE] Docelowy DSPmini wyłącznie dla rodziny L to moduł klasy ADAU1401/ADAU1701/ADAU1702. Ustalić schemat, cztery wyjścia i workflow inicjalizacji/programowania z ESP bez drogiego USBi.
 - [POST-STABLE] Dodać live tuning/runtime parameters, storage presetów, PEQ, crossover, subwoofer, 2.0/2.1/2.2, role/mute wyjść, delay, Auto Loudness, protection, balance/fader i trwałość presetów.
 - [POST-STABLE] Zintegrować DSPmini z WWW i LCD. W profilu DSP rozbudowane ustawienia mają należeć do AUDIO i nie mogą dublować globalnej głośności.
 - [DECISION] Po przygotowaniu integracji sprzętowej zdecydować, które elementy obecnej zakładki/demo DSP i `DSP_CUSTOM` zachować, zastąpić lub usunąć.
 
 ## Home Assistant i MQTT
 
-- [POST-STABLE] HA-1 — ustalić wersjonowany kontrakt integracji na bazie istniejącego `/ws`, `webStatus`, CommandHandler i SourceManager: stabilne pola snapshotu i synchronizację po reconnect, błędy/wynik komendy oraz jawne source-aware transport commands. Nie tworzyć osobnego WebSocket ani dodawać REST API wyłącznie dla HA.
+- [POST-STABLE] HA-1 — dla całej rodziny L/M/S/DIN/W ustalić wersjonowany kontrakt integracji na bazie istniejącego `/ws`, `webStatus`, CommandHandler i SourceManager: stabilne pola snapshotu i synchronizację po reconnect, błędy/wynik komendy oraz jawne source-aware transport commands. Nie tworzyć osobnego WebSocket ani dodawać REST API wyłącznie dla HA.
 - [POST-STABLE] HA-2 — dodać mDNS/Zeroconf `_voxone._tcp` i config flow z potwierdzeniem urządzenia, pełnym MAC MAIN jako unique ID oraz ręcznym host fallback; hostname i IP nie są unique ID.
 - [POST-STABLE] HA-3 — zbudować jedno urządzenie i główny `media_player` z runtime state, volume, mute, RADIO, podstawowym BT, `source`/`source_list` oraz source-aware metadata.
 - [POST-STABLE] HA-4 — wyliczać `supported_features` zależnie od aktywnego źródła i capabilities; reklamować PLAY/PAUSE/STOP/NEXT/PREV tylko gdy dana akcja jest rzeczywiście obsługiwana. Uwzględnić RADIO i BT, a DLNA/AUX dopiero po ich implementacji.
@@ -159,7 +159,7 @@
 ## Network
 
 - [POST-STABLE] Zachować maksymalnie pięć profili Wi-Fi, priority/last-known-good, tryb NORMAL bez wymuszonego AP, oczekiwanie RADIO na sieć, możliwość działania BT offline oraz jednoznaczne CONFIG/AP/recovery behavior.
-- [HARDWARE] Dodać W5500 tylko na odpowiednich PCB i dedykowanej magistrali SPI; tryby AUTO/LAN/Wi-Fi, LAN preferred, Wi-Fi fallback i DHCP, a później opcjonalny static IP.
+- [HARDWARE] Dodać W5500 wyłącznie dla rodziny L, na odpowiednim PCB i dedykowanej magistrali SPI; tryby AUTO/LAN/Wi-Fi, LAN preferred, Wi-Fi fallback i DHCP, a później opcjonalny static IP.
 - [POST-STABLE] Wydzielić abstrakcję sieciową bez twardego założenia `WiFiClient`; RADIO i DLNA mają działać przez LAN lub Wi-Fi.
 - [POST-STABLE] W WWW pokazywać aktywny interfejs/link/IP, a na LCD dla Ethernet używać małej ikony RJ45 zamiast słupków RSSI bez przesuwania stałego obszaru systemowego.
 
@@ -179,7 +179,7 @@ VoxOneBT jest osobnym projektem/repo i posiada własną rodzinę sprzętową Vx.
 - [HARDWARE] Zweryfikować na fizycznych prototypach S0 i DIN0 osobne profile i docelowe wyposażenie. Dzisiejsze buildy używają roboczego pinoutu M0, PCM5102A, OLED 128×64 i EC11; nie są dowodem działania przyszłych modułów.
 - [HARDWARE] Fizycznie zweryfikować Buttons3 na wspólnych liniach A/B/KEY wszystkich przeznaczonych PCB z zewnętrznymi pull-upami i filtracją na module lub PCB. Przed użyciem `VERY_LONG` przez menu dopracować wspólny gesture manager tak, aby nie wykonywał wcześniej `LONG`.
 - [POST-STABLE] Dodać runtime audio activation; nowe driver/backendy włączać tylko na PCB z potwierdzonymi capabilities.
-- [POST-STABLE] Dodać konfigurację sprzętu w WWW na podstawie `RuntimeHardwareConfig`: wybór display, wejścia EC11/Buttons3 i audio filtrowany przez `HardwareCapabilities`, kontrolowany zapis i restart tam, gdzie zmiana wymaga restartu. Później rozważyć osobne installed/enabled dla modułów opcjonalnych. Jeden profil PCB ma dostarczać jeden BIN; wybory użytkownika nie tworzą nowych env.
+- [POST-STABLE] Po dodaniu runtime audio activation rozszerzyć istniejącą sekcję `SPRZĘT` w WWW o wybór audio filtrowany przez `HardwareCapabilities`, z tym samym kontrolowanym zapisem i restartem. Później rozważyć osobne installed/enabled dla modułów opcjonalnych. Jeden profil PCB ma dostarczać jeden BIN; wybory użytkownika nie tworzą nowych env.
 - [POST-STABLE] Dodać backendy wyświetlaczy z macierzy rodzin oraz layout `OLED_128X32` dla SSD1306_128X32. PLAYER: góra nazwa stacji, dół belka info jak w OLED_128X64, bez artist/title/dużego zegara. STATIONS: góra wybrana stacja, dół `GRA` po lewej i `x/N` po prawej, bez nagłówka. VOL: góra duże 0–100 lub MUTE, dół IP, bez nagłówka.
 - [POST-STABLE] Wprowadzić jeden parametr `Jasność` 0–100% w WWW i menu lokalnym: TFT przez PWM podświetlenia, OLED przez contrast/current, 0% wygasza display.
 - [POST-STABLE] Przy zmianie runtime display z aktywnego backendu na `NONE` wygasić fizyczny ekran przed kontrolowanym restartem, aby soft-reset nie pozostawiał ostatniej ramki; cold boot i runtime `NONE` już spełniają kontrakt opcjonalnego display.

@@ -7,6 +7,7 @@
 #include "source_manager.h"
 #include "bt_link.h"
 #include "../hardware/hardware_descriptor.h"
+#include "../hardware/runtime_hardware_web.h"
 #if defined(CONFIG_IDF_TARGET_ESP32S3) && VOXONE_HAS_BT && VOXONE_PIN_MAP_COMPLETE
 #define VOXONE_BT_UPDATE_UPLOAD 1
 #include "bt_firmware_staging.h"
@@ -126,6 +127,8 @@ void handleStationsImportUpload(AsyncWebServerRequest *request, String filename,
                                 size_t index, uint8_t *data, size_t len, bool final);
 void handleMqttConfigRead(AsyncWebServerRequest *request);
 void handleMqttConfigSave(AsyncWebServerRequest *request);
+void handleHardwareConfigRead(AsyncWebServerRequest *request);
+void handleHardwareConfigSave(AsyncWebServerRequest *request);
 void handleTimeStatus(AsyncWebServerRequest *request);
 void handleTimeSync(AsyncWebServerRequest *request);
 void handleIndex(AsyncWebServerRequest * request);
@@ -548,6 +551,8 @@ bool NetServer::begin(bool quiet) {
   webserver.on("/api/stations/metadata", HTTP_POST, handleStationMetadata);
   webserver.on("/api/mqtt", HTTP_GET, handleMqttConfigRead);
   webserver.on("/api/mqtt", HTTP_POST, handleMqttConfigSave);
+  webserver.on("/api/hardware", HTTP_GET, handleHardwareConfigRead);
+  webserver.on("/api/hardware", HTTP_POST, handleHardwareConfigSave);
   webserver.on("/api/time", HTTP_GET, handleTimeStatus);
   webserver.on("/api/time/sync", HTTP_POST, handleTimeSync);
 #if VOXONE_BT_UPDATE_UPLOAD
@@ -1122,6 +1127,81 @@ static bool deviceApiAuthorized(AsyncWebServerRequest* request) {
   }
 #endif
   return true;
+}
+
+void handleHardwareConfigRead(AsyncWebServerRequest* request) {
+  if (!deviceApiAuthorized(request)) return;
+  std::unique_ptr<char[]> body(new (std::nothrow)
+      char[voxone::hardware::kRuntimeHardwareWebJsonCapacity]);
+  if (!body) {
+    stationsReply(request, 500, R"({"error":"hardware_config_unavailable"})");
+    return;
+  }
+  if (!voxone::hardware::formatRuntimeHardwareWebJson(
+          body.get(), voxone::hardware::kRuntimeHardwareWebJsonCapacity,
+          voxone::hardware::currentHardware(),
+          voxone::hardware::runtimeHardwareConfig())) {
+    stationsReply(request, 500, R"({"error":"hardware_config_unavailable"})");
+    return;
+  }
+  stationsReply(request, 200, body.get());
+}
+
+void handleHardwareConfigSave(AsyncWebServerRequest* request) {
+  if (!deviceApiAuthorized(request)) return;
+  if (systemRestartPending()) {
+    stationsReply(request, 409, R"({"error":"reboot_pending"})");
+    return;
+  }
+  if (!request->hasParam("display", true) ||
+      !request->hasParam("input", true)) {
+    stationsReply(request, 400, R"({"error":"missing_field"})");
+    return;
+  }
+  const String display = request->getParam("display", true)->value();
+  const String input = request->getParam("input", true)->value();
+  if (!display.length() || display.length() > 31 || !input.length() ||
+      input.length() > 15) {
+    stationsReply(request, 400, R"({"error":"invalid_value"})");
+    return;
+  }
+
+  const auto& current = voxone::hardware::runtimeHardwareConfig();
+  voxone::hardware::RuntimeHardwareConfig requested = current;
+  const auto validation = voxone::hardware::makeRuntimeHardwareWebCandidate(
+      current, voxone::hardware::hardwareCapabilities(), display.c_str(),
+      input.c_str(), requested);
+  if (validation == voxone::hardware::RuntimeHardwareValidation::Invalid) {
+    stationsReply(request, 400, R"({"error":"invalid_value"})");
+    return;
+  }
+  if (validation == voxone::hardware::RuntimeHardwareValidation::Unsupported) {
+    stationsReply(request, 422, R"({"error":"unsupported_hardware"})");
+    return;
+  }
+
+  const auto saved = voxone::hardware::saveRuntimeHardwareConfig(requested);
+  if (saved == voxone::hardware::RuntimeHardwareSaveStatus::Invalid) {
+    stationsReply(request, 400, R"({"error":"invalid_value"})");
+    return;
+  }
+  if (saved == voxone::hardware::RuntimeHardwareSaveStatus::Unsupported) {
+    stationsReply(request, 422, R"({"error":"unsupported_hardware"})");
+    return;
+  }
+  if (saved == voxone::hardware::RuntimeHardwareSaveStatus::StorageError) {
+    stationsReply(request, 500, R"({"error":"storage_failed"})");
+    return;
+  }
+
+  char body[192];
+  if (!voxone::hardware::formatRuntimeHardwareWebSaveJson(
+          body, sizeof(body), requested,
+          saved == voxone::hardware::RuntimeHardwareSaveStatus::Saved)) {
+    stationsReply(request, 500, R"({"error":"hardware_response_failed"})");
+    return;
+  }
+  stationsReply(request, 200, body);
 }
 
 static void mqttApiError(AsyncWebServerRequest* request, int code, const char* error) {

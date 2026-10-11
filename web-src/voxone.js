@@ -1,7 +1,7 @@
 (() => {
   "use strict";
 
-  const tabs = ["status", "stations", "audio", "dsp", "settings", "system", "update"];
+  const tabs = ["status", "stations", "audio", "dsp", "settings", "hardware", "system", "update"];
   const updateImages = {
     firmware: {
       file: document.getElementById("update-firmware-file"),
@@ -137,12 +137,29 @@
   const haYaml = document.getElementById("ha-yaml");
   const haCopy = document.getElementById("ha-copy");
   const haCopyStatus = document.getElementById("ha-copy-status");
+  const hardwareForm = document.getElementById("hardware-form");
+  const hardwareDisplay = document.getElementById("hardware-display");
+  const hardwareInput = document.getElementById("hardware-input");
+  const hardwareSave = document.getElementById("hardware-save");
+  const hardwareSaveRestart = document.getElementById("hardware-save-restart");
+  const hardwareFeedback = document.getElementById("hardware-feedback");
+  const hardwareDirtyBadge = document.getElementById("hardware-dirty-badge");
+  const hardwareRoadmapLists = {
+    displays: document.getElementById("hardware-display-roadmap"),
+    inputs: document.getElementById("hardware-input-roadmap"),
+    audio: document.getElementById("hardware-audio-roadmap"),
+    modules: document.getElementById("hardware-module-roadmap")
+  };
   let mqttConfigLoaded = false;
   let mqttPasswordSet = false;
   let mqttEffectiveRootValue = "";
   let mqttSaving = false;
   let rtcSyncing = false;
   let rtcStatusLoading = false;
+  let hardwareConfigLoaded = false;
+  let hardwareSaving = false;
+  let hardwareRestartRequired = false;
+  let savedHardwareConfig = null;
   const state = {
     connection: "connecting",
     webStatus: null,
@@ -585,6 +602,7 @@
     if (selected === "stations" && state.stationsStatus === "idle") loadStations();
     if (selected === "settings" && !mqttConfigLoaded) loadMqttConfig();
     if (selected === "settings") loadTimeStatus();
+    if (selected === "hardware" && !hardwareConfigLoaded) loadHardwareConfig();
     if (selected === "update") send("getwebstatus", 1);
     if (selected === "dsp") {
       if (!dspTabActive) advancedAudio.enter();
@@ -763,6 +781,167 @@
       mqttSaving = false;
       updateMqttFormState();
     }
+  }
+
+  function setHardwareFeedback(message, isError = false) {
+    hardwareFeedback.textContent = message;
+    hardwareFeedback.dataset.kind = isError ? "error" : "status";
+  }
+
+  function hardwareDirty() {
+    return !!savedHardwareConfig &&
+      (hardwareDisplay.value !== savedHardwareConfig.display ||
+       hardwareInput.value !== savedHardwareConfig.input);
+  }
+
+  function renderHardwareFormState() {
+    const dirty = hardwareDirty();
+    hardwareDirtyBadge.hidden = !dirty;
+    hardwareDisplay.disabled = !hardwareConfigLoaded || hardwareSaving;
+    hardwareInput.disabled = !hardwareConfigLoaded || hardwareSaving;
+    hardwareSave.disabled = hardwareSaving || !dirty;
+    hardwareSaveRestart.disabled = hardwareSaving || !hardwareConfigLoaded ||
+      (!dirty && !hardwareRestartRequired);
+  }
+
+  function replaceHardwareOptions(select, options, selected) {
+    select.replaceChildren();
+    for (const item of options) {
+      const option = document.createElement("option");
+      option.value = item.value;
+      option.textContent = item.label + (item.status === "untested" ? " — DO TESTU" : "");
+      select.append(option);
+    }
+    select.value = selected;
+  }
+
+  function renderHardwareRoadmap(list, items) {
+    list.replaceChildren();
+    for (const item of items) {
+      const row = document.createElement("li");
+      const name = document.createElement("span");
+      name.className = "hardware-roadmap-name";
+      name.textContent = item.label;
+      if (item.current) {
+        const current = document.createElement("span");
+        current.className = "hardware-roadmap-current";
+        current.textContent = "AKTUALNE";
+        name.append(current);
+      }
+      const status = document.createElement("span");
+      status.className = "hardware-roadmap-status";
+      status.dataset.roadmapStatus = item.status;
+      status.textContent = item.statusLabel;
+      row.append(name, status);
+      if (item.note) {
+        const note = document.createElement("span");
+        note.className = "hardware-roadmap-note";
+        note.textContent = item.note;
+        row.append(note);
+      }
+      list.append(row);
+    }
+  }
+
+  async function loadHardwareConfig() {
+    try {
+      const response = await fetch("/api/hardware", { cache: "no-store" });
+      const snapshot = await response.json();
+      if (!response.ok || !snapshot.config || !Array.isArray(snapshot.supportedDisplays) ||
+          !Array.isArray(snapshot.supportedInputs) || !snapshot.roadmap ||
+          Object.keys(hardwareRoadmapLists).some(key => !Array.isArray(snapshot.roadmap[key])))
+        throw new Error(snapshot.error || ("HTTP " + response.status));
+      replaceHardwareOptions(hardwareDisplay, snapshot.supportedDisplays, snapshot.config.display);
+      replaceHardwareOptions(hardwareInput, snapshot.supportedInputs, snapshot.config.input);
+      if (!hardwareDisplay.value || !hardwareInput.value)
+        throw new Error("Urządzenie zwróciło niezgodną konfigurację");
+      savedHardwareConfig = {
+        display: snapshot.config.display,
+        input: snapshot.config.input
+      };
+      text("hardware-family", snapshot.family || "—");
+      text("hardware-mcu", snapshot.mcu || "—");
+      for (const [key, list] of Object.entries(hardwareRoadmapLists))
+        renderHardwareRoadmap(list, snapshot.roadmap[key]);
+      hardwareConfigLoaded = true;
+      hardwareRestartRequired = snapshot.restartRequired === true;
+      setHardwareFeedback("");
+    } catch (error) {
+      hardwareConfigLoaded = false;
+      savedHardwareConfig = null;
+      setHardwareFeedback("Nie udało się pobrać konfiguracji sprzętu: " +
+        (error.message || "błąd połączenia"), true);
+    }
+    renderHardwareFormState();
+  }
+
+  function hardwareSaveError(error) {
+    if (error === "unsupported_hardware")
+      return "Wybrana konfiguracja nie jest obsługiwana przez tę rodzinę sprzętu.";
+    if (error === "invalid_value" || error === "missing_field")
+      return "Urządzenie odrzuciło nieprawidłową konfigurację sprzętu.";
+    if (error === "storage_failed")
+      return "Nie udało się zapisać konfiguracji w pamięci urządzenia.";
+    if (error === "reboot_pending") return "Restart urządzenia jest już w toku.";
+    return error || "błąd połączenia";
+  }
+
+  async function restartAfterHardwareSave() {
+    hardwareSaving = true;
+    renderHardwareFormState();
+    setHardwareFeedback("Restartowanie urządzenia...");
+    if (!send("reboot", 1)) {
+      hardwareSaving = false;
+      renderHardwareFormState();
+      setHardwareFeedback("Konfiguracja została zapisana, ale brak połączenia potrzebnego do restartu.", true);
+      return;
+    }
+    await waitForDeviceRestart({
+      delay: 1200,
+      onReturn: () => location.replace("/voxone.html?restarted=" + Date.now() + "#hardware"),
+      onTimeout: () => {
+        hardwareSaving = false;
+        renderHardwareFormState();
+        setHardwareFeedback("Konfiguracja została zapisana, ale nie udało się ponownie połączyć z VoxOne.", true);
+      }
+    });
+  }
+
+  async function saveHardwareConfig(restart) {
+    if (hardwareSaving || !hardwareConfigLoaded) return;
+    if (!hardwareDirty()) {
+      if (restart && hardwareRestartRequired) await restartAfterHardwareSave();
+      return;
+    }
+    hardwareSaving = true;
+    renderHardwareFormState();
+    setHardwareFeedback("Zapisywanie konfiguracji sprzętu…");
+    const body = new URLSearchParams();
+    body.set("display", hardwareDisplay.value);
+    body.set("input", hardwareInput.value);
+    try {
+      const response = await fetch("/api/hardware", {
+        method: "POST",
+        headers: { "Content-Type": "application/x-www-form-urlencoded;charset=UTF-8" },
+        body: body.toString(), cache: "no-store"
+      });
+      const result = await response.json();
+      if (!response.ok || result.ok !== true || result.restartRequired !== true || !result.config)
+        throw new Error(hardwareSaveError(result.error || ("HTTP " + response.status)));
+      savedHardwareConfig = { display: result.config.display, input: result.config.input };
+      hardwareDisplay.value = result.config.display;
+      hardwareInput.value = result.config.input;
+      hardwareRestartRequired = true;
+      setHardwareFeedback("Konfiguracja sprzętu została zapisana. Uruchom ponownie VoxOne, aby zastosować zmiany.");
+    } catch (error) {
+      setHardwareFeedback("Nie zapisano konfiguracji sprzętu: " +
+        (error.message || "błąd połączenia"), true);
+      return;
+    } finally {
+      hardwareSaving = false;
+      renderHardwareFormState();
+    }
+    if (restart) await restartAfterHardwareSave();
   }
 
   async function copyHaYaml() {
@@ -2217,6 +2396,19 @@
   rebootCancel.addEventListener("click", () => rebootDialog.close());
   rebootConfirm.addEventListener("click", rebootDevice);
   mqttForm.addEventListener("submit", saveMqttConfig);
+  hardwareForm.addEventListener("submit", event => {
+    event.preventDefault();
+    saveHardwareConfig(false);
+  });
+  hardwareSaveRestart.addEventListener("click", () => saveHardwareConfig(true));
+  hardwareDisplay.addEventListener("change", () => {
+    setHardwareFeedback("");
+    renderHardwareFormState();
+  });
+  hardwareInput.addEventListener("change", () => {
+    setHardwareFeedback("");
+    renderHardwareFormState();
+  });
   mqttEnabled.addEventListener("change", updateMqttFormState);
   mqttPassword.addEventListener("input", () => {
     if (mqttPassword.value) mqttClearPassword.checked = false;

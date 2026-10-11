@@ -76,10 +76,66 @@ class MockUpdateRequest {
 }
 window.XMLHttpRequest = MockUpdateRequest;
 window.btUpdateResponses = [];
+window.hardwareRequests = [];
+window.hardwarePostResponses = [];
+window.hardwareSnapshot = {
+  family:'L0', mcu:'ESP32-S3', restartRequired:false,
+  config:{display:'st7796s_480x320', input:'ec11'},
+  supportedDisplays:[
+    {value:'none',label:'Brak',status:'supported',statusLabel:'DOSTĘPNE'},
+    {value:'st7796s_480x320',label:'ST7796S_480X320',status:'untested',statusLabel:'DO TESTU'}
+  ],
+  supportedInputs:[
+    {value:'none',label:'Brak',status:'supported',statusLabel:'DOSTĘPNE'},
+    {value:'ec11',label:'EC11',status:'untested',statusLabel:'DO TESTU'},
+    {value:'buttons3',label:'BUTTONS3',status:'untested',statusLabel:'DO TESTU'}
+  ],
+  roadmap:{
+    displays:[
+      {value:'none',label:'Brak',note:'',status:'supported',statusLabel:'DOSTĘPNE',selectable:true,current:false},
+      {value:'ssd1306_128x64',label:'SSD1306_128X64',note:'',status:'planned',statusLabel:'PLANOWANE',selectable:false,current:false},
+      {value:'ssd1309_128x64',label:'SSD1309_128X64',note:'',status:'planned',statusLabel:'PLANOWANE',selectable:false,current:false},
+      {value:'ch1116_128x64',label:'CH1116_128X64',note:'',status:'planned',statusLabel:'PLANOWANE',selectable:false,current:false},
+      {value:'sh1106_128x64',label:'SH1106_128X64',note:'',status:'planned',statusLabel:'PLANOWANE',selectable:false,current:false},
+      {value:'st7290_128x64_tbd',label:'ST7290_128X64 (?)',note:'Kontroler do potwierdzenia',status:'planned',statusLabel:'PLANOWANE',selectable:false,current:false},
+      {value:'st7789v_320x240',label:'ST7789V_320X240',note:'',status:'planned',statusLabel:'PLANOWANE',selectable:false,current:false},
+      {value:'ssd1322_256x64',label:'SSD1322_256X64',note:'',status:'planned',statusLabel:'PLANOWANE',selectable:false,current:false},
+      {value:'st7796s_480x320',label:'ST7796S_480X320',note:'',status:'untested',statusLabel:'DO TESTU',selectable:true,current:true},
+      {value:'gc9a01_240x240',label:'GC9A01_240X240',note:'',status:'planned',statusLabel:'PLANOWANE',selectable:false,current:false}
+    ],
+    inputs:[
+      {value:'none',label:'Brak',note:'',status:'supported',statusLabel:'DOSTĘPNE',selectable:true,current:false},
+      {value:'ec11',label:'EC11',note:'',status:'untested',statusLabel:'DO TESTU',selectable:true,current:true},
+      {value:'buttons3',label:'BUTTONS3',note:'Brak fizycznego PASS',status:'untested',statusLabel:'DO TESTU',selectable:true,current:false}
+    ],
+    audio:[
+      {value:'pcm5102a',label:'PCM5102A',note:'',status:'untested',statusLabel:'DO TESTU',selectable:false,current:true},
+      {value:'dspmini',label:'DSPmini',note:'',status:'planned',statusLabel:'PLANOWANE',selectable:false,current:false}
+    ],
+    modules:[
+      {value:'voxonebt',label:'VoxOneBT',note:'',status:'untested',statusLabel:'DO TESTU',selectable:false,current:false},
+      {value:'ds3231',label:'DS3231',note:'',status:'untested',statusLabel:'DO TESTU',selectable:false,current:false},
+      {value:'w5500',label:'W5500',note:'',status:'planned',statusLabel:'PLANOWANE',selectable:false,current:false}
+    ]
+  }
+};
 const originalFetch = window.fetch.bind(window);
-window.fetch = (url, options) => url === '/api/bt/update'
-  ? Promise.resolve({ok:true, json:() => Promise.resolve(window.btUpdateResponses.shift() || {state:0})})
-  : originalFetch(url, options);
+window.fetch = (url, options = {}) => {
+  if (url === '/api/bt/update')
+    return Promise.resolve({ok:true, json:() => Promise.resolve(window.btUpdateResponses.shift() || {state:0})});
+  if (url === '/api/hardware') {
+    if ((options.method || 'GET') === 'GET')
+      return Promise.resolve({ok:true, status:200, json:() => Promise.resolve(window.hardwareSnapshot)});
+    const request = Object.fromEntries(new URLSearchParams(options.body || ''));
+    window.hardwareRequests.push(request);
+    const prepared = window.hardwarePostResponses.shift();
+    if (prepared) return Promise.resolve(prepared);
+    const result = {ok:true, changed:true, restartRequired:true,
+      config:{display:request.display,input:request.input}};
+    return Promise.resolve({ok:true,status:200,json:() => Promise.resolve(result)});
+  }
+  return originalFetch(url, options);
+};
 const originalSetInterval = window.setInterval.bind(window);
 window.setInterval = (handler, delay, ...args) => {
   if (delay === 1500) { window.btPollTest = handler; return 1; }
@@ -217,6 +273,60 @@ setTimeout(async () => {
     check(get('network-profiles').textContent.includes('kolejność prób: 2'), 'profile order');
     check(!networkCard.querySelector('input,button,select,textarea'), 'network card has no unsupported edit controls');
     check(!get('network-profiles').textContent.includes('secret'), 'no password value rendered');
+    location.hash = '#hardware';
+    window.dispatchEvent(new Event('hashchange'));
+    await new Promise(resolve => setTimeout(resolve, 0));
+    const hardwareDisplay = get('hardware-display');
+    const hardwareInput = get('hardware-input');
+    check(!get('hardware').hidden, 'SPRZĘT tab visible');
+    check(get('hardware-family').textContent === 'L0' && get('hardware-mcu').textContent === 'ESP32-S3',
+      'hardware family from descriptor API');
+    check([...hardwareDisplay.options].map(option => option.value).join(',') === 'none,st7796s_480x320',
+      'display options follow capabilities');
+    check([...hardwareInput.options].map(option => option.value).join(',') === 'none,ec11,buttons3',
+      'input options follow capabilities');
+    check(hardwareDisplay.querySelector('option[value="ch1116_128x64"]') === null,
+      'planned display is not saveable');
+    check(hardwareInput.querySelector('option[value="buttons3"]').textContent.includes('DO TESTU'),
+      'BUTTONS3 remains selectable and is marked untested');
+    check(get('hardware-display-roadmap').textContent.includes('CH1116_128X64') &&
+      get('hardware-display-roadmap').textContent.includes('PLANOWANE'),
+      'planned display visible with text status');
+    check(get('hardware-audio-roadmap').textContent.includes('PCM5102A') &&
+      get('hardware-audio-roadmap').textContent.includes('DSPmini') &&
+      get('hardware-audio-roadmap').textContent.includes('PLANOWANE'),
+      'audio roadmap is informational');
+    check(get('hardware-module-roadmap').textContent.includes('VoxOneBT') &&
+      get('hardware-module-roadmap').textContent.includes('W5500') &&
+      get('hardware-module-roadmap').textContent.includes('PLANOWANE'),
+      'module roadmap is informational');
+    check(!get('hardware-audio-roadmap').querySelector('input,button,select,textarea') &&
+      !get('hardware-module-roadmap').querySelector('input,button,select,textarea'),
+      'audio and module roadmaps do not expose configuration controls');
+    check(hardwareDisplay.value === 'st7796s_480x320' && hardwareInput.value === 'ec11',
+      'current hardware selections selected');
+    check(get('hardware-save').disabled && get('hardware-dirty-badge').hidden,
+      'hardware form initially clean');
+    hardwareDisplay.value = 'none';
+    hardwareDisplay.dispatchEvent(new Event('change'));
+    check(!get('hardware-save').disabled && !get('hardware-dirty-badge').hidden,
+      'hardware local dirty state');
+    get('hardware-save').click();
+    await new Promise(resolve => setTimeout(resolve, 0));
+    check(hardwareRequests.at(-1).display === 'none' && hardwareRequests.at(-1).input === 'ec11',
+      'hardware save request');
+    check(Object.keys(hardwareRequests.at(-1)).sort().join(',') === 'display,input',
+      'audio and module roadmap never enter save payload');
+    check(get('hardware-feedback').textContent.includes('Uruchom ponownie VoxOne') &&
+      !get('hardware-save-restart').disabled, 'restart-required message');
+    check(!btTestSocket.sent.some(item => item === 'reboot=1'), 'plain hardware save does not restart or activate live');
+    hardwareInput.value = 'none';
+    hardwareInput.dispatchEvent(new Event('change'));
+    hardwarePostResponses.push({ok:false,status:422,json:() => Promise.resolve({error:'unsupported_hardware'})});
+    get('hardware-save').click();
+    await new Promise(resolve => setTimeout(resolve, 0));
+    check(get('hardware-feedback').dataset.kind === 'error' &&
+      get('hardware-feedback').textContent.includes('nie jest obsługiwana'), 'hardware validation error shown');
     check(get('update-bt-online').textContent === 'TAK', 'online, phone disconnected');
     check(get('update-bt-firmware').textContent === '0.6.1-dev', 'firmware');
     check(get('update-bt-protocol').textContent === '2', 'protocol');

@@ -97,6 +97,7 @@ $nativeSources=@{
  mqtt_config_native=@('src/core/volume_map.cpp')
  runtime_display_activation_native=@('src/displays/display_backend_selection.cpp','src/hardware/runtime_hardware_config.cpp')
  runtime_hardware_config_native=@('src/hardware/runtime_hardware_config.cpp')
+ runtime_hardware_web_native=@('src/hardware/runtime_hardware_config.cpp','src/hardware/runtime_hardware_web.cpp')
  station_directory_native=@('src/core/station_directory_format.cpp')
  volume_limits_native=@('src/core/volume_map.cpp')
 }
@@ -107,7 +108,7 @@ Invoke-Step 'Native tests' {
   $name=$test.BaseName
   $sources=@($test.FullName)
   if($nativeSources.ContainsKey($name)) { $sources+=@($nativeSources[$name] | ForEach-Object { Join-Path $root $_ }) }
-  $variants=if($name -eq 'hardware_descriptor_native' -or $name -eq 'runtime_hardware_config_native' -or $name -eq 'runtime_display_activation_native') { @('L0','M0','S0','DIN0','W0') } elseif($name -eq 'build_identity_native') { @('','L0','M0','S0','DIN0','W0','CLEAN','DIRTY') } else { @('') }
+  $variants=if($name -eq 'hardware_descriptor_native' -or $name -eq 'runtime_hardware_config_native' -or $name -eq 'runtime_hardware_web_native' -or $name -eq 'runtime_display_activation_native') { @('L0','M0','S0','DIN0','W0') } elseif($name -eq 'build_identity_native') { @('','L0','M0','S0','DIN0','W0','CLEAN','DIRTY') } else { @('') }
   foreach($variant in $variants) {
    $label=if($variant) { "$name-$variant" } else { $name }
    $exe=Join-Path $work ($label+$(if($onWindows) { '.exe' } else { '' }))
@@ -116,7 +117,7 @@ Invoke-Step 'Native tests' {
    if($variant) {
     if($variant -eq 'CLEAN' -or $variant -eq 'DIRTY') { $compileArgs+="-DBUILD_ID_TEST_$variant=1" }
     else { $compileArgs+="-DVOXONE_PROFILE_$variant=1" }
-    $sourcesForVariant=if($name -eq 'hardware_descriptor_native' -or $name -eq 'runtime_hardware_config_native' -or $name -eq 'runtime_display_activation_native') { $sources+@(Join-Path $root 'src/hardware/hardware_descriptor.cpp') } else { $sources }
+    $sourcesForVariant=if($name -eq 'hardware_descriptor_native' -or $name -eq 'runtime_hardware_config_native' -or $name -eq 'runtime_hardware_web_native' -or $name -eq 'runtime_display_activation_native') { $sources+@(Join-Path $root 'src/hardware/hardware_descriptor.cpp') } else { $sources }
    } else { $sourcesForVariant=$sources }
    $compileArgs+=@('-o',$exe)+$sourcesForVariant
    $oldPreference=$ErrorActionPreference

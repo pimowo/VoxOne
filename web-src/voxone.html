@@ -28,6 +28,7 @@
       <a href="#audio" data-tab="audio">Audio</a>
       <a href="#dsp" data-tab="dsp">DSP</a>
       <a href="#settings" data-tab="settings">Ustawienia</a>
+      <a href="#hardware" data-tab="hardware">Sprzęt</a>
       <a href="#system" data-tab="system">System</a>
       <a href="#update" data-tab="update">Aktualizacja</a>
     </nav>
@@ -224,6 +225,53 @@
             <pre id="ha-yaml" class="ha-yaml" aria-live="polite">Ładowanie konfiguracji…</pre>
             <button id="ha-copy" type="button" disabled>Kopiuj</button><span id="ha-copy-status" class="mqtt-help" role="status" aria-live="polite"></span>
             <p class="hint">Jeżeli masz już sekcję media_player: w configuration.yaml, dopisz tylko wpis zaczynający się od - platform: yoradio.</p>
+          </article>
+        </div>
+      </section>
+
+      <section id="hardware" data-panel aria-labelledby="hardware-title" hidden>
+        <div class="section-heading"><div><p class="eyebrow">KONFIGURACJA</p><h2 id="hardware-title">Sprzęt</h2></div><span id="hardware-dirty-badge" class="badge" hidden>Niezapisane zmiany</span></div>
+        <div class="hardware-legend" aria-label="Legenda statusów sprzętu">
+          <span data-roadmap-status="supported">DOSTĘPNE</span>
+          <span data-roadmap-status="untested">DO TESTU</span>
+          <span data-roadmap-status="planned">PLANOWANE</span>
+        </div>
+        <div class="grid hardware-grid">
+          <article class="card">
+            <h3>Urządzenie</h3>
+            <dl class="facts">
+              <div><dt>Rodzina</dt><dd id="hardware-family">—</dd></div>
+              <div><dt>MCU</dt><dd id="hardware-mcu">—</dd></div>
+            </dl>
+          </article>
+          <article class="card hardware-config-card">
+            <h3>Konfiguracja lokalna</h3>
+            <form id="hardware-form" novalidate>
+              <label for="hardware-display">Display<span>Typ wyświetlacza</span></label>
+              <select id="hardware-display" class="setting-select" disabled></select>
+              <p class="hint">Brak oznacza, że wyświetlacz nie jest zainstalowany.</p>
+              <ul id="hardware-display-roadmap" class="hardware-roadmap-list" aria-label="Roadmapa wyświetlaczy"></ul>
+              <label for="hardware-input">Sterowanie lokalne<span>Typ wejścia</span></label>
+              <select id="hardware-input" class="setting-select" disabled></select>
+              <p class="hint">Brak oznacza, że lokalne sterowanie nie jest zainstalowane.</p>
+              <ul id="hardware-input-roadmap" class="hardware-roadmap-list" aria-label="Roadmapa sterowania lokalnego"></ul>
+              <p class="hardware-restart-note">Zmiany sprzętowe wymagają ponownego uruchomienia.</p>
+              <p id="hardware-feedback" class="hardware-feedback" role="status" aria-live="polite"></p>
+              <div class="hardware-actions">
+                <button id="hardware-save" type="submit" disabled>ZAPISZ</button>
+                <button id="hardware-save-restart" type="button" disabled>ZAPISZ I URUCHOM PONOWNIE</button>
+              </div>
+            </form>
+          </article>
+          <article class="card">
+            <h3>Audio</h3>
+            <p class="hint">Informacyjna roadmapa. Audio nie jest konfigurowane na tej stronie.</p>
+            <ul id="hardware-audio-roadmap" class="hardware-roadmap-list" aria-label="Roadmapa audio"></ul>
+          </article>
+          <article class="card">
+            <h3>Moduły i rozszerzenia</h3>
+            <p class="hint">Informacyjna roadmapa bez ustawień runtime.</p>
+            <ul id="hardware-module-roadmap" class="hardware-roadmap-list" aria-label="Roadmapa modułów"></ul>
           </article>
         </div>
       </section>
