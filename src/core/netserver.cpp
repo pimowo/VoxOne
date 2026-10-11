@@ -32,6 +32,9 @@
 #include <climits>
 #include <cstdlib>
 #include "config.h"
+#include "config_backup_web.h"
+#include "config_restore_adapter.h"
+#include "version.h"
 #if defined(VOXONE_PROFILE_L0)
 #include "dsp_transport_runtime.h"
 #endif
@@ -129,11 +132,16 @@ void handleMqttConfigRead(AsyncWebServerRequest *request);
 void handleMqttConfigSave(AsyncWebServerRequest *request);
 void handleHardwareConfigRead(AsyncWebServerRequest *request);
 void handleHardwareConfigSave(AsyncWebServerRequest *request);
+void handleConfigBackup(AsyncWebServerRequest *request);
+void handleConfigRestore(AsyncWebServerRequest *request);
+void handleConfigRestoreBody(AsyncWebServerRequest *request, uint8_t *data,
+                             size_t len, size_t index, size_t total);
 void handleTimeStatus(AsyncWebServerRequest *request);
 void handleTimeSync(AsyncWebServerRequest *request);
 void handleIndex(AsyncWebServerRequest * request);
 void handleNotFound(AsyncWebServerRequest * request);
 void onWsEvent(AsyncWebSocket *server, AsyncWebSocketClient *client, AwsEventType type, void *arg, uint8_t *data, size_t len);
+static bool deviceApiAuthorized(AsyncWebServerRequest* request);
 
 uint32_t webUpdateRebootAt = 0;
 //Ticker mqttplaylistticker;
@@ -553,6 +561,12 @@ bool NetServer::begin(bool quiet) {
   webserver.on("/api/mqtt", HTTP_POST, handleMqttConfigSave);
   webserver.on("/api/hardware", HTTP_GET, handleHardwareConfigRead);
   webserver.on("/api/hardware", HTTP_POST, handleHardwareConfigSave);
+  webserver.on(voxone::config_backup_web::kBackupRoute, HTTP_GET,
+               handleConfigBackup);
+  webserver.on(voxone::config_backup_web::kRestoreRoute, HTTP_POST,
+               handleConfigRestore,
+               [](AsyncWebServerRequest*, String, size_t, uint8_t*, size_t, bool) {},
+               handleConfigRestoreBody);
   webserver.on("/api/time", HTTP_GET, handleTimeStatus);
   webserver.on("/api/time/sync", HTTP_POST, handleTimeSync);
 #if VOXONE_BT_UPDATE_UPLOAD
@@ -1127,6 +1141,151 @@ static bool deviceApiAuthorized(AsyncWebServerRequest* request) {
   }
 #endif
   return true;
+}
+
+namespace {
+struct ConfigRestoreUploadSession {
+  voxone::config_backup_web::UploadState state;
+  voxone::config_restore::ProductionRestoreUpload* upload = nullptr;
+  int status = 0;
+  const char* error = nullptr;
+};
+
+AsyncWebServerRequest* activeConfigRestoreUpload = nullptr;
+
+void finishConfigRestoreUpload(AsyncWebServerRequest* request) {
+  auto* session = static_cast<ConfigRestoreUploadSession*>(request->_tempObject);
+  if (session) {
+    delete session->upload;
+    delete session;
+    request->_tempObject = nullptr;
+  }
+  if (activeConfigRestoreUpload == request) activeConfigRestoreUpload = nullptr;
+}
+
+void configApiReply(AsyncWebServerRequest* request, int status,
+                    const String& body) {
+  AsyncWebServerResponse* response = request->beginResponse(
+      status, "application/json; charset=utf-8", body);
+  response->addHeader("Cache-Control", voxone::config_backup_web::kCacheControl);
+  request->send(response);
+}
+}  // namespace
+
+void handleConfigBackup(AsyncWebServerRequest* request) {
+  if (!deviceApiAuthorized(request)) return;
+  std::shared_ptr<voxone::config_restore::ProductionBackupStream> stream =
+      std::make_shared<voxone::config_restore::ProductionBackupStream>();
+  voxone::config_backup::Status status = voxone::config_backup::Status::StorageReadFailed;
+  if (!stream->begin(status) || !stream->size() ||
+      stream->size() > voxone::config_backup_web::kMaxUploadBytes) {
+    configApiReply(request, 500, R"({"error":"backup_failed"})");
+    return;
+  }
+  const std::size_t size = stream->size();
+  AsyncWebServerResponse* response = request->beginResponse(
+      voxone::config_backup_web::kContentType, size,
+      [stream](uint8_t* output, size_t capacity, size_t index) {
+        return stream->read(index, output, capacity);
+      });
+  response->addHeader("Content-Disposition",
+      "attachment; filename=\"VoxOne-" VOXONE_VERSION "-backup.vxcf\"");
+  response->addHeader("Cache-Control", voxone::config_backup_web::kCacheControl);
+  request->send(response);
+}
+
+void handleConfigRestoreBody(AsyncWebServerRequest* request, uint8_t* data,
+                             size_t len, size_t index, size_t total) {
+#if defined(HTTP_USER) && defined(HTTP_PASS)
+  if (network.status == CONNECTED &&
+      !request->authenticate(HTTP_USER, HTTP_PASS)) return;
+#endif
+  auto* session = static_cast<ConfigRestoreUploadSession*>(request->_tempObject);
+  if (!session) {
+    session = new (std::nothrow) ConfigRestoreUploadSession;
+    if (!session) return;
+    request->_tempObject = session;
+    request->onDisconnect([request]() { finishConfigRestoreUpload(request); });
+    if (activeConfigRestoreUpload && activeConfigRestoreUpload != request) {
+      session->status = 409;
+      session->error = "restore_busy";
+      return;
+    }
+    activeConfigRestoreUpload = request;
+  }
+  if (session->error) return;
+  const auto decision = session->state.append(index, len, total);
+  if (decision == voxone::config_backup_web::UploadDecision::InvalidSize) {
+    session->status = total > voxone::config_backup_web::kMaxUploadBytes ? 413 : 400;
+    session->error = total > voxone::config_backup_web::kMaxUploadBytes
+                         ? "backup_too_large" : "invalid_file";
+    return;
+  }
+  if (decision == voxone::config_backup_web::UploadDecision::InvalidOffset ||
+      decision == voxone::config_backup_web::UploadDecision::AlreadyComplete) {
+    session->status = 400;
+    session->error = "invalid_file";
+    return;
+  }
+  if (!session->upload) {
+    session->upload =
+        new (std::nothrow) voxone::config_restore::ProductionRestoreUpload;
+    if (!session->upload) {
+      session->status = 507;
+      session->error = "insufficient_memory";
+      return;
+    }
+    const auto status = session->upload->begin(total);
+    if (status != voxone::config_backup::Status::Ok) {
+      const auto mapped = voxone::config_backup_web::mapRestoreResult(
+          {status, false});
+      session->status = mapped.httpStatus;
+      session->error = mapped.error;
+      return;
+    }
+  }
+  const auto uploadStatus = session->upload->append(index, data, len);
+  if (uploadStatus != voxone::config_backup::Status::Ok) {
+    const auto mapped = voxone::config_backup_web::mapRestoreResult(
+        {uploadStatus, false});
+    session->status = mapped.httpStatus;
+    session->error = mapped.error;
+  }
+}
+
+void handleConfigRestore(AsyncWebServerRequest* request) {
+  if (!deviceApiAuthorized(request)) {
+    finishConfigRestoreUpload(request);
+    return;
+  }
+  auto* session = static_cast<ConfigRestoreUploadSession*>(request->_tempObject);
+  if (systemRestartPending()) {
+    configApiReply(request, 409, R"({"error":"reboot_pending"})");
+    finishConfigRestoreUpload(request);
+    return;
+  }
+  if (!session || session->error || !session->state.complete() ||
+      !session->upload || !session->upload->complete()) {
+    const int status = session && session->status ? session->status : 400;
+    const char* error = session && session->error ? session->error : "incomplete_upload";
+    configApiReply(request, status,
+                   String("{\"error\":\"") + error + "\"}");
+    finishConfigRestoreUpload(request);
+    return;
+  }
+
+  const auto restored = session->upload->finish();
+  finishConfigRestoreUpload(request);
+  const auto result = voxone::config_backup_web::mapRestoreResult(restored);
+  if (result.error) {
+    configApiReply(request, result.httpStatus,
+                   String("{\"error\":\"") + result.error + "\"}");
+    return;
+  }
+  configApiReply(request, 200,
+                 result.restartRequired
+                     ? R"({"ok":true,"restartRequired":true})"
+                     : R"({"ok":true,"restartRequired":false})");
 }
 
 void handleHardwareConfigRead(AsyncWebServerRequest* request) {

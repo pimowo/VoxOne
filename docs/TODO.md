@@ -108,7 +108,7 @@
 - [POST-STABLE] Ujednolicić później MUTE między WWW, LCD i HA.
 - [POST-STABLE] Rozszerzyć istniejący WebSocket runtime state o source-aware metadata i codec/format DLNA/AUX, sample rate oraz bitrate tam, gdzie mają znaczenie.
 - [POST-STABLE] Dokończyć edycję maksymalnie pięciu profili Wi-Fi: priority/last-known-good, nowe hasło, zachowanie lub wyczyszczenie hasła, walidacja, atomowy zapis i kontrolowany restart.
-- [POST-STABLE] Dodać konfigurację restartu, sleep/screensaver, auto standby, backup/restore config, playlist import/export, Radio Directory i recovery bez przywracania starego WWW.
+- [POST-STABLE] Dodać konfigurację restartu, sleep/screensaver, auto standby, playlist import/export, Radio Directory i recovery bez przywracania starego WWW. Backup/restore config ma software WWW/API baseline; realny download/restore/restart pozostaje w fizycznym teście persistence.
 - [DECISION] Rozstrzygnąć, czy lokalny WebSocket ma walidować żądany subprotocol zamiast bezwarunkowo go odsyłać; połączyć decyzję z audytem auth/CSRF.
 
 ## Local UI / LCD

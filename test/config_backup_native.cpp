@@ -165,6 +165,25 @@ struct FakeStorage : RestoreStorage {
   }
 };
 
+class TrackingReader : public ByteReader {
+ public:
+  explicit TrackingReader(Bytes bytes) : bytes_(bytes) {}
+  std::size_t size() const override { return bytes_.size; }
+  bool read(std::size_t offset, uint8_t* output,
+            std::size_t length) override {
+    if (length > largestRead_) largestRead_ = length;
+    if ((length && (!output || !bytes_.data)) || offset > bytes_.size ||
+        length > bytes_.size - offset) return false;
+    if (length) std::memcpy(output, bytes_.data + offset, length);
+    return true;
+  }
+  std::size_t largestRead() const { return largestRead_; }
+
+ private:
+  Bytes bytes_;
+  std::size_t largestRead_ = 0;
+};
+
 void assertDataEqual(const Data& expected, const Data& actual) {
   uint8_t left[kConfigV7SerializedSize];
   uint8_t right[kConfigV7SerializedSize];
@@ -199,6 +218,29 @@ int main() {
   assert(serialize(parsed, hardwareCapabilities(), second.data(), second.size(),
                    written) == Status::Ok);
   assert(bytes == second);
+
+  // Production download reads variable records directly into their final
+  // output offsets, so serialization must explicitly support that one-buffer path.
+  std::vector<uint8_t> inPlace(serializedSize(source));
+  uint8_t* variable = inPlace.data() + kBackupVariableOffset;
+  std::memcpy(variable, source.wifi.data, source.wifi.size);
+  std::memcpy(variable + source.wifi.size, source.stations.data,
+              source.stations.size);
+  Data inPlaceData = source;
+  inPlaceData.wifi = {variable, source.wifi.size};
+  inPlaceData.stations = {variable + source.wifi.size, source.stations.size};
+  assert(serialize(inPlaceData, hardwareCapabilities(), inPlace.data(),
+                   inPlace.size(), written) == Status::Ok);
+  assert(inPlace == bytes);
+
+  // File-backed validation reads bounded records instead of materializing
+  // either variable-length section in RAM.
+  TrackingReader wifiReader(source.wifi);
+  TrackingReader stationsReader(source.stations);
+  assert(validateExternal(source, hardwareCapabilities(), wifiReader,
+                          stationsReader) == Status::Ok);
+  assert(wifiReader.largestRead() <= 70);
+  assert(stationsReader.largestRead() <= 512);
 
   Data unchanged = source;
   unchanged.config.fields.volume = 9;

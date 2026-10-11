@@ -37,6 +37,7 @@ class FakeBackend : public Backend {
   int cutAt = -1;
   int operation = 0;
   int failAt = -1;
+  bool capacityAvailable = true;
 
   MarkerStatus readMarker(Phase& phase) override {
     if (!device_.marker) return MarkerStatus::None;
@@ -52,7 +53,7 @@ class FakeBackend : public Backend {
   }
   bool stageCandidate(const Data&) override {
     tick();
-    if (failed()) return false;
+    if (failed() || !capacityAvailable) return false;
     device_.staged = true;  // Wi-Fi staged; stations may still fail or power-cut.
     tick();
     if (failed()) return false;
@@ -137,6 +138,21 @@ int main() {
     assert(transaction.commit());
     assert(same(device.active, device.candidate));
     assert(!device.marker);
+  }
+
+  // A valid candidate that cannot be staged is rejected before the durable
+  // marker and before any active component changes.
+  {
+    DurableDevice device;
+    FakeBackend backend(device);
+    backend.capacityAvailable = false;
+    TransactionStorage transaction(backend);
+    assert(transaction.begin());
+    assert(!transaction.stage(dummyCandidate()));
+    assert(transaction.rollback());
+    const State oldState{{1, 1, 1, 1, 1, 1}};
+    assert(same(device.active, oldState));
+    assert(!device.marker && !device.staged && !device.snapshot);
   }
 
   // Simulated process death at every durable operation. Before the marker the

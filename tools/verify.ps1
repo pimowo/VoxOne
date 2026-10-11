@@ -104,6 +104,7 @@ $nativeSources=@{
  bt_volume_native=@('src/core/bt_link_protocol.cpp')
  config_format_native=@('src/core/config_format.cpp','src/core/volume_map.cpp')
  config_backup_native=@('src/core/config_backup.cpp','src/core/config_format.cpp','src/core/volume_map.cpp','src/hardware/runtime_hardware_config.cpp')
+ config_backup_web_native=@('src/core/config_backup_web.cpp')
  config_restore_transaction_native=@('src/core/config_restore_transaction.cpp')
  config_startup_native=@('src/core/config_format.cpp','src/core/volume_map.cpp')
  config_persistence_native=@('src/core/config_format.cpp','src/core/volume_map.cpp')

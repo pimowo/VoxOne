@@ -300,6 +300,24 @@
             <div><dt>Możliwości</dt><dd id="system-bt-capabilities">—</dd></div>
           </dl></article>
         </div>
+        <div class="grid config-transfer-grid">
+          <article class="card config-transfer-card">
+            <h3>Backup konfiguracji</h3>
+            <p class="muted">Backup obejmuje ustawienia VoxOne, konfigurację sprzętu, Wi-Fi, MQTT i stacje.</p>
+            <p class="config-secret-warning">Plik backupu zawiera zapisane hasła Wi-Fi/MQTT. Przechowuj go bezpiecznie.</p>
+            <button id="config-backup-button" type="button">Pobierz backup</button>
+            <p id="config-backup-status" class="config-transfer-status" role="status" aria-live="polite"></p>
+          </article>
+          <article class="card config-transfer-card">
+            <h3>Przywracanie</h3>
+            <label for="config-restore-file">Plik backupu VXCF</label>
+            <input id="config-restore-file" type="file" accept=".vxcf,application/octet-stream">
+            <p id="config-restore-name" class="update-file-name">Nie wybrano pliku.</p>
+            <button id="config-restore-button" type="button" disabled>Przywróć</button>
+            <button id="config-restore-restart" type="button" hidden>Uruchom ponownie</button>
+            <p id="config-restore-status" class="config-transfer-status" role="status" aria-live="polite"></p>
+          </article>
+        </div>
         <article class="card reboot-card"><h3>Urządzenie</h3><p class="muted">Uruchamia urządzenie ponownie bez zmiany zapisanych ustawień.</p><button id="reboot-button" type="button">Restart VoxOne</button><p id="reboot-status" class="reboot-status" role="status" aria-live="polite"></p></article>
       </section>
 

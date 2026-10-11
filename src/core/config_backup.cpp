@@ -15,14 +15,23 @@ constexpr std::size_t kChecksumSize = 4;
 constexpr std::size_t kMaxStationLine = 512;
 constexpr std::size_t kMaxWifiProfiles = 5;
 
-uint32_t crc32(const uint8_t* data, std::size_t size) {
-  uint32_t crc = 0xffffffffu;
-  for (std::size_t i = 0; i < size; ++i) {
-    crc ^= data[i];
-    for (unsigned bit = 0; bit < 8; ++bit)
-      crc = (crc >> 1) ^ ((crc & 1u) ? 0xedb88320u : 0u);
+class MemoryReader : public ByteReader {
+ public:
+  explicit MemoryReader(const Bytes& bytes) : bytes_(bytes) {}
+  std::size_t size() const override { return bytes_.size; }
+  bool read(std::size_t offset, uint8_t* output,
+            std::size_t length) override {
+    if ((length && (!output || !bytes_.data)) || offset > bytes_.size ||
+        length > bytes_.size - offset) return false;
+    if (length) std::memcpy(output, bytes_.data + offset, length);
+    return true;
   }
-  return crc ^ 0xffffffffu;
+ private:
+  Bytes bytes_;
+};
+
+bool readByte(ByteReader& reader, std::size_t offset, uint8_t& value) {
+  return reader.read(offset, &value, 1);
 }
 
 void write16(uint8_t*& cursor, uint16_t value) {
@@ -70,43 +79,60 @@ bool validUi(const UiTimeoutSettings& value) {
   return value.stationListSeconds <= 120 && value.btTransportSeconds <= 120;
 }
 
-bool validWifi(const Bytes& value, std::size_t& profiles) {
-  if (value.size && !value.data) return false;
+bool validWifi(ByteReader& value, std::size_t& profiles) {
   profiles = 0;
   std::size_t start = 0;
-  while (start < value.size) {
+  while (start < value.size()) {
     std::size_t end = start;
-    while (end < value.size && value.data[end] != '\n') ++end;
+    uint8_t ch = 0;
+    while (end < value.size()) {
+      if (!readByte(value, end, ch)) return false;
+      if (ch == '\n') break;
+      ++end;
+    }
     std::size_t length = end - start;
-    if (length && value.data[start + length - 1] == '\r') --length;
-    if (!length) return false;
+    if (length) {
+      if (!readByte(value, start + length - 1, ch)) return false;
+      if (ch == '\r') --length;
+    }
+    if (!length || length > 69) return false;
+    uint8_t line[70];
+    if (!value.read(start, line, length)) return false;
     std::size_t tab = 0;
-    while (tab < length && value.data[start + tab] != '\t') ++tab;
+    while (tab < length && line[tab] != '\t') ++tab;
     if (tab == 0 || tab > 29 || tab == length || length - tab - 1 > 39)
       return false;
     for (std::size_t i = 0; i < length; ++i)
-      if (value.data[start + i] == 0 ||
-          (i != tab && value.data[start + i] == '\t')) return false;
+      if (line[i] == 0 || (i != tab && line[i] == '\t')) return false;
     if (++profiles > kMaxWifiProfiles) return false;
-    start = end < value.size ? end + 1 : end;
+    start = end < value.size() ? end + 1 : end;
   }
   return true;
 }
 
-bool validStations(const Bytes& value, std::size_t& rows) {
+bool validStations(ByteReader& value, std::size_t& rows) {
   const std::size_t headerSize = sizeof(kStationsHeader) - 1;
-  if (!value.data || value.size < headerSize ||
-      std::memcmp(value.data, kStationsHeader, headerSize) != 0) return false;
+  uint8_t header[sizeof(kStationsHeader) - 1];
+  if (value.size() < headerSize || !value.read(0, header, headerSize) ||
+      std::memcmp(header, kStationsHeader, headerSize) != 0) return false;
   rows = 0;
   std::size_t start = headerSize;
-  while (start < value.size) {
+  while (start < value.size()) {
     std::size_t end = start;
-    while (end < value.size && value.data[end] != '\n') ++end;
+    uint8_t ch = 0;
+    while (end < value.size()) {
+      if (!readByte(value, end, ch)) return false;
+      if (ch == '\n') break;
+      ++end;
+    }
     std::size_t length = end - start;
-    if (length && value.data[start + length - 1] == '\r') --length;
+    if (length) {
+      if (!readByte(value, start + length - 1, ch)) return false;
+      if (ch == '\r') --length;
+    }
     if (!length || length >= kMaxStationLine) return false;
     char line[kMaxStationLine];
-    std::memcpy(line, value.data + start, length);
+    if (!value.read(start, reinterpret_cast<uint8_t*>(line), length)) return false;
     line[length] = '\0';
     uint64_t id = 0;
     char* name = nullptr;
@@ -118,15 +144,19 @@ bool validStations(const Bytes& value, std::size_t& rows) {
     while (prior < start) {
       if (start - prior < 16) return false;
       char priorId[17];
-      std::memcpy(priorId, value.data + prior, 16);
+      if (!value.read(prior, reinterpret_cast<uint8_t*>(priorId), 16)) return false;
       priorId[16] = '\0';
       uint64_t parsedId = 0;
       if (!stationParseId(priorId, parsedId) || parsedId == id) return false;
-      while (prior < start && value.data[prior] != '\n') ++prior;
+      while (prior < start) {
+        if (!readByte(value, prior, ch)) return false;
+        if (ch == '\n') break;
+        ++prior;
+      }
       if (prior < start) ++prior;
     }
     if (++rows > std::numeric_limits<uint16_t>::max()) return false;
-    start = end < value.size ? end + 1 : end;
+    start = end < value.size() ? end + 1 : end;
   }
   return true;
 }
@@ -164,8 +194,8 @@ bool decodeMqtt(const uint8_t* input, MqttSettings& output) {
   return true;
 }
 
-Status validate(const Data& data,
-                const hardware::HardwareCapabilities& capabilities) {
+Status validateFixed(const Data& data,
+                     const hardware::HardwareCapabilities& capabilities) {
   if (!validConfig(data.config)) return Status::InvalidConfig;
   const hardware::RuntimeHardwareValidation hardwareStatus =
       hardware::validateRuntimeHardwareConfig(data.hardware, capabilities);
@@ -175,18 +205,38 @@ Status validate(const Data& data,
     return Status::InvalidHardware;
   if (!mqttValidSettings(data.mqtt)) return Status::InvalidMqtt;
   if (!validUi(data.ui)) return Status::InvalidUi;
-  std::size_t wifiProfiles = 0;
-  if (!validWifi(data.wifi, wifiProfiles)) return Status::InvalidWifi;
-  std::size_t stationRows = 0;
-  if (!validStations(data.stations, stationRows)) return Status::InvalidStations;
-  if ((data.config.btEnabled && !capabilities.supportsVoxOneBt) ||
-      data.config.fields.lastSSID > wifiProfiles ||
-      data.config.fields.countStation != stationRows ||
-      data.config.fields.lastStation > stationRows) return Status::InvalidConfig;
+  if (data.config.btEnabled && !capabilities.supportsVoxOneBt)
+    return Status::InvalidConfig;
   return Status::Ok;
 }
 
 }  // namespace
+
+void Crc32::update(const uint8_t* data, std::size_t size) {
+  if (!data) return;
+  for (std::size_t i = 0; i < size; ++i) {
+    value_ ^= data[i];
+    for (unsigned bit = 0; bit < 8; ++bit)
+      value_ = (value_ >> 1) ^ ((value_ & 1u) ? 0xedb88320u : 0u);
+  }
+}
+
+Status validateExternal(const Data& data,
+                        const hardware::HardwareCapabilities& capabilities,
+                        ByteReader& wifi, ByteReader& stations) {
+  const Status fixed = validateFixed(data, capabilities);
+  if (fixed != Status::Ok) return fixed;
+  if (wifi.size() != data.wifi.size || stations.size() != data.stations.size)
+    return Status::InvalidLength;
+  std::size_t wifiProfiles = 0;
+  if (!validWifi(wifi, wifiProfiles)) return Status::InvalidWifi;
+  std::size_t stationRows = 0;
+  if (!validStations(stations, stationRows)) return Status::InvalidStations;
+  if (data.config.fields.lastSSID > wifiProfiles ||
+      data.config.fields.countStation != stationRows ||
+      data.config.fields.lastStation > stationRows) return Status::InvalidConfig;
+  return Status::Ok;
+}
 
 std::size_t serializedSize(const Data& data) {
   if (data.wifi.size > std::numeric_limits<uint32_t>::max() ||
@@ -199,19 +249,16 @@ std::size_t serializedSize(const Data& data) {
   return kBackupFixedOverhead + variable;
 }
 
-Status serialize(const Data& data,
-                 const hardware::HardwareCapabilities& capabilities,
-                 uint8_t* output, std::size_t capacity,
-                 std::size_t& written) {
-  written = 0;
+Status encodePrefix(const Data& data,
+                    const hardware::HardwareCapabilities& capabilities,
+                    uint8_t* output, std::size_t capacity) {
   if (!output) return Status::InvalidArgument;
-  const Status validation = validate(data, capabilities);
+  if (capacity < kBackupVariableOffset) return Status::OutputTooSmall;
+  const Status validation = validateFixed(data, capabilities);
   if (validation != Status::Ok) return validation;
   const std::size_t total = serializedSize(data);
   if (!total || total > std::numeric_limits<uint32_t>::max())
     return Status::InvalidLength;
-  if (capacity < total) return Status::OutputTooSmall;
-
   uint8_t* cursor = output;
   std::memcpy(cursor, kMagic, sizeof(kMagic)); cursor += sizeof(kMagic);
   write16(cursor, kBackupSchemaVersion);
@@ -234,19 +281,17 @@ Status serialize(const Data& data,
   *cursor++ = 1;
   *cursor++ = data.ui.stationListSeconds;
   *cursor++ = data.ui.btTransportSeconds;
-  if (data.wifi.size) { std::memcpy(cursor, data.wifi.data, data.wifi.size); cursor += data.wifi.size; }
-  std::memcpy(cursor, data.stations.data, data.stations.size); cursor += data.stations.size;
-  write32(cursor, crc32(output, total - kChecksumSize));
-  written = static_cast<std::size_t>(cursor - output);
-  return written == total ? Status::Ok : Status::InvalidLength;
+  return static_cast<std::size_t>(cursor - output) == kBackupVariableOffset
+             ? Status::Ok : Status::InvalidLength;
 }
 
-Status parse(const uint8_t* input, std::size_t size,
-             const hardware::HardwareCapabilities& capabilities,
-             Data& output) {
+Status decodePrefix(const uint8_t* input, std::size_t size,
+                    std::size_t artifactSize,
+                    const hardware::HardwareCapabilities& capabilities,
+                    Data& output) {
   if (!input) return Status::InvalidArgument;
-  if (!size) return Status::Empty;
-  if (size < kBackupFixedOverhead) return Status::Truncated;
+  if (size < kBackupVariableOffset || artifactSize < kBackupFixedOverhead)
+    return Status::Truncated;
   if (std::memcmp(input, kMagic, sizeof(kMagic)) != 0) return Status::WrongMagic;
   const uint8_t* cursor = input + sizeof(kMagic);
   if (read16(cursor) != kBackupSchemaVersion) return Status::WrongSchema;
@@ -257,18 +302,14 @@ Status parse(const uint8_t* input, std::size_t size,
   const uint32_t uiSize = read32(cursor);
   const uint32_t wifiSize = read32(cursor);
   const uint32_t stationsSize = read32(cursor);
-  if (total > size) return Status::Truncated;
-  if (total < size || configSize != config_format::kConfigV7SerializedSize ||
+  if (total > artifactSize) return Status::Truncated;
+  if (total < artifactSize || configSize != config_format::kConfigV7SerializedSize ||
       hardwareSize != hardware::kRuntimeHardwareConfigSerializedSize ||
       mqttSize != kMqttWireSize || uiSize != kUiWireSize) return Status::InvalidLength;
   const uint64_t expected = static_cast<uint64_t>(kBackupFixedOverhead) +
                             wifiSize + stationsSize;
-  if (expected != size) return expected > size ? Status::Truncated : Status::InvalidLength;
-  const uint8_t* checksum = input + size - kChecksumSize;
-  const uint8_t* checksumCursor = checksum;
-  if (read32(checksumCursor) != crc32(input, size - kChecksumSize))
-    return Status::InvalidChecksum;
-
+  if (expected != artifactSize)
+    return expected > artifactSize ? Status::Truncated : Status::InvalidLength;
   Data candidate{};
   if (!config_format::deserializeConfigV7(cursor, configSize, candidate.config))
     return Status::InvalidConfig;
@@ -284,10 +325,86 @@ Status parse(const uint8_t* input, std::size_t size,
   if (cursor[0] != 1) return Status::InvalidUi;
   candidate.ui.stationListSeconds = cursor[1];
   candidate.ui.btTransportSeconds = cursor[2];
-  cursor += uiSize;
-  candidate.wifi = {cursor, wifiSize}; cursor += wifiSize;
-  candidate.stations = {cursor, stationsSize};
-  const Status validation = validate(candidate, capabilities);
+  candidate.wifi = {nullptr, wifiSize};
+  candidate.stations = {nullptr, stationsSize};
+  const Status validation = validateFixed(candidate, capabilities);
+  if (validation != Status::Ok) return validation;
+  output = candidate;
+  return Status::Ok;
+}
+
+Status serialize(const Data& data,
+                 const hardware::HardwareCapabilities& capabilities,
+                 uint8_t* output, std::size_t capacity,
+                 std::size_t& written) {
+  written = 0;
+  if (!output) return Status::InvalidArgument;
+  MemoryReader wifi(data.wifi);
+  MemoryReader stations(data.stations);
+  const Status validation = validateExternal(data, capabilities, wifi, stations);
+  if (validation != Status::Ok) return validation;
+  const std::size_t total = serializedSize(data);
+  if (!total || total > std::numeric_limits<uint32_t>::max())
+    return Status::InvalidLength;
+  if (capacity < total) return Status::OutputTooSmall;
+
+  const Status prefix = encodePrefix(data, capabilities, output, capacity);
+  if (prefix != Status::Ok) return prefix;
+  uint8_t* cursor = output + kBackupVariableOffset;
+  if (data.wifi.size) {
+    if (cursor != data.wifi.data)
+      std::memcpy(cursor, data.wifi.data, data.wifi.size);
+    cursor += data.wifi.size;
+  }
+  if (cursor != data.stations.data)
+    std::memcpy(cursor, data.stations.data, data.stations.size);
+  cursor += data.stations.size;
+  Crc32 checksum;
+  checksum.update(output, total - kChecksumSize);
+  write32(cursor, checksum.value());
+  written = static_cast<std::size_t>(cursor - output);
+  return written == total ? Status::Ok : Status::InvalidLength;
+}
+
+Status parse(const uint8_t* input, std::size_t size,
+             const hardware::HardwareCapabilities& capabilities,
+             Data& output) {
+  if (!input) return Status::InvalidArgument;
+  if (!size) return Status::Empty;
+  if (size < kBackupFixedOverhead) return Status::Truncated;
+  if (std::memcmp(input, kMagic, sizeof(kMagic)) != 0) return Status::WrongMagic;
+  const uint8_t* header = input + sizeof(kMagic);
+  if (read16(header) != kBackupSchemaVersion) return Status::WrongSchema;
+  const uint32_t total = read32(header);
+  const uint32_t configSize = read32(header);
+  const uint32_t hardwareSize = read32(header);
+  const uint32_t mqttSize = read32(header);
+  const uint32_t uiSize = read32(header);
+  const uint32_t wifiSize = read32(header);
+  const uint32_t stationsSize = read32(header);
+  if (total > size) return Status::Truncated;
+  if (total < size || configSize != config_format::kConfigV7SerializedSize ||
+      hardwareSize != hardware::kRuntimeHardwareConfigSerializedSize ||
+      mqttSize != kMqttWireSize || uiSize != kUiWireSize) return Status::InvalidLength;
+  const uint64_t expected = static_cast<uint64_t>(kBackupFixedOverhead) +
+                            wifiSize + stationsSize;
+  if (expected != size) return expected > size ? Status::Truncated : Status::InvalidLength;
+  const uint8_t* checksum = input + size - kChecksumSize;
+  const uint8_t* checksumCursor = checksum;
+  Crc32 calculated;
+  calculated.update(input, size - kChecksumSize);
+  if (read32(checksumCursor) != calculated.value())
+    return Status::InvalidChecksum;
+  Data candidate{};
+  const Status decoded = decodePrefix(input, size, size, capabilities, candidate);
+  if (decoded != Status::Ok) return decoded;
+  const uint8_t* cursor = input + kBackupVariableOffset;
+  candidate.wifi.data = cursor;
+  cursor += candidate.wifi.size;
+  candidate.stations.data = cursor;
+  MemoryReader wifi(candidate.wifi);
+  MemoryReader stations(candidate.stations);
+  const Status validation = validateExternal(candidate, capabilities, wifi, stations);
   if (validation != Status::Ok) return validation;
   output = candidate;
   return Status::Ok;
@@ -299,6 +416,10 @@ RestoreResult restore(const uint8_t* input, std::size_t size,
   Data candidate{};
   const Status parsed = parse(input, size, capabilities, candidate);
   if (parsed != Status::Ok) return {parsed, false};
+  return restoreValidated(candidate, storage);
+}
+
+RestoreResult restoreValidated(const Data& candidate, RestoreStorage& storage) {
   if (!storage.begin()) return {Status::StorageBeginFailed, false};
   if (!storage.stage(candidate)) {
     return {storage.rollback() ? Status::StorageWriteFailed

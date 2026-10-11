@@ -5,10 +5,13 @@
 #include <SPIFFS.h>
 #include <nvs.h>
 
+#include <algorithm>
 #include <cstring>
+#include <new>
 
 #include "config.h"
 #include "config_eeprom_storage.h"
+#include "config_backup_web.h"
 #include "config_restore_transaction.h"
 #include "mqtt_config.h"
 #include "playlist_store.h"
@@ -27,11 +30,12 @@ constexpr char kConfigKey[] = "config";
 constexpr char kHardwareKey[] = "hardware";
 constexpr char kMqttKey[] = "mqtt";
 constexpr char kUiKey[] = "ui";
+constexpr char kWifiMetaKey[] = "wifimeta";
+constexpr char kStationsMetaKey[] = "stameta";
 constexpr char kWifiOld[] = "/data/.vxrestore.wifi.old";
 constexpr char kStationsOld[] = "/data/.vxrestore.stations.old";
 constexpr char kWifiNew[] = "/data/.vxrestore.wifi.new";
 constexpr char kStationsNew[] = "/data/.vxrestore.stations.new";
-constexpr char kRestoreTemp[] = "/data/.vxrestore.apply.tmp";
 constexpr uint32_t kMarkerMagic = 0x52584356u;  // VXCR, little endian.
 constexpr uint8_t kMarkerSchema = 1;
 constexpr std::size_t kMarkerSize = 12;
@@ -43,6 +47,11 @@ enum SnapshotFlag : uint8_t {
   UiPresent = 1u << 3,
   WifiPresent = 1u << 4,
   StationsPresent = 1u << 5
+};
+
+struct FileFingerprint {
+  uint32_t size;
+  uint32_t crc;
 };
 
 uint32_t crc32(const uint8_t* data, std::size_t size) {
@@ -128,45 +137,48 @@ bool fileEquals(const char* path, const uint8_t* bytes, std::size_t size) {
   return true;
 }
 
-bool filesEqual(const char* leftPath, const char* rightPath) {
-  File left = SPIFFS.open(leftPath, "r");
-  File right = SPIFFS.open(rightPath, "r");
-  if (!left || !right || left.size() != right.size()) {
-    left.close(); right.close(); return false;
+bool fingerprintFile(const char* path, FileFingerprint& result) {
+  File file = SPIFFS.open(path, "r");
+  if (!file || file.size() > UINT32_MAX) { file.close(); return false; }
+  config_backup::Crc32 crc;
+  uint8_t buffer[512];
+  while (file.available()) {
+    const std::size_t count = file.read(buffer, sizeof(buffer));
+    if (!count) { file.close(); return false; }
+    crc.update(buffer, count);
   }
-  uint8_t leftBytes[256];
-  uint8_t rightBytes[256];
-  while (left.available()) {
-    const std::size_t remaining = left.size() - left.position();
-    const std::size_t count = remaining < sizeof(leftBytes) ? remaining : sizeof(leftBytes);
-    if (left.read(leftBytes, count) != count || right.read(rightBytes, count) != count ||
-        std::memcmp(leftBytes, rightBytes, count) != 0) {
-      left.close(); right.close(); return false;
-    }
-  }
-  left.close(); right.close();
+  result.size = static_cast<uint32_t>(file.size());
+  result.crc = crc.value();
+  file.close();
   return true;
 }
 
-bool copyFile(const char* source, const char* target) {
-  File input = SPIFFS.open(source, "r");
-  if (!input || !removeIfPresent(target)) { input.close(); return false; }
-  File output = SPIFFS.open(target, "w");
-  if (!output) { input.close(); return false; }
-  uint8_t buffer[256];
-  bool ok = true;
-  while (input.available()) {
-    const std::size_t count = input.read(buffer, sizeof(buffer));
-    if (!count || output.write(buffer, count) != count) { ok = false; break; }
-  }
-  output.flush();
-  output.close();
-  input.close();
-  return ok && filesEqual(source, target);
+bool fileMatches(const char* path, const FileFingerprint& expected) {
+  FileFingerprint actual{};
+  return fingerprintFile(path, actual) && actual.size == expected.size &&
+         actual.crc == expected.crc;
 }
 
-bool installFile(const char* staged, const char* active) {
-  if (!SPIFFS.exists(staged) || !removeIfPresent(active)) return false;
+class FileByteReader : public config_backup::ByteReader {
+ public:
+  FileByteReader(File& file, std::size_t size) : file_(file), size_(size) {}
+  std::size_t size() const override { return size_; }
+  bool read(std::size_t offset, uint8_t* output,
+            std::size_t length) override {
+    if ((length && !output) || offset > size_ || length > size_ - offset)
+      return false;
+    return !length || (file_ && file_.seek(offset) &&
+                       file_.read(output, length) == length);
+  }
+ private:
+  File& file_;
+  std::size_t size_;
+};
+
+bool installTransactionalFile(const char* staged, const char* active,
+                              const char* rollback) {
+  if (!SPIFFS.exists(staged) || !removeIfPresent(rollback)) return false;
+  if (SPIFFS.exists(active) && !SPIFFS.rename(active, rollback)) return false;
   return SPIFFS.rename(staged, active);
 }
 
@@ -184,12 +196,15 @@ bool getBlob(nvs_handle_t handle, const char* key, T& value) {
 
 class ProductionBackend : public Backend {
  public:
+  explicit ProductionBackend(bool stagedFiles = false)
+      : stagedFiles_(stagedFiles) {}
   MarkerStatus readMarker(Phase& phase) override { return readMarkerRecord(phase); }
 
   bool cleanupStale() override {
     bool files = removeIfPresent(kWifiOld) && removeIfPresent(kStationsOld) &&
-                 removeIfPresent(kWifiNew) && removeIfPresent(kStationsNew) &&
-                 removeIfPresent(kRestoreTemp);
+                 ((stagedFiles_ && !candidate_) ||
+                  (removeIfPresent(kWifiNew) &&
+                   removeIfPresent(kStationsNew)));
     nvs_handle_t handle;
     const esp_err_t opened = nvs_open(kNamespace, NVS_READWRITE, &handle);
     if (opened == ESP_ERR_NVS_NOT_FOUND) return files;
@@ -201,6 +216,12 @@ class ProductionBackend : public Backend {
 
   bool stageCandidate(const config_backup::Data& candidate) override {
     candidate_ = &candidate;
+    if (stagedFiles_) {
+      return fingerprintFile(kWifiNew, candidateWifi_) &&
+             fingerprintFile(kStationsNew, candidateStations_) &&
+             candidateWifi_.size == candidate.wifi.size &&
+             candidateStations_.size == candidate.stations.size;
+    }
     return writeFile(kWifiNew, candidate.wifi.data, candidate.wifi.size) &&
            fileEquals(kWifiNew, candidate.wifi.data, candidate.wifi.size) &&
            writeFile(kStationsNew, candidate.stations.data, candidate.stations.size) &&
@@ -233,12 +254,13 @@ class ProductionBackend : public Backend {
     UiTimeoutSettings ui{};
     if (!uiTimeoutReadPersistent(ui, found)) return false;
     if (found) flags |= UiPresent;
+    FileFingerprint wifiMeta{}, stationsMeta{};
     if (SPIFFS.exists(SSIDS_PATH)) {
-      if (!copyFile(SSIDS_PATH, kWifiOld)) return false;
+      if (!fingerprintFile(SSIDS_PATH, wifiMeta)) return false;
       flags |= WifiPresent;
     }
     if (SPIFFS.exists(PLAYLIST_PATH)) {
-      if (!copyFile(PLAYLIST_PATH, kStationsOld)) return false;
+      if (!fingerprintFile(PLAYLIST_PATH, stationsMeta)) return false;
       flags |= StationsPresent;
     }
 
@@ -251,9 +273,13 @@ class ProductionBackend : public Backend {
     if (ok && (flags & HardwarePresent)) ok = setBlob(handle, kHardwareKey, hardwareConfig);
     if (ok && (flags & MqttPresent)) ok = setBlob(handle, kMqttKey, mqtt);
     if (ok && (flags & UiPresent)) ok = setBlob(handle, kUiKey, ui);
+    if (ok && (flags & WifiPresent)) ok = setBlob(handle, kWifiMetaKey, wifiMeta);
+    if (ok && (flags & StationsPresent))
+      ok = setBlob(handle, kStationsMetaKey, stationsMeta);
     ok = ok && nvs_commit(handle) == ESP_OK;
     nvs_close(handle);
-    return ok && verifyStoredSnapshot(flags, configBytes, hardwareConfig, mqtt, ui);
+    return ok && verifyStoredSnapshot(flags, configBytes, hardwareConfig, mqtt, ui,
+                                      wifiMeta, stationsMeta);
   }
 
   bool writeMarker(Phase phase) override {
@@ -276,8 +302,10 @@ class ProductionBackend : public Backend {
         return hardware::writeRuntimeHardwarePersistent(candidate_->hardware);
       case Component::Mqtt: return mqttWritePersistent(candidate_->mqtt);
       case Component::Ui: return uiTimeoutWritePersistent(candidate_->ui);
-      case Component::Wifi: return installFile(kWifiNew, SSIDS_PATH);
-      case Component::Stations: return installFile(kStationsNew, PLAYLIST_PATH);
+      case Component::Wifi:
+        return installTransactionalFile(kWifiNew, SSIDS_PATH, kWifiOld);
+      case Component::Stations:
+        return installTransactionalFile(kStationsNew, PLAYLIST_PATH, kStationsOld);
     }
     return false;
   }
@@ -299,6 +327,9 @@ class ProductionBackend : public Backend {
     UiTimeoutSettings ui{};
     if (!uiTimeoutReadPersistent(ui, found) || !found ||
         std::memcmp(&ui, &candidate_->ui, sizeof(ui)) != 0) return false;
+    if (stagedFiles_)
+      return fileMatches(SSIDS_PATH, candidateWifi_) &&
+             fileMatches(PLAYLIST_PATH, candidateStations_);
     return fileEquals(SSIDS_PATH, candidate_->wifi.data, candidate_->wifi.size) &&
            fileEquals(PLAYLIST_PATH, candidate_->stations.data, candidate_->stations.size);
   }
@@ -312,6 +343,7 @@ class ProductionBackend : public Backend {
     hardware::RuntimeHardwareConfig hardwareConfig{};
     MqttSettings mqtt{};
     UiTimeoutSettings ui{};
+    FileFingerprint wifiMeta{}, stationsMeta{};
     bool read = true;
     if (flags & ConfigPresent) {
       std::size_t size = sizeof(configBytes);
@@ -321,6 +353,10 @@ class ProductionBackend : public Backend {
     if (read && (flags & HardwarePresent)) read = getBlob(handle, kHardwareKey, hardwareConfig);
     if (read && (flags & MqttPresent)) read = getBlob(handle, kMqttKey, mqtt);
     if (read && (flags & UiPresent)) read = getBlob(handle, kUiKey, ui);
+    if (read && (flags & WifiPresent))
+      read = getBlob(handle, kWifiMetaKey, wifiMeta);
+    if (read && (flags & StationsPresent))
+      read = getBlob(handle, kStationsMetaKey, stationsMeta);
     nvs_close(handle);
     if (!read) return false;
 
@@ -335,8 +371,10 @@ class ProductionBackend : public Backend {
         ? mqttWritePersistent(mqtt) : mqttErasePersistent());
     restored = restored && ((flags & UiPresent)
         ? uiTimeoutWritePersistent(ui) : uiTimeoutErasePersistent());
-    if (!restored || !restoreFile(flags & WifiPresent, kWifiOld, SSIDS_PATH) ||
-        !restoreFile(flags & StationsPresent, kStationsOld, PLAYLIST_PATH) ||
+    if (!restored || !restoreTransactionalFile(flags & WifiPresent, kWifiOld,
+                                               SSIDS_PATH, wifiMeta) ||
+        !restoreTransactionalFile(flags & StationsPresent, kStationsOld,
+                                  PLAYLIST_PATH, stationsMeta) ||
         !removeIfPresent(INDEX_PATH)) return false;
     if (flags & StationsPresent) return rebuildStationsIndex();
     return true;
@@ -351,6 +389,7 @@ class ProductionBackend : public Backend {
     hardware::RuntimeHardwareConfig hardwareConfig{};
     MqttSettings mqtt{};
     UiTimeoutSettings ui{};
+    FileFingerprint wifiMeta{}, stationsMeta{};
     bool read = true;
     if (flags & ConfigPresent) {
       std::size_t size = sizeof(configBytes);
@@ -360,15 +399,19 @@ class ProductionBackend : public Backend {
     if (read && (flags & HardwarePresent)) read = getBlob(handle, kHardwareKey, hardwareConfig);
     if (read && (flags & MqttPresent)) read = getBlob(handle, kMqttKey, mqtt);
     if (read && (flags & UiPresent)) read = getBlob(handle, kUiKey, ui);
+    if (read && (flags & WifiPresent))
+      read = getBlob(handle, kWifiMetaKey, wifiMeta);
+    if (read && (flags & StationsPresent))
+      read = getBlob(handle, kStationsMetaKey, stationsMeta);
     nvs_close(handle);
     if (!read || !verifyConfigPresence(flags & ConfigPresent, configBytes) ||
         !verifyHardwarePresence(flags & HardwarePresent, hardwareConfig) ||
         !verifyMqttPresence(flags & MqttPresent, mqtt) ||
         !verifyUiPresence(flags & UiPresent, ui)) return false;
     const bool wifi = flags & WifiPresent
-        ? filesEqual(kWifiOld, SSIDS_PATH) : !SPIFFS.exists(SSIDS_PATH);
+        ? fileMatches(SSIDS_PATH, wifiMeta) : !SPIFFS.exists(SSIDS_PATH);
     const bool stations = flags & StationsPresent
-        ? filesEqual(kStationsOld, PLAYLIST_PATH) : !SPIFFS.exists(PLAYLIST_PATH);
+        ? fileMatches(PLAYLIST_PATH, stationsMeta) : !SPIFFS.exists(PLAYLIST_PATH);
     return wifi && stations;
   }
 
@@ -384,6 +427,9 @@ class ProductionBackend : public Backend {
 
  private:
   const config_backup::Data* candidate_ = nullptr;
+  bool stagedFiles_ = false;
+  FileFingerprint candidateWifi_{};
+  FileFingerprint candidateStations_{};
 
   bool writeConfig(const config_format::config_v7_t& configValue) {
     uint8_t bytes[config_format::kConfigV7SerializedSize]{};
@@ -404,7 +450,9 @@ class ProductionBackend : public Backend {
 
   bool verifyStoredSnapshot(uint8_t flags, const uint8_t* configBytes,
                             const hardware::RuntimeHardwareConfig& hardwareConfig,
-                            const MqttSettings& mqtt, const UiTimeoutSettings& ui) {
+                            const MqttSettings& mqtt, const UiTimeoutSettings& ui,
+                            const FileFingerprint& wifiMeta,
+                            const FileFingerprint& stationsMeta) {
     nvs_handle_t handle;
     if (nvs_open(kNamespace, NVS_READONLY, &handle) != ESP_OK) return false;
     uint8_t actualFlags = 0;
@@ -428,17 +476,31 @@ class ProductionBackend : public Backend {
     if (ok && (flags & UiPresent))
       ok = getBlob(handle, kUiKey, actualUi) &&
            std::memcmp(&actualUi, &ui, sizeof(ui)) == 0;
+    FileFingerprint actualWifi{}, actualStations{};
+    if (ok && (flags & WifiPresent))
+      ok = getBlob(handle, kWifiMetaKey, actualWifi) &&
+           std::memcmp(&actualWifi, &wifiMeta, sizeof(wifiMeta)) == 0;
+    if (ok && (flags & StationsPresent))
+      ok = getBlob(handle, kStationsMetaKey, actualStations) &&
+           std::memcmp(&actualStations, &stationsMeta, sizeof(stationsMeta)) == 0;
     nvs_close(handle);
     if (!ok) return false;
-    return (!(flags & WifiPresent) || filesEqual(SSIDS_PATH, kWifiOld)) &&
-           (!(flags & StationsPresent) || filesEqual(PLAYLIST_PATH, kStationsOld));
+    return (!(flags & WifiPresent) || fileMatches(SSIDS_PATH, wifiMeta)) &&
+           (!(flags & StationsPresent) || fileMatches(PLAYLIST_PATH, stationsMeta));
   }
 
-  bool restoreFile(bool present, const char* snapshot, const char* active) {
+  bool restoreTransactionalFile(bool present, const char* rollback,
+                                const char* active,
+                                const FileFingerprint& expected) {
     if (!present) return removeIfPresent(active);
-    if (!copyFile(snapshot, kRestoreTemp)) return false;
-    if (!removeIfPresent(active)) return false;
-    return SPIFFS.rename(kRestoreTemp, active);
+    if (SPIFFS.exists(rollback)) {
+      // The durable marker makes the rollback file authoritative. Removing a
+      // partial NEW file and renaming OLD is retryable after a power cut and
+      // does not require a third full-size SPIFFS copy.
+      if (!removeIfPresent(active) || !SPIFFS.rename(rollback, active))
+        return false;
+    }
+    return fileMatches(active, expected);
   }
 
   bool verifyConfigPresence(bool present, const uint8_t* expected) {
@@ -493,6 +555,317 @@ void cleanupStaleAfterStorageInit() {
   if (readMarkerRecord(phase) != MarkerStatus::None) return;
   ProductionBackend backend;
   backend.cleanupStale();
+}
+
+struct ProductionBackupStream::Impl {
+  config_backup::Data data{};
+  File wifi;
+  File stations;
+  uint8_t prefix[config_backup::kBackupVariableOffset]{};
+  uint8_t checksum[4]{};
+  std::size_t total = 0;
+  bool ready = false;
+};
+
+ProductionBackupStream::ProductionBackupStream()
+    : impl_(new (std::nothrow) Impl) {
+  static_assert(sizeof(Impl) <= 2048,
+                "backup download transport must remain a small allocation");
+}
+ProductionBackupStream::~ProductionBackupStream() {
+  if (impl_) {
+    impl_->wifi.close();
+    impl_->stations.close();
+    delete impl_;
+  }
+}
+
+bool ProductionBackupStream::begin(config_backup::Status& status) {
+  status = config_backup::Status::StorageReadFailed;
+  if (!impl_) { status = config_backup::Status::AllocationFailed; return false; }
+  config_backup::Data& data = impl_->data;
+  uint8_t configBytes[config_format::kConfigV7SerializedSize]{};
+  bool found = false;
+  config_storage::ConfigEepromStorage configStore;
+  if (!configStore.readRecord(configBytes, sizeof(configBytes), found) || !found ||
+      config_format::parseConfigV7(configBytes, sizeof(configBytes), data.config) !=
+          config_format::ConfigRecordStatus::LOADED_V7)
+    return false;
+
+  if (!hardware::readRuntimeHardwarePersistent(data.hardware, found))
+    return false;
+  if (!found) data.hardware = hardware::runtimeHardwareConfig();
+  if (!mqttReadPersistent(data.mqtt, found))
+    return false;
+  if (!found) data.mqtt = mqttConfig();
+  if (!uiTimeoutReadPersistent(data.ui, found))
+    return false;
+  if (!found) data.ui = uiTimeoutConfig();
+
+  if (!SPIFFS.exists(PLAYLIST_PATH))
+    return false;
+  impl_->wifi = SPIFFS.open(SSIDS_PATH, "r");
+  impl_->stations = SPIFFS.open(PLAYLIST_PATH, "r");
+  const std::size_t wifiSize = impl_->wifi ? impl_->wifi.size() : 0;
+  const std::size_t stationsSize = impl_->stations ? impl_->stations.size() : 0;
+  if (!impl_->stations) return false;
+  data.wifi = {nullptr, wifiSize};
+  data.stations = {nullptr, stationsSize};
+  impl_->total = config_backup::serializedSize(data);
+  if (!impl_->total) { status = config_backup::Status::InvalidLength; return false; }
+  FileByteReader wifiReader(impl_->wifi, wifiSize);
+  FileByteReader stationsReader(impl_->stations, stationsSize);
+  status = config_backup::validateExternal(
+      data, hardware::hardwareCapabilities(), wifiReader, stationsReader);
+  if (status != config_backup::Status::Ok) return false;
+  status = config_backup::encodePrefix(
+      data, hardware::hardwareCapabilities(), impl_->prefix, sizeof(impl_->prefix));
+  if (status != config_backup::Status::Ok) return false;
+  config_backup::Crc32 crc;
+  crc.update(impl_->prefix, sizeof(impl_->prefix));
+  uint8_t buffer[1024];
+  for (FileByteReader* reader : {&wifiReader, &stationsReader}) {
+    for (std::size_t offset = 0; offset < reader->size();) {
+      const std::size_t count = std::min(sizeof(buffer), reader->size() - offset);
+      if (!reader->read(offset, buffer, count)) {
+        status = config_backup::Status::StorageReadFailed;
+        return false;
+      }
+      crc.update(buffer, count);
+      offset += count;
+    }
+  }
+  const uint32_t value = crc.value();
+  for (unsigned i = 0; i < 4; ++i)
+    impl_->checksum[i] = static_cast<uint8_t>(value >> (8 * i));
+  impl_->ready = true;
+  status = config_backup::Status::Ok;
+  return true;
+}
+
+std::size_t ProductionBackupStream::size() const {
+  return impl_ && impl_->ready ? impl_->total : 0;
+}
+
+std::size_t ProductionBackupStream::read(std::size_t offset, uint8_t* output,
+                                         std::size_t capacity) {
+  if (!impl_ || !impl_->ready || !output || offset >= impl_->total) return 0;
+  const std::size_t wanted = std::min(capacity, impl_->total - offset);
+  std::size_t copied = 0;
+  bool success = true;
+  auto copyMemory = [&](const uint8_t* source, std::size_t length) {
+    if (!success || copied >= wanted) return;
+    if (offset >= length) { offset -= length; return; }
+    const std::size_t count = std::min(wanted - copied, length - offset);
+    memcpy(output + copied, source + offset, count);
+    copied += count;
+    offset = 0;
+  };
+  auto copyFileRange = [&](File& file, std::size_t length) {
+    if (!success || copied >= wanted) return;
+    if (offset >= length) { offset -= length; return; }
+    const std::size_t count = std::min(wanted - copied, length - offset);
+    if (!file || !file.seek(offset) || file.read(output + copied, count) != count) {
+      success = false;
+      return;
+    }
+    copied += count;
+    offset = 0;
+  };
+  copyMemory(impl_->prefix, sizeof(impl_->prefix));
+  copyFileRange(impl_->wifi, impl_->data.wifi.size);
+  copyFileRange(impl_->stations, impl_->data.stations.size);
+  copyMemory(impl_->checksum, sizeof(impl_->checksum));
+  return success ? copied : 0;
+}
+
+struct ProductionRestoreUpload::Impl {
+  config_backup::Data candidate{};
+  config_backup::Crc32 crc;
+  File wifi;
+  File stations;
+  uint8_t prefix[config_backup::kBackupVariableOffset]{};
+  uint8_t checksum[4]{};
+  std::size_t total = 0;
+  std::size_t received = 0;
+  config_backup::Status status = config_backup::Status::InvalidArgument;
+  bool decoded = false;
+  bool finished = false;
+};
+
+ProductionRestoreUpload::ProductionRestoreUpload()
+    : impl_(new (std::nothrow) Impl) {
+  static_assert(sizeof(Impl) <= 2048,
+                "restore upload transport must remain a small allocation");
+}
+
+ProductionRestoreUpload::~ProductionRestoreUpload() {
+  abort();
+  delete impl_;
+}
+
+config_backup::Status ProductionRestoreUpload::begin(std::size_t total) {
+  using config_backup::Status;
+  if (!impl_) return Status::AllocationFailed;
+  if (total < config_backup::kBackupFixedOverhead || total > UINT32_MAX)
+    return impl_->status = total ? Status::Truncated : Status::Empty;
+  Phase phase = Phase::Prepared;
+  const MarkerStatus marker = readMarkerRecord(phase);
+  if (marker != MarkerStatus::None)
+    return impl_->status = Status::RecoveryPending;
+  if (!removeIfPresent(kWifiNew) || !removeIfPresent(kStationsNew))
+    return impl_->status = Status::StorageWriteFailed;
+  impl_->total = total;
+  impl_->status = Status::Ok;
+  return Status::Ok;
+}
+
+config_backup::Status ProductionRestoreUpload::append(
+    std::size_t index, const uint8_t* data, std::size_t length) {
+  using config_backup::Status;
+  if (!impl_ || impl_->status != Status::Ok || impl_->finished)
+    return impl_ ? impl_->status : Status::AllocationFailed;
+  if ((length && !data) || index != impl_->received ||
+      length > impl_->total - impl_->received)
+    return impl_->status = Status::InvalidLength;
+
+  const std::size_t checksumOffset = impl_->total - sizeof(impl_->checksum);
+  if (index < checksumOffset) {
+    const std::size_t crcLength =
+        std::min(length, checksumOffset - index);
+    impl_->crc.update(data, crcLength);
+  }
+
+  while (length) {
+    const std::size_t position = impl_->received;
+    if (position < sizeof(impl_->prefix)) {
+      const std::size_t count =
+          std::min(length, sizeof(impl_->prefix) - position);
+      std::memcpy(impl_->prefix + position, data, count);
+      impl_->received += count;
+      data += count;
+      length -= count;
+      if (impl_->received == sizeof(impl_->prefix)) {
+        impl_->status = config_backup::decodePrefix(
+            impl_->prefix, sizeof(impl_->prefix), impl_->total,
+            hardware::hardwareCapabilities(), impl_->candidate);
+        if (impl_->status != Status::Ok) return impl_->status;
+
+        // SPIFFS has no cross-file transaction. Both candidate files must fit
+        // beside the active generation; one erase block is reserved for FS
+        // metadata and rename bookkeeping.
+        const std::size_t stagedBytes = impl_->candidate.wifi.size +
+                                        impl_->candidate.stations.size;
+        const std::size_t freeBytes = SPIFFS.totalBytes() - SPIFFS.usedBytes();
+        if (stagedBytes > freeBytes ||
+            freeBytes - stagedBytes <
+                config_backup_web::kRestoreStagingReserveBytes)
+          return impl_->status = Status::StorageWriteFailed;
+        impl_->wifi = SPIFFS.open(kWifiNew, "w");
+        impl_->stations = SPIFFS.open(kStationsNew, "w");
+        if (!impl_->wifi || !impl_->stations)
+          return impl_->status = Status::StorageWriteFailed;
+        impl_->decoded = true;
+      }
+      continue;
+    }
+
+    const std::size_t wifiEnd = sizeof(impl_->prefix) +
+                                impl_->candidate.wifi.size;
+    const std::size_t stationsEnd = wifiEnd + impl_->candidate.stations.size;
+    if (position < wifiEnd) {
+      const std::size_t count = std::min(length, wifiEnd - position);
+      if (impl_->wifi.write(data, count) != count)
+        return impl_->status = Status::StorageWriteFailed;
+      impl_->received += count;
+      data += count;
+      length -= count;
+      continue;
+    }
+    if (position < stationsEnd) {
+      const std::size_t count = std::min(length, stationsEnd - position);
+      if (impl_->stations.write(data, count) != count)
+        return impl_->status = Status::StorageWriteFailed;
+      impl_->received += count;
+      data += count;
+      length -= count;
+      continue;
+    }
+    if (position < impl_->total) {
+      const std::size_t checksumIndex = position - stationsEnd;
+      const std::size_t count =
+          std::min(length, sizeof(impl_->checksum) - checksumIndex);
+      std::memcpy(impl_->checksum + checksumIndex, data, count);
+      impl_->received += count;
+      data += count;
+      length -= count;
+      continue;
+    }
+    return impl_->status = Status::InvalidLength;
+  }
+  return Status::Ok;
+}
+
+config_backup::RestoreResult ProductionRestoreUpload::finish() {
+  using config_backup::Status;
+  if (!impl_) return {Status::AllocationFailed, false};
+  if (impl_->status != Status::Ok) return {impl_->status, false};
+  if (!impl_->decoded || impl_->received != impl_->total)
+    return {Status::Truncated, false};
+  impl_->wifi.flush();
+  impl_->stations.flush();
+  impl_->wifi.close();
+  impl_->stations.close();
+  if (get32(impl_->checksum) != impl_->crc.value()) {
+    impl_->status = Status::InvalidChecksum;
+    abort();
+    return {Status::InvalidChecksum, false};
+  }
+
+  impl_->wifi = SPIFFS.open(kWifiNew, "r");
+  impl_->stations = SPIFFS.open(kStationsNew, "r");
+  if (!impl_->wifi || !impl_->stations) {
+    impl_->status = Status::StorageReadFailed;
+    abort();
+    return {impl_->status, false};
+  }
+  FileByteReader wifiReader(impl_->wifi, impl_->candidate.wifi.size);
+  FileByteReader stationsReader(impl_->stations, impl_->candidate.stations.size);
+  impl_->status = config_backup::validateExternal(
+      impl_->candidate, hardware::hardwareCapabilities(), wifiReader,
+      stationsReader);
+  impl_->wifi.close();
+  impl_->stations.close();
+  if (impl_->status != Status::Ok) {
+    abort();
+    return {impl_->status, false};
+  }
+
+  ProductionBackend backend(true);
+  TransactionStorage transaction(backend);
+  const config_backup::RestoreResult result =
+      config_backup::restoreValidated(impl_->candidate, transaction);
+  impl_->status = result.status;
+  impl_->finished = true;
+  return result;
+}
+
+void ProductionRestoreUpload::abort() {
+  if (!impl_) return;
+  impl_->wifi.close();
+  impl_->stations.close();
+  if (impl_->finished) return;
+  Phase phase = Phase::Prepared;
+  if (readMarkerRecord(phase) == MarkerStatus::None) {
+    removeIfPresent(kWifiNew);
+    removeIfPresent(kStationsNew);
+  }
+  impl_->finished = true;
+}
+
+bool ProductionRestoreUpload::complete() const {
+  return impl_ && impl_->status == config_backup::Status::Ok &&
+         impl_->received == impl_->total;
 }
 
 config_backup::RestoreResult restoreProductionBackup(const uint8_t* input,

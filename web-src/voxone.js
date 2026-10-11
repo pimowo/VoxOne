@@ -30,6 +30,14 @@
   const rebootConfirm = document.getElementById("reboot-confirm");
   const rebootStatus = document.getElementById("reboot-status");
   let rebootStarted = false;
+  const configBackupButton = document.getElementById("config-backup-button");
+  const configBackupStatus = document.getElementById("config-backup-status");
+  const configRestoreFile = document.getElementById("config-restore-file");
+  const configRestoreName = document.getElementById("config-restore-name");
+  const configRestoreButton = document.getElementById("config-restore-button");
+  const configRestoreRestart = document.getElementById("config-restore-restart");
+  const configRestoreStatus = document.getElementById("config-restore-status");
+  let configTransferBusy = false;
   const buttons = {
     prev: document.getElementById("prev-button"),
     play: document.getElementById("play-button"),
@@ -445,6 +453,86 @@
       },
       onTimeout: () => setRebootStatus("Nie udało się ponownie połączyć z VoxOne.", true)
     });
+  }
+
+  function setConfigTransferStatus(element, message, error = false) {
+    element.textContent = message;
+    element.dataset.kind = error ? "error" : "status";
+  }
+
+  function configRestoreError(error) {
+    if (error === "wrong_schema") return "Backup ma nieobsługiwaną wersję schematu.";
+    if (error === "bad_crc") return "Backup jest uszkodzony (nieprawidłowy CRC).";
+    if (error === "unsupported_hardware")
+      return "Backup zawiera konfigurację sprzętu nieobsługiwaną przez to urządzenie.";
+    if (error === "recovery_pending")
+      return "Przywracanie nie zostało zakończone. Uruchom ponownie urządzenie, aby wykonać recovery.";
+    if (error === "backup_too_large") return "Plik backupu przekracza bezpieczny limit rozmiaru.";
+    if (error === "restore_failed") return "Nie udało się zapisać przywracanej konfiguracji.";
+    if (error === "insufficient_memory") return "Brak pamięci do zweryfikowania backupu.";
+    if (error === "reboot_pending") return "Restart urządzenia jest już w toku.";
+    return "Nieprawidłowy lub niekompletny plik backupu.";
+  }
+
+  async function downloadConfigBackup() {
+    if (configTransferBusy) return;
+    configTransferBusy = true;
+    configBackupButton.disabled = true;
+    setConfigTransferStatus(configBackupStatus, "Przygotowywanie backupu...");
+    try {
+      const response = await fetch("/api/config/backup", {cache: "no-store"});
+      if (!response.ok) throw new Error("HTTP " + response.status);
+      const blob = await response.blob();
+      if (!blob.size) throw new Error("empty backup");
+      const disposition = response.headers?.get?.("Content-Disposition") || "";
+      const match = disposition.match(/filename="([^"]+)"/i);
+      const link = document.createElement("a");
+      link.href = URL.createObjectURL(blob);
+      link.download = match ? match[1] : "VoxOne-0.8.0-backup.vxcf";
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      URL.revokeObjectURL(link.href);
+      setConfigTransferStatus(configBackupStatus, "Backup został pobrany.");
+    } catch (_) {
+      setConfigTransferStatus(configBackupStatus, "Nie udało się pobrać backupu.", true);
+    } finally {
+      configTransferBusy = false;
+      configBackupButton.disabled = false;
+    }
+  }
+
+  async function restoreConfigBackup() {
+    if (configTransferBusy) return;
+    const file = configRestoreFile.files[0];
+    if (!file) return;
+    configTransferBusy = true;
+    configRestoreButton.disabled = true;
+    configRestoreFile.disabled = true;
+    configRestoreRestart.hidden = true;
+    setConfigTransferStatus(configRestoreStatus, "Walidacja i przywracanie konfiguracji...");
+    try {
+      const response = await fetch("/api/config/restore", {
+        method: "POST",
+        headers: {"Content-Type": "application/octet-stream"},
+        body: file,
+        cache: "no-store"
+      });
+      const result = await response.json();
+      if (!response.ok || result.ok !== true || result.restartRequired !== true) {
+        throw new Error(result.error || "invalid_file");
+      }
+      configRestoreRestart.hidden = false;
+      setConfigTransferStatus(configRestoreStatus,
+        "Konfiguracja została przywrócona. Wymagane ponowne uruchomienie.");
+    } catch (error) {
+      setConfigTransferStatus(configRestoreStatus,
+        configRestoreError(error.message), true);
+    } finally {
+      configTransferBusy = false;
+      configRestoreFile.disabled = false;
+      configRestoreButton.disabled = !configRestoreFile.files.length;
+    }
   }
 
   function uploadUpdateImage(target) {
@@ -2395,6 +2483,18 @@
   });
   rebootCancel.addEventListener("click", () => rebootDialog.close());
   rebootConfirm.addEventListener("click", rebootDevice);
+  configBackupButton.addEventListener("click", downloadConfigBackup);
+  configRestoreFile.addEventListener("change", () => {
+    const file = configRestoreFile.files[0];
+    configRestoreName.textContent = file ? file.name : "Nie wybrano pliku.";
+    configRestoreButton.disabled = !file || configTransferBusy;
+    configRestoreRestart.hidden = true;
+    setConfigTransferStatus(configRestoreStatus, "");
+  });
+  configRestoreButton.addEventListener("click", restoreConfigBackup);
+  configRestoreRestart.addEventListener("click", () => {
+    if (!rebootStarted) rebootDialog.showModal();
+  });
   mqttForm.addEventListener("submit", saveMqttConfig);
   hardwareForm.addEventListener("submit", event => {
     event.preventDefault();

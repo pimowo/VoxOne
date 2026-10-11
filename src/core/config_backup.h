@@ -19,6 +19,7 @@ constexpr std::size_t kBackupFixedOverhead =
     34 + config_format::kConfigV7SerializedSize +
     hardware::kRuntimeHardwareConfigSerializedSize + kMqttWireSize +
     kUiWireSize + 4;
+constexpr std::size_t kBackupVariableOffset = kBackupFixedOverhead - 4;
 
 struct Bytes {
   const uint8_t* data;
@@ -32,6 +33,24 @@ struct Data {
   UiTimeoutSettings ui;
   Bytes wifi;
   Bytes stations;
+};
+
+class ByteReader {
+ public:
+  virtual ~ByteReader() {}
+  virtual std::size_t size() const = 0;
+  virtual bool read(std::size_t offset, uint8_t* output,
+                    std::size_t length) = 0;
+};
+
+class Crc32 {
+ public:
+  Crc32() : value_(0xffffffffu) {}
+  void update(const uint8_t* data, std::size_t size);
+  uint32_t value() const { return value_ ^ 0xffffffffu; }
+
+ private:
+  uint32_t value_;
 };
 
 enum class Status : uint8_t {
@@ -51,6 +70,8 @@ enum class Status : uint8_t {
   InvalidWifi,
   InvalidStations,
   OutputTooSmall,
+  AllocationFailed,
+  StorageReadFailed,
   StorageBeginFailed,
   StorageWriteFailed,
   StorageCommitFailed,
@@ -63,6 +84,16 @@ struct RestoreResult {
 };
 
 std::size_t serializedSize(const Data& data);
+Status encodePrefix(const Data& data,
+                    const hardware::HardwareCapabilities& capabilities,
+                    uint8_t* output, std::size_t capacity);
+Status decodePrefix(const uint8_t* input, std::size_t size,
+                    std::size_t artifactSize,
+                    const hardware::HardwareCapabilities& capabilities,
+                    Data& output);
+Status validateExternal(const Data& data,
+                        const hardware::HardwareCapabilities& capabilities,
+                        ByteReader& wifi, ByteReader& stations);
 Status serialize(const Data& data,
                  const hardware::HardwareCapabilities& capabilities,
                  uint8_t* output, std::size_t capacity,
@@ -85,6 +116,7 @@ class RestoreStorage {
 RestoreResult restore(const uint8_t* input, std::size_t size,
                       const hardware::HardwareCapabilities& capabilities,
                       RestoreStorage& storage);
+RestoreResult restoreValidated(const Data& candidate, RestoreStorage& storage);
 
 }  // namespace config_backup
 }  // namespace voxone

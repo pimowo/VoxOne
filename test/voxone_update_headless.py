@@ -78,6 +78,10 @@ window.XMLHttpRequest = MockUpdateRequest;
 window.btUpdateResponses = [];
 window.hardwareRequests = [];
 window.hardwarePostResponses = [];
+window.configBackupRequests = 0;
+window.configDownloadedName = '';
+window.configRestoreRequests = [];
+window.configRestoreResponses = [];
 window.hardwareSnapshot = {
   family:'L0', mcu:'ESP32-S3', restartRequired:false,
   config:{display:'st7796s_480x320', input:'ec11'},
@@ -121,6 +125,19 @@ window.hardwareSnapshot = {
 };
 const originalFetch = window.fetch.bind(window);
 window.fetch = (url, options = {}) => {
+  if (url === '/api/config/backup') {
+    window.configBackupRequests++;
+    return Promise.resolve({ok:true,status:200,
+      headers:{get:name => name.toLowerCase() === 'content-disposition' ?
+        'attachment; filename="VoxOne-0.8.0-backup.vxcf"' : null},
+      blob:() => Promise.resolve(new Blob(['VXCF-backup'], {type:'application/octet-stream'}))});
+  }
+  if (url === '/api/config/restore') {
+    window.configRestoreRequests.push(options);
+    const prepared = window.configRestoreResponses.shift() ||
+      {ok:true,status:200,json:() => Promise.resolve({ok:true,restartRequired:true})};
+    return Promise.resolve(prepared);
+  }
   if (url === '/api/bt/update')
     return Promise.resolve({ok:true, json:() => Promise.resolve(window.btUpdateResponses.shift() || {state:0})});
   if (url === '/api/hardware') {
@@ -135,6 +152,11 @@ window.fetch = (url, options = {}) => {
     return Promise.resolve({ok:true,status:200,json:() => Promise.resolve(result)});
   }
   return originalFetch(url, options);
+};
+const originalAnchorClick = HTMLAnchorElement.prototype.click;
+HTMLAnchorElement.prototype.click = function() {
+  if (this.download) { window.configDownloadedName = this.download; return; }
+  return originalAnchorClick.call(this);
 };
 const originalSetInterval = window.setInterval.bind(window);
 window.setInterval = (handler, delay, ...args) => {
@@ -244,6 +266,49 @@ setTimeout(async () => {
     check(get('footer-connection').textContent === 'Połączono', 'footer WebSocket connected');
     check(get('system').querySelector('h3').textContent === 'VoxOne', 'VoxOne system card');
     check([...get('system').querySelectorAll('h3')].some(node => node.textContent === 'VoxOneBT'), 'VoxOneBT system card');
+    check([...get('system').querySelectorAll('h3')].some(node => node.textContent === 'Backup konfiguracji'),
+      'backup card visible');
+    check(get('system').textContent.includes('hasła Wi-Fi/MQTT'), 'backup secrets warning');
+    get('config-backup-button').click();
+    await new Promise(resolve => setTimeout(resolve, 0));
+    check(configBackupRequests === 1 && configDownloadedName === 'VoxOne-0.8.0-backup.vxcf' &&
+      get('config-backup-status').textContent.includes('pobrany'),
+      'backup download action');
+    const restoreFile = new File(['VXCF-backup'], 'settings.vxcf', {type:'application/octet-stream'});
+    const restoreTransfer = new DataTransfer();
+    restoreTransfer.items.add(restoreFile);
+    Object.defineProperty(get('config-restore-file'), 'files', {configurable:true, value:restoreTransfer.files});
+    get('config-restore-file').dispatchEvent(new Event('change'));
+    check(!get('config-restore-button').disabled && get('config-restore-name').textContent === 'settings.vxcf',
+      'restore file selection');
+    get('config-restore-button').click();
+    await new Promise(resolve => setTimeout(resolve, 0));
+    check(configRestoreRequests.length === 1 && configRestoreRequests[0].body === restoreFile,
+      'restore uploads selected binary');
+    check(get('config-restore-status').textContent.includes('Wymagane ponowne uruchomienie') &&
+      !get('config-restore-restart').hidden, 'restore success and restart action');
+    configRestoreResponses.push({ok:false,status:400,
+      json:() => Promise.resolve({error:'invalid_file'})});
+    get('config-restore-button').click();
+    await new Promise(resolve => setTimeout(resolve, 0));
+    check(get('config-restore-status').dataset.kind === 'error' &&
+      get('config-restore-status').textContent.includes('Nieprawidłowy') &&
+      get('config-restore-restart').hidden, 'restore invalid error without restart');
+    for (const [error, text] of [['wrong_schema','schematu'], ['bad_crc','CRC'],
+                                ['unsupported_hardware','nieobsługiwaną']]) {
+      configRestoreResponses.push({ok:false,status:422,
+        json:() => Promise.resolve({error})});
+      get('config-restore-button').click();
+      await new Promise(resolve => setTimeout(resolve, 0));
+      check(get('config-restore-status').textContent.includes(text) &&
+        get('config-restore-restart').hidden, 'restore error ' + error);
+    }
+    configRestoreResponses.push({ok:false,status:503,
+      json:() => Promise.resolve({error:'recovery_pending'})});
+    get('config-restore-button').click();
+    await new Promise(resolve => setTimeout(resolve, 0));
+    check(get('config-restore-status').textContent.includes('wykonać recovery') &&
+      get('config-restore-restart').hidden, 'restore recovery pending without success action');
     ['Czas pracy', 'Wolna pamięć heap', 'Możliwości', 'Protokół', 'Nazwa BT'].forEach(label =>
       check([...get('system').querySelectorAll('dt')].some(node => node.textContent === label), 'system label ' + label));
     ['VoxOne Firmware', 'VoxOne system plików', 'VoxOneBT Firmware'].forEach(label =>
