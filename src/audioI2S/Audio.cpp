@@ -390,6 +390,11 @@ void Audio::connectTask(void* pvParams) {
 
 //---------------------------------------------------------------------------------------------------------------------
 bool Audio::connecttohost(const char* host, const char* user, const char* pwd) {
+    return connectToHost(host, user, pwd, true);
+}
+//---------------------------------------------------------------------------------------------------------------------
+bool Audio::connectToHost(const char* host, const char* user, const char* pwd,
+                          bool startResolution) {
     // user and pwd for authentification only, can be empty
 
     if(host == NULL) {
@@ -406,10 +411,22 @@ bool Audio::connecttohost(const char* host, const char* user, const char* pwd) {
         return false;
     }
 
-    int idx = indexOf(host, "http");
     char* l_host = (char*)malloc(lenHost + 10);
-    if(idx < 0){strcpy(l_host, "http://"); strcat(l_host, host); } // amend "http;//" if not found
-    else       {strcpy(l_host, (host + idx));}                     // trim left if necessary
+    if(!l_host) return resolutionError("out of memory resolving URL");
+    if(strstr(host, "://")) strcpy(l_host, host);
+    else {strcpy(l_host, "http://"); strcat(l_host, host);}
+
+    char normalizedHost[voxone::radio::kMaxResolvedUrlLength];
+    const auto urlResult = voxone::radio::resolveRelativeUrl(
+        l_host, l_host, normalizedHost, sizeof(normalizedHost));
+    if(urlResult != voxone::radio::UrlResolutionResult::Ok) {
+        free(l_host);
+        return resolutionError(
+            urlResult == voxone::radio::UrlResolutionResult::UnsupportedScheme
+                ? "unsupported URL scheme" : "malformed URL");
+    }
+    strcpy(l_host, normalizedHost);
+    if(startResolution) m_urlHopBudget.reset(l_host);
 
     char* h_host = NULL; // pointer of l_host without http:// or https://
     if(startsWith(l_host, "https")) h_host = strdup(l_host + 8);
@@ -554,6 +571,29 @@ bool Audio::connecttohost(const char* host, const char* user, const char* pwd) {
     if(l_host   ) {free(l_host);    l_host    = NULL;}
     if(h_host   ) {free(h_host);    h_host    = NULL;}
     return res;
+}
+//---------------------------------------------------------------------------------------------------------------------
+bool Audio::resolutionError(const char* reason) {
+    AUDIO_INFO("URL resolution failed: %s", reason);
+    AUDIO_ERROR("URL resolution failed: %s", reason);
+    if(_client) _client->stop();
+    if(m_playlistBuff) {free(m_playlistBuff); m_playlistBuff = NULL;}
+    vector_clear_and_shrink(m_playlistContent);
+    setDatamode(AUDIO_NONE);
+    stopSong();
+    return false;
+}
+//---------------------------------------------------------------------------------------------------------------------
+bool Audio::followResolutionUrl(const char* host, const char* source) {
+    if(!host || !host[0]) return resolutionError("playlist or redirect has no URL");
+    const auto hop = m_urlHopBudget.follow(host);
+    if(hop == voxone::radio::UrlHopResult::Loop)
+        return resolutionError("playlist/redirect loop detected");
+    if(hop == voxone::radio::UrlHopResult::LimitExceeded)
+        return resolutionError("playlist/redirect hop limit exceeded");
+    AUDIO_INFO("Follow %s URL (%u/%u): %s", source, m_urlHopBudget.hops(),
+               voxone::radio::kMaxResolutionHops, host);
+    return connectToHost(host, "", "", false);
 }
 //---------------------------------------------------------------------------------------------------------------------
 bool Audio::httpPrint(const char* host) {
@@ -2350,9 +2390,9 @@ void Audio::loop() {
                 readPlayListData();
                 break;
             case AUDIO_PLAYLISTDATA:
-                if(m_playlistFormat == FORMAT_M3U)  connecttohost(parsePlaylist_M3U());
-                if(m_playlistFormat == FORMAT_PLS)  connecttohost(parsePlaylist_PLS());
-                if(m_playlistFormat == FORMAT_ASX)  connecttohost(parsePlaylist_ASX());
+                if(m_playlistFormat == FORMAT_M3U)  followResolutionUrl(parsePlaylist_M3U(), "M3U");
+                if(m_playlistFormat == FORMAT_PLS)  followResolutionUrl(parsePlaylist_PLS(), "PLS");
+                if(m_playlistFormat == FORMAT_ASX)  followResolutionUrl(parsePlaylist_ASX(), "ASX");
                 break;
             case AUDIO_DATA:
                 if(m_streamType == ST_WEBSTREAM) processWebStream();
@@ -2489,7 +2529,7 @@ bool Audio::readPlayListData() {
 const char* Audio::parsePlaylist_M3U(){
     uint8_t lines = m_playlistContent.size();
     int pos = 0;
-    char* host = nullptr;
+    char selected[voxone::radio::kMaxResolvedUrlLength] = {};
 
     for(int i= 0; i < lines; i++){
         if(indexOf(m_playlistContent[i], "#EXTINF:") >= 0) {            // Info?
@@ -2500,50 +2540,38 @@ const char* Audio::parsePlaylist_M3U(){
             }
             continue;
         }
-        if(startsWith(m_playlistContent[i], "#")) {                     // Commentline?
-            continue;
-        }
-
-        pos = indexOf(m_playlistContent[i], "http://:@", 0);            // ":@"??  remove that!
-        if(pos >= 0) {
-            AUDIO_INFO("Entry in playlist found: %s", (m_playlistContent[i] + pos + 9));
-            host = m_playlistContent[i] + pos + 9;
-            break;
-        }
-        // AUDIO_INFO("Entry in playlist found: %s", pl);
-        pos = indexOf(m_playlistContent[i], "http", 0);                 // Search for "http"
-        if(pos >= 0) {                                                  // Does URL contain "http://"?
-    //    log_e("%s pos=%i", m_playlistContent[i], pos);
-            host = m_playlistContent[i] + pos;                        // Yes, set new host
+        if(voxone::radio::parseM3uEntry(m_playlistContent[i], m_lastHost,
+                                        selected, sizeof(selected)) ==
+           voxone::radio::UrlResolutionResult::Ok) {
+            AUDIO_INFO("Entry in playlist found: %s", selected);
             break;
         }
     }
+    if(m_playlistBuff) {free(m_playlistBuff); m_playlistBuff = NULL;}
+    if(selected[0]) m_playlistBuff = strdup(selected);
     vector_clear_and_shrink(m_playlistContent);
-    return host;
+    return m_playlistBuff;
 }
 //----------------------------------------------------------------------------------------------------------------------
 const char* Audio::parsePlaylist_PLS(){
     uint8_t lines = m_playlistContent.size();
-    int pos = 0;
-    char* host = nullptr;
+    bool sawHeader = false;
+    uint16_t selectedNumber = UINT16_MAX;
+    char selected[voxone::radio::kMaxResolvedUrlLength] = {};
 
     for(int i= 0; i < lines; i++){
-        if(i == 0){
-            if(strlen(m_playlistContent[0]) == 0) goto exit;            // empty line
-            if(strcmp(m_playlistContent[0] , "[playlist]") != 0){       // first entry in valid pls
-                setDatamode(HTTP_RESPONSE_HEADER);                      // pls is not valid
-                AUDIO_INFO("pls is not valid, switch to HTTP_RESPONSE_HEADER");
-                goto exit;
-            }
-            continue;
-        }
-        if(startsWith(m_playlistContent[i], "File1")) {
-            if(host) continue;                                          // we have already a url
-            pos = indexOf(m_playlistContent[i], "http", 0);             // File1=http://streamplus30.leonex.de:14840/;
-            if(pos >= 0) {                                              // yes, URL contains "http"?
-                host = m_playlistContent[i] + pos;                      // Now we have an URL for a stream in host.
-            }
-            continue;
+        char* line = m_playlistContent[i];
+        while(*line && isspace(static_cast<unsigned char>(*line))) ++line;
+        if(!strcmp(line, "[playlist]")) sawHeader = true;
+        char candidate[voxone::radio::kMaxResolvedUrlLength];
+        uint16_t candidateNumber = 0;
+        if(voxone::radio::parsePlsEntry(m_playlistContent[i], m_lastHost,
+                                        &candidateNumber, candidate,
+                                        sizeof(candidate)) ==
+               voxone::radio::UrlResolutionResult::Ok &&
+           candidateNumber < selectedNumber) {
+            selectedNumber = candidateNumber;
+            strcpy(selected, candidate);
         }
         if(startsWith(m_playlistContent[i], "Title1")) {                // Title1=Antenne Tirol
             const char* plsStationName = (m_playlistContent[i] + 7);
@@ -2555,17 +2583,18 @@ const char* Audio::parsePlaylist_PLS(){
             continue;
         }
         if(indexOf(m_playlistContent[i], "Invalid username") >= 0){     // Unable to access account:
-            goto exit;                                                  // Invalid username or password
+            selected[0] = '\0';                                        // Invalid username or password
+            break;
         }
     }
-    return host;
-
-exit:
-    m_f_running = false;
-    stopSong();
+    if(!sawHeader) selected[0] = '\0';
+    if(m_playlistBuff) {free(m_playlistBuff); m_playlistBuff = NULL;}
+    if(selected[0]) {
+        AUDIO_INFO("Entry File%u in playlist found: %s", selectedNumber, selected);
+        m_playlistBuff = strdup(selected);
+    }
     vector_clear_and_shrink(m_playlistContent);
-    setDatamode(AUDIO_NONE);
-    return nullptr;
+    return m_playlistBuff;
 }
 //----------------------------------------------------------------------------------------------------------------------
 const char* Audio::parsePlaylist_ASX(){                             // Advanced Stream Redirector
@@ -3236,7 +3265,9 @@ bool Audio::parseHttpResponseHeader() { // this is the response to a GET / reque
     }
     notavailablefor = 0;
     char rhl[512]; // responseHeaderline
+    char redirectUrl[voxone::radio::kMaxResolvedUrlLength] = {};
     bool ct_seen = false;
+    int httpStatus = 0;
     uint32_t ctime = millis();
     uint32_t timeout = 2500; // ms
     while(true){  // outer while
@@ -3249,6 +3280,15 @@ bool Audio::parseHttpResponseHeader() { // this is the response to a GET / reque
             uint8_t b = _client->read();
             if(b == '\n') {
                 if(!pos){ // empty line received, is the last line of this responseHeader
+                    if(voxone::radio::httpResponseAction(httpStatus) ==
+                       voxone::radio::HttpResponseAction::Redirect) {
+                        if(!redirectUrl[0]) {
+                            AUDIO_ERROR("HTTP redirect %d without Location", httpStatus);
+                            goto exit;
+                        }
+                        while(_client->available()) _client->read();
+                        return followResolutionUrl(redirectUrl, "redirect");
+                    }
                     if(ct_seen) goto lastToDo;
                     char absentContentType[] = "";
                     if(parseContentType(absentContentType)) goto lastToDo;
@@ -3278,48 +3318,36 @@ bool Audio::parseHttpResponseHeader() { // this is the response to a GET / reque
             }
         }
 
-        if(startsWith(rhl, "HTTP/")){ // HTTP status error code
-            char statusCode[5];
-            statusCode[0] = rhl[9];
-            statusCode[1] = rhl[10];
-            statusCode[2] = rhl[11];
-            statusCode[3] = '\0';
-            int sc = atoi(statusCode);
-            if(sc > 310){ // e.g. HTTP/1.1 301 Moved Permanently
+        if(startsWith(rhl, "HTTP/")){ // HTTP status and redirect decision
+            if(sscanf(rhl, "%*s %d", &httpStatus) != 1) {
+                AUDIO_ERROR("Malformed HTTP status: %s", rhl);
+                goto exit;
+            }
+            if(voxone::radio::httpResponseAction(httpStatus) ==
+               voxone::radio::HttpResponseAction::Error) {
+                AUDIO_ERROR("HTTP status %d not supported", httpStatus);
                 if(audio_showstreamtitle) audio_showstreamtitle(rhl);
                 goto exit;
             }
         }
 
         else if(startsWith(rhl, "content-type:")){ // content-type: text/html; charset=UTF-8
-            int idx = indexOf(rhl + 13, ";");
-            if(idx >0) rhl[13 + idx] = '\0';
-            if(parseContentType(rhl + 13)) ct_seen = true;
-            else goto exit;
+            if(voxone::radio::httpResponseAction(httpStatus) !=
+               voxone::radio::HttpResponseAction::Redirect) {
+                int idx = indexOf(rhl + 13, ";");
+                if(idx >0) rhl[13 + idx] = '\0';
+                if(parseContentType(rhl + 13)) ct_seen = true;
+                else goto exit;
+            }
         }
 
         else if(startsWith(rhl, "location:")) {
-            int pos = indexOf(rhl, "http", 0);
-            if(pos >= 0){
-                const char* c_host = (rhl + pos);
-                if(strcmp(c_host, m_lastHost) != 0) { // prevent a loop
-                    int pos_slash = indexOf(c_host, "/", 9);
-                    if(pos_slash > 9){
-                        if(!strncmp(c_host, m_lastHost, pos_slash)){
-                            AUDIO_INFO("redirect to new extension at existing host \"%s\"", c_host);
-                            if(m_playlistFormat == FORMAT_M3U8) {
-                                strcpy(m_lastHost, c_host);
-                                m_f_m3u8data = true;
-                            }
-                            httpPrint(c_host);
-                            while(_client->available()) _client->read(); // empty client buffer
-                            return true;
-                        }
-                    }
-                    AUDIO_INFO("redirect to new host \"%s\"", c_host);
-                    connecttohost(c_host);
-                    return true;
-                }
+            const char* location = rhl + 9;
+            const auto result = voxone::radio::resolveRelativeUrl(
+                m_lastHost, location, redirectUrl, sizeof(redirectUrl));
+            if(result != voxone::radio::UrlResolutionResult::Ok) {
+                AUDIO_ERROR("Invalid redirect Location: %s", location);
+                goto exit;
             }
         }
 
@@ -3545,7 +3573,8 @@ bool Audio::parseContentType(char* ct) {
 
     int ct_val = CT_NONE;
 
-    if(!strcmp(ct, "video/mp2t")){           m_codec = CODEC_AAC; m_f_ts = true; return true;} // existing AAC transport stream path
+    if(!ct[0] && m_expectedPlsFmt != FORMAT_NONE) ct_val = CT_TXT;
+    else if(!strcmp(ct, "video/mp2t")){      m_codec = CODEC_AAC; m_f_ts = true; return true;} // existing AAC transport stream path
     else if(!strcmp(ct, "audio/wav"))        ct_val = CT_WAV;
     else if(!strcmp(ct, "audio/x-wav"))      ct_val = CT_WAV;
 
@@ -3562,7 +3591,6 @@ bool Audio::parseContentType(char* ct) {
     else if(!strcmp(ct, "application/x-mpegurl")) ct_val =CT_M3U8;
 
     else if(!strcmp(ct, "application/octet-stream")) ct_val = CT_TXT; // ??? listen.radionomy.com/1oldies before redirection
-    else if(!strcmp(ct, "text/html"))        ct_val = CT_TXT;
     else if(!strcmp(ct, "text/plain"))       ct_val = CT_TXT;
 
     else if(ct_val == CT_NONE){

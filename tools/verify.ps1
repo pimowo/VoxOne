@@ -29,12 +29,24 @@ $root=(Resolve-Path (Join-Path $PSScriptRoot '..')).Path
 Set-Location -LiteralPath $root
 $work=Join-Path $root '.pio/verify'
 [void][System.IO.Directory]::CreateDirectory($work)
+$partitionsPath=Join-Path $root 'partitions_yoradio.csv'
+$partitionRows=Import-Csv -LiteralPath $partitionsPath -Header Name,Type,SubType,Offset,Size,Flags
+function Get-PartitionSize([string]$name) {
+ $row=$partitionRows | Where-Object { $_.Name.Trim() -eq $name } | Select-Object -First 1
+ if(-not $row) { throw "Partition not found: $name" }
+ $value=$row.Size.Trim()
+ if($value -match '^0[xX][0-9a-fA-F]+$') { return [Convert]::ToInt64($value.Substring(2),16) }
+ return [Convert]::ToInt64($value,10)
+}
+$appPartitionSize=Get-PartitionSize 'app0'
+if((Get-PartitionSize 'app1') -ne $appPartitionSize) { throw 'app0 and app1 partition sizes differ' }
 $versionHeader=Get-Content -LiteralPath (Join-Path $root 'src/core/version.h') -Raw
 $versionMatch=[regex]::Match($versionHeader,'(?m)^\s*#define\s+VOXONE_VERSION\s+"(\d+\.\d+\.\d+)"\s*$')
 if(-not $versionMatch.Success) { throw 'VOXONE_VERSION must be SemVer in src/core/version.h' }
 $productVersion=$versionMatch.Groups[1].Value
 $results=[ordered]@{}
 $sizes=[ordered]@{}
+$firmwareMemory=[ordered]@{}
 $script:failed=$false
 function Invoke-Step([string]$name,[scriptblock]$action) {
  Write-Host "RUN $name"
@@ -100,6 +112,7 @@ $nativeSources=@{
  dsp_state_json_native=@('src/core/dsp_model.cpp','src/core/dsp_storage_format.cpp','src/core/dsp_service.cpp','src/core/dsp_state_json.cpp')
  mqtt_config_native=@('src/core/volume_map.cpp')
  radio_format_detection_native=@('src/core/radio_format_detection.cpp')
+ radio_url_resolution_native=@('src/core/radio_url_resolution.cpp')
  runtime_display_activation_native=@('src/displays/display_backend_selection.cpp','src/hardware/runtime_hardware_config.cpp')
  runtime_hardware_config_native=@('src/hardware/runtime_hardware_config.cpp')
  runtime_hardware_web_native=@('src/hardware/runtime_hardware_config.cpp','src/hardware/runtime_hardware_web.cpp')
@@ -164,7 +177,15 @@ foreach($target in @('l0','m0','s0','din0','w0')) {
   $versionedBin=Join-Path $root ".pio/build/$envName/VoxOne-$productVersion-firmware.bin"
   if(-not (Test-Path -LiteralPath $versionedBin)) { throw "Missing versioned firmware: $versionedBin" }
   if((Get-FileHash -LiteralPath $bin -Algorithm SHA256).Hash -ne (Get-FileHash -LiteralPath $versionedBin -Algorithm SHA256).Hash) { throw "Versioned firmware differs: $versionedBin" }
-  $sizes[$envName.ToUpperInvariant()]=(Get-Item -LiteralPath $bin).Length
+  $profile=$envName.ToUpperInvariant()
+  $firmwareSize=(Get-Item -LiteralPath $bin).Length
+  if($firmwareSize -gt $appPartitionSize) { throw "$profile firmware exceeds app partition" }
+  $sizes[$profile]=$firmwareSize
+  $firmwareMemory[$profile]=[pscustomobject]@{
+   Firmware=$firmwareSize
+   UsedPercent=100.0*$firmwareSize/$appPartitionSize
+   Free=$appPartitionSize-$firmwareSize
+  }
  }
 }
 Invoke-Step 'WWW repeatability' {
@@ -180,6 +201,12 @@ Write-Host ''
 Write-Host 'VoxOne Regression Verification'
 foreach($name in $results.Keys) { Write-Host ("{0}: {1}" -f $name,$results[$name]) }
 foreach($name in $sizes.Keys) { Write-Host ("{0} size: {1} B" -f $name,$sizes[$name]) }
+Write-Host ("App partition size: {0} B" -f $appPartitionSize)
+foreach($name in $firmwareMemory.Keys) {
+ $memory=$firmwareMemory[$name]
+ $used=$memory.UsedPercent.ToString('F2',[Globalization.CultureInfo]::InvariantCulture)
+ Write-Host ("{0} firmware: {1} B, used: {2}%, free: {3} B" -f $name,$memory.Firmware,$used,$memory.Free)
+}
 if($script:failed) { Write-Host 'RESULT: FAIL'; exit 1 }
 Write-Host 'RESULT: PASS'
 exit 0

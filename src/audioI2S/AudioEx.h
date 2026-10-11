@@ -9,6 +9,7 @@
 #pragma once
 #pragma GCC optimize ("Ofast")
 #include <vector>
+#include "../core/radio_url_resolution.h"
 #include <Arduino.h>
 #include <libb64/cencode.h>
 #include <esp32-hal-log.h>
@@ -176,6 +177,10 @@ private:
     //void setDefaults(); // free buffers and set defaults
     void initInBuff();
     bool httpPrint(const char* host);
+    bool connectToHost(const char* host, const char* user, const char* pwd,
+                       bool startResolution);
+    bool followResolutionUrl(const char* host, const char* source);
+    bool resolutionError(const char* reason);
     void processWebStream();
     void processWebFile();
     void processWebStreamTS();
@@ -422,6 +427,7 @@ private:
     std::vector<char*>    m_playlistContent; // m3u8 playlist buffer
     std::vector<char*>    m_playlistURL;     // m3u8 streamURLs buffer
     std::vector<uint32_t> m_hashQueue;
+    voxone::radio::UrlHopBudget m_urlHopBudget;
     
     struct ConnectParams {
       char *hostwoext = nullptr;
