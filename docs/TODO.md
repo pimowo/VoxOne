@@ -64,7 +64,7 @@
 
 ## Audio, RADIO i kodeki
 
-- [STABLE] Utrzymywać MP3, AAC/AAC+, FLAC oraz M4A wyłącznie jako kontener AAC; dokończyć detekcję AAC/AAC+ i `audio/aacp`, aby danych AAC nie kierować do dekodera MP3; przetestować MP3, AAC/AAC+ (w tym RMF DLA DZIECI), FLAC, SHOUTcast/Icecast, `ICY 200`, HTTP/HTTPS, metadata/brak metadata, reconnect i dead stream.
+- [STABLE] Fizycznie przetestować MP3, AAC/AAC+ (w tym RMF DLA DZIECI), FLAC i M4A jako kontener AAC: SHOUTcast/Icecast, `ICY 200`, HTTP/HTTPS, metadata/brak metadata, reconnect i dead stream. Deterministyczny routing MIME ma pozostać software baseline; real-stream PASS wymaga sprzętu.
 - [STABLE] Dokończyć obsługę M3U, PLS, redirect i final URL streamu z limitem rekurencji i ochroną przed pętlą; zweryfikować te ścieżki na rzeczywistych playlistach.
 - [DECISION] Po stable ocenić usunięcie WAV, OGG/Vorbis remnants i Opus enum/remnants oraz potrzebę ASX, M3U8, HLS i TS na podstawie realnych consumerów. Nie traktować ich jako nowych planowanych funkcji.
 - [DECISION] Ustalić źródło wiarygodnego kodeka i bitrate A2DP; publikować je dopiero, gdy VoxOneBT lub A2DP udostępni realne dane.

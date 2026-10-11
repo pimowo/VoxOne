@@ -99,6 +99,7 @@ $nativeSources=@{
  dsp_transport_native=@('src/core/dsp_model.cpp','src/core/dsp_storage_format.cpp','src/core/dsp_service.cpp','src/core/dsp_transport_protocol.cpp')
  dsp_state_json_native=@('src/core/dsp_model.cpp','src/core/dsp_storage_format.cpp','src/core/dsp_service.cpp','src/core/dsp_state_json.cpp')
  mqtt_config_native=@('src/core/volume_map.cpp')
+ radio_format_detection_native=@('src/core/radio_format_detection.cpp')
  runtime_display_activation_native=@('src/displays/display_backend_selection.cpp','src/hardware/runtime_hardware_config.cpp')
  runtime_hardware_config_native=@('src/hardware/runtime_hardware_config.cpp')
  runtime_hardware_web_native=@('src/hardware/runtime_hardware_config.cpp','src/hardware/runtime_hardware_web.cpp')

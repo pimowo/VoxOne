@@ -14,6 +14,7 @@
 #include "aac_decoder/aac_decoder.h"
 #include "flac_decoder/flac_decoder.h"
 #include "../core/config.h"
+#include "../core/radio_format_detection.h"
 #include "../core/system_operation_state.h"
 #if VOXONE_HAS_BT && VOXONE_PIN_MAP_COMPLETE && VOXONE_BT_I2S_RX_ENABLED
 #include "../core/source_manager.h"
@@ -3249,7 +3250,9 @@ bool Audio::parseHttpResponseHeader() { // this is the response to a GET / reque
             if(b == '\n') {
                 if(!pos){ // empty line received, is the last line of this responseHeader
                     if(ct_seen) goto lastToDo;
-                    else goto exit;
+                    char absentContentType[] = "";
+                    if(parseContentType(absentContentType)) goto lastToDo;
+                    goto exit;
                 }
                 break;
             }
@@ -3503,33 +3506,48 @@ bool Audio:: initializeDecoder(){
 //---------------------------------------------------------------------------------------------------------------------
 bool Audio::parseContentType(char* ct) {
 
-    enum : int {CT_NONE, CT_MP3, CT_AAC, CT_M4A, CT_WAV, CT_OGG, CT_FLAC, CT_PLS, CT_M3U, CT_ASX,
-                CT_M3U8, CT_TXT, CT_AACP};
+    enum : int {CT_NONE, CT_WAV, CT_OGG, CT_PLS, CT_M3U, CT_ASX,
+                CT_M3U8, CT_TXT};
+
+    voxone::radio::AudioFormat hint = voxone::radio::AudioFormat::Unknown;
+    if(m_expectedCodec == CODEC_MP3) hint = voxone::radio::AudioFormat::Mp3;
+    if(m_expectedCodec == CODEC_AAC) hint = voxone::radio::AudioFormat::Aac;
+    if(m_expectedCodec == CODEC_M4A) hint = voxone::radio::AudioFormat::M4aAac;
+    if(m_expectedCodec == CODEC_FLAC) hint = voxone::radio::AudioFormat::Flac;
+    const auto detected = voxone::radio::detectAudioFormat(ct, hint);
+
+    m_codec = CODEC_NONE;
+    switch(detected.format) {
+        case voxone::radio::AudioFormat::Mp3: m_codec = CODEC_MP3; break;
+        case voxone::radio::AudioFormat::Aac:
+            m_codec = CODEC_AAC;
+            if(detected.aacPlus && m_playlistFormat == FORMAT_M3U8) m_f_ts = true;
+            break;
+        case voxone::radio::AudioFormat::M4aAac: m_codec = CODEC_M4A; break;
+        case voxone::radio::AudioFormat::Flac: m_codec = CODEC_FLAC; break;
+        case voxone::radio::AudioFormat::Unknown: break;
+    }
+    if(m_codec != CODEC_NONE) {
+        const char* format = m_codec == CODEC_MP3 ? "mp3" :
+                             m_codec == CODEC_FLAC ? "flac" : "aac";
+        if(m_f_Log) log_i("ContentType %s, format is %s%s", ct, format,
+                         detected.source == voxone::radio::AudioFormatSource::Hint
+                             ? " (URL hint)" : "");
+        if(audio_info) {
+            snprintf(chbuf, sizeof(chbuf), "format is %s", format);
+            audio_info(chbuf);
+        }
+        return true;
+    }
 
     strlwr(ct);
     trim(ct);
 
-    m_codec = CODEC_NONE;
     int ct_val = CT_NONE;
 
-    if(!strcmp(ct, "audio/mpeg"))            ct_val = CT_MP3;
-    else if(!strcmp(ct, "audio/mpeg3"))      ct_val = CT_MP3;
-    else if(!strcmp(ct, "audio/x-mpeg"))     ct_val = CT_MP3;
-    else if(!strcmp(ct, "audio/x-mpeg-3"))   ct_val = CT_MP3;
-    else if(!strcmp(ct, "audio/mp3"))        ct_val = CT_MP3;
-
-    else if(!strcmp(ct, "audio/aac"))        ct_val = CT_AAC;
-    else if(!strcmp(ct, "audio/x-aac"))      ct_val = CT_AAC;
-    else if(!strcmp(ct, "audio/aacp")){      ct_val = CT_AAC; if(m_playlistFormat == FORMAT_M3U8) m_f_ts = true;}
-    else if(!strcmp(ct, "video/mp2t")){      ct_val = CT_AAC; m_f_ts = true;} // assume AAC transport stream
-    else if(!strcmp(ct, "audio/mp4"))        ct_val = CT_M4A;
-    else if(!strcmp(ct, "audio/m4a"))        ct_val = CT_M4A;
-    else if(!strcmp(ct, "audio/x-m4a"))      ct_val = CT_M4A;
-
+    if(!strcmp(ct, "video/mp2t")){           m_codec = CODEC_AAC; m_f_ts = true; return true;} // existing AAC transport stream path
     else if(!strcmp(ct, "audio/wav"))        ct_val = CT_WAV;
     else if(!strcmp(ct, "audio/x-wav"))      ct_val = CT_WAV;
-
-    else if(!strcmp(ct, "audio/flac"))       ct_val = CT_FLAC;
 
     else if(!strcmp(ct, "audio/scpls"))      ct_val = CT_PLS;
     else if(!strcmp(ct, "audio/x-scpls"))    ct_val = CT_PLS;
@@ -3555,26 +3573,6 @@ bool Audio::parseContentType(char* ct) {
     else {;}
 
     switch(ct_val){
-        case CT_MP3:
-            m_codec = CODEC_MP3;
-            if(m_f_Log) { log_i("ContentType %s, format is mp3", ct); } //ok is likely mp3
-            if(audio_info) audio_info("format is mp3");
-            break;
-        case CT_AAC:
-            m_codec = CODEC_AAC;
-            if(m_f_Log) { log_i("ContentType %s, format is aac", ct); }
-            if(audio_info) audio_info("format is aac");
-            break;
-        case CT_M4A:
-            m_codec = CODEC_M4A;
-            if(m_f_Log) { log_i("ContentType %s, format is aac", ct); }
-            if(audio_info) audio_info("format is aac");
-            break;
-        case CT_FLAC:
-            m_codec = CODEC_FLAC;
-            if(m_f_Log) { log_i("ContentType %s, format is flac", ct); }
-            if(audio_info) audio_info("format is flac");
-            break;
         case CT_WAV:
             m_codec = CODEC_WAV;
             if(m_f_Log) { log_i("ContentType %s, format is wav", ct); }
@@ -3599,9 +3597,6 @@ bool Audio::parseContentType(char* ct) {
             m_playlistFormat = FORMAT_M3U8;
             break;
         case CT_TXT: // overwrite text/plain
-            if(m_expectedCodec == CODEC_AAC){ m_codec = CODEC_AAC; if(m_f_Log) log_i("set ct from M3U8 to AAC");}
-            if(m_expectedCodec == CODEC_MP3){ m_codec = CODEC_MP3; if(m_f_Log) log_i("set ct from M3U8 to MP3");}
-
             if(m_expectedPlsFmt == FORMAT_ASX){ m_playlistFormat = FORMAT_ASX;  if(m_f_Log) log_i("set playlist format to ASX");}
             if(m_expectedPlsFmt == FORMAT_M3U){ m_playlistFormat = FORMAT_M3U;  if(m_f_Log) log_i("set playlist format to M3U");}
             if(m_expectedPlsFmt == FORMAT_M3U8){m_playlistFormat = FORMAT_M3U8; if(m_f_Log) log_i("set playlist format to M3U8");}
