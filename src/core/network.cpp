@@ -44,11 +44,11 @@ void MyNetwork::WiFiReconnected(WiFiEvent_t event, WiFiEventInfo_t info){
   if (radioWifiReconnectShouldPlay(network.lostPlaying,
                                    !bluetoothSourceSelected(),
                                    sourceManagerRadioPlayIntent()))
-    player.sendCommand({PR_RADIO_RESUME, config.lastStation()});
+    player.sendCommand({PR_RADIO_NETWORK_ONLINE, 0});
 #else
   if (radioWifiReconnectShouldPlay(network.lostPlaying, true,
                                    sourceManagerRadioPlayIntent()))
-    player.sendCommand({PR_PLAY, config.lastStation()});
+    player.sendCommand({PR_RADIO_NETWORK_ONLINE, 0});
 #endif
   network.lostPlaying = false;
   mqttWifiConnected();
@@ -69,14 +69,16 @@ void MyNetwork::WiFiLostConnection(WiFiEvent_t event, WiFiEventInfo_t info){
   if(!network.beginReconnect){
     const bool temporaryRecovery = player.interruptTemporaryForNetwork();
     Serial.printf("Lost connection, reconnecting to %s...\n", config.ssids[config.store.lastSSID-1].ssid);
-    network.lostPlaying = !temporaryRecovery && player.isRunning();
+#if VOXONE_HAS_BT && VOXONE_PIN_MAP_COMPLETE
+    const bool radioSelected = !bluetoothSourceSelected();
+#else
+    const bool radioSelected = true;
+#endif
+    network.lostPlaying = radioWifiDisconnectShouldSuspend(
+        temporaryRecovery, radioSelected, sourceManagerRadioPlayIntent());
     if (network.lostPlaying) {
       player.lockOutput = true;
-#if VOXONE_HAS_BT && VOXONE_PIN_MAP_COMPLETE
-      player.sendCommand({PR_RADIO_SUSPEND, 0});
-#else
-      player.sendCommand({PR_STOP, 0});
-#endif
+      player.sendCommand({PR_RADIO_NETWORK_OFFLINE, 0});
     }
     transitionUiMode(LOST);
   }

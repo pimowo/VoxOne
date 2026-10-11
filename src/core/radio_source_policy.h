@@ -20,4 +20,10 @@ inline bool radioWifiReconnectShouldPlay(bool lostPlaying,
   return lostPlaying && radioSelected && playIntent;
 }
 
+inline bool radioWifiDisconnectShouldSuspend(bool temporaryRecovery,
+                                             bool radioSelected,
+                                             bool playIntent) {
+  return !temporaryRecovery && radioSelected && playIntent;
+}
+
 #endif

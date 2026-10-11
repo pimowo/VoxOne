@@ -200,6 +200,24 @@ void Player::loop() {
           _play(static_cast<uint16_t>(requestP.payload), true);
         }
         break;
+      case PR_RADIO_NETWORK_OFFLINE:
+        if (!sourceManagerRadioResumeAllowed()) {
+          _radioReconnect.cancel();
+          break;
+        }
+        if (!temporaryBusy()) _stop(false, RadioStopReason::SourceSwitch);
+        scheduleRadioReconnect();
+        serialCli.printf("##[RADIO]# network offline, reconnect suspended\n");
+        break;
+      case PR_RADIO_NETWORK_ONLINE:
+        if (temporaryBusy() || systemUpdateAudioBlocked() ||
+            !sourceManagerRadioResumeAllowed()) {
+          _radioReconnect.cancel();
+          break;
+        }
+        scheduleRadioReconnect();
+        serialCli.printf("##[RADIO]# network online, reconnect resumed\n");
+        break;
       case PR_PLAY: {
         // Accepted commands already updated canonical intent/station. Let the
         // announcement finish, then use that current intent exactly once.
@@ -246,8 +264,10 @@ void Player::loop() {
   _callbackToken = _temporary.token();
   if (!_temporary.terminal()) Audio::loop();
   _callbackToken = 0;
-  if (_radioReconnect.failures() && audioStreamStarted())
+  if (_radioReconnect.failures() && audioStreamStarted()) {
+    serialCli.printf("##[RADIO]# stream recovered\n");
     _radioReconnect.reset();
+  }
   if (temporaryActive()) {
     if (_temporary.terminal() || !isRunning()) finishTemporary();
   } else if (!isRunning() && _status==PLAYING) {

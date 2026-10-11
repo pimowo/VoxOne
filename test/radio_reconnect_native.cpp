@@ -1,4 +1,5 @@
 #include "../src/core/radio_reconnect_policy.h"
+#include "../src/core/radio_source_policy.h"
 
 #include <cassert>
 #include <cstring>
@@ -9,7 +10,60 @@ using voxone::radio::ReconnectPolicy;
 int main() {
   ReconnectPolicy retry;
 
+  // 1. RADIO PLAY + offline creates one suspended recovery request. It is
+  // consumed only after the network returns and the retry becomes due.
+  assert(radioWifiDisconnectShouldSuspend(false, true, true));
+  assert(retry.schedule(100));
+  assert(!retry.schedule(100));
+  assert(!retry.takeDue(5000, true, false));
+  assert(retry.pending());
+  assert(radioWifiReconnectShouldPlay(true, true, true));
+  assert(retry.takeDue(5000, true, true));
+
+  // 2. RADIO STOP never suspends for automatic recovery.
+  retry.reset();
+  assert(!radioWifiDisconnectShouldSuspend(false, true, false));
+  assert(!radioWifiReconnectShouldPlay(false, true, false));
+
+  // 3. STOP while offline cancels the pending request before network return.
+  assert(retry.schedule(6000));
+  assert(!retry.takeDue(8000, false, false));
+  assert(!retry.pending() && retry.failures() == 0);
+  assert(!radioWifiReconnectShouldPlay(true, true, false));
+
+  // 4. Selecting BT while offline cancels RADIO recovery and cannot be
+  // converted into a RADIO takeover when Wi-Fi returns.
+  assert(retry.schedule(9000));
+  assert(!retry.takeDue(11000, false, false));
+  assert(!retry.pending() && retry.failures() == 0);
+  assert(!radioWifiReconnectShouldPlay(true, false, true));
+
+  // Temporary audio owns its own restore and must not start this flow.
+  assert(!radioWifiDisconnectShouldSuspend(true, true, true));
+
+  // 5. Repeated disconnect callbacks and service-loop passes keep exactly one
+  // pending request; successful recovery starts the next cycle from 1 s.
+  retry.reset();
+  for (uint32_t cycle = 0; cycle < 3; ++cycle) {
+    const uint32_t startedAt = 12000 + cycle * 50000;
+    assert(retry.schedule(startedAt));
+    for (int duplicate = 0; duplicate < 20; ++duplicate)
+      assert(!retry.schedule(startedAt + duplicate));
+    assert(retry.failures() == 1);
+    assert(retry.takeDue(startedAt + 1000, true, true));
+    retry.reset();  // Actual stream recognition, not just socket connect.
+  }
+
+  // 6. A 45 s outage produces no HTTP attempt and does not consume or
+  // multiply the pending request.
+  assert(retry.schedule(200000));
+  for (uint32_t elapsed = 1000; elapsed <= 45000; elapsed += 1000)
+    assert(!retry.takeDue(200000 + elapsed, true, false));
+  assert(retry.pending() && retry.failures() == 1);
+  assert(retry.takeDue(245000, true, true));
+
   // First failure schedules exactly one short retry.
+  retry.reset();
   assert(retry.schedule(100));
   assert(retry.pending() && retry.failures() == 1);
   assert(retry.dueAtMs() == 1100);
@@ -18,7 +72,7 @@ int main() {
   assert(retry.takeDue(1100, true, true));
   assert(!retry.pending());
 
-  // Repeated failures use deterministic bounded backoff.
+  // 8. A failed attempt schedules the next deterministic bounded delay.
   constexpr uint32_t delays[] = {2000, 5000, 10000, 15000, 30000, 30000};
   uint32_t now = 1100;
   for (uint32_t delay : delays) {
@@ -35,7 +89,7 @@ int main() {
   assert(retry.failures() == 6);
   assert(ReconnectPolicy::delayForFailure(255) == 30000);
 
-  // Success/reset and STOP both clear pending state and backoff.
+  // 9. Actual stream recognition resets backoff; STOP clears it as well.
   assert(retry.schedule(now));
   retry.reset();
   assert(!retry.pending() && retry.failures() == 0);
@@ -68,7 +122,9 @@ int main() {
   assert(!voxone::radio::streamIsDead(true, false, 9999, 0));
   assert(voxone::radio::streamIsDead(true, false, 10000, 0));
 
-  // Retry policy owns no URL storage and cannot mutate configured/final URLs.
+  // 7. Retry policy owns no resolved URL. Player retries by station id, which
+  // reloads the configured M3U/redirect URL; a prior final URL remains merely
+  // evidence from the previous resolution chain.
   char configured[] = "http://station.example/list.m3u";
   char finalUrl[] = "https://cdn.example/live.aac";
   retry.reset();
