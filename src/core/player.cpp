@@ -34,6 +34,7 @@ void Player::init() {
   _pendingMode = 0;
   _volumePending = false;
   _maximumPending = false;
+  _radioReconnect.reset();
   playerQueue = xQueueCreate( 5, sizeof( playerRequestParams_t ) );
   setOutputPins(false);
   delay(50);
@@ -91,6 +92,7 @@ void Player::setError(const char *e){
 void Player::_stop(bool alreadyStopped, RadioStopReason reason){
   log_i("%s called", __func__);
   _status = STOPPED;
+  if (reason == RadioStopReason::Normal) _radioReconnect.cancel();
   setOutputPins(false);
   if(!_hasError) config.setTitle((uiState.mode()==LOST || uiState.mode()==UPDATING)?"":LANG::const_PlStopped);
   config.station.bitrate = 0;
@@ -163,12 +165,15 @@ void Player::loop() {
     if (systemUpdateAudioBlocked() && requestP.type != PR_UPDATE_STOP) return;
     switch (requestP.type){
       case PR_UPDATE_STOP:
+        _radioReconnect.cancel();
         if (_temporaryUrls) xQueueReset(_temporaryUrls);
         suppressTemporaryRadioRestore();
         if (temporaryActive()) finishTemporary();
         else _stop(false, RadioStopReason::SourceSwitch);
         break;
       case PR_STOP:
+        _radioReconnect.cancel();
+        network.lostPlaying = false;
         if (_temporaryUrls) xQueueReset(_temporaryUrls);
         if (temporaryBusy()) {
           if (temporaryActive()) finishTemporary();
@@ -181,9 +186,11 @@ void Player::loop() {
         sourceManagerRadioStopConsumed();
         break;
       case PR_RADIO_SUSPEND:
+        _radioReconnect.cancel();
         if (!temporaryBusy()) _stop(false, RadioStopReason::SourceSwitch);
         break;
       case PR_RADIO_RESUME:
+        _radioReconnect.cancel();
         if (temporaryBusy()) break;
         if (sourceManagerRadioResumeAllowed()) {
           if (requestP.payload > 0 &&
@@ -197,6 +204,7 @@ void Player::loop() {
         // Accepted commands already updated canonical intent/station. Let the
         // announcement finish, then use that current intent exactly once.
         if (temporaryBusy()) break;
+        _radioReconnect.cancel();
         if (requestP.payload>0) {
           config.setLastStation((uint16_t)requestP.payload);
         }
@@ -238,14 +246,18 @@ void Player::loop() {
   _callbackToken = _temporary.token();
   if (!_temporary.terminal()) Audio::loop();
   _callbackToken = 0;
+  if (_radioReconnect.failures() && audioStreamStarted())
+    _radioReconnect.reset();
   if (temporaryActive()) {
     if (_temporary.terminal() || !isRunning()) finishTemporary();
   } else if (!isRunning() && _status==PLAYING) {
-    _stop(true);
+    _stop(true, RadioStopReason::SourceSwitch);
+    scheduleRadioReconnect();
   }
   if (uxQueueMessagesWaiting(playerQueue) == 0 &&
       (!_temporaryUrls || uxQueueMessagesWaiting(_temporaryUrls) == 0))
     restoreTemporaryBase();
+  serviceRadioReconnect();
   if(_volTimer){
     if((millis()-_volTicks)>3000){
       config.saveVolume();
@@ -283,9 +295,32 @@ void Player::_play(uint16_t stationId, bool sourceResume) {
   }else{
     serialCli.printf("##ERROR#:\tError connecting to %.128s\n", config.station.url);
     snprintf(config.tmpBuf, sizeof(config.tmpBuf), "Error connecting to %.128s", config.station.url); setError();
-    _stop(true, sourceResume ? RadioStopReason::SourceSwitch
-                             : RadioStopReason::Normal);
+    _stop(true, RadioStopReason::SourceSwitch);
+    scheduleRadioReconnect();
   };
+}
+
+void Player::scheduleRadioReconnect() {
+  if (temporaryBusy() || systemUpdateAudioBlocked() ||
+      !sourceManagerRadioResumeAllowed()) {
+    _radioReconnect.cancel();
+    return;
+  }
+  if (_radioReconnect.schedule(millis())) {
+    serialCli.printf("##[RADIO]# reconnect pending attempt=%u delay=%lu ms\n",
+                     static_cast<unsigned>(_radioReconnect.failures()),
+                     static_cast<unsigned long>(voxone::radio::ReconnectPolicy::
+                         delayForFailure(_radioReconnect.failures() - 1)));
+  }
+}
+
+void Player::serviceRadioReconnect() {
+  const bool allowed = !temporaryBusy() && !systemUpdateAudioBlocked() &&
+                       sourceManagerRadioResumeAllowed();
+  if (!_radioReconnect.takeDue(millis(), allowed, WiFi.isConnected())) return;
+  serialCli.printf("##[RADIO]# reconnect attempt=%u\n",
+                   static_cast<unsigned>(_radioReconnect.failures()));
+  _play(config.lastStation(), true);
 }
 
 void Player::requestTemporaryUrl(const char* url, size_t length) {
@@ -387,7 +422,7 @@ void Player::next() {
 
 void Player::toggle() {
   if (systemUpdateAudioBlocked()) return;
-  if (temporaryBusy() ? sourceManagerRadioPlayIntent() : _status == PLAYING) {
+  if (sourceManagerRadioPlayIntent()) {
     sendCommand({PR_STOP, 0});
   } else {
     const uint16_t selected = config.lastStation();

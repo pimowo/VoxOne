@@ -50,9 +50,10 @@ int main() {
   // Wi-Fi loss uses the same suspend/resume policy, so the PLAY intent is
   // still available if BT is selected before Wi-Fi reconnects.
   assert(playing.radioPlayIntent());
-  assert(radioWifiReconnectShouldPlay(true, true));
-  assert(!radioWifiReconnectShouldPlay(true, false));
-  assert(!radioWifiReconnectShouldPlay(false, true));
+  assert(radioWifiReconnectShouldPlay(true, true, true));
+  assert(!radioWifiReconnectShouldPlay(true, false, true));
+  assert(!radioWifiReconnectShouldPlay(false, true, true));
+  assert(!radioWifiReconnectShouldPlay(true, true, false));
 
   // RADIO STOP -> auto BT -> disconnect leaves the radio stopped.
   bt.connected = true;

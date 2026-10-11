@@ -15,6 +15,7 @@
 #include "flac_decoder/flac_decoder.h"
 #include "../core/config.h"
 #include "../core/radio_format_detection.h"
+#include "../core/radio_reconnect_policy.h"
 #include "../core/system_operation_state.h"
 #if VOXONE_HAS_BT && VOXONE_PIN_MAP_COMPLETE && VOXONE_BT_I2S_RX_ENABLED
 #include "../core/source_manager.h"
@@ -2833,7 +2834,7 @@ void Audio::processWebStream() {
     static uint8_t  cnt_slow;
     static uint32_t chunkSize;                                  // chunkcount read from stream
     static uint32_t tmr_1s;                                     // timer 1 sec
-    static uint32_t loopCnt;                                    // count loops if clientbuffer is empty
+    static uint32_t lastDataMs;                                 // last bytes received from the stream
 
     // first call, set some values to default  - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
     if(m_f_firstCall) { // runs only ont time per connection, prepare for start
@@ -2841,8 +2842,8 @@ void Audio::processWebStream() {
         f_stream = false;
         cnt_slow = 0;
         chunkSize = 0;
-        loopCnt = 0;
         tmr_1s = millis();
+        lastDataMs = tmr_1s;
         m_metacount = m_metaint;
         readMetadata(0, true); // reset all static vars
     }
@@ -2866,19 +2867,20 @@ void Audio::processWebStream() {
         tmr_1s = millis();
     }
     // if the buffer is often almost empty issue a warning - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
-    if(InBuff.bufferFilled() > maxFrameSize) {f_tmr_1s = false; cnt_slow = 0; loopCnt = 0;}
+    if(InBuff.bufferFilled() > maxFrameSize) {f_tmr_1s = false; cnt_slow = 0;}
     if(f_tmr_1s){
         cnt_slow ++;
         if(cnt_slow > 50){cnt_slow = 0; f_tmr_1s = false; AUDIO_INFO("slow stream, dropouts are possible");}
     }
-    // if the buffer can't filled for several seconds try a new connection - - - - - - - - - - - - - - - - - - - - - - -
-    if(f_stream && !availableBytes){
-        loopCnt++;
-        if(loopCnt > 200000) {              // wait several seconds
-            AUDIO_INFO("Stream lost -> try new connection");
-            connecttohost(m_lastHost);
-            return;
-        }
+    // Let Player schedule retries. Keep short gaps buffered and storm-free.
+    if(!availableBytes && voxone::radio::streamIsDead(
+            _client->connected(), InBuff.bufferFilled() > maxFrameSize,
+            millis(), lastDataMs)) {
+        AUDIO_INFO("Stream lost");
+        _client->stop();
+        setDatamode(AUDIO_NONE);
+        stopSong();
+        return;
     }
     // buffer fill routine - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
     if(availableBytes) {
@@ -2886,6 +2888,7 @@ void Audio::processWebStream() {
         int16_t bytesAddedToBuffer = _client->read(InBuff.getWritePtr(), availableBytes);
 
         if(bytesAddedToBuffer > 0) {
+            lastDataMs = millis();
             if(m_f_metadata)            m_metacount  -= bytesAddedToBuffer;
             if(m_f_chunked)             chunkSize    -= bytesAddedToBuffer;
             InBuff.bytesWritten(bytesAddedToBuffer);

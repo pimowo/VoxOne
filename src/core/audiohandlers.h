@@ -98,8 +98,9 @@ void audio_id3data(const char *info){  //id3 metadata
 }
 
 void audio_eof_stream(const char *info){
+  (void)info;
   if (player.temporaryEof()) return;
-  player.sendCommand({PR_STOP, 0});
+  // Player observes the stopped backend and applies the RADIO retry policy.
 }
 
 void audio_eof_speech(const char *info){

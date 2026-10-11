@@ -42,10 +42,12 @@ void MyNetwork::WiFiReconnected(WiFiEvent_t event, WiFiEventInfo_t info){
   if (player.temporaryBusy()) network.lostPlaying = false;
 #if VOXONE_HAS_BT && VOXONE_PIN_MAP_COMPLETE
   if (radioWifiReconnectShouldPlay(network.lostPlaying,
-                                   !bluetoothSourceSelected()))
+                                   !bluetoothSourceSelected(),
+                                   sourceManagerRadioPlayIntent()))
     player.sendCommand({PR_RADIO_RESUME, config.lastStation()});
 #else
-  if (network.lostPlaying)
+  if (radioWifiReconnectShouldPlay(network.lostPlaying, true,
+                                   sourceManagerRadioPlayIntent()))
     player.sendCommand({PR_PLAY, config.lastStation()});
 #endif
   network.lostPlaying = false;

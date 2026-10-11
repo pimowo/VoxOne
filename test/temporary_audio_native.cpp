@@ -248,7 +248,7 @@ int main() {
   assert(wifi.temporary.finish(token));
   for (int i = 0; i < 100; ++i) wifi.restore(false);
   assert(wifi.resumes == 0 && wifi.temporary.busy());
-  assert(!radioWifiReconnectShouldPlay(lostPlaying, true));
+  assert(!radioWifiReconnectShouldPlay(lostPlaying, true, true));
   wifi.restore(true);
   wifi.restore(true);
   assert(wifi.resumes == 1 && !wifi.temporary.busy());

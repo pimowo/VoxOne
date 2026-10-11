@@ -2,6 +2,7 @@
 #define player_h
 
 #include "mute_state.h"
+#include "radio_reconnect_policy.h"
 #include "radio_source_policy.h"
 #include "temporary_audio_state.h"
 
@@ -36,6 +37,7 @@ class Player: public Audio {
     plStatus_e  _status;
     MuteState _mute;
     TemporaryAudioState _temporary;
+    voxone::radio::ReconnectPolicy _radioReconnect;
     uint32_t _callbackToken = 0;
     QueueHandle_t _temporaryUrls = nullptr;
     //char        _plError[PLERR_LN];
@@ -48,6 +50,8 @@ class Player: public Audio {
     void browseUrl(const char* url);
     void finishTemporary();
     void restoreTemporaryBase();
+    void scheduleRadioReconnect();
+    void serviceRadioReconnect();
   public:
     bool lockOutput = true;
     volatile bool connproc = true;

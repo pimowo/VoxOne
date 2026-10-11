@@ -136,6 +136,7 @@ public:
     bool setPinout(uint8_t BCLK, uint8_t LRC, uint8_t DOUT, int8_t DIN = I2S_PIN_NO_CHANGE, int8_t MCK = I2S_PIN_NO_CHANGE);
     bool pauseResume();
     bool isRunning() {return m_f_running;}
+    bool audioStreamStarted() const {return m_f_playing;}
     void loop();
     uint32_t stopSong();
     void forceMono(bool m);
