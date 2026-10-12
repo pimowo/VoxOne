@@ -119,6 +119,7 @@ $nativeSources=@{
  runtime_display_activation_native=@('src/displays/display_backend_selection.cpp','src/hardware/runtime_hardware_config.cpp')
  runtime_hardware_config_native=@('src/hardware/runtime_hardware_config.cpp')
  runtime_hardware_web_native=@('src/hardware/runtime_hardware_config.cpp','src/hardware/runtime_hardware_web.cpp')
+ security_auth_native=@('src/core/security_settings.cpp')
  station_directory_native=@('src/core/station_directory_format.cpp')
  volume_limits_native=@('src/core/volume_map.cpp')
 }
@@ -158,7 +159,7 @@ Invoke-Step 'Native tests' {
  Write-Host "  $($tests.Count) native tests passed"
 }
 if(-not $onWindows) {
- Invoke-Step 'Config restore sanitizers' {
+ Invoke-Step 'Native sanitizers' {
   $sanitizerArgs=@('-std=c++11','-O1','-g','-fsanitize=address,undefined','-fno-omit-frame-pointer','-Wall','-Wextra','-Werror','-Wno-unused-parameter')
   $backupExe=Join-Path $work 'config_backup_sanitized'
   $backupSources=@(
@@ -179,6 +180,13 @@ if(-not $onWindows) {
   if($LASTEXITCODE -ne 0) { throw 'Sanitized config restore compile failed' }
   & $restoreExe
   if($LASTEXITCODE -ne 0) { throw 'Sanitized config restore test failed' }
+  $securityExe=Join-Path $work 'security_auth_sanitized'
+  & $Cxx @sanitizerArgs '-o' $securityExe `
+    (Join-Path $root 'test/security_auth_native.cpp') `
+    (Join-Path $root 'src/core/security_settings.cpp')
+  if($LASTEXITCODE -ne 0) { throw 'Sanitized security auth compile failed' }
+  & $securityExe
+  if($LASTEXITCODE -ne 0) { throw 'Sanitized security auth test failed' }
  }
 }
 Invoke-Step 'Web Update headless' {
