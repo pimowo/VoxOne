@@ -12,7 +12,7 @@ constexpr uint32_t kPbkdf2Iterations = 10000;
 constexpr size_t kSecuritySaltSize = 16;
 constexpr size_t kSecurityVerifierSize = 32;
 constexpr size_t kSecurityRecordSize = 68;
-constexpr size_t kMinAdminPasswordBytes = 8;
+constexpr size_t kMinAdminPasswordCharacters = 4;
 constexpr size_t kMaxAdminPasswordBytes = 64;
 
 enum class SecurityState : uint8_t {
@@ -92,6 +92,11 @@ bool securityPbkdf2HmacSha256(const uint8_t* password, size_t passwordSize,
                               const uint8_t* salt, size_t saltSize,
                               uint32_t iterations,
                               uint8_t output[kSecurityVerifierSize]);
+bool securitySha256(const uint8_t* input, size_t inputSize,
+                    uint8_t output[kSecurityVerifierSize]);
+bool securityValidateAdminPassword(const char* password,
+                                   size_t* byteLength = nullptr,
+                                   size_t* characterCount = nullptr);
 
 class SecurityService {
  public:

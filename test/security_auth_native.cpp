@@ -183,7 +183,7 @@ void testPasswordChangesAndModeSwitches() {
 
   assert(service.changePassword("zle-haslo", "drugie-bezpieczne") ==
          SecurityOperationStatus::AuthenticationFailed);
-  assert(service.changePassword("pierwsze-haslo", "krotkie") ==
+  assert(service.changePassword("pierwsze-haslo", "trz") ==
          SecurityOperationStatus::InvalidPassword);
   assert(storage.writes == 1);
   random.fail = true;
@@ -279,6 +279,36 @@ void testRandomAndEraseFailures() {
 }
 
 void testUtf8AndPasswordBounds() {
+  size_t bytes = 0;
+  size_t characters = 0;
+  assert(!securityValidateAdminPassword("trz", &bytes, &characters));
+  assert(securityValidateAdminPassword("abcd", &bytes, &characters));
+  assert(bytes == 4 && characters == 4);
+  assert(securityValidateAdminPassword(
+      "\xC4\x85\xC4\x99\xC4\x87\xC5\xBC", &bytes, &characters));
+  assert(bytes == 8 && characters == 4);
+  assert(securityValidateAdminPassword(
+      "\xF0\x9F\x94\x92\xF0\x9F\x8E\xB5"
+      "\xF0\x9F\x93\xBB\xF0\x9F\x9A\x80",
+      &bytes, &characters));
+  assert(bytes == 16 && characters == 4);
+  assert(!securityValidateAdminPassword(
+      "\xF0\x9F\x94\x92\xF0\x9F\x8E\xB5\xF0\x9F\x93\xBB"));
+
+  assert(!securityValidateAdminPassword("abc\x80"));
+  assert(!securityValidateAdminPassword("abc\xC0\xAF"));
+  assert(!securityValidateAdminPassword("abc\xE0\x80\xAF"));
+  assert(!securityValidateAdminPassword("abc\xED\xA0\x80"));
+  assert(!securityValidateAdminPassword("abc\xF4\x90\x80\x80"));
+  assert(!securityValidateAdminPassword("abc\xF0\x9F\x94"));
+
+  char maximum[kMaxAdminPasswordBytes + 1];
+  std::memset(maximum, 'a', sizeof(maximum));
+  maximum[sizeof(maximum) - 1] = '\0';
+  assert(securityValidateAdminPassword(maximum, &bytes, &characters));
+  assert(bytes == kMaxAdminPasswordBytes &&
+         characters == kMaxAdminPasswordBytes);
+
   FakeStorage storage;
   DeterministicRandom random;
   SecurityService service(storage, random);

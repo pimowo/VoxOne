@@ -56,13 +56,6 @@ bool constantTimeEqual(const uint8_t* left, const uint8_t* right, size_t size) {
   return difference == 0;
 }
 
-bool passwordLength(const char* password, size_t& length) {
-  length = 0;
-  if (!password) return false;
-  while (length <= kMaxAdminPasswordBytes && password[length]) ++length;
-  return length >= kMinAdminPasswordBytes && length <= kMaxAdminPasswordBytes;
-}
-
 #if !defined(ARDUINO)
 struct Sha256Context {
   uint32_t state[8];
@@ -357,6 +350,73 @@ bool securityPbkdf2HmacSha256(const uint8_t* password, size_t passwordSize,
 #endif
 }
 
+bool securitySha256(const uint8_t* input, size_t inputSize,
+                    uint8_t output[kSecurityVerifierSize]) {
+  if ((!input && inputSize) || !output) return false;
+#if defined(ARDUINO)
+  static const uint8_t empty = 0;
+  const mbedtls_md_info_t* info =
+      mbedtls_md_info_from_type(MBEDTLS_MD_SHA256);
+  return info &&
+         mbedtls_md(info, input ? input : &empty, inputSize, output) == 0;
+#else
+  Sha256Context context;
+  sha256Init(context);
+  sha256Update(context, input, inputSize);
+  sha256Finish(context, output);
+  return true;
+#endif
+}
+
+bool securityValidateAdminPassword(const char* password, size_t* byteLength,
+                                   size_t* characterCount) {
+  if (byteLength) *byteLength = 0;
+  if (characterCount) *characterCount = 0;
+  if (!password) return false;
+
+  size_t length = 0;
+  while (length <= kMaxAdminPasswordBytes && password[length]) ++length;
+  if (length > kMaxAdminPasswordBytes) return false;
+
+  size_t characters = 0;
+  size_t offset = 0;
+  const uint8_t* bytes = reinterpret_cast<const uint8_t*>(password);
+  while (offset < length) {
+    const uint8_t first = bytes[offset];
+    size_t sequenceSize = 0;
+    if (first <= 0x7f) {
+      sequenceSize = 1;
+    } else if (first >= 0xc2 && first <= 0xdf) {
+      sequenceSize = 2;
+    } else if (first >= 0xe0 && first <= 0xef) {
+      sequenceSize = 3;
+    } else if (first >= 0xf0 && first <= 0xf4) {
+      sequenceSize = 4;
+    } else {
+      return false;
+    }
+    if (sequenceSize > length - offset) return false;
+    for (size_t index = 1; index < sequenceSize; ++index) {
+      if ((bytes[offset + index] & 0xc0) != 0x80) return false;
+    }
+    if (sequenceSize == 3 &&
+        ((first == 0xe0 && bytes[offset + 1] < 0xa0) ||
+         (first == 0xed && bytes[offset + 1] >= 0xa0)))
+      return false;
+    if (sequenceSize == 4 &&
+        ((first == 0xf0 && bytes[offset + 1] < 0x90) ||
+         (first == 0xf4 && bytes[offset + 1] >= 0x90)))
+      return false;
+    offset += sequenceSize;
+    ++characters;
+  }
+
+  if (characters < kMinAdminPasswordCharacters) return false;
+  if (byteLength) *byteLength = length;
+  if (characterCount) *characterCount = characters;
+  return true;
+}
+
 SecurityService::SecurityService(SecurityStorage& storage,
                                  SecurityRandomSource& random)
     : storage_(storage),
@@ -460,7 +520,7 @@ SecurityOperationStatus SecurityService::eraseForFactoryReset() {
 bool SecurityService::verifyPassword(const char* password) const {
   if (settings_.state != SecurityState::Protected) return false;
   size_t length = 0;
-  if (!passwordLength(password, length)) return false;
+  if (!securityValidateAdminPassword(password, &length)) return false;
   uint8_t candidate[kSecurityVerifierSize];
   if (!securityPbkdf2HmacSha256(
           reinterpret_cast<const uint8_t*>(password), length, settings_.salt,
@@ -483,7 +543,7 @@ SecurityOperationStatus SecurityService::saveOpen() {
 
 SecurityOperationStatus SecurityService::saveProtected(const char* password) {
   size_t length = 0;
-  if (!passwordLength(password, length))
+  if (!securityValidateAdminPassword(password, &length))
     return SecurityOperationStatus::InvalidPassword;
   SecuritySettings candidate = defaultSettings(SecurityState::Protected);
   candidate.generation = settings_.generation + 1;
