@@ -120,6 +120,7 @@ $nativeSources=@{
  runtime_hardware_config_native=@('src/hardware/runtime_hardware_config.cpp')
  runtime_hardware_web_native=@('src/hardware/runtime_hardware_config.cpp','src/hardware/runtime_hardware_web.cpp')
  security_auth_native=@('src/core/security_settings.cpp')
+ security_access_policy_native=@('src/core/security_access_policy.cpp')
  security_api_native=@('src/core/security_settings.cpp','src/core/security_session.cpp','src/core/security_api.cpp')
  security_runtime_native=@('src/core/security_settings.cpp','src/core/security_runtime.cpp')
  security_session_native=@('src/core/security_settings.cpp','src/core/security_session.cpp')
@@ -215,6 +216,13 @@ if(-not $onWindows) {
   if($LASTEXITCODE -ne 0) { throw 'Sanitized security API compile failed' }
   & $securityApiExe
   if($LASTEXITCODE -ne 0) { throw 'Sanitized security API test failed' }
+  $securityPolicyExe=Join-Path $work 'security_access_policy_sanitized'
+  & $Cxx @sanitizerArgs '-o' $securityPolicyExe `
+    (Join-Path $root 'test/security_access_policy_native.cpp') `
+    (Join-Path $root 'src/core/security_access_policy.cpp')
+  if($LASTEXITCODE -ne 0) { throw 'Sanitized security access policy compile failed' }
+  & $securityPolicyExe
+  if($LASTEXITCODE -ne 0) { throw 'Sanitized security access policy test failed' }
  }
 }
 Invoke-Step 'Web Update headless' {

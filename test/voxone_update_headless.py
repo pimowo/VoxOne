@@ -2,6 +2,7 @@
 
 from pathlib import Path
 import gzip
+import hashlib
 import os
 import re
 import shutil
@@ -924,12 +925,44 @@ def main():
     html = (ROOT / "web-src/voxone.html").read_text(encoding="utf-8")
     css = (ROOT / "web-src/voxone.css").read_text(encoding="utf-8")
     route = (ROOT / "src/core/netserver.cpp").read_text(encoding="utf-8")
+    access_policy = (ROOT / "src/core/security_access_policy.cpp").read_text(
+        encoding="utf-8")
+    assert '"/voxone.html"' in access_policy and \
+           'SecurityRouteClass::PublicBootstrap' in access_policy, \
+        "login bootstrap assets must remain public in the prepared policy"
+    compressed_assets = (
+        "advanced-audio.js", "dsp-client.js", "voxone-logo.svg",
+        "voxone.css", "voxone.html", "voxone.js")
+    expected_assets = {
+        asset: (ROOT / "web-src" / asset).read_bytes()
+        for asset in compressed_assets
+    }
+    generated_html = expected_assets["voxone.html"].decode("utf-8")
+    for asset in compressed_assets:
+        if asset == "voxone.html":
+            continue
+        digest = hashlib.sha256(expected_assets[asset]).hexdigest()[:12]
+        generated_html = generated_html.replace(f"{{{asset}-hash}}", digest)
+    expected_assets["voxone.html"] = generated_html.encode("utf-8")
+    for asset in compressed_assets:
+        assert f'"/{asset}.gz"' in access_policy, \
+            f"security policy inventory missing rejected direct /{asset}.gz"
+        stored = gzip.decompress((ROOT / "data/www" / f"{asset}.gz").read_bytes())
+        assert stored == expected_assets[asset], \
+            f"canonical gzip fallback asset {asset} must match its source"
+    assert "RejectedDirectCompressedAsset" in access_policy and \
+           "DirectCompressedAssetDenied" in access_policy, \
+        "direct compressed asset URLs must have an explicit deny policy"
+    for protected_path in ("/variables.js", "/api/ready", "/api/stations",
+                           "/ws", "/update", "/update/bt"):
+        assert f'"{protected_path}"' in access_policy, \
+            f"security policy inventory missing {protected_path}"
+    assert "security_access_policy.h" not in route and \
+           "evaluateSecurityAccess(" not in route, \
+        "SECURITY-ENFORCE-1A must not activate route enforcement"
     assert re.search(r'webserver\.on\("/favicon\.ico", HTTP_GET,.*?'
                      r'request->redirect\("/voxone-logo\.svg"\);', route, re.S), \
         "favicon.ico must redirect to the existing logo"
-    logo = (ROOT / "web-src/voxone-logo.svg").read_bytes()
-    assert gzip.decompress((ROOT / "data/www/voxone-logo.svg.gz").read_bytes()) == logo, \
-        "served logo asset must match its source"
     scripts = [
         (ROOT / "web-src" / name).read_text(encoding="utf-8")
         for name in ("advanced-audio.js", "dsp-client.js", "voxone.js")

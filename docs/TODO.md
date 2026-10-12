@@ -69,6 +69,7 @@
 
 ## TTS / PLAY_MEDIA
 
+- [POST-STABLE] TTS-ADVANCED-1 — rozszerzyć TTS o kolejkę i priorytety komunikatów, konfigurowalne źródła/głosy oraz kontrolowane ducking, cache i restore; zachować jeden kontrakt temporary audio i nie traktować etapu jako blokującego Stable 1.0.0.
 - [POST-STABLE] Wprowadzić tryby TTS Volume `CURRENT`, `FIXED` i `AUTO`. `CURRENT` używa normalnego `userVolume`; `FIXED` ma własne 0–100 bez zmiany `userVolume`; `AUTO` wybiera wartość na początku komunikatu na podstawie rzeczywistego base playback i utrzymuje ją do końca TTS.
 - [POST-STABLE] Zachować Max Volume jako hard clamp i nie wysyłać BT Absolute Volume podczas TTS.
 - [STABLE] Fizycznie przetestować restore RADIO PLAY/STOP oraz BT PLAY/PAUSE/STOP, ownership I2S0, sample rate i routing po normalnym końcu, błędzie, przerwaniu i timeout.
@@ -78,6 +79,7 @@
 
 ## Source control i VoxOneBT
 
+- [POST-STABLE] VOXONEBT-A2DP-TX-1 — ocenić i wdrożyć nadawanie A2DP z VoxOneBT do słuchawek/głośników BT jako osobną capability, z jawnym routingiem źródeł, kodekiem, opóźnieniem, regulacją głośności i bez regresji obecnego odbioru A2DP; etap nie blokuje Stable 1.0.0.
 - [DECISION] Ustalić zachowanie po ręcznym wyborze BT bez podłączonego telefonu: czy i na jak długo otwierać pairing/discoverability, zachowując manual source priority.
 - [DECISION] Ustalić model parowania: PIN/passkey wymagany lub nie, stały albo konfigurowalny, preferred peer, pairing window, reconnect, discoverability i bezpieczeństwo ponownego parowania.
 - [POST-STABLE] Zachować sterowanie enkoderem: RADIO — obrót Volume, klik PLAY/STOP, dwuklik następne dostępne źródło, przytrzymanie lista stacji; BT — obrót Volume, klik PLAY/PAUSE, dwuklik następne źródło, przytrzymanie transport BT; trójklik bez akcji poza źródłami, które jawnie go wykorzystują.
@@ -99,6 +101,10 @@
 
 - [HARDWARE] Zaprojektować wejście AUX na PCM1808 dla analogowego RCA i ewentualnego źródła wewnętrznego oraz potwierdzić piny, zegary i format I2S input.
 - [POST-STABLE] Zintegrować AUX z SourceManager, VU z PCM, WWW, LCD i HA; zamiast bitrate pokazywać sample rate/format PCM oraz właściwy status źródła bez metadata.
+
+## Multiroom
+
+- [POST-STABLE] MULTIROOM-1 — zaprojektować i wdrożyć grupowanie VoxOne w zaufanej sieci LAN, wybór lidera/odbiorników, synchronizację zegara i buforów, korekcję dryfu, reconnect oraz zabezpieczenie sterowania i strumienia; etap nie blokuje Stable 1.0.0.
 
 ## WWW, API i WebSocket
 
@@ -137,6 +143,7 @@
 
 ## DSPmini
 
+- [POST-STABLE] AUTOEQ-1 — zaprojektować pomiar i automatyczne wyznaczanie bezpiecznej korekcji dla DSPmini, z kalibracją mikrofonu, limitami filtrów, podglądem wyniku oraz możliwością porównania, odrzucenia i ręcznej korekty; etap nie blokuje Stable 1.0.0.
 - [HARDWARE] Docelowy DSPmini wyłącznie dla rodziny L to moduł klasy ADAU1401/ADAU1701/ADAU1702. Ustalić schemat, cztery wyjścia i workflow inicjalizacji/programowania z ESP bez drogiego USBi.
 - [POST-STABLE] Dodać live tuning/runtime parameters, storage presetów, PEQ, crossover, subwoofer, 2.0/2.1/2.2, role/mute wyjść, delay, Auto Loudness, protection, balance/fader i trwałość presetów.
 - [POST-STABLE] Zintegrować DSPmini z WWW i LCD. W profilu DSP rozbudowane ustawienia mają należeć do AUDIO i nie mogą dublować globalnej głośności.
