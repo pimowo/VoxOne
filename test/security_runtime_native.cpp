@@ -142,17 +142,21 @@ void testProductionStartupOrderAndIsolation() {
   const size_t wifiInventory = networkSource.find("config.initNetwork();");
   const size_t securityInit =
       networkSource.find("initializeDeviceSecurity(");
+  const size_t sessionInit =
+      networkSource.find("deviceSecuritySessionService()");
   const size_t wifiStart = networkSource.find("setWifiParams();");
   const size_t mqttStart = networkSource.find("mqttInit();");
   assert(wifiInventory != std::string::npos &&
-         securityInit != std::string::npos && wifiStart != std::string::npos &&
+         securityInit != std::string::npos &&
+         sessionInit != std::string::npos && wifiStart != std::string::npos &&
          mqttStart != std::string::npos);
-  assert(wifiInventory < securityInit && securityInit < wifiStart &&
+  assert(wifiInventory < securityInit && securityInit < sessionInit &&
+         sessionInit < wifiStart &&
          securityInit < mqttStart);
 
   assert(serverSource.find("security_runtime.h") == std::string::npos);
   assert(mqttSource.find("security_runtime.h") == std::string::npos);
-  assert(networkSource.find("policy=observe-only") != std::string::npos);
+  assert(networkSource.find("policy=backend-only") != std::string::npos);
 }
 
 }  // namespace

@@ -32,6 +32,7 @@
 #include <algorithm>
 #include <cerrno>
 #include <climits>
+#include <cstdio>
 #include <cstdlib>
 #include "config.h"
 #include "config_backup_web.h"
@@ -61,6 +62,7 @@
 #include "ui_timeout_config.h"
 #include "ui_state.h"
 #include "rtcsupport.h"
+#include "security_api.h"
 #include "../displays/dspcore.h"
 #include "../displays/widgets/widgetsconfig.h" //BitrateFormat
 
@@ -140,6 +142,10 @@ void handleConfigRestoreBody(AsyncWebServerRequest *request, uint8_t *data,
                              size_t len, size_t index, size_t total);
 void handleTimeStatus(AsyncWebServerRequest *request);
 void handleTimeSync(AsyncWebServerRequest *request);
+void handleSecurityState(AsyncWebServerRequest *request);
+void handleSecuritySetup(AsyncWebServerRequest *request);
+void handleSecurityLogin(AsyncWebServerRequest *request);
+void handleSecurityLogout(AsyncWebServerRequest *request);
 void handleIndex(AsyncWebServerRequest * request);
 void handleNotFound(AsyncWebServerRequest * request);
 void onWsEvent(AsyncWebSocket *server, AsyncWebSocketClient *client, AwsEventType type, void *arg, uint8_t *data, size_t len);
@@ -627,6 +633,14 @@ bool NetServer::begin(bool quiet) {
                handleConfigRestoreBody);
   webserver.on("/api/time", HTTP_GET, handleTimeStatus);
   webserver.on("/api/time/sync", HTTP_POST, handleTimeSync);
+  webserver.on(voxone::security::kSecurityStateRoute, HTTP_GET,
+               handleSecurityState);
+  webserver.on(voxone::security::kSecuritySetupRoute, HTTP_POST,
+               handleSecuritySetup);
+  webserver.on(voxone::security::kSecurityLoginRoute, HTTP_POST,
+               handleSecurityLogin);
+  webserver.on(voxone::security::kSecurityLogoutRoute, HTTP_POST,
+               handleSecurityLogout);
   webserver.on("/api/ready", HTTP_GET, [](AsyncWebServerRequest* request) {
     if (!deviceApiAuthorized(request)) return;
     char body[80];
@@ -1202,6 +1216,192 @@ void handleStationDirectorySearch(AsyncWebServerRequest* request) {
                   String(R"({"status":"pending","job":)") + job + "}");
   }
 }
+namespace {
+
+void clearSensitive(char* value, size_t size) {
+  volatile uint8_t* bytes = reinterpret_cast<volatile uint8_t*>(value);
+  while (size--) *bytes++ = 0;
+}
+
+voxone::security::SecurityRequestContext securityRequestContext(
+    AsyncWebServerRequest* request, const String& localAddress) {
+  return {request->host().c_str(),
+          request->hasHeader("Origin") ? request->header("Origin").c_str()
+                                       : nullptr,
+          localAddress.c_str(), config.store.mdnsname,
+          request->contentType().c_str(), request->contentLength()};
+}
+
+void securityJsonReply(AsyncWebServerRequest* request, int status,
+                       const char* body, const char* cookie = nullptr,
+                       const char* retryAfter = nullptr) {
+  AsyncWebServerResponse* response = request->beginResponse(
+      status, "application/json; charset=utf-8", body ? body : "");
+  response->addHeader("Cache-Control", "no-store, max-age=0");
+  response->addHeader("X-Content-Type-Options", "nosniff");
+  response->addHeader("Referrer-Policy", "no-referrer");
+  if (cookie) response->addHeader("Set-Cookie", cookie);
+  if (retryAfter) response->addHeader("Retry-After", retryAfter);
+  request->send(response);
+}
+
+void securityRequestRejected(
+    AsyncWebServerRequest* request,
+    voxone::security::SecurityRequestStatus status) {
+  using voxone::security::SecurityRequestStatus;
+  switch (status) {
+    case SecurityRequestStatus::InvalidHost:
+    case SecurityRequestStatus::InvalidOrigin:
+      securityJsonReply(request, 403, R"({"error":"request_rejected"})");
+      return;
+    case SecurityRequestStatus::UnsupportedMediaType:
+      securityJsonReply(request, 415,
+                        R"({"error":"unsupported_media_type"})");
+      return;
+    case SecurityRequestStatus::BodyTooLarge:
+      securityJsonReply(request, 413, R"({"error":"body_too_large"})");
+      return;
+    case SecurityRequestStatus::BodyRequired:
+      securityJsonReply(request, 400, R"({"error":"body_required"})");
+      return;
+    case SecurityRequestStatus::Allowed:
+      return;
+  }
+}
+
+const char* postParameter(AsyncWebServerRequest* request, const char* name) {
+  AsyncWebParameter* parameter = request->getParam(name, true, false);
+  return parameter ? parameter->value().c_str() : nullptr;
+}
+
+bool requestSessionToken(
+    AsyncWebServerRequest* request,
+    char token[voxone::security::kSecuritySessionTokenBufferSize]) {
+  return request->hasHeader("Cookie") &&
+         voxone::security::securitySessionTokenFromCookie(
+             request->header("Cookie").c_str(), token);
+}
+
+void securityApiResultReply(
+    AsyncWebServerRequest* request,
+    voxone::security::SecurityApiResult& result) {
+  using namespace voxone::security;
+  char cookie[128]{};
+  const char* cookieHeader = nullptr;
+  if (result.setSessionCookie) {
+    std::snprintf(cookie, sizeof(cookie),
+                  "%s=%s; Path=/; HttpOnly; SameSite=Strict; Max-Age=86400",
+                  kSecuritySessionCookieName, result.sessionToken);
+    cookieHeader = cookie;
+  } else if (result.clearSessionCookie) {
+    std::snprintf(cookie, sizeof(cookie),
+                  "%s=; Path=/; HttpOnly; SameSite=Strict; Max-Age=0",
+                  kSecuritySessionCookieName);
+    cookieHeader = cookie;
+  }
+
+  if (result.httpStatus == 204) {
+    AsyncWebServerResponse* response = request->beginResponse(204);
+    response->addHeader("Cache-Control", "no-store, max-age=0");
+    if (cookieHeader) response->addHeader("Set-Cookie", cookieHeader);
+    request->send(response);
+  } else if (result.error == SecurityApiError::None) {
+    securityJsonReply(request, result.httpStatus, R"({"ok":true})",
+                      cookieHeader);
+  } else {
+    char body[80];
+    std::snprintf(body, sizeof(body), R"({"error":"%s"})",
+                  securityApiErrorName(result.error));
+    securityJsonReply(request, result.httpStatus, body, cookieHeader,
+                      result.error == SecurityApiError::RateLimited ? "60"
+                                                                    : nullptr);
+    clearSensitive(body, sizeof(body));
+  }
+  clearSensitive(cookie, sizeof(cookie));
+  clearSensitive(result.sessionToken, sizeof(result.sessionToken));
+}
+
+}  // namespace
+
+void handleSecurityState(AsyncWebServerRequest* request) {
+  using namespace voxone::security;
+  const String localAddress = request->client()->localIP().toString();
+  const SecurityRequestStatus validation =
+      validateSecurityReadRequest(securityRequestContext(request,
+                                                          localAddress));
+  if (validation != SecurityRequestStatus::Allowed) {
+    securityRequestRejected(request, validation);
+    return;
+  }
+  char token[kSecuritySessionTokenBufferSize]{};
+  const bool hasToken = requestSessionToken(request, token);
+  SecurityApiService api(deviceSecurityService(),
+                         deviceSecuritySessionService());
+  const SecurityApiState state = api.state(hasToken ? token : nullptr,
+                                           millis());
+  char body[kSecurityStateJsonSize];
+  if (!securityStateJson(state, body, sizeof(body))) {
+    securityJsonReply(request, 500, R"({"error":"internal_error"})");
+  } else {
+    securityJsonReply(request, 200, body);
+  }
+  clearSensitive(token, sizeof(token));
+  clearSensitive(body, sizeof(body));
+}
+
+void handleSecuritySetup(AsyncWebServerRequest* request) {
+  using namespace voxone::security;
+  const String localAddress = request->client()->localIP().toString();
+  const SecurityRequestStatus validation =
+      validateSecurityFormRequest(securityRequestContext(request,
+                                                          localAddress));
+  if (validation != SecurityRequestStatus::Allowed) {
+    securityRequestRejected(request, validation);
+    return;
+  }
+  SecurityApiService api(deviceSecurityService(),
+                         deviceSecuritySessionService());
+  SecurityApiResult result = api.setup(postParameter(request, "mode"),
+                                       postParameter(request, "password"));
+  securityApiResultReply(request, result);
+}
+
+void handleSecurityLogin(AsyncWebServerRequest* request) {
+  using namespace voxone::security;
+  const String localAddress = request->client()->localIP().toString();
+  const SecurityRequestStatus validation =
+      validateSecurityFormRequest(securityRequestContext(request,
+                                                          localAddress));
+  if (validation != SecurityRequestStatus::Allowed) {
+    securityRequestRejected(request, validation);
+    return;
+  }
+  SecurityApiService api(deviceSecurityService(),
+                         deviceSecuritySessionService());
+  SecurityApiResult result =
+      api.login(postParameter(request, "password"), millis());
+  securityApiResultReply(request, result);
+}
+
+void handleSecurityLogout(AsyncWebServerRequest* request) {
+  using namespace voxone::security;
+  const String localAddress = request->client()->localIP().toString();
+  const SecurityRequestStatus validation =
+      validateSecurityActionRequest(securityRequestContext(request,
+                                                            localAddress));
+  if (validation != SecurityRequestStatus::Allowed) {
+    securityRequestRejected(request, validation);
+    return;
+  }
+  char token[kSecuritySessionTokenBufferSize]{};
+  const bool hasToken = requestSessionToken(request, token);
+  SecurityApiService api(deviceSecurityService(),
+                         deviceSecuritySessionService());
+  SecurityApiResult result = api.logout(hasToken ? token : nullptr);
+  securityApiResultReply(request, result);
+  clearSensitive(token, sizeof(token));
+}
+
 static bool deviceApiAuthorized(AsyncWebServerRequest* request) {
 #if defined(HTTP_USER) && defined(HTTP_PASS)
   if (network.status == CONNECTED && !request->authenticate(HTTP_USER, HTTP_PASS)) {

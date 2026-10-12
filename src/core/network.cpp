@@ -15,6 +15,7 @@
 #include "radio_source_policy.h"
 #include "network_diagnostics.h"
 #include "security_runtime.h"
+#include "security_api.h"
 #include "timekeeper.h"
 #include "ui_state.h"
 #include <esp_netif.h>
@@ -341,8 +342,9 @@ void MyNetwork::begin() {
   config.initNetwork();
   const auto security = voxone::security::initializeDeviceSecurity(
       config.ssidsCount > 0);
+  (void)voxone::security::deviceSecuritySessionService();
   Serial.printf(
-      "##[SECURITY]# state=%s load=%s wifiConfigured=%u policy=observe-only\n",
+      "##[SECURITY]# state=%s load=%s wifiConfigured=%u policy=backend-only\n",
       voxone::security::securityStateName(security.state),
       voxone::security::securityLoadStatusName(security.loadStatus),
       security.wifiConfigured ? 1U : 0U);

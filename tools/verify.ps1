@@ -120,6 +120,7 @@ $nativeSources=@{
  runtime_hardware_config_native=@('src/hardware/runtime_hardware_config.cpp')
  runtime_hardware_web_native=@('src/hardware/runtime_hardware_config.cpp','src/hardware/runtime_hardware_web.cpp')
  security_auth_native=@('src/core/security_settings.cpp')
+ security_api_native=@('src/core/security_settings.cpp','src/core/security_session.cpp','src/core/security_api.cpp')
  security_runtime_native=@('src/core/security_settings.cpp','src/core/security_runtime.cpp')
  security_session_native=@('src/core/security_settings.cpp','src/core/security_session.cpp')
  station_directory_native=@('src/core/station_directory_format.cpp')
@@ -205,6 +206,15 @@ if(-not $onWindows) {
   if($LASTEXITCODE -ne 0) { throw 'Sanitized security session compile failed' }
   & $securitySessionExe
   if($LASTEXITCODE -ne 0) { throw 'Sanitized security session test failed' }
+  $securityApiExe=Join-Path $work 'security_api_sanitized'
+  & $Cxx @sanitizerArgs '-o' $securityApiExe `
+    (Join-Path $root 'test/security_api_native.cpp') `
+    (Join-Path $root 'src/core/security_settings.cpp') `
+    (Join-Path $root 'src/core/security_session.cpp') `
+    (Join-Path $root 'src/core/security_api.cpp')
+  if($LASTEXITCODE -ne 0) { throw 'Sanitized security API compile failed' }
+  & $securityApiExe
+  if($LASTEXITCODE -ne 0) { throw 'Sanitized security API test failed' }
  }
 }
 Invoke-Step 'Web Update headless' {

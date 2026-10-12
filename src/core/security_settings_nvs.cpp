@@ -1,5 +1,6 @@
 #include "security_settings.h"
 #include "security_runtime.h"
+#include "security_api.h"
 
 #include <esp_system.h>
 #include <nvs.h>
@@ -88,13 +89,23 @@ class EspSecurityRandomSource : public SecurityRandomSource {
   }
 };
 
+EspSecurityRandomSource& deviceSecurityRandomSource() {
+  static EspSecurityRandomSource random;
+  return random;
+}
+
 }  // namespace
 
 SecurityService& deviceSecurityService() {
   static NvsSecurityStorage storage;
-  static EspSecurityRandomSource random;
-  static SecurityService service(storage, random);
+  static SecurityService service(storage, deviceSecurityRandomSource());
   return service;
+}
+
+SecuritySessionService& deviceSecuritySessionService() {
+  static SecuritySessionService sessions(deviceSecurityService(),
+                                          deviceSecurityRandomSource());
+  return sessions;
 }
 
 SecurityRuntimeDiagnostics initializeDeviceSecurity(bool wifiConfigured) {

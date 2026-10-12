@@ -49,7 +49,6 @@
 - [HARDWARE] Przypisać GPIO XSMT PCM5102A na L0 i fizycznie sprawdzić LOW przy PAUZA/STOP, HIGH przy PLAY, ciszę podczas przejść i Web Update oraz czerwoną ramkę VOL bez zmiany semantyki MUTE.
 - [STABLE] Fizycznie sprawdzić MQTT/Home Assistant na L0; MQTT pozostaje wspierane w pierwszym stable.
 - [STABLE] Uzupełnić dokumentację aktywnych profili, API, MQTT/HA, Source Managera, VoxOneBT oraz update/recovery; oznaczyć historyczne baseline'y i usunąć z dokumentów bieżącego stanu opisy sprzeczne z aktualnym runtime.
-- [DECISION] Przed stable ustalić minimalny zakres uwierzytelniania, CSRF i ochrony mutujących REST/WebSocket oraz ekspozycji danych.
 
 ### Definition of Stable
 
@@ -108,7 +107,7 @@
 - [POST-STABLE] Rozszerzyć istniejący WebSocket runtime state o source-aware metadata i codec/format DLNA/AUX, sample rate oraz bitrate tam, gdzie mają znaczenie.
 - [POST-STABLE] Dokończyć edycję maksymalnie pięciu profili Wi-Fi: priority/last-known-good, nowe hasło, zachowanie lub wyczyszczenie hasła, walidacja, atomowy zapis i kontrolowany restart.
 - [POST-STABLE] Dodać konfigurację restartu, sleep/screensaver, auto standby, playlist import/export, Radio Directory i recovery bez przywracania starego WWW. Backup/restore config ma software WWW/API baseline; realny download/restore/restart pozostaje w fizycznym teście persistence.
-- [STABLE] Dokończyć SECURITY-AUTH po niezależnym od Config v7 modelu, rekordzie NVS, inicjalizacji runtime observe-only oraz backendzie dwóch sesji z timeoutami i rate limitingiem: dodać wybór OPEN/PROTECTED, endpointy setup/login/logout, cookie HttpOnly/SameSite=Strict, ochronę całego WWW/REST/WebSocket oraz wspólną walidację Host/Origin/CSRF. Migracja LEGACY_UNCLAIMED nie może zablokować OTA działającego W0; MQTT zachowuje osobną politykę.
+- [STABLE] Dokończyć SECURITY-AUTH: dodać w WWW wybór OPEN/PROTECTED oraz obsługę logowania i wylogowania, a następnie włączyć ochronę całego WWW/REST/WebSocket ze wspólną walidacją Host/Origin/CSRF. Migracja LEGACY_UNCLAIMED nie może zablokować OTA działającego W0; MQTT zachowuje osobną politykę.
 - [HARDWARE] SECURITY-AUTH HIL: skalibrować czas PBKDF2 na klasycznym ESP32 bez PSRAM, sprawdzić wybór trybu po konfiguracji Wi-Fi, sesję i ponowne logowanie, migrację istniejących 0.2.0/0.8.0 z zachowaniem OTA W0 oraz fabryczny reset przez VoxOne Installer USB. Nie dodawać recovery przez cykle zasilania ani obowiązkowe gesty przycisku.
 - [DECISION] Rozstrzygnąć, czy lokalny WebSocket ma walidować żądany subprotocol zamiast bezwarunkowo go odsyłać; połączyć decyzję z audytem auth/CSRF.
 
