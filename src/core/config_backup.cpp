@@ -1,5 +1,6 @@
 #include "config_backup.h"
 
+#include <algorithm>
 #include <cstring>
 #include <limits>
 
@@ -233,9 +234,111 @@ Status validateExternal(const Data& data,
   std::size_t stationRows = 0;
   if (!validStations(stations, stationRows)) return Status::InvalidStations;
   if (data.config.fields.lastSSID > wifiProfiles ||
-      data.config.fields.countStation != stationRows ||
       data.config.fields.lastStation > stationRows) return Status::InvalidConfig;
   return Status::Ok;
+}
+
+const char* statusName(Status status) {
+  switch (status) {
+    case Status::Ok: return "OK";
+    case Status::InvalidArgument: return "INVALID_ARGUMENT";
+    case Status::Empty: return "EMPTY";
+    case Status::Truncated: return "TRUNCATED";
+    case Status::WrongMagic: return "WRONG_MAGIC";
+    case Status::WrongSchema: return "WRONG_SCHEMA";
+    case Status::InvalidLength: return "INVALID_LENGTH";
+    case Status::InvalidChecksum: return "INVALID_CHECKSUM";
+    case Status::InvalidConfig: return "INVALID_CONFIG";
+    case Status::InvalidHardware: return "INVALID_HARDWARE";
+    case Status::UnsupportedHardware: return "UNSUPPORTED_HARDWARE";
+    case Status::InvalidMqtt: return "INVALID_MQTT";
+    case Status::InvalidUi: return "INVALID_UI";
+    case Status::InvalidWifi: return "INVALID_WIFI";
+    case Status::InvalidStations: return "INVALID_STATIONS";
+    case Status::OutputTooSmall: return "OUTPUT_TOO_SMALL";
+    case Status::AllocationFailed: return "ALLOCATION_FAILED";
+    case Status::StorageReadFailed: return "STORAGE_READ_FAILED";
+    case Status::StorageBeginFailed: return "STORAGE_BEGIN_FAILED";
+    case Status::StorageWriteFailed: return "STORAGE_WRITE_FAILED";
+    case Status::StorageCommitFailed: return "STORAGE_COMMIT_FAILED";
+    case Status::RecoveryPending: return "RECOVERY_PENDING";
+  }
+  return "UNKNOWN";
+}
+
+Status StreamEncoder::begin(
+    const Data& data, const hardware::HardwareCapabilities& capabilities,
+    ByteReader& wifi, ByteReader& stations) {
+  ready_ = false;
+  data_ = nullptr;
+  wifi_ = nullptr;
+  stations_ = nullptr;
+  total_ = serializedSize(data);
+  checksumValue_ = 0;
+  if (!total_) return status_ = Status::InvalidLength;
+  status_ = validateExternal(data, capabilities, wifi, stations);
+  if (status_ != Status::Ok) return status_;
+  status_ = encodePrefix(data, capabilities, prefix_, sizeof(prefix_));
+  if (status_ != Status::Ok) return status_;
+  Crc32 crc;
+  crc.update(prefix_, sizeof(prefix_));
+  uint8_t buffer[1024];
+  for (ByteReader* reader : {&wifi, &stations}) {
+    for (std::size_t offset = 0; offset < reader->size();) {
+      const std::size_t count =
+          std::min(sizeof(buffer), reader->size() - offset);
+      if (!reader->read(offset, buffer, count))
+        return status_ = Status::StorageReadFailed;
+      crc.update(buffer, count);
+      offset += count;
+    }
+  }
+  checksumValue_ = crc.value();
+  for (unsigned i = 0; i < sizeof(checksum_); ++i)
+    checksum_[i] = static_cast<uint8_t>(checksumValue_ >> (8 * i));
+  data_ = &data;
+  wifi_ = &wifi;
+  stations_ = &stations;
+  ready_ = true;
+  return status_ = Status::Ok;
+}
+
+std::size_t StreamEncoder::read(std::size_t offset, uint8_t* output,
+                                std::size_t capacity) {
+  if (!ready_ || !data_ || !wifi_ || !stations_ || !output ||
+      offset >= total_) return 0;
+  const std::size_t wanted = std::min(capacity, total_ - offset);
+  std::size_t copied = 0;
+  bool success = true;
+  auto copyMemory = [&](const uint8_t* source, std::size_t length) {
+    if (!success || copied >= wanted) return;
+    if (offset >= length) { offset -= length; return; }
+    const std::size_t count = std::min(wanted - copied, length - offset);
+    std::memcpy(output + copied, source + offset, count);
+    copied += count;
+    offset = 0;
+  };
+  auto copyReader = [&](ByteReader& reader, std::size_t length) {
+    if (!success || copied >= wanted) return;
+    if (offset >= length) { offset -= length; return; }
+    const std::size_t count = std::min(wanted - copied, length - offset);
+    if (!reader.read(offset, output + copied, count)) {
+      success = false;
+      return;
+    }
+    copied += count;
+    offset = 0;
+  };
+  copyMemory(prefix_, sizeof(prefix_));
+  copyReader(*wifi_, data_->wifi.size);
+  copyReader(*stations_, data_->stations.size);
+  copyMemory(checksum_, sizeof(checksum_));
+  if (!success) {
+    ready_ = false;
+    status_ = Status::StorageReadFailed;
+    return 0;
+  }
+  return copied;
 }
 
 std::size_t serializedSize(const Data& data) {

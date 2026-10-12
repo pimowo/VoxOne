@@ -11,6 +11,26 @@ namespace config_restore {
 
 enum class BootRecoveryStatus : uint8_t { NotPending, Recovered, Failed };
 
+enum class BackupStage : uint8_t {
+  None,
+  Allocation,
+  StationLock,
+  ConfigRead,
+  HardwareRead,
+  MqttRead,
+  UiRead,
+  StationsMissing,
+  WifiOpen,
+  StationsOpen,
+  Validate,
+  Serialize,
+  StreamWifi,
+  StreamStations,
+  Ready
+};
+
+const char* backupStageName(BackupStage stage);
+
 BootRecoveryStatus recoverAtBoot();
 void cleanupStaleAfterStorageInit();
 
@@ -21,6 +41,10 @@ class ProductionBackupStream {
   bool begin(config_backup::Status& status);
   std::size_t size() const;
   std::size_t read(std::size_t offset, uint8_t* output, std::size_t capacity);
+  BackupStage stage() const;
+  std::size_t wifiSize() const;
+  std::size_t stationsSize() const;
+  uint32_t checksum() const;
 
  private:
   struct Impl;

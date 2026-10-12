@@ -1,10 +1,12 @@
 #include "../src/core/config_backup.h"
 #include "../src/hardware/hardware_descriptor.h"
 
+#include <algorithm>
 #include <cassert>
 #include <cstdio>
 #include <cstdint>
 #include <cstring>
+#include <string>
 #include <vector>
 
 using namespace voxone::config_backup;
@@ -185,6 +187,25 @@ class TrackingReader : public ByteReader {
   std::size_t largestRead_ = 0;
 };
 
+class ToggleReader : public ByteReader {
+ public:
+  explicit ToggleReader(Bytes bytes) : bytes_(bytes) {}
+  std::size_t size() const override { return bytes_.size; }
+  bool read(std::size_t offset, uint8_t* output,
+            std::size_t length) override {
+    if (fail_) return false;
+    if ((length && (!output || !bytes_.data)) || offset > bytes_.size ||
+        length > bytes_.size - offset) return false;
+    if (length) std::memcpy(output, bytes_.data + offset, length);
+    return true;
+  }
+  void fail() { fail_ = true; }
+
+ private:
+  Bytes bytes_;
+  bool fail_ = false;
+};
+
 void assertDataEqual(const Data& expected, const Data& actual) {
   uint8_t left[kConfigV7SerializedSize];
   uint8_t right[kConfigV7SerializedSize];
@@ -207,6 +228,35 @@ void assertDataEqual(const Data& expected, const Data& actual) {
 int main() {
   const Data source = knownData();
   std::vector<uint8_t> bytes = makeBackup(source);
+
+  // The production encoder emits the same schema-1 artifact incrementally.
+  TrackingReader streamedWifi(source.wifi);
+  TrackingReader streamedStations(source.stations);
+  StreamEncoder encoder;
+  assert(encoder.begin(source, hardwareCapabilities(), streamedWifi,
+                       streamedStations) == Status::Ok);
+  assert(encoder.size() == bytes.size());
+  std::vector<uint8_t> streamed(encoder.size());
+  for (std::size_t offset = 0; offset < streamed.size();) {
+    const std::size_t count = encoder.read(
+        offset, streamed.data() + offset,
+        std::min<std::size_t>(37, streamed.size() - offset));
+    assert(count > 0);
+    offset += count;
+  }
+  assert(streamed == bytes);
+
+  // A file/transport short read becomes a deterministic controlled failure.
+  ToggleReader failingWifi(source.wifi);
+  ToggleReader healthyStations(source.stations);
+  StreamEncoder failingEncoder;
+  assert(failingEncoder.begin(source, hardwareCapabilities(), failingWifi,
+                              healthyStations) == Status::Ok);
+  failingWifi.fail();
+  uint8_t shortBuffer[32]{};
+  assert(failingEncoder.read(kBackupVariableOffset, shortBuffer,
+                             sizeof(shortBuffer)) == 0);
+  assert(failingEncoder.status() == Status::StorageReadFailed);
 
   Data parsed{};
   assert(parse(bytes.data(), bytes.size(), hardwareCapabilities(), parsed) ==
@@ -242,6 +292,45 @@ int main() {
                           stationsReader) == Status::Ok);
   assert(wifiReader.largestRead() <= 70);
   assert(stationsReader.largestRead() <= 512);
+
+  // A missing wifi.csv is represented by an empty section when no profile is
+  // selected. A selected profile without that section remains invalid.
+  Data noWifi = source;
+  noWifi.wifi = {nullptr, 0};
+  noWifi.config.fields.lastSSID = 0;
+  noWifi.config.crc32 = calculateConfigV7Crc(noWifi.config);
+  const std::vector<uint8_t> noWifiBackup = makeBackup(noWifi);
+  Data noWifiParsed{};
+  assert(parse(noWifiBackup.data(), noWifiBackup.size(), hardwareCapabilities(),
+               noWifiParsed) == Status::Ok);
+  Data selectedMissingWifi = noWifi;
+  selectedMissingWifi.config.fields.lastSSID = 1;
+  selectedMissingWifi.config.crc32 =
+      calculateConfigV7Crc(selectedMissingWifi.config);
+  std::vector<uint8_t> missingScratch(serializedSize(selectedMissingWifi));
+  assert(serialize(selectedMissingWifi, hardwareCapabilities(),
+                   missingScratch.data(), missingScratch.size(), written) ==
+         Status::InvalidConfig);
+
+  // stations.tsv is canonical and therefore mandatory.
+  Data noStations = source;
+  noStations.stations = {nullptr, 0};
+  noStations.config.fields.lastStation = 0;
+  noStations.config.crc32 = calculateConfigV7Crc(noStations.config);
+  missingScratch.resize(serializedSize(noStations));
+  assert(serialize(noStations, hardwareCapabilities(), missingScratch.data(),
+                   missingScratch.size(), written) == Status::InvalidStations);
+
+  // countStation is a retired derived counter. Preserve its exact Config v7
+  // value without rejecting a canonical stations.tsv snapshot.
+  Data staleCount = source;
+  staleCount.config.fields.countStation = 0;
+  staleCount.config.crc32 = calculateConfigV7Crc(staleCount.config);
+  const std::vector<uint8_t> staleCountBackup = makeBackup(staleCount);
+  Data staleCountParsed{};
+  assert(parse(staleCountBackup.data(), staleCountBackup.size(),
+               hardwareCapabilities(), staleCountParsed) == Status::Ok);
+  assert(staleCountParsed.config.fields.countStation == 0);
 
   Data unchanged = source;
   unchanged.config.fields.volume = 9;
@@ -404,5 +493,79 @@ int main() {
   result = restore(scaleBackup.data(), scaleBackup.size(),
                    hardwareCapabilities(), scaleStorage);
   assert(result.status == Status::Ok && result.restartRequired);
+
+  TrackingReader scaleWifi(scale.wifi);
+  TrackingReader scaleStations(scale.stations);
+  StreamEncoder scaleEncoder;
+  assert(scaleEncoder.begin(scale, hardwareCapabilities(), scaleWifi,
+                            scaleStations) == Status::Ok);
+  std::vector<uint8_t> scaleStream(scaleEncoder.size());
+  for (std::size_t offset = 0; offset < scaleStream.size();) {
+    const std::size_t count = scaleEncoder.read(
+        offset, scaleStream.data() + offset,
+        std::min<std::size_t>(997, scaleStream.size() - offset));
+    assert(count > 0);
+    offset += count;
+  }
+  assert(scaleStream == scaleBackup);
+
+  // Near-maximum legal station fields remain bounded below the 512-byte line
+  // buffer and survive schema/CRC validation.
+  const std::string longName(169, 'N');
+  const std::string longUrl = "https://example.test/" + std::string(148, 'u');
+  std::vector<uint8_t> nearMaxStations(header, header + std::strlen(header));
+  for (unsigned i = 0; i < 3; ++i) {
+    char id[17];
+    std::snprintf(id, sizeof(id), "%016X", i + 1);
+    const std::string row = std::string(id) + '\t' + longName + '\t' +
+                            longUrl + "\t-30\tnormal\n";
+    assert(row.size() < 512);
+    nearMaxStations.insert(nearMaxStations.end(), row.begin(), row.end());
+  }
+  Data nearMax = source;
+  nearMax.config.fields.countStation = 3;
+  nearMax.config.fields.lastStation = 3;
+  nearMax.config.crc32 = calculateConfigV7Crc(nearMax.config);
+  nearMax.stations = {nearMaxStations.data(), nearMaxStations.size()};
+  const std::vector<uint8_t> nearMaxBackup = makeBackup(nearMax);
+  Data nearMaxParsed{};
+  assert(parse(nearMaxBackup.data(), nearMaxBackup.size(),
+               hardwareCapabilities(), nearMaxParsed) == Status::Ok);
+
+  // Repeated backup creation is deterministic and does not modify sources.
+  uint8_t sourceConfigBefore[kConfigV7SerializedSize];
+  assert(serializeConfigV7(source.config, sourceConfigBefore,
+                           sizeof(sourceConfigBefore)));
+  for (unsigned attempt = 0; attempt < 5; ++attempt) {
+    TrackingReader repeatedWifi(source.wifi);
+    TrackingReader repeatedStations(source.stations);
+    StreamEncoder repeated;
+    assert(repeated.begin(source, hardwareCapabilities(), repeatedWifi,
+                          repeatedStations) == Status::Ok);
+    std::vector<uint8_t> artifact(repeated.size());
+    std::size_t offset = 0;
+    while (offset < artifact.size()) {
+      const std::size_t count = repeated.read(
+          offset, artifact.data() + offset,
+          std::min<std::size_t>(113, artifact.size() - offset));
+      assert(count > 0);
+      offset += count;
+    }
+    assert(artifact == bytes);
+  }
+  uint8_t sourceConfigAfter[kConfigV7SerializedSize];
+  assert(serializeConfigV7(source.config, sourceConfigAfter,
+                           sizeof(sourceConfigAfter)));
+  assert(std::memcmp(sourceConfigBefore, sourceConfigAfter,
+                     sizeof(sourceConfigBefore)) == 0);
+
+  // Diagnostic strings expose only bounded status codes, never fixture secrets.
+  for (Status status : {Status::Ok, Status::InvalidConfig,
+                        Status::InvalidWifi, Status::InvalidStations,
+                        Status::StorageReadFailed}) {
+    const char* diagnostic = statusName(status);
+    assert(std::strstr(diagnostic, "secret-password") == nullptr);
+    assert(std::strstr(diagnostic, "mqtt-secret") == nullptr);
+  }
   return 0;
 }

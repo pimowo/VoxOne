@@ -57,7 +57,6 @@
 
 ## Znane błędy i pomiary
 
-- [BUG] Naprawić `/api/config/backup`; na M0 endpoint zwraca obecnie `{"error":"backup_failed"}`. Nie łączyć tej poprawki z zamkniętym hardeningiem Wi-Fi ani atomową wymianą `/data/wifi.csv`.
 - [BUG] Sprawdzić bezpieczeństwo bufora/okna i clipping w `ScrollWidget`, szczególnie przy długich metadata; powiązać wynik z błędem czyszczenia i nie zmieniać timingu bez testu rendererów.
 - [HARDWARE] Wykonać kontrolowane porównanie poziomu RADIO i BT na tym samym materiale PCM. Użytkownik zmienił rezystory z 22 Ω na 41 Ω, ale trzeba nadal zmierzyć digital gain, BT Absolute Volume, VoxOneBT PCM, MAIN RX i poziom wyjścia.
 - [BUG] Zbadać pstryknięcie lub glitch audio podczas mutacji playlisty/stacji.

@@ -54,11 +54,22 @@ int main() {
   assert(upload.find("upload->append(index, data, len)") != std::string::npos);
   assert(upload.find("memcpy(session->bytes") == std::string::npos);
   assert(restore.find("deviceApiAuthorized(request)") != std::string::npos);
-  assert(download.find("Serial") == std::string::npos);
+  assert(download.find("##[CONFIG-BACKUP]# failed stage=%s status=%s") !=
+         std::string::npos);
+  assert(download.find("##[CONFIG-BACKUP]# ready total=%u wifi=%u stations=%u crc=%08lX") !=
+         std::string::npos);
+  for (const char* secret : {"password", "data.wifi", "data.mqtt"})
+    assert(download.find(secret) == std::string::npos);
   assert(upload.find("Serial") == std::string::npos);
   assert(restore.find("Serial") == std::string::npos);
 
   assert(adapter.find("ProductionBackupStream::read") != std::string::npos);
+  assert(adapter.find("config_backup::StreamEncoder encoder") !=
+         std::string::npos);
+  assert(adapter.find("PlaylistGuard playlistGuard") != std::string::npos);
+  assert(adapter.find("BACKUP_CONFIG_READ") != std::string::npos);
+  assert(adapter.find("BACKUP_STREAM_WIFI") != std::string::npos);
+  assert(adapter.find("BACKUP_STREAM_STATIONS") != std::string::npos);
   assert(adapter.find("ProductionRestoreUpload::append") != std::string::npos);
   assert(adapter.find("kBackupVariableOffset") != std::string::npos);
   assert(adapter.find("/data/.vxrestore.wifi.new") != std::string::npos);

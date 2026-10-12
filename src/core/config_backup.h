@@ -78,6 +78,31 @@ enum class Status : uint8_t {
   RecoveryPending
 };
 
+const char* statusName(Status status);
+
+class StreamEncoder {
+ public:
+  Status begin(const Data& data,
+               const hardware::HardwareCapabilities& capabilities,
+               ByteReader& wifi, ByteReader& stations);
+  std::size_t size() const { return ready_ ? total_ : 0; }
+  std::size_t read(std::size_t offset, uint8_t* output,
+                   std::size_t capacity);
+  Status status() const { return status_; }
+  uint32_t checksum() const { return checksumValue_; }
+
+ private:
+  const Data* data_ = nullptr;
+  ByteReader* wifi_ = nullptr;
+  ByteReader* stations_ = nullptr;
+  uint8_t prefix_[kBackupVariableOffset]{};
+  uint8_t checksum_[4]{};
+  std::size_t total_ = 0;
+  uint32_t checksumValue_ = 0;
+  Status status_ = Status::InvalidArgument;
+  bool ready_ = false;
+};
+
 struct RestoreResult {
   Status status;
   bool restartRequired;

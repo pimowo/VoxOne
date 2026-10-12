@@ -161,18 +161,31 @@ bool fileMatches(const char* path, const FileFingerprint& expected) {
 
 class FileByteReader : public config_backup::ByteReader {
  public:
-  FileByteReader(File& file, std::size_t size) : file_(file), size_(size) {}
+  FileByteReader() = default;
+  FileByteReader(File& file, std::size_t size, bool* failed = nullptr)
+      : file_(&file), size_(size), failed_(failed) {}
+  void reset(File& file, std::size_t size, bool* failed = nullptr) {
+    file_ = &file;
+    size_ = size;
+    failed_ = failed;
+  }
   std::size_t size() const override { return size_; }
   bool read(std::size_t offset, uint8_t* output,
             std::size_t length) override {
-    if ((length && !output) || offset > size_ || length > size_ - offset)
+    if ((length && !output) || offset > size_ || length > size_ - offset) {
+      if (failed_) *failed_ = true;
       return false;
-    return !length || (file_ && file_.seek(offset) &&
-                       file_.read(output, length) == length);
+    }
+    const bool ok = !length ||
+        (file_ && *file_ && file_->seek(offset) &&
+         file_->read(output, length) == length);
+    if (!ok && failed_) *failed_ = true;
+    return ok;
   }
  private:
-  File& file_;
-  std::size_t size_;
+  File* file_ = nullptr;
+  std::size_t size_ = 0;
+  bool* failed_ = nullptr;
 };
 
 bool installTransactionalFile(const char* staged, const char* active,
@@ -561,11 +574,36 @@ struct ProductionBackupStream::Impl {
   config_backup::Data data{};
   File wifi;
   File stations;
-  uint8_t prefix[config_backup::kBackupVariableOffset]{};
-  uint8_t checksum[4]{};
-  std::size_t total = 0;
-  bool ready = false;
+  PlaylistGuard playlistGuard;
+  FileByteReader wifiReader;
+  FileByteReader stationsReader;
+  config_backup::StreamEncoder encoder;
+  BackupStage stage = BackupStage::None;
+  bool wifiReadFailed = false;
+  bool stationsReadFailed = false;
+  bool streamFailureLogged = false;
 };
+
+const char* backupStageName(BackupStage stage) {
+  switch (stage) {
+    case BackupStage::None: return "BACKUP_NONE";
+    case BackupStage::Allocation: return "BACKUP_ALLOC";
+    case BackupStage::StationLock: return "BACKUP_STATION_LOCK";
+    case BackupStage::ConfigRead: return "BACKUP_CONFIG_READ";
+    case BackupStage::HardwareRead: return "BACKUP_HARDWARE_READ";
+    case BackupStage::MqttRead: return "BACKUP_MQTT_READ";
+    case BackupStage::UiRead: return "BACKUP_UI_READ";
+    case BackupStage::StationsMissing: return "BACKUP_STATIONS_MISSING";
+    case BackupStage::WifiOpen: return "BACKUP_WIFI_READ";
+    case BackupStage::StationsOpen: return "BACKUP_STATIONS_READ";
+    case BackupStage::Validate: return "BACKUP_VALIDATE";
+    case BackupStage::Serialize: return "BACKUP_SERIALIZE";
+    case BackupStage::StreamWifi: return "BACKUP_STREAM_WIFI";
+    case BackupStage::StreamStations: return "BACKUP_STREAM_STATIONS";
+    case BackupStage::Ready: return "BACKUP_READY";
+  }
+  return "BACKUP_UNKNOWN";
+}
 
 ProductionBackupStream::ProductionBackupStream()
     : impl_(new (std::nothrow) Impl) {
@@ -583,100 +621,113 @@ ProductionBackupStream::~ProductionBackupStream() {
 bool ProductionBackupStream::begin(config_backup::Status& status) {
   status = config_backup::Status::StorageReadFailed;
   if (!impl_) { status = config_backup::Status::AllocationFailed; return false; }
+  impl_->stage = BackupStage::Allocation;
+  if (!impl_->playlistGuard) {
+    impl_->stage = BackupStage::StationLock;
+    return false;
+  }
   config_backup::Data& data = impl_->data;
   uint8_t configBytes[config_format::kConfigV7SerializedSize]{};
   bool found = false;
   config_storage::ConfigEepromStorage configStore;
+  impl_->stage = BackupStage::ConfigRead;
   if (!configStore.readRecord(configBytes, sizeof(configBytes), found) || !found ||
       config_format::parseConfigV7(configBytes, sizeof(configBytes), data.config) !=
           config_format::ConfigRecordStatus::LOADED_V7)
     return false;
 
+  impl_->stage = BackupStage::HardwareRead;
   if (!hardware::readRuntimeHardwarePersistent(data.hardware, found))
     return false;
   if (!found) data.hardware = hardware::runtimeHardwareConfig();
+  impl_->stage = BackupStage::MqttRead;
   if (!mqttReadPersistent(data.mqtt, found))
     return false;
   if (!found) data.mqtt = mqttConfig();
+  impl_->stage = BackupStage::UiRead;
   if (!uiTimeoutReadPersistent(data.ui, found))
     return false;
   if (!found) data.ui = uiTimeoutConfig();
 
-  if (!SPIFFS.exists(PLAYLIST_PATH))
+  if (!SPIFFS.exists(PLAYLIST_PATH)) {
+    impl_->stage = BackupStage::StationsMissing;
     return false;
+  }
   impl_->wifi = SPIFFS.open(SSIDS_PATH, "r");
+  if (SPIFFS.exists(SSIDS_PATH) && !impl_->wifi) {
+    impl_->stage = BackupStage::WifiOpen;
+    return false;
+  }
   impl_->stations = SPIFFS.open(PLAYLIST_PATH, "r");
   const std::size_t wifiSize = impl_->wifi ? impl_->wifi.size() : 0;
   const std::size_t stationsSize = impl_->stations ? impl_->stations.size() : 0;
-  if (!impl_->stations) return false;
+  if (!impl_->stations) {
+    impl_->stage = BackupStage::StationsOpen;
+    return false;
+  }
   data.wifi = {nullptr, wifiSize};
   data.stations = {nullptr, stationsSize};
-  impl_->total = config_backup::serializedSize(data);
-  if (!impl_->total) { status = config_backup::Status::InvalidLength; return false; }
-  FileByteReader wifiReader(impl_->wifi, wifiSize);
-  FileByteReader stationsReader(impl_->stations, stationsSize);
-  status = config_backup::validateExternal(
-      data, hardware::hardwareCapabilities(), wifiReader, stationsReader);
-  if (status != config_backup::Status::Ok) return false;
-  status = config_backup::encodePrefix(
-      data, hardware::hardwareCapabilities(), impl_->prefix, sizeof(impl_->prefix));
-  if (status != config_backup::Status::Ok) return false;
-  config_backup::Crc32 crc;
-  crc.update(impl_->prefix, sizeof(impl_->prefix));
-  uint8_t buffer[1024];
-  for (FileByteReader* reader : {&wifiReader, &stationsReader}) {
-    for (std::size_t offset = 0; offset < reader->size();) {
-      const std::size_t count = std::min(sizeof(buffer), reader->size() - offset);
-      if (!reader->read(offset, buffer, count)) {
-        status = config_backup::Status::StorageReadFailed;
-        return false;
-      }
-      crc.update(buffer, count);
-      offset += count;
-    }
+  impl_->wifiReader.reset(impl_->wifi, wifiSize, &impl_->wifiReadFailed);
+  impl_->stationsReader.reset(impl_->stations, stationsSize,
+                              &impl_->stationsReadFailed);
+  impl_->stage = BackupStage::Validate;
+  status = impl_->encoder.begin(data, hardware::hardwareCapabilities(),
+                                impl_->wifiReader, impl_->stationsReader);
+  if (status != config_backup::Status::Ok) {
+    if (impl_->wifiReadFailed) impl_->stage = BackupStage::StreamWifi;
+    else if (impl_->stationsReadFailed)
+      impl_->stage = BackupStage::StreamStations;
+    else if (status != config_backup::Status::InvalidConfig &&
+             status != config_backup::Status::InvalidHardware &&
+             status != config_backup::Status::UnsupportedHardware &&
+             status != config_backup::Status::InvalidMqtt &&
+             status != config_backup::Status::InvalidUi &&
+             status != config_backup::Status::InvalidWifi &&
+             status != config_backup::Status::InvalidStations)
+      impl_->stage = BackupStage::Serialize;
+    return false;
   }
-  const uint32_t value = crc.value();
-  for (unsigned i = 0; i < 4; ++i)
-    impl_->checksum[i] = static_cast<uint8_t>(value >> (8 * i));
-  impl_->ready = true;
-  status = config_backup::Status::Ok;
+  impl_->stage = BackupStage::Ready;
   return true;
 }
 
 std::size_t ProductionBackupStream::size() const {
-  return impl_ && impl_->ready ? impl_->total : 0;
+  return impl_ ? impl_->encoder.size() : 0;
 }
 
 std::size_t ProductionBackupStream::read(std::size_t offset, uint8_t* output,
                                          std::size_t capacity) {
-  if (!impl_ || !impl_->ready || !output || offset >= impl_->total) return 0;
-  const std::size_t wanted = std::min(capacity, impl_->total - offset);
-  std::size_t copied = 0;
-  bool success = true;
-  auto copyMemory = [&](const uint8_t* source, std::size_t length) {
-    if (!success || copied >= wanted) return;
-    if (offset >= length) { offset -= length; return; }
-    const std::size_t count = std::min(wanted - copied, length - offset);
-    memcpy(output + copied, source + offset, count);
-    copied += count;
-    offset = 0;
-  };
-  auto copyFileRange = [&](File& file, std::size_t length) {
-    if (!success || copied >= wanted) return;
-    if (offset >= length) { offset -= length; return; }
-    const std::size_t count = std::min(wanted - copied, length - offset);
-    if (!file || !file.seek(offset) || file.read(output + copied, count) != count) {
-      success = false;
-      return;
+  if (!impl_) return 0;
+  impl_->wifiReadFailed = false;
+  impl_->stationsReadFailed = false;
+  const std::size_t copied = impl_->encoder.read(offset, output, capacity);
+  if (!copied && impl_->encoder.status() == config_backup::Status::StorageReadFailed) {
+    impl_->stage = impl_->wifiReadFailed ? BackupStage::StreamWifi
+                                        : BackupStage::StreamStations;
+    if (!impl_->streamFailureLogged) {
+      Serial.printf("##[CONFIG-BACKUP]# failed stage=%s status=%s\n",
+                    backupStageName(impl_->stage),
+                    config_backup::statusName(impl_->encoder.status()));
+      impl_->streamFailureLogged = true;
     }
-    copied += count;
-    offset = 0;
-  };
-  copyMemory(impl_->prefix, sizeof(impl_->prefix));
-  copyFileRange(impl_->wifi, impl_->data.wifi.size);
-  copyFileRange(impl_->stations, impl_->data.stations.size);
-  copyMemory(impl_->checksum, sizeof(impl_->checksum));
-  return success ? copied : 0;
+  }
+  return copied;
+}
+
+BackupStage ProductionBackupStream::stage() const {
+  return impl_ ? impl_->stage : BackupStage::Allocation;
+}
+
+std::size_t ProductionBackupStream::wifiSize() const {
+  return impl_ ? impl_->data.wifi.size : 0;
+}
+
+std::size_t ProductionBackupStream::stationsSize() const {
+  return impl_ ? impl_->data.stations.size : 0;
+}
+
+uint32_t ProductionBackupStream::checksum() const {
+  return impl_ ? impl_->encoder.checksum() : 0;
 }
 
 struct ProductionRestoreUpload::Impl {

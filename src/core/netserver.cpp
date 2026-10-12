@@ -1234,11 +1234,26 @@ void handleConfigBackup(AsyncWebServerRequest* request) {
   std::shared_ptr<voxone::config_restore::ProductionBackupStream> stream =
       std::make_shared<voxone::config_restore::ProductionBackupStream>();
   voxone::config_backup::Status status = voxone::config_backup::Status::StorageReadFailed;
-  if (!stream->begin(status) || !stream->size() ||
-      stream->size() > voxone::config_backup_web::kMaxUploadBytes) {
+  const bool prepared = stream->begin(status);
+  const std::size_t preparedSize = stream->size();
+  if (!prepared || !preparedSize ||
+      preparedSize > voxone::config_backup_web::kMaxUploadBytes) {
+    const char* stage = preparedSize > voxone::config_backup_web::kMaxUploadBytes
+                            ? "BACKUP_SIZE_LIMIT"
+                            : voxone::config_restore::backupStageName(stream->stage());
+    Serial.printf("##[CONFIG-BACKUP]# failed stage=%s status=%s total=%u\n",
+                  stage,
+                  voxone::config_backup::statusName(status),
+                  static_cast<unsigned>(preparedSize));
     configApiReply(request, 500, R"({"error":"backup_failed"})");
     return;
   }
+  Serial.printf(
+      "##[CONFIG-BACKUP]# ready total=%u wifi=%u stations=%u crc=%08lX\n",
+      static_cast<unsigned>(stream->size()),
+      static_cast<unsigned>(stream->wifiSize()),
+      static_cast<unsigned>(stream->stationsSize()),
+      static_cast<unsigned long>(stream->checksum()));
   activeConfigBackupRequest = request;
   request->onDisconnect([request]() {
     if (activeConfigBackupRequest == request) activeConfigBackupRequest = nullptr;
