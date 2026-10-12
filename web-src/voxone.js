@@ -19,7 +19,6 @@
   const updateBtFile = document.getElementById("update-bt-file");
   const updateBtFileName = document.getElementById("update-bt-file-name");
   const updateBtButton = document.getElementById("update-bt-button");
-  const updateBtHint = document.getElementById("update-bt-hint");
   let updateBusy = false;
   let btUpdateBusy = false;
   let btUpdatePolling = false;
@@ -148,15 +147,25 @@
   const hardwareForm = document.getElementById("hardware-form");
   const hardwareDisplay = document.getElementById("hardware-display");
   const hardwareInput = document.getElementById("hardware-input");
-  const hardwareSave = document.getElementById("hardware-save");
   const hardwareSaveRestart = document.getElementById("hardware-save-restart");
   const hardwareFeedback = document.getElementById("hardware-feedback");
   const hardwareDirtyBadge = document.getElementById("hardware-dirty-badge");
   const hardwareRoadmapLists = {
-    displays: document.getElementById("hardware-display-roadmap"),
-    inputs: document.getElementById("hardware-input-roadmap"),
-    audio: document.getElementById("hardware-audio-roadmap"),
-    modules: document.getElementById("hardware-module-roadmap")
+    audio: document.getElementById("hardware-audio-roadmap")
+  };
+  const hardwareModuleRoadmap = document.getElementById("hardware-module-roadmap");
+  const hardwareSelectionState = {
+    display: {
+      select: hardwareDisplay,
+      status: document.getElementById("hardware-display-status"),
+      current: document.getElementById("hardware-display-current")
+    },
+    input: {
+      select: hardwareInput,
+      status: document.getElementById("hardware-input-status"),
+      current: document.getElementById("hardware-input-current"),
+      note: document.getElementById("hardware-input-note")
+    }
   };
   let mqttConfigLoaded = false;
   let mqttPasswordSet = false;
@@ -166,8 +175,8 @@
   let rtcStatusLoading = false;
   let hardwareConfigLoaded = false;
   let hardwareSaving = false;
-  let hardwareRestartRequired = false;
   let savedHardwareConfig = null;
+  let hardwareRoadmap = { displays: [], inputs: [] };
   const state = {
     connection: "connecting",
     webStatus: null,
@@ -281,21 +290,17 @@
     updateBtFile.disabled = updateBusy || btUpdateBusy || !supported;
     updateBtButton.disabled = updateBusy || btUpdateBusy || !file || !ready ||
       !file.size || file.size > 1310720;
-    updateBtHint.textContent = !supported ? "Aktualizacja VoxOneBT: bezpośrednio przez USB (W0)." :
-      !info.psramTotal ? "PSRAM niedostępny; upload przez MAIN jest wyłączony." :
-      "Wymaga wolnego PSRAM (obraz + 384 KiB), VoxOneBT online, PROTO 2, FW_UPDATE i źródła innego niż BT.";
   }
 
   function renderBtModule() {
     const module = state.webStatus?.btModule;
     const online = state.connection === "connected" && module?.online === true;
-    for (const prefix of ["update-bt", "system-bt"]) {
-      text(prefix + "-online", online ? "TAK" : "NIE");
-      text(prefix + "-firmware", online && module.firmware ? module.firmware : "—");
-      text(prefix + "-protocol", online && module.protocol ? String(module.protocol) : "—");
-      text(prefix + "-name", online && module.name ? module.name : "—");
-      text(prefix + "-capabilities", online && module.capabilities ? module.capabilities : "—");
-    }
+    text("update-bt-online", online ? "Online" : "Offline");
+    text("system-bt-online", online ? "TAK" : "NIE");
+    text("system-bt-firmware", online && module.firmware ? module.firmware : "—");
+    text("system-bt-protocol", online && module.protocol ? String(module.protocol) : "—");
+    text("system-bt-name", online && module.name ? module.name : "—");
+    text("system-bt-capabilities", online && module.capabilities ? module.capabilities : "—");
   }
 
   function formatSystemUptime(seconds) {
@@ -885,9 +890,27 @@
   }
 
   function hardwareDirty() {
-    return !!savedHardwareConfig &&
+    return !!savedHardwareConfig && hardwareSelectionSaveable() &&
       (hardwareDisplay.value !== savedHardwareConfig.display ||
        hardwareInput.value !== savedHardwareConfig.input);
+  }
+
+  function hardwareSelectionSaveable() {
+    return [hardwareDisplay, hardwareInput].every(select =>
+      select.selectedOptions.length === 1 && !select.selectedOptions[0].disabled);
+  }
+
+  function renderHardwareSelectionState(kind, items) {
+    const state = hardwareSelectionState[kind];
+    const item = items.find(candidate => candidate.value === state.select.value);
+    state.status.textContent = item?.statusLabel || "—";
+    state.status.dataset.roadmapStatus = item?.status || "";
+    state.current.hidden = !savedHardwareConfig ||
+      state.select.value !== savedHardwareConfig[kind];
+    if (state.note) {
+      state.note.textContent = item?.note || "";
+      state.note.hidden = !item?.note;
+    }
   }
 
   function renderHardwareFormState() {
@@ -895,17 +918,20 @@
     hardwareDirtyBadge.hidden = !dirty;
     hardwareDisplay.disabled = !hardwareConfigLoaded || hardwareSaving;
     hardwareInput.disabled = !hardwareConfigLoaded || hardwareSaving;
-    hardwareSave.disabled = hardwareSaving || !dirty;
-    hardwareSaveRestart.disabled = hardwareSaving || !hardwareConfigLoaded ||
-      (!dirty && !hardwareRestartRequired);
+    hardwareSaveRestart.disabled = hardwareSaving || !hardwareConfigLoaded || !dirty ||
+      !hardwareSelectionSaveable();
+    renderHardwareSelectionState("display", hardwareRoadmap.displays);
+    renderHardwareSelectionState("input", hardwareRoadmap.inputs);
   }
 
-  function replaceHardwareOptions(select, options, selected) {
+  function replaceHardwareOptions(select, roadmap, supported, selected) {
+    const supportedValues = new Set(supported.map(item => item.value));
     select.replaceChildren();
-    for (const item of options) {
+    for (const item of roadmap) {
       const option = document.createElement("option");
       option.value = item.value;
-      option.textContent = item.label + (item.status === "untested" ? " — DO TESTU" : "");
+      option.textContent = item.label;
+      option.disabled = item.selectable !== true || !supportedValues.has(item.value);
       select.append(option);
     }
     select.value = selected;
@@ -939,16 +965,50 @@
     }
   }
 
+  function renderHardwareModules(items) {
+    hardwareModuleRoadmap.replaceChildren();
+    for (const item of items) {
+      const row = document.createElement("li");
+      const choice = document.createElement("label");
+      choice.className = "hardware-module-choice";
+      const checkbox = document.createElement("input");
+      checkbox.type = "checkbox";
+      checkbox.disabled = true;
+      const name = document.createElement("span");
+      name.textContent = item.label;
+      choice.append(checkbox, name);
+      const status = document.createElement("span");
+      status.className = "hardware-roadmap-status";
+      status.dataset.roadmapStatus = item.status;
+      status.textContent = item.statusLabel;
+      row.append(choice, status);
+      if (item.note) {
+        const note = document.createElement("span");
+        note.className = "hardware-roadmap-note";
+        note.textContent = item.note;
+        row.append(note);
+      }
+      hardwareModuleRoadmap.append(row);
+    }
+  }
+
   async function loadHardwareConfig() {
     try {
       const response = await fetch("/api/hardware", { cache: "no-store" });
       const snapshot = await response.json();
       if (!response.ok || !snapshot.config || !Array.isArray(snapshot.supportedDisplays) ||
           !Array.isArray(snapshot.supportedInputs) || !snapshot.roadmap ||
-          Object.keys(hardwareRoadmapLists).some(key => !Array.isArray(snapshot.roadmap[key])))
+          ["displays", "inputs", "audio", "modules"].some(key =>
+            !Array.isArray(snapshot.roadmap[key])))
         throw new Error(snapshot.error || ("HTTP " + response.status));
-      replaceHardwareOptions(hardwareDisplay, snapshot.supportedDisplays, snapshot.config.display);
-      replaceHardwareOptions(hardwareInput, snapshot.supportedInputs, snapshot.config.input);
+      hardwareRoadmap = {
+        displays: snapshot.roadmap.displays,
+        inputs: snapshot.roadmap.inputs
+      };
+      replaceHardwareOptions(hardwareDisplay, hardwareRoadmap.displays,
+        snapshot.supportedDisplays, snapshot.config.display);
+      replaceHardwareOptions(hardwareInput, hardwareRoadmap.inputs,
+        snapshot.supportedInputs, snapshot.config.input);
       if (!hardwareDisplay.value || !hardwareInput.value)
         throw new Error("Urządzenie zwróciło niezgodną konfigurację");
       savedHardwareConfig = {
@@ -959,8 +1019,8 @@
       text("hardware-mcu", snapshot.mcu || "—");
       for (const [key, list] of Object.entries(hardwareRoadmapLists))
         renderHardwareRoadmap(list, snapshot.roadmap[key]);
+      renderHardwareModules(snapshot.roadmap.modules);
       hardwareConfigLoaded = true;
-      hardwareRestartRequired = snapshot.restartRequired === true;
       setHardwareFeedback("");
     } catch (error) {
       hardwareConfigLoaded = false;
@@ -1005,10 +1065,7 @@
 
   async function saveHardwareConfig(restart) {
     if (hardwareSaving || !hardwareConfigLoaded) return;
-    if (!hardwareDirty()) {
-      if (restart && hardwareRestartRequired) await restartAfterHardwareSave();
-      return;
-    }
+    if (!hardwareDirty() || !hardwareSelectionSaveable()) return;
     hardwareSaving = true;
     renderHardwareFormState();
     setHardwareFeedback("Zapisywanie konfiguracji sprzętu…");
@@ -1027,7 +1084,6 @@
       savedHardwareConfig = { display: result.config.display, input: result.config.input };
       hardwareDisplay.value = result.config.display;
       hardwareInput.value = result.config.input;
-      hardwareRestartRequired = true;
       setHardwareFeedback("Konfiguracja sprzętu została zapisana. Uruchom ponownie VoxOne, aby zastosować zmiany.");
     } catch (error) {
       setHardwareFeedback("Nie zapisano konfiguracji sprzętu: " +
@@ -2506,9 +2562,8 @@
   mqttForm.addEventListener("submit", saveMqttConfig);
   hardwareForm.addEventListener("submit", event => {
     event.preventDefault();
-    saveHardwareConfig(false);
+    saveHardwareConfig(true);
   });
-  hardwareSaveRestart.addEventListener("click", () => saveHardwareConfig(true));
   hardwareDisplay.addEventListener("change", () => {
     setHardwareFeedback("");
     renderHardwareFormState();

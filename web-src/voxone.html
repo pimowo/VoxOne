@@ -236,44 +236,54 @@
           <span data-roadmap-status="untested">DO TESTU</span>
           <span data-roadmap-status="planned">PLANOWANE</span>
         </div>
-        <div class="grid hardware-grid">
-          <article class="card">
-            <h3>Urządzenie</h3>
-            <dl class="facts">
-              <div><dt>Rodzina</dt><dd id="hardware-family">—</dd></div>
-              <div><dt>MCU</dt><dd id="hardware-mcu">—</dd></div>
-            </dl>
-          </article>
-          <article class="card hardware-config-card">
-            <h3>Konfiguracja lokalna</h3>
-            <form id="hardware-form" novalidate>
-              <label for="hardware-display">Display<span>Typ wyświetlacza</span></label>
+        <form id="hardware-form" novalidate>
+          <div class="grid hardware-grid">
+            <article class="card">
+              <h3>Urządzenie</h3>
+              <dl class="facts">
+                <div><dt>Rodzina</dt><dd id="hardware-family">—</dd></div>
+                <div><dt>MCU</dt><dd id="hardware-mcu">—</dd></div>
+              </dl>
+            </article>
+            <article class="card hardware-config-card">
+              <h3>Display</h3>
+              <label for="hardware-display">Typ wyświetlacza</label>
               <select id="hardware-display" class="setting-select" disabled></select>
-              <p class="hint">Brak oznacza, że wyświetlacz nie jest zainstalowany.</p>
-              <ul id="hardware-display-roadmap" class="hardware-roadmap-list" aria-label="Roadmapa wyświetlaczy"></ul>
-              <label for="hardware-input">Sterowanie lokalne<span>Typ wejścia</span></label>
-              <select id="hardware-input" class="setting-select" disabled></select>
-              <p class="hint">Brak oznacza, że lokalne sterowanie nie jest zainstalowane.</p>
-              <ul id="hardware-input-roadmap" class="hardware-roadmap-list" aria-label="Roadmapa sterowania lokalnego"></ul>
-              <p class="hardware-restart-note">Zmiany sprzętowe wymagają ponownego uruchomienia.</p>
-              <p id="hardware-feedback" class="hardware-feedback" role="status" aria-live="polite"></p>
-              <div class="hardware-actions">
-                <button id="hardware-save" type="submit" disabled>ZAPISZ</button>
-                <button id="hardware-save-restart" type="button" disabled>ZAPISZ I URUCHOM PONOWNIE</button>
+              <div class="hardware-selection-state" aria-live="polite">
+                <span id="hardware-display-status" class="hardware-roadmap-status">—</span>
+                <span id="hardware-display-current" class="hardware-roadmap-current" hidden>AKTUALNE</span>
               </div>
-            </form>
+              <p class="hint">Brak oznacza, że wyświetlacz nie jest zainstalowany.</p>
+            </article>
+            <article class="card hardware-config-card">
+              <h3>Sterowanie lokalne</h3>
+              <label for="hardware-input">Typ sterowania</label>
+              <select id="hardware-input" class="setting-select" disabled></select>
+              <div class="hardware-selection-state" aria-live="polite">
+                <span id="hardware-input-status" class="hardware-roadmap-status">—</span>
+                <span id="hardware-input-current" class="hardware-roadmap-current" hidden>AKTUALNE</span>
+              </div>
+              <p id="hardware-input-note" class="hardware-option-note" hidden></p>
+              <p class="hint">Brak oznacza, że lokalne sterowanie nie jest zainstalowane.</p>
+            </article>
+            <article class="card">
+              <h3>Audio</h3>
+              <p class="hint">Informacyjna roadmapa. Audio nie jest konfigurowane na tej stronie.</p>
+              <ul id="hardware-audio-roadmap" class="hardware-roadmap-list" aria-label="Roadmapa audio"></ul>
+            </article>
+            <article class="card">
+              <h3>Moduły i rozszerzenia</h3>
+              <p class="hint">Informacyjna roadmapa bez ustawień runtime.</p>
+              <ul id="hardware-module-roadmap" class="hardware-module-list" aria-label="Roadmapa modułów"></ul>
+            </article>
+          </div>
+          <article class="card hardware-apply-card">
+            <h3>Zastosowanie konfiguracji</h3>
+            <p class="hardware-restart-note">Zmiany konfiguracji sprzętu wymagają ponownego uruchomienia urządzenia.</p>
+            <p id="hardware-feedback" class="hardware-feedback" role="status" aria-live="polite"></p>
+            <button id="hardware-save-restart" type="submit" disabled>ZAPISZ I URUCHOM PONOWNIE</button>
           </article>
-          <article class="card">
-            <h3>Audio</h3>
-            <p class="hint">Informacyjna roadmapa. Audio nie jest konfigurowane na tej stronie.</p>
-            <ul id="hardware-audio-roadmap" class="hardware-roadmap-list" aria-label="Roadmapa audio"></ul>
-          </article>
-          <article class="card">
-            <h3>Moduły i rozszerzenia</h3>
-            <p class="hint">Informacyjna roadmapa bez ustawień runtime.</p>
-            <ul id="hardware-module-roadmap" class="hardware-roadmap-list" aria-label="Roadmapa modułów"></ul>
-          </article>
-        </div>
+        </form>
       </section>
 
       <section id="system" data-panel aria-labelledby="system-title" hidden>
@@ -342,17 +352,13 @@
           <article class="card update-card">
             <h3>VoxOneBT Firmware</h3>
             <dl class="facts">
-              <div><dt>Online</dt><dd id="update-bt-online">NIE</dd></div>
-              <div><dt>Firmware</dt><dd id="update-bt-firmware">—</dd></div>
-              <div><dt>Protokół</dt><dd id="update-bt-protocol">—</dd></div>
-              <div><dt>Nazwa BT</dt><dd id="update-bt-name">—</dd></div>
-              <div><dt>Możliwości</dt><dd id="update-bt-capabilities">—</dd></div>
+              <div><dt>Status</dt><dd id="update-bt-online">Offline</dd></div>
             </dl>
             <label for="update-bt-file">Plik firmware VoxOneBT (.bin)</label>
             <input id="update-bt-file" type="file" accept=".bin,application/octet-stream">
             <p id="update-bt-file-name" class="update-file-name">Nie wybrano pliku.</p>
             <button id="update-bt-button" type="button" disabled>Aktualizuj VoxOneBT</button>
-            <p id="update-bt-hint" class="hint">Dostępność zależy od profilu, PSRAM i stanu VoxOneBT.</p>
+            <p class="hint">Aktualizacja VoxOneBT: bezpośrednio przez USB (X0).</p>
           </article>
         </div>
         <article class="card update-progress-card" aria-labelledby="update-progress-title">
