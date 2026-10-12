@@ -119,7 +119,7 @@ ScrollWidget::ScrollWidget(const char* separator, ScrollConfig conf, uint16_t fg
 }
 
 ScrollWidget::~ScrollWidget() {
-  free(_fb);
+  delete _fb;
   free(_sep);
   free(_window);
 }
@@ -150,7 +150,7 @@ void ScrollWidget::init(const char* separator, ScrollConfig conf, uint16_t fgcol
 
 void ScrollWidget::_setTextParams() {
   if (_config.textsize == 0) return;
-  if(_fb->ready()){
+  if(_frameBufferReady()){
   #ifdef PSFBUFFER
     _fb->setTextSize(_config.textsize);
     _fb->setTextColor(_fgcolor, _bgcolor);
@@ -162,26 +162,27 @@ void ScrollWidget::_setTextParams() {
 }
 
 bool ScrollWidget::_checkIsScrollNeeded() {
-  return _textwidth > _width;
+  return scrollTextNeedsScrolling(_textwidth, _width, _charWidth, _textheight);
+}
+
+bool ScrollWidget::_frameBufferReady() const {
+  return _fb && _fb->ready();
 }
 
 void ScrollWidget::setText(const char* txt) {
-  const char* encoded = utf8Rus(txt);
-  char nextText[_buffsize];
-  strlcpy(nextText, encoded, _buffsize - 1);
-  const bool changed = scrollTextChangedAndResetOffset(
-      _text, nextText, _x, _fb->ready() ? 0 : _config.left);
-  strlcpy(_text, nextText, _buffsize);
+  const char* encoded = utf8Rus(txt ? txt : "");
+  const bool changed = scrollTextAssign(
+      _text, _buffsize, encoded, _x, _frameBufferReady() ? 0 : _config.left);
   if (changed && _changeObserver) _changeObserver(_changeContext, _changeRow);
   if (!changed) return;
-  _textwidth = strlen(_text) * _charWidth;
+  _textwidth = scrollTextPixelWidth(strlen(_text), _charWidth);
   _doscroll = _checkIsScrollNeeded();
   if (dsp.getScrollId() == this) dsp.setScrollId(NULL);
   _scrolldelay = millis();
   if (_active) {
     _setTextParams();
     if (_doscroll) {
-      if(_fb->ready()){
+      if(_frameBufferReady()){
       #ifdef PSFBUFFER
         _fb->fillRect(0, 0, _width, _textheight, _bgcolor);
         _fb->setCursor(0, 0);
@@ -200,7 +201,7 @@ void ScrollWidget::setText(const char* txt) {
         dsp.clearClipping();
       }
     } else {
-      if(_fb->ready()){
+      if(_frameBufferReady()){
       #ifdef PSFBUFFER
         _fb->fillRect(0, 0, _width, _textheight, _bgcolor);
         _fb->setCursor(_realLeft(true), 0);
@@ -237,7 +238,7 @@ void ScrollWidget::loop() {
 #if !(VOXONE_DISPLAY_PROFILE == VOXONE_DISPLAY_PROFILE_OLED_128X64)
   if (dsp.getScrollId() != NULL && dsp.getScrollId() != this) return;
 #endif
-  uint16_t fbl = _fb->ready()?0:_config.left;
+  uint16_t fbl = _frameBufferReady()?0:_config.left;
   if (_checkDelay(_x == fbl ? _startscrolldelay : _scrolltime, _scrolldelay)) {
     _calcX(_scrolldelta);
     if (_active) _draw();
@@ -251,7 +252,7 @@ void ScrollWidget::setExternallyScheduled(bool enabled) {
 
 void ScrollWidget::startScheduledTurn() {
   if (!_externallyScheduled || !_doscroll) return;
-  const int16_t start = _fb->ready() ? 0 : _config.left;
+  const int16_t start = _frameBufferReady() ? 0 : _config.left;
   const bool redraw = _x != start;
   _x = start;
   if (dsp.getScrollId() == this) dsp.setScrollId(NULL);
@@ -262,11 +263,11 @@ bool ScrollWidget::stepScheduledTurn(uint8_t pixels) {
   if (!_externallyScheduled || !_doscroll || !_active || _locked) return false;
   _calcX(pixels);
   _draw();
-  return _x == (_fb->ready() ? 0 : _config.left);
+  return _x == (_frameBufferReady() ? 0 : _config.left);
 }
 
 void ScrollWidget::_clear(){
-  if(_fb->ready()){
+  if(_frameBufferReady()){
     #ifdef PSFBUFFER
     _fb->fillRect(0, 0, _width, _textheight, _bgcolor);
     _fb->display();
@@ -280,24 +281,16 @@ void ScrollWidget::_draw() {
   if(!_active || _locked) return;
   _setTextParams();
   if (_doscroll) {
-    uint16_t fbl = _fb->ready()?0:_config.left;
+    uint16_t fbl = _frameBufferReady()?0:_config.left;
     uint16_t _newx = fbl - _x;
-    const char* _cursor = _text + _newx / _charWidth;
-    uint16_t hiddenChars = _cursor - _text;
-    uint8_t addChars = _fb->ready()?2:1;
-    if (hiddenChars < strlen(_text)) {
-    //TODO
-    #pragma GCC diagnostic push
-    #pragma GCC diagnostic ignored "-Wformat-truncation="
-      snprintf(_window, scrollWindowPrintCapacity(_windowCapacity, _width,
-               _charWidth, addChars), "%s%s%s", _cursor, _sep, _text);
-    #pragma GCC diagnostic pop
-    } else {
-      const char* _scursor = _sep + (_cursor - (_text + strlen(_text)));
-      snprintf(_window, scrollWindowPrintCapacity(_windowCapacity, _width,
-               _charWidth, addChars), "%s%s", _scursor, _text);
-    }
-    if(_fb->ready()){
+    const uint16_t hiddenChars = _newx / _charWidth;
+    const uint8_t addChars = _frameBufferReady()?2:1;
+    scrollComposeWindow(
+        _window,
+        scrollWindowPrintCapacity(_windowCapacity, _width, _charWidth,
+                                  addChars),
+        _text, _sep, hiddenChars);
+    if(_frameBufferReady()){
     #ifdef PSFBUFFER
       _fb->fillRect(0, 0, _width, _textheight, _bgcolor);
       _fb->setCursor(_x + hiddenChars * _charWidth, 0);
@@ -312,7 +305,7 @@ void ScrollWidget::_draw() {
       dsp.clearClipping();
     }
   } else {
-    if(_fb->ready()){
+    if(_frameBufferReady()){
     #ifdef PSFBUFFER
       _fb->fillRect(0, 0, _width, _textheight, _bgcolor);
       _fb->setCursor(_realLeft(true), 0);
@@ -332,7 +325,7 @@ void ScrollWidget::_draw() {
 void ScrollWidget::_calcX(uint8_t pixels) {
   if (!_doscroll || _config.textsize == 0) return;
   _x -= pixels;
-  uint16_t fbl = _fb->ready()?0:_config.left;
+  uint16_t fbl = _frameBufferReady()?0:_config.left;
   if (-_x > _textwidth + _sepwidth - fbl) {
     _x = fbl;
 #if VOXONE_DISPLAY_PROFILE == VOXONE_DISPLAY_PROFILE_ST7789_284X76
@@ -365,7 +358,7 @@ void ScrollWidget::_reset(){
   if (!_st7789IndependentScroll)
 #endif
   dsp.setScrollId(NULL);
-  _x = _fb->ready()?0:_config.left;
+  _x = _frameBufferReady()?0:_config.left;
   _scrolldelay = millis();
   _doscroll = _checkIsScrollNeeded();
   #ifdef PSFBUFFER

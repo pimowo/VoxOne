@@ -142,6 +142,7 @@ class ScrollWidget: public TextWidget {
     void _drawFrame();
     void _draw();
     bool _checkIsScrollNeeded();
+    bool _frameBufferReady() const;
     bool _checkDelay(int m, uint32_t &tstamp);
     void _clear();
     void _reset();
@@ -294,5 +295,4 @@ class PlayListWidget: public Widget {
 
 #endif
 #endif
-
 
