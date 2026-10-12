@@ -157,7 +157,6 @@
 
 ## Network
 
-- [POST-STABLE] WIFI-CLI-OPEN-NETWORK-1 — obsłużyć w Serial CLI polecenie `wifi.con("SSID","")` dla otwartej sieci; obecny skan `%49[^\"]` wymaga co najmniej jednego znaku hasła. Nie łączyć tej poprawki z WIFI-NETIF-HARDENING-1.
 - [POST-STABLE] Zachować maksymalnie pięć profili Wi-Fi, priority/last-known-good, tryb NORMAL bez wymuszonego AP, oczekiwanie RADIO na sieć, możliwość działania BT offline oraz jednoznaczne CONFIG/AP/recovery behavior.
 - [HARDWARE] Dodać W5500 wyłącznie dla rodziny L, na odpowiednim PCB i dedykowanej magistrali SPI; tryby AUTO/LAN/Wi-Fi, LAN preferred, Wi-Fi fallback i DHCP, a później opcjonalny static IP.
 - [POST-STABLE] Wydzielić abstrakcję sieciową bez twardego założenia `WiFiClient`; RADIO i DLNA mają działać przez LAN lub Wi-Fi.

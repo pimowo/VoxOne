@@ -8,6 +8,7 @@
 #include "network_diagnostics.h"
 #include "serialcli.h"
 #include "update_progress.h"
+#include "wifi_cli_parser.h"
 #include "../hardware/runtime_hardware_config.h"
 #include <esp_netif.h>
 
@@ -409,7 +410,8 @@ void SerialCli::on_input(const char* str, uint8_t clientId) {
       uint8_t c = 1;
       while (file.available()) {
         if (config.parseSsid(file.readStringUntil('\n').c_str(), config.tmpBuf, config.tmpBuf2)) {
-          printf(clientId, "%d: %s, %s\n", c, config.tmpBuf, config.tmpBuf2);
+          printf(clientId, "%d: %s, password %s\n", c, config.tmpBuf,
+                 config.tmpBuf2[0] ? "set" : "empty");
           c++;
         }
       }
@@ -424,7 +426,9 @@ void SerialCli::on_input(const char* str, uint8_t clientId) {
       uint8_t c = 1;
       while (file.available()) {
         if (config.parseSsid(file.readStringUntil('\n').c_str(), config.tmpBuf, config.tmpBuf2)) {
-          if(c==config.store.lastSSID) printf(clientId, "%d: %s, %s\n", c, config.tmpBuf, config.tmpBuf2);
+          if(c==config.store.lastSSID)
+            printf(clientId, "%d: %s, password %s\n", c, config.tmpBuf,
+                   config.tmpBuf2[0] ? "set" : "empty");
           c++;
         }
       }
@@ -432,8 +436,15 @@ void SerialCli::on_input(const char* str, uint8_t clientId) {
     printf(clientId, "##WIFI.STATION#\n> ");
     return;
   }
-  char ssidbuf[50], passbuff[50];
-  if (sscanf(str, "wifi.con(\"%49[^\"]\",\"%49[^\"]\")", ssidbuf, passbuff) == 2 ||
+  char ssidbuf[50]{}, passbuff[50]{};
+  const voxone::wifi_cli::ParseStatus quotedCredentials =
+      voxone::wifi_cli::parseQuotedCredentials(
+          str, ssidbuf, sizeof(ssidbuf), passbuff, sizeof(passbuff));
+  if (quotedCredentials == voxone::wifi_cli::ParseStatus::Invalid) {
+    printf(clientId, "Wi-Fi credentials invalid or save failed\n> ");
+    return;
+  }
+  if (quotedCredentials == voxone::wifi_cli::ParseStatus::Valid ||
       sscanf(str, "wifi.con(%49[^,],%49[^)])", ssidbuf, passbuff) == 2 ||
       sscanf(str, "wifi.con(%49[^ ] %49[^)])", ssidbuf, passbuff) == 2 ||
       sscanf(str, "wifi %49[^ ] %49s", ssidbuf, passbuff) == 2) {
