@@ -14,6 +14,7 @@
 #include "source_manager.h"
 #include "radio_source_policy.h"
 #include "network_diagnostics.h"
+#include "security_runtime.h"
 #include "timekeeper.h"
 #include "ui_state.h"
 #include <esp_netif.h>
@@ -338,6 +339,13 @@ void MyNetwork::begin() {
   }
 #endif
   config.initNetwork();
+  const auto security = voxone::security::initializeDeviceSecurity(
+      config.ssidsCount > 0);
+  Serial.printf(
+      "##[SECURITY]# state=%s load=%s wifiConfigured=%u policy=observe-only\n",
+      voxone::security::securityStateName(security.state),
+      voxone::security::securityLoadStatusName(security.loadStatus),
+      security.wifiConfigured ? 1U : 0U);
   setWifiParams();
   if (config.ssidsCount == 0 || DBGAP) {
     raiseSoftAP();

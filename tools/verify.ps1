@@ -120,6 +120,7 @@ $nativeSources=@{
  runtime_hardware_config_native=@('src/hardware/runtime_hardware_config.cpp')
  runtime_hardware_web_native=@('src/hardware/runtime_hardware_config.cpp','src/hardware/runtime_hardware_web.cpp')
  security_auth_native=@('src/core/security_settings.cpp')
+ security_runtime_native=@('src/core/security_settings.cpp','src/core/security_runtime.cpp')
  station_directory_native=@('src/core/station_directory_format.cpp')
  volume_limits_native=@('src/core/volume_map.cpp')
 }
@@ -187,6 +188,14 @@ if(-not $onWindows) {
   if($LASTEXITCODE -ne 0) { throw 'Sanitized security auth compile failed' }
   & $securityExe
   if($LASTEXITCODE -ne 0) { throw 'Sanitized security auth test failed' }
+  $securityRuntimeExe=Join-Path $work 'security_runtime_sanitized'
+  & $Cxx @sanitizerArgs '-o' $securityRuntimeExe `
+    (Join-Path $root 'test/security_runtime_native.cpp') `
+    (Join-Path $root 'src/core/security_settings.cpp') `
+    (Join-Path $root 'src/core/security_runtime.cpp')
+  if($LASTEXITCODE -ne 0) { throw 'Sanitized security runtime compile failed' }
+  & $securityRuntimeExe
+  if($LASTEXITCODE -ne 0) { throw 'Sanitized security runtime test failed' }
  }
 }
 Invoke-Step 'Web Update headless' {

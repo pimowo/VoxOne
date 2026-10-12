@@ -123,8 +123,8 @@ class SecurityService {
   SecurityLoadStatus loadStatus_;
 };
 
-// Device-owned instance. This stage deliberately does not call begin() or
-// connect the service to HTTP, WebSocket, MQTT, WWW or OTA code.
+// Device-owned instance. Startup is coordinated by security_runtime; route
+// enforcement and session handling remain outside this service.
 SecurityService& deviceSecurityService();
 
 const char* securityStateName(SecurityState state);

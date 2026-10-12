@@ -1,4 +1,5 @@
 #include "security_settings.h"
+#include "security_runtime.h"
 
 #include <esp_system.h>
 #include <nvs.h>
@@ -94,6 +95,10 @@ SecurityService& deviceSecurityService() {
   static EspSecurityRandomSource random;
   static SecurityService service(storage, random);
   return service;
+}
+
+SecurityRuntimeDiagnostics initializeDeviceSecurity(bool wifiConfigured) {
+  return initializeSecurityRuntime(deviceSecurityService(), wifiConfigured);
 }
 
 }  // namespace security
