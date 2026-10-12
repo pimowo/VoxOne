@@ -72,15 +72,15 @@ inline void formatDisplayAudioInfo(char* output, size_t capacity,
     output[0] = '\0';
     return;
   }
-  if (radioBitrate == 0) {
-    output[0] = '\0';
-    return;
-  }
   const char* codec = displayRadioFormatLabel(radioFormat);
-  if (codec[0])
-    snprintf(output, capacity, "%u %s", radioBitrate, codec);
-  else
+  if (codec[0] && radioBitrate)
+    snprintf(output, capacity, "%s %u", codec, radioBitrate);
+  else if (codec[0])
+    snprintf(output, capacity, "%s", codec);
+  else if (radioBitrate)
     snprintf(output, capacity, "%u", radioBitrate);
+  else
+    output[0] = '\0';
 }
 
 #endif

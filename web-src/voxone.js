@@ -1186,8 +1186,8 @@
     const codec = status?.codec;
     const bitrate = status?.bitrate;
     if (codec) parts.push(codec);
-    if (bitrate > 0) parts.push(bitrate + " kb/s");
-    text("codec", parts.length ? parts.join(" · ") : "—");
+    if (bitrate > 0) parts.push(String(bitrate));
+    text("codec", parts.length ? parts.join(" ") : "—");
   }
 
   function renderSource() {

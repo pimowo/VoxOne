@@ -357,6 +357,7 @@ void Audio::setDefaults() {
     m_audioDataSize = 0;
     m_avr_bitrate = 0;                                      // the same as m_bitrate if CBR, median if VBR
     m_bitRate = 0;                                          // Bitrate still unknown
+    m_flacBitrateMeter.reset();
     m_bytesNotDecoded = 0;                                  // counts all not decodable bytes
     m_chunkcount = 0;                                       // for chunked streams
     m_contentlength = 0;                                    // If Content-Length is known, count it
@@ -3826,6 +3827,11 @@ int Audio::sendBytes(uint8_t* data, size_t len) {
         return 1;
     }
     if(ret < 0) { // Error, skip the frame...
+        if(m_codec == CODEC_FLAC) {
+            const bool hadMeasuredBitrate = m_flacBitrateMeter.bitrateBps() != 0;
+            m_flacBitrateMeter.reset();
+            if(hadMeasuredBitrate && audio_bitrate) audio_bitrate("0");
+        }
         if(m_f_Log) if(m_codec == CODEC_M4A){log_i("begin not found"); return 1;}
         if (radioCanUseI2S()) i2s_zero_dma_buffer((i2s_port_t)m_i2s_num);
         if(!getChannels() && (ret == -2)) {
@@ -3872,6 +3878,17 @@ int Audio::sendBytes(uint8_t* data, size_t len) {
         if((m_codec == CODEC_FLAC) || (m_codec == CODEC_OGG_FLAC)){
             m_validSamples = FLACGetOutputSamps() / getChannels();
         }
+    }
+    if(m_codec == CODEC_FLAC && bytesDecoded > 0) {
+        const uint32_t measuredBitrate =
+            m_flacBitrateMeter.addBytes(millis(), static_cast<uint32_t>(bytesDecoded));
+        if(measuredBitrate && audio_bitrate) {
+            snprintf(chbuf, sizeof(chbuf), "%lu",
+                     static_cast<unsigned long>(measuredBitrate));
+            audio_bitrate(chbuf);
+        }
+    } else if(m_codec != CODEC_FLAC) {
+        m_flacBitrateMeter.reset();
     }
     compute_audioCurrentTime(bytesDecoded);
 

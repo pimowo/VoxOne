@@ -10,6 +10,7 @@
 #pragma GCC optimize ("Ofast")
 #include <vector>
 #include "../core/radio_url_resolution.h"
+#include "../core/flac_bitrate_meter.h"
 #include <Arduino.h>
 #include <libb64/cencode.h>
 #include <esp32-hal-log.h>
@@ -458,6 +459,7 @@ private:
     uint32_t        m_sampleRate=16000;
     uint32_t        m_bitRate=0;                    // current bitrate given fom decoder
     uint32_t        m_avr_bitrate = 0;              // average bitrate, median computed by VBR
+    voxone::audio::FlacBitrateMeter m_flacBitrateMeter;
     int             m_readbytes = 0;                // bytes read
     uint32_t        m_metacount = 0;                // counts down bytes between metadata
     int             m_controlCounter = 0;           // Status within readID3data() and readWaveHeader()

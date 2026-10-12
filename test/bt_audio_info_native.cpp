@@ -33,8 +33,9 @@ int main() {
   DisplaySourceView view{};
 
   sources.displayView(view);
-  expectRadio(view, 320, BF_MP3, "320 MP3");
-  expectRadio(view, 128, BF_AAC, "128 AAC");
+  expectRadio(view, 320, BF_MP3, "MP3 320");
+  expectRadio(view, 128, BF_AAC, "AAC 128");
+  expectRadio(view, 0, BF_FLAC, "FLAC");
   view.kind = DisplaySourceKind::Dlna;
   DisplayAudioInfo unimplemented = selectDisplayAudioInfo(view, 128, BF_AAC);
   assert(!unimplemented.bluetooth && unimplemented.radioBitrate == 0 &&
@@ -48,9 +49,9 @@ int main() {
   formatDisplayAudioInfo(emptyInfo, sizeof(emptyInfo), view, 128, BF_AAC);
   assert(emptyInfo[0] == '\0');
   sources.displayView(view);
-  expectRadio(view, 999, BF_FLAC, "999 FLAC");
-  expectRadio(view, 1000, BF_FLAC, "1000 FLAC");
-  expectRadio(view, 1411, BF_FLAC, "1411 FLAC");
+  expectRadio(view, 999, BF_FLAC, "FLAC 999");
+  expectRadio(view, 1000, BF_FLAC, "FLAC 1000");
+  expectRadio(view, 1411, BF_FLAC, "FLAC 1411");
 
   bt.runtimeAvailable = true;
   bt.connected = true;
@@ -83,7 +84,7 @@ int main() {
   update = sources.cycle(bt);  // BT -> RADIO while connected.
   assert(update.activeChanged && update.audioInfoChanged);
   sources.displayView(view);
-  expectRadio(view, 320, BF_MP3, "320 MP3");
+  expectRadio(view, 320, BF_MP3, "MP3 320");
 
   update = sources.cycle(bt);  // RADIO -> BT while connected.
   assert(update.activeChanged && update.audioInfoChanged);
@@ -95,5 +96,5 @@ int main() {
   update = sources.observe(bt);  // BT disconnect -> RADIO.
   assert(update.activeChanged && update.audioInfoChanged);
   sources.displayView(view);
-  expectRadio(view, 128, BF_AAC, "128 AAC");
+  expectRadio(view, 128, BF_AAC, "AAC 128");
 }

@@ -24,6 +24,10 @@ int main() {
   assert(std::strcmp(status.title, "Utwór") == 0);
   assert(std::strcmp(status.playback, "PLAY") == 0);
   assert(std::strcmp(status.codec, "MP3") == 0 && status.bitrate == 320);
+
+  status = selectWebStatusView(display, "Radio A", "", "", "",
+                               "FLAC", 1124);
+  assert(std::strcmp(status.codec, "FLAC") == 0 && status.bitrate == 1124);
   assert(webTransportAction(false, "prev") == WebTransportAction::RadioPrevious);
   assert(webTransportAction(false, "toggle") == WebTransportAction::RadioToggle);
   assert(webTransportAction(false, "next") == WebTransportAction::RadioNext);

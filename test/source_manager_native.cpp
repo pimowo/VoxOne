@@ -25,7 +25,7 @@ int main() {
   assert(playerView.userVolume == 0 && !playerView.muted);
   assert(playerView.wifiLevel == 4 && playerView.audioInfo.radioBitrate == 320 &&
          playerView.audioInfo.radioFormat == BF_MP3 &&
-         std::strcmp(playerView.audioText, "320 MP3") == 0);
+         std::strcmp(playerView.audioText, "MP3 320") == 0);
   makePlayerDisplayView(playerView, raw, "Radio One", "", false,
                         50, false, true, -50, 320, BF_MP3);
   assert(playerView.source == DisplaySourceKind::Radio && playerView.btConnected);

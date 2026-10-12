@@ -10,10 +10,17 @@
 void audio_info(const char *info) {
   if(player.lockOutput) return;
   if(config.store.audioinfo) serialCli.printf("##AUDIO.INFO#: %s\n", info);
-  if (strstr(info, "format is aac")  != NULL) { config.setBitrateFormat(BF_AAC); display.putRequest(DBITRATE); }
-  if (strstr(info, "format is flac") != NULL) { config.setBitrateFormat(BF_FLAC); display.putRequest(DBITRATE); }
-  if (strstr(info, "format is mp3")  != NULL) { config.setBitrateFormat(BF_MP3); display.putRequest(DBITRATE); }
-  if (strstr(info, "format is wav")  != NULL) { config.setBitrateFormat(BF_WAV); display.putRequest(DBITRATE); }
+  BitrateFormat detectedFormat = BF_UNKNOWN;
+  if (strstr(info, "format is aac")  != NULL) detectedFormat = BF_AAC;
+  if (strstr(info, "format is flac") != NULL) detectedFormat = BF_FLAC;
+  if (strstr(info, "format is mp3")  != NULL) detectedFormat = BF_MP3;
+  if (strstr(info, "format is wav")  != NULL) detectedFormat = BF_WAV;
+  if (detectedFormat != BF_UNKNOWN) {
+    if (config.configFmt != detectedFormat) config.station.bitrate = 0;
+    config.setBitrateFormat(detectedFormat);
+    display.putRequest(DBITRATE);
+    netserver.requestOnChange(BITRATE, 0);
+  }
   if (strstr(info, "skip metadata") != NULL) config.setTitle(config.station.name);
   if (strstr(info, "Account already in use") != NULL || strstr(info, "HTTP/1.0 401") != NULL) {
     player.setError(info);
