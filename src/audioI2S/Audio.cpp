@@ -366,6 +366,7 @@ void Audio::setDefaults() {
     m_chunkLineLength = 0;
     m_chunkState = CHUNK_SIZE;
     m_chunkHasDigits = false;
+    m_segmentTransportWatchdog.reset(millis());
     m_contentlength = 0;                                    // If Content-Length is known, count it
     m_curSample = 0;
     m_metaint = 0;                                          // No metaint yet
@@ -2475,11 +2476,11 @@ void Audio::loop() {
                 }
                 break;
             case AUDIO_DATA:
-                if(m_f_ts) processWebStreamTS();  // aac or aacp with ts packets
-                else       processWebStreamHLS(); // aac or aacp normal stream
+                if(m_f_ts) processWebStreamTS(!f_noNewHost);  // aac or aacp with ts packets
+                else       processWebStreamHLS(!f_noNewHost); // aac or aacp normal stream
                 if(f_noNewHost){
                     m_f_continue = false;
-                    if(timestamp2 < millis()) {
+                    if(static_cast<int32_t>(millis() - timestamp2) >= 0) {
                         httpPrint(m_lastHost);
                         remaintime = 1000;
                     }
@@ -3058,7 +3059,7 @@ void Audio::processWebFile() {
     return;
 }
 //---------------------------------------------------------------------------------------------------------------------
-void Audio::processWebStreamTS() {
+void Audio::processWebStreamTS(bool monitorTransport) {
 
     const uint16_t  maxFrameSize = InBuff.getMaxBlockSize();    // every mp3/aac frame is not bigger
     uint32_t        availableBytes;                             // available bytes in stream
@@ -3068,7 +3069,6 @@ void Audio::processWebStreamTS() {
     static int      bytesDecoded;
     static uint32_t byteCounter;                                // count received data
     static uint32_t tmr_1s;                                     // timer 1 sec
-    static uint32_t loopCnt;                                    // count loops if clientbuffer is empty
     static uint8_t  ts_packet[188];                             // m3u8 transport stream is 188 bytes long
     uint8_t         ts_packetStart = 0;
     uint8_t         ts_packetLength = 0;
@@ -3081,9 +3081,9 @@ void Audio::processWebStreamTS() {
         f_firstPacket = true;
         byteCounter = 0;
         bytesDecoded = 0;
-        loopCnt = 0;
         tmr_1s = millis();
         m_t0 = millis();
+        m_segmentTransportWatchdog.reset(m_t0);
         ts_packetPtr = 0;
         m_controlCounter = 0;
         m_f_firstCall = false;
@@ -3105,6 +3105,7 @@ void Audio::processWebStreamTS() {
         const uint32_t requested = min(availableBytes, (uint32_t)(ts_packetsize - ts_packetPtr));
         int res = _client->read(ts_packet + ts_packetPtr, requested);
         if(res > 0){
+            m_segmentTransportWatchdog.received(millis());
             if(m_f_chunked) m_chunkcount -= res;
             ts_packetPtr += res;
             byteCounter += res;
@@ -3149,7 +3150,7 @@ void Audio::processWebStreamTS() {
     }
 
     // timer, triggers every second - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
-    if((tmr_1s + 1000) < millis()) {
+    if(static_cast<uint32_t>(millis() - tmr_1s) >= 1000) {
         f_tmr_1s = true;                                        // flag will be set every second for one loop only
         tmr_1s = millis();
     }
@@ -3165,17 +3166,18 @@ void Audio::processWebStreamTS() {
         }
     }
 
-    // if the buffer can't filled for several seconds try a new connection  - - - - - - - - - - - - - - - - - - - - - -
-    if(f_stream && !availableBytes){
-        loopCnt++;
-        if(loopCnt > 200000) {              // wait several seconds
-            loopCnt = 0;
-            AUDIO_INFO("Stream lost -> try new connection");
-            httpPrint(m_lastHost);
-            return;
-        }
+    const auto transport = m_segmentTransportWatchdog.evaluate(
+        m_f_continue, monitorTransport, _client->connected(),
+        InBuff.bufferFilled() > maxFrameSize, millis());
+    if(transport == voxone::radio::SegmentTransportResult::RecoverStation) {
+        AUDIO_INFO("HLS/TS transport stalled; returning recovery to Player");
+        _client->stop();
+        setDatamode(AUDIO_NONE);
+        stopSong();
+        return;
     }
-    if(availableBytes) loopCnt = 0;
+    if(transport == voxone::radio::SegmentTransportResult::SegmentComplete)
+        return;
 
     // buffer fill routine  - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
     if(true) { // statement has no effect
@@ -3197,7 +3199,7 @@ void Audio::processWebStreamTS() {
     return;
 }
 //---------------------------------------------------------------------------------------------------------------------
-void Audio::processWebStreamHLS() {
+void Audio::processWebStreamHLS(bool monitorTransport) {
 
     const uint16_t  maxFrameSize = InBuff.getMaxBlockSize();    // every mp3/aac frame is not bigger
     uint32_t        availableBytes;                             // available bytes in stream
@@ -3206,16 +3208,15 @@ void Audio::processWebStreamHLS() {
     static int      bytesDecoded;
     static uint32_t byteCounter;                                // count received data
     static uint32_t tmr_1s;                                     // timer 1 sec
-    static uint32_t loopCnt;                                    // count loops if clientbuffer is empty
     (void)bytesDecoded;
     // first call, set some values to default - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
     if(m_f_firstCall) { // runs only ont time per connection, prepare for start
         f_stream = false;
         byteCounter = 0;
         bytesDecoded = 0;
-        loopCnt = 0;
         tmr_1s = millis();
         m_t0 = millis();
+        m_segmentTransportWatchdog.reset(m_t0);
          m_f_firstCall = false;
     }
 
@@ -3230,24 +3231,27 @@ void Audio::processWebStreamHLS() {
             if(getDatamode() != AUDIO_DATA) return;
             availableBytes = min((uint32_t)_client->available(), m_chunkcount);
         }
-        size_t bytesWasWritten = 0;
+        int bytesWasWritten = 0;
         if(InBuff.writeSpace() >= availableBytes){
             bytesWasWritten = _client->read(InBuff.getWritePtr(), availableBytes);
         }
         else{
             bytesWasWritten = _client->read(InBuff.getWritePtr(), InBuff.writeSpace());
         }
-        InBuff.bytesWritten(bytesWasWritten);
-        byteCounter += bytesWasWritten;
-        if(m_f_chunked) m_chunkcount -= bytesWasWritten;
-        if(m_contentlength && byteCounter == m_contentlength){
-            byteCounter = 0;
-            m_f_continue = true;
+        if(bytesWasWritten > 0) {
+            m_segmentTransportWatchdog.received(millis());
+            InBuff.bytesWritten(bytesWasWritten);
+            byteCounter += bytesWasWritten;
+            if(m_f_chunked) m_chunkcount -= bytesWasWritten;
+            if(m_contentlength && byteCounter == m_contentlength){
+                byteCounter = 0;
+                m_f_continue = true;
+            }
         }
     }
 
     // timer, triggers every second - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
-    if((tmr_1s + 1000) < millis()) {
+    if(static_cast<uint32_t>(millis() - tmr_1s) >= 1000) {
         f_tmr_1s = true;                                        // flag will be set every second for one loop only
         tmr_1s = millis();
     }
@@ -3263,17 +3267,18 @@ void Audio::processWebStreamHLS() {
         }
     }
 
-    // if the buffer can't filled for several seconds try a new connection  - - - - - - - - - - - - - - - - - - - - - -
-    if(f_stream && !availableBytes){
-        loopCnt++;
-        if(loopCnt > 200000) {              // wait several seconds
-            loopCnt = 0;
-            AUDIO_INFO("Stream lost -> try new connection");
-            httpPrint(m_lastHost);
-            return;
-        }
+    const auto transport = m_segmentTransportWatchdog.evaluate(
+        m_f_continue, monitorTransport, _client->connected(),
+        InBuff.bufferFilled() > maxFrameSize, millis());
+    if(transport == voxone::radio::SegmentTransportResult::RecoverStation) {
+        AUDIO_INFO("HLS transport stalled; returning recovery to Player");
+        _client->stop();
+        setDatamode(AUDIO_NONE);
+        stopSong();
+        return;
     }
-    if(availableBytes) loopCnt = 0;
+    if(transport == voxone::radio::SegmentTransportResult::SegmentComplete)
+        return;
 
     if(InBuff.bufferFilled() > maxFrameSize && !f_stream) {  // waiting for buffer filled
         f_stream = true;  // ready to play the audio data

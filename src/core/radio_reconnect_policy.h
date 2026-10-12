@@ -61,6 +61,38 @@ inline bool streamIsDead(bool socketConnected, bool bufferedFrameAvailable,
          static_cast<uint32_t>(nowMs - lastDataMs) >= kStreamInactivityTimeoutMs;
 }
 
+enum class SegmentTransportResult : uint8_t {
+  Waiting = 0,
+  SegmentComplete,
+  RecoverStation,
+};
+
+// HLS segment completion is a normal transport transition, not a station
+// failure. Only a disconnected/drained or time-stalled incomplete segment is
+// returned to Player for the common station reconnect policy.
+class SegmentTransportWatchdog {
+ public:
+  void reset(uint32_t nowMs) { lastDataMs_ = nowMs; }
+  void received(uint32_t nowMs) { lastDataMs_ = nowMs; }
+
+  SegmentTransportResult evaluate(bool segmentComplete, bool transportExpected,
+                                  bool socketConnected,
+                                  bool bufferedFrameAvailable,
+                                  uint32_t nowMs) const {
+    if (segmentComplete) return SegmentTransportResult::SegmentComplete;
+    if (!transportExpected) return SegmentTransportResult::Waiting;
+    if (streamIsDead(socketConnected, bufferedFrameAvailable, nowMs,
+                     lastDataMs_))
+      return SegmentTransportResult::RecoverStation;
+    return SegmentTransportResult::Waiting;
+  }
+
+  uint32_t lastDataMs() const { return lastDataMs_; }
+
+ private:
+  uint32_t lastDataMs_ = 0;
+};
+
 }  // namespace radio
 }  // namespace voxone
 

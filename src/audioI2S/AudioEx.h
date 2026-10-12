@@ -12,6 +12,7 @@
 #include "../core/radio_url_resolution.h"
 #include "../core/flac_bitrate_meter.h"
 #include "../core/radio_connect_lifetime.h"
+#include "../core/radio_reconnect_policy.h"
 #include <Arduino.h>
 #include <libb64/cencode.h>
 #include <esp32-hal-log.h>
@@ -187,8 +188,8 @@ private:
     bool resolutionError(const char* reason);
     void processWebStream();
     void processWebFile();
-    void processWebStreamTS();
-    void processWebStreamHLS();
+    void processWebStreamTS(bool monitorTransport);
+    void processWebStreamHLS(bool monitorTransport);
     void playAudioData();
     bool readPlayListData();
     const char* parsePlaylist_M3U();
@@ -459,6 +460,7 @@ private:
         : hostwoext(h), port(p), timeoutMs(timeout), client(c), instance(a) {}
     };
     voxone::radio::ConnectAttemptLifetime m_connectAttempt;
+    voxone::radio::SegmentTransportWatchdog m_segmentTransportWatchdog;
     
     const size_t    m_frameSizeWav  = 1024 * 8;
     const size_t    m_frameSizeMP3  = 1600;
