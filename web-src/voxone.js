@@ -44,6 +44,268 @@ window.VoxOneRestartWaiter = Object.freeze({
 (() => {
   "use strict";
 
+  const securityGate = document.getElementById("security-gate");
+  const appShell = document.getElementById("app-shell");
+  const securityApiWarning = document.getElementById("security-api-warning");
+  const securityViews = [...securityGate.querySelectorAll(".security-view")];
+  const securitySetupForm = document.getElementById("security-setup-form");
+  const securityPasswordFields = document.getElementById("security-password-fields");
+  const securitySetupPassword = document.getElementById("security-setup-password");
+  const securitySetupRepeat = document.getElementById("security-setup-repeat");
+  const securityWeakWarning = document.getElementById("security-weak-warning");
+  const securityOpenConfirmWrap = document.getElementById("security-open-confirm-wrap");
+  const securityOpenConfirm = document.getElementById("security-open-confirm");
+  const securitySetupMessage = document.getElementById("security-setup-message");
+  const securitySetupSubmit = document.getElementById("security-setup-submit");
+  const securitySetupLater = document.getElementById("security-setup-later");
+  const securityLoginForm = document.getElementById("security-login-form");
+  const securityLoginPassword = document.getElementById("security-login-password");
+  const securityLoginMessage = document.getElementById("security-login-message");
+  const securityLoginSubmit = document.getElementById("security-login-submit");
+  const securityLogout = document.getElementById("security-logout");
+  let securityRequestGeneration = 0;
+  let securityBusy = false;
+
+  function validUnicode(value) {
+    for (let index = 0; index < value.length; ++index) {
+      const unit = value.charCodeAt(index);
+      if (unit >= 0xd800 && unit <= 0xdbff) {
+        if (++index >= value.length) return false;
+        const low = value.charCodeAt(index);
+        if (low < 0xdc00 || low > 0xdfff) return false;
+      } else if (unit >= 0xdc00 && unit <= 0xdfff) {
+        return false;
+      }
+    }
+    return true;
+  }
+
+  function securityPasswordInfo(value) {
+    const characters = validUnicode(value) ? Array.from(value).length : 0;
+    const bytes = validUnicode(value) ? new TextEncoder().encode(value).length : 0;
+    return {
+      valid: validUnicode(value) && characters >= 4 && bytes <= 64,
+      weak: validUnicode(value) && characters >= 4 && characters <= 7 && bytes <= 64,
+      characters, bytes
+    };
+  }
+
+  function setSecurityMessage(element, message, error = true) {
+    element.textContent = message;
+    element.dataset.kind = error && message ? "error" : "status";
+  }
+
+  function showSecurityView(id) {
+    appShell.hidden = true;
+    securityGate.hidden = false;
+    securityApiWarning.hidden = true;
+    for (const view of securityViews) view.hidden = view.id !== id;
+  }
+
+  function showApplication({warning = "", authenticated = false} = {}) {
+    securityGate.hidden = true;
+    appShell.hidden = false;
+    securityLogout.hidden = !authenticated;
+    securityApiWarning.textContent = warning;
+    securityApiWarning.hidden = !warning;
+  }
+
+  function renderSecurityModeFields() {
+    const mode = securitySetupForm.elements["security-mode"].value;
+    const protectedMode = mode === "protected";
+    securityPasswordFields.hidden = !protectedMode;
+    securityOpenConfirmWrap.hidden = protectedMode;
+    securitySetupPassword.disabled = !protectedMode;
+    securitySetupRepeat.disabled = !protectedMode;
+    securityOpenConfirm.disabled = protectedMode;
+    if (protectedMode) securityOpenConfirm.checked = false;
+    securityWeakWarning.hidden = !protectedMode ||
+      !securityPasswordInfo(securitySetupPassword.value).weak;
+    setSecurityMessage(securitySetupMessage, "", false);
+  }
+
+  function renderSecurityState(state) {
+    const known = ["unconfigured", "legacy-unclaimed", "protected", "open", "locked"];
+    if (!state || !known.includes(state.state)) throw new Error("invalid security state");
+    securityLogout.hidden = true;
+    if (state.state === "legacy-unclaimed") {
+      if (state.setupAllowed !== true) throw new Error("inconsistent setup state");
+      showSecurityView("security-setup-form");
+      renderSecurityModeFields();
+      return;
+    }
+    if (state.state === "protected") {
+      if (state.authenticated === true) {
+        showApplication({authenticated: true});
+      } else {
+        if (state.loginAllowed !== true) throw new Error("inconsistent login state");
+        showSecurityView("security-login-form");
+        securityLoginPassword.focus();
+      }
+      return;
+    }
+    if (state.state === "open") {
+      showApplication();
+      return;
+    }
+    showSecurityView(state.state === "locked" ? "security-locked" :
+      "security-unconfigured");
+  }
+
+  async function refreshSecurityState() {
+    const generation = ++securityRequestGeneration;
+    try {
+      const response = await fetch("/api/security/state", {
+        cache: "no-store", credentials: "same-origin"
+      });
+      if (generation !== securityRequestGeneration) return;
+      if (!response.ok) throw new Error("HTTP " + response.status);
+      const state = await response.json();
+      if (generation !== securityRequestGeneration) return;
+      renderSecurityState(state);
+    } catch (_) {
+      if (generation !== securityRequestGeneration) return;
+      showApplication({warning: "Nie udało się odczytać stanu ochrony. Panel pozostaje dostępny, aby zachować możliwość aktualizacji urządzenia."});
+    }
+  }
+
+  async function securityErrorMessage(response, fallback) {
+    let code = "";
+    try { code = (await response.json())?.error || ""; } catch (_) {}
+    if (response.status === 429 || code === "rate_limited") {
+      const retry = response.headers?.get?.("Retry-After");
+      return retry ? "Zbyt wiele nieudanych prób. Spróbuj ponownie za " + retry + " s."
+        : "Zbyt wiele nieudanych prób. Spróbuj ponownie później.";
+    }
+    if (response.status === 401 || code === "authentication_failed")
+      return "Nieprawidłowe hasło.";
+    if (response.status === 409 || code === "invalid_state")
+      return "Stan ochrony zmienił się. Odświeżam dane urządzenia.";
+    if (code === "invalid_password") return "Hasło nie spełnia wymagań.";
+    if (response.status === 403) return "Żądanie zostało odrzucone przez ochronę Host/Origin.";
+    return fallback;
+  }
+
+  async function submitSecuritySetup(event) {
+    event.preventDefault();
+    if (securityBusy) return;
+    const mode = securitySetupForm.elements["security-mode"].value;
+    const params = new URLSearchParams();
+    params.set("mode", mode);
+    if (mode === "protected") {
+      const info = securityPasswordInfo(securitySetupPassword.value);
+      if (!info.valid) {
+        setSecurityMessage(securitySetupMessage,
+          info.bytes > 64 ? "Hasło przekracza 64 bajty UTF-8." :
+          "Hasło musi zawierać co najmniej 4 znaki Unicode.");
+        return;
+      }
+      if (securitySetupPassword.value !== securitySetupRepeat.value) {
+        setSecurityMessage(securitySetupMessage, "Wpisane hasła nie są identyczne.");
+        return;
+      }
+      params.set("password", securitySetupPassword.value);
+    } else if (mode === "open") {
+      if (!securityOpenConfirm.checked) {
+        setSecurityMessage(securitySetupMessage,
+          "Potwierdź świadomy wybór panelu bez hasła.");
+        return;
+      }
+    } else {
+      setSecurityMessage(securitySetupMessage, "Nieznany tryb ochrony.");
+      return;
+    }
+
+    securityBusy = true;
+    securitySetupSubmit.disabled = true;
+    let body = params.toString();
+    securitySetupPassword.value = "";
+    securitySetupRepeat.value = "";
+    securityWeakWarning.hidden = true;
+    try {
+      const response = await fetch("/api/security/setup", {
+        method: "POST", credentials: "same-origin", cache: "no-store",
+        headers: {"Content-Type": "application/x-www-form-urlencoded"}, body
+      });
+      body = "";
+      if (!response.ok) {
+        setSecurityMessage(securitySetupMessage,
+          await securityErrorMessage(response, "Nie udało się zapisać trybu ochrony."));
+        if (response.status === 409) await refreshSecurityState();
+        return;
+      }
+      await refreshSecurityState();
+    } catch (_) {
+      body = "";
+      setSecurityMessage(securitySetupMessage,
+        "Brak połączenia z urządzeniem. Tryb ochrony nie został potwierdzony.");
+    } finally {
+      securityBusy = false;
+      securitySetupSubmit.disabled = false;
+    }
+  }
+
+  async function submitSecurityLogin(event) {
+    event.preventDefault();
+    if (securityBusy) return;
+    const info = securityPasswordInfo(securityLoginPassword.value);
+    if (!info.valid) {
+      setSecurityMessage(securityLoginMessage,
+        info.bytes > 64 ? "Hasło przekracza 64 bajty UTF-8." :
+        "Podaj hasło zawierające co najmniej 4 znaki Unicode.");
+      return;
+    }
+    const params = new URLSearchParams();
+    params.set("password", securityLoginPassword.value);
+    let body = params.toString();
+    securityLoginPassword.value = "";
+    securityBusy = true;
+    securityLoginSubmit.disabled = true;
+    try {
+      const response = await fetch("/api/security/login", {
+        method: "POST", credentials: "same-origin", cache: "no-store",
+        headers: {"Content-Type": "application/x-www-form-urlencoded"}, body
+      });
+      body = "";
+      if (!response.ok) {
+        setSecurityMessage(securityLoginMessage,
+          await securityErrorMessage(response, "Logowanie nie powiodło się."));
+        return;
+      }
+      setSecurityMessage(securityLoginMessage, "", false);
+      await refreshSecurityState();
+    } catch (_) {
+      body = "";
+      setSecurityMessage(securityLoginMessage,
+        "Brak połączenia z urządzeniem. Spróbuj ponownie.");
+    } finally {
+      securityBusy = false;
+      securityLoginSubmit.disabled = false;
+    }
+  }
+
+  async function logoutSecuritySession() {
+    if (securityBusy) return;
+    securityBusy = true;
+    securityLogout.disabled = true;
+    try {
+      await fetch("/api/security/logout", {
+        method: "POST", credentials: "same-origin", cache: "no-store"
+      });
+    } catch (_) {
+      // Refresh still determines whether the server retained the session.
+    } finally {
+      securityBusy = false;
+      securityLogout.disabled = false;
+      await refreshSecurityState();
+    }
+  }
+
+  window.VoxOneSecurityUi = Object.freeze({
+    refresh: refreshSecurityState,
+    passwordInfo: securityPasswordInfo
+  });
+
   const tabs = ["status", "stations", "audio", "dsp", "settings", "hardware", "system", "update"];
   const updateImages = {
     firmware: {
@@ -2603,8 +2865,28 @@ window.VoxOneRestartWaiter = Object.freeze({
 
   window.addEventListener("hashchange", showTab);
   window.addEventListener("pageshow", event => {
-    if (event.persisted) showStartupTab();
+    if (event.persisted) {
+      showStartupTab();
+      refreshSecurityState();
+    }
   });
+  securitySetupForm.addEventListener("change", event => {
+    if (event.target.name === "security-mode") renderSecurityModeFields();
+  });
+  securitySetupPassword.addEventListener("input", () => {
+    securityWeakWarning.hidden = !securityPasswordInfo(securitySetupPassword.value).weak;
+    setSecurityMessage(securitySetupMessage, "", false);
+  });
+  securitySetupRepeat.addEventListener("input", () =>
+    setSecurityMessage(securitySetupMessage, "", false));
+  securitySetupForm.addEventListener("submit", submitSecuritySetup);
+  securitySetupLater.addEventListener("click", () => showApplication({
+    warning: "Ochrona panelu nie została jeszcze skonfigurowana."
+  }));
+  securityLoginForm.addEventListener("submit", submitSecurityLogin);
+  securityLoginPassword.addEventListener("input", () =>
+    setSecurityMessage(securityLoginMessage, "", false));
+  securityLogout.addEventListener("click", logoutSecuritySession);
   for (const [target, image] of Object.entries(updateImages)) {
     image.file.addEventListener("change", renderUpdateFiles);
     image.button.addEventListener("click", () => uploadUpdateImage(target));
@@ -2665,4 +2947,5 @@ window.VoxOneRestartWaiter = Object.freeze({
   renderConnection();
   showStartupTab();
   connect();
+  refreshSecurityState();
 })();

@@ -99,6 +99,19 @@ window.configDownloadedName = '';
 window.configRestoreRequests = [];
 window.configRestoreResponses = [];
 window.deviceReadinessBootId = 'boot-before-update';
+window.securityStateRequests = 0;
+window.securityStateResponses = [];
+window.securityRequests = [];
+window.securityLoginResponses = [];
+window.securityServerState = {
+  state:'legacy-unclaimed', setupAllowed:true, loginAllowed:false,
+  authenticated:false, protectionEnforced:false
+};
+const securityResponse = (status, body = {}, headers = {}) => ({
+  ok:status >= 200 && status < 300, status,
+  headers:{get:name => headers[name] || headers[name.toLowerCase()] || null},
+  json:() => Promise.resolve(body)
+});
 window.hardwareSnapshot = {
   family:'M0', mcu:'ESP32-S3', restartRequired:false,
   config:{display:'ssd1309_128x64', input:'ec11'},
@@ -143,6 +156,37 @@ window.hardwareSnapshot = {
 };
 const originalFetch = window.fetch.bind(window);
 window.fetch = (url, options = {}) => {
+  if (url === '/api/security/state') {
+    window.securityStateRequests++;
+    const prepared = window.securityStateResponses.shift();
+    if (prepared) return Promise.resolve(prepared);
+    return Promise.resolve(securityResponse(200, {...window.securityServerState}));
+  }
+  if (url === '/api/security/setup') {
+    const request = Object.fromEntries(new URLSearchParams(options.body || ''));
+    window.securityRequests.push({url, method:options.method, request, options});
+    if (window.securityServerState.state !== 'legacy-unclaimed')
+      return Promise.resolve(securityResponse(409, {error:'invalid_state'}));
+    window.securityServerState = {
+      state:request.mode, setupAllowed:false,
+      loginAllowed:request.mode === 'protected', authenticated:false,
+      protectionEnforced:false
+    };
+    return Promise.resolve(securityResponse(200, {ok:true}));
+  }
+  if (url === '/api/security/login') {
+    const request = Object.fromEntries(new URLSearchParams(options.body || ''));
+    window.securityRequests.push({url, method:options.method, request, options});
+    const prepared = window.securityLoginResponses.shift() ||
+      securityResponse(200, {ok:true});
+    if (prepared.ok) window.securityServerState.authenticated = true;
+    return Promise.resolve(prepared);
+  }
+  if (url === '/api/security/logout') {
+    window.securityRequests.push({url, method:options.method, request:{}, options});
+    window.securityServerState.authenticated = false;
+    return Promise.resolve(securityResponse(204));
+  }
   if (String(url).startsWith('/api/ready?'))
     return Promise.resolve({ok:true,status:200,json:() => Promise.resolve({
       ready:true, bootId:window.deviceReadinessBootId
@@ -195,6 +239,125 @@ setTimeout(async () => {
   const check = (ok, message) => { if (!ok) throw Error(message); };
   try {
     check(location.hash === '#status', 'startup tab');
+    const settleSecurity = async () => {
+      await Promise.resolve();
+      await new Promise(resolve => setTimeout(resolve, 0));
+      await Promise.resolve();
+    };
+    await settleSecurity();
+    check(!get('security-setup-form').hidden && get('app-shell').hidden,
+      'legacy-unclaimed presents the first protection choice');
+    check(securityRequests.length === 0,
+      'reading security state never submits setup automatically');
+    get('security-setup-later').click();
+    check(!get('app-shell').hidden && securityRequests.length === 0,
+      'legacy user can defer setup without losing panel or OTA access');
+    await VoxOneSecurityUi.refresh();
+    let passwordInfo = VoxOneSecurityUi.passwordInfo('żółw');
+    check(passwordInfo.valid && passwordInfo.weak && passwordInfo.characters === 4 &&
+      passwordInfo.bytes === 7, 'Unicode password counts characters and UTF-8 bytes');
+    passwordInfo = VoxOneSecurityUi.passwordInfo('ą'.repeat(32));
+    check(passwordInfo.valid && passwordInfo.bytes === 64,
+      '64-byte UTF-8 password accepted by UI');
+    check(!VoxOneSecurityUi.passwordInfo('ą'.repeat(33)).valid,
+      'over-64-byte UTF-8 password rejected by UI');
+
+    const setupForm = get('security-setup-form');
+    const protectedMode = setupForm.querySelector('input[value="protected"]');
+    const openMode = setupForm.querySelector('input[value="open"]');
+    openMode.checked = true;
+    openMode.dispatchEvent(new Event('change', {bubbles:true}));
+    setupForm.dispatchEvent(new Event('submit', {bubbles:true,cancelable:true}));
+    await settleSecurity();
+    check(securityRequests.length === 0 &&
+      get('security-setup-message').textContent.includes('Potwierdź'),
+      'OPEN requires explicit confirmation and sends no premature POST');
+
+    protectedMode.checked = true;
+    protectedMode.dispatchEvent(new Event('change', {bubbles:true}));
+    get('security-setup-password').value = 'żółw';
+    get('security-setup-repeat').value = 'żółw';
+    get('security-setup-password').dispatchEvent(new Event('input'));
+    check(!get('security-weak-warning').hidden, '4-7 character password warning');
+    setupForm.dispatchEvent(new Event('submit', {bubbles:true,cancelable:true}));
+    await settleSecurity();
+    check(securityRequests.length === 1 && securityRequests[0].url === '/api/security/setup' &&
+      securityRequests[0].method === 'POST' && securityRequests[0].request.mode === 'protected' &&
+      securityRequests[0].request.password === 'żółw' &&
+      securityRequests[0].options.credentials === 'same-origin' &&
+      securityRequests[0].options.headers['Content-Type'] === 'application/x-www-form-urlencoded',
+      'explicit PROTECTED setup uses UTF-8 form encoding');
+    check(get('security-setup-password').value === '' &&
+      get('security-setup-repeat').value === '' && !get('security-login-form').hidden,
+      'setup passwords are cleared and protected state enters login');
+    check(get('security-login-form').querySelectorAll('input').length === 1 &&
+      get('security-login-password').type === 'password', 'login contains only a password field');
+    check(!location.href.includes('żółw') && localStorage.length === 0 && sessionStorage.length === 0,
+      'password is absent from URL and browser storage');
+
+    securityLoginResponses.push(securityResponse(401, {error:'authentication_failed'}));
+    get('security-login-password').value = 'ą'.repeat(32);
+    get('security-login-form').dispatchEvent(new Event('submit', {bubbles:true,cancelable:true}));
+    await settleSecurity();
+    check(get('security-login-message').textContent === 'Nieprawidłowe hasło.' &&
+      get('security-login-password').value === '', '401 is reported and password input cleared');
+    check(securityRequests.at(-1).request.password === 'ą'.repeat(32),
+      '64-byte UTF-8 password survives form encoding');
+    securityLoginResponses.push(securityResponse(429, {error:'rate_limited'}, {'Retry-After':'60'}));
+    get('security-login-password').value = 'żółw';
+    get('security-login-form').dispatchEvent(new Event('submit', {bubbles:true,cancelable:true}));
+    await settleSecurity();
+    check(get('security-login-message').textContent.includes('60 s'), '429 rate limit message');
+    securityLoginResponses.push(securityResponse(200, {ok:true}));
+    get('security-login-password').value = 'żółw';
+    get('security-login-form').dispatchEvent(new Event('submit', {bubbles:true,cancelable:true}));
+    await settleSecurity();
+    check(!get('app-shell').hidden && !get('security-logout').hidden,
+      'successful login reveals panel and logout');
+    await VoxOneSecurityUi.refresh();
+    check(!get('app-shell').hidden, 're-entering authenticated UI is deterministic');
+    get('security-logout').click();
+    await settleSecurity();
+    check(!get('security-login-form').hidden &&
+      securityRequests.at(-1).url === '/api/security/logout' &&
+      securityRequests.at(-1).method === 'POST', 'logout invalidates current browser session');
+
+    window.securityServerState = {
+      state:'legacy-unclaimed', setupAllowed:true, loginAllowed:false,
+      authenticated:false, protectionEnforced:false
+    };
+    await VoxOneSecurityUi.refresh();
+    openMode.checked = true;
+    openMode.dispatchEvent(new Event('change', {bubbles:true}));
+    const setupCount = securityRequests.length;
+    setupForm.dispatchEvent(new Event('submit', {bubbles:true,cancelable:true}));
+    await settleSecurity();
+    check(securityRequests.length === setupCount, 're-entered OPEN still requires confirmation');
+    get('security-open-confirm').checked = true;
+    setupForm.dispatchEvent(new Event('submit', {bubbles:true,cancelable:true}));
+    await settleSecurity();
+    check(window.securityServerState.state === 'open' && !get('app-shell').hidden,
+      'confirmed OPEN setup returns to existing panel');
+    window.securityServerState = {
+      state:'unconfigured', setupAllowed:false, loginAllowed:false,
+      authenticated:false, protectionEnforced:false
+    };
+    await VoxOneSecurityUi.refresh();
+    check(!get('security-unconfigured').hidden, 'UNCONFIGURED state recognized');
+    window.securityServerState.state = 'locked';
+    await VoxOneSecurityUi.refresh();
+    check(!get('security-locked').hidden, 'LOCKED state recognized');
+    window.securityStateResponses.push(securityResponse(404, {error:'not_found'}));
+    await VoxOneSecurityUi.refresh();
+    check(!get('app-shell').hidden && !get('security-api-warning').hidden,
+      'old MAIN without Security API fails open for panel and OTA migration');
+    window.securityServerState = {
+      state:'open', setupAllowed:false, loginAllowed:false,
+      authenticated:false, protectionEnforced:false
+    };
+    await VoxOneSecurityUi.refresh();
+    check(get('security-api-warning').hidden, 'successful re-entry clears compatibility warning');
+
     const deterministicWaiter = (responses, timeout = 2000) => {
       let clock = 0;
       const waiter = window.VoxOneRestartWaiter.create({

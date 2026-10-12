@@ -13,14 +13,72 @@
   <script src="/voxone.js?v={voxone.js-hash}" defer></script>
 </head>
 <body>
-  <div class="shell">
+  <section id="security-gate" class="security-gate" aria-labelledby="security-title" hidden>
+    <article class="security-card">
+      <div class="security-brand">
+        <img src="/voxone-logo.svg?v={voxone-logo.svg-hash}" alt="" width="56" height="56">
+        <div><p class="eyebrow">DOSTĘP DO PANELU</p><h1 id="security-title">VoxOne</h1></div>
+      </div>
+
+      <div id="security-loading" class="security-view">
+        <h2>Sprawdzanie ochrony</h2>
+        <p class="muted">Odczytywanie stanu urządzenia…</p>
+      </div>
+
+      <form id="security-setup-form" class="security-view" novalidate hidden>
+        <h2>Wybierz ochronę panelu</h2>
+        <p class="muted">Ustawienie dotyczy dostępu do panelu WWW. Hasło nie jest wysyłane ani zapisywane, dopóki nie zatwierdzisz formularza.</p>
+        <p class="security-warning">Połączenie HTTP nie szyfruje hasła. Konfiguruj ochronę wyłącznie w zaufanej sieci LAN.</p>
+        <fieldset class="security-mode-options">
+          <legend>Tryb dostępu</legend>
+          <label><input type="radio" name="security-mode" value="protected" checked><span><strong>Chroniony hasłem</strong><small>Zalecane w domowej sieci LAN.</small></span></label>
+          <label><input type="radio" name="security-mode" value="open"><span><strong>Bez hasła</strong><small>Każdy w tej sieci może otworzyć panel.</small></span></label>
+        </fieldset>
+        <div id="security-password-fields" class="security-password-fields">
+          <label for="security-setup-password">Hasło</label>
+          <input id="security-setup-password" type="password" autocomplete="off" autocapitalize="off" spellcheck="false">
+          <label for="security-setup-repeat">Powtórz hasło</label>
+          <input id="security-setup-repeat" type="password" autocomplete="off" autocapitalize="off" spellcheck="false">
+          <p class="hint">Od 4 znaków Unicode, maksymalnie 64 bajty UTF-8.</p>
+          <p id="security-weak-warning" class="security-warning" hidden>Hasło ma 4–7 znaków i zapewnia słabą ochronę.</p>
+        </div>
+        <label id="security-open-confirm-wrap" class="security-open-confirm" hidden><input id="security-open-confirm" type="checkbox"><span>Rozumiem, że panel będzie dostępny bez hasła dla osób w tej sieci.</span></label>
+        <p id="security-setup-message" class="security-message" role="alert"></p>
+        <button id="security-setup-submit" class="primary" type="submit">Zapisz tryb ochrony</button>
+        <button id="security-setup-later" class="security-secondary" type="button">Skonfiguruję później</button>
+      </form>
+
+      <form id="security-login-form" class="security-view" novalidate hidden>
+        <h2>Panel chroniony</h2>
+        <p class="muted">Podaj hasło administratora VoxOne.</p>
+        <p class="security-warning">Połączenie HTTP nie szyfruje hasła. Zapomniane hasło można usunąć tylko przez reset fabryczny w VoxOne Installer USB.</p>
+        <label for="security-login-password">Hasło</label>
+        <input id="security-login-password" type="password" autocomplete="off" autocapitalize="off" spellcheck="false" autofocus>
+        <p id="security-login-message" class="security-message" role="alert"></p>
+        <button id="security-login-submit" class="primary" type="submit">Zaloguj</button>
+      </form>
+
+      <div id="security-unconfigured" class="security-view" hidden>
+        <h2>Najpierw skonfiguruj Wi-Fi</h2>
+        <p class="muted">Połącz VoxOne z domową siecią. W trybie pierwszego uruchomienia punkt dostępowy służy wyłącznie do zapisania Wi-Fi.</p>
+      </div>
+
+      <div id="security-locked" class="security-view" hidden>
+        <h2>Ustawienia ochrony są zablokowane</h2>
+        <p class="security-message" data-kind="error">Nie można bezpiecznie odczytać ustawień. Odzyskanie dostępu wymaga resetu fabrycznego przez VoxOne Installer USB.</p>
+      </div>
+    </article>
+  </section>
+
+  <div id="app-shell" class="shell">
     <header class="topbar">
       <div class="brand">
         <img src="/voxone-logo.svg?v={voxone-logo.svg-hash}" alt="" width="48" height="48">
         <div><p class="eyebrow">RADIO INTERNETOWE</p><h1>VoxOne</h1></div>
       </div>
-      <div class="identity"><span id="header-version">VoxOne —</span><span id="header-profile" class="profile">Profil —</span></div>
+      <div class="identity"><span id="header-version">VoxOne —</span><span id="header-profile" class="profile">Profil —</span><button id="security-logout" class="security-logout" type="button" hidden>Wyloguj</button></div>
     </header>
+    <p id="security-api-warning" class="security-api-warning" role="status" hidden>Nie udało się odczytać stanu ochrony. Panel pozostaje dostępny, aby zachować możliwość aktualizacji urządzenia.</p>
 
     <nav class="tabs" aria-label="Główna nawigacja">
       <a href="#status" data-tab="status" aria-current="page">Status</a>

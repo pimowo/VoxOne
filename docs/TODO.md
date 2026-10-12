@@ -107,7 +107,7 @@
 - [POST-STABLE] Rozszerzyć istniejący WebSocket runtime state o source-aware metadata i codec/format DLNA/AUX, sample rate oraz bitrate tam, gdzie mają znaczenie.
 - [POST-STABLE] Dokończyć edycję maksymalnie pięciu profili Wi-Fi: priority/last-known-good, nowe hasło, zachowanie lub wyczyszczenie hasła, walidacja, atomowy zapis i kontrolowany restart.
 - [POST-STABLE] Dodać konfigurację restartu, sleep/screensaver, auto standby, playlist import/export, Radio Directory i recovery bez przywracania starego WWW. Backup/restore config ma software WWW/API baseline; realny download/restore/restart pozostaje w fizycznym teście persistence.
-- [STABLE] Dokończyć SECURITY-AUTH: dodać w WWW wybór OPEN/PROTECTED oraz obsługę logowania i wylogowania, a następnie włączyć ochronę całego WWW/REST/WebSocket ze wspólną walidacją Host/Origin/CSRF. Migracja LEGACY_UNCLAIMED nie może zablokować OTA działającego W0; MQTT zachowuje osobną politykę.
+- [STABLE] Dokończyć SECURITY-AUTH: włączyć ochronę całego WWW/REST/WebSocket ze wspólną walidacją Host/Origin/CSRF. Migracja LEGACY_UNCLAIMED nie może zablokować OTA działającego W0; MQTT zachowuje osobną politykę.
 - [HARDWARE] SECURITY-AUTH HIL: skalibrować czas PBKDF2 na klasycznym ESP32 bez PSRAM, sprawdzić wybór trybu po konfiguracji Wi-Fi, sesję i ponowne logowanie, migrację istniejących 0.2.0/0.8.0 z zachowaniem OTA W0 oraz fabryczny reset przez VoxOne Installer USB. Nie dodawać recovery przez cykle zasilania ani obowiązkowe gesty przycisku.
 - [DECISION] Rozstrzygnąć, czy lokalny WebSocket ma walidować żądany subprotocol zamiast bezwarunkowo go odsyłać; połączyć decyzję z audytem auth/CSRF.
 
