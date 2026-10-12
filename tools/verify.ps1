@@ -152,6 +152,9 @@ Invoke-Step 'Native tests' {
    Write-Host "  PASS $label"
   }
  }
+ & $Python (Join-Path $root 'test/radio_transport_native.py') '--strict' 2>&1 | ForEach-Object { Write-Host $_ }
+ if($LASTEXITCODE -ne 0) { throw 'Radio transport strict test failed' }
+ Write-Host '  PASS radio_transport_native strict'
  Write-Host "  $($tests.Count) native tests passed"
 }
 if(-not $onWindows) {

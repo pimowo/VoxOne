@@ -402,6 +402,20 @@ private:
     enum : int { CODEC_NONE = 0, CODEC_WAV = 1, CODEC_MP3 = 2, CODEC_AAC = 3, CODEC_M4A = 4, CODEC_FLAC = 5,
                  CODEC_OGG = 6, CODEC_OGG_FLAC = 7, CODEC_OGG_OPUS = 8, CODEC_AACP = 9};
     enum : int { ST_NONE = 0, ST_WEBFILE = 1, ST_WEBSTREAM = 2};
+    enum ChunkedState : uint8_t {
+        CHUNK_SIZE,
+        CHUNK_EXTENSION,
+        CHUNK_SIZE_LF,
+        CHUNK_PAYLOAD,
+        CHUNK_PAYLOAD_CR,
+        CHUNK_PAYLOAD_LF,
+        CHUNK_TRAILER_START,
+        CHUNK_TRAILER,
+        CHUNK_TRAILER_LF,
+        CHUNK_TRAILER_FINAL_LF,
+        CHUNK_DONE,
+        CHUNK_ERROR
+    };
     typedef enum { LEFTCHANNEL=0, RIGHTCHANNEL=1 } SampleIndex;
     typedef enum { LOWSHELF = 0, PEAKEQ = 1, HIFGSHELF =2 } FilterType;
 
@@ -490,6 +504,9 @@ private:
     uint32_t        m_flacTotalSamplesInStream = 0; // can be read out in the FLAC file header
     uint32_t        m_metaint = 0;                  // Number of databytes between metadata
     uint32_t        m_chunkcount = 0 ;              // Counter for chunked transfer
+    uint16_t        m_chunkLineLength = 0;          // Bounded size/extension/trailer line length
+    ChunkedState    m_chunkState = CHUNK_SIZE;
+    bool            m_chunkHasDigits = false;
     uint32_t        m_t0 = 0;                       // store millis(), is needed for a small delay
     uint32_t        m_contentlength = 0;            // Stores the length if the stream comes from fileserver
     uint32_t        m_bytesNotDecoded = 0;          // pictures or something else that comes with the stream

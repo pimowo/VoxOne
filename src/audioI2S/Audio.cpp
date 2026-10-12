@@ -360,6 +360,9 @@ void Audio::setDefaults() {
     m_flacBitrateMeter.reset();
     m_bytesNotDecoded = 0;                                  // counts all not decodable bytes
     m_chunkcount = 0;                                       // for chunked streams
+    m_chunkLineLength = 0;
+    m_chunkState = CHUNK_SIZE;
+    m_chunkHasDigits = false;
     m_contentlength = 0;                                    // If Content-Length is known, count it
     m_curSample = 0;
     m_metaint = 0;                                          // No metaint yet
@@ -2833,7 +2836,6 @@ void Audio::processWebStream() {
     static bool     f_tmr_1s;
     static bool     f_stream;                                   // first audio data received
     static uint8_t  cnt_slow;
-    static uint32_t chunkSize;                                  // chunkcount read from stream
     static uint32_t tmr_1s;                                     // timer 1 sec
     static uint32_t lastDataMs;                                 // last bytes received from the stream
 
@@ -2842,7 +2844,6 @@ void Audio::processWebStream() {
         m_f_firstCall = false;
         f_stream = false;
         cnt_slow = 0;
-        chunkSize = 0;
         tmr_1s = millis();
         lastDataMs = tmr_1s;
         m_metacount = m_metaint;
@@ -2854,12 +2855,20 @@ void Audio::processWebStream() {
     // chunked data tramsfer - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
     if(m_f_chunked && availableBytes){
         uint8_t readedBytes = 0;
-        if(!chunkSize) chunkSize = chunkedDataTransfer(&readedBytes);
-        availableBytes = min(availableBytes, chunkSize);
+        if(!m_chunkcount) chunkedDataTransfer(&readedBytes);
+        if(getDatamode() != AUDIO_DATA) {stopSong(); return;}
+        availableBytes = min((uint32_t)_client->available(), m_chunkcount);
     }
     // we have metadata  - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
     if(m_f_metadata && availableBytes){
-        if(m_metacount == 0) {chunkSize -= readMetadata(availableBytes); return;}
+        if(m_metacount == 0) {
+            const uint16_t metadataBytes = readMetadata(availableBytes);
+            if(m_f_chunked) {
+                if(metadataBytes > m_chunkcount) {log_e("chunked metadata overflow"); stopSong(); return;}
+                m_chunkcount -= metadataBytes;
+            }
+            return;
+        }
         availableBytes = min(availableBytes, m_metacount);
     }
     // timer, triggers every second  - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
@@ -2891,7 +2900,7 @@ void Audio::processWebStream() {
         if(bytesAddedToBuffer > 0) {
             lastDataMs = millis();
             if(m_f_metadata)            m_metacount  -= bytesAddedToBuffer;
-            if(m_f_chunked)             chunkSize    -= bytesAddedToBuffer;
+            if(m_f_chunked)             m_chunkcount -= bytesAddedToBuffer;
             InBuff.bytesWritten(bytesAddedToBuffer);
         }
 
@@ -2916,7 +2925,6 @@ void Audio::processWebFile() {
     static bool     f_stream;                                   // first audio data received
     static bool     f_webFileDataComplete;                      // all file data received
     static uint32_t byteCounter;                                // count received data
-    static uint32_t chunkSize;                                  // chunkcount read from stream
     static size_t   audioDataCount;                             // counts the decoded audiodata only
 
     // first call, set some values to default - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
@@ -2925,7 +2933,6 @@ void Audio::processWebFile() {
         f_webFileDataComplete = false;
         f_stream = false;
         byteCounter = 0;
-        chunkSize = 0;
         audioDataCount = 0;
     }
 
@@ -2936,8 +2943,9 @@ void Audio::processWebFile() {
     // chunked data tramsfer - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
     if(m_f_chunked){
         uint8_t readedBytes = 0;
-        if(!chunkSize) chunkSize = chunkedDataTransfer(&readedBytes);
-        availableBytes = min(availableBytes, chunkSize);
+        if(!m_chunkcount) chunkedDataTransfer(&readedBytes);
+        if(getDatamode() != AUDIO_DATA) return;
+        availableBytes = min((uint32_t)_client->available(), m_chunkcount);
     }
 
     // if the buffer is often almost empty issue a warning  - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
@@ -3025,7 +3033,6 @@ void Audio::processWebStreamTS() {
     uint8_t         ts_packetLength = 0;
     static uint8_t  ts_packetPtr = 0;
     const uint8_t   ts_packetsize = 188;
-    static size_t   chunkSize = 0;
     (void)bytesDecoded;
     // first call, set some values to default - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
     if(m_f_firstCall) { // runs only ont time per connection, prepare for start
@@ -3033,7 +3040,6 @@ void Audio::processWebStreamTS() {
         f_firstPacket = true;
         byteCounter = 0;
         bytesDecoded = 0;
-        chunkSize = 0;
         loopCnt = 0;
         tmr_1s = millis();
         m_t0 = millis();
@@ -3049,9 +3055,16 @@ void Audio::processWebStreamTS() {
     availableBytes = _client->available();
     if(availableBytes){
         uint8_t readedBytes = 0;
-        if(m_f_chunked) chunkSize = chunkedDataTransfer(&readedBytes);
-        int res = _client->read(ts_packet + ts_packetPtr, ts_packetsize - ts_packetPtr);
+        if(m_f_chunked) {
+            if(!m_chunkcount) chunkedDataTransfer(&readedBytes);
+            if(m_chunkState == CHUNK_DONE) {m_f_continue = true; return;}
+            if(getDatamode() != AUDIO_DATA) return;
+            availableBytes = min((uint32_t)_client->available(), m_chunkcount);
+        }
+        const uint32_t requested = min(availableBytes, (uint32_t)(ts_packetsize - ts_packetPtr));
+        int res = _client->read(ts_packet + ts_packetPtr, requested);
         if(res > 0){
+            if(m_f_chunked) m_chunkcount -= res;
             ts_packetPtr += res;
             byteCounter += res;
             if(ts_packetPtr < ts_packetsize)  return;
@@ -3085,7 +3098,7 @@ void Audio::processWebStreamTS() {
                     InBuff.bytesWritten(ts_packetLength -ws);
                 }
             }
-            if(byteCounter == m_contentlength  || byteCounter == chunkSize){
+            if(m_contentlength && byteCounter == m_contentlength){
                 byteCounter = 0;
                 m_f_continue = true;
             }
@@ -3151,7 +3164,6 @@ void Audio::processWebStreamHLS() {
     static bool     f_stream;                                   // first audio data received
     static int      bytesDecoded;
     static uint32_t byteCounter;                                // count received data
-    static size_t   chunkSize = 0;
     static uint32_t tmr_1s;                                     // timer 1 sec
     static uint32_t loopCnt;                                    // count loops if clientbuffer is empty
     (void)bytesDecoded;
@@ -3160,7 +3172,6 @@ void Audio::processWebStreamHLS() {
         f_stream = false;
         byteCounter = 0;
         bytesDecoded = 0;
-        chunkSize = 0;
         loopCnt = 0;
         tmr_1s = millis();
         m_t0 = millis();
@@ -3172,7 +3183,12 @@ void Audio::processWebStreamHLS() {
     availableBytes = _client->available();
     if(availableBytes){
         uint8_t readedBytes = 0;
-        if(m_f_chunked) chunkSize = chunkedDataTransfer(&readedBytes);
+        if(m_f_chunked) {
+            if(!m_chunkcount) chunkedDataTransfer(&readedBytes);
+            if(m_chunkState == CHUNK_DONE) {m_f_continue = true; return;}
+            if(getDatamode() != AUDIO_DATA) return;
+            availableBytes = min((uint32_t)_client->available(), m_chunkcount);
+        }
         size_t bytesWasWritten = 0;
         if(InBuff.writeSpace() >= availableBytes){
             bytesWasWritten = _client->read(InBuff.getWritePtr(), availableBytes);
@@ -3182,7 +3198,8 @@ void Audio::processWebStreamHLS() {
         }
         InBuff.bytesWritten(bytesWasWritten);
         byteCounter += bytesWasWritten;
-        if(byteCounter == m_contentlength || byteCounter == chunkSize){
+        if(m_f_chunked) m_chunkcount -= bytesWasWritten;
+        if(m_contentlength && byteCounter == m_contentlength){
             byteCounter = 0;
             m_f_continue = true;
         }
@@ -3439,6 +3456,9 @@ bool Audio::parseHttpResponseHeader() { // this is the response to a GET / reque
                 m_f_chunked = true;
                 if(!m_f_Log) AUDIO_INFO("chunked data transfer");
                 m_chunkcount = 0;                         // Expect chunkcount in DATA
+                m_chunkLineLength = 0;
+                m_chunkState = CHUNK_SIZE;
+                m_chunkHasDigits = false;
             }
         }
 
@@ -4662,6 +4682,7 @@ uint16_t Audio::readMetadata(uint16_t maxBytes, bool first) {
 
     if(!metalen) {
         int b = _client->read();   // First byte of metadata?
+        if(b < 0) return 0;
         metalen = b * 16 ;                              // New count for metadata including length byte
         if(metalen > 512){
             AUDIO_INFO("Metadata block to long! Skipping all Metadata from now on.");
@@ -4672,7 +4693,8 @@ uint16_t Audio::readMetadata(uint16_t maxBytes, bool first) {
         res = 1;
     }
     if(!metalen) {m_metacount = m_metaint; return res;} // metalen is 0
-    uint16_t a = _client->readBytes(&chbuf[pos_ml], min((uint16_t)(metalen - pos_ml), (uint16_t)(maxBytes -1)));
+    const uint16_t budget = maxBytes > res ? maxBytes - res : 0;
+    uint16_t a = _client->readBytes(&chbuf[pos_ml], min((uint16_t)(metalen - pos_ml), budget));
     res += a;
     pos_ml += a;
     if(pos_ml == metalen) {
@@ -4699,28 +4721,118 @@ uint16_t Audio::readMetadata(uint16_t maxBytes, bool first) {
 }
 //----------------------------------------------------------------------------------------------------------------------
 size_t Audio::chunkedDataTransfer(uint8_t* bytes){
-    size_t chunksize = 0;
-    int b = 0;
-    uint32_t ctime = millis();
-    uint32_t timeout = 2000; // ms
-    while(true){
-        if(ctime + timeout < millis()) {
-            log_e("timeout");
-            stopSong();
-            return 0;
-        }
-        b = _client->read();
-        *bytes++;
-        if(b < 0) continue;  // -1 no data available
-        if(b == '\n') break;
-        if(b < '0') continue;
-        // We have received a hexadecimal character.  Decode it and add to the result.
-        b = toupper(b) - '0';                       // Be sure we have uppercase
-        if(b > 9) b = b - 7;                        // Translate A..F to 10..15
-        chunksize = (chunksize << 4) + b;
+    static const uint16_t maxLineLength = 128;
+    static const uint32_t timeout = 2000;
+    if(bytes) *bytes = 0;
+
+    if(m_chunkState == CHUNK_DONE || m_chunkState == CHUNK_ERROR) return 0;
+    if(m_chunkState == CHUNK_PAYLOAD) {
+        if(m_chunkcount) return m_chunkcount;
+        m_chunkState = CHUNK_PAYLOAD_CR;
     }
-    if(m_f_Log) log_i("chunksize %d", chunksize);
-    return chunksize;
+
+    const auto fail = [this](const char* reason) -> size_t {
+        log_e("chunked transfer error: %s", reason);
+        stopSong();
+        m_chunkState = CHUNK_ERROR;
+        m_chunkcount = 0;
+        return 0;
+    };
+    const auto finish = [this]() -> size_t {
+        m_chunkState = CHUNK_DONE;
+        m_chunkcount = 0;
+        setDatamode(AUDIO_NONE);
+        return 0;
+    };
+    uint32_t lastProgress = millis();
+
+    while(true){
+        int b = _client->read();
+        if(b < 0) {
+            if(m_chunkState == CHUNK_TRAILER_START && !_client->available()) return finish();
+            if((uint32_t)(millis() - lastProgress) >= timeout) return fail("timeout");
+            continue;
+        }
+        lastProgress = millis();
+        if(bytes && *bytes != UINT8_MAX) ++(*bytes);
+
+        switch(m_chunkState) {
+            case CHUNK_SIZE: {
+                uint8_t value;
+                if(b >= '0' && b <= '9') value = b - '0';
+                else if(b >= 'A' && b <= 'F') value = b - 'A' + 10;
+                else if(b >= 'a' && b <= 'f') value = b - 'a' + 10;
+                else if(b == ';' && m_chunkHasDigits) {m_chunkState = CHUNK_EXTENSION; break;}
+                else if(b == '\r' && m_chunkHasDigits) {m_chunkState = CHUNK_SIZE_LF; break;}
+                else return fail("invalid size");
+
+                if(m_chunkcount > (UINT32_MAX - value) / 16U) return fail("size overflow");
+                m_chunkcount = m_chunkcount * 16U + value;
+                m_chunkHasDigits = true;
+                if(++m_chunkLineLength > maxLineLength) return fail("size line too long");
+                break;
+            }
+            case CHUNK_EXTENSION:
+                if(b == '\r') m_chunkState = CHUNK_SIZE_LF;
+                else {
+                    if(b == '\n' || (b < 0x20 && b != '\t') || b == 0x7f)
+                        return fail("invalid extension");
+                    if(++m_chunkLineLength > maxLineLength) return fail("extension too long");
+                }
+                break;
+            case CHUNK_SIZE_LF:
+                if(b != '\n') return fail("missing LF after size");
+                m_chunkLineLength = 0;
+                m_chunkHasDigits = false;
+                if(m_chunkcount) {
+                    m_chunkState = CHUNK_PAYLOAD;
+                    if(m_f_Log) log_i("chunksize %u", m_chunkcount);
+                    return m_chunkcount;
+                }
+                m_chunkState = CHUNK_TRAILER_START;
+                if(!_client->available()) return finish();
+                break;
+            case CHUNK_PAYLOAD_CR:
+                if(b != '\r') return fail("missing CR after payload");
+                m_chunkState = CHUNK_PAYLOAD_LF;
+                break;
+            case CHUNK_PAYLOAD_LF:
+                if(b != '\n') return fail("missing LF after payload");
+                m_chunkState = CHUNK_SIZE;
+                m_chunkcount = 0;
+                m_chunkLineLength = 0;
+                m_chunkHasDigits = false;
+                break;
+            case CHUNK_TRAILER_START:
+                if(b == '\r') m_chunkState = CHUNK_TRAILER_FINAL_LF;
+                else {
+                    if(b == '\n' || b < 0x21 || b == 0x7f) return fail("invalid trailer");
+                    m_chunkLineLength = 1;
+                    m_chunkState = CHUNK_TRAILER;
+                }
+                break;
+            case CHUNK_TRAILER:
+                if(b == '\r') m_chunkState = CHUNK_TRAILER_LF;
+                else {
+                    if(b == '\n' || (b < 0x20 && b != '\t') || b == 0x7f)
+                        return fail("invalid trailer");
+                    if(++m_chunkLineLength > maxLineLength) return fail("trailer too long");
+                }
+                break;
+            case CHUNK_TRAILER_LF:
+                if(b != '\n') return fail("missing LF after trailer");
+                m_chunkLineLength = 0;
+                m_chunkState = CHUNK_TRAILER_START;
+                break;
+            case CHUNK_TRAILER_FINAL_LF:
+                if(b != '\n') return fail("missing final LF");
+                return finish();
+            case CHUNK_PAYLOAD:
+            case CHUNK_DONE:
+            case CHUNK_ERROR:
+                return fail("invalid state");
+        }
+    }
 }
 //----------------------------------------------------------------------------------------------------------------------
 bool Audio::readID3V1Tag(){
