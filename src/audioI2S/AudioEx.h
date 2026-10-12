@@ -11,6 +11,7 @@
 #include <vector>
 #include "../core/radio_url_resolution.h"
 #include "../core/flac_bitrate_meter.h"
+#include "../core/radio_connect_lifetime.h"
 #include <Arduino.h>
 #include <libb64/cencode.h>
 #include <esp32-hal-log.h>
@@ -134,6 +135,7 @@ public:
     bool connecttospeech(const char* speech, const char* lang);
     bool connecttomarytts(const char* speech, const char* lang, const char* voice);
     void setConnectionTimeout(uint16_t timeout_ms, uint16_t timeout_ms_ssl);
+    void cancelPendingConnection();
     bool setPinout(uint8_t BCLK, uint8_t LRC, uint8_t DOUT, int8_t DIN = I2S_PIN_NO_CHANGE, int8_t MCK = I2S_PIN_NO_CHANGE);
     bool pauseResume();
     bool isRunning() {return m_f_running;}
@@ -448,13 +450,15 @@ private:
     struct ConnectParams {
       char *hostwoext = nullptr;
       uint16_t port = 80;
+      uint16_t timeoutMs = 0;
+      WiFiClient* client = nullptr;
       Audio* instance = nullptr;
       
-      ConnectParams(char* h, uint16_t p, Audio* a)
-        : hostwoext(h), port(p), instance(a) {}
+      ConnectParams(char* h, uint16_t p, uint16_t timeout, WiFiClient* c,
+                    Audio* a)
+        : hostwoext(h), port(p), timeoutMs(timeout), client(c), instance(a) {}
     };
-    volatile bool _connectionResult;
-    TaskHandle_t _connectTaskHandle = nullptr;
+    voxone::radio::ConnectAttemptLifetime m_connectAttempt;
     
     const size_t    m_frameSizeWav  = 1024 * 8;
     const size_t    m_frameSizeMP3  = 1600;

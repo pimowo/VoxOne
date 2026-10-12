@@ -17,6 +17,7 @@
 #include "../core/radio_format_detection.h"
 #include "../core/radio_reconnect_policy.h"
 #include "../core/system_operation_state.h"
+#include <new>
 #if VOXONE_HAS_BT && VOXONE_PIN_MAP_COMPLETE && VOXONE_BT_I2S_RX_ENABLED
 #include "../core/source_manager.h"
 static inline bool radioCanUseI2S() { return radioI2SOutputEnabled(); }
@@ -308,6 +309,8 @@ esp_err_t Audio::i2s_mclk_pin_select(const uint8_t pin) {
 }
 //---------------------------------------------------------------------------------------------------------------------
 Audio::~Audio() {
+    cancelPendingConnection();
+    while(m_connectAttempt.active()) vTaskDelay(1);
     //I2Sstop(m_i2s_num);
     //InBuff.~AudioBuffer(); #215 the AudioBuffer is automatically destroyed by the destructor
     setDefaults();
@@ -326,7 +329,7 @@ void Audio::setDefaults() {
     vector_clear_and_shrink(m_playlistURL);
     vector_clear_and_shrink(m_playlistContent);
     m_hashQueue.clear(); m_hashQueue.shrink_to_fit(); // uint32_t vector
-    if(_client) _client->stop();
+    if(_client && !m_connectAttempt.active()) _client->stop();
     _client = static_cast<WiFiClient*>(&client); /* default to *something* so that no NULL deref can happen */
     playI2Sremains();
     ts_parsePacket(0, 0, 0); // reset ts routine
@@ -379,17 +382,26 @@ void Audio::setConnectionTimeout(uint16_t timeout_ms, uint16_t timeout_ms_ssl){
     if(timeout_ms_ssl) m_timeout_ms_ssl = timeout_ms_ssl;
 }
 
+void Audio::cancelPendingConnection() {
+    m_connectAttempt.requestCancel();
+}
+
 void Audio::connectTask(void* pvParams) {
   ConnectParams* params = static_cast<ConnectParams*>(pvParams);
   Audio* self = params->instance;
-  if(self->_client){
-    self->_connectionResult = self->_client->connect(params->hostwoext, params->port/*, self->m_f_ssl ? self->m_timeout_ms_ssl : self->m_timeout_ms*/);
-  }else{
-    self->_connectionResult = false;
-  }
-  free((void*)params->hostwoext);
-  delete params;
-  self->_connectTaskHandle = nullptr;
+  WiFiClient* const connectClient = params->client;
+  const bool connected = connectClient &&
+      connectClient->connect(params->hostwoext, params->port,
+                             params->timeoutMs);
+  const auto completion = self->m_connectAttempt.complete(
+      connected, [params]() {
+        free(params->hostwoext);
+        delete params;
+      }, [connectClient, connected]() {
+        if (connected && connectClient) connectClient->stop();
+      });
+  if (completion == voxone::radio::ConnectCompletion::Invalid)
+    AUDIO_ERROR("Connect worker completed in an invalid state");
   vTaskDelete(nullptr);
 }
 
@@ -519,21 +531,49 @@ bool Audio::connectToHost(const char* host, const char* user, const char* pwd,
     else       { _client = static_cast<WiFiClient*>(&client);}
 
     uint32_t t = millis();
+    const uint16_t connectTimeout = m_f_ssl ? m_timeout_ms_ssl : m_timeout_ms;
     if(m_f_Log) AUDIO_INFO("connect to %s on port %d path %s", hostwoext, port, extension);
     if(!config.store.watchdog){
-      res = _client->connect(hostwoext, port, m_f_ssl ? m_timeout_ms_ssl : m_timeout_ms);
+      res = _client->connect(hostwoext, port, connectTimeout);
     }else{
-      ConnectParams* params = new ConnectParams{ strdup(hostwoext), port, this }; _connectionResult = false;
-      xTaskCreatePinnedToCore(connectTask, "ConnectTask", WATCHDOG_TASK_SIZE, params, WATCHDOG_TASK_PRIORITY, &_connectTaskHandle, WATCHDOG_TASK_CORE_ID);
-      for(;;){
-        if(millis()-t>(m_f_ssl ? m_timeout_ms_ssl : m_timeout_ms) || _connectionResult) break;
-        vTaskDelay(10);
-      }
-      res = _connectionResult;
-      if (_connectTaskHandle!=nullptr) {
-        vTaskDelete(_connectTaskHandle);
-        _connectTaskHandle = nullptr;
-        AUDIO_INFO("WATCH DOG HAS FINISHED A WORK, BYE!");
+      res = false;
+      if (!m_connectAttempt.begin()) {
+        AUDIO_ERROR("Connection worker is still active");
+      } else {
+        char* taskHost = strdup(hostwoext);
+        ConnectParams* params = taskHost
+            ? new (std::nothrow) ConnectParams{
+                  taskHost, port, connectTimeout, _client, this}
+            : nullptr;
+        if (!params) {
+          free(taskHost);
+          m_connectAttempt.complete(false, []() {}, []() {});
+          AUDIO_ERROR("Cannot allocate connection worker parameters");
+        } else if (xTaskCreatePinnedToCore(
+                       connectTask, "ConnectTask", WATCHDOG_TASK_SIZE, params,
+                       WATCHDOG_TASK_PRIORITY, nullptr, WATCHDOG_TASK_CORE_ID) !=
+                   pdPASS) {
+          m_connectAttempt.complete(false, [params]() {
+            free(params->hostwoext);
+            delete params;
+          }, []() {});
+          AUDIO_ERROR("Cannot create connection worker");
+        } else {
+          for(;;) {
+            if (!m_connectAttempt.active()) break;
+            if (m_connectAttempt.cancellationRequested()) break;
+            if (voxone::radio::connectWaitExpired(t, millis(), connectTimeout)) {
+              m_connectAttempt.requestCancel();
+              if (m_connectAttempt.cancellationRequested()) break;
+              // The worker already owns finalization. It no longer performs
+              // network I/O, so wait for its bounded cleanup publication.
+            }
+            vTaskDelay(10);
+          }
+          res = m_connectAttempt.succeeded();
+          if (m_connectAttempt.cancellationRequested())
+            AUDIO_INFO("Connection attempt canceled or timed out");
+        }
       }
     }
     if(res){
@@ -2187,6 +2227,7 @@ size_t Audio::process_m3u8_ID3_Header(uint8_t* packet){
 }
 //---------------------------------------------------------------------------------------------------------------------
 uint32_t Audio::stopSong() {
+    cancelPendingConnection();
     m_f_running = false;
     memset(m_outBuff, 0, sizeof(m_outBuff));     //Clear OutputBuffer
     if (radioCanUseI2S()) i2s_zero_dma_buffer((i2s_port_t) m_i2s_num);

@@ -62,6 +62,19 @@ void Player::sendCommand(playerRequestParams_t request){
   if(playerQueue==NULL) return;
   if(systemUpdateAudioBlocked() && request.type != PR_UPDATE_STOP) return;
   if(xQueueSend(playerQueue, &request, PLQ_SEND_DELAY) != pdPASS) return;
+  switch (request.type) {
+    case PR_PLAY:
+    case PR_STOP:
+    case PR_BURL:
+    case PR_RADIO_SUSPEND:
+    case PR_RADIO_RESUME:
+    case PR_UPDATE_STOP:
+    case PR_RADIO_NETWORK_OFFLINE:
+      cancelPendingConnection();
+      break;
+    default:
+      break;
+  }
   if(request.type == PR_PLAY || request.type == PR_STOP)
     sourceManagerRadioCommandQueued(request.type == PR_PLAY,
                                    request.type == PR_PLAY && request.payload > 0
