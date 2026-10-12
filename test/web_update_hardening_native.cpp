@@ -136,6 +136,12 @@ int main() {
          std::string::npos);
   assert(server.find("activeConfigRestoreUpload || activeConfigBackupRequest") !=
          std::string::npos);
+  assert(server.find("webserver.on(\"/api/ready\", HTTP_GET") !=
+         std::string::npos);
+  assert(server.find("\"{\\\"ready\\\":true,\\\"bootId\\\":\\\"%08lx\\\"}\"") !=
+         std::string::npos);
+  assert(server.find("Cache-Control\", \"no-store, max-age=0") !=
+         std::string::npos);
   assert(server.find("request->url() == \"/emergency\" || request->url() == \"/update.html\"") !=
          std::string::npos);
   assert(server.find("if (config.currentWwwReady)\n      request->redirect(\"/#update\");") !=

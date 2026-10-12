@@ -98,6 +98,7 @@ window.configBackupRequests = 0;
 window.configDownloadedName = '';
 window.configRestoreRequests = [];
 window.configRestoreResponses = [];
+window.deviceReadinessBootId = 'boot-before-update';
 window.hardwareSnapshot = {
   family:'M0', mcu:'ESP32-S3', restartRequired:false,
   config:{display:'ssd1309_128x64', input:'ec11'},
@@ -142,6 +143,10 @@ window.hardwareSnapshot = {
 };
 const originalFetch = window.fetch.bind(window);
 window.fetch = (url, options = {}) => {
+  if (String(url).startsWith('/api/ready?'))
+    return Promise.resolve({ok:true,status:200,json:() => Promise.resolve({
+      ready:true, bootId:window.deviceReadinessBootId
+    })});
   if (url === '/api/config/backup') {
     window.configBackupRequests++;
     return Promise.resolve({ok:true,status:200,
@@ -190,6 +195,48 @@ setTimeout(async () => {
   const check = (ok, message) => { if (!ok) throw Error(message); };
   try {
     check(location.hash === '#status', 'startup tab');
+    const deterministicWaiter = (responses, timeout = 2000) => {
+      let clock = 0;
+      const waiter = window.VoxOneRestartWaiter.create({
+        now: () => clock,
+        sleep: delay => { clock += delay; return Promise.resolve(); },
+        probe: () => {
+          const response = responses.shift();
+          if (response instanceof Error) return Promise.reject(response);
+          return Promise.resolve(response || {ready:true, bootId:'old-boot'});
+        }
+      });
+      return waiter.wait({previousBootId:'old-boot', timeout, interval:500});
+    };
+    let restartResult = await deterministicWaiter([
+      {ready:true, bootId:'old-boot'}, new Error('offline'),
+      {ready:true, bootId:'new-boot'}
+    ]);
+    check(restartResult.status === 'ready' && restartResult.bootId === 'new-boot',
+      'restart waiter observes a new boot after network loss');
+    restartResult = await deterministicWaiter([{ready:true, bootId:'fast-new-boot'}]);
+    check(restartResult.status === 'ready' && restartResult.bootId === 'fast-new-boot',
+      'fast restart succeeds without requiring a sampled outage');
+    restartResult = await deterministicWaiter([], 1000);
+    check(restartResult.status === 'timeout', 'unchanged HTTP readiness cannot report success');
+    restartResult = await deterministicWaiter([
+      new Error('offline'), new Error('offline'), new Error('offline')
+    ], 1000);
+    check(restartResult.status === 'timeout', 'network errors remain bounded by timeout');
+    let repeatCalls = 0;
+    const repeatWaiter = window.VoxOneRestartWaiter.create({
+      probe: signal => {
+        if (++repeatCalls > 1) return Promise.resolve({ready:true, bootId:'second-boot'});
+        return new Promise((resolve, reject) => signal.addEventListener('abort',
+          () => reject(new Error('cancelled')), {once:true}));
+      }
+    });
+    const staleWait = repeatWaiter.wait({previousBootId:'old-boot'});
+    await Promise.resolve();
+    const currentWait = repeatWaiter.wait({previousBootId:'old-boot'});
+    const [staleResult, currentResult] = await Promise.all([staleWait, currentWait]);
+    check(staleResult.status === 'cancelled' && currentResult.status === 'ready',
+      'repeated update cancels stale polling');
     const muteButtons = [...document.querySelectorAll('.mute-button')];
     check(muteButtons.length === 2 && muteButtons.every(button => button.disabled), 'mute waits for snapshot');
     btTestSocket.receiveVolume(27, false);
@@ -487,12 +534,14 @@ setTimeout(async () => {
     get('update-firmware-file').dispatchEvent(new Event('change'));
     updateTransportOutcomes.push({event:'error'});
     get('update-firmware-button').click();
+    await new Promise(resolve => setTimeout(resolve, 0));
     check(get('update-progress').hidden && get('update-progress').value === 0 &&
       !get('update-firmware-button').disabled &&
       get('update-status').textContent.includes('ponowić'),
       'MAIN disconnect clears progress and permits retry');
     updateTransportOutcomes.push({event:'abort'});
     get('update-firmware-button').click();
+    await new Promise(resolve => setTimeout(resolve, 0));
     check(get('update-progress').hidden && !get('update-firmware-button').disabled &&
       get('update-status').textContent.includes('przerwana'),
       'MAIN abort clears busy state');
@@ -503,6 +552,7 @@ setTimeout(async () => {
     get('update-spiffs-file').dispatchEvent(new Event('change'));
     updateTransportOutcomes.push({event:'load', status:400, text:'Update.write failed'});
     get('update-spiffs-button').click();
+    await new Promise(resolve => setTimeout(resolve, 0));
     check(get('update-progress').hidden && !get('update-spiffs-button').disabled &&
       get('update-status').textContent.includes('Update.write failed'),
       'SPIFFS Error clears busy state and permits retry');

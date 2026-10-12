@@ -1,3 +1,46 @@
+window.VoxOneRestartWaiter = Object.freeze({
+  create({probe, now = () => Date.now(), sleep = delay => new Promise(resolve => setTimeout(resolve, delay))}) {
+    let generation = 0;
+    let activeController = null;
+    const cancel = () => {
+      ++generation;
+      if (activeController) activeController.abort();
+      activeController = null;
+    };
+    const wait = async ({previousBootId, timeout = 30000, interval = 500,
+                         requestTimeout = 2500}) => {
+      cancel();
+      const currentGeneration = generation;
+      const deadline = now() + timeout;
+      while (now() < deadline) {
+        const controller = new AbortController();
+        activeController = controller;
+        const probeTimeout = setTimeout(() => controller.abort(),
+          Math.min(requestTimeout, deadline - now()));
+        try {
+          const readiness = await probe(controller.signal);
+          if (currentGeneration !== generation) return {status: "cancelled"};
+          if (readiness?.ready === true && readiness.bootId &&
+              readiness.bootId !== previousBootId) {
+            activeController = null;
+            return {status: "ready", bootId: readiness.bootId};
+          }
+        } catch (_) {
+          if (currentGeneration !== generation) return {status: "cancelled"};
+        } finally {
+          clearTimeout(probeTimeout);
+          if (activeController === controller) activeController = null;
+        }
+        const remaining = deadline - now();
+        if (remaining > 0) await sleep(Math.min(interval, remaining));
+        if (currentGeneration !== generation) return {status: "cancelled"};
+      }
+      return {status: "timeout"};
+    };
+    return {wait, cancel};
+  }
+});
+
 (() => {
   "use strict";
 
@@ -20,6 +63,17 @@
   const updateBtFileName = document.getElementById("update-bt-file-name");
   const updateBtButton = document.getElementById("update-bt-button");
   let updateBusy = false;
+  const readDeviceReadiness = async signal => {
+    const response = await fetch("/api/ready?update=" + Date.now(), {
+      cache: "no-store", signal
+    });
+    if (!response.ok) throw new Error("HTTP " + response.status);
+    const readiness = await response.json();
+    if (readiness?.ready !== true || typeof readiness.bootId !== "string" ||
+        !readiness.bootId) throw new Error("invalid readiness response");
+    return readiness;
+  };
+  const updateRestartWaiter = window.VoxOneRestartWaiter.create({probe: readDeviceReadiness});
   let btUpdateBusy = false;
   let btUpdatePolling = false;
   let btHttpUploading = false;
@@ -419,16 +473,17 @@
     onTimeout();
   }
 
-  async function waitForUpdateRestart() {
+  async function waitForUpdateRestart(previousBootId) {
     setUpdateStatus("Aktualizacja zakończona. Restart urządzenia...");
-    await waitForDeviceRestart({
-      onReturn: () => location.replace("/voxone.html?updated=" + Date.now() + "#update"),
-      onTimeout: () => {
-        updateBusy = false;
-        renderUpdateFiles();
-        setUpdateStatus("Urządzenie nie wróciło w ciągu 30 s. Sprawdź połączenie i odśwież stronę.", true);
-      }
-    });
+    const result = await updateRestartWaiter.wait({previousBootId});
+    if (result.status === "ready") {
+      location.replace("/voxone.html?updated=" + encodeURIComponent(result.bootId) + "#status");
+      return;
+    }
+    if (result.status === "cancelled") return;
+    updateBusy = false;
+    renderUpdateFiles();
+    setUpdateStatus("Urządzenie nie wróciło w ciągu 30 s. Sprawdź połączenie i odśwież stronę.", true);
   }
 
   function setRebootStatus(message, error = false) {
@@ -540,7 +595,7 @@
     }
   }
 
-  function uploadUpdateImage(target) {
+  async function uploadUpdateImage(target) {
     if (updateBusy || btUpdateBusy) return;
     const file = updateImages[target].file.files[0];
     if (!file) return;
@@ -559,10 +614,25 @@
       return;
     }
     updateBusy = true;
+    updateRestartWaiter.cancel();
     renderUpdateFiles();
     updateProgress.hidden = false;
     updateProgress.value = 0;
     setUpdateStatus("Wysyłanie " + file.name + "...");
+    let readiness;
+    const readinessController = new AbortController();
+    const readinessTimeout = setTimeout(() => readinessController.abort(), 2500);
+    try {
+      readiness = await readDeviceReadiness(readinessController.signal);
+    } catch (_) {
+      updateBusy = false;
+      renderUpdateFiles();
+      updateProgress.hidden = true;
+      setUpdateStatus("Nie udało się przygotować monitorowania restartu. Spróbuj ponownie.", true);
+      return;
+    } finally {
+      clearTimeout(readinessTimeout);
+    }
     const body = new FormData();
     body.append("updatetarget", target);
     body.append("filesize", String(file.size));
@@ -589,7 +659,7 @@
     request.addEventListener("load", () => {
       if (request.status === 200 && request.responseText.trim() === "OK") {
         setUpdateStatus("Aktualizacja zakończona.");
-        waitForUpdateRestart();
+        waitForUpdateRestart(readiness.bootId);
         return;
       }
       finishTransportFailure(request.responseText.trim() ||

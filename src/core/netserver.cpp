@@ -25,6 +25,7 @@
 #include <esp_mac.h>
 #include <esp_heap_caps.h>
 #include <esp_timer.h>
+#include <esp_system.h>
 #include <nvs.h>
 #include <memory>
 #include <new>
@@ -150,6 +151,7 @@ namespace {
 SystemOperationState systemOperationState;
 UpdateRuntimeGuard updateRuntimeGuard;
 UpdateRestartCoordinator updateRestartCoordinator;
+uint32_t webBootId = 0;
 
 bool quiesceForUpdate() {
   const UpdateProgressSnapshot snapshot = updateProgress();
@@ -585,6 +587,10 @@ bool NetServer::begin(bool quiet) {
                 static_cast<int>(network.status), _started ? "yes" : "no",
                 quiet ? "searchWiFi" : "setup");
   if (!netServerShouldInitialize(_started)) return true;
+  if (webBootId == 0) {
+    webBootId = esp_random();
+    if (webBootId == 0) webBootId = 1;
+  }
   if(!quiet) Serial.print("##[BOOT]#\tnetserver.begin\t");
   playerBufMax = psramInit()?300000:1600 * config.store.abuff;
   _volumeUpdatePending = false;
@@ -621,6 +627,17 @@ bool NetServer::begin(bool quiet) {
                handleConfigRestoreBody);
   webserver.on("/api/time", HTTP_GET, handleTimeStatus);
   webserver.on("/api/time/sync", HTTP_POST, handleTimeSync);
+  webserver.on("/api/ready", HTTP_GET, [](AsyncWebServerRequest* request) {
+    if (!deviceApiAuthorized(request)) return;
+    char body[80];
+    snprintf(body, sizeof(body),
+             "{\"ready\":true,\"bootId\":\"%08lx\"}",
+             static_cast<unsigned long>(webBootId));
+    AsyncWebServerResponse* response = request->beginResponse(
+        200, "application/json; charset=utf-8", body);
+    response->addHeader("Cache-Control", "no-store, max-age=0");
+    request->send(response);
+  });
 #if VOXONE_BT_UPDATE_UPLOAD
   webserver.on("/api/bt/update", HTTP_GET, handleBtUpdateStatus);
 #endif

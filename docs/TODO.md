@@ -39,7 +39,7 @@
 - [STABLE] Fizycznie sprawdzić backup/restore całej konfiguracji, błąd zapisu/commit, realny restart/NVS/power-cycle, zanik zasilania podczas każdej fazy restore oraz zachowanie config po firmware/SPIFFS update. Jawny schemat backupu, produkcyjny adapter NVS/SPIFFS, trwały marker, boot rollback i brak restartu po błędzie pozostają software baseline.
 - [STABLE] Sprawdzić recovery AP, `/update.html` i `/emergency` przy niedostępnym SPIFFS, błędne dane Wi-Fi, Serial CLI oraz ekran AP na telefonie.
 - [STABLE] Fizycznie zweryfikować restart i Config v7: volume, MUTE, source intent, aktywną stację oraz rozdział ustawień runtime/persistent; software backup nie serializuje MUTE ani chwilowego source/runtime state.
-- [STABLE] Sprawdzić auto reload WWW: powrót do STATUS, timeout i czytelny komunikat, gdy urządzenie nie wróci.
+- [HARDWARE] Fizycznie sprawdzić auto reload WWW po aktualizacji MAIN i SPIFFS: wykrycie restartu, powrót do STATUS, odświeżenie zasobów, timeout i czytelny komunikat, gdy urządzenie nie wróci. Anulowalny polling z identyfikatorem nowego bootu, ograniczonym timeoutem i deterministycznymi testami headless pozostaje software baseline.
 
 ### Targety i release gate
 
