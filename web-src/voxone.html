@@ -13,6 +13,7 @@
   <script src="/voxone.js?v={voxone.js-hash}" defer></script>
 </head>
 <body>
+  <p id="security-save-confirmation" class="security-save-confirmation" role="status" hidden>Ustawienia ochrony zostały zapisane</p>
   <section id="security-gate" class="security-gate" aria-labelledby="security-title" hidden>
     <article class="security-card">
       <div class="security-brand">
@@ -36,9 +37,9 @@
         </fieldset>
         <div id="security-password-fields" class="security-password-fields">
           <label for="security-setup-password">Hasło</label>
-          <input id="security-setup-password" type="password" autocomplete="off" autocapitalize="off" spellcheck="false">
+          <div class="security-password-control"><input id="security-setup-password" type="password" autocomplete="off" autocapitalize="off" spellcheck="false"><button class="security-password-toggle" type="button" data-password-target="security-setup-password" aria-label="Pokaż hasło" aria-pressed="false"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M2.5 12s3.5-6 9.5-6 9.5 6 9.5 6-3.5 6-9.5 6-9.5-6-9.5-6Z"/><circle cx="12" cy="12" r="2.7"/><path class="security-eye-slash" d="m4 4 16 16"/></svg></button></div>
           <label for="security-setup-repeat">Powtórz hasło</label>
-          <input id="security-setup-repeat" type="password" autocomplete="off" autocapitalize="off" spellcheck="false">
+          <div class="security-password-control"><input id="security-setup-repeat" type="password" autocomplete="off" autocapitalize="off" spellcheck="false"><button class="security-password-toggle" type="button" data-password-target="security-setup-repeat" aria-label="Pokaż hasło" aria-pressed="false"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M2.5 12s3.5-6 9.5-6 9.5 6 9.5 6-3.5 6-9.5 6-9.5-6-9.5-6Z"/><circle cx="12" cy="12" r="2.7"/><path class="security-eye-slash" d="m4 4 16 16"/></svg></button></div>
           <p class="hint">Od 4 znaków Unicode, maksymalnie 64 bajty UTF-8.</p>
           <p id="security-weak-warning" class="security-warning" hidden>Hasło ma 4–7 znaków i zapewnia słabą ochronę.</p>
         </div>
@@ -53,7 +54,7 @@
         <p class="muted">Podaj hasło administratora VoxOne.</p>
         <p class="security-warning">Połączenie HTTP nie szyfruje hasła. Zapomniane hasło można usunąć tylko przez reset fabryczny w VoxOne Installer USB.</p>
         <label for="security-login-password">Hasło</label>
-        <input id="security-login-password" type="password" autocomplete="off" autocapitalize="off" spellcheck="false" autofocus>
+        <div class="security-password-control"><input id="security-login-password" type="password" autocomplete="off" autocapitalize="off" spellcheck="false"><button class="security-password-toggle" type="button" data-password-target="security-login-password" aria-label="Pokaż hasło" aria-pressed="false"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M2.5 12s3.5-6 9.5-6 9.5 6 9.5 6-3.5 6-9.5 6-9.5-6-9.5-6Z"/><circle cx="12" cy="12" r="2.7"/><path class="security-eye-slash" d="m4 4 16 16"/></svg></button></div>
         <p id="security-login-message" class="security-message" role="alert"></p>
         <button id="security-login-submit" class="primary" type="submit">Zaloguj</button>
       </form>

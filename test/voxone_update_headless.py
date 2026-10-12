@@ -49,6 +49,12 @@ window.voxOneVersion = '0.8.0';
 window.voxOneChannel = 'dev';
 window.voxOneBuild = '192a400';
 window.yoRadioVersion = 'test';
+window.securityFinePointer = true;
+const nativeMatchMedia = window.matchMedia.bind(window);
+window.matchMedia = query => query.includes('(pointer: fine)') ? {
+  matches:window.securityFinePointer, media:query,
+  addEventListener() {}, removeEventListener() {}
+} : nativeMatchMedia(query);
 class MockWebSocket {
   static OPEN = 1;
   static CLOSING = 2;
@@ -102,6 +108,7 @@ window.deviceReadinessBootId = 'boot-before-update';
 window.securityStateRequests = 0;
 window.securityStateResponses = [];
 window.securityRequests = [];
+window.securitySetupResponses = [];
 window.securityLoginResponses = [];
 window.securityServerState = {
   state:'legacy-unclaimed', setupAllowed:true, loginAllowed:false,
@@ -109,6 +116,7 @@ window.securityServerState = {
 };
 const securityResponse = (status, body = {}, headers = {}) => ({
   ok:status >= 200 && status < 300, status,
+  _body:body,
   headers:{get:name => headers[name] || headers[name.toLowerCase()] || null},
   json:() => Promise.resolve(body)
 });
@@ -165,6 +173,10 @@ window.fetch = (url, options = {}) => {
   if (url === '/api/security/setup') {
     const request = Object.fromEntries(new URLSearchParams(options.body || ''));
     window.securityRequests.push({url, method:options.method, request, options});
+    const prepared = window.securitySetupResponses.shift();
+    if (prepared instanceof Error) return Promise.reject(prepared);
+    if (prepared && !prepared.ok) return Promise.resolve(prepared);
+    if (prepared && prepared._body?.ok !== true) return Promise.resolve(prepared);
     if (window.securityServerState.state !== 'legacy-unclaimed')
       return Promise.resolve(securityResponse(409, {error:'invalid_state'}));
     window.securityServerState = {
@@ -172,7 +184,7 @@ window.fetch = (url, options = {}) => {
       loginAllowed:request.mode === 'protected', authenticated:false,
       protectionEnforced:false
     };
-    return Promise.resolve(securityResponse(200, {ok:true}));
+    return Promise.resolve(prepared || securityResponse(200, {ok:true}));
   }
   if (url === '/api/security/login') {
     const request = Object.fromEntries(new URLSearchParams(options.body || ''));
@@ -265,6 +277,23 @@ setTimeout(async () => {
     const setupForm = get('security-setup-form');
     const protectedMode = setupForm.querySelector('input[value="protected"]');
     const openMode = setupForm.querySelector('input[value="open"]');
+    const setupPassword = get('security-setup-password');
+    const setupPasswordToggle = document.querySelector(
+      '[data-password-target="security-setup-password"]');
+    setupPassword.value = 'żółw';
+    setupPassword.focus();
+    setupPassword.setSelectionRange(1, 3, 'forward');
+    setupPasswordToggle.click();
+    check(setupPassword.type === 'text' && setupPassword.value === 'żółw' &&
+      setupPassword.selectionStart === 1 && setupPassword.selectionEnd === 3 &&
+      setupPasswordToggle.getAttribute('aria-pressed') === 'true' &&
+      setupPasswordToggle.getAttribute('aria-label') === 'Ukryj hasło',
+      'show password preserves value, selection and accessible state');
+    setupPasswordToggle.click();
+    check(setupPassword.type === 'password' &&
+      setupPasswordToggle.tagName === 'BUTTON' && setupPasswordToggle.type === 'button' &&
+      setupPasswordToggle.getAttribute('aria-label') === 'Pokaż hasło',
+      'native keyboard-accessible button hides password');
     openMode.checked = true;
     openMode.dispatchEvent(new Event('change', {bubbles:true}));
     setupForm.dispatchEvent(new Event('submit', {bubbles:true,cancelable:true}));
@@ -279,19 +308,71 @@ setTimeout(async () => {
     get('security-setup-repeat').value = 'żółw';
     get('security-setup-password').dispatchEvent(new Event('input'));
     check(!get('security-weak-warning').hidden, '4-7 character password warning');
+    window.securitySetupResponses.push(securityResponse(500, {error:'storage_error'}));
     setupForm.dispatchEvent(new Event('submit', {bubbles:true,cancelable:true}));
     await settleSecurity();
-    check(securityRequests.length === 1 && securityRequests[0].url === '/api/security/setup' &&
-      securityRequests[0].method === 'POST' && securityRequests[0].request.mode === 'protected' &&
-      securityRequests[0].request.password === 'żółw' &&
-      securityRequests[0].options.credentials === 'same-origin' &&
-      securityRequests[0].options.headers['Content-Type'] === 'application/x-www-form-urlencoded',
+    check(get('security-save-confirmation').hidden && !get('security-setup-form').hidden,
+      'backend setup error never shows success');
+    get('security-setup-password').value = 'żółw';
+    get('security-setup-repeat').value = 'żółw';
+    window.securitySetupResponses.push(new DOMException('timed out', 'AbortError'));
+    setupForm.dispatchEvent(new Event('submit', {bubbles:true,cancelable:true}));
+    await settleSecurity();
+    check(get('security-save-confirmation').hidden &&
+      get('security-setup-message').textContent.includes('nie został potwierdzony'),
+      'setup timeout never shows uncertain success');
+    get('security-setup-password').value = 'żółw';
+    get('security-setup-repeat').value = 'żółw';
+    window.securitySetupResponses.push(securityResponse(200, {}));
+    setupForm.dispatchEvent(new Event('submit', {bubbles:true,cancelable:true}));
+    await settleSecurity();
+    check(get('security-save-confirmation').hidden &&
+      get('security-setup-message').textContent.includes('nie potwierdziło'),
+      'ambiguous HTTP 200 without backend confirmation never shows success');
+    get('security-setup-password').value = 'żółw';
+    get('security-setup-repeat').value = 'żółw';
+    setupForm.dispatchEvent(new Event('submit', {bubbles:true,cancelable:true}));
+    await settleSecurity();
+    const setupRequest = securityRequests.filter(item => item.url === '/api/security/setup').at(-1);
+    check(setupRequest.method === 'POST' && setupRequest.request.mode === 'protected' &&
+      setupRequest.request.password === 'żółw' &&
+      setupRequest.options.credentials === 'same-origin' &&
+      setupRequest.options.headers['Content-Type'] === 'application/x-www-form-urlencoded',
       'explicit PROTECTED setup uses UTF-8 form encoding');
     check(get('security-setup-password').value === '' &&
       get('security-setup-repeat').value === '' && !get('security-login-form').hidden,
       'setup passwords are cleared and protected state enters login');
     check(get('security-login-form').querySelectorAll('input').length === 1 &&
       get('security-login-password').type === 'password', 'login contains only a password field');
+    check(document.querySelectorAll('.security-password-toggle').length === 3 &&
+      [...document.querySelectorAll('.security-password-toggle')].every(button =>
+        button.getAttribute('aria-pressed') === 'false' && button.tabIndex === 0),
+      'all password fields have keyboard-accessible eye controls');
+    check(document.activeElement === get('security-login-password'),
+      'desktop login focuses password after display');
+    check(!get('security-save-confirmation').hidden &&
+      get('security-save-confirmation').textContent === 'Ustawienia ochrony zostały zapisane',
+      'confirmed PROTECTED setup shows exact success message');
+    get('security-save-confirmation').hidden = true;
+    await VoxOneSecurityUi.refresh();
+    check(get('security-save-confirmation').hidden,
+      'ordinary state refresh does not repeat setup success');
+    get('security-login-password').value = 'żółw';
+    get('security-login-password').focus();
+    get('security-login-password').setSelectionRange(2, 4);
+    await VoxOneSecurityUi.refresh();
+    check(document.activeElement === get('security-login-password') &&
+      get('security-login-password').value === 'żółw' &&
+      get('security-login-password').selectionStart === 2,
+      'state refresh does not steal focus while user is typing');
+    const loginPasswordToggle = document.querySelector(
+      '[data-password-target="security-login-password"]');
+    loginPasswordToggle.click();
+    check(get('security-login-password').type === 'text' &&
+      get('security-login-password').selectionStart === 2 &&
+      loginPasswordToggle.getAttribute('aria-label') === 'Ukryj hasło',
+      'login eye preserves current value and cursor');
+    loginPasswordToggle.click();
     check(!location.href.includes('żółw') && localStorage.length === 0 && sessionStorage.length === 0,
       'password is absent from URL and browser storage');
 
@@ -321,6 +402,28 @@ setTimeout(async () => {
     check(!get('security-login-form').hidden &&
       securityRequests.at(-1).url === '/api/security/logout' &&
       securityRequests.at(-1).method === 'POST', 'logout invalidates current browser session');
+    window.securityFinePointer = false;
+    get('security-login-password').blur();
+    window.securityServerState.authenticated = false;
+    await VoxOneSecurityUi.refresh();
+    await settleSecurity();
+    check(document.activeElement !== get('security-login-password'),
+      'mobile pointer does not force password focus or virtual keyboard');
+    const securityGate = get('security-gate');
+    securityGate.style.height = '180px';
+    securityGate.style.minHeight = '0';
+    check(getComputedStyle(securityGate).overflowY === 'auto' &&
+      securityGate.scrollHeight > securityGate.clientHeight,
+      'small dynamic viewport keeps login gate scrollable: ' +
+      getComputedStyle(securityGate).overflowY + '/' + securityGate.scrollHeight +
+      '/' + securityGate.clientHeight + '/hidden=' + securityGate.hidden);
+    get('security-login-submit').scrollIntoView({block:'nearest'});
+    const gateRect = securityGate.getBoundingClientRect();
+    const loginButtonRect = get('security-login-submit').getBoundingClientRect();
+    check(loginButtonRect.bottom <= gateRect.bottom + 1,
+      'login button can be scrolled above mobile keyboard viewport');
+    securityGate.removeAttribute('style');
+    window.securityFinePointer = true;
 
     window.securityServerState = {
       state:'legacy-unclaimed', setupAllowed:true, loginAllowed:false,
@@ -338,6 +441,9 @@ setTimeout(async () => {
     await settleSecurity();
     check(window.securityServerState.state === 'open' && !get('app-shell').hidden,
       'confirmed OPEN setup returns to existing panel');
+    check(!get('security-save-confirmation').hidden &&
+      get('security-save-confirmation').textContent === 'Ustawienia ochrony zostały zapisane',
+      'confirmed OPEN setup shows exact success message');
     window.securityServerState = {
       state:'unconfigured', setupAllowed:false, loginAllowed:false,
       authenticated:false, protectionEnforced:false
@@ -816,6 +922,7 @@ setTimeout(async () => {
 def main():
     chrome = resolve_chrome()
     html = (ROOT / "web-src/voxone.html").read_text(encoding="utf-8")
+    css = (ROOT / "web-src/voxone.css").read_text(encoding="utf-8")
     route = (ROOT / "src/core/netserver.cpp").read_text(encoding="utf-8")
     assert re.search(r'webserver\.on\("/favicon\.ico", HTTP_GET,.*?'
                      r'request->redirect\("/voxone-logo\.svg"\);', route, re.S), \
@@ -827,6 +934,8 @@ def main():
         (ROOT / "web-src" / name).read_text(encoding="utf-8")
         for name in ("advanced-audio.js", "dsp-client.js", "voxone.js")
     ]
+    html = re.sub(r'<link rel="stylesheet" href="/voxone\.css[^"]*">',
+                  "<style>" + css + "</style>", html, count=1)
     html = re.sub(r'<script src="/variables.js"></script>', MOCK, html, count=1)
     html = re.sub(
         r'<script src="/(?:advanced-audio|dsp-client|voxone)\.js[^"]*" defer></script>',

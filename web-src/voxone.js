@@ -63,8 +63,69 @@ window.VoxOneRestartWaiter = Object.freeze({
   const securityLoginMessage = document.getElementById("security-login-message");
   const securityLoginSubmit = document.getElementById("security-login-submit");
   const securityLogout = document.getElementById("security-logout");
+  const securityPasswordToggles = [...document.querySelectorAll(".security-password-toggle")];
+  const securitySaveConfirmation = document.getElementById("security-save-confirmation");
   let securityRequestGeneration = 0;
   let securityBusy = false;
+  let securityConfirmationTimer = 0;
+
+  function securityFetch(url, options = {}, timeout = 10000) {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), timeout);
+    return fetch(url, {...options, signal: controller.signal})
+      .finally(() => clearTimeout(timer));
+  }
+
+  function passwordToggleFor(input) {
+    return securityPasswordToggles.find(button =>
+      button.dataset.passwordTarget === input.id);
+  }
+
+  function setPasswordVisible(input, visible, restoreFocus = false) {
+    const button = passwordToggleFor(input);
+    if (!button) return;
+    const start = input.selectionStart;
+    const end = input.selectionEnd;
+    const direction = input.selectionDirection;
+    input.type = visible ? "text" : "password";
+    button.setAttribute("aria-pressed", visible ? "true" : "false");
+    button.setAttribute("aria-label", visible ? "Ukryj hasło" : "Pokaż hasło");
+    if (restoreFocus) {
+      input.focus({preventScroll: true});
+      if (start !== null && end !== null)
+        input.setSelectionRange(start, end, direction || "none");
+    }
+  }
+
+  function clearPasswordInput(input) {
+    input.value = "";
+    setPasswordVisible(input, false);
+  }
+
+  function desktopPasswordFocusAllowed() {
+    return typeof window.matchMedia === "function" &&
+      window.matchMedia("(hover: hover) and (pointer: fine)").matches;
+  }
+
+  function visibleFocusedControl() {
+    const active = document.activeElement;
+    return active && active !== document.body && active !== document.documentElement &&
+      securityGate.contains(active) && !active.closest("[hidden]");
+  }
+
+  function focusLoginPasswordOnDesktop() {
+    if (!desktopPasswordFocusAllowed() || visibleFocusedControl()) return;
+    if (!securityLoginForm.hidden)
+      securityLoginPassword.focus({preventScroll: true});
+  }
+
+  function showSecuritySaveConfirmation() {
+    clearTimeout(securityConfirmationTimer);
+    securitySaveConfirmation.hidden = false;
+    securityConfirmationTimer = setTimeout(() => {
+      securitySaveConfirmation.hidden = true;
+    }, 5000);
+  }
 
   function validUnicode(value) {
     for (let index = 0; index < value.length; ++index) {
@@ -117,6 +178,8 @@ window.VoxOneRestartWaiter = Object.freeze({
     securityOpenConfirmWrap.hidden = protectedMode;
     securitySetupPassword.disabled = !protectedMode;
     securitySetupRepeat.disabled = !protectedMode;
+    passwordToggleFor(securitySetupPassword).disabled = !protectedMode;
+    passwordToggleFor(securitySetupRepeat).disabled = !protectedMode;
     securityOpenConfirm.disabled = protectedMode;
     if (protectedMode) securityOpenConfirm.checked = false;
     securityWeakWarning.hidden = !protectedMode ||
@@ -140,7 +203,7 @@ window.VoxOneRestartWaiter = Object.freeze({
       } else {
         if (state.loginAllowed !== true) throw new Error("inconsistent login state");
         showSecurityView("security-login-form");
-        securityLoginPassword.focus();
+        focusLoginPasswordOnDesktop();
       }
       return;
     }
@@ -155,9 +218,9 @@ window.VoxOneRestartWaiter = Object.freeze({
   async function refreshSecurityState() {
     const generation = ++securityRequestGeneration;
     try {
-      const response = await fetch("/api/security/state", {
+      const response = await securityFetch("/api/security/state", {
         cache: "no-store", credentials: "same-origin"
-      });
+      }, 5000);
       if (generation !== securityRequestGeneration) return;
       if (!response.ok) throw new Error("HTTP " + response.status);
       const state = await response.json();
@@ -219,11 +282,11 @@ window.VoxOneRestartWaiter = Object.freeze({
     securityBusy = true;
     securitySetupSubmit.disabled = true;
     let body = params.toString();
-    securitySetupPassword.value = "";
-    securitySetupRepeat.value = "";
+    clearPasswordInput(securitySetupPassword);
+    clearPasswordInput(securitySetupRepeat);
     securityWeakWarning.hidden = true;
     try {
-      const response = await fetch("/api/security/setup", {
+      const response = await securityFetch("/api/security/setup", {
         method: "POST", credentials: "same-origin", cache: "no-store",
         headers: {"Content-Type": "application/x-www-form-urlencoded"}, body
       });
@@ -234,7 +297,15 @@ window.VoxOneRestartWaiter = Object.freeze({
         if (response.status === 409) await refreshSecurityState();
         return;
       }
+      let confirmation = null;
+      try { confirmation = await response.json(); } catch (_) {}
+      if (confirmation?.ok !== true) {
+        setSecurityMessage(securitySetupMessage,
+          "Urządzenie nie potwierdziło zapisu ustawień ochrony.");
+        return;
+      }
       await refreshSecurityState();
+      showSecuritySaveConfirmation();
     } catch (_) {
       body = "";
       setSecurityMessage(securitySetupMessage,
@@ -258,11 +329,11 @@ window.VoxOneRestartWaiter = Object.freeze({
     const params = new URLSearchParams();
     params.set("password", securityLoginPassword.value);
     let body = params.toString();
-    securityLoginPassword.value = "";
+    clearPasswordInput(securityLoginPassword);
     securityBusy = true;
     securityLoginSubmit.disabled = true;
     try {
-      const response = await fetch("/api/security/login", {
+      const response = await securityFetch("/api/security/login", {
         method: "POST", credentials: "same-origin", cache: "no-store",
         headers: {"Content-Type": "application/x-www-form-urlencoded"}, body
       });
@@ -289,7 +360,7 @@ window.VoxOneRestartWaiter = Object.freeze({
     securityBusy = true;
     securityLogout.disabled = true;
     try {
-      await fetch("/api/security/logout", {
+      await securityFetch("/api/security/logout", {
         method: "POST", credentials: "same-origin", cache: "no-store"
       });
     } catch (_) {
@@ -2887,6 +2958,12 @@ window.VoxOneRestartWaiter = Object.freeze({
   securityLoginPassword.addEventListener("input", () =>
     setSecurityMessage(securityLoginMessage, "", false));
   securityLogout.addEventListener("click", logoutSecuritySession);
+  for (const button of securityPasswordToggles) {
+    button.addEventListener("click", () => {
+      const input = document.getElementById(button.dataset.passwordTarget);
+      setPasswordVisible(input, input.type === "password", true);
+    });
+  }
   for (const [target, image] of Object.entries(updateImages)) {
     image.file.addEventListener("change", renderUpdateFiles);
     image.button.addEventListener("click", () => uploadUpdateImage(target));
