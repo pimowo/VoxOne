@@ -60,7 +60,7 @@ void sendError(uint32_t clientId, uint32_t requestId, uint16_t code) {
            "{\"event\":\"dsp.error\",\"requestId\":%lu,\"code\":%u,"
            "\"revision\":%lu}",
            static_cast<unsigned long>(requestId), static_cast<unsigned>(code), revision);
-  websocket.text(clientId, reply);
+  securityWebSocketText(clientId, reply);
 }
 
 void sendChanged(const DspCommand& command, uint32_t revision,
@@ -91,7 +91,7 @@ void sendChanged(const DspCommand& command, uint32_t revision,
            static_cast<unsigned>(activePreset),
            static_cast<unsigned long>(revision),
            static_cast<unsigned long>(appliedRevision), dirty ? "true" : "false");
-  websocket.textAll(reply);
+  securityWebSocketTextAll(reply);
 }
 
 uint16_t parseCode(DspParseError error) {
@@ -234,7 +234,7 @@ void processDspTransportQueue() {
                "\"dirty\":%s}",
                static_cast<unsigned long>(revision), static_cast<unsigned long>(applied),
                dirty ? "true" : "false");
-      websocket.textAll(reply);
+      securityWebSocketTextAll(reply);
       return;
     }
   }

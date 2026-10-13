@@ -4,12 +4,110 @@
 
 namespace voxone {
 namespace security {
+namespace {
 
-bool securityHttpWebSocketDeferred(SecurityAccessMethod method,
-                                   const char* path,
-                                   bool requestedWebsocket) {
-  return requestedWebsocket && method == SecurityAccessMethod::Get && path &&
-         std::strcmp(path, "/ws") == 0;
+char asciiLower(char value) {
+  return value >= 'A' && value <= 'Z' ? static_cast<char>(value + 32) : value;
+}
+
+bool equalsIgnoreCase(const char* left, const char* right) {
+  if (!left || !right) return false;
+  while (*left && *right) {
+    if (asciiLower(*left++) != asciiLower(*right++)) return false;
+  }
+  return *left == '\0' && *right == '\0';
+}
+
+bool connectionHasUpgradeToken(const char* value) {
+  if (!value) return false;
+  const char* cursor = value;
+  while (*cursor) {
+    while (*cursor == ' ' || *cursor == '\t' || *cursor == ',') ++cursor;
+    const char* start = cursor;
+    while (*cursor && *cursor != ',') ++cursor;
+    const char* end = cursor;
+    while (end > start && (end[-1] == ' ' || end[-1] == '\t')) --end;
+    static const char expected[] = "upgrade";
+    if (static_cast<size_t>(end - start) == sizeof(expected) - 1) {
+      bool match = true;
+      for (size_t index = 0; index < sizeof(expected) - 1; ++index)
+        match = match && asciiLower(start[index]) == expected[index];
+      if (match) return true;
+    }
+    if (*cursor == ',') ++cursor;
+  }
+  return false;
+}
+
+bool validWebSocketKey(const char* key) {
+  if (!key) return false;
+  size_t length = 0;
+  while (key[length]) ++length;
+  if (length != 24 || key[22] != '=' || key[23] != '=') return false;
+  for (size_t index = 0; index < 22; ++index) {
+    const char value = key[index];
+    if (!((value >= 'A' && value <= 'Z') ||
+          (value >= 'a' && value <= 'z') ||
+          (value >= '0' && value <= '9') || value == '+' || value == '/'))
+      return false;
+  }
+  // A WebSocket key is exactly 16 bytes. With two padding characters the
+  // final base64 sextet may contain only the top two data bits.
+  return key[21] == 'A' || key[21] == 'Q' || key[21] == 'g' ||
+         key[21] == 'w';
+}
+
+}  // namespace
+
+SecurityWebSocketHandshakeStatus securityWebSocketHandshakeStatus(
+    SecurityAccessMethod method, const char* path,
+    const SecurityWebSocketHandshake& handshake) {
+  if (!handshake.requestedWebsocket || method != SecurityAccessMethod::Get ||
+      !path || std::strcmp(path, "/ws") != 0)
+    return SecurityWebSocketHandshakeStatus::NotWebSocket;
+  const bool protocolAllowed = handshake.protocolHeaders == 0 ||
+      (handshake.protocolHeaders == 1 && handshake.protocol &&
+       std::strcmp(handshake.protocol, kSecurityWebSocketProtocol) == 0);
+  const bool valid = handshake.connectionHeaders == 1 &&
+      handshake.upgradeHeaders == 1 && handshake.versionHeaders == 1 &&
+      handshake.keyHeaders == 1 && handshake.protocolHeaders <= 1 &&
+      handshake.cookieHeaders <= 1 &&
+      connectionHasUpgradeToken(handshake.connection) &&
+      equalsIgnoreCase(handshake.upgrade, "websocket") &&
+      handshake.version && std::strcmp(handshake.version, "13") == 0 &&
+      validWebSocketKey(handshake.key) && protocolAllowed;
+  return valid ? SecurityWebSocketHandshakeStatus::Valid
+               : SecurityWebSocketHandshakeStatus::Invalid;
+}
+
+bool securityWebSocketSubprotocolRequested(
+    const SecurityWebSocketHandshake& handshake) {
+  return handshake.protocolHeaders == 1 && handshake.protocol &&
+         std::strcmp(handshake.protocol, kSecurityWebSocketProtocol) == 0;
+}
+
+bool securityWebSocketCommandAllowed(const char* command) {
+  if (!command || !*command) return false;
+  // Keep the browser transport explicit and fail closed. Destructive legacy
+  // maintenance commands (format, clearspiffs, reset) intentionally do not
+  // appear here; they have dedicated recovery/configuration workflows.
+  static const char* const allowed[] = {
+      "ping", "tone", "trebble", "middle", "bass", "source",
+      "webtransport", "start", "stop", "toggle", "prev", "next",
+      "volm", "volp", "ballance", "playstation", "play", "vol",
+      "volume", "vol100", "mute", "maximumvolume", "startupmode",
+      "startupfixedvolume", "dspon", "dim", "getindex", "getrssi",
+      "getsystem", "getwebstatus", "getscreen", "stationlisttimeout",
+      "bttransporttimeout", "numplaylist", "flipscreen", "brightness",
+      "screenon", "contrast", "screensaverenabled", "screensavertimeout",
+      "screensaverblank", "screensaverplayingenabled",
+      "screensaverplayingtimeout", "screensaverplayingblank", "abuff",
+      "tzh", "tzm", "sntp2", "sntp1", "timeint", "timeintrtc",
+      "volsteps", "encacc", "oneclickswitching", "balance", "reboot",
+      "boot", "smartstart", "vumeter", "softap", "mdnsname"};
+  for (const char* allowedCommand : allowed)
+    if (std::strcmp(command, allowedCommand) == 0) return true;
+  return false;
 }
 
 bool securityHttpRecoveryLoginRequired(bool enforcementEnabled,
@@ -54,6 +152,7 @@ uint16_t securityAccessHttpStatus(SecurityAccessStatus status) {
     case SecurityAccessStatus::Locked:
     case SecurityAccessStatus::DirectCompressedAssetDenied:
       return 403;
+    case SecurityAccessStatus::InvalidHandshake: return 400;
   }
   return 403;
 }
@@ -61,17 +160,12 @@ uint16_t securityAccessHttpStatus(SecurityAccessStatus status) {
 SecurityHttpDecision evaluateSecurityHttpRequest(
     const SecurityAccessRequest& request, bool enforcementEnabled,
     bool websocketRequest) {
-  // SECURITY-ENFORCE-1B deliberately leaves the WebSocket handshake and
-  // frames untouched. A later stage must adapt them before production can
-  // claim complete protection.
-  if (websocketRequest)
-    return {SecurityAccessStatus::Allowed, 200, true, true};
   if (!enforcementEnabled)
-    return {SecurityAccessStatus::Allowed, 200, true, false};
+    return {SecurityAccessStatus::Allowed, 200, true, websocketRequest};
 
   const SecurityAccessStatus status = evaluateSecurityAccess(request);
   return {status, securityAccessHttpStatus(status),
-          status == SecurityAccessStatus::Allowed, false};
+          status == SecurityAccessStatus::Allowed, websocketRequest};
 }
 
 }  // namespace security

@@ -62,6 +62,7 @@ class MockWebSocket {
   constructor() {
     this.readyState = 1;
     this.sent = [];
+    window.webSocketInstances.push(this);
     window.btTestSocket = this;
     setTimeout(() => this.onopen(), 0);
   }
@@ -75,6 +76,7 @@ class MockWebSocket {
   ]})}); }
 }
 window.WebSocket = MockWebSocket;
+window.webSocketInstances = [];
 class MockUpdateRequest {
   constructor() { this.handlers = {}; this.upload = {addEventListener() {}}; window.btUpdateRequest = this; }
   open(method, url) { this.method = method; this.url = url; }
@@ -260,12 +262,18 @@ setTimeout(async () => {
     await settleSecurity();
     check(!get('security-setup-form').hidden && get('app-shell').hidden,
       'legacy-unclaimed presents the first protection choice');
+    check(webSocketInstances.length === 0,
+      'normal WebSocket is not opened before security authorization');
     check(securityRequests.length === 0,
       'reading security state never submits setup automatically');
     get('security-setup-later').click();
     check(!get('app-shell').hidden && securityRequests.length === 0,
       'legacy user can defer setup without losing panel or OTA access');
+    check(webSocketInstances.length === 1,
+      'explicit legacy compatibility entry starts one WebSocket');
     await VoxOneSecurityUi.refresh();
+    check(webSocketInstances[0].readyState === 3,
+      'returning to the security gate closes an existing WebSocket');
     let passwordInfo = VoxOneSecurityUi.passwordInfo('żółw');
     check(passwordInfo.valid && passwordInfo.weak && passwordInfo.characters === 4 &&
       passwordInfo.bytes === 7, 'Unicode password counts characters and UTF-8 bytes');
@@ -396,6 +404,9 @@ setTimeout(async () => {
     await settleSecurity();
     check(!get('app-shell').hidden && !get('security-logout').hidden,
       'successful login reveals panel and logout');
+    const authenticatedSocket = window.btTestSocket;
+    check(authenticatedSocket.readyState === MockWebSocket.OPEN,
+      'authenticated UI opens WebSocket only after session confirmation');
     await VoxOneSecurityUi.refresh();
     check(!get('app-shell').hidden, 're-entering authenticated UI is deterministic');
     get('security-logout').click();
@@ -403,6 +414,8 @@ setTimeout(async () => {
     check(!get('security-login-form').hidden &&
       securityRequests.at(-1).url === '/api/security/logout' &&
       securityRequests.at(-1).method === 'POST', 'logout invalidates current browser session');
+    check(authenticatedSocket.readyState === 3,
+      'logout closes the active WebSocket and suppresses reconnect');
     window.securityFinePointer = false;
     get('security-login-password').blur();
     window.securityServerState.authenticated = false;
@@ -503,6 +516,7 @@ setTimeout(async () => {
       authenticated:false, protectionEnforced:false
     };
     await VoxOneSecurityUi.refresh();
+    await new Promise(resolve => setTimeout(resolve, 0));
     restartResult = await deterministicWaiter([], 1000);
     check(restartResult.status === 'timeout', 'unchanged HTTP readiness cannot report success');
     restartResult = await deterministicWaiter([
@@ -1086,9 +1100,10 @@ def main():
     first_route_index = route.find('webserver.on("/", HTTP_ANY')
     assert -1 < gate_index < update_guard_index < first_route_index, \
         "security HTTP gate must precede update guard and every route"
-    assert "websocketRequest" in http_adapter and \
-           "websocketDeferred" in http_adapter_header, \
-        "SECURITY-ENFORCE-1B must explicitly defer WebSocket enforcement"
+    assert "securityWebSocketHandshakeStatus" in http_adapter and \
+           "websocketHandshake" in http_adapter_header and \
+           "validateBinding" in route, \
+        "SECURITY-ENFORCE-1C must enforce handshake and live WS bindings"
     assert "VOXONE_SECURITY_HTTP_ENFORCEMENT 0" in http_adapter_header and \
            "VOXONE_SECURITY_HTTP_ENFORCEMENT_TEST 0" in http_adapter_header, \
         "ordinary builds must keep HTTP enforcement disabled"

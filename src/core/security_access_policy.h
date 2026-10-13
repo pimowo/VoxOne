@@ -83,6 +83,7 @@ enum class SecurityAccessStatus : uint8_t {
   AuthenticationRequired,
   InvalidState,
   Locked,
+  InvalidHandshake,
   MethodNotAllowed,
   DirectCompressedAssetDenied,
   UnknownRoute

@@ -159,6 +159,8 @@ class NetServer {
 bool restoreWebUpdateData();
 bool systemRestartPending();
 void requestSystemRestart();
+bool securityWebSocketText(uint32_t clientId, const char* message);
+void securityWebSocketTextAll(const char* message);
 extern NetServer netserver;
 extern AsyncWebSocket websocket;
 

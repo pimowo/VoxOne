@@ -145,6 +145,59 @@ bool SecuritySessionService::rateLimited(uint32_t nowMs) {
   return lockoutActive_;
 }
 
+bool SecuritySessionService::bind(const char* token, uint32_t nowMs,
+                                  SecuritySessionBinding& binding) {
+  clearBinding(binding);
+  synchronizeSecurity();
+  expireSessions(nowMs);
+  binding.securityGeneration = security_.generation();
+  if (security_.state() == SecurityState::Open) {
+    binding.mode = SecuritySessionBindingMode::Open;
+    return true;
+  }
+  if (security_.state() != SecurityState::Protected) {
+    clearBinding(binding);
+    return false;
+  }
+
+  uint8_t hash[kSecurityVerifierSize];
+  if (!tokenHash(token, hash)) return false;
+  const int match = matchingSession(hash);
+  if (match < 0) {
+    secureZero(hash, sizeof(hash));
+    clearBinding(binding);
+    return false;
+  }
+  Session& session = sessions_[static_cast<size_t>(match)];
+  session.lastActivityMs = nowMs;
+  std::memcpy(binding.tokenHash, hash, sizeof(binding.tokenHash));
+  binding.mode = SecuritySessionBindingMode::Protected;
+  secureZero(hash, sizeof(hash));
+  return true;
+}
+
+bool SecuritySessionService::validateBinding(
+    const SecuritySessionBinding& binding, uint32_t nowMs,
+    bool recordActivity) {
+  synchronizeSecurity();
+  expireSessions(nowMs);
+  if (binding.securityGeneration != security_.generation()) return false;
+  if (binding.mode == SecuritySessionBindingMode::Open)
+    return security_.state() == SecurityState::Open;
+  if (binding.mode != SecuritySessionBindingMode::Protected ||
+      security_.state() != SecurityState::Protected)
+    return false;
+  const int match = matchingSession(binding.tokenHash);
+  if (match < 0) return false;
+  if (recordActivity)
+    sessions_[static_cast<size_t>(match)].lastActivityMs = nowMs;
+  return true;
+}
+
+void SecuritySessionService::clearBinding(SecuritySessionBinding& binding) {
+  secureZero(&binding, sizeof(binding));
+}
+
 void SecuritySessionService::synchronizeSecurity() {
   if (observedState_ == security_.state() &&
       observedGeneration_ == security_.generation())
@@ -234,6 +287,9 @@ size_t SecuritySessionService::targetSession(uint32_t nowMs) const {
 }
 
 void SecuritySessionService::clearSession(Session& session) {
+  // Revoke first so a concurrent fail-closed observer can never accept a
+  // partially cleared token digest as active.
+  session.active = false;
   secureZero(&session, sizeof(session));
 }
 

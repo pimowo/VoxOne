@@ -157,6 +157,9 @@ window.VoxOneRestartWaiter = Object.freeze({
   }
 
   function showSecurityView(id) {
+    applicationAuthorized = false;
+    clearTimeout(reconnectTimer);
+    if (socket) socket.close();
     appShell.hidden = true;
     securityGate.hidden = false;
     securityApiWarning.hidden = true;
@@ -164,11 +167,13 @@ window.VoxOneRestartWaiter = Object.freeze({
   }
 
   function showApplication({warning = "", authenticated = false} = {}) {
+    applicationAuthorized = true;
     securityGate.hidden = true;
     appShell.hidden = false;
     securityLogout.hidden = !authenticated;
     securityApiWarning.textContent = warning;
     securityApiWarning.hidden = !warning;
+    if (!socket) connect();
   }
 
   function renderSecurityModeFields() {
@@ -622,6 +627,7 @@ window.VoxOneRestartWaiter = Object.freeze({
   let dspTabActive = false;
 
   let socket = null;
+  let applicationAuthorized = false;
   let reconnectTimer = 0;
   let reconnectDelay = 1000;
   let extraSyncTimer = 0;
@@ -2514,7 +2520,8 @@ window.VoxOneRestartWaiter = Object.freeze({
   }
 
   function connect() {
-    if (leaving || (socket && socket.readyState < WebSocket.CLOSING)) return;
+    if (!applicationAuthorized || leaving ||
+        (socket && socket.readyState < WebSocket.CLOSING)) return;
     clearTimeout(reconnectTimer);
     state.connection = "connecting";
     renderConnection();
@@ -2559,7 +2566,7 @@ window.VoxOneRestartWaiter = Object.freeze({
       }
       renderAudio();
       renderDisplaySettings();
-      if (!leaving) {
+      if (applicationAuthorized && !leaving) {
         reconnectTimer = setTimeout(connect, reconnectDelay);
         reconnectDelay = Math.min(reconnectDelay * 2, 15000);
       }
@@ -3012,7 +3019,7 @@ window.VoxOneRestartWaiter = Object.freeze({
   haName.addEventListener("input", renderHaYaml);
   haCopy.addEventListener("click", copyHaYaml);
   window.addEventListener("online", () => {
-    if (!socket) connect();
+    if (applicationAuthorized && !socket) connect();
   });
   window.addEventListener("beforeunload", () => {
     leaving = true;
@@ -3023,6 +3030,5 @@ window.VoxOneRestartWaiter = Object.freeze({
   renderUpdateFiles();
   renderConnection();
   showStartupTab();
-  connect();
   refreshSecurityState();
 })();

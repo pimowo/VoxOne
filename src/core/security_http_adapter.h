@@ -32,12 +32,38 @@ constexpr bool securityHttpEnforcementEnabled() {
          VOXONE_SECURITY_HTTP_ENFORCEMENT_TEST != 0;
 }
 
-// requestedWebsocket is the connection type reported by AsyncWebServer. It is
-// only a candidate signal: the library also reports RCT_WS for an arbitrary
-// HTTP request carrying "Upgrade: websocket".
-bool securityHttpWebSocketDeferred(SecurityAccessMethod method,
-                                   const char* path,
-                                   bool requestedWebsocket);
+constexpr char kSecurityWebSocketProtocol[] = "voxone.v1";
+
+// AsyncWebServer reports RCT_WS from Upgrade alone. This stricter description
+// proves that the candidate is a complete /ws handshake before the HTTP gate
+// changes its access method to WebSocketHandshake.
+struct SecurityWebSocketHandshake {
+  bool requestedWebsocket;
+  size_t connectionHeaders;
+  size_t upgradeHeaders;
+  size_t versionHeaders;
+  size_t keyHeaders;
+  size_t protocolHeaders;
+  size_t cookieHeaders;
+  const char* connection;
+  const char* upgrade;
+  const char* version;
+  const char* key;
+  const char* protocol;
+};
+
+enum class SecurityWebSocketHandshakeStatus : uint8_t {
+  NotWebSocket,
+  Valid,
+  Invalid
+};
+
+SecurityWebSocketHandshakeStatus securityWebSocketHandshakeStatus(
+    SecurityAccessMethod method, const char* path,
+    const SecurityWebSocketHandshake& handshake);
+bool securityWebSocketSubprotocolRequested(
+    const SecurityWebSocketHandshake& handshake);
+bool securityWebSocketCommandAllowed(const char* command);
 
 bool securityHttpRecoveryLoginRequired(bool enforcementEnabled,
                                        SecurityState state, bool wwwReady,
@@ -53,7 +79,7 @@ struct SecurityHttpDecision {
   SecurityAccessStatus status;
   uint16_t httpStatus;
   bool allowed;
-  bool websocketDeferred;
+  bool websocketHandshake;
 };
 
 SecurityHttpDecision evaluateSecurityHttpRequest(

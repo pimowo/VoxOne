@@ -253,6 +253,9 @@ class AsyncWebSocket: public AsyncWebHandler {
     uint32_t _cNextId;
     AwsEventHandler _eventHandler;
     bool _enabled;
+    String _subprotocol;
+    bool _subprotocolPolicyEnabled;
+    bool _allowNoSubprotocol;
     AsyncWebLock _lock;
 
   public:
@@ -261,6 +264,13 @@ class AsyncWebSocket: public AsyncWebHandler {
     const char * url() const { return _url.c_str(); }
     void enable(bool e){ _enabled = e; }
     bool enabled() const { return _enabled; }
+    // When enabled, never reflect an arbitrary client value. A missing
+    // protocol may remain valid for compatibility with older VoxOne SPIFFS.
+    void setSubprotocolPolicy(const String& protocol, bool allowNone=true){
+      _subprotocol = protocol;
+      _subprotocolPolicyEnabled = true;
+      _allowNoSubprotocol = allowNone;
+    }
     bool availableForWriteAll();
     bool availableForWrite(uint32_t id);
     bool hasQueuedMessages();
@@ -272,6 +282,8 @@ class AsyncWebSocket: public AsyncWebHandler {
     void close(uint32_t id, uint16_t code=0, const char * message=NULL);
     void closeAll(uint16_t code=0, const char * message=NULL);
     void cleanupClients(uint16_t maxClients = DEFAULT_MAX_WS_CLIENTS);
+    void forEachClient(
+        const std::function<void(AsyncWebSocketClient*)>& handler);
 
     void ping(uint32_t id, uint8_t *data=NULL, size_t len=0);
     void pingAll(uint8_t *data=NULL, size_t len=0); //  done

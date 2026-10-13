@@ -587,7 +587,11 @@ void testProductionInventoryAndHttpOnlyIntegration() {
   assert(server.find("security_http_adapter.h") != std::string::npos);
   assert(server.find("request->requestedConnType() == RCT_WS") !=
          std::string::npos);
-  assert(server.find("securityHttpWebSocketDeferred(") !=
+  assert(server.find("securityWebSocketHandshakeStatus(") !=
+         std::string::npos);
+  assert(server.find("deviceSecuritySessionService().bind(") !=
+         std::string::npos);
+  assert(server.find("validateBinding(") !=
          std::string::npos);
   assert(server.find("securityRecoveryLoginRequired()") !=
          std::string::npos);

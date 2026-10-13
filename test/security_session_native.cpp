@@ -206,6 +206,76 @@ void testSecurityChangesLogoutAndRestart() {
   assert(!fixture.sessions.validate(token, 16));
 }
 
+void testLongLivedConnectionBindings() {
+  Fixture fixture;
+  char first[kSecuritySessionTokenBufferSize];
+  char second[kSecuritySessionTokenBufferSize];
+  char third[kSecuritySessionTokenBufferSize];
+  assert(fixture.sessions.login("abcd", 100, first) ==
+         SecurityLoginStatus::Created);
+  SecuritySessionBinding binding{};
+  assert(fixture.sessions.bind(first, 101, binding));
+  assert(binding.mode == SecuritySessionBindingMode::Protected);
+  assert(fixture.sessions.validateBinding(binding, 102, true));
+
+  assert(fixture.sessions.logout(first));
+  assert(!fixture.sessions.validateBinding(binding, 103, true));
+
+  assert(fixture.sessions.login("abcd", 200, first) ==
+         SecurityLoginStatus::Created);
+  assert(fixture.sessions.bind(first, 201, binding));
+  assert(fixture.security.changePassword("abcd", "nowe") ==
+         SecurityOperationStatus::Applied);
+  assert(!fixture.sessions.validateBinding(binding, 202, false));
+
+  assert(fixture.sessions.login("nowe", 300, first) ==
+         SecurityLoginStatus::Created);
+  assert(fixture.sessions.bind(first, 301, binding));
+  assert(fixture.security.unprotect("nowe") ==
+         SecurityOperationStatus::Applied);
+  assert(!fixture.sessions.validateBinding(binding, 302, false));
+
+  SecuritySessionBinding openBinding{};
+  assert(fixture.sessions.bind(nullptr, 303, openBinding));
+  assert(openBinding.mode == SecuritySessionBindingMode::Open);
+  assert(fixture.sessions.validateBinding(openBinding, 304, false));
+  assert(fixture.security.protectOpen("inne") ==
+         SecurityOperationStatus::Applied);
+  assert(!fixture.sessions.validateBinding(openBinding, 305, false));
+
+  assert(fixture.sessions.login("inne", 400, first) ==
+         SecurityLoginStatus::Created);
+  assert(fixture.sessions.bind(first, 401, binding));
+  assert(!fixture.sessions.validateBinding(
+      binding, 401 + kSecuritySessionIdleTimeoutMs, true));
+
+  assert(fixture.sessions.login("inne", 500, first) ==
+         SecurityLoginStatus::Created);
+  assert(fixture.sessions.bind(first, 501, binding));
+  assert(fixture.sessions.validateBinding(
+      binding, 500 + 7UL * 60UL * 60UL * 1000UL, true));
+  assert(fixture.sessions.validateBinding(
+      binding, 500 + 14UL * 60UL * 60UL * 1000UL, true));
+  assert(fixture.sessions.validateBinding(
+      binding, 500 + 21UL * 60UL * 60UL * 1000UL, true));
+  assert(!fixture.sessions.validateBinding(
+      binding, 500 + kSecuritySessionAbsoluteTimeoutMs, true));
+
+  assert(fixture.sessions.login("inne", 1000, first) ==
+         SecurityLoginStatus::Created);
+  SecuritySessionBinding oldest{};
+  assert(fixture.sessions.bind(first, 1001, oldest));
+  assert(fixture.sessions.login("inne", 1100, second) ==
+         SecurityLoginStatus::Created);
+  assert(fixture.sessions.login("inne", 1200, third) ==
+         SecurityLoginStatus::Created);
+  assert(!fixture.sessions.validateBinding(oldest, 1201, false));
+
+  SecuritySessionService::clearBinding(binding);
+  assert(binding.mode == SecuritySessionBindingMode::None);
+  assert(!fixture.sessions.validateBinding(binding, 1202, false));
+}
+
 void testLoginRateLimitAndWrap() {
   Fixture fixture;
   char token[kSecuritySessionTokenBufferSize];
@@ -260,6 +330,7 @@ int main() {
   testIdleAbsoluteAndMillisWrapTimeouts();
   testRngFailuresAndDuplicateTokens();
   testSecurityChangesLogoutAndRestart();
+  testLongLivedConnectionBindings();
   testLoginRateLimitAndWrap();
   return 0;
 }

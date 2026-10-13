@@ -366,6 +366,7 @@ const char* securityAccessStatusName(SecurityAccessStatus status) {
       return "authentication-required";
     case SecurityAccessStatus::InvalidState: return "invalid-state";
     case SecurityAccessStatus::Locked: return "locked";
+    case SecurityAccessStatus::InvalidHandshake: return "invalid-handshake";
     case SecurityAccessStatus::MethodNotAllowed: return "method-not-allowed";
     case SecurityAccessStatus::DirectCompressedAssetDenied:
       return "direct-compressed-asset-denied";

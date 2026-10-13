@@ -28,6 +28,22 @@ enum class SecurityLoginStatus : uint8_t {
   RandomError
 };
 
+enum class SecuritySessionBindingMode : uint8_t {
+  None,
+  Open,
+  Protected
+};
+
+// Opaque, RAM-only authorization captured when a long-lived connection is
+// accepted.  Protected bindings contain only the SHA-256 token digest, never
+// the HttpOnly cookie value.  The security generation makes mode/password
+// changes invalidate an already accepted connection.
+struct SecuritySessionBinding {
+  uint8_t tokenHash[kSecurityVerifierSize];
+  uint32_t securityGeneration;
+  SecuritySessionBindingMode mode;
+};
+
 class SecuritySessionService {
  public:
   SecuritySessionService(SecurityService& security,
@@ -41,6 +57,15 @@ class SecuritySessionService {
   void invalidateAll();
   size_t activeSessionCount(uint32_t nowMs);
   bool rateLimited(uint32_t nowMs);
+
+  // OPEN binds without a token. PROTECTED requires a valid token. Other
+  // security states fail closed. validateBinding() can either observe the
+  // binding or count an accepted client frame as session activity.
+  bool bind(const char* token, uint32_t nowMs,
+            SecuritySessionBinding& binding);
+  bool validateBinding(const SecuritySessionBinding& binding, uint32_t nowMs,
+                       bool recordActivity);
+  static void clearBinding(SecuritySessionBinding& binding);
 
  private:
   struct Session {

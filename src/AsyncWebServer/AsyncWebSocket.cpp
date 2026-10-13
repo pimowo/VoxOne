@@ -867,6 +867,9 @@ AsyncWebSocket::AsyncWebSocket(const String& url)
   ,_clients(LinkedList<AsyncWebSocketClient *>([](AsyncWebSocketClient *c){ delete c; }))
   ,_cNextId(1)
   ,_enabled(true)
+  ,_subprotocol()
+  ,_subprotocolPolicyEnabled(false)
+  ,_allowNoSubprotocol(true)
   ,_buffers(LinkedList<AsyncWebSocketMessageBuffer *>([](AsyncWebSocketMessageBuffer *b){ delete b; }))
 {
   _eventHandler = NULL;
@@ -949,6 +952,13 @@ void AsyncWebSocket::cleanupClients(uint16_t maxClients)
   if (count() > maxClients){
     _clients.front()->close();
   }
+}
+
+void AsyncWebSocket::forEachClient(
+    const std::function<void(AsyncWebSocketClient*)>& handler) {
+  if (!handler) return;
+  AsyncWebLockGuard guard(_clientsLock);
+  for (AsyncWebSocketClient* client : _clients) handler(client);
 }
 
 void AsyncWebSocket::ping(uint32_t id, uint8_t *data, size_t len){
@@ -1211,10 +1221,26 @@ void AsyncWebSocket::handleRequest(AsyncWebServerRequest *request){
     return;
   }
   AsyncWebHeader* key = request->getHeader(WS_STR_KEY);
+  bool selectedSubprotocol = false;
+  if (_subprotocolPolicyEnabled) {
+    if (request->hasHeader(WS_STR_PROTOCOL)) {
+      AsyncWebHeader* protocol = request->getHeader(WS_STR_PROTOCOL);
+      if (!protocol || protocol->value() != _subprotocol) {
+        request->send(400);
+        return;
+      }
+      selectedSubprotocol = true;
+    } else if (!_allowNoSubprotocol) {
+      request->send(400);
+      return;
+    }
+  }
   AsyncWebServerResponse *response = new AsyncWebSocketResponse(key->value(), this);
-  if(request->hasHeader(WS_STR_PROTOCOL)){
+  if (_subprotocolPolicyEnabled && selectedSubprotocol) {
+    response->addHeader(WS_STR_PROTOCOL, _subprotocol);
+  } else if(!_subprotocolPolicyEnabled && request->hasHeader(WS_STR_PROTOCOL)){
     AsyncWebHeader* protocol = request->getHeader(WS_STR_PROTOCOL);
-    //ToDo: check protocol
+    // Legacy behavior is retained only while security enforcement is off.
     response->addHeader(WS_STR_PROTOCOL, protocol->value());
   }
   request->send(response);

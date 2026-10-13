@@ -27,6 +27,7 @@
 #include <esp_heap_caps.h>
 #include <esp_timer.h>
 #include <esp_system.h>
+#include <freertos/semphr.h>
 #include <nvs.h>
 #include <memory>
 #include <new>
@@ -160,6 +161,25 @@ SystemOperationState systemOperationState;
 UpdateRuntimeGuard updateRuntimeGuard;
 UpdateRestartCoordinator updateRestartCoordinator;
 uint32_t webBootId = 0;
+SemaphoreHandle_t securityRuntimeMutex = nullptr;
+
+class SecurityRuntimeLock {
+ public:
+  explicit SecurityRuntimeLock(bool required = true,
+                               TickType_t wait = portMAX_DELAY)
+      : locked_(!required || (securityRuntimeMutex &&
+                              xSemaphoreTake(securityRuntimeMutex,
+                                             wait) == pdTRUE)),
+        owns_(required && locked_) {}
+  ~SecurityRuntimeLock() {
+    if (owns_) xSemaphoreGive(securityRuntimeMutex);
+  }
+  bool locked() const { return locked_; }
+
+ private:
+  bool locked_;
+  bool owns_;
+};
 
 bool quiesceForUpdate() {
   const UpdateProgressSnapshot snapshot = updateProgress();
@@ -217,7 +237,8 @@ bool recoverFilesystemAfterFailedUpdate(bool required) {
 }
 
 voxone::security::SecurityHttpDecision authorizeHttpRequest(
-    AsyncWebServerRequest* request);
+    AsyncWebServerRequest* request,
+    voxone::security::SecuritySessionBinding* websocketBinding = nullptr);
 voxone::security::SecurityAccessMethod securityAccessMethod(
     WebRequestMethodComposite method);
 
@@ -245,8 +266,24 @@ struct SecurityHttpDeniedRequest {
 class SecurityHttpAccessGate : public AsyncWebHandler {
  public:
   bool canHandle(AsyncWebServerRequest* request) override {
-    const auto decision = authorizeHttpRequest(request);
-    if (decision.allowed) return false;
+    using namespace voxone::security;
+    SecuritySessionBinding binding{};
+    auto decision = authorizeHttpRequest(request, &binding);
+    if (decision.allowed) {
+      if (decision.websocketHandshake && securityHttpEnforcementEnabled()) {
+        auto* stored = static_cast<SecuritySessionBinding*>(
+            std::malloc(sizeof(SecuritySessionBinding)));
+        if (!stored) {
+          decision = {SecurityAccessStatus::Locked, 500, false, true};
+        } else {
+          *stored = binding;
+          request->_tempObject = stored;
+          return false;
+        }
+      } else {
+        return false;
+      }
+    }
     auto* denied = static_cast<SecurityHttpDeniedRequest*>(
         std::malloc(sizeof(SecurityHttpDeniedRequest)));
     if (denied) {
@@ -589,6 +626,91 @@ void systemUpdateRadioStopped() { systemOperationState.radioStopped(); }
 
 void requestSystemRestart() { scheduleSystemRestart("SYSTEM"); }
 
+namespace {
+
+voxone::security::SecuritySessionBinding* webSocketBinding(
+    AsyncWebSocketClient* client) {
+  return client ? static_cast<voxone::security::SecuritySessionBinding*>(
+                      client->_tempObject)
+                : nullptr;
+}
+
+enum class WebSocketAuthorization : uint8_t {
+  Authorized,
+  Denied,
+  Busy
+};
+
+WebSocketAuthorization webSocketClientAuthorization(
+    AsyncWebSocketClient* client, bool recordActivity,
+    TickType_t wait = 0) {
+  using namespace voxone::security;
+  if (!client) return WebSocketAuthorization::Denied;
+  if (!securityHttpEnforcementEnabled())
+    return WebSocketAuthorization::Authorized;
+  // NetServer::loop may run on an audio-owning task. Never wait behind a
+  // password KDF in an HTTP callback; defer the frame/publication instead.
+  SecurityRuntimeLock lock(true, wait);
+  if (!lock.locked()) return WebSocketAuthorization::Busy;
+  SecuritySessionBinding* binding = webSocketBinding(client);
+  return binding && deviceSecuritySessionService().validateBinding(
+                        *binding, millis(), recordActivity)
+             ? WebSocketAuthorization::Authorized
+             : WebSocketAuthorization::Denied;
+}
+
+void closeUnauthorizedWebSockets() {
+  if (!voxone::security::securityHttpEnforcementEnabled()) return;
+  websocket.forEachClient([](AsyncWebSocketClient* client) {
+    if (client && client->status() == WS_CONNECTED &&
+        webSocketClientAuthorization(client, false) ==
+            WebSocketAuthorization::Denied)
+      client->close(1008, "Session expired");
+  });
+}
+
+}  // namespace
+
+bool securityWebSocketText(uint32_t clientId, const char* message) {
+  if (!message) return false;
+  bool sent = false;
+  websocket.forEachClient([clientId, message, &sent](
+                              AsyncWebSocketClient* client) {
+    if (!client || client->id() != clientId ||
+        client->status() != WS_CONNECTED)
+      return;
+    const WebSocketAuthorization authorization =
+        webSocketClientAuthorization(client, false);
+    if (authorization == WebSocketAuthorization::Denied) {
+      client->close(1008, "Session expired");
+      return;
+    }
+    if (authorization == WebSocketAuthorization::Busy) return;
+    client->text(message);
+    sent = true;
+  });
+  return sent;
+}
+
+void securityWebSocketTextAll(const char* message) {
+  if (!message) return;
+  if (!voxone::security::securityHttpEnforcementEnabled()) {
+    websocket.textAll(message);
+    return;
+  }
+  websocket.forEachClient([message](AsyncWebSocketClient* client) {
+    if (!client || client->status() != WS_CONNECTED) return;
+    const WebSocketAuthorization authorization =
+        webSocketClientAuthorization(client, false);
+    if (authorization == WebSocketAuthorization::Denied) {
+      client->close(1008, "Session expired");
+      return;
+    }
+    if (authorization == WebSocketAuthorization::Busy) return;
+    client->text(message);
+  });
+}
+
 bool restoreWebUpdateData() {
   nvs_handle_t handle;
   if (nvs_open(kWebUpdateNamespace, NVS_READWRITE, &handle) != ESP_OK) return false;
@@ -680,6 +802,11 @@ bool NetServer::begin(bool quiet) {
   if (webBootId == 0) {
     webBootId = esp_random();
     if (webBootId == 0) webBootId = 1;
+  }
+  if (!securityRuntimeMutex) securityRuntimeMutex = xSemaphoreCreateMutex();
+  if (!securityRuntimeMutex) {
+    Serial.println("##[ERROR]# security runtime mutex unavailable");
+    return false;
   }
   if(!quiet) Serial.print("##[BOOT]#\tnetserver.begin\t");
   playerBufMax = psramInit()?300000:1600 * config.store.abuff;
@@ -775,6 +902,9 @@ bool NetServer::begin(bool quiet) {
   //if(strlen(config.store.mdnsname)>0)
   //  MDNS.begin(config.store.mdnsname);
   websocket.onEvent(onWsEvent);
+  if (voxone::security::securityHttpEnforcementEnabled())
+    websocket.setSubprotocolPolicy(
+        voxone::security::kSecurityWebSocketProtocol, true);
   webserver.addHandler(&websocket);
   _started = true;
   if(!quiet) Serial.println("done");
@@ -1395,14 +1525,41 @@ voxone::security::SecurityAccessMethod securityAccessMethod(
 }
 
 voxone::security::SecurityHttpDecision authorizeHttpRequest(
-    AsyncWebServerRequest* request) {
+    AsyncWebServerRequest* request,
+    voxone::security::SecuritySessionBinding* websocketBinding) {
   using namespace voxone::security;
-  const SecurityAccessMethod accessMethod =
+  SecurityAccessMethod accessMethod =
       securityAccessMethod(request->method());
-  const bool websocketRequest = securityHttpWebSocketDeferred(
-      accessMethod, request->url().c_str(),
-      request->requestedConnType() == RCT_WS);
-  if (!securityHttpEnforcementEnabled() || websocketRequest) {
+  SecurityWebSocketHandshake handshake{
+      request->requestedConnType() == RCT_WS, 0, 0, 0, 0, 0, 0,
+      nullptr, nullptr, nullptr, nullptr, nullptr};
+  for (size_t index = 0; index < request->headers(); ++index) {
+    const String& name = request->headerName(index);
+    const char* value = request->header(index).c_str();
+    if (name.equalsIgnoreCase("Connection")) {
+      if (++handshake.connectionHeaders == 1) handshake.connection = value;
+    } else if (name.equalsIgnoreCase("Upgrade")) {
+      if (++handshake.upgradeHeaders == 1) handshake.upgrade = value;
+    } else if (name.equalsIgnoreCase("Sec-WebSocket-Version")) {
+      if (++handshake.versionHeaders == 1) handshake.version = value;
+    } else if (name.equalsIgnoreCase("Sec-WebSocket-Key")) {
+      if (++handshake.keyHeaders == 1) handshake.key = value;
+    } else if (name.equalsIgnoreCase("Sec-WebSocket-Protocol")) {
+      if (++handshake.protocolHeaders == 1) handshake.protocol = value;
+    } else if (name.equalsIgnoreCase("Cookie")) {
+      ++handshake.cookieHeaders;
+    }
+  }
+  const SecurityWebSocketHandshakeStatus handshakeStatus =
+      securityWebSocketHandshakeStatus(accessMethod, request->url().c_str(),
+                                       handshake);
+  const bool websocketRequest =
+      handshakeStatus == SecurityWebSocketHandshakeStatus::Valid;
+  if (handshakeStatus == SecurityWebSocketHandshakeStatus::Invalid &&
+      securityHttpEnforcementEnabled())
+    return {SecurityAccessStatus::InvalidHandshake, 400, false, true};
+  if (websocketRequest) accessMethod = SecurityAccessMethod::WebSocketHandshake;
+  if (!securityHttpEnforcementEnabled()) {
     SecurityAccessRequest bypass{deviceSecurityService().state(),
                                  SecurityAccessMethod::Unknown,
                                  request->url().c_str(), false, false, false,
@@ -1410,6 +1567,9 @@ voxone::security::SecurityHttpDecision authorizeHttpRequest(
     return evaluateSecurityHttpRequest(
         bypass, securityHttpEnforcementEnabled(), websocketRequest);
   }
+  SecurityRuntimeLock securityLock;
+  if (!securityLock.locked())
+    return {SecurityAccessStatus::Locked, 503, false, websocketRequest};
 
   const String localAddress = request->client()->localIP().toString();
   const SecurityRequestContext context =
@@ -1428,8 +1588,14 @@ voxone::security::SecurityHttpDecision authorizeHttpRequest(
   }
   char token[kSecuritySessionTokenBufferSize]{};
   const bool hasToken = requestSessionToken(request, token);
-  const bool sessionValid = hasToken &&
-      deviceSecuritySessionService().validate(token, millis());
+  bool sessionValid = false;
+  if (websocketRequest && websocketBinding) {
+    sessionValid = deviceSecuritySessionService().bind(
+        hasToken ? token : nullptr, millis(), *websocketBinding);
+  } else {
+    sessionValid = hasToken &&
+        deviceSecuritySessionService().validate(token, millis());
+  }
   clearSensitive(token, sizeof(token));
 
   const bool originPresent = originHeaders != 0;
@@ -1440,7 +1606,11 @@ voxone::security::SecurityHttpDecision authorizeHttpRequest(
       originHeaders == 1 && securityRequestOriginAllowed(context),
       apWifiRecoveryAllowed(network.status == CONNECTED),
       !config.currentWwwReady || systemOperationState.filesystemUnavailable()};
-  return evaluateSecurityHttpRequest(access, true, false);
+  const SecurityHttpDecision decision =
+      evaluateSecurityHttpRequest(access, true, websocketRequest);
+  if (!decision.allowed && websocketBinding)
+    SecuritySessionService::clearBinding(*websocketBinding);
+  return decision;
 }
 
 void securityApiResultReply(
@@ -1498,8 +1668,16 @@ void handleSecurityState(AsyncWebServerRequest* request) {
   const bool hasToken = requestSessionToken(request, token);
   SecurityApiService api(deviceSecurityService(),
                          deviceSecuritySessionService());
-  const SecurityApiState state = api.state(hasToken ? token : nullptr,
-                                           millis());
+  SecurityApiState state{};
+  {
+    SecurityRuntimeLock lock;
+    if (!lock.locked()) {
+      clearSensitive(token, sizeof(token));
+      securityJsonReply(request, 503, R"({"error":"service_unavailable"})");
+      return;
+    }
+    state = api.state(hasToken ? token : nullptr, millis());
+  }
   char body[kSecurityStateJsonSize];
   if (!securityStateJson(state, body, sizeof(body))) {
     securityJsonReply(request, 500, R"({"error":"internal_error"})");
@@ -1522,8 +1700,16 @@ void handleSecuritySetup(AsyncWebServerRequest* request) {
   }
   SecurityApiService api(deviceSecurityService(),
                          deviceSecuritySessionService());
-  SecurityApiResult result = api.setup(postParameter(request, "mode"),
-                                       postParameter(request, "password"));
+  SecurityApiResult result{};
+  {
+    SecurityRuntimeLock lock;
+    if (!lock.locked()) {
+      securityJsonReply(request, 503, R"({"error":"service_unavailable"})");
+      return;
+    }
+    result = api.setup(postParameter(request, "mode"),
+                       postParameter(request, "password"));
+  }
   securityApiResultReply(request, result);
 }
 
@@ -1539,8 +1725,15 @@ void handleSecurityLogin(AsyncWebServerRequest* request) {
   }
   SecurityApiService api(deviceSecurityService(),
                          deviceSecuritySessionService());
-  SecurityApiResult result =
-      api.login(postParameter(request, "password"), millis());
+  SecurityApiResult result{};
+  {
+    SecurityRuntimeLock lock;
+    if (!lock.locked()) {
+      securityJsonReply(request, 503, R"({"error":"service_unavailable"})");
+      return;
+    }
+    result = api.login(postParameter(request, "password"), millis());
+  }
   securityApiResultReply(request, result);
 }
 
@@ -1558,7 +1751,17 @@ void handleSecurityLogout(AsyncWebServerRequest* request) {
   const bool hasToken = requestSessionToken(request, token);
   SecurityApiService api(deviceSecurityService(),
                          deviceSecuritySessionService());
-  SecurityApiResult result = api.logout(hasToken ? token : nullptr);
+  SecurityApiResult result{};
+  {
+    SecurityRuntimeLock lock;
+    if (!lock.locked()) {
+      clearSensitive(token, sizeof(token));
+      securityJsonReply(request, 503, R"({"error":"service_unavailable"})");
+      return;
+    }
+    result = api.logout(hasToken ? token : nullptr);
+  }
+  closeUnauthorizedWebSockets();
   securityApiResultReply(request, result);
   clearSensitive(token, sizeof(token));
 }
@@ -2640,7 +2843,11 @@ void NetServer::processQueue(){
       default:          break;
     }
     if (strlen(wsBuf) > 0) {
-      if (clientId == 0) { websocket.textAll(wsBuf); }else{ websocket.text(clientId, wsBuf); }
+      if (clientId == 0) {
+        securityWebSocketTextAll(wsBuf);
+      } else {
+        securityWebSocketText(clientId, wsBuf);
+      }
       if (clientId == 0 && (request.type == STATION || request.type == ITEM || request.type == TITLE || request.type == MODE)) mqttPublishStatus();
       if (clientId == 0 && request.type == VOLUME) mqttPublishVolume();
     }
@@ -2652,7 +2859,7 @@ void NetServer::processQueue(){
 #endif
       {
         formatWebStatus(wsBuf, sizeof(wsBuf));
-        if (wsBuf[0]) websocket.textAll(wsBuf);
+        if (wsBuf[0]) securityWebSocketTextAll(wsBuf);
       }
     }
   }
@@ -2678,7 +2885,7 @@ void NetServer::processVolumeUpdate(){
 
   _lastVolumeUpdate = now;
   sprintf(wsBuf, "{\"payload\":[{\"id\":\"volume\",\"value\":%d},{\"id\":\"volume100\",\"value\":%d},{\"id\":\"muted\",\"value\":%d},{\"id\":\"maximumVolume\",\"value\":%d},{\"id\":\"startupMode\",\"value\":%d},{\"id\":\"startupFixedVolume\",\"value\":%d}]}", config.store.volume, config.userVolume, player.isMuted(), config.store.maximumVolume, config.store.startupMode, config.store.startupFixedVolume);
-  if(hasWebClients) websocket.textAll(wsBuf);
+  if(hasWebClients) securityWebSocketTextAll(wsBuf);
   serialCli.printf("##CLI.VOL#: %d\n", config.store.volume);
   mqttPublishVolume();
 }
@@ -2700,6 +2907,7 @@ void NetServer::loop() {
   }
   netserverLoopActive = true;
   portEXIT_CRITICAL(&netserverLoopMux);
+  closeUnauthorizedWebSockets();
   processQueue();
 #if defined(VOXONE_PROFILE_L0)
   voxone::dsp::processDspTransportQueue();
@@ -2823,8 +3031,13 @@ void NetServer::onWsMessage(void *arg, uint8_t *data, size_t len, uint32_t clien
   if (info->final && info->index == 0 && info->len == len && info->opcode == WS_TEXT) {
     data[len] = 0;
     if (config.parseWsCommand((const char*)data, _wscmd, _wsval, 65)) {
+      if (voxone::security::securityHttpEnforcementEnabled() &&
+          !voxone::security::securityWebSocketCommandAllowed(_wscmd)) {
+        websocket.close(clientId, 1008, "Command not allowed");
+        return;
+      }
       if (strcmp(_wscmd, "ping") == 0) {
-        websocket.text(clientId, "{\"pong\": 1}");
+        securityWebSocketText(clientId, "{\"pong\": 1}");
         return;
       }
       if (strcmp(_wscmd, "tone") == 0) {
@@ -3071,19 +3284,50 @@ void handleUpload(AsyncWebServerRequest *request, String filename, size_t index,
 
 void onWsEvent(AsyncWebSocket *server, AsyncWebSocketClient *client, AwsEventType type, void *arg, uint8_t *data, size_t len) {
   switch (type) {
-    case WS_EVT_CONNECT:
+    case WS_EVT_CONNECT: {
+      auto* request = static_cast<AsyncWebServerRequest*>(arg);
+      if (voxone::security::securityHttpEnforcementEnabled()) {
+        client->_tempObject = request ? request->_tempObject : nullptr;
+        if (request) request->_tempObject = nullptr;
+      }
       webSocketSessions.fetch_add(1);
       if (config.store.audioinfo) Serial.printf("[WEBSOCKET] client #%lu connected from %s\n", client->id(), config.ipToStr(client->remoteIP()));
-      if (updateNetworkQuiescing.load()) client->close(1001, "VoxOne restarting");
+      if (updateNetworkQuiescing.load()) {
+        client->close(1001, "VoxOne restarting");
+      } else if (webSocketClientAuthorization(
+                     client, false, portMAX_DELAY) !=
+                 WebSocketAuthorization::Authorized) {
+        client->close(1008, "Unauthorized");
+      }
       break;
+    }
     case WS_EVT_DISCONNECT:
       if (config.store.audioinfo) Serial.printf("[WEBSOCKET] client #%lu disconnected\n", client->id());
+      if (auto* binding = webSocketBinding(client)) {
+        voxone::security::SecuritySessionService::clearBinding(*binding);
+        std::free(binding);
+        client->_tempObject = nullptr;
+      }
       webSocketSessions.fetch_sub(1);
       break;
-    case WS_EVT_DATA:
-      if (!systemOperationState.blocksRequests() && !updateNetworkQuiescing.load())
-        netserver.onWsMessage(arg, data, len, client->id());
+    case WS_EVT_DATA: {
+      const WebSocketAuthorization authorization =
+          webSocketClientAuthorization(client, true, portMAX_DELAY);
+      if (authorization == WebSocketAuthorization::Denied) {
+        client->close(1008, "Session expired");
+      } else if (authorization == WebSocketAuthorization::Authorized &&
+                 !systemOperationState.blocksRequests() &&
+                 !updateNetworkQuiescing.load()) {
+        const auto* frame = static_cast<const AwsFrameInfo*>(arg);
+        if (!frame || !frame->final || frame->index != 0 ||
+            frame->len != len || frame->opcode != WS_TEXT) {
+          client->close(1003, "Text frames only");
+        } else {
+          netserver.onWsMessage(arg, data, len, client->id());
+        }
+      }
       break;
+    }
     case WS_EVT_PONG:
     case WS_EVT_ERROR:
       break;
