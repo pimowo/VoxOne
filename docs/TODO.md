@@ -50,7 +50,7 @@
 - [STABLE] Fizycznie zweryfikować aktualne WWW na L0 i W0 (gdy bezpieczna aktualizacja W0 będzie możliwa): MUTE, selector RADIO/BT, oznaczenie BT offline, manual source priority, reconnect/resnapshot, favicon bez 404 oraz build identity w SYSTEM i AKTUALIZACJA.
 - [HARDWARE] Przypisać GPIO XSMT PCM5102A na L0 i fizycznie sprawdzić LOW przy PAUZA/STOP, HIGH przy PLAY, ciszę podczas przejść i Web Update oraz czerwoną ramkę VOL bez zmiany semantyki MUTE.
 - [STABLE] Fizycznie sprawdzić MQTT/Home Assistant na L0; MQTT pozostaje wspierane w pierwszym stable.
-- [STABLE] Uzupełnić dokumentację aktywnych profili, API, MQTT/HA, Source Managera, VoxOneBT oraz update/recovery; oznaczyć historyczne baseline'y i usunąć z dokumentów bieżącego stanu opisy sprzeczne z aktualnym runtime.
+- [STABLE][DOCUMENTATION PASS][HIL PENDING] Baseline `STABLE-DOCS-CONTRACT-1` opisuje aktywne profile, API, MQTT/HA, Source Manager, VoxOneBT, TTS, update/recovery, OTA, Config v7 i granicę Technical Stable/Commercial Release. Przed release uzupełnić wyłącznie końcowe wyniki HIL oraz zatwierdzony status S0/DIN0; nie traktować katalogu roadmapy sprzętu jako capability bieżącego BIN.
 
 ### Definition of Stable
 
@@ -217,7 +217,7 @@ Nazwy wariantów display: `STEROWNIK_ROZDZIELCZOŚĆ`, np. `SSD1306_128X32`, `SS
 
 ## Compatibility i małe decyzje techniczne
 
-- [DECISION] Uporządkować compatibility API strefy czasowej: system używa stałej Europe/Warsaw, pola Config v7 pozostają zachowane, ale `getTimezoneOffset()` nie może pozostać nieopisanym `return 0`; ustalić kontrakt bez zmiany serialized layout.
+- [DECISION] Zatwierdzić zaproponowany w `docs/STABLE_CONTRACT.md` compatibility contract strefy czasowej: jedyną aktywną strefą 1.0.0 jest Europe/Warsaw z automatycznym CET/CEST, pola Config v7 pozostają opaque/reserved, a przyszłe `getTimezoneOffset()` oznacza bieżący lokalny offset UTC w minutach i jest jawnie publikowane z nazwą strefy; nie zmieniać serialized layout.
 
 ## Kolejność
 

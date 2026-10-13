@@ -19,15 +19,15 @@ Stan odniesienia: commit 4436dce4d71ad1bb7d3d9d9b785c2825a33ee086. Ten dokument 
 | src/core/version.h: VOXONE_VERSION | Wersja produktu 0.8.0 | Tak: WWW, bootlog, User-Agent i nazwy artefaktów | Pozostawić osobnym źródłem prawdy VoxOne | KEEP |
 | src/core/config.*, playlist_store.*, station_* | EEPROM, SPIFFS, stacje i migracje | Tak | Zachować format Config oraz dane użytkownika; refaktor niezależnie od relokacji | REFACTOR |
 | src/core/netserver.*, data/www/, web-src/ | API, WS, Web Update, legacy i nowa strona WWW | Tak | Zachować kontrakty; osobno ocenić zbędne endpointy | REFACTOR |
-| GET /legacy.html, stare statyczne strony w data/www | Kompatybilny interfejs yoRadio | Tak: trasy i zasoby są nadal serwowane | Osobny audyt klientów i recovery przed ewentualnym usunięciem | UNKNOWN |
-| POST /upload | Dawny import playlist bez ID; kod odmawia nadpisania formatu v1 | Trasa nadal istnieje, lecz legacy import jest zablokowany | Kandydat do usunięcia dopiero po potwierdzeniu braku klientów | REMOVE_LATER |
+| GET /legacy.html, stare statyczne strony yoRadio | Historyczny interfejs yoRadio | Nie: bieżące `data/www` nie zawiera tych zasobów, a serwer i polityka SECURITY nie rejestrują `/legacy.html` | Zachować opis wyłącznie jako historię migracji | RETIRED |
+| POST /upload | Historyczny import playlist bez ID | Nie: bieżący kontrakt używa `POST /api/stations/import`; `/upload` nie jest zarejestrowaną trasą | Zachować informację dla analizy dawnych klientów | RETIRED |
 | src/IRremoteESP8266/ | Duża biblioteka IR odziedziczona z yoRadio | Źródła wyklucza build_src_filter; controls.cpp nadal ma warunkowe include dla IR_PIN | Sprawdzić plan obsługi IR, zależności i licencję przed decyzją o usunięciu | UNKNOWN |
 | src/GT911_Touchscreen/ i src/core/touchscreen.* | Opcjonalny dotyk | Nie w obecnych profilach: TS_MODEL_UNDEFINED | Ustalić przyszłe LCD/touch przed decyzją | UNKNOWN |
 | src/pluginsManager/, src/plugins/ | Hooki rozszerzeń setup/runtime | Tak: main.cpp wywołuje pm.on_setup/on_end_setup | Zachować hooki; później ocenić API i potrzebne pluginy | REFACTOR |
 | src/async-mqtt-client/ | Klient MQTT używany przez mqtt.cpp | Tak | Zachować do czasu osobnego audytu zależności | KEEP |
 | Nazwy e2002/yoRadio w komentarzach i docs | Atrybucja i ślady pochodzenia kodu | Tak, dokumentacyjne | Zachować atrybucję; nie traktować komentarzy jako zbędnego kodu | KEEP |
 
-Dowody użycia: platformio.ini definiuje pięć aktywnych profili i wyklucza IRremoteESP8266; src/core/player.cpp wybiera AudioI2S, gdy VS1053_CS=255; src/core/display.cpp, src/displays/dspcore.h i widgets używają DSP_MODEL; src/core/controls.cpp używa enkodera; src/main.cpp wywołuje pluginsManager; src/core/netserver.cpp obsługuje /legacy.html oraz /upload; src/core/options.h zawiera YOVERSION. Żadna pozycja UNKNOWN ani REMOVE_LATER nie jest zgodą na usunięcie w tym etapie.
+Dowody użycia: platformio.ini definiuje pięć aktywnych profili i wyklucza IRremoteESP8266; src/core/player.cpp wybiera AudioI2S, gdy VS1053_CS=255; src/core/display.cpp, src/displays/dspcore.h i widgets używają DSP_MODEL; src/core/controls.cpp używa enkodera; src/main.cpp wywołuje pluginsManager; src/core/netserver.cpp i security_access_policy.cpp definiują bieżący HTTP/API; src/core/options.h zawiera YOVERSION. Żadna pozycja UNKNOWN ani REMOVE_LATER nie jest zgodą na usunięcie w tym etapie.
 
 Wersje: VoxOne używa src/core/version.h; yoRadio ma YOVERSION w src/core/options.h; osobne repo VoxOneBT ma include/Version.h i własną wersję. CONFIG_VERSION i wersja protokołu UART są odrębne.
 
