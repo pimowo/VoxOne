@@ -205,8 +205,11 @@ bool securitySessionTokenFromCookie(
 }
 
 SecurityApiService::SecurityApiService(SecurityService& security,
-                                       SecuritySessionService& sessions)
-    : security_(security), sessions_(sessions) {}
+                                       SecuritySessionService& sessions,
+                                       bool protectionEnforced)
+    : security_(security),
+      sessions_(sessions),
+      protectionEnforced_(protectionEnforced) {}
 
 SecurityApiState SecurityApiService::state(const char* sessionToken,
                                            uint32_t nowMs) {
@@ -214,7 +217,8 @@ SecurityApiState SecurityApiService::state(const char* sessionToken,
   const bool authenticated = current == SecurityState::Protected &&
                              sessions_.validate(sessionToken, nowMs);
   return {current, current == SecurityState::LegacyUnclaimed,
-          current == SecurityState::Protected, authenticated, false};
+          current == SecurityState::Protected, authenticated,
+          protectionEnforced_};
 }
 
 SecurityApiResult SecurityApiService::setup(const char* mode,

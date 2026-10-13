@@ -33,6 +33,7 @@ enum EvidenceBit : uint32_t {
   RuntimeReady = 1u << 3,
   NetworkRequired = 1u << 4,
   NetworkReady = 1u << 5,
+  SecurityControlPlaneRequiredBit = 1u << 6,
 };
 
 HealthGate gate;
@@ -48,6 +49,9 @@ std::atomic<uint8_t> imageState{static_cast<uint8_t>(ESP_OTA_IMG_UNDEFINED)};
 std::atomic<uint8_t> lastFailure{static_cast<uint8_t>(Failure::None)};
 std::atomic<uint32_t> lastServiceMs{0};
 std::atomic<bool> httpApiProbed{false};
+std::atomic<bool> securityControlPlaneConfirmed{false};
+std::atomic<uint32_t> securityWebSocketGeneration{0};
+std::atomic<uint8_t> securityWebSocketMode{0};
 char runningSlot[17] = "unknown";
 char bootSlot[17] = "unknown";
 
@@ -77,7 +81,7 @@ void loadLastFailure() {
   if (nvs_open(kNvsNamespace, NVS_READONLY, &handle) != ESP_OK) return;
   uint8_t value = static_cast<uint8_t>(Failure::None);
   if (nvs_get_u8(handle, kNvsLastFailure, &value) == ESP_OK &&
-      value <= static_cast<uint8_t>(Failure::RollbackFailed))
+      value <= static_cast<uint8_t>(Failure::SecurityControlPlane))
     lastFailure.store(value);
   nvs_close(handle);
 }
@@ -104,6 +108,9 @@ Evidence currentEvidence(uint32_t nowMs) {
   evidence.networkRequired = (bits & NetworkRequired) != 0;
   evidence.networkReady = (bits & NetworkReady) != 0;
   evidence.httpApiReady = httpApiProbed.load();
+  evidence.securityControlPlaneRequired =
+      (bits & SecurityControlPlaneRequiredBit) != 0;
+  evidence.securityControlPlaneReady = securityControlPlaneConfirmed.load();
   evidence.fatalFailure = static_cast<Failure>(fatalFailure.load());
   return evidence;
 }
@@ -222,16 +229,37 @@ void reportBootFatal(Failure failure) {
 
 void reportBootSetup(bool configurationReady, bool dataReady,
                      bool runtimeReady, bool networkRequired,
-                     bool networkReady, bool httpApiReady) {
+                     bool networkReady, bool httpApiReady,
+                     bool securityControlPlaneRequired) {
   uint32_t bits = SetupComplete;
   if (configurationReady) bits |= ConfigurationReady;
   if (dataReady) bits |= DataReady;
   if (runtimeReady) bits |= RuntimeReady;
   if (networkRequired) bits |= NetworkRequired;
   if (networkReady) bits |= NetworkReady;
+  if (securityControlPlaneRequired) bits |= SecurityControlPlaneRequiredBit;
   evidenceBits.store(bits);
   if (httpApiReady) httpApiProbed.store(true);
   lastServiceMs.store(millis());
+}
+
+void reportSecurityWebSocketProbe(uint32_t securityGeneration,
+                                  bool protectedMode) {
+  if ((evidenceBits.load() & SecurityControlPlaneRequiredBit) == 0) return;
+  securityWebSocketGeneration.store(securityGeneration);
+  securityWebSocketMode.store(protectedMode ? 2 : 1);
+}
+
+bool confirmSecurityControlPlane(uint32_t securityGeneration,
+                                 bool protectedMode) {
+  if ((evidenceBits.load() & SecurityControlPlaneRequiredBit) == 0) return true;
+  const uint8_t proofMode = securityWebSocketMode.load();
+  if (!securityControlPlaneProofMatches(
+          proofMode != 0, securityWebSocketGeneration.load(),
+          proofMode == 2, securityGeneration, protectedMode))
+    return false;
+  securityControlPlaneConfirmed.store(true);
+  return true;
 }
 
 void serviceBootHealth(bool networkReady) {

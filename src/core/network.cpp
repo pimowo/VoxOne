@@ -16,6 +16,7 @@
 #include "network_diagnostics.h"
 #include "security_runtime.h"
 #include "security_api.h"
+#include "security_http_adapter.h"
 #include "timekeeper.h"
 #include "ui_state.h"
 #include <esp_netif.h>
@@ -343,11 +344,17 @@ void MyNetwork::begin() {
   const auto security = voxone::security::initializeDeviceSecurity(
       config.ssidsCount > 0);
   (void)voxone::security::deviceSecuritySessionService();
+  const char* securityPolicy =
+      voxone::security::securityHttpProductionEnforcementEnabled()
+          ? "production"
+          : (voxone::security::securityHttpEnforcementEnabled()
+                 ? "test"
+                 : "backend-only");
   Serial.printf(
-      "##[SECURITY]# state=%s load=%s wifiConfigured=%u policy=backend-only\n",
+      "##[SECURITY]# state=%s load=%s wifiConfigured=%u policy=%s\n",
       voxone::security::securityStateName(security.state),
       voxone::security::securityLoadStatusName(security.loadStatus),
-      security.wifiConfigured ? 1U : 0U);
+      security.wifiConfigured ? 1U : 0U, securityPolicy);
   setWifiParams();
   if (config.ssidsCount == 0 || DBGAP) {
     raiseSoftAP();

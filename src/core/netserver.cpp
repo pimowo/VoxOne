@@ -149,6 +149,7 @@ void handleSecurityState(AsyncWebServerRequest *request);
 void handleSecuritySetup(AsyncWebServerRequest *request);
 void handleSecurityLogin(AsyncWebServerRequest *request);
 void handleSecurityLogout(AsyncWebServerRequest *request);
+void handleSecurityOtaConfirm(AsyncWebServerRequest *request);
 void handleIndex(AsyncWebServerRequest * request);
 void handleNotFound(AsyncWebServerRequest * request);
 void onWsEvent(AsyncWebSocket *server, AsyncWebSocketClient *client, AwsEventType type, void *arg, uint8_t *data, size_t len);
@@ -669,6 +670,28 @@ void closeUnauthorizedWebSockets() {
   });
 }
 
+void reportSecurityWebSocketOtaProof(uint32_t clientId) {
+  using namespace voxone::security;
+  if (!securityHttpProductionEnforcementEnabled()) return;
+  websocket.forEachClient([clientId](AsyncWebSocketClient* client) {
+    if (!client || client->id() != clientId ||
+        client->status() != WS_CONNECTED)
+      return;
+    SecurityRuntimeLock lock;
+    if (!lock.locked()) return;
+    SecuritySessionBinding* binding = webSocketBinding(client);
+    if (!binding || !deviceSecuritySessionService().validateBinding(
+                        *binding, millis(), false))
+      return;
+    const bool protectedMode =
+        binding->mode == SecuritySessionBindingMode::Protected;
+    if (!protectedMode && binding->mode != SecuritySessionBindingMode::Open)
+      return;
+    voxone::ota::reportSecurityWebSocketProbe(
+        binding->securityGeneration, protectedMode);
+  });
+}
+
 }  // namespace
 
 bool securityWebSocketText(uint32_t clientId, const char* message) {
@@ -862,6 +885,8 @@ bool NetServer::begin(bool quiet) {
                handleSecurityLogin);
   webserver.on(voxone::security::kSecurityLogoutRoute, HTTP_POST,
                handleSecurityLogout);
+  webserver.on(voxone::security::kSecurityOtaConfirmRoute, HTTP_POST,
+               handleSecurityOtaConfirm);
   webserver.on("/api/ready", HTTP_GET, [](AsyncWebServerRequest* request) {
     voxone::ota::reportHttpApiProbe();
     char ota[320];
@@ -1667,7 +1692,8 @@ void handleSecurityState(AsyncWebServerRequest* request) {
   char token[kSecuritySessionTokenBufferSize]{};
   const bool hasToken = requestSessionToken(request, token);
   SecurityApiService api(deviceSecurityService(),
-                         deviceSecuritySessionService());
+                         deviceSecuritySessionService(),
+                         securityHttpProductionEnforcementEnabled());
   SecurityApiState state{};
   {
     SecurityRuntimeLock lock;
@@ -1699,7 +1725,8 @@ void handleSecuritySetup(AsyncWebServerRequest* request) {
     return;
   }
   SecurityApiService api(deviceSecurityService(),
-                         deviceSecuritySessionService());
+                         deviceSecuritySessionService(),
+                         securityHttpProductionEnforcementEnabled());
   SecurityApiResult result{};
   {
     SecurityRuntimeLock lock;
@@ -1724,7 +1751,8 @@ void handleSecurityLogin(AsyncWebServerRequest* request) {
     return;
   }
   SecurityApiService api(deviceSecurityService(),
-                         deviceSecuritySessionService());
+                         deviceSecuritySessionService(),
+                         securityHttpProductionEnforcementEnabled());
   SecurityApiResult result{};
   {
     SecurityRuntimeLock lock;
@@ -1750,7 +1778,8 @@ void handleSecurityLogout(AsyncWebServerRequest* request) {
   char token[kSecuritySessionTokenBufferSize]{};
   const bool hasToken = requestSessionToken(request, token);
   SecurityApiService api(deviceSecurityService(),
-                         deviceSecuritySessionService());
+                         deviceSecuritySessionService(),
+                         securityHttpProductionEnforcementEnabled());
   SecurityApiResult result{};
   {
     SecurityRuntimeLock lock;
@@ -1764,6 +1793,56 @@ void handleSecurityLogout(AsyncWebServerRequest* request) {
   closeUnauthorizedWebSockets();
   securityApiResultReply(request, result);
   clearSensitive(token, sizeof(token));
+}
+
+void handleSecurityOtaConfirm(AsyncWebServerRequest* request) {
+  using namespace voxone::security;
+  const String localAddress = request->client()->localIP().toString();
+  const SecurityRequestStatus validation =
+      validateSecurityActionRequest(securityRequestContext(request,
+                                                            localAddress));
+  if (validation != SecurityRequestStatus::Allowed) {
+    securityRequestRejected(request, validation);
+    return;
+  }
+
+  char token[kSecuritySessionTokenBufferSize]{};
+  const bool hasToken = requestSessionToken(request, token);
+  bool confirmed = false;
+  bool stateAllowed = false;
+  bool authenticated = false;
+  {
+    SecurityRuntimeLock lock;
+    if (!lock.locked()) {
+      clearSensitive(token, sizeof(token));
+      securityJsonReply(request, 503, R"({"error":"service_unavailable"})");
+      return;
+    }
+    const SecurityState state = deviceSecurityService().state();
+    stateAllowed = state == SecurityState::Open ||
+                   state == SecurityState::Protected;
+    authenticated = state == SecurityState::Open ||
+        (hasToken && deviceSecuritySessionService().validate(token, millis()));
+    if (stateAllowed && authenticated) {
+      confirmed = voxone::ota::confirmSecurityControlPlane(
+          deviceSecurityService().generation(),
+          state == SecurityState::Protected);
+    }
+  }
+  clearSensitive(token, sizeof(token));
+  if (!stateAllowed) {
+    securityJsonReply(request, 409, R"({"error":"invalid_state"})");
+  } else if (!authenticated) {
+    securityJsonReply(request, 401,
+                      R"({"error":"authentication_required"})");
+  } else if (!confirmed) {
+    securityJsonReply(request, 409,
+                      R"({"error":"websocket_confirmation_required"})");
+  } else {
+    AsyncWebServerResponse* response = request->beginResponse(204);
+    response->addHeader("Cache-Control", "no-store, max-age=0");
+    request->send(response);
+  }
 }
 
 static bool deviceApiAuthorized(AsyncWebServerRequest* request) {
@@ -3036,6 +3115,7 @@ void NetServer::onWsMessage(void *arg, uint8_t *data, size_t len, uint32_t clien
         websocket.close(clientId, 1008, "Command not allowed");
         return;
       }
+      reportSecurityWebSocketOtaProof(clientId);
       if (strcmp(_wscmd, "ping") == 0) {
         securityWebSocketText(clientId, "{\"pong\": 1}");
         return;

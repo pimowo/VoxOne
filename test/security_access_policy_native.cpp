@@ -60,6 +60,9 @@ const EndpointCase kEndpoints[] = {
      SecurityRouteClass::SecurityApi, true, false},
     {SecurityAccessMethod::Post, "/api/security/logout", SecurityEndpoint::SecurityLogout,
      SecurityRouteClass::SecurityApi, true, false},
+    {SecurityAccessMethod::Post, "/api/security/ota-confirm",
+     SecurityEndpoint::SecurityOtaConfirm,
+     SecurityRouteClass::ProtectedRest, true, false},
     {SecurityAccessMethod::Get, "/variables.js", SecurityEndpoint::Variables,
      SecurityRouteClass::ProtectedWeb, false, false},
     {SecurityAccessMethod::Get, "/api/stations", SecurityEndpoint::StationsSnapshot,
@@ -233,11 +236,11 @@ void testCompleteEndpointInventory() {
     assert(std::strcmp(securityEndpointName(actual.endpoint), "unknown") != 0);
     assert(std::strcmp(securityRouteClassName(actual.routeClass), "unknown") != 0);
   }
-  assert(sizeof(kEndpoints) / sizeof(kEndpoints[0]) == 47);
+  assert(sizeof(kEndpoints) / sizeof(kEndpoints[0]) == 48);
 
   size_t ruleCount = 0;
   const SecurityRouteRule* rules = securityAccessRouteRules(ruleCount);
-  assert(rules != nullptr && ruleCount == 47);
+  assert(rules != nullptr && ruleCount == 48);
   for (size_t index = 0; index < ruleCount; ++index) {
     const SecurityRouteRule& rule = rules[index];
     assert(rule.path && rule.path[0] == '/');
@@ -570,7 +573,8 @@ void testProductionInventoryAndHttpOnlyIntegration() {
       "/api/stations/reorder", "/api/stations/metadata", "/api/mqtt",
       "/api/hardware", "kBackupRoute", "kRestoreRoute", "/api/time",
       "/api/time/sync", "kSecurityStateRoute", "kSecuritySetupRoute",
-      "kSecurityLoginRoute", "kSecurityLogoutRoute", "/api/ready",
+      "kSecurityLoginRoute", "kSecurityLogoutRoute",
+      "kSecurityOtaConfirmRoute", "/api/ready",
       "/api/bt/update", "/api/dsp/state", "AsyncWebSocket websocket(\"/ws\")",
       "request->url()==\"/update\"", "request->url() == \"/update/bt\"",
       "request->url()==\"/emergency\"", "request->url() == \"/update.html\"",
@@ -595,7 +599,9 @@ void testProductionInventoryAndHttpOnlyIntegration() {
          std::string::npos);
   assert(server.find("securityRecoveryLoginRequired()") !=
          std::string::npos);
-  assert(api.find("protectionEnforced, true") == std::string::npos);
+  assert(api.find("protectionEnforced_") != std::string::npos);
+  assert(server.find("securityHttpProductionEnforcementEnabled()") !=
+         std::string::npos);
   // ArduinoOTA is a separate, compile-time service rather than an HTTP
   // route. It must remain disabled until it can follow the same access
   // contract instead of relying on an unrelated OTA_PASS.

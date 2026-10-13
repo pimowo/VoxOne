@@ -156,7 +156,10 @@ void testProductionStartupOrderAndIsolation() {
 
   assert(serverSource.find("security_runtime.h") == std::string::npos);
   assert(mqttSource.find("security_runtime.h") == std::string::npos);
-  assert(networkSource.find("policy=backend-only") != std::string::npos);
+  assert(networkSource.find("securityHttpProductionEnforcementEnabled()") !=
+         std::string::npos);
+  assert(networkSource.find("? \"production\"") != std::string::npos);
+  assert(networkSource.find(": \"backend-only\"") != std::string::npos);
 }
 
 }  // namespace

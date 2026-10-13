@@ -111,6 +111,7 @@ window.deviceReadinessBootId = 'boot-before-update';
 window.securityStateRequests = 0;
 window.securityStateResponses = [];
 window.securityRequests = [];
+window.securityOtaConfirmRequests = [];
 window.securitySetupResponses = [];
 window.securityLoginResponses = [];
 window.securityServerState = {
@@ -200,6 +201,10 @@ window.fetch = (url, options = {}) => {
   if (url === '/api/security/logout') {
     window.securityRequests.push({url, method:options.method, request:{}, options});
     window.securityServerState.authenticated = false;
+    return Promise.resolve(securityResponse(204));
+  }
+  if (url === '/api/security/ota-confirm') {
+    window.securityOtaConfirmRequests.push(options);
     return Promise.resolve(securityResponse(204));
   }
   if (String(url).startsWith('/api/ready?'))
@@ -500,6 +505,10 @@ setTimeout(async () => {
     restartResult = await deterministicWaiter([{ready:true, bootId:'fast-new-boot'}]);
     check(restartResult.status === 'ready' && restartResult.bootId === 'fast-new-boot',
       'fast restart succeeds without requiring a sampled outage');
+    restartResult = await deterministicWaiter([{ready:false, bootId:'pending-new-boot'}]);
+    check(restartResult.status === 'pending' &&
+          restartResult.bootId === 'pending-new-boot',
+      'new pending boot transfers control to its authentication UI');
     window.deviceReadinessBootId = 'post-ota-boot';
     window.securityServerState = {
       state:'protected', setupAllowed:false, loginAllowed:true,
@@ -540,6 +549,11 @@ setTimeout(async () => {
     const muteButtons = [...document.querySelectorAll('.mute-button')];
     check(muteButtons.length === 2 && muteButtons.every(button => button.disabled), 'mute waits for snapshot');
     btTestSocket.receiveVolume(27, false);
+    await settleSecurity();
+    check(window.securityOtaConfirmRequests.length === 1 &&
+          window.securityOtaConfirmRequests[0].method === 'POST' &&
+          window.securityOtaConfirmRequests[0].credentials === 'same-origin',
+      'pending OTA confirmation follows an authorized WebSocket response');
     check(muteButtons.every(button => !button.disabled && button.getAttribute('aria-pressed') === 'false'), 'initial mute off');
     muteButtons[0].click();
     check(btTestSocket.sent.at(-1) === 'mute=1', 'WWW mute on command');
@@ -1104,12 +1118,17 @@ def main():
            "websocketHandshake" in http_adapter_header and \
            "validateBinding" in route, \
         "SECURITY-ENFORCE-1C must enforce handshake and live WS bindings"
-    assert "VOXONE_SECURITY_HTTP_ENFORCEMENT 0" in http_adapter_header and \
-           "VOXONE_SECURITY_HTTP_ENFORCEMENT_TEST 0" in http_adapter_header, \
-        "ordinary builds must keep HTTP enforcement disabled"
+    for profile in ("W0", "M0", "L0", "S0", "DIN0"):
+        assert f"defined(VOXONE_PROFILE_{profile})" in http_adapter_header, \
+            f"production enforcement must cover {profile}"
+    assert "securityHttpProductionEnforcementEnabled" in http_adapter_header and \
+           "!VOXONE_SECURITY_HTTP_ENFORCEMENT_TEST" in http_adapter_header, \
+        "production and HIL enforcement states must remain distinct"
     assert "[env:m0-security-test]" in platformio and \
            "-DVOXONE_SECURITY_HTTP_ENFORCEMENT_TEST=1" in platformio, \
         "dedicated M0 enforcement test profile is missing"
+    assert "securityHttpProductionEnforcementEnabled()" in route, \
+        "security API must report the actual production enforcement switch"
     recovery_match = re.search(
         r'const char security_recovery_login\[\] PROGMEM = '
         r'R"VOXONE_RECOVERY\((.*?)\)VOXONE_RECOVERY";',
@@ -1157,7 +1176,8 @@ def main():
                    "--disable-extensions", "--no-first-run",
                    "--no-default-browser-check", "--allow-file-access-from-files",
                    "--user-data-dir=" + str(Path(temporary) / "profile"),
-                   "--virtual-time-budget=2500", "--dump-dom", page.as_uri()]
+                   "--virtual-time-budget=2500", "--dump-dom",
+                   page.as_uri() + "?ota=pending#status"]
         result = subprocess.run(command, capture_output=True, text=True,
                                 encoding="utf-8", errors="replace", timeout=30)
         recovery_page = Path(temporary) / "recovery-test.html"

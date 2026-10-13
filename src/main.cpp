@@ -22,6 +22,7 @@
 #include "core/dsp_runtime.h"
 #include "core/ui_state.h"
 #include "core/ota_boot_runtime.h"
+#include "core/security_http_adapter.h"
 #include "hardware/runtime_hardware_config.h"
 #include "displays/display_backend_selection.h"
 #include <esp_heap_caps.h>
@@ -114,7 +115,8 @@ void completeBootHealth(
   voxone::ota::reportBootSetup(
       configurationReady, dataReady, runtimeReady,
       true,  // Every current MAIN OTA path is network-originated.
-      networkReady, false);  // Set only by an actual /api/ready request.
+      networkReady, false,  // Set only by an actual /api/ready request.
+      voxone::security::securityHttpProductionEnforcementEnabled());
 }
 }  // namespace
 

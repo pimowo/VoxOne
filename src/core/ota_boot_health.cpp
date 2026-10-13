@@ -24,6 +24,9 @@ Failure HealthGate::waitingReason(const Evidence& evidence) const {
     return Failure::Network;
   if (evidence.networkRequired && !evidence.httpApiReady)
     return Failure::HttpApi;
+  if (evidence.securityControlPlaneRequired &&
+      !evidence.securityControlPlaneReady)
+    return Failure::SecurityControlPlane;
   return Failure::None;
 }
 
@@ -108,12 +111,22 @@ const char* failureName(Failure failure) {
     case Failure::RuntimeService: return "runtime_service";
     case Failure::Network: return "network";
     case Failure::HttpApi: return "http_api";
+    case Failure::SecurityControlPlane: return "security_control_plane";
     case Failure::Timeout: return "timeout";
     case Failure::MarkValid: return "mark_valid";
     case Failure::RollbackUnavailable: return "rollback_unavailable";
     case Failure::RollbackFailed: return "rollback_failed";
   }
   return "unknown";
+}
+
+bool securityControlPlaneProofMatches(bool proofAvailable,
+                                      uint32_t proofGeneration,
+                                      bool proofProtectedMode,
+                                      uint32_t currentGeneration,
+                                      bool currentProtectedMode) {
+  return proofAvailable && proofGeneration == currentGeneration &&
+         proofProtectedMode == currentProtectedMode;
 }
 
 }  // namespace ota

@@ -6,12 +6,22 @@
 #include <stddef.h>
 #include <stdint.h>
 
-#ifndef VOXONE_SECURITY_HTTP_ENFORCEMENT
-#define VOXONE_SECURITY_HTTP_ENFORCEMENT 0
-#endif
-
 #ifndef VOXONE_SECURITY_HTTP_ENFORCEMENT_TEST
 #define VOXONE_SECURITY_HTTP_ENFORCEMENT_TEST 0
+#endif
+
+#ifndef VOXONE_SECURITY_HTTP_ENFORCEMENT
+// Release profiles enforce the reviewed HTTP/WebSocket policy. The dedicated
+// HIL profile keeps the production bit clear so it cannot be mistaken for a
+// released configuration while exercising the same gate through TEST.
+#if !VOXONE_SECURITY_HTTP_ENFORCEMENT_TEST && \
+    (defined(VOXONE_PROFILE_W0) || defined(VOXONE_PROFILE_M0) || \
+     defined(VOXONE_PROFILE_L0) || defined(VOXONE_PROFILE_S0) || \
+     defined(VOXONE_PROFILE_DIN0))
+#define VOXONE_SECURITY_HTTP_ENFORCEMENT 1
+#else
+#define VOXONE_SECURITY_HTTP_ENFORCEMENT 0
+#endif
 #endif
 
 #if (VOXONE_SECURITY_HTTP_ENFORCEMENT != 0 && \
@@ -24,11 +34,16 @@
 namespace voxone {
 namespace security {
 
+constexpr bool securityHttpProductionEnforcementEnabled() {
+  return VOXONE_SECURITY_HTTP_ENFORCEMENT != 0;
+}
+
 // Production enforcement is monotonic: once the production flag is enabled,
-// disabling the test flag cannot weaken it. Ordinary profiles currently keep
-// both flags off; the dedicated M0 test profile enables only the test flag.
+// disabling the test flag cannot weaken it. The dedicated M0 HIL profile
+// enables only the test flag and therefore never advertises a production
+// configuration.
 constexpr bool securityHttpEnforcementEnabled() {
-  return VOXONE_SECURITY_HTTP_ENFORCEMENT != 0 ||
+  return securityHttpProductionEnforcementEnabled() ||
          VOXONE_SECURITY_HTTP_ENFORCEMENT_TEST != 0;
 }
 

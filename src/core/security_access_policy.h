@@ -32,6 +32,7 @@ enum class SecurityEndpoint : uint8_t {
   SecuritySetup,
   SecurityLogin,
   SecurityLogout,
+  SecurityOtaConfirm,
   Variables,
   StationsSnapshot,
   DirectorySearch,

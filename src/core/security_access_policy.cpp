@@ -68,6 +68,9 @@ const SecurityRouteRule kRouteRules[] = {
     {SecurityAccessMethod::Post, "/api/security/logout",
      SecurityEndpoint::SecurityLogout, SecurityRouteClass::SecurityApi, true,
      false},
+    {SecurityAccessMethod::Post, "/api/security/ota-confirm",
+     SecurityEndpoint::SecurityOtaConfirm,
+     SecurityRouteClass::ProtectedRest, true, false},
     {SecurityAccessMethod::Get, "/variables.js", SecurityEndpoint::Variables,
      SecurityRouteClass::ProtectedWeb, false, false},
     {SecurityAccessMethod::Get, "/api/stations",
@@ -307,6 +310,7 @@ const char* securityEndpointName(SecurityEndpoint endpoint) {
     case SecurityEndpoint::SecuritySetup: return "security-setup";
     case SecurityEndpoint::SecurityLogin: return "security-login";
     case SecurityEndpoint::SecurityLogout: return "security-logout";
+    case SecurityEndpoint::SecurityOtaConfirm: return "security-ota-confirm";
     case SecurityEndpoint::Variables: return "variables";
     case SecurityEndpoint::StationsSnapshot: return "stations-snapshot";
     case SecurityEndpoint::DirectorySearch: return "directory-search";

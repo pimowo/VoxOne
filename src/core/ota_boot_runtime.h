@@ -21,7 +21,8 @@ void reportBootFatal(Failure failure);
 // network-originated for every profile, so networkRequired must remain true.
 void reportBootSetup(bool configurationReady, bool dataReady,
                      bool runtimeReady, bool networkRequired,
-                     bool networkReady, bool httpApiReady);
+                     bool networkReady, bool httpApiReady,
+                     bool securityControlPlaneRequired = false);
 
 // Refreshes volatile connectivity and proves that the main loop remains live
 // while the five-second stability window is open.
@@ -30,6 +31,14 @@ void serviceBootHealth(bool networkReady);
 // Called only after /api/ready has reached its handler. This proves the remote
 // control plane end-to-end; merely starting a listening socket is insufficient.
 void reportHttpApiProbe();
+
+// Production SECURITY MAIN images require a live authorized WebSocket frame
+// followed by a same-origin confirmation on the matching security generation.
+// The explicit confirmation is a no-op for the standard OTA gate.
+void reportSecurityWebSocketProbe(uint32_t securityGeneration,
+                                  bool protectedMode);
+bool confirmSecurityControlPlane(uint32_t securityGeneration,
+                                 bool protectedMode);
 
 // /api/ready uses this to avoid reporting a PENDING_VERIFY image as ready.
 bool bootHealthReady();

@@ -20,10 +20,11 @@ window.VoxOneRestartWaiter = Object.freeze({
         try {
           const readiness = await probe(controller.signal);
           if (currentGeneration !== generation) return {status: "cancelled"};
-          if (readiness?.ready === true && readiness.bootId &&
+          if (typeof readiness?.ready === "boolean" && readiness.bootId &&
               readiness.bootId !== previousBootId) {
             activeController = null;
-            return {status: "ready", bootId: readiness.bootId};
+            return {status: readiness.ready ? "ready" : "pending",
+                    bootId: readiness.bootId};
           }
         } catch (_) {
           if (currentGeneration !== generation) return {status: "cancelled"};
@@ -68,12 +69,36 @@ window.VoxOneRestartWaiter = Object.freeze({
   let securityRequestGeneration = 0;
   let securityBusy = false;
   let securityConfirmationTimer = 0;
+  const otaSecurityConfirmationRequested =
+    new URLSearchParams(location.search).get("ota") === "pending";
+  let otaSecurityConfirmationInFlight = false;
+  let otaSecurityConfirmed = false;
 
   function securityFetch(url, options = {}, timeout = 10000) {
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), timeout);
     return fetch(url, {...options, signal: controller.signal})
       .finally(() => clearTimeout(timer));
+  }
+
+  async function confirmOtaSecurityControlPlane() {
+    if (!otaSecurityConfirmationRequested || otaSecurityConfirmationInFlight ||
+        otaSecurityConfirmed) return;
+    otaSecurityConfirmationInFlight = true;
+    try {
+      const response = await securityFetch("/api/security/ota-confirm", {
+        method: "POST", credentials: "same-origin", cache: "no-store"
+      }, 5000);
+      if (!response.ok) throw new Error("HTTP " + response.status);
+      otaSecurityConfirmed = true;
+      const url = new URL(location.href);
+      url.searchParams.delete("ota");
+      history.replaceState(null, "", url.pathname + url.search + url.hash);
+    } catch (_) {
+      // A later authorized WebSocket message retries while the OTA timeout
+      // remains the authoritative rollback deadline.
+      otaSecurityConfirmationInFlight = false;
+    }
   }
 
   function passwordToggleFor(input) {
@@ -407,7 +432,8 @@ window.VoxOneRestartWaiter = Object.freeze({
     });
     if (!response.ok) throw new Error("HTTP " + response.status);
     const readiness = await response.json();
-    if (readiness?.ready !== true || typeof readiness.bootId !== "string" ||
+    if (typeof readiness?.ready !== "boolean" ||
+        typeof readiness.bootId !== "string" ||
         !readiness.bootId) throw new Error("invalid readiness response");
     return readiness;
   };
@@ -815,8 +841,10 @@ window.VoxOneRestartWaiter = Object.freeze({
   async function waitForUpdateRestart(previousBootId) {
     setUpdateStatus("Aktualizacja zakończona. Restart urządzenia...");
     const result = await updateRestartWaiter.wait({previousBootId});
-    if (result.status === "ready") {
-      location.replace("/voxone.html?updated=" + encodeURIComponent(result.bootId) + "#status");
+    if (result.status === "ready" || result.status === "pending") {
+      const pending = result.status === "pending" ? "&ota=pending" : "";
+      location.replace("/voxone.html?updated=" + encodeURIComponent(result.bootId) +
+        pending + "#status");
       return;
     }
     if (result.status === "cancelled") return;
@@ -963,6 +991,8 @@ window.VoxOneRestartWaiter = Object.freeze({
     const readinessTimeout = setTimeout(() => readinessController.abort(), 2500);
     try {
       readiness = await readDeviceReadiness(readinessController.signal);
+      if (readiness.ready !== true)
+        throw new Error("device already has a pending boot");
     } catch (_) {
       updateBusy = false;
       renderUpdateFiles();
@@ -2543,7 +2573,10 @@ window.VoxOneRestartWaiter = Object.freeze({
       scheduleSystemInfoRefresh();
     };
     ws.onmessage = event => {
-      if (socket === ws) receive(event.data);
+      if (socket === ws) {
+        receive(event.data);
+        confirmOtaSecurityControlPlane();
+      }
     };
     ws.onerror = () => ws.close();
     ws.onclose = () => {

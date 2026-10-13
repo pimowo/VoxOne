@@ -136,7 +136,7 @@ Invoke-Step 'Native tests' {
   $name=$test.BaseName
   $sources=@($test.FullName)
   if($nativeSources.ContainsKey($name)) { $sources+=@($nativeSources[$name] | ForEach-Object { Join-Path $root $_ }) }
-  $variants=if($name -eq 'config_backup_native' -or $name -eq 'hardware_descriptor_native' -or $name -eq 'runtime_hardware_config_native' -or $name -eq 'runtime_hardware_web_native' -or $name -eq 'runtime_display_activation_native') { @('L0','M0','S0','DIN0','W0') } elseif($name -eq 'build_identity_native') { @('','L0','M0','S0','DIN0','W0','CLEAN','DIRTY') } else { @('') }
+  $variants=if($name -eq 'config_backup_native' -or $name -eq 'hardware_descriptor_native' -or $name -eq 'runtime_hardware_config_native' -or $name -eq 'runtime_hardware_web_native' -or $name -eq 'runtime_display_activation_native') { @('L0','M0','S0','DIN0','W0') } elseif($name -eq 'security_http_adapter_native') { @('','L0','M0','S0','DIN0','W0','SECURITY_TEST') } elseif($name -eq 'build_identity_native') { @('','L0','M0','S0','DIN0','W0','CLEAN','DIRTY') } else { @('') }
   foreach($variant in $variants) {
    $label=if($variant) { "$name-$variant" } else { $name }
    $exe=Join-Path $work ($label+$(if($onWindows) { '.exe' } else { '' }))
@@ -144,6 +144,7 @@ Invoke-Step 'Native tests' {
    $compileArgs=@('-std=c++11','-O2','-Wall','-Wextra','-Werror','-Wno-unused-parameter')
    if($variant) {
     if($variant -eq 'CLEAN' -or $variant -eq 'DIRTY') { $compileArgs+="-DBUILD_ID_TEST_$variant=1" }
+    elseif($variant -eq 'SECURITY_TEST') { $compileArgs+=@('-DVOXONE_PROFILE_M0=1','-DVOXONE_SECURITY_HTTP_ENFORCEMENT_TEST=1') }
     else { $compileArgs+="-DVOXONE_PROFILE_$variant=1" }
     $sourcesForVariant=if($name -eq 'config_backup_native' -or $name -eq 'hardware_descriptor_native' -or $name -eq 'runtime_hardware_config_native' -or $name -eq 'runtime_hardware_web_native' -or $name -eq 'runtime_display_activation_native') { $sources+@(Join-Path $root 'src/hardware/hardware_descriptor.cpp') } else { $sources }
    } else { $sourcesForVariant=$sources }

@@ -36,6 +36,7 @@ enum class Failure : uint8_t {
   MarkValid,
   RollbackUnavailable,
   RollbackFailed,
+  SecurityControlPlane,
 };
 
 enum class Action : uint8_t { None, Validate, Rollback };
@@ -48,6 +49,8 @@ struct Evidence {
   bool networkRequired = true;
   bool networkReady = false;
   bool httpApiReady = false;
+  bool securityControlPlaneRequired = false;
+  bool securityControlPlaneReady = false;
   Failure fatalFailure = Failure::None;
 };
 
@@ -81,6 +84,11 @@ class HealthGate {
 
 const char* phaseName(Phase phase);
 const char* failureName(Failure failure);
+bool securityControlPlaneProofMatches(bool proofAvailable,
+                                      uint32_t proofGeneration,
+                                      bool proofProtectedMode,
+                                      uint32_t currentGeneration,
+                                      bool currentProtectedMode);
 
 }  // namespace ota
 }  // namespace voxone

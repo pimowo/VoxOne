@@ -54,6 +54,11 @@ int main() {
 
   assert(contains(server, "formatBootHealthJson"));
   assert(contains(server, "reportHttpApiProbe"));
+  assert(contains(runtime, "reportSecurityWebSocketProbe"));
+  assert(contains(runtime, "confirmSecurityControlPlane"));
+  assert(contains(main, "securityHttpProductionEnforcementEnabled()"));
+  assert(contains(server, "kSecurityOtaConfirmRoute, HTTP_POST"));
+  assert(contains(server, "websocket_confirmation_required"));
   assert(contains(runtime, "VOXONE_OTA_HIL_ROLLBACK_AFTER_PROBE"));
   assert(contains(platform, "[env:m0-ota-rollback-test]"));
   assert(contains(platform, "-DVOXONE_OTA_HIL_ROLLBACK_AFTER_PROBE=1"));
@@ -62,4 +67,5 @@ int main() {
   assert(contains(runtime, "\\\"bootSlot\\\""));
   assert(contains(runtime, "\\\"imageState\\\""));
   assert(contains(runtime, "\\\"lastFailure\\\""));
+  assert(contains(health, "SecurityControlPlane"));
 }

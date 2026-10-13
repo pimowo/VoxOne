@@ -5,7 +5,15 @@
 
 using namespace voxone::ota;
 
-static Evidence healthy(bool networkRequired = true) {
+static_assert(static_cast<uint8_t>(Failure::Timeout) == 8,
+              "persisted OTA failure values must remain compatible");
+static_assert(static_cast<uint8_t>(Failure::RollbackFailed) == 11,
+              "persisted OTA failure values must remain compatible");
+static_assert(static_cast<uint8_t>(Failure::SecurityControlPlane) == 12,
+              "new OTA failure values must be appended");
+
+static Evidence healthy(bool networkRequired = true,
+                        bool securityControlPlaneRequired = false) {
   Evidence evidence;
   evidence.setupComplete = true;
   evidence.configurationReady = true;
@@ -14,6 +22,8 @@ static Evidence healthy(bool networkRequired = true) {
   evidence.networkRequired = networkRequired;
   evidence.networkReady = networkRequired;
   evidence.httpApiReady = networkRequired;
+  evidence.securityControlPlaneRequired = securityControlPlaneRequired;
+  evidence.securityControlPlaneReady = !securityControlPlaneRequired;
   return evidence;
 }
 
@@ -35,6 +45,28 @@ int main() {
   assert(pending.evaluate(evidence, 6000) == Action::Validate);
   assert(pending.snapshot(6000).phase == Phase::Validated);
   assert(pending.evaluate(evidence, 7000) == Action::None);
+
+  // A public readiness probe alone must not validate a production SECURITY
+  // image. No confirming client reaches the existing timeout and rollback.
+  HealthGate securityPending;
+  securityPending.begin(true, true, 0);
+  Evidence publicReady = healthy(true, true);
+  assert(securityPending.evaluate(publicReady, 0) == Action::None);
+  assert(securityPending.snapshot(0).reason ==
+         Failure::SecurityControlPlane);
+  assert(securityPending.evaluate(publicReady, kHealthTimeoutMs) ==
+         Action::Rollback);
+  assert(securityPending.snapshot(kHealthTimeoutMs).reason ==
+         Failure::Timeout);
+
+  HealthGate securityConfirmed;
+  securityConfirmed.begin(true, true, 0);
+  Evidence authenticated = healthy(true, true);
+  authenticated.securityControlPlaneReady = true;
+  assert(securityConfirmed.evaluate(authenticated, 10) == Action::None);
+  assert(securityConfirmed.snapshot(10).phase == Phase::Stabilizing);
+  assert(securityConfirmed.evaluate(authenticated, 10 + kHealthStableMs) ==
+         Action::Validate);
 
   // A transient loss resets the entire stability interval.
   HealthGate transient;
@@ -98,4 +130,10 @@ int main() {
 
   assert(strcmp(phaseName(Phase::Stabilizing), "stabilizing") == 0);
   assert(strcmp(failureName(Failure::DataPartition), "data_partition") == 0);
+  assert(strcmp(failureName(Failure::SecurityControlPlane),
+                "security_control_plane") == 0);
+  assert(!securityControlPlaneProofMatches(false, 9, true, 9, true));
+  assert(!securityControlPlaneProofMatches(true, 8, true, 9, true));
+  assert(!securityControlPlaneProofMatches(true, 9, false, 9, true));
+  assert(securityControlPlaneProofMatches(true, 9, true, 9, true));
 }

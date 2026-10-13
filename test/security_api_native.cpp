@@ -55,9 +55,9 @@ class DeterministicRandom : public SecurityRandomSource {
 };
 
 struct Fixture {
-  Fixture(bool wifiConfigured = true)
+  Fixture(bool wifiConfigured = true, bool protectionEnforced = false)
       : security(storage, random), sessions(security, random),
-        api(security, sessions) {
+        api(security, sessions, protectionEnforced) {
     security.begin(wifiConfigured);
   }
 
@@ -194,6 +194,14 @@ void testStateMachineAndSetup() {
   assert(std::strstr(json, "verifier") == nullptr);
   assert(std::strstr(json, "token") == nullptr);
 
+  Fixture productionProtected(true, true);
+  setup = productionProtected.api.setup("protected", "haslo");
+  assert(setup.httpStatus == 200);
+  state = productionProtected.api.state(nullptr, 4);
+  assert(state.protectionEnforced);
+  assert(securityStateJson(state, json, sizeof(json)));
+  assert(std::strstr(json, "\"protectionEnforced\":true") != nullptr);
+
   Fixture locked;
   locked.storage.readError = true;
   assert(locked.security.begin(true) == SecurityLoadStatus::StorageError);
@@ -257,12 +265,20 @@ void testProductionIntegrationContract() {
   const size_t wifi = network.find("setWifiParams();");
   assert(settings != std::string::npos && sessions != std::string::npos &&
          wifi != std::string::npos && settings < sessions && sessions < wifi);
-  assert(network.find("policy=backend-only") != std::string::npos);
+  assert(network.find("securityHttpProductionEnforcementEnabled()") !=
+         std::string::npos);
+  assert(network.find("? \"production\"") != std::string::npos);
+  assert(network.find("? \"test\"") != std::string::npos);
+  assert(network.find(": \"backend-only\"") != std::string::npos);
+  assert(server.find("securityHttpProductionEnforcementEnabled())") !=
+         std::string::npos);
 
   assert(server.find("kSecurityStateRoute, HTTP_GET") != std::string::npos);
   assert(server.find("kSecuritySetupRoute, HTTP_POST") != std::string::npos);
   assert(server.find("kSecurityLoginRoute, HTTP_POST") != std::string::npos);
   assert(server.find("kSecurityLogoutRoute, HTTP_POST") != std::string::npos);
+  assert(server.find("kSecurityOtaConfirmRoute, HTTP_POST") !=
+         std::string::npos);
   assert(server.find("HttpOnly; SameSite=Strict; Max-Age=86400") !=
          std::string::npos);
   assert(server.find("Secure; Max-Age=86400") == std::string::npos);

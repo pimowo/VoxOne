@@ -48,6 +48,7 @@ trasy i metody; nieznana trasa kończy się `404`, znana trasa ze złą metodą
 | `GET /api/ready` | Publiczna diagnostyka: `ready`, losowy dla bootu `bootId` oraz obiekt `ota`. Sam HTTP 200 nie oznacza akceptacji obrazu `PENDING_VERIFY`, jeżeli `ready=false`. |
 | `GET /api/security/state` | Publiczny stan bootstrapu SECURITY; zawiera `state`, `setupAllowed`, `loginAllowed`, `authenticated`, `protectionEnforced`. |
 | `POST /api/security/setup`, `/login`, `/logout` | Formularz security setup/login/logout; Host i same-origin są walidowane. Setup jest dozwolony tylko dla `legacy-unclaimed`. |
+| `POST /api/security/ota-confirm` | Jawne, same-origin potwierdzenie control plane dla oczekującego produkcyjnego obrazu SECURITY. W `protected` wymaga ważnej sesji administratora, a w `open` świadomie wybranego trybu OPEN; w obu trybach wcześniej musi przejść dozwolona ramka WebSocket z tej samej generation. |
 | `GET /api/stations`, `/api/directory/search`, `/api/stations/export` | Odczyt stacji, Radio Directory i eksport. |
 | `POST /api/stations/import`, `/add`, `/edit`, `/delete`, `/reorder`, `/metadata` | Mutacje listy stacji. Import jest uploadem multipart i ma osobną walidację formatu. |
 | `GET/POST /api/mqtt` | Odczyt i zapis bieżącej konfiguracji MQTT. API nigdy nie zwraca zapisanego hasła; raportuje jedynie, czy hasło istnieje. |
@@ -90,10 +91,14 @@ Akceptacja `hostname.local` przez politykę Host nie gwarantuje obecnie
 rozwiązywania tej nazwy: publikowanie mDNS nie jest aktywne w bieżącej ścieżce
 startowej firmware.
 
-Bieżący stan produkcyjny pozostaje observe-only: zwykłe profile mają
-`VOXONE_SECURITY_HTTP_ENFORCEMENT=0`, a API raportuje
-`protectionEnforced=false`. Tylko `m0-security-test` włącza testową bramkę.
-Produkcji nie wolno włączyć przed HIL PBKDF2, HTTP/WS, migracji i recovery.
+`SECURITY-PRODUCTION-PREP-1` definiuje docelową aktywację dla W0, M0, L0, S0
+i DIN0: bramka HTTP/WS jest wtedy włączona, a API raportuje
+`protectionEnforced=true`. Profil `m0-security-test` nadal używa wyłącznie
+flagi testowej, egzekwuje tę samą politykę, ale raportuje
+`protectionEnforced=false`, więc HIL nie może zostać pomylony z aktywacją
+produkcyjną. Sam software PASS nie zezwala na wdrożenie: wariant produkcyjny
+wolno przenieść na `main` dopiero po HIL PBKDF2, HTTP/WS, migracji, Web Update
+i recovery.
 MQTT zachowuje osobną politykę i nie korzysta z cookie HTTP.
 
 ## WebSocket
@@ -183,6 +188,39 @@ Timeout wynosi 180 s. Błąd krytyczny powoduje żądanie rollbacku; powód jest
 zapisywany w NVS. `/api/ready.ota` zawiera `runningSlot`, `bootSlot`,
 `imageState`, `pending`, `rollbackAvailable`, `health`, `reason`,
 `lastFailure` i `elapsedMs`.
+
+Gdy aktywna jest produkcyjna flaga SECURITY, anonimowe `/api/ready` potwierdza
+wyłącznie osiągalność HTTP i nie może samodzielnie zatwierdzić obrazu. Health
+gate dodatkowo czeka na dozwoloną ramkę autoryzowanego WebSocket oraz
+`POST /api/security/ota-confirm` dla tej samej generation i trybu. W
+`protected` sesje są tworzone od nowa po restarcie, dlatego potwierdzenie
+wymaga udanego logowania; w `open` aktualny WWW wykonuje jawną ścieżkę POST po
+pierwszej odpowiedzi WS. Brak klienta, stary WWW bez tej ścieżki, zmiana trybu
+lub generation i brak działającego logowania pozostawiają obraz
+`PENDING_VERIFY`; po 180 s następuje rollback zamiast utrwalenia niedostępnego
+firmware. Standardowy OTA bez produkcyjnej flagi SECURITY zachowuje poprzednią
+bramkę HTTP.
+
+Kontrolowana aktywacja produkcyjna wymaga wcześniej PASS SECURITY HIL i OTA
+HIL dla danego profilu. Przed MAIN należy wgrać i sprawdzić odpowiadający mu
+bieżący SPIFFS, uzbroić UART, potwierdzić poprzedni slot `VALID` i pozytywny
+preflight rollbacku. Po MAIN trzeba zaobserwować nowy `bootId`,
+`ready=false` oraz `reason=security_control_plane`, następnie:
+
+1. w `protected` zalogować się od nowa, a w `open` jawnie wejść do bieżącego
+   panelu;
+2. potwierdzić chronioną trasę, poprawny handshake i odpowiedź WebSocket;
+3. wykonać same-origin `POST /api/security/ota-confirm` i dopiero potem
+   oczekiwać `ready=true`, `imageState=valid` oraz niezmienionego `bootId`;
+4. w osobnym scenariuszu nie uruchamiać klienta potwierdzającego i sprawdzić
+   automatyczny rollback, poprzedni slot/bootId oraz `lastFailure=timeout`.
+
+Brak któregokolwiek dowodu, utrata WWW/logowania albo rozbieżność slotu jest
+FAIL. Nie należy wtedy resetować urządzenia ani ponawiać OTA: trzeba pozwolić
+na rollback, sprawdzić dostęp do poprzedniego obrazu i zachować log UART.
+Starego SPIFFS nie wolno uznać za zgodny na podstawie samej obecności plików;
+jeżeli nie potrafi doprowadzić do potwierdzenia, bezpiecznym wynikiem jest
+timeout i rollback, nie ręczne oznaczenie obrazu jako `VALID`.
 
 Software checkpoint OTA ma PASS, lecz całość pozostaje HIL PENDING. Obecny
 zachowany runtime M0 pochodzi sprzed tego checkpointu i nie jest dowodem

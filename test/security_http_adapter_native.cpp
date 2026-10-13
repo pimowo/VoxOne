@@ -312,6 +312,21 @@ void testPublicReadinessAndFailClosedPaths() {
   decision = evaluateSecurityHttpRequest(badHost, true, false);
   assert(!decision.allowed && decision.httpStatus == 403);
 
+  SecurityAccessRequest otaConfirm = request(
+      SecurityState::Open, SecurityAccessMethod::Post,
+      "/api/security/ota-confirm");
+  decision = evaluateSecurityHttpRequest(otaConfirm, true, false);
+  assert(decision.allowed);
+  otaConfirm.state = SecurityState::Protected;
+  decision = evaluateSecurityHttpRequest(otaConfirm, true, false);
+  assert(!decision.allowed && decision.httpStatus == 401);
+  otaConfirm.sessionValid = true;
+  decision = evaluateSecurityHttpRequest(otaConfirm, true, false);
+  assert(decision.allowed);
+  otaConfirm.state = SecurityState::LegacyUnclaimed;
+  decision = evaluateSecurityHttpRequest(otaConfirm, true, false);
+  assert(!decision.allowed && decision.httpStatus == 403);
+
   SecurityAccessRequest directGzip = request(
       SecurityState::Open, SecurityAccessMethod::Get, "/voxone.js.gz");
   decision = evaluateSecurityHttpRequest(directGzip, true, false);
@@ -452,6 +467,21 @@ void testProtectedRecoveryLoginSelection() {
   decision = evaluateSecurityHttpRequest(update, true, false);
   assert(decision.allowed);
 
+  // A complete but legacy SPIFFS bundle may not render the current login UI.
+  // The firmware API must still permit a same-origin login, after which the
+  // authenticated update endpoint can replace that bundle without erasing
+  // configuration or weakening the protected policy.
+  SecurityAccessRequest legacyFrontendLogin = request(
+      SecurityState::Protected, SecurityAccessMethod::Post,
+      "/api/security/login");
+  decision = evaluateSecurityHttpRequest(legacyFrontendLogin, true, false);
+  assert(decision.allowed);
+  legacyFrontendLogin.originPresent = false;
+  legacyFrontendLogin.originValid = false;
+  decision = evaluateSecurityHttpRequest(legacyFrontendLogin, true, false);
+  assert(!decision.allowed &&
+         decision.status == SecurityAccessStatus::InvalidOrigin);
+
   const std::string server = readFile("src/core/netserver.cpp");
   const std::string header = readFile("src/core/netserver.h");
   assert(server.find("securityRecoveryLoginRequired()") != std::string::npos);
@@ -468,13 +498,21 @@ void testProtectedRecoveryLoginSelection() {
 }
 
 void testBuildSwitchIsMonotonic() {
-#if VOXONE_SECURITY_HTTP_ENFORCEMENT || \
-    VOXONE_SECURITY_HTTP_ENFORCEMENT_TEST
+#if VOXONE_SECURITY_HTTP_ENFORCEMENT
+  static_assert(securityHttpProductionEnforcementEnabled(),
+                "production build must advertise production enforcement");
   static_assert(securityHttpEnforcementEnabled(),
-                "enabled build must enforce HTTP policy");
+                "production build must enforce HTTP policy");
+#else
+  static_assert(!securityHttpProductionEnforcementEnabled(),
+                "non-production build must not advertise production enforcement");
+#if VOXONE_SECURITY_HTTP_ENFORCEMENT_TEST
+  static_assert(securityHttpEnforcementEnabled(),
+                "test build must enforce HTTP policy");
 #else
   static_assert(!securityHttpEnforcementEnabled(),
-                "ordinary build must remain disabled in 1B");
+                "unscoped native build must keep enforcement disabled");
+#endif
 #endif
   const std::string platform = readFile("platformio.ini");
   assert(platform.find("[env:m0-security-test]") != std::string::npos);
