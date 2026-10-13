@@ -97,7 +97,7 @@ const EndpointCase kEndpoints[] = {
     {SecurityAccessMethod::Post, "/api/time/sync", SecurityEndpoint::TimeSync,
      SecurityRouteClass::ProtectedRest, true, false},
     {SecurityAccessMethod::Get, "/api/ready", SecurityEndpoint::Ready,
-     SecurityRouteClass::ProtectedRest, false, false},
+     SecurityRouteClass::PublicBootstrap, false, false},
     {SecurityAccessMethod::Get, "/api/bt/update", SecurityEndpoint::BtUpdateStatus,
      SecurityRouteClass::ProtectedRest, false, false},
     {SecurityAccessMethod::Get, "/api/dsp/state", SecurityEndpoint::DspState,
@@ -503,8 +503,7 @@ void testProvisioningMigrationRecoveryAndOtaRestart() {
   assert(evaluateSecurityAccess(update) == SecurityAccessStatus::Allowed);
   SecurityAccessRequest afterRestart = request(
       SecurityState::Protected, SecurityAccessMethod::Get, "/api/ready");
-  assert(evaluateSecurityAccess(afterRestart) ==
-         SecurityAccessStatus::AuthenticationRequired);
+  assert(evaluateSecurityAccess(afterRestart) == SecurityAccessStatus::Allowed);
   SecurityAccessRequest login = request(
       SecurityState::Protected, SecurityAccessMethod::Post,
       "/api/security/login");
@@ -557,7 +556,7 @@ void testFailClosedUnknownAndMethodMismatch() {
   }
 }
 
-void testProductionInventoryAndObserveOnlyIsolation() {
+void testProductionInventoryAndHttpOnlyIntegration() {
   const std::string server = readFile("src/core/netserver.cpp");
   const std::string api = readFile("src/core/security_api.cpp");
   const std::string policy = readFile("src/core/security_access_policy.cpp");
@@ -579,9 +578,19 @@ void testProductionInventoryAndObserveOnlyIsolation() {
   for (const char* registration : registrations)
     assert(server.find(registration) != std::string::npos);
 
-  // SECURITY-ENFORCE-1A deliberately prepares policy without changing runtime.
-  assert(server.find("security_access_policy.h") == std::string::npos);
-  assert(server.find("evaluateSecurityAccess(") == std::string::npos);
+  const size_t accessGate =
+      server.find("webserver.addHandler(new SecurityHttpAccessGate())");
+  const size_t updateGuard =
+      server.find("webserver.addHandler(new WebUpdateRequestGuard())");
+  assert(accessGate != std::string::npos && updateGuard != std::string::npos &&
+         accessGate < updateGuard);
+  assert(server.find("security_http_adapter.h") != std::string::npos);
+  assert(server.find("request->requestedConnType() == RCT_WS") !=
+         std::string::npos);
+  assert(server.find("securityHttpWebSocketDeferred(") !=
+         std::string::npos);
+  assert(server.find("securityRecoveryLoginRequired()") !=
+         std::string::npos);
   assert(api.find("protectionEnforced, true") == std::string::npos);
   // ArduinoOTA is a separate, compile-time service rather than an HTTP
   // route. It must remain disabled until it can follow the same access
@@ -603,6 +612,6 @@ int main() {
   testProtectedOpenAndLockedPolicy();
   testProvisioningMigrationRecoveryAndOtaRestart();
   testFailClosedUnknownAndMethodMismatch();
-  testProductionInventoryAndObserveOnlyIsolation();
+  testProductionInventoryAndHttpOnlyIntegration();
   return 0;
 }

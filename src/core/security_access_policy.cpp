@@ -117,7 +117,7 @@ const SecurityRouteRule kRouteRules[] = {
     {SecurityAccessMethod::Post, "/api/time/sync", SecurityEndpoint::TimeSync,
      SecurityRouteClass::ProtectedRest, true, false},
     {SecurityAccessMethod::Get, "/api/ready", SecurityEndpoint::Ready,
-     SecurityRouteClass::ProtectedRest, false, false},
+     SecurityRouteClass::PublicBootstrap, false, false},
     {SecurityAccessMethod::Get, "/api/bt/update",
      SecurityEndpoint::BtUpdateStatus, SecurityRouteClass::ProtectedRest,
      false, false},

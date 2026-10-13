@@ -64,6 +64,43 @@ if(typeof voxOneVersion !== 'undefined') document.getElementById('version').text
 </body>
 </html>
 )";
+const char security_recovery_login[] PROGMEM = R"VOXONE_RECOVERY(
+<!doctype html>
+<html lang="pl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="theme-color" content="#0b121b"><title>VoxOne — logowanie awaryjne</title>
+<style>:root{color-scheme:dark}*{box-sizing:border-box}body{margin:0;min-height:100vh;padding:24px;background:#0b121b;color:#edf5fa;font:16px/1.5 system-ui,sans-serif;display:flex}main{width:100%;max-width:480px;margin:auto}h1{margin:0;color:#71d8e8;font-size:2.4rem}.card{padding:24px;margin:20px 0;border:1px solid #314456;border-radius:15px;background:#151f2b}p{color:#a2b5c5}label,input,button{display:block;width:100%}label{margin:16px 0 6px;font-weight:600}input{padding:12px;border:1px solid #314456;border-radius:10px;background:#1b2937;color:#edf5fa;font:inherit}input:focus-visible,button:focus-visible{outline:2px solid #71d8e8;outline-offset:2px}button{min-height:46px;margin-top:22px;padding:13px;border:1px solid #71d8e8;border-radius:10px;background:#173f4b;color:#edf5fa;font:650 1rem system-ui,sans-serif;cursor:pointer}button:disabled{opacity:.65;cursor:wait}.message{min-height:1.5em;margin:14px 0 0;color:#ffb4ab}@media(max-width:480px){.card{padding:20px}h1{font-size:2rem}}</style>
+</head><body><main><h1>VoxOne</h1><section class="card"><h2>Logowanie awaryjne</h2>
+<p>Pliki WWW są niedostępne. Zaloguj się, aby otworzyć wbudowany aktualizator.</p>
+<form id="recovery-login"><label for="recovery-password">Hasło</label>
+<input id="recovery-password" name="password" type="password" autocomplete="current-password" required autofocus>
+<button id="recovery-submit" type="submit">Zaloguj</button><p id="recovery-message" class="message" role="alert" aria-live="polite"></p></form>
+</section></main><script>
+(function(){
+  'use strict';
+  var form=document.getElementById('recovery-login');
+  var password=document.getElementById('recovery-password');
+  var submit=document.getElementById('recovery-submit');
+  var message=document.getElementById('recovery-message');
+  function show(text){message.textContent=text}
+  form.addEventListener('submit',async function(event){
+    event.preventDefault();
+    submit.disabled=true;show('Logowanie…');
+    var body=new URLSearchParams();body.set('password',password.value);password.value='';
+    try{
+      var response=await fetch('/api/security/login',{method:'POST',credentials:'same-origin',cache:'no-store',headers:{'Content-Type':'application/x-www-form-urlencoded'},body:body.toString()});
+      if(response.status===401){show('Nieprawidłowe hasło.');return}
+      if(response.status===429){var seconds=parseInt(response.headers.get('Retry-After')||'60',10);show('Zbyt wiele prób. Spróbuj ponownie za '+(Number.isFinite(seconds)?seconds:60)+' s.');return}
+      if(!response.ok){show('Logowanie nie powiodło się.');return}
+      var stateResponse=await fetch('/api/security/state',{credentials:'same-origin',cache:'no-store'});
+      var state=stateResponse.ok?await stateResponse.json():null;
+      if(!state||state.state!=='protected'||state.authenticated!==true){show('Nie udało się potwierdzić sesji.');return}
+      window.location.replace('/emergency');
+    }catch(error){show('Brak połączenia z urządzeniem.')}
+    finally{password.value='';submit.disabled=false}
+  });
+})();
+</script></body></html>
+)VOXONE_RECOVERY";
 const char emergency_form[] PROGMEM = R"(
 <!doctype html>
 <html lang="pl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">

@@ -42,6 +42,11 @@ SecurityRequestStatus validateSecurityFormRequest(
 SecurityRequestStatus validateSecurityActionRequest(
     const SecurityRequestContext& request);
 
+// Shared Host/Origin primitives for the central HTTP adapter. They use the
+// same normalization and DNS-rebinding rules as the bootstrap Security API.
+bool securityRequestHostAllowed(const SecurityRequestContext& request);
+bool securityRequestOriginAllowed(const SecurityRequestContext& request);
+
 bool securitySessionTokenFromCookie(
     const char* cookieHeader,
     char token[kSecuritySessionTokenBufferSize]);

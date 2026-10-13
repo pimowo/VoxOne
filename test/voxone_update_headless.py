@@ -487,6 +487,22 @@ setTimeout(async () => {
     restartResult = await deterministicWaiter([{ready:true, bootId:'fast-new-boot'}]);
     check(restartResult.status === 'ready' && restartResult.bootId === 'fast-new-boot',
       'fast restart succeeds without requiring a sampled outage');
+    window.deviceReadinessBootId = 'post-ota-boot';
+    window.securityServerState = {
+      state:'protected', setupAllowed:false, loginAllowed:true,
+      authenticated:false, protectionEnforced:false
+    };
+    const postOtaReady = await (await fetch('/api/ready?update=post-ota')).json();
+    check(postOtaReady.ready === true && postOtaReady.bootId === 'post-ota-boot',
+      'public readiness reports new boot after OTA session loss');
+    await VoxOneSecurityUi.refresh();
+    check(!get('security-login-form').hidden && get('app-shell').hidden,
+      'post-OTA session loss returns protected UI to login');
+    window.securityServerState = {
+      state:'open', setupAllowed:false, loginAllowed:false,
+      authenticated:false, protectionEnforced:false
+    };
+    await VoxOneSecurityUi.refresh();
     restartResult = await deterministicWaiter([], 1000);
     check(restartResult.status === 'timeout', 'unchanged HTTP readiness cannot report success');
     restartResult = await deterministicWaiter([
@@ -919,6 +935,102 @@ setTimeout(async () => {
 </script>
 """
 
+RECOVERY_MOCK = r"""
+<script>
+window.recoveryLoginResponses = [];
+window.recoveryStateResponses = [];
+window.recoveryRequests = [];
+window.recoveryRedirect = '';
+window.recoveryResponse = (status, body = {}, headers = {}) => ({
+  ok:status >= 200 && status < 300, status,
+  headers:{get:name => headers[name] || headers[name.toLowerCase()] || null},
+  json:() => Promise.resolve(body)
+});
+window.fetch = (url, options = {}) => {
+  window.recoveryRequests.push({url, options});
+  const queue = url === '/api/security/login'
+    ? window.recoveryLoginResponses : window.recoveryStateResponses;
+  const prepared = queue.shift();
+  if (prepared instanceof Error) return Promise.reject(prepared);
+  return Promise.resolve(prepared || window.recoveryResponse(500));
+};
+</script>
+"""
+
+RECOVERY_CHECK = r"""
+<output id="recovery-headless-result">PENDING</output>
+<script>
+const recoveryCheck = (condition, message) => {
+  if (!condition) throw new Error(message);
+};
+const recoverySettle = async () => {
+  await new Promise(resolve => setTimeout(resolve, 0));
+  await new Promise(resolve => setTimeout(resolve, 0));
+};
+setTimeout(async () => {
+  const output = document.getElementById('recovery-headless-result');
+  try {
+    const form = document.getElementById('recovery-login');
+    const password = document.getElementById('recovery-password');
+    const message = document.getElementById('recovery-message');
+    recoveryCheck(form.querySelectorAll('input').length === 1 &&
+      password.type === 'password', 'recovery login must contain only password');
+
+    recoveryLoginResponses.push(recoveryResponse(401));
+    password.value = 'wrong-secret';
+    form.dispatchEvent(new Event('submit', {bubbles:true,cancelable:true}));
+    await recoverySettle();
+    recoveryCheck(message.textContent === 'Nieprawidłowe hasło.' &&
+      password.value === '', '401 must clear password and show an error');
+    const rejected = recoveryRequests.at(-1);
+    recoveryCheck(rejected.url === '/api/security/login' &&
+      rejected.options.method === 'POST' &&
+      rejected.options.credentials === 'same-origin' &&
+      rejected.options.headers['Content-Type'] ===
+        'application/x-www-form-urlencoded' &&
+      new URLSearchParams(rejected.options.body).get('password') ===
+        'wrong-secret', 'recovery login must use the existing form API');
+
+    recoveryLoginResponses.push(recoveryResponse(429, {}, {'Retry-After':'17'}));
+    password.value = 'rate-limited';
+    form.dispatchEvent(new Event('submit', {bubbles:true,cancelable:true}));
+    await recoverySettle();
+    recoveryCheck(message.textContent.includes('17 s') && password.value === '',
+      '429 must show retry time and clear password');
+
+    recoveryLoginResponses.push(new Error('offline'));
+    password.value = 'network-error';
+    form.dispatchEvent(new Event('submit', {bubbles:true,cancelable:true}));
+    await recoverySettle();
+    recoveryCheck(message.textContent === 'Brak połączenia z urządzeniem.' &&
+      password.value === '', 'network failure must be reported');
+
+    recoveryLoginResponses.push(recoveryResponse(200, {ok:true}));
+    recoveryStateResponses.push(recoveryResponse(200, {
+      state:'protected', authenticated:false
+    }));
+    password.value = 'valid-but-unconfirmed';
+    form.dispatchEvent(new Event('submit', {bubbles:true,cancelable:true}));
+    await recoverySettle();
+    recoveryCheck(recoveryRedirect === '' &&
+      message.textContent === 'Nie udało się potwierdzić sesji.',
+      'login response alone must not open recovery');
+
+    recoveryLoginResponses.push(recoveryResponse(200, {ok:true}));
+    recoveryStateResponses.push(recoveryResponse(200, {
+      state:'protected', authenticated:true
+    }));
+    password.value = 'valid-secret';
+    form.dispatchEvent(new Event('submit', {bubbles:true,cancelable:true}));
+    await recoverySettle();
+    recoveryCheck(recoveryRedirect === '/emergency' && password.value === '',
+      'confirmed session must enter embedded updater');
+    output.textContent = 'PASS';
+  } catch (error) { output.textContent = 'FAIL: ' + error.message; }
+}, 0);
+</script>
+"""
+
 
 def main():
     chrome = resolve_chrome()
@@ -927,6 +1039,13 @@ def main():
     route = (ROOT / "src/core/netserver.cpp").read_text(encoding="utf-8")
     access_policy = (ROOT / "src/core/security_access_policy.cpp").read_text(
         encoding="utf-8")
+    http_adapter = (ROOT / "src/core/security_http_adapter.cpp").read_text(
+        encoding="utf-8")
+    http_adapter_header = (ROOT / "src/core/security_http_adapter.h").read_text(
+        encoding="utf-8")
+    netserver_header = (ROOT / "src/core/netserver.h").read_text(
+        encoding="utf-8")
+    platformio = (ROOT / "platformio.ini").read_text(encoding="utf-8")
     assert '"/voxone.html"' in access_policy and \
            'SecurityRouteClass::PublicBootstrap' in access_policy, \
         "login bootstrap assets must remain public in the prepared policy"
@@ -953,13 +1072,45 @@ def main():
     assert "RejectedDirectCompressedAsset" in access_policy and \
            "DirectCompressedAssetDenied" in access_policy, \
         "direct compressed asset URLs must have an explicit deny policy"
-    for protected_path in ("/variables.js", "/api/ready", "/api/stations",
-                           "/ws", "/update", "/update/bt"):
+    for protected_path in ("/variables.js", "/api/stations", "/ws",
+                           "/update", "/update/bt"):
         assert f'"{protected_path}"' in access_policy, \
             f"security policy inventory missing {protected_path}"
-    assert "security_access_policy.h" not in route and \
-           "evaluateSecurityAccess(" not in route, \
-        "SECURITY-ENFORCE-1A must not activate route enforcement"
+    ready_rule = re.search(
+        r'"/api/ready"\s*,\s*SecurityEndpoint::Ready\s*,\s*'
+        r'SecurityRouteClass::PublicBootstrap', access_policy)
+    assert ready_rule, \
+        "/api/ready must remain a minimal public restart probe"
+    gate_index = route.find("webserver.addHandler(new SecurityHttpAccessGate())")
+    update_guard_index = route.find("webserver.addHandler(new WebUpdateRequestGuard())")
+    first_route_index = route.find('webserver.on("/", HTTP_ANY')
+    assert -1 < gate_index < update_guard_index < first_route_index, \
+        "security HTTP gate must precede update guard and every route"
+    assert "websocketRequest" in http_adapter and \
+           "websocketDeferred" in http_adapter_header, \
+        "SECURITY-ENFORCE-1B must explicitly defer WebSocket enforcement"
+    assert "VOXONE_SECURITY_HTTP_ENFORCEMENT 0" in http_adapter_header and \
+           "VOXONE_SECURITY_HTTP_ENFORCEMENT_TEST 0" in http_adapter_header, \
+        "ordinary builds must keep HTTP enforcement disabled"
+    assert "[env:m0-security-test]" in platformio and \
+           "-DVOXONE_SECURITY_HTTP_ENFORCEMENT_TEST=1" in platformio, \
+        "dedicated M0 enforcement test profile is missing"
+    recovery_match = re.search(
+        r'const char security_recovery_login\[\] PROGMEM = '
+        r'R"VOXONE_RECOVERY\((.*?)\)VOXONE_RECOVERY";',
+        netserver_header, re.S)
+    assert recovery_match, "embedded recovery login page is missing"
+    recovery_html = recovery_match.group(1)
+    assert len(re.findall(r'<input\b', recovery_html)) == 1 and \
+           'type="password"' in recovery_html, \
+        "embedded recovery login must contain only a password input"
+    assert '<script src=' not in recovery_html and \
+           'https://' not in recovery_html and 'http://' not in recovery_html, \
+        "embedded recovery login must not use external assets"
+    assert "fetch('/api/security/login'" in recovery_html and \
+           "fetch('/api/security/state'" in recovery_html and \
+           "window.location.replace('/emergency')" in recovery_html, \
+        "embedded recovery login must confirm the cookie session before recovery"
     assert re.search(r'webserver\.on\("/favicon\.ico", HTTP_GET,.*?'
                      r'request->redirect\("/voxone-logo\.svg"\);', route, re.S), \
         "favicon.ico must redirect to the existing logo"
@@ -976,6 +1127,13 @@ def main():
     html = html.replace("</body>", '<output id="headless-result">PENDING</output>' +
                         "".join("<script>" + script + "</script>" for script in scripts) +
                         CHECK + "</body>")
+    recovery_test_html = recovery_html.replace(
+        "window.location.replace('/emergency')",
+        "window.recoveryRedirect='/emergency'")
+    recovery_test_html = recovery_test_html.replace(
+        "</head>", RECOVERY_MOCK + "</head>", 1)
+    recovery_test_html = recovery_test_html.replace(
+        "</body>", RECOVERY_CHECK + "</body>", 1)
     with tempfile.TemporaryDirectory(prefix="voxone-web-test-", ignore_cleanup_errors=True) as temporary:
         page = Path(temporary) / "test.html"
         page.write_text(html, encoding="utf-8")
@@ -987,11 +1145,34 @@ def main():
                    "--virtual-time-budget=2500", "--dump-dom", page.as_uri()]
         result = subprocess.run(command, capture_output=True, text=True,
                                 encoding="utf-8", errors="replace", timeout=30)
+        recovery_page = Path(temporary) / "recovery-test.html"
+        recovery_page.write_text(recovery_test_html, encoding="utf-8")
+        recovery_command = [
+            str(chrome), "--headless", "--disable-gpu",
+            "--disable-gpu-compositing",
+            "--disable-features=Vulkan,UseSkiaRenderer,CanvasOopRasterization",
+            "--disable-extensions", "--no-first-run",
+            "--no-default-browser-check", "--allow-file-access-from-files",
+            "--user-data-dir=" + str(Path(temporary) / "recovery-profile"),
+            "--virtual-time-budget=1500", "--dump-dom", recovery_page.as_uri()
+        ]
+        recovery_result = subprocess.run(
+            recovery_command, capture_output=True, text=True,
+            encoding="utf-8", errors="replace", timeout=30)
     match = re.search(r'<output id="headless-result">([^<]+)</output>', result.stdout)
     outcome = match.group(1) if match else "FAIL: Chrome did not return the test result"
     print(outcome)
     if outcome != "PASS":
         print(result.stderr[-2000:])
+        raise SystemExit(1)
+    recovery_match = re.search(
+        r'<output id="recovery-headless-result">([^<]+)</output>',
+        recovery_result.stdout)
+    recovery_outcome = recovery_match.group(1) if recovery_match else \
+        "FAIL: Chrome did not return the recovery result"
+    print("Recovery " + recovery_outcome)
+    if recovery_outcome != "PASS":
+        print(recovery_result.stderr[-2000:])
         raise SystemExit(1)
 
 

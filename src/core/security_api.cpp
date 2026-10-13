@@ -132,14 +132,16 @@ bool lowerHexToken(const char* token) {
 
 SecurityRequestStatus validateSecurityReadRequest(
     const SecurityRequestContext& request) {
-  return allowedHost(request) ? SecurityRequestStatus::Allowed
-                              : SecurityRequestStatus::InvalidHost;
+  return securityRequestHostAllowed(request) ? SecurityRequestStatus::Allowed
+                                             : SecurityRequestStatus::InvalidHost;
 }
 
 SecurityRequestStatus validateSecurityFormRequest(
     const SecurityRequestContext& request) {
-  if (!allowedHost(request)) return SecurityRequestStatus::InvalidHost;
-  if (!sameOrigin(request)) return SecurityRequestStatus::InvalidOrigin;
+  if (!securityRequestHostAllowed(request))
+    return SecurityRequestStatus::InvalidHost;
+  if (!securityRequestOriginAllowed(request))
+    return SecurityRequestStatus::InvalidOrigin;
   if (!request.contentLength) return SecurityRequestStatus::BodyRequired;
   if (request.contentLength > kSecurityMaxRequestBodyBytes)
     return SecurityRequestStatus::BodyTooLarge;
@@ -150,10 +152,20 @@ SecurityRequestStatus validateSecurityFormRequest(
 
 SecurityRequestStatus validateSecurityActionRequest(
     const SecurityRequestContext& request) {
-  if (!allowedHost(request)) return SecurityRequestStatus::InvalidHost;
-  if (!sameOrigin(request)) return SecurityRequestStatus::InvalidOrigin;
+  if (!securityRequestHostAllowed(request))
+    return SecurityRequestStatus::InvalidHost;
+  if (!securityRequestOriginAllowed(request))
+    return SecurityRequestStatus::InvalidOrigin;
   return request.contentLength == 0 ? SecurityRequestStatus::Allowed
                                     : SecurityRequestStatus::BodyTooLarge;
+}
+
+bool securityRequestHostAllowed(const SecurityRequestContext& request) {
+  return allowedHost(request);
+}
+
+bool securityRequestOriginAllowed(const SecurityRequestContext& request) {
+  return sameOrigin(request);
 }
 
 bool securitySessionTokenFromCookie(

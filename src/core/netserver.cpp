@@ -63,6 +63,7 @@
 #include "ui_state.h"
 #include "rtcsupport.h"
 #include "security_api.h"
+#include "security_http_adapter.h"
 #include "../displays/dspcore.h"
 #include "../displays/widgets/widgetsconfig.h" //BitrateFormat
 
@@ -214,14 +215,96 @@ bool recoverFilesystemAfterFailedUpdate(bool required) {
   return webUpdateStorageReadyAfterFailure(true, true, true);
 }
 
-class WebUpdateRequestGuard : public AsyncWebHandler {
-public:
+voxone::security::SecurityHttpDecision authorizeHttpRequest(
+    AsyncWebServerRequest* request);
+voxone::security::SecurityAccessMethod securityAccessMethod(
+    WebRequestMethodComposite method);
+
+bool securityRecoveryLoginRequired() {
+  using namespace voxone::security;
+  return securityHttpRecoveryLoginRequired(
+      securityHttpEnforcementEnabled(), deviceSecurityService().state(),
+      config.currentWwwReady, systemOperationState.filesystemUnavailable());
+}
+
+void sendSecurityRecoveryLogin(AsyncWebServerRequest* request) {
+  AsyncWebServerResponse* response = request->beginResponse_P(
+      200, "text/html; charset=utf-8", security_recovery_login);
+  response->addHeader("Cache-Control", "no-store, max-age=0");
+  response->addHeader("X-Content-Type-Options", "nosniff");
+  response->addHeader("Referrer-Policy", "no-referrer");
+  request->send(response);
+}
+
+struct SecurityHttpDeniedRequest {
+  voxone::security::SecurityAccessStatus status;
+  uint16_t httpStatus;
+};
+
+class SecurityHttpAccessGate : public AsyncWebHandler {
+ public:
   bool canHandle(AsyncWebServerRequest* request) override {
-    return systemOperationState.blocksRequests() &&
-           !(request->method() == HTTP_POST && request->url() == "/update");
+    const auto decision = authorizeHttpRequest(request);
+    if (decision.allowed) return false;
+    auto* denied = static_cast<SecurityHttpDeniedRequest*>(
+        std::malloc(sizeof(SecurityHttpDeniedRequest)));
+    if (denied) {
+      denied->status = decision.status;
+      denied->httpStatus = decision.httpStatus;
+    }
+    request->_tempObject = denied;
+    return true;
   }
 
   void handleRequest(AsyncWebServerRequest* request) override {
+    using voxone::security::SecurityAccessStatus;
+    auto* denied = static_cast<SecurityHttpDeniedRequest*>(
+        request->_tempObject);
+    const SecurityAccessStatus status = denied
+        ? denied->status : SecurityAccessStatus::Locked;
+    const uint16_t httpStatus = denied ? denied->httpStatus : 500;
+    std::free(denied);
+    request->_tempObject = nullptr;
+
+    const char* error = "request_rejected";
+    if (status == SecurityAccessStatus::AuthenticationRequired)
+      error = "authentication_required";
+    else if (status == SecurityAccessStatus::MethodNotAllowed)
+      error = "method_not_allowed";
+    else if (status == SecurityAccessStatus::UnknownRoute)
+      error = "not_found";
+
+    char body[64];
+    std::snprintf(body, sizeof(body), R"({"error":"%s"})", error);
+    AsyncWebServerResponse* response = request->beginResponse(
+        httpStatus, "application/json; charset=utf-8", body);
+    response->addHeader("Cache-Control", "no-store, max-age=0");
+    response->addHeader("X-Content-Type-Options", "nosniff");
+    response->addHeader("Referrer-Policy", "no-referrer");
+    request->send(response);
+  }
+};
+
+class WebUpdateRequestGuard : public AsyncWebHandler {
+public:
+  bool canHandle(AsyncWebServerRequest* request) override {
+    if (!systemOperationState.blocksRequests()) return false;
+    if (request->method() == HTTP_POST && request->url() == "/update")
+      return false;
+    if (systemOperationState.filesystemUnavailable() &&
+        securityRecoveryLoginRequired() &&
+        voxone::security::securityHttpFilesystemRecoveryPassthrough(
+            securityAccessMethod(request->method()), request->url().c_str()))
+      return false;
+    return true;
+  }
+
+  void handleRequest(AsyncWebServerRequest* request) override {
+    if (request->method() == HTTP_GET && request->url() == "/" &&
+        securityRecoveryLoginRequired()) {
+      sendSecurityRecoveryLogin(request);
+      return;
+    }
     if (request->method() == HTTP_GET &&
         (request->url() == "/emergency" || request->url() == "/update.html")) {
 #if defined(HTTP_USER) && defined(HTTP_PASS)
@@ -609,6 +692,11 @@ bool NetServer::begin(bool quiet) {
 #endif
 
   // Must precede static handlers: their canHandle() opens files in SPIFFS.
+  // The access gate must be first: AsyncWebServer attaches a handler after
+  // parsing headers but before parsing a body or dispatching upload chunks.
+  // A denied multipart request is therefore pinned to the rejecting handler
+  // and can never reach flash/SPIFFS/config upload callbacks.
+  webserver.addHandler(new SecurityHttpAccessGate());
   webserver.addHandler(new WebUpdateRequestGuard());
   webserver.on("/", HTTP_ANY, handleIndex);
   webserver.on("/api/stations/export", HTTP_GET, handleStationsExport);
@@ -642,7 +730,6 @@ bool NetServer::begin(bool quiet) {
   webserver.on(voxone::security::kSecurityLogoutRoute, HTTP_POST,
                handleSecurityLogout);
   webserver.on("/api/ready", HTTP_GET, [](AsyncWebServerRequest* request) {
-    if (!deviceApiAuthorized(request)) return;
     char body[80];
     snprintf(body, sizeof(body),
              "{\"ready\":true,\"bootId\":\"%08lx\"}",
@@ -1280,6 +1367,68 @@ bool requestSessionToken(
   return request->hasHeader("Cookie") &&
          voxone::security::securitySessionTokenFromCookie(
              request->header("Cookie").c_str(), token);
+}
+
+voxone::security::SecurityAccessMethod securityAccessMethod(
+    WebRequestMethodComposite method) {
+  using voxone::security::SecurityAccessMethod;
+  if (method == HTTP_GET) return SecurityAccessMethod::Get;
+  if (method == HTTP_POST) return SecurityAccessMethod::Post;
+  if (method == HTTP_PUT) return SecurityAccessMethod::Put;
+  if (method == HTTP_DELETE) return SecurityAccessMethod::Delete;
+  if (method == HTTP_PATCH) return SecurityAccessMethod::Patch;
+  if (method == HTTP_HEAD) return SecurityAccessMethod::Head;
+  if (method == HTTP_OPTIONS) return SecurityAccessMethod::Options;
+  return SecurityAccessMethod::Unknown;
+}
+
+voxone::security::SecurityHttpDecision authorizeHttpRequest(
+    AsyncWebServerRequest* request) {
+  using namespace voxone::security;
+  const SecurityAccessMethod accessMethod =
+      securityAccessMethod(request->method());
+  const bool websocketRequest = securityHttpWebSocketDeferred(
+      accessMethod, request->url().c_str(),
+      request->requestedConnType() == RCT_WS);
+  if (!securityHttpEnforcementEnabled() || websocketRequest) {
+    SecurityAccessRequest bypass{deviceSecurityService().state(),
+                                 SecurityAccessMethod::Unknown,
+                                 request->url().c_str(), false, false, false,
+                                 false, false, false};
+    return evaluateSecurityHttpRequest(
+        bypass, securityHttpEnforcementEnabled(), websocketRequest);
+  }
+
+  const String localAddress = request->client()->localIP().toString();
+  const SecurityRequestContext context =
+      securityRequestContext(request, localAddress);
+  if (!securityHttpPathRepresentationAllowed(request->url().c_str(),
+                                             request->url().length())) {
+    return {SecurityAccessStatus::UnknownRoute, 404, false, false};
+  }
+  size_t hostHeaders = 0;
+  size_t originHeaders = 0;
+  for (size_t index = 0; index < request->headers(); ++index) {
+    if (request->headerName(index).equalsIgnoreCase("Host"))
+      ++hostHeaders;
+    else if (request->headerName(index).equalsIgnoreCase("Origin"))
+      ++originHeaders;
+  }
+  char token[kSecuritySessionTokenBufferSize]{};
+  const bool hasToken = requestSessionToken(request, token);
+  const bool sessionValid = hasToken &&
+      deviceSecuritySessionService().validate(token, millis());
+  clearSensitive(token, sizeof(token));
+
+  const bool originPresent = originHeaders != 0;
+  const SecurityAccessRequest access{
+      deviceSecurityService().state(), accessMethod,
+      request->url().c_str(), sessionValid,
+      hostHeaders == 1 && securityRequestHostAllowed(context), originPresent,
+      originHeaders == 1 && securityRequestOriginAllowed(context),
+      apWifiRecoveryAllowed(network.status == CONNECTED),
+      !config.currentWwwReady || systemOperationState.filesystemUnavailable()};
+  return evaluateSecurityHttpRequest(access, true, false);
 }
 
 void securityApiResultReply(
@@ -3029,6 +3178,11 @@ void handleNotFound(AsyncWebServerRequest * request) {
 }
 
 void handleIndex(AsyncWebServerRequest * request) {
+  if (request->method() == HTTP_GET && request->url() == "/" &&
+      securityRecoveryLoginRequired()) {
+    sendSecurityRecoveryLogin(request);
+    return;
+  }
   if (systemOperationState.blocksRequests()) {
     request->send(503, "text/plain", "Update in progress");
     return;

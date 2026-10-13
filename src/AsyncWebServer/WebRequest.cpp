@@ -19,6 +19,7 @@
   Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
 */
 #include "ESPAsyncWebServer.h"
+#include "RequestConnectionType.h"
 #include "WebResponseImpl.h"
 #include "WebAuthentication.h"
 
@@ -337,7 +338,7 @@ bool AsyncWebServerRequest::_parseReqHeader(){
         _authorization = value.substring(7);
       }
     } else {
-      if(name.equalsIgnoreCase("Upgrade") && value.equalsIgnoreCase("websocket")){
+      if(asyncWebHeaderRequestsWebSocket(name.c_str(), value.c_str())){
         // WebSocket request can be uniquely identified by header: [Upgrade: websocket]
         _reqconntype = RCT_WS;
       } else {
