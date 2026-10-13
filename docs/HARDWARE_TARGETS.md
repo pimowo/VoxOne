@@ -2,6 +2,11 @@
 
 Litera oznacza rodzinę, cyfra rewizję: `0` to prototyp, `1` pierwsza docelowa PCB, `2..n` następne rewizje tej samej rodziny. Rewizje mogą mieć różne GPIO. Capability wynika z konkretnego profilu i potwierdzonego sprzętu, a nie z nazwy rodziny. VoxOneBT jest osobnym projektem/repo i posiada własną rodzinę sprzętową Vx.
 
+Profil rewizji jest historycznym kontraktem: nowe PCB nie zmienia pinoutu ani
+capability istniejącego profilu. S0 i DIN0 zachowują zatwierdzoną mapę GPIO M0
+jako mapę własnej rewizji 0. Pierwsze dedykowane PCB rodzin S i DIN będą miały
+osobne profile S1 i DIN1 z własnymi definicjami sprzętu.
+
 | Rodzina | Przeznaczenie | Docelowe elementy rodziny — roadmapa, nie deklaracja rewizji 0 |
 |---|---|---|
 | Lx | rozbudowana | ESP32-S3 N16R8, PCM5102, DSPmini, W5500, SSD1306/SSD1309/CH1116/SH1106/ST7290 128×64, ST7789V 320×240, SSD1322 256×64, ST7796S 480×320, GC9A01 240×240, EC11, 3×SW, VoxOneBT, DS3231 |
@@ -17,11 +22,12 @@ Litera oznacza rodzinę, cyfra rewizję: `0` to prototyp, `1` pierwsza docelowa 
 | `w0` | klasyczny ESP32; build `esp32dev`, bez PSRAM; deskryptor nie deklaruje fizycznego rozmiaru flash | PCM5102A, ST7789 284×76, EC11/Buttons3/NONE, RADIO/WWW/MQTT/Web Update; bez BT, RTC i VU | Istnieje wcześniejszy pinout fizyczny; pełna regresja Stable po rename i SECURITY/OTA pozostaje PENDING |
 | `m0` | ESP32-S3 Zero, flash 4 MiB, PSRAM 2 MiB | PCM5102A, runtime SSD1306/SSD1309 128×64/NONE, EC11/Buttons3/NONE; bez BT, RTC i VU | SSD1306, SSD1309, PCM5102A, EC11 i wybrane kombinacje NONE mają wcześniejszy PHYSICAL PASS; końcowy HIL Stable PENDING |
 | `l0` | ESP32-S3; build flash 16 MiB i PSRAM OPI; rozmiar PSRAM nie jest utrwalony w deskryptorze | PCM5102A, ST7796S 480×320, EC11/Buttons3/NONE, DS3231, VoxOneBT UART + I2S RX, VU i aktualizacja VoxOneBT | Funkcje mają etapowe baseline'y, lecz skonsolidowany HIL Stable, endurance i negatywne update pozostają PENDING |
-| `s0` | ESP32-S3 Zero, flash 4 MiB, PSRAM 2 MiB | Obecnie ten sam roboczy PCM5102A/OLED 128×64/EC11 co M0; przyszłe capability rodziny S nie są włączone | Brak PASS na docelowym prototypie. Propozycja: `BUILD-ONLY / EXPERIMENTAL` do HIL, bez usuwania z roadmapy Stable |
-| `din0` | ESP32-S3 Zero, flash 4 MiB, PSRAM 2 MiB | Obecnie ten sam roboczy PCM5102A/OLED 128×64/EC11 co M0; przyszłe wyposażenie DIN nie jest włączone | Brak PASS na docelowym prototypie. Propozycja: `BUILD-ONLY / EXPERIMENTAL` do HIL, bez usuwania z roadmapy Stable |
+| `s0` | ESP32-S3 Zero, flash 4 MiB, PSRAM 2 MiB | Zatwierdzony pinout rewizji 0 i bieżące capability jak M0: PCM5102A, OLED 128×64 i local input; przyszłe capability rodziny S nie są włączone | Obowiązkowy profil Stable; brak fizycznego PASS S0 na odpowiednim sprzęcie rewizji 0 jest blockerem wydania |
+| `din0` | ESP32-S3 Zero, flash 4 MiB, PSRAM 2 MiB | Zatwierdzony pinout rewizji 0 i bieżące capability jak M0: PCM5102A, OLED 128×64 i local input; przyszłe wyposażenie DIN nie jest włączone | Obowiązkowy profil Stable; brak fizycznego PASS DIN0 na odpowiednim sprzęcie rewizji 0 jest blockerem wydania |
 
-Proponowany status S0/DIN0 nie jest zatwierdzoną zmianą zakresu wydania. Pełny
-kontrakt i skondensowaną macierz HIL zawiera
+Zatwierdzony zakres Stable 1.0.0 wymaga fizycznego HIL PASS profili W0, M0,
+L0, S0 i DIN0. Build-only nie kwalifikuje żadnego z nich. Pełny kontrakt i
+skondensowaną macierz HIL zawiera
 [STABLE_CONTRACT.md](STABLE_CONTRACT.md).
 
 ### Faktyczny pinout bieżących BIN
@@ -34,13 +40,36 @@ pull-upy i filtracja.
 |---|---|---|---|---|
 | W0 | `26 / 27 / 25` | ST7789: `CS5`, `DC4`, `RST—`; SCK/MOSI korzystają z domyślnej magistrali frameworka i nie są jawnie zakontraktowane w deskryptorze | `33 / 35 / 32` | brak PSRAM, BT, RTC, VU i XSMT |
 | M0 | `1 / 2 / 3` | OLED I2C: `SDA7`, `SCL8`, `RST—`, adres `0x3C` | `5 / 6 / 4` | SSD1306 lub SSD1309 w jednym BIN |
-| S0 | `1 / 2 / 3` | OLED I2C: `SDA7`, `SCL8`, `RST—`, adres `0x3C` | `5 / 6 / 4` | roboczy pinout M0, nie docelowy S |
-| DIN0 | `1 / 2 / 3` | OLED I2C: `SDA7`, `SCL8`, `RST—`, adres `0x3C` | `5 / 6 / 4` | roboczy pinout M0, nie docelowy DIN |
+| S0 | `1 / 2 / 3` | OLED I2C: `SDA7`, `SCL8`, `RST—`, adres `0x3C` | `5 / 6 / 4` | zatwierdzona mapa rewizji 0 współdzielona z M0; HIL PENDING |
+| DIN0 | `1 / 2 / 3` | OLED I2C: `SDA7`, `SCL8`, `RST—`, adres `0x3C` | `5 / 6 / 4` | zatwierdzona mapa rewizji 0 współdzielona z M0; HIL PENDING |
 | L0 | `5 / 4 / 6` | SPI `SCK12`, `MOSI11`, `MISO13`; ST7796S `CS10`, `DC9`, `RST—`, backlight `14` | `41 / 40 / 39` | RTC `SDA8/SCL7`; BT UART `RX15/TX16`; BT I2S RX `BCLK1/WS2/DIN17`; XSMT nieprzypisany |
 
 W kodzie `HardwareDescriptor.audioOut` prezentuje kolejność `BCLK/WS/DOUT`;
 powyższa tabela zachowuje kolejność nazw makr profili, aby uniknąć pomylenia
 GPIO. Żadne GPIO działających prototypów nie zostało zmienione przez rename.
+
+### Rewizje 0 i rzeczywiste braki S0/DIN0
+
+`VOXONE_PIN_MAP_COMPLETE=1` oraz zgodność `profiles/s0.h` i
+`profiles/din0.h` z M0 odzwierciedlają zatwierdzony pinout rewizji 0. Nie ma
+wymagania zmiany tych GPIO przed Stable. Brakiem pozostaje dowód fizyczny:
+każdy profil musi przejść HIL na odpowiednim urządzeniu S0 albo DIN0, z
+potwierdzeniem deklarowanych flash/PSRAM, zasilania i złączy oraz działania
+PCM5102A, OLED i local input. Uruchomienie właściwego BIN wyłącznie na
+urządzeniu M0 nie zastępuje identyfikacji i PASS osobnego targetu.
+
+Bieżący kontrakt obu profili obejmuje PCM5102A, runtime SSD1306/SSD1309
+128×64/NONE oraz EC11/Buttons3/NONE. Nie obejmuje MAX98357A, OLED 128×32,
+pomiaru baterii, VoxOneBT, RTC ani VU na S0; na DIN0 nie obejmuje OLED 128×32,
+VoxOneBT, RTC ani VU. Są to braki względem szerszej roadmapy rodzin, nie
+ukryte capability aktualnych BIN. Rozszerzenie tego zestawu wymaga osobnej
+decyzji zakresowej i implementacji; samo obowiązkowe HIL Stable nie może
+zadeklarować tych funkcji jako działających.
+
+Dedykowane PCB S1 i DIN1 są przyszłymi rewizjami z własnym pinoutem i
+capability. Ich definicje należy dodać jako osobne profile, bez modyfikowania
+historycznych S0/DIN0. Projekt, implementacja i HIL S1/DIN1 są POST-STABLE i
+nie blokują Stable 1.0.0 dla obowiązkowych rewizji 0.
 
 ### Flash i partycje
 

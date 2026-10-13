@@ -45,16 +45,16 @@
 
 ### Targety i release gate
 
-- [STABLE] Wykonać fizyczną regresję W0, L0 i M0 po zmianie nazewnictwa: full image, first boot/AP/Wi-Fi/WWW, RADIO, audio, wyświetlacz, enkoder i restart. Na L0 sprawdzić VoxOneBT oraz MQTT/HA; S0/DIN0 wymagają osobnej weryfikacji na docelowym sprzęcie.
+- [STABLE][HIL PENDING] Wykonać i udokumentować fizyczną regresję wszystkich pięciu obowiązkowych profili W0, M0, L0, S0 i DIN0: właściwy full image, first boot/AP/Wi-Fi/WWW, RADIO, audio, zadeklarowany wyświetlacz i local input, restart, Config v7, update/recovery oraz podstawowa ścieżka OTA. Na L0 dodatkowo sprawdzić VoxOneBT oraz MQTT/HA. Każdy profil musi zakończyć się osobnym PASS; uruchomienie obrazu S0/DIN0 na prototypie M0 nie kwalifikuje docelowego targetu.
 - [STABLE] Na W0 sprawdzić ukrycie suwaka jasności, restart z WWW, powrót Wi-Fi bez utraty stacji/config oraz osobno ekran aktualizacji bez regresji ScrollWidget/HOLD.
 - [STABLE] Fizycznie zweryfikować aktualne WWW na L0 i W0 (gdy bezpieczna aktualizacja W0 będzie możliwa): MUTE, selector RADIO/BT, oznaczenie BT offline, manual source priority, reconnect/resnapshot, favicon bez 404 oraz build identity w SYSTEM i AKTUALIZACJA.
 - [HARDWARE] Przypisać GPIO XSMT PCM5102A na L0 i fizycznie sprawdzić LOW przy PAUZA/STOP, HIGH przy PLAY, ciszę podczas przejść i Web Update oraz czerwoną ramkę VOL bez zmiany semantyki MUTE.
 - [STABLE] Fizycznie sprawdzić MQTT/Home Assistant na L0; MQTT pozostaje wspierane w pierwszym stable.
-- [STABLE][DOCUMENTATION PASS][HIL PENDING] Baseline `STABLE-DOCS-CONTRACT-1` opisuje aktywne profile, API, MQTT/HA, Source Manager, VoxOneBT, TTS, update/recovery, OTA, Config v7 i granicę Technical Stable/Commercial Release. Przed release uzupełnić wyłącznie końcowe wyniki HIL oraz zatwierdzony status S0/DIN0; nie traktować katalogu roadmapy sprzętu jako capability bieżącego BIN.
+- [STABLE][DOCUMENTATION PASS][HIL PENDING] Baseline `STABLE-DOCS-CONTRACT-1` opisuje aktywne profile, API, MQTT/HA, Source Manager, VoxOneBT, TTS, update/recovery, OTA, Config v7 i granicę Technical Stable/Commercial Release. `STABLE-SCOPE-5TARGETS-1` zatwierdza W0, M0, L0, S0 i DIN0 jako pięć obowiązkowych profili, każdy z osobnym fizycznym HIL PASS przed release. Uzupełnić końcowe wyniki HIL; nie traktować katalogu roadmapy sprzętu jako capability bieżącego BIN.
 
 ### Definition of Stable
 
-- [STABLE] Zamknąć release gate: FULL VERIFY PASS; fizyczny W0, L0 i M0 PASS; RADIO endurance PASS; BT phone i LG TV PASS; SourceManager switching/reconnect PASS; TTS RADIO/BT restore PASS; firmware i SPIFFS update PASS; recovery PASS; Config v7 persistence PASS; L/R i VU PASS; brak otwartych błędów P0/P1.
+- [STABLE] Zamknąć release gate: FULL VERIFY PASS; osobny fizyczny W0, M0, L0, S0 i DIN0 PASS; RADIO endurance PASS; BT phone i LG TV PASS; SourceManager switching/reconnect PASS; TTS RADIO/BT restore PASS; firmware i SPIFFS update PASS; recovery PASS; Config v7 persistence PASS; L/R i VU PASS; brak otwartych błędów P0/P1.
 
 ## Znane błędy i pomiary
 
@@ -127,7 +127,7 @@
 - [POST-STABLE] Przebudować PLAYER: podnieść PLAY/PAUSE/STOP oraz bitrate/audio info, a niżej dodać czytelną ramkę faktycznego trybu wyjścia 2.0/2.1/2.2 pochodzącego z konfiguracji audio/DSP.
 - [POST-STABLE] Ustalić wspólną lub jawnie przypisaną szybkość przewijania dla stacji, artysty, utworu i list; usunąć przypadkowo różne timingi rendererów.
 - [POST-STABLE] Dodać source-aware PLAYER, ekran TTS, przyszłą przeglądarkę DLNA oraz konfigurację DSP.
-- [HARDWARE] Na M0/S0/DIN0 fizycznie sprawdzić dalszą stabilność OLED, input i audio po zmianie tożsamości buildów; wcześniejszy PHYSICAL PASS SSD1306 i SSD1309 na tym samym prototypie pozostaje baseline. VoxOneBT i MQTT/HA na tych profilach nie mają PHYSICAL PASS.
+- [HARDWARE][STABLE][HIL PENDING] Na odpowiednich urządzeniach rewizji 0 M0, S0 i DIN0 fizycznie sprawdzić stabilność OLED, input i audio po zmianie tożsamości buildów. Wcześniejszy PHYSICAL PASS SSD1306 i SSD1309 na urządzeniu M0 pozostaje baseline wyłącznie M0 i nie kwalifikuje S0/DIN0. Dla każdego profilu sprawdzić PCM5102A, SSD1306/SSD1309/NONE oraz EC11/Buttons3/NONE zgodnie z faktycznie zainstalowanym sprzętem. VoxOneBT i MQTT/HA nie są capability bieżących profili M0/S0/DIN0.
 - [POST-STABLE] Przygotować wspólne `assets/branding` jako źródło logo WWW, splash/logo LCD i favicon; później użyć tych samych materiałów w README/GitHub.
 - [POST-STABLE] Rozważyć opcjonalną skórkę YAMAHA AMBER: czarne tło i jeden bursztynowy kolor, punkt startowy `#FF9A1F` / RGB565 `0xFCC3`.
 - [DECISION] Rozstrzygnąć zakres dalszego wsparcia ST7789 284×76 na rodzinie Wx.
@@ -184,7 +184,7 @@
 VoxOneBT jest osobnym projektem/repo i posiada własną rodzinę sprzętową Vx.
 
 - [HARDWARE] Potwierdzić GPIO, rewizje PCB, opcjonalne LCD/BT/DSP oraz przyszłe warianty wyjścia PCM5102A, MAX98357A i DSPmini. Na nowych PCB zweryfikować GPIO, audio, OLED i EC11; wcześniejszy fizyczny baseline M0 obejmuje PCM5102A GPIO1/2/3, oba OLED I2C GPIO7/8 oraz EC11 GPIO4/5/6. Pozostałe OLED-y 128×64 wymagają driverów i testów.
-- [HARDWARE] Zweryfikować na fizycznych prototypach S0 i DIN0 osobne profile i docelowe wyposażenie. Dzisiejsze buildy używają roboczego pinoutu M0, PCM5102A, OLED 128×64 i EC11; nie są dowodem działania przyszłych modułów.
+- [STABLE][HARDWARE][HIL PENDING] Fizycznie zweryfikować S0 i DIN0 z zatwierdzonym pinoutem rewizji 0 współdzielonym z M0: PCM5102A `BCLK1/DOUT2/LRCK3`, OLED `SDA7/SCL8`, input `A5/B6/KEY4`. Potwierdzić na odpowiednim sprzęcie każdego profilu moduł MCU, flash/PSRAM, zasilanie, złącza, brak kolizji GPIO, zgodność deskryptora oraz wszystkie zadeklarowane capability. Nie zmieniać historycznych definicji S0/DIN0 z powodu przyszłych PCB. MAX98357A, OLED 128×32, pomiar baterii, VoxOneBT i RTC nie są obecnie capability S0, a OLED 128×32, VoxOneBT i RTC nie są capability DIN0; nie zaliczać planów rodziny jako PASS bieżącego BIN.
 - [HARDWARE] Fizycznie zweryfikować Buttons3 na wspólnych liniach A/B/KEY wszystkich przeznaczonych PCB z zewnętrznymi pull-upami i filtracją na module lub PCB. Przed użyciem `VERY_LONG` przez menu dopracować wspólny gesture manager tak, aby nie wykonywał wcześniej `LONG`.
 - [POST-STABLE] Dodać runtime audio activation; nowe driver/backendy włączać tylko na PCB z potwierdzonymi capabilities.
 - [POST-STABLE] Po dodaniu runtime audio activation rozszerzyć istniejącą sekcję `SPRZĘT` w WWW o wybór audio filtrowany przez `HardwareCapabilities`, z tym samym kontrolowanym zapisem i restartem. Później rozważyć osobne installed/enabled dla modułów opcjonalnych. Jeden profil PCB ma dostarczać jeden BIN; wybory użytkownika nie tworzą nowych env.
@@ -194,7 +194,7 @@ VoxOneBT jest osobnym projektem/repo i posiada własną rodzinę sprzętową Vx.
 - [POST-STABLE] Przy zmianie runtime display z aktywnego backendu na `NONE` wygasić fizyczny ekran przed kontrolowanym restartem, aby soft-reset nie pozostawiał ostatniej ramki; cold boot i runtime `NONE` już spełniają kontrakt opcjonalnego display.
 - [DECISION] Ustalić, czy rzeczywista zmiana `userVolume` z WWW, HA lub BT wywołana przez użytkownika otwiera ekran VOL; snapshot, restore i synchronizacja nie mogą go otwierać przypadkowo.
 - [DECISION] Ustalić, czy ekran VOL dostaje pasek 0–100; przy MUTE pasek ma pokazywać zapamiętane `userVolume`, ponieważ MUTE nie oznacza volume 0.
-- [HARDWARE] Zaprojektować osobne docelowe PCB L1/M1/S1/DIN1; każda rewizja wymaga własnego pinoutu i capabilities bez współdzielonego BoardProfile. Potwierdzić GPIO i capabilities każdej płytki.
+- [POST-STABLE][HARDWARE] Zaprojektować osobne docelowe PCB L1/M1/S1/DIN1; każda rewizja wymaga własnego pinoutu, capabilities i definicji sprzętowej bez nadpisywania profili rewizji 0 ani współdzielonego BoardProfile. S1 i DIN1 będą pierwszymi dedykowanymi PCB rodzin S i DIN z docelowym GPIO; ich projekt i HIL nie blokują Stable 1.0.0 dla S0/DIN0. Potwierdzić GPIO i capabilities każdej płytki.
 - [POST-STABLE] Aktualizację VoxOneBT przez MAIN dopuścić tylko przy obecnym module, capability BT firmware update i wystarczającym PSRAM/staging. Na przyszłym Wx z modułem BT aktualizację modułu prowadzić bezpośrednio przez USB, bez stagingu na MAIN.
 
 ### Architecture baseline
