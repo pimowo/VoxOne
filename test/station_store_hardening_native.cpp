@@ -359,6 +359,7 @@ int main() {
          StationRecoverySource::Fail);
 
   const std::string storeSource = readFile("src/core/playlist_store.cpp");
+  const std::string storeHeader = readFile("src/core/playlist_store.h");
   const std::string serverSource = readFile("src/core/netserver.cpp");
   assert(storeSource.find("xSemaphoreCreateRecursiveMutex") != std::string::npos);
   assert(storeSource.find("xSemaphoreTakeRecursive") != std::string::npos);
@@ -368,6 +369,20 @@ int main() {
          std::string::npos);
   assert(storeSource.find("scanRows(kCsvTmp, &newRevision, &rows") !=
          std::string::npos);
+  for (const char* timingField : {"lockUs", "validateUs", "stageUs", "writeUs",
+                                  "verifyUs", "indexUs", "installUs",
+                                  "persistUs", "cleanupUs", "totalUs"}) {
+    assert(storeHeader.find(timingField) != std::string::npos);
+    assert(storeSource.find("timing." + std::string(timingField)) !=
+           std::string::npos);
+  }
+  for (const char* diagnosticField : {"##[PLAYLIST-DIAG]#", "commitUs=",
+                                      "buf=%lu->%lu", "action=%s",
+                                      "reconnect=%u", "active=%016llX->%016llX",
+                                      "ovol=%d->%d", "targetOvol=%d"})
+    assert(serverSource.find(diagnosticField) != std::string::npos);
+  assert(serverSource.find("playlistStore.commit(rows, newCurrent, newRevision, "
+                           "&commitDiagnostics)") != std::string::npos);
   for (const char* responseField : {"\\\"revision\\\"", "\\\"current\\\"",
                                     "\\\"count\\\""})
     assert(serverSource.find(responseField) != std::string::npos);

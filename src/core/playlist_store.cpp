@@ -371,27 +371,65 @@ bool PlaylistStore::recover() {
 }
 
 PlaylistWriteError PlaylistStore::commit(const std::vector<PlaylistRow>& rows,
-                                         uint16_t current, String& revision) {
+                                         uint16_t current, String& revision,
+                                         PlaylistCommitDiagnostics* diagnostics) {
+  PlaylistCommitDiagnostics timing;
+  timing.rows = static_cast<uint16_t>(rows.size());
+  auto timestamp = [&]() { return diagnostics ? micros() : 0U; };
+  const uint32_t totalStartedUs = timestamp();
+  auto finish = [&](PlaylistWriteError result) {
+    timing.totalUs = timestamp() - totalStartedUs;
+    if (diagnostics) *diagnostics = timing;
+    return result;
+  };
+
+  uint32_t phaseStartedUs = timestamp();
   PlaylistGuard guard;
-  if (!guard) return PlaylistWriteError::IO_ERROR;
-  if (rows.size() > UINT16_MAX || current > rows.size()) return PlaylistWriteError::INVALID;
+  timing.lockUs = timestamp() - phaseStartedUs;
+  if (!guard) return finish(PlaylistWriteError::IO_ERROR);
+
+  phaseStartedUs = timestamp();
+  if (rows.size() > UINT16_MAX || current > rows.size()) {
+    timing.validateUs = timestamp() - phaseStartedUs;
+    return finish(PlaylistWriteError::INVALID);
+  }
   size_t bytesNeeded = sizeof(kStationsHeader) - 1;
   for (const PlaylistRow& row : rows) {
-    if (!validRecord(row)) return PlaylistWriteError::INVALID;
+    if (!validRecord(row)) {
+      timing.validateUs = timestamp() - phaseStartedUs;
+      return finish(PlaylistWriteError::INVALID);
+    }
     bytesNeeded += 16 + row.name.length() + row.url.length() +
                    String(row.ovol).length() +
                    (row.metadataMode == STATION_META_SWAP ? 4 : 6) + 5;
   }
   for (size_t i = 0; i < rows.size(); ++i)
     for (size_t j = 0; j < i; ++j)
-      if (rows[i].id == rows[j].id) return PlaylistWriteError::INVALID;
+      if (rows[i].id == rows[j].id) {
+        timing.validateUs = timestamp() - phaseStartedUs;
+        return finish(PlaylistWriteError::INVALID);
+      }
+  timing.bytes = bytesNeeded;
   if (!stationCommitHasSpace(SPIFFS.totalBytes(), SPIFFS.usedBytes(),
-                             bytesNeeded, rows.size()))
-    return PlaylistWriteError::NO_SPACE;
-  if (!removeIfPresent(kCsvTmp) || !removeIfPresent(kIndexTmp))
-    return PlaylistWriteError::IO_ERROR;
+                             bytesNeeded, rows.size())) {
+    timing.validateUs = timestamp() - phaseStartedUs;
+    return finish(PlaylistWriteError::NO_SPACE);
+  }
+  timing.validateUs = timestamp() - phaseStartedUs;
+
+  phaseStartedUs = timestamp();
+  if (!removeIfPresent(kCsvTmp) || !removeIfPresent(kIndexTmp)) {
+    timing.stageUs = timestamp() - phaseStartedUs;
+    return finish(PlaylistWriteError::IO_ERROR);
+  }
+  timing.stageUs = timestamp() - phaseStartedUs;
+
+  phaseStartedUs = timestamp();
   File tmp = SPIFFS.open(kCsvTmp, "w");
-  if (!tmp) return PlaylistWriteError::NO_SPACE;
+  if (!tmp) {
+    timing.writeUs = timestamp() - phaseStartedUs;
+    return finish(PlaylistWriteError::NO_SPACE);
+  }
   bool written = tmp.write(reinterpret_cast<const uint8_t*>(kStationsHeader),
                            sizeof(kStationsHeader) - 1) == sizeof(kStationsHeader) - 1;
   for (const PlaylistRow& row : rows) {
@@ -407,39 +445,71 @@ PlaylistWriteError PlaylistStore::commit(const std::vector<PlaylistRow>& rows,
   }
   tmp.flush();
   tmp.close();
-  if (!written) return PlaylistWriteError::NO_SPACE;
-  String newRevision;
-  if (!scanRows(kCsvTmp, &newRevision, &rows, nullptr, nullptr))
-    return PlaylistWriteError::IO_ERROR;
-  File sizeCheck = SPIFFS.open(kCsvTmp, "r");
-  if (!sizeCheck || sizeCheck.size() != bytesNeeded) return PlaylistWriteError::IO_ERROR;
-  sizeCheck.close();
-  if (!prepareIndex(kCsvTmp)) return PlaylistWriteError::NO_SPACE;
+  timing.writeUs = timestamp() - phaseStartedUs;
+  if (!written) return finish(PlaylistWriteError::NO_SPACE);
 
+  phaseStartedUs = timestamp();
+  String newRevision;
+  if (!scanRows(kCsvTmp, &newRevision, &rows, nullptr, nullptr)) {
+    timing.verifyUs = timestamp() - phaseStartedUs;
+    return finish(PlaylistWriteError::IO_ERROR);
+  }
+  File sizeCheck = SPIFFS.open(kCsvTmp, "r");
+  if (!sizeCheck || sizeCheck.size() != bytesNeeded) {
+    timing.verifyUs = timestamp() - phaseStartedUs;
+    return finish(PlaylistWriteError::IO_ERROR);
+  }
+  sizeCheck.close();
+  timing.verifyUs = timestamp() - phaseStartedUs;
+
+  phaseStartedUs = timestamp();
+  if (!prepareIndex(kCsvTmp)) {
+    timing.indexUs = timestamp() - phaseStartedUs;
+    return finish(PlaylistWriteError::NO_SPACE);
+  }
+  timing.indexUs = timestamp() - phaseStartedUs;
+
+  phaseStartedUs = timestamp();
   const bool hadCsv = SPIFFS.exists(PLAYLIST_PATH);
-  if (!removeIfPresent(kCsvBak)) return PlaylistWriteError::IO_ERROR;
-  if (hadCsv && !SPIFFS.rename(PLAYLIST_PATH, kCsvBak))
-    return PlaylistWriteError::IO_ERROR;
+  if (!removeIfPresent(kCsvBak)) {
+    timing.installUs = timestamp() - phaseStartedUs;
+    return finish(PlaylistWriteError::IO_ERROR);
+  }
+  if (hadCsv && !SPIFFS.rename(PLAYLIST_PATH, kCsvBak)) {
+    timing.installUs = timestamp() - phaseStartedUs;
+    return finish(PlaylistWriteError::IO_ERROR);
+  }
   if (!SPIFFS.rename(kCsvTmp, PLAYLIST_PATH)) {
     if (hadCsv && !rollbackPlaylist()) Serial.println("##[ERROR]# Playlist restore failed");
-    return PlaylistWriteError::IO_ERROR;
+    timing.installUs = timestamp() - phaseStartedUs;
+    return finish(PlaylistWriteError::IO_ERROR);
   }
   if (!installIndex() || !validIndex(PLAYLIST_PATH, INDEX_PATH)) {
     rollbackPlaylist();
-    return PlaylistWriteError::IO_ERROR;
+    timing.installUs = timestamp() - phaseStartedUs;
+    return finish(PlaylistWriteError::IO_ERROR);
   }
+  timing.installUs = timestamp() - phaseStartedUs;
+
+  phaseStartedUs = timestamp();
   const uint16_t previousCurrent = config.lastStation();
   const bool previousZeroIntentional =
       config.store._reserved == VOXONE_NO_STATION_MARKER;
   if (!config.setLastStationChecked(current)) {
     rollbackPlaylist();
-    return PlaylistWriteError::IO_ERROR;
+    timing.persistUs = timestamp() - phaseStartedUs;
+    return finish(PlaylistWriteError::IO_ERROR);
   }
+  timing.persistUs = timestamp() - phaseStartedUs;
+
+  phaseStartedUs = timestamp();
   if (!removeIfPresent(kIndexBak) || !removeIfPresent(kCsvBak)) {
     rollbackPlaylist();
     config.setLastStationChecked(previousCurrent, previousZeroIntentional);
-    return PlaylistWriteError::IO_ERROR;
+    timing.cleanupUs = timestamp() - phaseStartedUs;
+    return finish(PlaylistWriteError::IO_ERROR);
   }
+  timing.cleanupUs = timestamp() - phaseStartedUs;
   revision = newRevision;
-  return PlaylistWriteError::OK;
+  return finish(PlaylistWriteError::OK);
 }

@@ -2549,6 +2549,11 @@ void handleStationsMutation(AsyncWebServerRequest *request) {
     stationsError(request, 404, "not_found");
     return;
   }
+  const char* operation = add ? "add" : edit ? "edit" : remove ? "delete" : "reorder";
+  const uint32_t mutationStartedUs = micros();
+  const uint32_t bufferBefore = player.inBufferFilled();
+  const bool runningBefore = player.isRunning();
+  const int runtimeOvolBefore = config.station.ovol;
   String clientRevision;
   if (!stationParam(request, "revision", clientRevision) || clientRevision.length() != 8) {
     stationsError(request, 400, "bad_revision");
@@ -2581,6 +2586,7 @@ void handleStationsMutation(AsyncWebServerRequest *request) {
     stationsError(request, 500, "invalid_playlist_state");
     return;
   }
+  const uint64_t activeIdBefore = oldCurrent ? rows[oldCurrent - 1].id : 0;
   if (add || edit) {
     String name, url, ovolText;
     if (!stationParam(request, "name", name) || !stationParam(request, "url", url) ||
@@ -2661,14 +2667,37 @@ void handleStationsMutation(AsyncWebServerRequest *request) {
     refreshCurrent = newCurrent != oldCurrent;
   }
   String newRevision;
-  const PlaylistWriteError result = playlistStore.commit(rows, newCurrent, newRevision);
+  PlaylistCommitDiagnostics commitDiagnostics;
+  const PlaylistWriteError result =
+      playlistStore.commit(rows, newCurrent, newRevision, &commitDiagnostics);
   if (result != PlaylistWriteError::OK) {
+    const char* resultText = result == PlaylistWriteError::INVALID ? "invalid" :
+        result == PlaylistWriteError::NO_SPACE ? "no-space" : "io-error";
+    Serial.printf(
+        "##[PLAYLIST-DIAG]# op=%s result=%s totalUs=%lu commitUs=%lu "
+        "lock=%lu validate=%lu stage=%lu write=%lu verify=%lu index=%lu "
+        "install=%lu persist=%lu cleanup=%lu buf=%lu->%lu run=%u->%u\n",
+        operation, resultText, static_cast<unsigned long>(micros() - mutationStartedUs),
+        static_cast<unsigned long>(commitDiagnostics.totalUs),
+        static_cast<unsigned long>(commitDiagnostics.lockUs),
+        static_cast<unsigned long>(commitDiagnostics.validateUs),
+        static_cast<unsigned long>(commitDiagnostics.stageUs),
+        static_cast<unsigned long>(commitDiagnostics.writeUs),
+        static_cast<unsigned long>(commitDiagnostics.verifyUs),
+        static_cast<unsigned long>(commitDiagnostics.indexUs),
+        static_cast<unsigned long>(commitDiagnostics.installUs),
+        static_cast<unsigned long>(commitDiagnostics.persistUs),
+        static_cast<unsigned long>(commitDiagnostics.cleanupUs),
+        static_cast<unsigned long>(bufferBefore),
+        static_cast<unsigned long>(player.inBufferFilled()), runningBefore ? 1U : 0U,
+        player.isRunning() ? 1U : 0U);
     if (result == PlaylistWriteError::INVALID) stationsError(request, 422, "invalid_station");
     else if (result == PlaylistWriteError::NO_SPACE) stationsError(request, 507, "insufficient_storage");
     else stationsError(request, 500, "playlist_write_failed");
     return;
   }
   const uint8_t previousMode = config.station.metadataMode;
+  const char* playerAction = "none";
   if (edit && number == oldCurrent && !reconnect) {
     const PlaylistRow& active = rows[number - 1];
     const bool volumeChanged = config.station.ovol != active.ovol;
@@ -2690,6 +2719,7 @@ void handleStationsMutation(AsyncWebServerRequest *request) {
     config.station.name[0] = '\0';
     config.station.url[0] = '\0';
     config.station.title[0] = '\0';
+    playerAction = "PR_STOP";
     player.sendCommand({PR_STOP, 0});
     display.putRequest(NEWSTATION);
     display.putRequest(NEWTITLE);
@@ -2697,6 +2727,7 @@ void handleStationsMutation(AsyncWebServerRequest *request) {
     netserver.requestOnChange(TITLE, 0);
   } else if (reconnect) {
     netserver.requestOnChange(ITEM, 0);
+    playerAction = "PR_PLAY";
     player.sendCommand({PR_PLAY, newCurrent});
   } else if (refreshCurrent) {
     netserver.requestOnChange(STATION, 0);
@@ -2705,6 +2736,37 @@ void handleStationsMutation(AsyncWebServerRequest *request) {
     display.putRequest(NEWTITLE);
     netserver.requestOnChange(TITLE, 0);
   }
+  const uint64_t activeIdTarget = newCurrent ? rows[newCurrent - 1].id : 0;
+  const int targetOvol = newCurrent ? rows[newCurrent - 1].ovol : 0;
+  const uint32_t bufferAfter = player.inBufferFilled();
+  const bool runningAfter = player.isRunning();
+  const uint32_t mutationTotalUs = micros() - mutationStartedUs;
+  Serial.printf(
+      "##[PLAYLIST-DIAG]# op=%s result=ok totalUs=%lu commitUs=%lu "
+      "lock=%lu validate=%lu stage=%lu write=%lu verify=%lu index=%lu "
+      "install=%lu persist=%lu cleanup=%lu rows=%u bytes=%lu "
+      "buf=%lu->%lu run=%u->%u action=%s reconnect=%u current=%u->%u "
+      "active=%016llX->%016llX ovol=%d->%d targetOvol=%d\n",
+      operation, static_cast<unsigned long>(mutationTotalUs),
+      static_cast<unsigned long>(commitDiagnostics.totalUs),
+      static_cast<unsigned long>(commitDiagnostics.lockUs),
+      static_cast<unsigned long>(commitDiagnostics.validateUs),
+      static_cast<unsigned long>(commitDiagnostics.stageUs),
+      static_cast<unsigned long>(commitDiagnostics.writeUs),
+      static_cast<unsigned long>(commitDiagnostics.verifyUs),
+      static_cast<unsigned long>(commitDiagnostics.indexUs),
+      static_cast<unsigned long>(commitDiagnostics.installUs),
+      static_cast<unsigned long>(commitDiagnostics.persistUs),
+      static_cast<unsigned long>(commitDiagnostics.cleanupUs),
+      static_cast<unsigned>(commitDiagnostics.rows),
+      static_cast<unsigned long>(commitDiagnostics.bytes),
+      static_cast<unsigned long>(bufferBefore), static_cast<unsigned long>(bufferAfter),
+      runningBefore ? 1U : 0U, runningAfter ? 1U : 0U, playerAction,
+      reconnect ? 1U : 0U, static_cast<unsigned>(oldCurrent),
+      static_cast<unsigned>(newCurrent),
+      static_cast<unsigned long long>(activeIdBefore),
+      static_cast<unsigned long long>(activeIdTarget), runtimeOvolBefore,
+      config.station.ovol, targetOvol);
   stationsReply(request, 200, String("{\"ok\":true,\"revision\":\"") +
       newRevision + "\",\"current\":" + String(newCurrent) +
       ",\"count\":" + String(rows.size()) + "}");
