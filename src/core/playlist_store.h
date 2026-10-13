@@ -44,13 +44,13 @@ class PlaylistStore {
   static bool parseInteger(const String& text, int& value);
   static uint64_t generateId(const std::vector<PlaylistRow>& rows);
   bool findStationById(uint64_t id, uint16_t& position);
-  bool lock();
+  bool lock(uint32_t waitMs = 3000);
   void unlock();
 };
 
 class PlaylistGuard {
  public:
-  PlaylistGuard();
+  explicit PlaylistGuard(uint32_t waitMs = 3000);
   ~PlaylistGuard();
   explicit operator bool() const { return held_; }
   void release();

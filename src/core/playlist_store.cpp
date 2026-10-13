@@ -247,16 +247,17 @@ bool PlaylistStore::begin() {
   return playlistMutex != nullptr;
 }
 
-bool PlaylistStore::lock() {
+bool PlaylistStore::lock(uint32_t waitMs) {
   return playlistMutex &&
-         xSemaphoreTakeRecursive(playlistMutex, pdMS_TO_TICKS(3000)) == pdTRUE;
+         xSemaphoreTakeRecursive(playlistMutex, pdMS_TO_TICKS(waitMs)) == pdTRUE;
 }
 
 void PlaylistStore::unlock() {
   if (playlistMutex) xSemaphoreGiveRecursive(playlistMutex);
 }
 
-PlaylistGuard::PlaylistGuard() : held_(playlistStore.lock()) {}
+PlaylistGuard::PlaylistGuard(uint32_t waitMs)
+    : held_(playlistStore.lock(waitMs)) {}
 PlaylistGuard::~PlaylistGuard() { release(); }
 
 void PlaylistGuard::release() {

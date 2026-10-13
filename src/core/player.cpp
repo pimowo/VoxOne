@@ -12,6 +12,7 @@
 #include "bt_audio_input.h"
 #include "ui_state.h"
 #include "playlist_mapping.h"
+#include "playlist_store.h"
 #include "station_format.h"
 #if I2S_DOUT!=255
 #include <driver/i2s.h>
@@ -37,6 +38,7 @@ void Player::init() {
   _volumePending = false;
   _maximumPending = false;
   _radioReconnect.reset();
+  _pendingStationRefresh.reset();
   playerQueue = xQueueCreate( 5, sizeof( playerRequestParams_t ) );
   setOutputPins(false);
   delay(50);
@@ -63,12 +65,11 @@ void Player::init() {
 void Player::sendCommand(playerRequestParams_t request){
   if(playerQueue==NULL) return;
   if(systemUpdateAudioBlocked() && request.type != PR_UPDATE_STOP) return;
-  // A committed playlist mutation must eventually refresh the runtime station.
-  // Its callers release PlaylistGuard first, so waiting here only suspends the
-  // producer task while Player::loop() remains free to drain the queue.
-  const TickType_t sendWait = request.type == PR_STATION_REFRESH
-      ? portMAX_DELAY : PLQ_SEND_DELAY;
-  if(xQueueSend(playerQueue, &request, sendWait) != pdPASS) return;
+  if (request.type == PR_STATION_REFRESH) {
+    _pendingStationRefresh.publish();
+    return;
+  }
+  if(xQueueSend(playerQueue, &request, PLQ_SEND_DELAY) != pdPASS) return;
   switch (request.type) {
     case PR_PLAY:
     case PR_STOP:
@@ -147,10 +148,10 @@ void Player::_clearStation(bool resetOvol) {
   netserver.requestOnChange(TITLE, 0);
 }
 
-void Player::_refreshStation(uint16_t stationId) {
+bool Player::_refreshStation(uint16_t stationId) {
   const int previousOvol = config.station.ovol;
   const uint8_t previousMode = config.station.metadataMode;
-  if (!config.loadStation(stationId)) return;
+  if (!config.loadStation(stationId)) return false;
   const StationRefreshChanges changes = stationRefreshChanges(
       previousOvol, previousMode, config.station.ovol,
       config.station.metadataMode);
@@ -161,6 +162,16 @@ void Player::_refreshStation(uint16_t stationId) {
     display.putRequest(NEWTITLE);
     netserver.requestOnChange(TITLE, 0);
   }
+  return true;
+}
+
+void Player::_servicePendingStationRefresh() {
+  if (systemUpdateAudioBlocked() || !_pendingStationRefresh.pending()) return;
+  PlaylistGuard guard(0);
+  if (!guard || !_pendingStationRefresh.take()) return;
+  const uint16_t stationId = config.lastStation();
+  if (stationId != 0 && !_refreshStation(stationId))
+    _pendingStationRefresh.publish();
 }
 
 void resetPlayer(){
@@ -313,6 +324,7 @@ void Player::loop() {
       default: break;
     }
   }
+  _servicePendingStationRefresh();
   char url[MQTT_BURL_SIZE];
   if (_temporaryUrls && xQueueReceive(_temporaryUrls, url, 0) == pdTRUE &&
       !systemUpdateAudioBlocked()) browseUrl(url);

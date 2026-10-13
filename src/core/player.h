@@ -5,6 +5,7 @@
 #include "radio_reconnect_policy.h"
 #include "radio_source_policy.h"
 #include "temporary_audio_state.h"
+#include "player_pending_refresh.h"
 
 #include "../audioI2S/AudioEx.h"
 
@@ -58,6 +59,7 @@ class Player: public Audio {
     MuteState _mute;
     TemporaryAudioState _temporary;
     voxone::radio::ReconnectPolicy _radioReconnect;
+    PlayerPendingRefresh _pendingStationRefresh;
     uint32_t _callbackToken = 0;
     QueueHandle_t _temporaryUrls = nullptr;
     //char        _plError[PLERR_LN];
@@ -65,7 +67,8 @@ class Player: public Audio {
     void _stop(bool alreadyStopped = false,
                RadioStopReason reason = RadioStopReason::Normal);
     void _play(uint16_t stationId, bool sourceResume = false);
-    void _refreshStation(uint16_t stationId);
+    bool _refreshStation(uint16_t stationId);
+    void _servicePendingStationRefresh();
     void _clearStation(bool resetOvol);
     void _loadVol(uint8_t volume);
     bool _hasError;

@@ -61,6 +61,7 @@
 - [HARDWARE] Fizycznie potwierdzić na aktywnych LCD brak clippingu, artefaktów czyszczenia i zmian wyglądu/timingu `ScrollWidget` przy pustych, krótkich, granicznych, bardzo długich i szybko zmienianych metadata, w tym z polskimi znakami. Bounded copy/window composition, zerowe wymiary, granice buforów, reset offsetu oraz ścieżki framebuffer/no-framebuffer mają software baseline i testy native z sanitizerami.
 - [HARDWARE] Wykonać kontrolowane porównanie poziomu RADIO i BT na tym samym materiale PCM. Użytkownik zmienił rezystory z 22 Ω na 41 Ω, ale trzeba nadal zmierzyć digital gain, BT Absolute Volume, VoxOneBT PCM, MAIN RX i poziom wyjścia.
 - [BUG] Zbadać pstryknięcie lub glitch audio podczas mutacji playlisty/stacji.
+- [BUG] Utwardzić zatwierdzone mutacje playlisty wymagające `PR_PLAY` lub `PR_STOP` na wypadek pełnej kolejki Playera. Obecny ograniczony `PLQ_SEND_DELAY` nie blokuje AsyncTCP bezterminowo i nie zmienia source intent po odrzuceniu, ale po timeoutcie wcześniej zatwierdzona playlista może oczekiwać reconnectu albo zatrzymania do następnej komendy użytkownika.
 
 ## Audio, RADIO i kodeki
 
