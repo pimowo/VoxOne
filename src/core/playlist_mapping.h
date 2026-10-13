@@ -3,6 +3,28 @@
 
 #include <stdint.h>
 
+enum class StationRuntimeAction : uint8_t { None, Refresh, Play, Stop };
+
+constexpr StationRuntimeAction stationRuntimeAction(bool affectsActive,
+                                                     bool hasSelection,
+                                                     bool reconnect) {
+  return !affectsActive ? StationRuntimeAction::None :
+         !hasSelection ? StationRuntimeAction::Stop :
+         reconnect ? StationRuntimeAction::Play : StationRuntimeAction::Refresh;
+}
+
+struct StationRefreshChanges {
+  bool volume;
+  bool metadataMode;
+};
+
+constexpr StationRefreshChanges stationRefreshChanges(
+    int previousOvol, uint8_t previousMetadataMode,
+    int currentOvol, uint8_t currentMetadataMode) {
+  return {previousOvol != currentOvol,
+          previousMetadataMode != currentMetadataMode};
+}
+
 constexpr uint16_t stationAfterMove(uint16_t current, uint16_t from, uint16_t to) {
   return current == from ? to :
          from < to && current > from && current <= to ? current - 1 :
@@ -29,5 +51,13 @@ static_assert(stationAfterDelete(5, 5, 12) == 5, "delete current middle");
 static_assert(stationAfterDelete(13, 13, 12) == 12, "delete current last");
 static_assert(stationAfterDelete(1, 1, 0) == 0, "delete sole station");
 static_assert(stationAfterDelete(0, 1, 0) == 0, "empty selection");
+static_assert(stationRuntimeAction(false, true, false) ==
+              StationRuntimeAction::None, "inactive mutation");
+static_assert(stationRuntimeAction(true, true, false) ==
+              StationRuntimeAction::Refresh, "active metadata/OVOL refresh");
+static_assert(stationRuntimeAction(true, true, true) ==
+              StationRuntimeAction::Play, "active reconnect");
+static_assert(stationRuntimeAction(true, false, false) ==
+              StationRuntimeAction::Stop, "active station removed");
 
 #endif

@@ -29,7 +29,13 @@ enum playerRequestType_e : uint8_t {
   PR_RADIO_RESUME = 11,
   PR_UPDATE_STOP = 12,
   PR_RADIO_NETWORK_OFFLINE = 13,
-  PR_RADIO_NETWORK_ONLINE = 14
+  PR_RADIO_NETWORK_ONLINE = 14,
+  PR_STATION_REFRESH = 15
+};
+enum playerStopPayload_e : int {
+  PR_STOP_KEEP_STATION = 0,
+  PR_STOP_CLEAR_STATION = -1,
+  PR_STOP_CLEAR_STATION_RESET_OVOL = -2
 };
 struct playerRequestParams_t
 {
@@ -59,6 +65,8 @@ class Player: public Audio {
     void _stop(bool alreadyStopped = false,
                RadioStopReason reason = RadioStopReason::Normal);
     void _play(uint16_t stationId, bool sourceResume = false);
+    void _refreshStation(uint16_t stationId);
+    void _clearStation(bool resetOvol);
     void _loadVol(uint8_t volume);
     bool _hasError;
     void browseUrl(const char* url);

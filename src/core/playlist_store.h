@@ -53,6 +53,7 @@ class PlaylistGuard {
   PlaylistGuard();
   ~PlaylistGuard();
   explicit operator bool() const { return held_; }
+  void release();
   PlaylistGuard(const PlaylistGuard&) = delete;
   PlaylistGuard& operator=(const PlaylistGuard&) = delete;
  private:

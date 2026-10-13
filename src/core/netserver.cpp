@@ -2334,6 +2334,13 @@ void handleStationsImport(AsyncWebServerRequest* request) {
     return;
   }
   const size_t oldCount = rows.size();
+  const uint16_t oldCurrent = config.lastStation();
+  if (oldCurrent > oldCount) {
+    stationsError(request, 500, "invalid_playlist_state");
+    finishPlaylistUpload(request);
+    return;
+  }
+  const PlaylistRow oldActive = oldCurrent ? rows[oldCurrent - 1] : PlaylistRow{};
   if (hasEmpty && !empty) {
     stationsError(request, 400, "bad_empty");
     finishPlaylistUpload(request);
@@ -2401,16 +2408,8 @@ void handleStationsImport(AsyncWebServerRequest* request) {
     }
     rows.clear();
   }
-  const uint16_t oldCurrent = config.lastStation();
-  if (oldCurrent > oldCount) {
-    stationsError(request, 500, "invalid_playlist_state");
-    finishPlaylistUpload(request);
-    return;
-  }
-  const uint16_t newCurrent = stationImportCurrent(rows, oldCurrent, config.station.id);
-  const uint64_t oldId = config.station.id;
-  const String oldUrl = config.station.url;
-  const uint8_t oldMode = config.station.metadataMode;
+  const uint16_t newCurrent =
+      stationImportCurrent(rows, oldCurrent, oldActive.id);
   String newRevision;
   const PlaylistWriteError result =
       playlistStore.commit(rows, newCurrent, newRevision);
@@ -2424,32 +2423,23 @@ void handleStationsImport(AsyncWebServerRequest* request) {
     finishPlaylistUpload(request);
     return;
   }
+  guard.release();
   finishPlaylistUpload(request);
-  if (newCurrent == 0) {
-    config.station.id = 0;
-    config.station.metadataMode = STATION_META_NORMAL;
-    config.station.name[0] = '\0';
-    config.station.url[0] = '\0';
-    config.station.title[0] = '\0';
-    config.station.ovol = 0;
-    player.sendCommand({PR_STOP, 0});
-    display.putRequest(NEWSTATION);
-    display.putRequest(NEWTITLE);
-    netserver.requestOnChange(STATION, 0);
-    netserver.requestOnChange(TITLE, 0);
-  } else {
-    const PlaylistRow& selected = rows[newCurrent - 1];
-    if (player.isRunning() && (oldId != selected.id || oldUrl != selected.url)) {
+  const bool reconnect = newCurrent != 0 && player.isRunning() &&
+      (oldActive.id != rows[newCurrent - 1].id ||
+       oldActive.url != rows[newCurrent - 1].url);
+  switch (stationRuntimeAction(true, newCurrent != 0, reconnect)) {
+    case StationRuntimeAction::Stop:
+      player.sendCommand({PR_STOP, PR_STOP_CLEAR_STATION_RESET_OVOL});
+      break;
+    case StationRuntimeAction::Play:
       player.sendCommand({PR_PLAY, newCurrent});
-    } else {
-      config.loadStation(newCurrent);
-      display.putRequest(NEWSTATION);
-      netserver.requestOnChange(STATION, 0);
-    }
-  }
-  if (newCurrent != 0 && oldMode != config.station.metadataMode) {
-    display.putRequest(NEWTITLE);
-    netserver.requestOnChange(TITLE, 0);
+      break;
+    case StationRuntimeAction::Refresh:
+      player.sendCommand({PR_STATION_REFRESH, newCurrent});
+      break;
+    case StationRuntimeAction::None:
+      break;
   }
   stationsReply(request, 200, String("{\"ok\":true,\"revision\":\"") +
       newRevision + "\",\"current\":" + String(newCurrent) +
@@ -2518,21 +2508,26 @@ void handleStationMetadata(AsyncWebServerRequest* request) {
     stationsError(request, 404, "station_not_found");
     return;
   }
+  const uint8_t previousMetadataMode = rows[index].metadataMode;
   rows[index].metadataMode = swapText == "1" ? STATION_META_SWAP : STATION_META_NORMAL;
   String newRevision;
-  const bool active = config.station.id == id;
+  const uint16_t current = config.lastStation();
+  if (current > rows.size()) {
+    stationsError(request, 500, "invalid_playlist_state");
+    return;
+  }
+  const bool active = current != 0 && rows[current - 1].id == id;
+  const bool modeChanged = active &&
+      previousMetadataMode != rows[index].metadataMode;
   const PlaylistWriteError metadataResult =
-      playlistStore.commit(rows, config.lastStation(), newRevision);
+      playlistStore.commit(rows, current, newRevision);
   if (metadataResult != PlaylistWriteError::OK) {
     stationsError(request, metadataResult == PlaylistWriteError::NO_SPACE ? 507 : 500,
                   "station_write_failed");
     return;
   }
-  if (active && config.station.metadataMode != rows[index].metadataMode) {
-    config.station.metadataMode = rows[index].metadataMode;
-    display.putRequest(NEWTITLE);
-    netserver.requestOnChange(TITLE, 0);
-  }
+  guard.release();
+  if (modeChanged) player.sendCommand({PR_STATION_REFRESH, current});
   stationsReply(request, 200, String("{\"ok\":true,\"revision\":\"") +
       newRevision + "\",\"id\":\"" + idText +
       "\",\"metadataMode\":\"" + (swapText == "1" ? "swap" : "normal") +
@@ -2553,7 +2548,6 @@ void handleStationsMutation(AsyncWebServerRequest *request) {
   const uint32_t mutationStartedUs = micros();
   const uint32_t bufferBefore = player.inBufferFilled();
   const bool runningBefore = player.isRunning();
-  const int runtimeOvolBefore = config.station.ovol;
   String clientRevision;
   if (!stationParam(request, "revision", clientRevision) || clientRevision.length() != 8) {
     stationsError(request, 400, "bad_revision");
@@ -2581,12 +2575,12 @@ void handleStationsMutation(AsyncWebServerRequest *request) {
   const uint16_t oldCurrent = config.lastStation();
   uint16_t newCurrent = oldCurrent;
   uint16_t number = 0;
-  bool reconnect = false, stop = false, refreshCurrent = false;
+  bool reconnect = false, refreshCurrent = false;
   if (oldCurrent > rows.size()) {
     stationsError(request, 500, "invalid_playlist_state");
     return;
   }
-  const uint64_t activeIdBefore = oldCurrent ? rows[oldCurrent - 1].id : 0;
+  const PlaylistRow activeBefore = oldCurrent ? rows[oldCurrent - 1] : PlaylistRow{};
   if (add || edit) {
     String name, url, ovolText;
     if (!stationParam(request, "name", name) || !stationParam(request, "url", url) ||
@@ -2641,7 +2635,6 @@ void handleStationsMutation(AsyncWebServerRequest *request) {
     newCurrent = stationAfterDelete(oldCurrent, number, rows.size());
     if (number == oldCurrent) {
       reconnect = newCurrent != 0 && player.isRunning();
-      stop = newCurrent == 0;
     }
     refreshCurrent = number <= oldCurrent;
   }
@@ -2696,45 +2689,26 @@ void handleStationsMutation(AsyncWebServerRequest *request) {
     else stationsError(request, 500, "playlist_write_failed");
     return;
   }
-  const uint8_t previousMode = config.station.metadataMode;
+  guard.release();
   const char* playerAction = "none";
-  if (edit && number == oldCurrent && !reconnect) {
-    const PlaylistRow& active = rows[number - 1];
-    const bool volumeChanged = config.station.ovol != active.ovol;
-    strlcpy(config.station.name, active.name.c_str(), sizeof(config.station.name));
-    strlcpy(config.station.url, active.url.c_str(), sizeof(config.station.url));
-    config.station.ovol = active.ovol;
-    config.station.id = active.id;
-    config.station.metadataMode = active.metadataMode;
-    if (volumeChanged) player.setVol(config.store.volume);
-    display.putRequest(NEWSTATION);
-  }
-  if (remove && number == oldCurrent && newCurrent != 0 && !reconnect) {
-    config.loadStation(newCurrent);
-    display.putRequest(NEWSTATION);
-  }
-  if (stop) {
-    config.station.id = 0;
-    config.station.metadataMode = STATION_META_NORMAL;
-    config.station.name[0] = '\0';
-    config.station.url[0] = '\0';
-    config.station.title[0] = '\0';
+  const bool affectsActive = (edit || remove) && number == oldCurrent;
+  switch (stationRuntimeAction(affectsActive, newCurrent != 0, reconnect)) {
+  case StationRuntimeAction::Stop:
     playerAction = "PR_STOP";
-    player.sendCommand({PR_STOP, 0});
-    display.putRequest(NEWSTATION);
-    display.putRequest(NEWTITLE);
-    netserver.requestOnChange(STATION, 0);
-    netserver.requestOnChange(TITLE, 0);
-  } else if (reconnect) {
+    player.sendCommand({PR_STOP, PR_STOP_CLEAR_STATION});
+    break;
+  case StationRuntimeAction::Play:
     netserver.requestOnChange(ITEM, 0);
     playerAction = "PR_PLAY";
     player.sendCommand({PR_PLAY, newCurrent});
-  } else if (refreshCurrent) {
-    netserver.requestOnChange(STATION, 0);
-  }
-  if (!reconnect && !stop && previousMode != config.station.metadataMode) {
-    display.putRequest(NEWTITLE);
-    netserver.requestOnChange(TITLE, 0);
+    break;
+  case StationRuntimeAction::Refresh:
+    playerAction = "PR_STATION_REFRESH";
+    player.sendCommand({PR_STATION_REFRESH, newCurrent});
+    break;
+  case StationRuntimeAction::None:
+    if (refreshCurrent) netserver.requestOnChange(STATION, 0);
+    break;
   }
   const uint64_t activeIdTarget = newCurrent ? rows[newCurrent - 1].id : 0;
   const int targetOvol = newCurrent ? rows[newCurrent - 1].ovol : 0;
@@ -2764,9 +2738,9 @@ void handleStationsMutation(AsyncWebServerRequest *request) {
       runningBefore ? 1U : 0U, runningAfter ? 1U : 0U, playerAction,
       reconnect ? 1U : 0U, static_cast<unsigned>(oldCurrent),
       static_cast<unsigned>(newCurrent),
-      static_cast<unsigned long long>(activeIdBefore),
-      static_cast<unsigned long long>(activeIdTarget), runtimeOvolBefore,
-      config.station.ovol, targetOvol);
+      static_cast<unsigned long long>(activeBefore.id),
+      static_cast<unsigned long long>(activeIdTarget), activeBefore.ovol,
+      targetOvol, targetOvol);
   stationsReply(request, 200, String("{\"ok\":true,\"revision\":\"") +
       newRevision + "\",\"current\":" + String(newCurrent) +
       ",\"count\":" + String(rows.size()) + "}");

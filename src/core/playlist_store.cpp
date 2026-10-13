@@ -257,7 +257,13 @@ void PlaylistStore::unlock() {
 }
 
 PlaylistGuard::PlaylistGuard() : held_(playlistStore.lock()) {}
-PlaylistGuard::~PlaylistGuard() { if (held_) playlistStore.unlock(); }
+PlaylistGuard::~PlaylistGuard() { release(); }
+
+void PlaylistGuard::release() {
+  if (!held_) return;
+  playlistStore.unlock();
+  held_ = false;
+}
 
 bool PlaylistStore::parseInteger(const String& text, int& value) {
   return playlistParseInteger(text.c_str(), text.length(), value);

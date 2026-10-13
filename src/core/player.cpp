@@ -11,6 +11,8 @@
 #include "network.h"
 #include "bt_audio_input.h"
 #include "ui_state.h"
+#include "playlist_mapping.h"
+#include "station_format.h"
 #if I2S_DOUT!=255
 #include <driver/i2s.h>
 #endif
@@ -61,7 +63,12 @@ void Player::init() {
 void Player::sendCommand(playerRequestParams_t request){
   if(playerQueue==NULL) return;
   if(systemUpdateAudioBlocked() && request.type != PR_UPDATE_STOP) return;
-  if(xQueueSend(playerQueue, &request, PLQ_SEND_DELAY) != pdPASS) return;
+  // A committed playlist mutation must eventually refresh the runtime station.
+  // Its callers release PlaylistGuard first, so waiting here only suspends the
+  // producer task while Player::loop() remains free to drain the queue.
+  const TickType_t sendWait = request.type == PR_STATION_REFRESH
+      ? portMAX_DELAY : PLQ_SEND_DELAY;
+  if(xQueueSend(playerQueue, &request, sendWait) != pdPASS) return;
   switch (request.type) {
     case PR_PLAY:
     case PR_STOP:
@@ -127,6 +134,35 @@ void Player::_stop(bool alreadyStopped, RadioStopReason reason){
   if (player_on_stop_play) player_on_stop_play();
 }
 
+void Player::_clearStation(bool resetOvol) {
+  config.station.id = 0;
+  config.station.metadataMode = STATION_META_NORMAL;
+  config.station.name[0] = '\0';
+  config.station.url[0] = '\0';
+  config.station.title[0] = '\0';
+  if (resetOvol) config.station.ovol = 0;
+  display.putRequest(NEWSTATION);
+  display.putRequest(NEWTITLE);
+  netserver.requestOnChange(STATION, 0);
+  netserver.requestOnChange(TITLE, 0);
+}
+
+void Player::_refreshStation(uint16_t stationId) {
+  const int previousOvol = config.station.ovol;
+  const uint8_t previousMode = config.station.metadataMode;
+  if (!config.loadStation(stationId)) return;
+  const StationRefreshChanges changes = stationRefreshChanges(
+      previousOvol, previousMode, config.station.ovol,
+      config.station.metadataMode);
+  if (changes.volume) setVol(config.store.volume);
+  display.putRequest(NEWSTATION);
+  netserver.requestOnChange(STATION, 0);
+  if (changes.metadataMode) {
+    display.putRequest(NEWTITLE);
+    netserver.requestOnChange(TITLE, 0);
+  }
+}
+
 void resetPlayer(){
   if(!config.store.watchdog) return;
   player.resetQueue();
@@ -185,6 +221,10 @@ void Player::loop() {
         else _stop(false, RadioStopReason::SourceSwitch);
         break;
       case PR_STOP:
+        if (requestP.payload < PR_STOP_KEEP_STATION) {
+          _clearStation(
+              requestP.payload == PR_STOP_CLEAR_STATION_RESET_OVOL);
+        }
         _radioReconnect.cancel();
         network.lostPlaying = false;
         if (_temporaryUrls) xQueueReset(_temporaryUrls);
@@ -197,6 +237,10 @@ void Player::loop() {
           _stop();
         }
         sourceManagerRadioStopConsumed();
+        break;
+      case PR_STATION_REFRESH:
+        if (requestP.payload > 0)
+          _refreshStation(static_cast<uint16_t>(requestP.payload));
         break;
       case PR_RADIO_SUSPEND:
         _radioReconnect.cancel();
