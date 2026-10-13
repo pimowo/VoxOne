@@ -114,6 +114,7 @@ $nativeSources=@{
  dsp_transport_native=@('src/core/dsp_model.cpp','src/core/dsp_storage_format.cpp','src/core/dsp_service.cpp','src/core/dsp_transport_protocol.cpp')
  dsp_state_json_native=@('src/core/dsp_model.cpp','src/core/dsp_storage_format.cpp','src/core/dsp_service.cpp','src/core/dsp_state_json.cpp')
  mqtt_config_native=@('src/core/volume_map.cpp')
+ ota_boot_health_native=@('src/core/ota_boot_health.cpp')
  radio_format_detection_native=@('src/core/radio_format_detection.cpp')
  radio_url_resolution_native=@('src/core/radio_url_resolution.cpp')
  runtime_display_activation_native=@('src/displays/display_backend_selection.cpp','src/hardware/runtime_hardware_config.cpp')
@@ -237,6 +238,12 @@ if(-not $onWindows) {
 Invoke-Step 'Web Update headless' {
  & $Python (Join-Path $root 'test/voxone_update_headless.py') 2>&1 | ForEach-Object { Write-Host $_ }
  if($LASTEXITCODE -ne 0) { throw 'Existing Chrome test failed' }
+}
+Invoke-Step 'HIL diagnostics' {
+ foreach($testName in @('m0_flash_backup_test.py','security_enforce_hil_test.py')) {
+  & $Python (Join-Path $root "test/$testName") 2>&1 | ForEach-Object { Write-Host $_ }
+  if($LASTEXITCODE -ne 0) { throw "HIL diagnostic test failed: $testName" }
+ }
 }
 $initialAssets=Get-AssetHashes
 Invoke-Step 'SPIFFS' {

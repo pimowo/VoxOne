@@ -139,6 +139,8 @@ void Config::init() {
   }
 #endif
   spiffsMounted = false;
+  webUpdateDataReady = false;
+  wifiConfigReady = false;
   currentWwwReady = false;
   radioPlaylistReady = false;
   uint8_t configArea[EEPROM_SIZE - EEPROM_START]{};
@@ -150,6 +152,7 @@ void Config::init() {
   const auto loaded = voxone::config_format::loadStartupConfig(
       eepromReady ? configArea : nullptr, sizeof(configArea), supportsBt, store,
       [this](config_t&) { _applyDefaults(); });
+  _startupStatus = loaded.status;
   _storage.begin(loaded.status, loaded.storedBtEnabled);
   btRuntime.configureBeforeStart(loaded.btEnabled);
   Serial.printf("[CONFIG] %s\n", voxone::config_format::configStartupMessage(loaded.status));
@@ -177,16 +180,21 @@ void Config::init() {
     Serial.printf("[CONFIG] persistence: %s\n", voxone::config_format::configWriteMessage(startupWrite));
   BOOTLOG("CONFIG_VERSION\t%d", store.version);
   _initHW();
-  if (!SPIFFS.begin(true)) {
+  // Never format shared data automatically while a MAIN image may still be
+  // PENDING_VERIFY. A damaged filesystem must be visible to the OTA health
+  // gate so the previous firmware can be selected without destroying data.
+  if (!SPIFFS.begin(false)) {
     Serial.println("##[ERROR]#\tSPIFFS Mount Failed");
     return;
   }
   spiffsMounted = true;
   BOOTLOG("SPIFFS mounted");
   voxone::config_restore::cleanupStaleAfterStorageInit();
-  if (!restoreWebUpdateData()) Serial.println("##[ERROR]# Web Update data restore incomplete");
+  webUpdateDataReady = restoreWebUpdateData();
+  if (!webUpdateDataReady) Serial.println("##[ERROR]# Web Update data restore incomplete");
   WifiConfigSpiffsStorage wifiStorage;
-  if (!voxone::wifi_config_atomic::recover(wifiStorage))
+  wifiConfigReady = voxone::wifi_config_atomic::recover(wifiStorage);
+  if (!wifiConfigReady)
     Serial.println("##[ERROR]# Wi-Fi credentials recovery incomplete");
   radioPlaylistReady = playlistStore.begin() && playlistStore.recover();
   if (!radioPlaylistReady)

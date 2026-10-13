@@ -131,6 +131,7 @@ class NetServer {
   public:
     NetServer() {};
     bool begin(bool quiet=false);
+    bool started() const { return _started; }
     void loop();
     void serviceBtFirmwareUpdate();  // Called from the main loop after BtLink::loop().
     void serviceUpdateRestart();  // MAIN-loop-only, after update state publication.

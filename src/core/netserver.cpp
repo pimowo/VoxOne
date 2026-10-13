@@ -3,6 +3,7 @@
 #include "update_progress.h"
 #include "update_restart_coordinator.h"
 #include "update_runtime_guard.h"
+#include "ota_boot_runtime.h"
 #include "web_update_state.h"
 #include "bt_update_progress.h"
 #include "source_manager.h"
@@ -684,11 +685,16 @@ bool NetServer::begin(bool quiet) {
   playerBufMax = psramInit()?300000:1600 * config.store.abuff;
   _volumeUpdatePending = false;
   _lastVolumeUpdate = millis() - NS_VOLUME_INTERVAL_MS;
-  nsQueue = xQueueCreate( 20, sizeof( nsRequestParams_t ) );
-  while(nsQueue==NULL){;}
+  nsQueue = xQueueCreate(20, sizeof(nsRequestParams_t));
+  if (!nsQueue) {
+    Serial.println("##[ERROR]# netserver queue unavailable");
+    return false;
+  }
 #if defined(VOXONE_PROFILE_L0)
-  if (!voxone::dsp::beginDspTransport())
+  if (!voxone::dsp::beginDspTransport()) {
     Serial.println("[DSP] transport queue unavailable");
+    return false;
+  }
 #endif
 
   // Must precede static handlers: their canHandle() opens files in SPIFFS.
@@ -730,10 +736,16 @@ bool NetServer::begin(bool quiet) {
   webserver.on(voxone::security::kSecurityLogoutRoute, HTTP_POST,
                handleSecurityLogout);
   webserver.on("/api/ready", HTTP_GET, [](AsyncWebServerRequest* request) {
-    char body[80];
+    voxone::ota::reportHttpApiProbe();
+    char ota[320];
+    char body[448];
+    if (!voxone::ota::formatBootHealthJson(ota, sizeof(ota)))
+      std::snprintf(ota, sizeof(ota),
+                    "{\"health\":\"diagnostic_error\"}");
     snprintf(body, sizeof(body),
-             "{\"ready\":true,\"bootId\":\"%08lx\"}",
-             static_cast<unsigned long>(webBootId));
+             "{\"ready\":%s,\"bootId\":\"%08lx\",\"ota\":%s}",
+             voxone::ota::bootHealthReady() ? "true" : "false",
+             static_cast<unsigned long>(webBootId), ota);
     AsyncWebServerResponse* response = request->beginResponse(
         200, "application/json; charset=utf-8", body);
     response->addHeader("Cache-Control", "no-store, max-age=0");

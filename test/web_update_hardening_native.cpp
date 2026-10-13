@@ -138,7 +138,9 @@ int main() {
          std::string::npos);
   assert(server.find("webserver.on(\"/api/ready\", HTTP_GET") !=
          std::string::npos);
-  assert(server.find("\"{\\\"ready\\\":true,\\\"bootId\\\":\\\"%08lx\\\"}\"") !=
+  assert(server.find("voxone::ota::bootHealthReady() ? \"true\" : \"false\"") !=
+         std::string::npos);
+  assert(server.find("voxone::ota::formatBootHealthJson") !=
          std::string::npos);
   assert(server.find("Cache-Control\", \"no-store, max-age=0") !=
          std::string::npos);

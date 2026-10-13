@@ -21,6 +21,7 @@
 #include "core/nvs_diagnostics.h"
 #include "core/dsp_runtime.h"
 #include "core/ui_state.h"
+#include "core/ota_boot_runtime.h"
 #include "hardware/runtime_hardware_config.h"
 #include "displays/display_backend_selection.h"
 #include <esp_heap_caps.h>
@@ -77,6 +78,44 @@ void reportEnduranceHealth(uint32_t nowMs) {
   enduranceMaximumLoopUs = 0;
   enduranceLastReportMs = nowMs;
 }
+
+bool bootConfigurationReady(
+    voxone::hardware::RuntimeHardwareLoadStatus hardwareStatus) {
+  const auto startupStatus = config.startupStatus();
+  const bool configRecordReady =
+      startupStatus == voxone::config_format::ConfigRecordStatus::LOADED_V7 ||
+      startupStatus == voxone::config_format::ConfigRecordStatus::MIGRATED_V5 ||
+      startupStatus == voxone::config_format::ConfigRecordStatus::MIGRATED_V6;
+  const bool hardwareReady =
+      hardwareStatus == voxone::hardware::RuntimeHardwareLoadStatus::Loaded ||
+      hardwareStatus ==
+          voxone::hardware::RuntimeHardwareLoadStatus::DefaultMissing;
+  return configRecordReady && hardwareReady &&
+      config.storageMode() == voxone::config_format::ConfigStorageMode::V7;
+}
+
+void completeBootHealth(
+    voxone::hardware::RuntimeHardwareLoadStatus hardwareStatus,
+    bool netserverReady, bool networkReady) {
+  const bool configurationReady = bootConfigurationReady(hardwareStatus);
+  // currentWwwReady is deliberately not required: an older compatible
+  // SPIFFS can serve its assets, while embedded /api/ready and /emergency
+  // remain available independently of the current web bundle.
+  const bool dataReady = config.spiffsMounted && config.webUpdateDataReady &&
+      config.wifiConfigReady && config.radioPlaylistReady;
+  const bool runtimeReady = netserverReady && netserver.started() &&
+      display.ready();
+  if (!configurationReady)
+    voxone::ota::reportBootFatal(voxone::ota::Failure::Configuration);
+  else if (!dataReady)
+    voxone::ota::reportBootFatal(voxone::ota::Failure::DataPartition);
+  else if (!runtimeReady)
+    voxone::ota::reportBootFatal(voxone::ota::Failure::RuntimeService);
+  voxone::ota::reportBootSetup(
+      configurationReady, dataReady, runtimeReady,
+      true,  // Every current MAIN OTA path is network-originated.
+      networkReady, false);  // Set only by an actual /api/ready request.
+}
 }  // namespace
 
 #if USE_OTA
@@ -119,9 +158,11 @@ void setupOTA(){
 
 void setup() {
   Serial.begin(115200);
+  voxone::ota::beginBootHealthMonitor();
   const auto restoreRecovery = voxone::config_restore::recoverAtBoot();
   if (restoreRecovery == voxone::config_restore::BootRecoveryStatus::Failed) {
     Serial.println("##[ERROR]# Config restore recovery failed; boot halted");
+    voxone::ota::reportBootFatal(voxone::ota::Failure::ConfigRestore);
     for (;;) delay(1000);
   }
   if (restoreRecovery == voxone::config_restore::BootRecoveryStatus::Recovered)
@@ -174,15 +215,17 @@ void setup() {
     if (btRuntime.physicalStarted()) btAudioInput.begin();
   #endif
   logNvsStats();
+  bool netserverReady = false;
   if (network.status != CONNECTED) {
-    netserver.begin();
+    netserverReady = netserver.begin();
     initControls();
     display.putRequest(DSP_START);
     while(!display.ready()) delay(10);
+    completeBootHealth(runtimeHardwareStatus, netserverReady, false);
     return;
   }
   config.initRadioPlaylist();
-  netserver.begin();
+  netserverReady = netserver.begin();
   initControls();
   display.putRequest(DSP_START);
   while(!display.ready()) delay(10);
@@ -191,6 +234,7 @@ void setup() {
   #endif
   player.lockOutput=false;
   // Preserve the selected station, but always enter the base source in STOP.
+  completeBootHealth(runtimeHardwareStatus, netserverReady, network.ready());
 }
 
 void loop() {
@@ -201,6 +245,7 @@ void loop() {
   timekeeper.loop1();
   serialCli.loop();
   network.loop();
+  voxone::ota::serviceBootHealth(network.ready());
   #if VOXONE_HAS_BT && VOXONE_PIN_MAP_COMPLETE
     if (btRuntime.physicalStarted()) {
       btLink.loop();

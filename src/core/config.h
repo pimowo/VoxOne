@@ -152,6 +152,8 @@ class Config {
     uint8_t ssidsCount;
     uint16_t sleepfor;
     bool     spiffsMounted;
+    bool     webUpdateDataReady;
+    bool     wifiConfigReady;
     bool     currentWwwReady;
     bool     radioPlaylistReady;
     uint16_t vuThreshold;
@@ -169,6 +171,7 @@ class Config {
     bool persistV7();
     bool setBtEnabled(bool enabled);
     voxone::config_format::ConfigStorageMode storageMode() const { return _storage.mode(); }
+    voxone::config_format::ConfigRecordStatus startupStatus() const { return _startupStatus; }
     bool storedBtEnabled() const { return _storage.storedBtEnabled(); }
     void loadTheme();
     uint8_t setVolume(uint8_t val);
@@ -253,6 +256,8 @@ class Config {
       return chipId;
     }
   private:
+    voxone::config_format::ConfigRecordStatus _startupStatus =
+        voxone::config_format::ConfigRecordStatus::INVALID_ARGUMENT;
     class WriteLock {
      public:
       explicit WriteLock(SemaphoreHandle_t mutex) : mutex_(mutex) {
