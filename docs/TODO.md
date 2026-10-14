@@ -108,6 +108,39 @@
 
 - [POST-STABLE] MULTIROOM-1 — zaprojektować i wdrożyć grupowanie VoxOne w zaufanej sieci LAN, wybór lidera/odbiorników, synchronizację zegara i buforów, korekcję dryfu, reconnect oraz zabezpieczenie sterowania i strumienia; etap nie blokuje Stable 1.0.0.
 
+## LCD i WWW — VOXONE-UI-TODO-1
+
+Poniższy pakiet doprecyzowuje zatwierdzony zakres LCD i WWW. Nie zastępuje ani nie usuwa wcześniejszych pozycji backlogu; rozdziela bezpieczne poprawki istniejących widoków od funkcji wymagających wspólnego modelu konfiguracji, backendu lub persistence oraz od prac POST-STABLE.
+
+### A. Istniejące LCD i WWW — poprawki wizualne przed Stable
+
+- [STABLE] Uzupełnić `ST7789_284X76` o brakujące ekrany aktualizacji, zachowując działanie, stany i komunikaty zgodne z istniejącym ekranem aktualizacji OLED 128×64.
+- [STABLE] Na ekranie VOL `ST7789_284X76` pokazywać napis `MUTE` na czerwono, gdy wyciszenie jest aktywne; nie zmieniać semantyki MUTE ani zapamiętanej wartości `userVolume`.
+- [STABLE] Na ekranie STATIONS `ST7789_284X76` przenieść oznaczenie `GRA` z prawej na lewą stronę.
+- [STABLE] Przebudować ekran PLAYER `ST7789_284X76` dla fizycznego obszaru 284×76: całkowicie usunąć zegar; zachować wiersze stacja, artysta i utwór, separator oraz dotychczasową prezentację głośności; tekst RSSI `-xx dBm` zastąpić słupkami Wi-Fi na skraju prawej strony jak w L0/M0; po lewej stronie słupków pokazywać ikonę BT tylko przy połączonym urządzeniu; format i bitrate, np. `MP3 128`, umieścić za wartością głośności i wyśrodkować między głośnością a ikoną BT; na dole po lewej pokazywać wzorowane na OLED ikony PLAY/PAUSE/STOP; za ikoną transportu pokazywać źródło `[WEB]` albo `[BT]`, wyśrodkowane między transportem a obszarem głośności.
+- [STABLE] Kolorystykę PLAYER `ST7789_284X76` odwzorować 1:1 z aktywnej implementacji L0, która używa profilu `ST7796_480X320` i pól `config.theme`; przed implementacją odczytać rzeczywiste użycia kolorów w rendererze L0, `src/core/display.cpp`, `src/displays/displayST7796.cpp`, `src/displays/conf/displayST7796conf.h` i współdzielonych widgetach. Nie dobierać nieznanych kolorów intuicyjnie.
+- [HARDWARE][STABLE][HIL PENDING] Na fizycznym `ST7789_284X76` sprawdzić brak nakładania tekstów i ikon oraz poprawny layout dla długich nazw, braku metadanych, MUTE, rozłączenia BT i skrajnych wartości głośności. Test sprzętowy pozostaje wymagany i nie może zostać zastąpiony samym buildem lub podglądem.
+- [STABLE] W belce WWW zastąpić `Vn` logo VoxOne, a numer wersji umieścić w osobnym kafelku stylistycznie zgodnym z kafelkiem profilu.
+- [STABLE] W STATUS WWW nadać przyciskom w karcie STACJA kolorystykę zakładek oraz ujednolicić pola Artysta i Utwór z ich wyglądem przy podłączonym BT. Dla karty Głośność nie dodawać żadnej nowej zmiany bez osobnego zatwierdzenia użytkownika.
+- [STABLE] W STACJE WWW przenieść akcje importu i eksportu na sam dół karty, poniżej listy stacji, oraz nadać im dokładne nazwy `Import listy` i `Eksport listy`.
+- [STABLE] W SPRZĘT WWW wyrównać odstępy między kartami, uporządkować ich wysokości i układ oraz uniknąć nieestetycznego sąsiedztwa niskiej i wysokiej karty. Etykietę `Tryb sterowania` prezentować z wartościami `Brak` / `Enkoder` / `Przyciski`, a `Display` zmienić na `Wyświetlacz`; zachować istniejącą koncepcję EC11 i 3×SW na wspólnych GPIO bez rozszerzania jej implementacji w tym pakiecie.
+- [STABLE] W SYSTEM WWW zmienić etykietę `Przywracanie` na `Przywracanie konfiguracji`, pozostawiając pozostały zakres sekcji bez zmian. W AKTUALIZACJA WWW zmienić `Profil` na `Profil sprzętu`.
+- [STABLE] W stopce WWW usunąć stan `Połączono` i zastąpić dotychczasowy tekst identyfikacyjny dokładnie tekstem `VoxOne © 2026 PMW Support: pmw.voxone@gmail.com`.
+- [STABLE] Ujednolicić tytuły kart WWW, preferując nazwy rozpoczynane wielką literą, oraz przenieść do VoxOne wizualny język NexaPanel: paletę kolorów, fonty, przyciski, suwaki, checkboxy, paski postępu, pola formularzy, karty, odstępy, zaokrąglenia i responsywność. Referencją tylko do odczytu jest `/home/piotrek/projects/NexaPanel/src/WebPanelPage.cpp`; zachować funkcjonalność, kontrakty WWW i SECURITY VoxOne, bez kopiowania logiki NexaPanel.
+
+Obecna sekcja AUDIO jest zaakceptowana i nie wymaga zmian w kategorii A.
+
+### B. Funkcje wymagające backendu, persistence lub wspólnego modelu
+
+- [POST-STABLE] Zachować jako wzorzec obecne przewijanie `ST7789_284X76` z pauzą poszczególnych wierszy i docelowo wprowadzić wspólne zachowanie przewijania dla obsługiwanych wyświetlaczy, pozostawiając rendererom dostosowanie do wymiarów i technologii panelu. W WWW dodać szybkość `Wolno` / `Normalnie` / `Szybko` oraz czas pauzy, gdzie `0` oznacza brak pauzy; zaprojektować wspólny model, propagację do aktywnego renderera i ewentualny trwały zapis. Nie zmieniać działającego przewijania w samym etapie dokumentacyjnym ani przed wydzieleniem bezpiecznego checkpointu implementacyjnego.
+- [POST-STABLE] Rozszerzyć zarządzanie profilami Wi-Fi w WWW o edycję oraz włączanie i wyłączanie poszczególnych sieci. Realizować to jako osobny etap funkcjonalny obejmujący backend, walidację, atomowy zapis i persistence; nie mieszać z kosmetyką WWW.
+- [DECISION] Karta `Sen` w bieżącym WWW jest wyłącznie statycznym placeholderem: pokazuje `Timer wyłączenia —` i informację `Konfiguracja w kolejnym etapie`, bez kontrolki, obsługi JS i wywołania backendu. Przed usunięciem lub zmianą wyjaśnić użytkownikowi ten stan i zatwierdzić docelowy kontrakt sleep/timera; nie przypisywać karcie istniejącej funkcji, której kod obecnie nie realizuje.
+- [POST-STABLE] Dla sekcji Wyświetlacz zapewnić ustawienie `Jasność LCD/OLED` jako suwak 0–100% z liczbową wartością. Najpierw zinwentaryzować capabilities i faktyczne mechanizmy poszczególnych ekranów — PWM podświetlenia dla TFT oraz contrast/current dla OLED — a dopiero potem zaprojektować regulację runtime, wspólny model i persistence; wartość 0% ma wygaszać ekran. Istniejący capability-gated suwak WWW i komenda runtime nie są jeszcze dowodem kompletnego wsparcia wszystkich backendów ani trwałego zapisu.
+
+### C. POST-STABLE
+
+- [POST-STABLE] Pozostawić obecną sekcję AUDIO bez zmian dla profili bez DSPmini. Na odpowiednio wyposażonych wariantach Lx funkcjonalność DSPmini ma docelowo rozszerzyć albo zastąpić odpowiednią część AUDIO zgodnie z capabilities, bez dublowania globalnej głośności. DSPmini, jego sprzęt, backend, persistence i integracja WWW/LCD pozostają POST-STABLE i nie należą do bieżącego pakietu implementacyjnego.
+
 ## WWW, API i WebSocket
 
 - [POST-STABLE] Rozszerzyć source-aware metadata WWW o przyszłe DLNA/AUX; RADIO/BT są bieżącym działającym baseline.
