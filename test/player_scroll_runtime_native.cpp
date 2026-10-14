@@ -239,12 +239,48 @@ int main() {
   expectTick(runtime, 101, true, 1, 0);
   expectTick(runtime, 102, true, 2, 0);
   assert(runtime.controller().phase() == ScrollEnginePhase::Waiting);
+
   expectTick(runtime, 1099, false);
   station.metrics.contentRevision++;
   expectTick(runtime, 1100, true, 0, 0);
   expectTick(runtime, 1101, false);
   assert(runtime.controller().activeRow() == 1);
   assert(runtime.controller().phase() == ScrollEnginePhase::Waiting);
+
+  // Republishing an identical configuration does not leave PLAYER or restart
+  // its waiting cycle. A real change leaves it once; Display then re-enters at
+  // the publication time so the replacement pause starts from that moment.
+  const uint32_t stationControlsBefore = station.controlChanges;
+  assert(!runtime.configure(true, ScrollRendererProfile::St7789_284x76,
+                            ScrollSettings{true, ScrollSpeed::Normal, 1000},
+                            ScrollSettingsSource::UserSettings));
+  assert(runtime.active());
+  assert(station.controlChanges == stationControlsBefore);
+  assert(runtime.controller().phase() == ScrollEnginePhase::Waiting);
+  assert(runtime.configure(true, ScrollRendererProfile::St7789_284x76,
+                           ScrollSettings{true, ScrollSpeed::Slow, 2000},
+                           ScrollSettingsSource::UserSettings));
+  assert(!runtime.active() && !station.coreControlled);
+  runtime.enter(2000);
+  expectTick(runtime, 2000, true, 0, 0);
+  expectTick(runtime, 2001, true, 1, 0);
+  expectTick(runtime, 2002, true, 2, 0);
+  expectTick(runtime, 3999, false);
+  assert(runtime.controller().phase() == ScrollEnginePhase::Waiting);
+
+  // The same change rule applies while moving: the old cycle is abandoned,
+  // all offsets reset, and no overdue frame is caught up.
+  expectTick(runtime, 4000, true, 0, 1);
+  assert(runtime.controller().phase() == ScrollEnginePhase::Moving);
+  assert(runtime.configure(true, ScrollRendererProfile::St7789_284x76,
+                           ScrollSettings{true, ScrollSpeed::Fast, 0},
+                           ScrollSettingsSource::UserSettings));
+  assert(!runtime.active());
+  runtime.enter(5000);
+  expectTick(runtime, 5000, true, 0, 0);
+  expectTick(runtime, 5001, true, 1, 0);
+  expectTick(runtime, 5002, true, 2, 0);
+  expectTick(runtime, 5009, true, 0, 0);
 
   // Empty, short and absent rows never animate. enabled=false retains static
   // core-controlled rendering without starting a legacy scheduler.
@@ -317,6 +353,10 @@ int main() {
   assert(displaySource.find("if (_title1) rows[count++]") != std::string::npos);
   assert(displaySource.find("if (_title2) rows[count++]") != std::string::npos);
   assert(displaySource.find("if (_playerScrollCoreEnabled())") !=
+         std::string::npos);
+  assert(displaySource.find("_playerScrollRefresh(nowMs);") !=
+         std::string::npos);
+  assert(displaySource.find("readScrollSettingsPersistent") ==
          std::string::npos);
   assert(displaySource.find("ScrollWidget::nextSt7789ScrollFrame()") !=
          std::string::npos);

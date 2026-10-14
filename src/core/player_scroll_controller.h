@@ -49,14 +49,25 @@ class PlayerScrollController {
         pendingResetMask_(0),
         active_(false) {}
 
-  void configure(ScrollRendererProfile profile,
+  bool configure(ScrollRendererProfile profile,
                  const ScrollSettings& settings,
                  ScrollSettingsSource source) {
+    if (configurationMatches(profile, settings, source)) return false;
     profile_ = profile;
     settings_ = settings;
     source_ = source;
     rebuildEngine();
     if (active_) pendingResetMask_ = presentRowsMask();
+    return true;
+  }
+
+  bool configurationMatches(ScrollRendererProfile profile,
+                            const ScrollSettings& settings,
+                            ScrollSettingsSource source) const {
+    return profile_ == profile && source_ == source &&
+           settings_.enabled == settings.enabled &&
+           settings_.speed == settings.speed &&
+           settings_.pauseMs == settings.pauseMs;
   }
 
   // Invalid input is rejected and converted to a safe empty layout.

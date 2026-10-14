@@ -5,6 +5,7 @@
 #include "core/serialcli.h"
 #include "core/player.h"
 #include "core/display.h"
+#include "core/display_scroll_runtime_config.h"
 #include "core/network.h"
 #include "core/netserver.h"
 #include "core/controls.h"
@@ -197,6 +198,7 @@ void setup() {
   if(REAL_LEDBUILTIN!=255) pinMode(REAL_LEDBUILTIN, OUTPUT);
   if (yoradio_on_setup) yoradio_on_setup();
   config.init();
+  (void)voxone::display_scroll::initializeScrollSettingsRuntimePersistent();
   btRuntime.start();
 #if defined(VOXONE_PROFILE_L0)
   voxone::dsp::initDspRuntime({config.store.bass, config.store.middle,

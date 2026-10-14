@@ -45,11 +45,15 @@ class PlayerScrollRuntime {
   PlayerScrollRuntime()
       : controller_{}, bindings_{}, rowCount_(0), enabled_(false), active_(false) {}
 
-  void configure(bool enabled, ScrollRendererProfile profile,
+  bool configure(bool enabled, ScrollRendererProfile profile,
                  const ScrollSettings& settings, ScrollSettingsSource source) {
+    if (enabled_ == enabled &&
+        controller_.configurationMatches(profile, settings, source))
+      return false;
     if (active_) leave();
     enabled_ = enabled;
-    controller_.configure(profile, settings, source);
+    (void)controller_.configure(profile, settings, source);
+    return true;
   }
 
   bool setRows(const PlayerScrollWidgetBinding* bindings, uint8_t count) {

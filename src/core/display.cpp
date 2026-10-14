@@ -1525,10 +1525,12 @@ bool Display::_playerScrollCoreEnabled() const {
 
 void Display::_playerScrollBind() {
   using namespace voxone::display_scroll;
-  _playerScrollRuntime.configure(_playerScrollCoreEnabled(),
-                                 activePlayerScrollProfile(),
-                                 defaultScrollSettings(),
-                                 ScrollSettingsSource::RendererDefaults);
+  const ScrollSettingsRuntimeSnapshot snapshot =
+      scrollSettingsRuntimeConfig().snapshot();
+  (void)_playerScrollRuntime.configure(_playerScrollCoreEnabled(),
+                                       activePlayerScrollProfile(),
+                                       snapshot.settings, snapshot.source);
+  _playerScrollConfigRevision = snapshot.revision;
   PlayerScrollWidgetBinding rows[PlayerScrollRuntime::kMaximumRows]{};
   uint8_t count = 0;
 #if VOXONE_DISPLAY_PROFILE == VOXONE_DISPLAY_PROFILE_ST7789_284X76
@@ -1542,8 +1544,10 @@ void Display::_playerScrollBind() {
 }
 
 void Display::_playerScrollEnter(uint32_t nowMs) {
-  if (_playerScrollReady && _playerScrollCoreEnabled())
+  if (_playerScrollReady && _playerScrollCoreEnabled()) {
+    _playerScrollRefresh(nowMs);
     _playerScrollRuntime.enter(nowMs);
+  }
 }
 
 void Display::_playerScrollLeave() {
@@ -1551,8 +1555,24 @@ void Display::_playerScrollLeave() {
 }
 
 void Display::_playerScrollTick(uint32_t nowMs) {
-  if (_playerScrollReady && _playerScrollRuntime.active())
+  if (_playerScrollReady && _playerScrollRuntime.active()) {
+    _playerScrollRefresh(nowMs);
     (void)_playerScrollRuntime.tick(nowMs);
+  }
+}
+
+void Display::_playerScrollRefresh(uint32_t nowMs) {
+  using namespace voxone::display_scroll;
+  const ScrollSettingsRuntimeSnapshot snapshot =
+      scrollSettingsRuntimeConfig().snapshot();
+  if (snapshot.revision == _playerScrollConfigRevision) return;
+
+  const bool wasActive = _playerScrollRuntime.active();
+  const bool changed = _playerScrollRuntime.configure(
+      _playerScrollCoreEnabled(), activePlayerScrollProfile(),
+      snapshot.settings, snapshot.source);
+  _playerScrollConfigRevision = snapshot.revision;
+  if (changed && wasActive) _playerScrollRuntime.enter(nowMs);
 }
 
 void Display::loop() {

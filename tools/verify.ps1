@@ -109,6 +109,7 @@ $nativeSources=@{
  config_startup_native=@('src/core/config_format.cpp','src/core/volume_map.cpp')
  config_persistence_native=@('src/core/config_format.cpp','src/core/volume_map.cpp')
  display_scroll_persistence_native=@('src/core/display_scroll_persistence.cpp')
+ display_scroll_runtime_config_native=@('src/core/display_scroll_runtime_config.cpp','src/core/display_scroll_persistence.cpp')
  dsp_model_native=@('src/core/dsp_model.cpp')
  dsp_storage_format_native=@('src/core/dsp_model.cpp','src/core/dsp_storage_format.cpp')
  dsp_service_native=@('src/core/dsp_model.cpp','src/core/dsp_service.cpp')
@@ -144,6 +145,7 @@ Invoke-Step 'Native tests' {
    $exe=Join-Path $work ($label+$(if($onWindows) { '.exe' } else { '' }))
    $compileLog=Join-Path $work ($label+'.compile.log')
    $compileArgs=@('-std=c++11','-O2','-Wall','-Wextra','-Werror','-Wno-unused-parameter')
+   if($name -eq 'display_scroll_runtime_config_native') { $compileArgs+='-pthread' }
    if($variant) {
     if($variant -eq 'CLEAN' -or $variant -eq 'DIRTY') { $compileArgs+="-DBUILD_ID_TEST_$variant=1" }
     else { $compileArgs+="-DVOXONE_PROFILE_$variant=1" }
@@ -189,6 +191,14 @@ if(-not $onWindows) {
   if($LASTEXITCODE -ne 0) { throw 'Sanitized display scroll persistence compile failed' }
   & $scrollPersistenceExe
   if($LASTEXITCODE -ne 0) { throw 'Sanitized display scroll persistence test failed' }
+  $scrollRuntimeConfigExe=Join-Path $work 'display_scroll_runtime_config_sanitized'
+  & $Cxx @sanitizerArgs '-pthread' '-o' $scrollRuntimeConfigExe `
+    (Join-Path $root 'test/display_scroll_runtime_config_native.cpp') `
+    (Join-Path $root 'src/core/display_scroll_runtime_config.cpp') `
+    (Join-Path $root 'src/core/display_scroll_persistence.cpp')
+  if($LASTEXITCODE -ne 0) { throw 'Sanitized display scroll runtime config compile failed' }
+  & $scrollRuntimeConfigExe
+  if($LASTEXITCODE -ne 0) { throw 'Sanitized display scroll runtime config test failed' }
   $restoreExe=Join-Path $work 'config_restore_sanitized'
   & $Cxx @sanitizerArgs '-o' $restoreExe `
     (Join-Path $root 'test/config_restore_transaction_native.cpp') `

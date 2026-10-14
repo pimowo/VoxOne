@@ -110,8 +110,8 @@ ScrollSettingsSaveStatus saveScrollSettings(
     const ScrollSettings& requested);
 ScrollSettingsEraseStatus eraseScrollSettings(ScrollSettingsStorage& storage);
 
-// Production NVS adapter. These functions are intentionally not called by the
-// active Display runtime yet; persistence remains an isolated subsystem.
+// Production NVS adapter. Runtime code reads through the explicit boot/reload
+// boundary in display_scroll_runtime_config; render ticks never call NVS.
 ScrollSettingsLoadResult readScrollSettingsPersistent();
 ScrollSettingsSaveStatus writeScrollSettingsPersistent(
     const ScrollSettingsLoadResult& current,

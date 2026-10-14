@@ -6,6 +6,7 @@
 #include "ui_state.h"
 #include "update_display_view.h"
 #include "player_scroll_runtime.h"
+#include "display_scroll_runtime_config.h"
 #include "../displays/display_profile.h"
 #if VOXONE_DISPLAY_PROFILE == VOXONE_DISPLAY_PROFILE_ST7796_480X320
 #include "st7796_player_scroll.h"
@@ -225,9 +226,11 @@ class Display {
     void _playerScrollEnter(uint32_t nowMs);
     void _playerScrollLeave();
     void _playerScrollTick(uint32_t nowMs);
+    void _playerScrollRefresh(uint32_t nowMs);
     bool _playerScrollCoreEnabled() const;
     voxone::display_scroll::PlayerScrollRuntime _playerScrollRuntime;
     bool _playerScrollReady = false;
+    uint32_t _playerScrollConfigRevision = 0xffffffffu;
 #if VOXONE_DISPLAY_PROFILE == VOXONE_DISPLAY_PROFILE_ST7796_480X320
     void _updatePlaybackStatus();
 #endif
