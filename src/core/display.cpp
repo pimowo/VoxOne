@@ -911,7 +911,7 @@ void Display::_buildPager(){
   };
   _meta->setChangeObserver(this, 0, onTextChanged);
   _title1->setChangeObserver(this, 1, onTextChanged);
-  _title2->setChangeObserver(this, 2, onTextChanged);
+  if (_title2) _title2->setChangeObserver(this, 2, onTextChanged);
 #endif
   _playerScrollBind();
 #if VOXONE_DISPLAY_PROFILE == VOXONE_DISPLAY_PROFILE_ST7789_284X76

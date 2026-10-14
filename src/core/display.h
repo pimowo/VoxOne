@@ -149,7 +149,10 @@ class Display {
     uint16_t width();
     uint16_t height();
   private:
-    ScrollWidget *_meta, *_title1, *_plcurrent, *_title2;
+    ScrollWidget *_meta = nullptr;
+    ScrollWidget *_title1 = nullptr;
+    ScrollWidget *_plcurrent = nullptr;
+    ScrollWidget *_title2 = nullptr;
     PlayListWidget *_plwidget;
     BitrateWidget *_fullbitrate;
     FillWidget *_metabackground, *_plbackground;
