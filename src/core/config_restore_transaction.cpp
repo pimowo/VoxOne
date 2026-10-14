@@ -39,6 +39,10 @@ Step TransactionStorage::commitStep() {
                      backend_.writeMarker(Phase::UiWritten)
                  ? Step::InProgress : Step::Failed;
     case Phase::UiWritten:
+      return backend_.apply(Component::Scroll) &&
+                     backend_.writeMarker(Phase::ScrollWritten)
+                 ? Step::InProgress : Step::Failed;
+    case Phase::ScrollWritten:
       return backend_.apply(Component::Wifi) &&
                      backend_.writeMarker(Phase::WifiWritten)
                  ? Step::InProgress : Step::Failed;

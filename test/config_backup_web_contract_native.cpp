@@ -68,10 +68,14 @@ int main() {
          std::string::npos);
   assert(adapter.find("PlaylistGuard playlistGuard") != std::string::npos);
   assert(adapter.find("BACKUP_CONFIG_READ") != std::string::npos);
+  assert(adapter.find("BACKUP_SCROLL_READ") != std::string::npos);
   assert(adapter.find("BACKUP_STREAM_WIFI") != std::string::npos);
   assert(adapter.find("BACKUP_STREAM_STATIONS") != std::string::npos);
   assert(adapter.find("ProductionRestoreUpload::append") != std::string::npos);
   assert(adapter.find("kBackupVariableOffset") != std::string::npos);
+  assert(adapter.find("ScrollCaptured") != std::string::npos);
+  assert(adapter.find("ScrollPresent") != std::string::npos);
+  assert(adapter.find("kScrollKey[] = \"scroll\"") != std::string::npos);
   assert(adapter.find("/data/.vxrestore.wifi.new") != std::string::npos);
   assert(adapter.find("/data/.vxrestore.stations.new") != std::string::npos);
   assert(adapter.find("SPIFFS.totalBytes() - SPIFFS.usedBytes()") !=

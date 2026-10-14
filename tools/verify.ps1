@@ -103,7 +103,7 @@ $nativeSources=@{
  bt_firmware_staging_native=@('src/core/bt_firmware_staging.cpp')
  bt_volume_native=@('src/core/bt_link_protocol.cpp')
  config_format_native=@('src/core/config_format.cpp','src/core/volume_map.cpp')
- config_backup_native=@('src/core/config_backup.cpp','src/core/config_format.cpp','src/core/volume_map.cpp','src/hardware/runtime_hardware_config.cpp')
+ config_backup_native=@('src/core/config_backup.cpp','src/core/config_format.cpp','src/core/volume_map.cpp','src/core/display_scroll_persistence.cpp','src/hardware/runtime_hardware_config.cpp')
  config_backup_web_native=@('src/core/config_backup_web.cpp')
  config_restore_transaction_native=@('src/core/config_restore_transaction.cpp')
  config_startup_native=@('src/core/config_format.cpp','src/core/volume_map.cpp')
@@ -175,6 +175,7 @@ if(-not $onWindows) {
    (Join-Path $root 'src/core/config_backup.cpp'),
    (Join-Path $root 'src/core/config_format.cpp'),
    (Join-Path $root 'src/core/volume_map.cpp'),
+   (Join-Path $root 'src/core/display_scroll_persistence.cpp'),
    (Join-Path $root 'src/hardware/runtime_hardware_config.cpp'),
    (Join-Path $root 'src/hardware/hardware_descriptor.cpp'))
   & $Cxx @sanitizerArgs '-DVOXONE_PROFILE_L0=1' '-o' $backupExe @backupSources

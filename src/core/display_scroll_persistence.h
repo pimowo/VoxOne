@@ -39,6 +39,15 @@ enum class ScrollSettingsStorageWriteStatus : uint8_t {
   VerifyError
 };
 
+enum class ScrollSettingsStorageEraseStatus : uint8_t {
+  Erased,
+  Missing,
+  OpenError,
+  EraseError,
+  CommitError,
+  VerifyError
+};
+
 enum class ScrollSettingsLoadStatus : uint8_t {
   UserSettings,
   RendererDefaultsMissing,
@@ -57,6 +66,15 @@ enum class ScrollSettingsSaveStatus : uint8_t {
   StorageVerifyError
 };
 
+enum class ScrollSettingsEraseStatus : uint8_t {
+  Erased,
+  Unchanged,
+  StorageOpenError,
+  StorageEraseError,
+  StorageCommitError,
+  StorageVerifyError
+};
+
 class ScrollSettingsStorage {
  public:
   virtual ~ScrollSettingsStorage() {}
@@ -65,6 +83,7 @@ class ScrollSettingsStorage {
                                                 size_t& size) = 0;
   virtual ScrollSettingsStorageWriteStatus write(const uint8_t* input,
                                                    size_t size) = 0;
+  virtual ScrollSettingsStorageEraseStatus erase() = 0;
 };
 
 // This is a value snapshot: it owns no storage handles and is safe to copy to
@@ -89,6 +108,7 @@ ScrollSettingsLoadResult loadScrollSettings(ScrollSettingsStorage& storage);
 ScrollSettingsSaveStatus saveScrollSettings(
     ScrollSettingsStorage& storage, const ScrollSettingsLoadResult& current,
     const ScrollSettings& requested);
+ScrollSettingsEraseStatus eraseScrollSettings(ScrollSettingsStorage& storage);
 
 // Production NVS adapter. These functions are intentionally not called by the
 // active Display runtime yet; persistence remains an isolated subsystem.
@@ -96,6 +116,7 @@ ScrollSettingsLoadResult readScrollSettingsPersistent();
 ScrollSettingsSaveStatus writeScrollSettingsPersistent(
     const ScrollSettingsLoadResult& current,
     const ScrollSettings& requested);
+ScrollSettingsEraseStatus eraseScrollSettingsPersistent();
 
 }  // namespace display_scroll
 }  // namespace voxone

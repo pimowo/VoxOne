@@ -80,7 +80,8 @@ int main() {
   assert(mapped.httpStatus == 500 &&
          std::strcmp(mapped.error, "restore_failed") == 0);
   for (Status status : {Status::Empty, Status::Truncated, Status::WrongMagic,
-                        Status::InvalidLength, Status::InvalidHardware}) {
+                        Status::InvalidLength, Status::InvalidHardware,
+                        Status::InvalidScroll}) {
     mapped = mapRestoreResult({status, false});
     assert(mapped.httpStatus == 400 &&
            std::strcmp(mapped.error, "invalid_file") == 0 &&

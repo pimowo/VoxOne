@@ -64,6 +64,25 @@ ScrollSettingsSaveStatus mapWriteStatus(
   return ScrollSettingsSaveStatus::StorageWriteError;
 }
 
+ScrollSettingsEraseStatus mapEraseStatus(
+    ScrollSettingsStorageEraseStatus status) {
+  switch (status) {
+    case ScrollSettingsStorageEraseStatus::Erased:
+      return ScrollSettingsEraseStatus::Erased;
+    case ScrollSettingsStorageEraseStatus::Missing:
+      return ScrollSettingsEraseStatus::Unchanged;
+    case ScrollSettingsStorageEraseStatus::OpenError:
+      return ScrollSettingsEraseStatus::StorageOpenError;
+    case ScrollSettingsStorageEraseStatus::EraseError:
+      return ScrollSettingsEraseStatus::StorageEraseError;
+    case ScrollSettingsStorageEraseStatus::CommitError:
+      return ScrollSettingsEraseStatus::StorageCommitError;
+    case ScrollSettingsStorageEraseStatus::VerifyError:
+      return ScrollSettingsEraseStatus::StorageVerifyError;
+  }
+  return ScrollSettingsEraseStatus::StorageEraseError;
+}
+
 }  // namespace
 
 static_assert(kCrcOffset + sizeof(uint32_t) == kScrollSettingsRecordSize,
@@ -167,6 +186,10 @@ ScrollSettingsSaveStatus saveScrollSettings(
   if (!serializeScrollSettingsRecord(requested, record, sizeof(record)))
     return ScrollSettingsSaveStatus::Invalid;
   return mapWriteStatus(storage.write(record, sizeof(record)));
+}
+
+ScrollSettingsEraseStatus eraseScrollSettings(ScrollSettingsStorage& storage) {
+  return mapEraseStatus(storage.erase());
 }
 
 }  // namespace display_scroll

@@ -49,6 +49,7 @@ ApiResult mapRestoreResult(const config_backup::RestoreResult& result) {
     case Status::InvalidHardware:
     case Status::InvalidMqtt:
     case Status::InvalidUi:
+    case Status::InvalidScroll:
     case Status::InvalidWifi:
     case Status::InvalidStations:
     case Status::InvalidArgument:

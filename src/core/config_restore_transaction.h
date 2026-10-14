@@ -17,7 +17,9 @@ enum class Phase : uint8_t {
   WifiWritten,
   StationsWritten,
   IndexRebuilt,
-  Verified
+  Verified,
+  // Appended to preserve the durable numeric values of marker schema 1.
+  ScrollWritten
 };
 
 enum class Component : uint8_t {
@@ -25,6 +27,7 @@ enum class Component : uint8_t {
   Hardware,
   Mqtt,
   Ui,
+  Scroll,
   Wifi,
   Stations
 };

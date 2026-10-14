@@ -38,6 +38,16 @@ class FakeStorage : public ScrollSettingsStorage {
     return ScrollSettingsStorageWriteStatus::Stored;
   }
 
+  ScrollSettingsStorageEraseStatus erase() override {
+    ++erases;
+    if (eraseStatus != ScrollSettingsStorageEraseStatus::Erased &&
+        eraseStatus != ScrollSettingsStorageEraseStatus::Missing)
+      return eraseStatus;
+    size = 0;
+    readStatus = ScrollSettingsStorageReadStatus::Missing;
+    return eraseStatus;
+  }
+
   void setRecord(const uint8_t* input, size_t inputSize) {
     assert(inputSize <= sizeof(bytes));
     if (inputSize) std::memcpy(bytes, input, inputSize);
@@ -49,10 +59,13 @@ class FakeStorage : public ScrollSettingsStorage {
   size_t size = 0;
   unsigned reads = 0;
   unsigned writes = 0;
+  unsigned erases = 0;
   ScrollSettingsStorageReadStatus readStatus =
       ScrollSettingsStorageReadStatus::Missing;
   ScrollSettingsStorageWriteStatus writeStatus =
       ScrollSettingsStorageWriteStatus::Stored;
+  ScrollSettingsStorageEraseStatus eraseStatus =
+      ScrollSettingsStorageEraseStatus::Erased;
 };
 
 void write32(uint8_t* output, uint32_t value) {
@@ -278,6 +291,34 @@ void testStorageErrorsAndExplicitSave() {
              ScrollSettings{true, ScrollSpeed::Normal, 2500}) ==
          ScrollSettingsSaveStatus::Invalid);
   assert(explicitDefault.writes == 1);
+
+  struct EraseFailureCase {
+    ScrollSettingsStorageEraseStatus storage;
+    ScrollSettingsEraseStatus expected;
+  };
+  const EraseFailureCase eraseFailures[] = {
+      {ScrollSettingsStorageEraseStatus::OpenError,
+       ScrollSettingsEraseStatus::StorageOpenError},
+      {ScrollSettingsStorageEraseStatus::EraseError,
+       ScrollSettingsEraseStatus::StorageEraseError},
+      {ScrollSettingsStorageEraseStatus::CommitError,
+       ScrollSettingsEraseStatus::StorageCommitError},
+      {ScrollSettingsStorageEraseStatus::VerifyError,
+       ScrollSettingsEraseStatus::StorageVerifyError}};
+  for (const EraseFailureCase& failure : eraseFailures) {
+    FakeStorage failing;
+    failing.eraseStatus = failure.storage;
+    assert(eraseScrollSettings(failing) == failure.expected);
+    assert(failing.erases == 1);
+  }
+  FakeStorage missingErase;
+  missingErase.eraseStatus = ScrollSettingsStorageEraseStatus::Missing;
+  assert(eraseScrollSettings(missingErase) ==
+         ScrollSettingsEraseStatus::Unchanged);
+  assert(missingErase.erases == 1);
+  assert(eraseScrollSettings(explicitDefault) ==
+         ScrollSettingsEraseStatus::Erased);
+  assert(explicitDefault.erases == 1 && explicitDefault.size == 0);
 }
 
 void testFixedCostAndSafeSnapshot() {

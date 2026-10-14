@@ -5,6 +5,7 @@
 #include <cstdint>
 
 #include "config_format.h"
+#include "display_scroll_persistence.h"
 #include "mqtt_config.h"
 #include "ui_timeout_config.h"
 #include "../hardware/runtime_hardware_config.h"
@@ -12,14 +13,40 @@
 namespace voxone {
 namespace config_backup {
 
-constexpr uint16_t kBackupSchemaVersion = 1;
+constexpr uint16_t kLegacyBackupSchemaVersion = 1;
+constexpr uint16_t kBackupSchemaVersion = 2;
 constexpr std::size_t kMqttWireSize = 388;
 constexpr std::size_t kUiWireSize = 3;
-constexpr std::size_t kBackupFixedOverhead =
-    34 + config_format::kConfigV7SerializedSize +
+constexpr std::size_t kBackupHeaderSize = 34;
+constexpr std::size_t kScrollWireSize =
+    1 + display_scroll::kScrollSettingsRecordSize;
+constexpr std::size_t kLegacyBackupFixedOverhead =
+    kBackupHeaderSize + config_format::kConfigV7SerializedSize +
     hardware::kRuntimeHardwareConfigSerializedSize + kMqttWireSize +
     kUiWireSize + 4;
+constexpr std::size_t kLegacyBackupVariableOffset =
+    kLegacyBackupFixedOverhead - 4;
+constexpr std::size_t kBackupFixedOverhead =
+    kLegacyBackupFixedOverhead + kScrollWireSize;
 constexpr std::size_t kBackupVariableOffset = kBackupFixedOverhead - 4;
+
+constexpr std::size_t backupVariableOffsetForSchema(uint16_t schema) {
+  return schema == kLegacyBackupSchemaVersion
+             ? kLegacyBackupVariableOffset
+         : schema == kBackupSchemaVersion ? kBackupVariableOffset : 0;
+}
+
+constexpr std::size_t backupFixedOverheadForSchema(uint16_t schema) {
+  return schema == kLegacyBackupSchemaVersion
+             ? kLegacyBackupFixedOverhead
+         : schema == kBackupSchemaVersion ? kBackupFixedOverhead : 0;
+}
+
+enum class ScrollBackupMode : uint8_t {
+  PreserveExisting,
+  RendererDefaults,
+  UserSettings
+};
 
 struct Bytes {
   const uint8_t* data;
@@ -31,6 +58,9 @@ struct Data {
   hardware::RuntimeHardwareConfig hardware;
   MqttSettings mqtt;
   UiTimeoutSettings ui;
+  ScrollBackupMode scrollMode = ScrollBackupMode::RendererDefaults;
+  display_scroll::ScrollSettings scrollSettings =
+      display_scroll::defaultScrollSettings();
   Bytes wifi;
   Bytes stations;
 };
@@ -67,6 +97,7 @@ enum class Status : uint8_t {
   UnsupportedHardware,
   InvalidMqtt,
   InvalidUi,
+  InvalidScroll,
   InvalidWifi,
   InvalidStations,
   OutputTooSmall,

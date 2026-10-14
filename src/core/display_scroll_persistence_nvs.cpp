@@ -73,6 +73,34 @@ class NvsScrollSettingsStorage : public ScrollSettingsStorage {
     return verifiedOk ? ScrollSettingsStorageWriteStatus::Stored
                       : ScrollSettingsStorageWriteStatus::VerifyError;
   }
+
+  ScrollSettingsStorageEraseStatus erase() override {
+    nvs_handle_t handle;
+    const esp_err_t opened = nvs_open(kNamespace, NVS_READWRITE, &handle);
+    if (opened == ESP_ERR_NVS_NOT_FOUND)
+      return ScrollSettingsStorageEraseStatus::Missing;
+    if (opened != ESP_OK) return ScrollSettingsStorageEraseStatus::OpenError;
+    const esp_err_t erased = nvs_erase_key(handle, kRecordKey);
+    if (erased == ESP_ERR_NVS_NOT_FOUND) {
+      nvs_close(handle);
+      return ScrollSettingsStorageEraseStatus::Missing;
+    }
+    if (erased != ESP_OK) {
+      nvs_close(handle);
+      return ScrollSettingsStorageEraseStatus::EraseError;
+    }
+    if (nvs_commit(handle) != ESP_OK) {
+      nvs_close(handle);
+      return ScrollSettingsStorageEraseStatus::CommitError;
+    }
+    size_t size = 0;
+    const esp_err_t verified =
+        nvs_get_blob(handle, kRecordKey, nullptr, &size);
+    nvs_close(handle);
+    return verified == ESP_ERR_NVS_NOT_FOUND
+               ? ScrollSettingsStorageEraseStatus::Erased
+               : ScrollSettingsStorageEraseStatus::VerifyError;
+  }
 };
 
 }  // namespace
@@ -87,6 +115,11 @@ ScrollSettingsSaveStatus writeScrollSettingsPersistent(
     const ScrollSettings& requested) {
   NvsScrollSettingsStorage storage;
   return saveScrollSettings(storage, current, requested);
+}
+
+ScrollSettingsEraseStatus eraseScrollSettingsPersistent() {
+  NvsScrollSettingsStorage storage;
+  return eraseScrollSettings(storage);
 }
 
 }  // namespace display_scroll

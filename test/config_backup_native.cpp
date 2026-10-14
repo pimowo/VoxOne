@@ -12,6 +12,7 @@
 using namespace voxone::config_backup;
 using namespace voxone::config_format;
 using namespace voxone::hardware;
+namespace display_scroll = voxone::display_scroll;
 
 namespace {
 
@@ -20,6 +21,19 @@ constexpr std::size_t kHardwareOffset = kConfigOffset + kConfigV7SerializedSize;
 constexpr std::size_t kMqttOffset =
     kHardwareOffset + kRuntimeHardwareConfigSerializedSize;
 constexpr std::size_t kUiOffset = kMqttOffset + kMqttWireSize;
+constexpr std::size_t kScrollOffset = kUiOffset + kUiWireSize;
+
+void write16(uint8_t* output, uint16_t value) {
+  output[0] = static_cast<uint8_t>(value);
+  output[1] = static_cast<uint8_t>(value >> 8);
+}
+
+void write32(uint8_t* output, uint32_t value) {
+  output[0] = static_cast<uint8_t>(value);
+  output[1] = static_cast<uint8_t>(value >> 8);
+  output[2] = static_cast<uint8_t>(value >> 16);
+  output[3] = static_cast<uint8_t>(value >> 24);
+}
 
 uint32_t crc32(const uint8_t* data, std::size_t size) {
   uint32_t crc = 0xffffffffu;
@@ -35,6 +49,12 @@ void repairBackupCrc(std::vector<uint8_t>& bytes) {
   const uint32_t crc = crc32(bytes.data(), bytes.size() - 4);
   for (unsigned i = 0; i < 4; ++i)
     bytes[bytes.size() - 4 + i] = static_cast<uint8_t>(crc >> (8 * i));
+}
+
+void repairScrollAndBackupCrc(std::vector<uint8_t>& bytes) {
+  uint8_t* record = bytes.data() + kScrollOffset + 1;
+  write32(record + 9, crc32(record, 9));
+  repairBackupCrc(bytes);
 }
 
 config_v7_t knownConfig() {
@@ -94,6 +114,16 @@ std::vector<uint8_t> makeBackup(const Data& data) {
   return bytes;
 }
 
+std::vector<uint8_t> makeLegacyBackup(const Data& data) {
+  std::vector<uint8_t> bytes = makeBackup(data);
+  bytes.erase(bytes.begin() + kScrollOffset,
+              bytes.begin() + kScrollOffset + kScrollWireSize);
+  write16(bytes.data() + 4, kLegacyBackupSchemaVersion);
+  write32(bytes.data() + 6, static_cast<uint32_t>(bytes.size()));
+  repairBackupCrc(bytes);
+  return bytes;
+}
+
 void replaceConfig(std::vector<uint8_t>& bytes, config_v7_t config) {
   config.crc32 = calculateConfigV7Crc(config);
   assert(serializeConfigV7(config, bytes.data() + kConfigOffset,
@@ -136,6 +166,15 @@ struct FakeStorage : RestoreStorage {
   int current = 200;
   int snapshot = 0;
   int staged = 0;
+  ScrollBackupMode currentScrollMode = ScrollBackupMode::UserSettings;
+  display_scroll::ScrollSettings currentScroll{
+      false, display_scroll::ScrollSpeed::Fast, 3000};
+  ScrollBackupMode snapshotScrollMode = ScrollBackupMode::RendererDefaults;
+  display_scroll::ScrollSettings snapshotScroll =
+      display_scroll::defaultScrollSettings();
+  ScrollBackupMode stagedScrollMode = ScrollBackupMode::PreserveExisting;
+  display_scroll::ScrollSettings stagedScroll =
+      display_scroll::defaultScrollSettings();
   bool beginOk = true;
   bool stageOk = true;
   bool commitOk = true;
@@ -148,22 +187,34 @@ struct FakeStorage : RestoreStorage {
   bool begin() override {
     ++begins;
     snapshot = current;
+    snapshotScrollMode = currentScrollMode;
+    snapshotScroll = currentScroll;
     return beginOk;
   }
   bool stage(const Data& candidate) override {
     ++stages;
     if (!stageOk) return false;
     staged = candidate.config.fields.volume;
+    stagedScrollMode = candidate.scrollMode;
+    stagedScroll = candidate.scrollSettings;
     current = staged;
     return true;
   }
   bool commit() override {
     ++commits;
+    if (commitOk && stagedScrollMode != ScrollBackupMode::PreserveExisting) {
+      currentScrollMode = stagedScrollMode;
+      currentScroll = stagedScroll;
+    }
     return commitOk;
   }
   bool rollback() override {
     ++rollbacks;
-    if (rollbackOk) current = snapshot;
+    if (rollbackOk) {
+      current = snapshot;
+      currentScrollMode = snapshotScrollMode;
+      currentScroll = snapshotScroll;
+    }
     return rollbackOk;
   }
 };
@@ -216,6 +267,10 @@ void assertDataEqual(const Data& expected, const Data& actual) {
   assert(std::memcmp(&expected.mqtt, &actual.mqtt, sizeof(expected.mqtt)) == 0);
   assert(expected.ui.stationListSeconds == actual.ui.stationListSeconds);
   assert(expected.ui.btTransportSeconds == actual.ui.btTransportSeconds);
+  assert(expected.scrollMode == actual.scrollMode);
+  if (expected.scrollMode == ScrollBackupMode::UserSettings)
+    assert(display_scroll::equalScrollSettings(expected.scrollSettings,
+                                               actual.scrollSettings));
   assert(expected.wifi.size == actual.wifi.size);
   assert(std::memcmp(expected.wifi.data, actual.wifi.data, actual.wifi.size) == 0);
   assert(expected.stations.size == actual.stations.size);
@@ -229,7 +284,59 @@ int main() {
   const Data source = knownData();
   std::vector<uint8_t> bytes = makeBackup(source);
 
-  // The production encoder emits the same schema-1 artifact incrementally.
+  static_assert(kBackupSchemaVersion == 2, "new backups must use schema 2");
+  static_assert(kBackupFixedOverhead ==
+                    kLegacyBackupFixedOverhead + kScrollWireSize,
+                "schema 2 overhead must add only the scroll section");
+  assert(bytes[4] == 2 && bytes[5] == 0);
+  assert(bytes[kScrollOffset] == 0);
+  for (std::size_t i = 1; i < kScrollWireSize; ++i)
+    assert(bytes[kScrollOffset + i] == 0);
+
+  // Schema 1 remains readable and explicitly means that scroll persistence is
+  // outside the artifact, so restore must preserve the installed value.
+  const std::vector<uint8_t> legacy = makeLegacyBackup(source);
+  Data legacyParsed{};
+  assert(parse(legacy.data(), legacy.size(), hardwareCapabilities(),
+               legacyParsed) == Status::Ok);
+  assert(legacyParsed.scrollMode == ScrollBackupMode::PreserveExisting);
+  assert(legacy.size() + kScrollWireSize == bytes.size());
+
+  // Schema 2 round-trips every allowed user value without confusing an
+  // explicitly stored default with the absence of the NVS record.
+  const display_scroll::ScrollSpeed speeds[] = {
+      display_scroll::ScrollSpeed::Slow,
+      display_scroll::ScrollSpeed::Normal,
+      display_scroll::ScrollSpeed::Fast};
+  const uint16_t pauses[] = {0, 1000, 2000, 3000, 4000, 5000};
+  for (bool enabled : {false, true}) {
+    for (display_scroll::ScrollSpeed speed : speeds) {
+      for (uint16_t pause : pauses) {
+        Data withScroll = source;
+        withScroll.scrollMode = ScrollBackupMode::UserSettings;
+        withScroll.scrollSettings = {enabled, speed, pause};
+        const std::vector<uint8_t> artifact = makeBackup(withScroll);
+        assert(artifact[kScrollOffset] == 1);
+        Data roundTrip{};
+        assert(parse(artifact.data(), artifact.size(), hardwareCapabilities(),
+                     roundTrip) == Status::Ok);
+        assertDataEqual(withScroll, roundTrip);
+      }
+    }
+  }
+  Data explicitDefaults = source;
+  explicitDefaults.scrollMode = ScrollBackupMode::UserSettings;
+  explicitDefaults.scrollSettings = display_scroll::defaultScrollSettings();
+  const std::vector<uint8_t> explicitDefaultsBackup =
+      makeBackup(explicitDefaults);
+  assert(explicitDefaultsBackup[kScrollOffset] == 1);
+  assert(explicitDefaultsBackup != bytes);
+  Data explicitDefaultsParsed{};
+  assert(parse(explicitDefaultsBackup.data(), explicitDefaultsBackup.size(),
+               hardwareCapabilities(), explicitDefaultsParsed) == Status::Ok);
+  assert(explicitDefaultsParsed.scrollMode == ScrollBackupMode::UserSettings);
+
+  // The production encoder emits the same schema-2 artifact incrementally.
   TrackingReader streamedWifi(source.wifi);
   TrackingReader streamedStations(source.stations);
   StreamEncoder encoder;
@@ -349,7 +456,7 @@ int main() {
          Status::WrongMagic);
 
   std::vector<uint8_t> wrongSchema = bytes;
-  wrongSchema[4] = 2;
+  wrongSchema[4] = 3;
   assert(parse(wrongSchema.data(), wrongSchema.size(), hardwareCapabilities(), unchanged) ==
          Status::WrongSchema);
 
@@ -405,6 +512,72 @@ int main() {
   assert(parse(invalidUi.data(), invalidUi.size(), hardwareCapabilities(), unchanged) ==
          Status::InvalidUi);
 
+  std::vector<uint8_t> invalidScrollPresence = bytes;
+  invalidScrollPresence[kScrollOffset] = 2;
+  repairBackupCrc(invalidScrollPresence);
+  assert(parse(invalidScrollPresence.data(), invalidScrollPresence.size(),
+               hardwareCapabilities(), unchanged) == Status::InvalidScroll);
+
+  std::vector<uint8_t> nonzeroAbsentScroll = bytes;
+  nonzeroAbsentScroll[kScrollOffset + 1] = 1;
+  repairBackupCrc(nonzeroAbsentScroll);
+  assert(parse(nonzeroAbsentScroll.data(), nonzeroAbsentScroll.size(),
+               hardwareCapabilities(), unchanged) == Status::InvalidScroll);
+
+  Data validScrollData = source;
+  validScrollData.scrollMode = ScrollBackupMode::UserSettings;
+  validScrollData.scrollSettings = {
+      true, display_scroll::ScrollSpeed::Normal, 5000};
+  const std::vector<uint8_t> validScrollBackup = makeBackup(validScrollData);
+
+  std::vector<uint8_t> corruptScrollCrc = validScrollBackup;
+  corruptScrollCrc[kScrollOffset + 1 + 9] ^= 1;
+  repairBackupCrc(corruptScrollCrc);
+  assert(parse(corruptScrollCrc.data(), corruptScrollCrc.size(),
+               hardwareCapabilities(), unchanged) == Status::InvalidScroll);
+
+  std::vector<uint8_t> futureScroll = validScrollBackup;
+  futureScroll[kScrollOffset + 1 + 4] =
+      display_scroll::kScrollSettingsRecordVersion + 1;
+  repairScrollAndBackupCrc(futureScroll);
+  assert(parse(futureScroll.data(), futureScroll.size(),
+               hardwareCapabilities(), unchanged) == Status::InvalidScroll);
+
+  std::vector<uint8_t> invalidEnabled = validScrollBackup;
+  invalidEnabled[kScrollOffset + 1 + 5] = 2;
+  repairScrollAndBackupCrc(invalidEnabled);
+  assert(parse(invalidEnabled.data(), invalidEnabled.size(),
+               hardwareCapabilities(), unchanged) == Status::InvalidScroll);
+
+  std::vector<uint8_t> invalidSpeedScroll = validScrollBackup;
+  invalidSpeedScroll[kScrollOffset + 1 + 6] = 9;
+  repairScrollAndBackupCrc(invalidSpeedScroll);
+  assert(parse(invalidSpeedScroll.data(), invalidSpeedScroll.size(),
+               hardwareCapabilities(), unchanged) == Status::InvalidScroll);
+
+  std::vector<uint8_t> invalidPause = validScrollBackup;
+  invalidPause[kScrollOffset + 1 + 7] = 0xc4;
+  invalidPause[kScrollOffset + 1 + 8] = 0x09;  // 2500 ms.
+  repairScrollAndBackupCrc(invalidPause);
+  assert(parse(invalidPause.data(), invalidPause.size(),
+               hardwareCapabilities(), unchanged) == Status::InvalidScroll);
+
+  std::vector<uint8_t> shortScroll = validScrollBackup;
+  shortScroll.erase(shortScroll.begin() + kScrollOffset + kScrollWireSize - 1);
+  assert(parse(shortScroll.data(), shortScroll.size(), hardwareCapabilities(),
+               unchanged) == Status::Truncated);
+
+  Data invalidOutgoingScroll = source;
+  invalidOutgoingScroll.scrollMode = ScrollBackupMode::UserSettings;
+  invalidOutgoingScroll.scrollSettings = {
+      true, display_scroll::ScrollSpeed::Normal, 2500};
+  std::vector<uint8_t> invalidScrollScratch(kBackupFixedOverhead +
+                                            source.wifi.size +
+                                            source.stations.size);
+  assert(serialize(invalidOutgoingScroll, hardwareCapabilities(),
+                   invalidScrollScratch.data(), invalidScrollScratch.size(),
+                   written) == Status::InvalidScroll);
+
   Data badWifi = source;
   static const uint8_t tooManyWifi[] =
       "a\tp\nb\tp\nc\tp\nd\tp\ne\tp\nf\tp\n";
@@ -425,7 +598,27 @@ int main() {
   RestoreResult result = restore(bytes.data(), bytes.size(), hardwareCapabilities(), storage);
   assert(result.status == Status::Ok && result.restartRequired);
   assert(storage.current == source.config.fields.volume);
+  assert(storage.currentScrollMode == ScrollBackupMode::RendererDefaults);
   assert(storage.begins == 1 && storage.stages == 1 && storage.commits == 1);
+
+  // A schema-1 restore cannot express scroll intent and therefore preserves
+  // an existing user record exactly.
+  storage = FakeStorage{};
+  const display_scroll::ScrollSettings legacyScroll = storage.currentScroll;
+  result = restore(legacy.data(), legacy.size(), hardwareCapabilities(), storage);
+  assert(result.status == Status::Ok && result.restartRequired);
+  assert(storage.currentScrollMode == ScrollBackupMode::UserSettings);
+  assert(display_scroll::equalScrollSettings(storage.currentScroll,
+                                             legacyScroll));
+
+  // Schema 2 can restore a validated user record as well as explicit absence.
+  storage = FakeStorage{};
+  result = restore(validScrollBackup.data(), validScrollBackup.size(),
+                   hardwareCapabilities(), storage);
+  assert(result.status == Status::Ok && result.restartRequired);
+  assert(storage.currentScrollMode == ScrollBackupMode::UserSettings);
+  assert(display_scroll::equalScrollSettings(storage.currentScroll,
+                                             validScrollData.scrollSettings));
 
   storage = FakeStorage{};
   storage.beginOk = false;
@@ -455,6 +648,13 @@ int main() {
   result = restore(invalidRange.data(), invalidRange.size(), hardwareCapabilities(), storage);
   assert(result.status == Status::InvalidConfig && !result.restartRequired);
   assert(storage.current == 200 && storage.begins == 0);
+
+  storage = FakeStorage{};
+  result = restore(corruptScrollCrc.data(), corruptScrollCrc.size(),
+                   hardwareCapabilities(), storage);
+  assert(result.status == Status::InvalidScroll && !result.restartRequired);
+  assert(storage.current == 200 && storage.begins == 0 &&
+         storage.currentScrollMode == ScrollBackupMode::UserSettings);
 
   // Runtime-only state is not part of Data and cannot affect the artifact.
   int runtimeMute = 0;
@@ -561,6 +761,7 @@ int main() {
 
   // Diagnostic strings expose only bounded status codes, never fixture secrets.
   for (Status status : {Status::Ok, Status::InvalidConfig,
+                        Status::InvalidScroll,
                         Status::InvalidWifi, Status::InvalidStations,
                         Status::StorageReadFailed}) {
     const char* diagnostic = statusName(status);

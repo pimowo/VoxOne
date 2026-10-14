@@ -19,6 +19,7 @@ enum class BackupStage : uint8_t {
   HardwareRead,
   MqttRead,
   UiRead,
+  ScrollRead,
   StationsMissing,
   WifiOpen,
   StationsOpen,

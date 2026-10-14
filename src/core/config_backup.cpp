@@ -11,7 +11,6 @@ namespace config_backup {
 namespace {
 
 constexpr uint8_t kMagic[4] = {'V', 'X', 'C', 'F'};
-constexpr std::size_t kHeaderSize = 34;
 constexpr std::size_t kChecksumSize = 4;
 constexpr std::size_t kMaxStationLine = 512;
 constexpr std::size_t kMaxWifiProfiles = 5;
@@ -78,6 +77,13 @@ bool validConfig(const config_format::config_v7_t& value) {
 
 bool validUi(const UiTimeoutSettings& value) {
   return value.stationListSeconds <= 120 && value.btTransportSeconds <= 120;
+}
+
+bool validScroll(const Data& data) {
+  if (data.scrollMode == ScrollBackupMode::PreserveExisting ||
+      data.scrollMode == ScrollBackupMode::RendererDefaults) return true;
+  return data.scrollMode == ScrollBackupMode::UserSettings &&
+         display_scroll::isValidScrollSettings(data.scrollSettings);
 }
 
 bool validWifi(ByteReader& value, std::size_t& profiles) {
@@ -206,6 +212,7 @@ Status validateFixed(const Data& data,
     return Status::InvalidHardware;
   if (!mqttValidSettings(data.mqtt)) return Status::InvalidMqtt;
   if (!validUi(data.ui)) return Status::InvalidUi;
+  if (!validScroll(data)) return Status::InvalidScroll;
   if (data.config.btEnabled && !capabilities.supportsVoxOneBt)
     return Status::InvalidConfig;
   return Status::Ok;
@@ -253,6 +260,7 @@ const char* statusName(Status status) {
     case Status::UnsupportedHardware: return "UNSUPPORTED_HARDWARE";
     case Status::InvalidMqtt: return "INVALID_MQTT";
     case Status::InvalidUi: return "INVALID_UI";
+    case Status::InvalidScroll: return "INVALID_SCROLL";
     case Status::InvalidWifi: return "INVALID_WIFI";
     case Status::InvalidStations: return "INVALID_STATIONS";
     case Status::OutputTooSmall: return "OUTPUT_TOO_SMALL";
@@ -273,6 +281,8 @@ Status StreamEncoder::begin(
   data_ = nullptr;
   wifi_ = nullptr;
   stations_ = nullptr;
+  if (data.scrollMode == ScrollBackupMode::PreserveExisting)
+    return status_ = Status::InvalidScroll;
   total_ = serializedSize(data);
   checksumValue_ = 0;
   if (!total_) return status_ = Status::InvalidLength;
@@ -342,6 +352,7 @@ std::size_t StreamEncoder::read(std::size_t offset, uint8_t* output,
 }
 
 std::size_t serializedSize(const Data& data) {
+  if (data.scrollMode == ScrollBackupMode::PreserveExisting) return 0;
   if (data.wifi.size > std::numeric_limits<uint32_t>::max() ||
       data.stations.size > std::numeric_limits<uint32_t>::max()) return 0;
   if (data.wifi.size > std::numeric_limits<std::size_t>::max() -
@@ -359,6 +370,8 @@ Status encodePrefix(const Data& data,
   if (capacity < kBackupVariableOffset) return Status::OutputTooSmall;
   const Status validation = validateFixed(data, capabilities);
   if (validation != Status::Ok) return validation;
+  if (data.scrollMode == ScrollBackupMode::PreserveExisting)
+    return Status::InvalidScroll;
   const std::size_t total = serializedSize(data);
   if (!total || total > std::numeric_limits<uint32_t>::max())
     return Status::InvalidLength;
@@ -384,6 +397,15 @@ Status encodePrefix(const Data& data,
   *cursor++ = 1;
   *cursor++ = data.ui.stationListSeconds;
   *cursor++ = data.ui.btTransportSeconds;
+  std::memset(cursor, 0, kScrollWireSize);
+  if (data.scrollMode == ScrollBackupMode::UserSettings) {
+    *cursor = 1;
+    if (!display_scroll::serializeScrollSettingsRecord(
+            data.scrollSettings, cursor + 1,
+            display_scroll::kScrollSettingsRecordSize))
+      return Status::InvalidScroll;
+  }
+  cursor += kScrollWireSize;
   return static_cast<std::size_t>(cursor - output) == kBackupVariableOffset
              ? Status::Ok : Status::InvalidLength;
 }
@@ -393,11 +415,15 @@ Status decodePrefix(const uint8_t* input, std::size_t size,
                     const hardware::HardwareCapabilities& capabilities,
                     Data& output) {
   if (!input) return Status::InvalidArgument;
-  if (size < kBackupVariableOffset || artifactSize < kBackupFixedOverhead)
-    return Status::Truncated;
+  if (size < sizeof(kMagic) + sizeof(uint16_t)) return Status::Truncated;
   if (std::memcmp(input, kMagic, sizeof(kMagic)) != 0) return Status::WrongMagic;
   const uint8_t* cursor = input + sizeof(kMagic);
-  if (read16(cursor) != kBackupSchemaVersion) return Status::WrongSchema;
+  const uint16_t schema = read16(cursor);
+  const std::size_t variableOffset = backupVariableOffsetForSchema(schema);
+  const std::size_t fixedOverhead = backupFixedOverheadForSchema(schema);
+  if (!variableOffset) return Status::WrongSchema;
+  if (size < variableOffset || artifactSize < fixedOverhead)
+    return Status::Truncated;
   const uint32_t total = read32(cursor);
   const uint32_t configSize = read32(cursor);
   const uint32_t hardwareSize = read32(cursor);
@@ -409,7 +435,7 @@ Status decodePrefix(const uint8_t* input, std::size_t size,
   if (total < artifactSize || configSize != config_format::kConfigV7SerializedSize ||
       hardwareSize != hardware::kRuntimeHardwareConfigSerializedSize ||
       mqttSize != kMqttWireSize || uiSize != kUiWireSize) return Status::InvalidLength;
-  const uint64_t expected = static_cast<uint64_t>(kBackupFixedOverhead) +
+  const uint64_t expected = static_cast<uint64_t>(fixedOverhead) +
                             wifiSize + stationsSize;
   if (expected != artifactSize)
     return expected > artifactSize ? Status::Truncated : Status::InvalidLength;
@@ -428,6 +454,29 @@ Status decodePrefix(const uint8_t* input, std::size_t size,
   if (cursor[0] != 1) return Status::InvalidUi;
   candidate.ui.stationListSeconds = cursor[1];
   candidate.ui.btTransportSeconds = cursor[2];
+  cursor += kUiWireSize;
+  if (schema == kLegacyBackupSchemaVersion) {
+    candidate.scrollMode = ScrollBackupMode::PreserveExisting;
+  } else {
+    const uint8_t present = cursor[0];
+    const uint8_t* record = cursor + 1;
+    if (present == 0) {
+      for (std::size_t i = 0;
+           i < display_scroll::kScrollSettingsRecordSize; ++i)
+        if (record[i] != 0) return Status::InvalidScroll;
+      candidate.scrollMode = ScrollBackupMode::RendererDefaults;
+      candidate.scrollSettings = display_scroll::defaultScrollSettings();
+    } else if (present == 1) {
+      if (display_scroll::deserializeScrollSettingsRecord(
+              record, display_scroll::kScrollSettingsRecordSize,
+              candidate.scrollSettings) !=
+          display_scroll::ScrollSettingsRecordStatus::Valid)
+        return Status::InvalidScroll;
+      candidate.scrollMode = ScrollBackupMode::UserSettings;
+    } else {
+      return Status::InvalidScroll;
+    }
+  }
   candidate.wifi = {nullptr, wifiSize};
   candidate.stations = {nullptr, stationsSize};
   const Status validation = validateFixed(candidate, capabilities);
@@ -446,6 +495,8 @@ Status serialize(const Data& data,
   MemoryReader stations(data.stations);
   const Status validation = validateExternal(data, capabilities, wifi, stations);
   if (validation != Status::Ok) return validation;
+  if (data.scrollMode == ScrollBackupMode::PreserveExisting)
+    return Status::InvalidScroll;
   const std::size_t total = serializedSize(data);
   if (!total || total > std::numeric_limits<uint32_t>::max())
     return Status::InvalidLength;
@@ -474,10 +525,14 @@ Status parse(const uint8_t* input, std::size_t size,
              Data& output) {
   if (!input) return Status::InvalidArgument;
   if (!size) return Status::Empty;
-  if (size < kBackupFixedOverhead) return Status::Truncated;
+  if (size < sizeof(kMagic) + sizeof(uint16_t)) return Status::Truncated;
   if (std::memcmp(input, kMagic, sizeof(kMagic)) != 0) return Status::WrongMagic;
   const uint8_t* header = input + sizeof(kMagic);
-  if (read16(header) != kBackupSchemaVersion) return Status::WrongSchema;
+  const uint16_t schema = read16(header);
+  const std::size_t variableOffset = backupVariableOffsetForSchema(schema);
+  const std::size_t fixedOverhead = backupFixedOverheadForSchema(schema);
+  if (!variableOffset) return Status::WrongSchema;
+  if (size < fixedOverhead) return Status::Truncated;
   const uint32_t total = read32(header);
   const uint32_t configSize = read32(header);
   const uint32_t hardwareSize = read32(header);
@@ -489,7 +544,7 @@ Status parse(const uint8_t* input, std::size_t size,
   if (total < size || configSize != config_format::kConfigV7SerializedSize ||
       hardwareSize != hardware::kRuntimeHardwareConfigSerializedSize ||
       mqttSize != kMqttWireSize || uiSize != kUiWireSize) return Status::InvalidLength;
-  const uint64_t expected = static_cast<uint64_t>(kBackupFixedOverhead) +
+  const uint64_t expected = static_cast<uint64_t>(fixedOverhead) +
                             wifiSize + stationsSize;
   if (expected != size) return expected > size ? Status::Truncated : Status::InvalidLength;
   const uint8_t* checksum = input + size - kChecksumSize;
@@ -499,9 +554,10 @@ Status parse(const uint8_t* input, std::size_t size,
   if (read32(checksumCursor) != calculated.value())
     return Status::InvalidChecksum;
   Data candidate{};
-  const Status decoded = decodePrefix(input, size, size, capabilities, candidate);
+  const Status decoded = decodePrefix(input, variableOffset, size,
+                                      capabilities, candidate);
   if (decoded != Status::Ok) return decoded;
-  const uint8_t* cursor = input + kBackupVariableOffset;
+  const uint8_t* cursor = input + variableOffset;
   candidate.wifi.data = cursor;
   cursor += candidate.wifi.size;
   candidate.stations.data = cursor;

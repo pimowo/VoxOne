@@ -13,6 +13,7 @@
 #include "config_eeprom_storage.h"
 #include "config_backup_web.h"
 #include "config_restore_transaction.h"
+#include "display_scroll_persistence.h"
 #include "mqtt_config.h"
 #include "playlist_store.h"
 #include "ui_timeout_config.h"
@@ -30,6 +31,7 @@ constexpr char kConfigKey[] = "config";
 constexpr char kHardwareKey[] = "hardware";
 constexpr char kMqttKey[] = "mqtt";
 constexpr char kUiKey[] = "ui";
+constexpr char kScrollKey[] = "scroll";
 constexpr char kWifiMetaKey[] = "wifimeta";
 constexpr char kStationsMetaKey[] = "stameta";
 constexpr char kWifiOld[] = "/data/.vxrestore.wifi.old";
@@ -46,7 +48,11 @@ enum SnapshotFlag : uint8_t {
   MqttPresent = 1u << 2,
   UiPresent = 1u << 3,
   WifiPresent = 1u << 4,
-  StationsPresent = 1u << 5
+  StationsPresent = 1u << 5,
+  ScrollPresent = 1u << 6,
+  // Distinguishes a new snapshot of an absent scroll record from snapshots
+  // created by older firmware, where scroll was outside the transaction.
+  ScrollCaptured = 1u << 7
 };
 
 struct FileFingerprint {
@@ -97,7 +103,7 @@ MarkerStatus readMarkerRecord(Phase& phase) {
   if (result != ESP_OK || size != sizeof(bytes) ||
       get32(bytes) != kMarkerMagic || bytes[4] != kMarkerSchema ||
       bytes[5] < static_cast<uint8_t>(Phase::Prepared) ||
-      bytes[5] > static_cast<uint8_t>(Phase::Verified) ||
+      bytes[5] > static_cast<uint8_t>(Phase::ScrollWritten) ||
       get32(bytes + 8) != crc32(bytes, 8)) return MarkerStatus::Error;
   phase = static_cast<Phase>(bytes[5]);
   return MarkerStatus::Pending;
@@ -207,6 +213,63 @@ bool getBlob(nvs_handle_t handle, const char* key, T& value) {
          size == sizeof(value);
 }
 
+bool readScrollState(config_backup::ScrollBackupMode& mode,
+                     display_scroll::ScrollSettings& settings) {
+  const display_scroll::ScrollSettingsLoadResult loaded =
+      display_scroll::readScrollSettingsPersistent();
+  if (loaded.status ==
+      display_scroll::ScrollSettingsLoadStatus::RendererDefaultsMissing) {
+    mode = config_backup::ScrollBackupMode::RendererDefaults;
+    settings = display_scroll::defaultScrollSettings();
+    return true;
+  }
+  if (loaded.status == display_scroll::ScrollSettingsLoadStatus::UserSettings &&
+      loaded.source == display_scroll::ScrollSettingsSource::UserSettings &&
+      loaded.recordStatus ==
+          display_scroll::ScrollSettingsRecordStatus::Valid) {
+    mode = config_backup::ScrollBackupMode::UserSettings;
+    settings = loaded.settings;
+    return true;
+  }
+  return false;
+}
+
+bool applyScrollState(config_backup::ScrollBackupMode mode,
+                      const display_scroll::ScrollSettings& settings) {
+  using config_backup::ScrollBackupMode;
+  if (mode == ScrollBackupMode::PreserveExisting) return true;
+  if (mode == ScrollBackupMode::RendererDefaults) {
+    const display_scroll::ScrollSettingsEraseStatus erased =
+        display_scroll::eraseScrollSettingsPersistent();
+    return erased == display_scroll::ScrollSettingsEraseStatus::Erased ||
+           erased == display_scroll::ScrollSettingsEraseStatus::Unchanged;
+  }
+  if (mode != ScrollBackupMode::UserSettings ||
+      !display_scroll::isValidScrollSettings(settings)) return false;
+  const display_scroll::ScrollSettingsLoadResult current =
+      display_scroll::readScrollSettingsPersistent();
+  const display_scroll::ScrollSettingsSaveStatus saved =
+      display_scroll::writeScrollSettingsPersistent(current, settings);
+  return saved == display_scroll::ScrollSettingsSaveStatus::Saved ||
+         saved == display_scroll::ScrollSettingsSaveStatus::Unchanged;
+}
+
+bool verifyScrollState(config_backup::ScrollBackupMode mode,
+                       const display_scroll::ScrollSettings& settings) {
+  using config_backup::ScrollBackupMode;
+  if (mode == ScrollBackupMode::PreserveExisting) return true;
+  const display_scroll::ScrollSettingsLoadResult actual =
+      display_scroll::readScrollSettingsPersistent();
+  if (mode == ScrollBackupMode::RendererDefaults)
+    return actual.status ==
+           display_scroll::ScrollSettingsLoadStatus::RendererDefaultsMissing;
+  return mode == ScrollBackupMode::UserSettings &&
+         actual.status == display_scroll::ScrollSettingsLoadStatus::UserSettings &&
+         actual.source == display_scroll::ScrollSettingsSource::UserSettings &&
+         actual.recordStatus == display_scroll::ScrollSettingsRecordStatus::Valid &&
+         display_scroll::equalScrollSettings(actual.settings, settings);
+}
+
 class ProductionBackend : public Backend {
  public:
   explicit ProductionBackend(bool stagedFiles = false)
@@ -267,6 +330,18 @@ class ProductionBackend : public Backend {
     UiTimeoutSettings ui{};
     if (!uiTimeoutReadPersistent(ui, found)) return false;
     if (found) flags |= UiPresent;
+    config_backup::ScrollBackupMode scrollMode =
+        config_backup::ScrollBackupMode::RendererDefaults;
+    display_scroll::ScrollSettings scrollSettings =
+        display_scroll::defaultScrollSettings();
+    uint8_t scrollBytes[display_scroll::kScrollSettingsRecordSize]{};
+    if (!readScrollState(scrollMode, scrollSettings)) return false;
+    flags |= ScrollCaptured;
+    if (scrollMode == config_backup::ScrollBackupMode::UserSettings) {
+      if (!display_scroll::serializeScrollSettingsRecord(
+              scrollSettings, scrollBytes, sizeof(scrollBytes))) return false;
+      flags |= ScrollPresent;
+    }
     FileFingerprint wifiMeta{}, stationsMeta{};
     if (SPIFFS.exists(SSIDS_PATH)) {
       if (!fingerprintFile(SSIDS_PATH, wifiMeta)) return false;
@@ -286,13 +361,16 @@ class ProductionBackend : public Backend {
     if (ok && (flags & HardwarePresent)) ok = setBlob(handle, kHardwareKey, hardwareConfig);
     if (ok && (flags & MqttPresent)) ok = setBlob(handle, kMqttKey, mqtt);
     if (ok && (flags & UiPresent)) ok = setBlob(handle, kUiKey, ui);
+    if (ok && (flags & ScrollPresent))
+      ok = nvs_set_blob(handle, kScrollKey, scrollBytes,
+                        sizeof(scrollBytes)) == ESP_OK;
     if (ok && (flags & WifiPresent)) ok = setBlob(handle, kWifiMetaKey, wifiMeta);
     if (ok && (flags & StationsPresent))
       ok = setBlob(handle, kStationsMetaKey, stationsMeta);
     ok = ok && nvs_commit(handle) == ESP_OK;
     nvs_close(handle);
-    return ok && verifyStoredSnapshot(flags, configBytes, hardwareConfig, mqtt, ui,
-                                      wifiMeta, stationsMeta);
+    return ok && verifyStoredSnapshot(flags, configBytes, hardwareConfig, mqtt,
+                                      ui, scrollBytes, wifiMeta, stationsMeta);
   }
 
   bool writeMarker(Phase phase) override {
@@ -315,6 +393,9 @@ class ProductionBackend : public Backend {
         return hardware::writeRuntimeHardwarePersistent(candidate_->hardware);
       case Component::Mqtt: return mqttWritePersistent(candidate_->mqtt);
       case Component::Ui: return uiTimeoutWritePersistent(candidate_->ui);
+      case Component::Scroll:
+        return applyScrollState(candidate_->scrollMode,
+                                candidate_->scrollSettings);
       case Component::Wifi:
         return installTransactionalFile(kWifiNew, SSIDS_PATH, kWifiOld);
       case Component::Stations:
@@ -340,6 +421,8 @@ class ProductionBackend : public Backend {
     UiTimeoutSettings ui{};
     if (!uiTimeoutReadPersistent(ui, found) || !found ||
         std::memcmp(&ui, &candidate_->ui, sizeof(ui)) != 0) return false;
+    if (!verifyScrollState(candidate_->scrollMode,
+                           candidate_->scrollSettings)) return false;
     if (stagedFiles_)
       return fileMatches(SSIDS_PATH, candidateWifi_) &&
              fileMatches(PLAYLIST_PATH, candidateStations_);
@@ -356,6 +439,9 @@ class ProductionBackend : public Backend {
     hardware::RuntimeHardwareConfig hardwareConfig{};
     MqttSettings mqtt{};
     UiTimeoutSettings ui{};
+    uint8_t scrollBytes[display_scroll::kScrollSettingsRecordSize]{};
+    display_scroll::ScrollSettings scrollSettings =
+        display_scroll::defaultScrollSettings();
     FileFingerprint wifiMeta{}, stationsMeta{};
     bool read = true;
     if (flags & ConfigPresent) {
@@ -366,6 +452,14 @@ class ProductionBackend : public Backend {
     if (read && (flags & HardwarePresent)) read = getBlob(handle, kHardwareKey, hardwareConfig);
     if (read && (flags & MqttPresent)) read = getBlob(handle, kMqttKey, mqtt);
     if (read && (flags & UiPresent)) read = getBlob(handle, kUiKey, ui);
+    if (read && (flags & ScrollPresent)) {
+      std::size_t size = sizeof(scrollBytes);
+      read = nvs_get_blob(handle, kScrollKey, scrollBytes, &size) == ESP_OK &&
+             size == sizeof(scrollBytes) &&
+             display_scroll::deserializeScrollSettingsRecord(
+                 scrollBytes, sizeof(scrollBytes), scrollSettings) ==
+                 display_scroll::ScrollSettingsRecordStatus::Valid;
+    }
     if (read && (flags & WifiPresent))
       read = getBlob(handle, kWifiMetaKey, wifiMeta);
     if (read && (flags & StationsPresent))
@@ -384,6 +478,13 @@ class ProductionBackend : public Backend {
         ? mqttWritePersistent(mqtt) : mqttErasePersistent());
     restored = restored && ((flags & UiPresent)
         ? uiTimeoutWritePersistent(ui) : uiTimeoutErasePersistent());
+    restored = restored && applyScrollState(
+        !(flags & ScrollCaptured)
+            ? config_backup::ScrollBackupMode::PreserveExisting
+        : flags & ScrollPresent
+            ? config_backup::ScrollBackupMode::UserSettings
+            : config_backup::ScrollBackupMode::RendererDefaults,
+        scrollSettings);
     if (!restored || !restoreTransactionalFile(flags & WifiPresent, kWifiOld,
                                                SSIDS_PATH, wifiMeta) ||
         !restoreTransactionalFile(flags & StationsPresent, kStationsOld,
@@ -402,6 +503,9 @@ class ProductionBackend : public Backend {
     hardware::RuntimeHardwareConfig hardwareConfig{};
     MqttSettings mqtt{};
     UiTimeoutSettings ui{};
+    uint8_t scrollBytes[display_scroll::kScrollSettingsRecordSize]{};
+    display_scroll::ScrollSettings scrollSettings =
+        display_scroll::defaultScrollSettings();
     FileFingerprint wifiMeta{}, stationsMeta{};
     bool read = true;
     if (flags & ConfigPresent) {
@@ -412,6 +516,14 @@ class ProductionBackend : public Backend {
     if (read && (flags & HardwarePresent)) read = getBlob(handle, kHardwareKey, hardwareConfig);
     if (read && (flags & MqttPresent)) read = getBlob(handle, kMqttKey, mqtt);
     if (read && (flags & UiPresent)) read = getBlob(handle, kUiKey, ui);
+    if (read && (flags & ScrollPresent)) {
+      std::size_t size = sizeof(scrollBytes);
+      read = nvs_get_blob(handle, kScrollKey, scrollBytes, &size) == ESP_OK &&
+             size == sizeof(scrollBytes) &&
+             display_scroll::deserializeScrollSettingsRecord(
+                 scrollBytes, sizeof(scrollBytes), scrollSettings) ==
+                 display_scroll::ScrollSettingsRecordStatus::Valid;
+    }
     if (read && (flags & WifiPresent))
       read = getBlob(handle, kWifiMetaKey, wifiMeta);
     if (read && (flags & StationsPresent))
@@ -420,7 +532,14 @@ class ProductionBackend : public Backend {
     if (!read || !verifyConfigPresence(flags & ConfigPresent, configBytes) ||
         !verifyHardwarePresence(flags & HardwarePresent, hardwareConfig) ||
         !verifyMqttPresence(flags & MqttPresent, mqtt) ||
-        !verifyUiPresence(flags & UiPresent, ui)) return false;
+        !verifyUiPresence(flags & UiPresent, ui) ||
+        !verifyScrollState(
+            !(flags & ScrollCaptured)
+                ? config_backup::ScrollBackupMode::PreserveExisting
+            : flags & ScrollPresent
+                ? config_backup::ScrollBackupMode::UserSettings
+                : config_backup::ScrollBackupMode::RendererDefaults,
+            scrollSettings)) return false;
     const bool wifi = flags & WifiPresent
         ? fileMatches(SSIDS_PATH, wifiMeta) : !SPIFFS.exists(SSIDS_PATH);
     const bool stations = flags & StationsPresent
@@ -464,6 +583,7 @@ class ProductionBackend : public Backend {
   bool verifyStoredSnapshot(uint8_t flags, const uint8_t* configBytes,
                             const hardware::RuntimeHardwareConfig& hardwareConfig,
                             const MqttSettings& mqtt, const UiTimeoutSettings& ui,
+                            const uint8_t* scrollBytes,
                             const FileFingerprint& wifiMeta,
                             const FileFingerprint& stationsMeta) {
     nvs_handle_t handle;
@@ -489,6 +609,19 @@ class ProductionBackend : public Backend {
     if (ok && (flags & UiPresent))
       ok = getBlob(handle, kUiKey, actualUi) &&
            std::memcmp(&actualUi, &ui, sizeof(ui)) == 0;
+    uint8_t actualScroll[display_scroll::kScrollSettingsRecordSize]{};
+    if (ok && (flags & ScrollPresent)) {
+      std::size_t size = sizeof(actualScroll);
+      display_scroll::ScrollSettings checked =
+          display_scroll::defaultScrollSettings();
+      ok = scrollBytes &&
+           nvs_get_blob(handle, kScrollKey, actualScroll, &size) == ESP_OK &&
+           size == sizeof(actualScroll) &&
+           std::memcmp(actualScroll, scrollBytes, sizeof(actualScroll)) == 0 &&
+           display_scroll::deserializeScrollSettingsRecord(
+               actualScroll, sizeof(actualScroll), checked) ==
+               display_scroll::ScrollSettingsRecordStatus::Valid;
+    }
     FileFingerprint actualWifi{}, actualStations{};
     if (ok && (flags & WifiPresent))
       ok = getBlob(handle, kWifiMetaKey, actualWifi) &&
@@ -593,6 +726,7 @@ const char* backupStageName(BackupStage stage) {
     case BackupStage::HardwareRead: return "BACKUP_HARDWARE_READ";
     case BackupStage::MqttRead: return "BACKUP_MQTT_READ";
     case BackupStage::UiRead: return "BACKUP_UI_READ";
+    case BackupStage::ScrollRead: return "BACKUP_SCROLL_READ";
     case BackupStage::StationsMissing: return "BACKUP_STATIONS_MISSING";
     case BackupStage::WifiOpen: return "BACKUP_WIFI_READ";
     case BackupStage::StationsOpen: return "BACKUP_STATIONS_READ";
@@ -648,6 +782,27 @@ bool ProductionBackupStream::begin(config_backup::Status& status) {
   if (!uiTimeoutReadPersistent(data.ui, found))
     return false;
   if (!found) data.ui = uiTimeoutConfig();
+  impl_->stage = BackupStage::ScrollRead;
+  const display_scroll::ScrollSettingsLoadResult scroll =
+      display_scroll::readScrollSettingsPersistent();
+  if (scroll.status ==
+      display_scroll::ScrollSettingsLoadStatus::RendererDefaultsMissing) {
+    data.scrollMode = config_backup::ScrollBackupMode::RendererDefaults;
+    data.scrollSettings = display_scroll::defaultScrollSettings();
+  } else if (scroll.status ==
+                 display_scroll::ScrollSettingsLoadStatus::UserSettings &&
+             scroll.source ==
+                 display_scroll::ScrollSettingsSource::UserSettings &&
+             scroll.recordStatus ==
+                 display_scroll::ScrollSettingsRecordStatus::Valid) {
+    data.scrollMode = config_backup::ScrollBackupMode::UserSettings;
+    data.scrollSettings = scroll.settings;
+  } else {
+    if (scroll.status ==
+        display_scroll::ScrollSettingsLoadStatus::RendererDefaultsInvalid)
+      status = config_backup::Status::InvalidScroll;
+    return false;
+  }
 
   if (!SPIFFS.exists(PLAYLIST_PATH)) {
     impl_->stage = BackupStage::StationsMissing;
@@ -682,6 +837,7 @@ bool ProductionBackupStream::begin(config_backup::Status& status) {
              status != config_backup::Status::UnsupportedHardware &&
              status != config_backup::Status::InvalidMqtt &&
              status != config_backup::Status::InvalidUi &&
+             status != config_backup::Status::InvalidScroll &&
              status != config_backup::Status::InvalidWifi &&
              status != config_backup::Status::InvalidStations)
       impl_->stage = BackupStage::Serialize;
@@ -737,6 +893,7 @@ struct ProductionRestoreUpload::Impl {
   File stations;
   uint8_t prefix[config_backup::kBackupVariableOffset]{};
   uint8_t checksum[4]{};
+  std::size_t prefixExpected = 6;
   std::size_t total = 0;
   std::size_t received = 0;
   config_backup::Status status = config_backup::Status::InvalidArgument;
@@ -758,7 +915,7 @@ ProductionRestoreUpload::~ProductionRestoreUpload() {
 config_backup::Status ProductionRestoreUpload::begin(std::size_t total) {
   using config_backup::Status;
   if (!impl_) return Status::AllocationFailed;
-  if (total < config_backup::kBackupFixedOverhead || total > UINT32_MAX)
+  if (total < config_backup::kLegacyBackupFixedOverhead || total > UINT32_MAX)
     return impl_->status = total ? Status::Truncated : Status::Empty;
   Phase phase = Phase::Prepared;
   const MarkerStatus marker = readMarkerRecord(phase);
@@ -789,16 +946,29 @@ config_backup::Status ProductionRestoreUpload::append(
 
   while (length) {
     const std::size_t position = impl_->received;
-    if (position < sizeof(impl_->prefix)) {
+    if (!impl_->decoded && position < impl_->prefixExpected) {
       const std::size_t count =
-          std::min(length, sizeof(impl_->prefix) - position);
+          std::min(length, impl_->prefixExpected - position);
       std::memcpy(impl_->prefix + position, data, count);
       impl_->received += count;
       data += count;
       length -= count;
-      if (impl_->received == sizeof(impl_->prefix)) {
+      if (impl_->received == 6 && impl_->prefixExpected == 6) {
+        const uint16_t schema =
+            static_cast<uint16_t>(impl_->prefix[4]) |
+            (static_cast<uint16_t>(impl_->prefix[5]) << 8);
+        impl_->prefixExpected =
+            config_backup::backupVariableOffsetForSchema(schema);
+        const std::size_t fixed =
+            config_backup::backupFixedOverheadForSchema(schema);
+        if (!impl_->prefixExpected)
+          return impl_->status = Status::WrongSchema;
+        if (impl_->total < fixed)
+          return impl_->status = Status::Truncated;
+      }
+      if (impl_->received == impl_->prefixExpected) {
         impl_->status = config_backup::decodePrefix(
-            impl_->prefix, sizeof(impl_->prefix), impl_->total,
+            impl_->prefix, impl_->prefixExpected, impl_->total,
             hardware::hardwareCapabilities(), impl_->candidate);
         if (impl_->status != Status::Ok) return impl_->status;
 
@@ -821,7 +991,7 @@ config_backup::Status ProductionRestoreUpload::append(
       continue;
     }
 
-    const std::size_t wifiEnd = sizeof(impl_->prefix) +
+    const std::size_t wifiEnd = impl_->prefixExpected +
                                 impl_->candidate.wifi.size;
     const std::size_t stationsEnd = wifiEnd + impl_->candidate.stations.size;
     if (position < wifiEnd) {
