@@ -165,6 +165,17 @@ window.hardwareSnapshot = {
     ]
   }
 };
+window.stationListResponse = {
+  count:24, current:12, revision:'a1b2c3d4',
+  stations:Array.from({length:24}, (_, index) => ({
+    number:index + 1,
+    id:(index + 1).toString(16).toUpperCase().padStart(16, '0'),
+    name:'Stacja testowa ' + String(index + 1).padStart(2, '0') +
+      ' — długa nazwa kontrolna',
+    url:'https://radio.example/' + (index + 1) + '/stream-with-long-address',
+    ovol:index % 7 - 3, metadataMode:'normal', swapArtistTitle:false
+  }))
+};
 const originalFetch = window.fetch.bind(window);
 window.fetch = (url, options = {}) => {
   if (url === '/api/security/state') {
@@ -219,6 +230,9 @@ window.fetch = (url, options = {}) => {
       {ok:true,status:200,json:() => Promise.resolve({ok:true,restartRequired:true})};
     return Promise.resolve(prepared);
   }
+  if (url === '/api/stations' && (options.method || 'GET') === 'GET')
+    return Promise.resolve({ok:true,status:200,
+      json:() => Promise.resolve(window.stationListResponse)});
   if (url === '/api/bt/update')
     return Promise.resolve({ok:true, json:() => Promise.resolve(window.btUpdateResponses.shift() || {state:0})});
   if (url === '/api/hardware') {
@@ -592,7 +606,10 @@ setTimeout(async () => {
     check(get('current-station-name').textContent === 'Telefon' &&
       get('bt-artist').textContent.includes('BT Artysta') && get('bt-title').textContent.includes('BT Utwór'),
       'BT AVRCP metadata replaces RADIO metadata');
-    check(get('metadata').hidden && get('playback-state').textContent === 'PLAY', 'BT playing');
+    check(get('metadata').hidden && !get('bt-metadata').hidden &&
+      [...get('bt-metadata').querySelectorAll('.status-metadata-label')]
+        .map(node => node.textContent).join(',') === 'Artysta,Utwór' &&
+      get('playback-state').textContent === 'PLAY', 'BT metadata fields and playback');
     btTestSocket.receive({source:'BT', btConnected:false});
     check(get('bt-disconnected').hidden && get('playback-state').textContent === 'PLAY',
       'incomplete status cannot imply BT disconnect; complete webStatus is atomic');
@@ -623,11 +640,26 @@ setTimeout(async () => {
     check(selector.querySelectorAll('button').length === 1 && !sourceButton('bt'), 'target without BT');
     check(!btTestSocket.sent.some(item => /^(webtransport|stop)=/.test(item)), 'source selection sends no transport');
     const icon = document.querySelector('link[rel="icon"]');
-    const logo = document.querySelector('header img[src*="voxone-logo.svg"]');
-    check(icon?.type === 'image/svg+xml' && !!logo, 'VoxOne SVG favicon and header logo');
-    check(icon.getAttribute('href') === logo.getAttribute('src'), 'favicon reuses header logo');
-    check(get('footer-details').textContent === 'VoxOne 0.8.0 · L0', 'footer identity');
-    check(get('footer-connection').textContent === 'Połączono', 'footer WebSocket connected');
+    const headerBrand = document.querySelector('.topbar .brand h1');
+    check(icon?.type === 'image/svg+xml' && headerBrand?.textContent === 'VoxOne' &&
+      !document.querySelector('.topbar .brand img'), 'text VoxOne brand replaces temporary Vn header mark');
+    check(get('header-version').classList.contains('profile') &&
+      get('header-version').textContent === 'Wersja 0.8.0-dev' &&
+      get('header-profile').textContent === 'Profil L0', 'header version and hardware profile tiles');
+    const footer = document.querySelector('.site-footer');
+    check(footer.textContent.trim() === 'VoxOne © 2026 PMW Support: pmw.voxone@gmail.com' &&
+      !get('footer-details') && !get('footer-connection'), 'static support footer without runtime identity');
+    const stationTransfer = document.querySelector('.station-transfer-actions');
+    check(stationTransfer?.contains(get('station-import')) && stationTransfer.contains(get('station-export')) &&
+      get('station-import').textContent === 'Import listy' &&
+      get('station-export').textContent === 'Eksport listy' &&
+      !!(get('station-list').compareDocumentPosition(stationTransfer) & Node.DOCUMENT_POSITION_FOLLOWING),
+      'station import and export follow the station list');
+    check([...get('hardware').querySelectorAll('h3')].some(node => node.textContent === 'Wyświetlacz') &&
+      [...get('system').querySelectorAll('h3')].some(node => node.textContent === 'Przywracanie konfiguracji') &&
+      [...get('update').querySelectorAll('dt')].some(node => node.textContent === 'Profil sprzętu') &&
+      getComputedStyle(get('system').querySelector('h3')).textTransform === 'none',
+      'approved card labels use sentence case');
     check(get('system').querySelector('h3').textContent === 'VoxOne', 'VoxOne system card');
     check([...get('system').querySelectorAll('h3')].some(node => node.textContent === 'VoxOneBT'), 'VoxOneBT system card');
     check([...get('system').querySelectorAll('h3')].some(node => node.textContent === 'Backup konfiguracji'),
@@ -685,6 +717,15 @@ setTimeout(async () => {
       'BT update card keeps direct USB guidance');
     const networkCard = [...get('settings').querySelectorAll('.card')].find(card => card.querySelector('h3')?.textContent === 'Sieć');
     check(!!networkCard, 'network card');
+    location.hash = '#stations';
+    window.dispatchEvent(new Event('hashchange'));
+    await settleSecurity();
+    const longStationRows = [...get('station-list').querySelectorAll('.station-row')];
+    const stationTransferActions = document.querySelector('.station-transfer-actions');
+    check(longStationRows.length === 24 &&
+      stationTransferActions.getBoundingClientRect().top >=
+        longStationRows.at(-1).getBoundingClientRect().bottom,
+      'long station list keeps import and export below its final row');
     location.hash = '#settings';
     window.dispatchEvent(new Event('hashchange'));
     check(btTestSocket.sent.some(item => item === 'getsystem=1'), 'network snapshot requested on Settings');
@@ -799,7 +840,8 @@ setTimeout(async () => {
     check(btTestSocket.sent.some(item => item === 'getrssi=1'), 'system RSSI request');
     btTestSocket.onmessage({data:JSON.stringify({ipaddr:'192.168.1.42',
       payload:[{id:'rssi',value:-57}]})});
-    check(get('footer-details').textContent === 'VoxOne 0.8.0 · L0 · 192.168.1.42', 'footer IP');
+    check(document.querySelector('.site-footer').textContent.trim() ===
+      'VoxOne © 2026 PMW Support: pmw.voxone@gmail.com', 'footer ignores runtime IP');
     check(get('system-version').textContent === '0.8.0-dev', 'identity firmware fallback');
     check(get('system-build').textContent === '192a400', 'identity build');
     check(get('update-version').textContent === 'VoxOne 0.8.0-dev', 'update firmware');
@@ -908,8 +950,8 @@ setTimeout(async () => {
       get('current-station-name').textContent === '—' && get('source').textContent === '—',
       'disconnect clears stale source and metadata');
     check(muteButtons.every(button => button.disabled && button.getAttribute('aria-pressed') === 'false'), 'disconnect clears mute state');
-    check(get('footer-connection').textContent === 'Rozłączono', 'footer WebSocket disconnected');
-    check(get('footer-details').textContent === 'VoxOne 0.8.0 · L0', 'offline footer hides stale IP');
+    check(document.querySelector('.site-footer').textContent.trim() ===
+      'VoxOne © 2026 PMW Support: pmw.voxone@gmail.com', 'footer remains static after disconnect');
     check(get('network-active-ssid').textContent === '—', 'offline network info cleared');
     const transfer = new DataTransfer();
     transfer.items.add(new File(['image'], 'voxonebt.bin', {type:'application/octet-stream'}));

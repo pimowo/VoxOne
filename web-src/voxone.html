@@ -74,10 +74,9 @@
   <div id="app-shell" class="shell">
     <header class="topbar">
       <div class="brand">
-        <img src="/voxone-logo.svg?v={voxone-logo.svg-hash}" alt="" width="48" height="48">
         <div><p class="eyebrow">RADIO INTERNETOWE</p><h1>VoxOne</h1></div>
       </div>
-      <div class="identity"><span id="header-version">VoxOne —</span><span id="header-profile" class="profile">Profil —</span><button id="security-logout" class="security-logout" type="button" hidden>Wyloguj</button></div>
+      <div class="identity"><div class="identity-badges"><span id="header-version" class="profile">Wersja —</span><span id="header-profile" class="profile">Profil —</span></div><button id="security-logout" class="security-logout" type="button" hidden>Wyloguj</button></div>
     </header>
     <p id="security-api-warning" class="security-api-warning" role="status" hidden>Nie udało się odczytać stanu ochrony. Panel pozostaje dostępny, aby zachować możliwość aktualizacji urządzenia.</p>
 
@@ -98,8 +97,10 @@
         <article class="card hero">
           <span class="label" id="status-name-label">STACJA</span><h3 id="current-station-name">—</h3>
           <p class="track" id="metadata">—</p>
-          <p class="track" id="bt-artist" hidden></p>
-          <p class="track" id="bt-title" hidden></p>
+          <div id="bt-metadata" class="status-metadata" hidden>
+            <div class="status-metadata-field"><span class="status-metadata-label">Artysta</span><p class="track" id="bt-artist">—</p></div>
+            <div class="status-metadata-field"><span class="status-metadata-label">Utwór</span><p class="track" id="bt-title">—</p></div>
+          </div>
           <p class="track" id="bt-disconnected" hidden>Brak połączenia z telefonem.</p>
           <p class="hint" id="metadata-hint">Metadata z bieżącego strumienia.</p>
           <p class="hint" id="playback-state" aria-live="polite">—</p>
@@ -130,9 +131,6 @@
               <div class="station-search-wrap"><input id="station-search" class="station-search" type="search" placeholder="Filtruj moje stacje..." autocomplete="off"><button id="station-search-clear" type="button" disabled>Wyczyść</button></div>
             </div>
             <button id="station-add" type="button" disabled>+ Dodaj stację</button>
-            <button id="station-import" type="button" disabled>Import VoxOne</button>
-            <a id="station-export" class="station-download" href="/api/stations/export" download="VoxOne-stations.tsv">Eksport VoxOne</a>
-            <input id="station-import-file" type="file" accept=".tsv,text/plain,text/tab-separated-values" hidden>
             <span id="stations-saving" role="status" hidden>Zapisywanie…</span>
           </div>
           <div id="stations-feedback" class="stations-feedback" role="status" aria-live="polite"></div>
@@ -140,6 +138,11 @@
           <button id="stations-retry" type="button" hidden>Ponów</button>
           <div class="station-list-heading" aria-hidden="true" hidden><span>Nr</span><span>Stacja / URL</span><span>OVol</span><span>Akcje</span></div>
           <ul id="station-list" class="station-list" aria-label="Zapisane stacje"></ul>
+          <div class="station-transfer-actions">
+            <button id="station-import" type="button" disabled>Import listy</button>
+            <a id="station-export" class="station-download" href="/api/stations/export" download="VoxOne-stations.tsv">Eksport listy</a>
+            <input id="station-import-file" type="file" accept=".tsv,text/plain,text/tab-separated-values" hidden>
+          </div>
         </article>
         </div>
         <article id="directory-view" class="card" role="tabpanel" aria-labelledby="directory-tab" hidden>
@@ -163,7 +166,7 @@
           </form>
         </dialog>
         <dialog id="station-import-dialog" aria-labelledby="station-import-title">
-          <h3 id="station-import-title">Import VoxOne Stations</h3>
+          <h3 id="station-import-title">Import listy stacji</h3>
           <p id="station-import-details"></p>
           <p id="station-import-warning"></p>
           <div class="station-form-actions"><button id="station-import-cancel" type="button">Anuluj</button><button id="station-import-confirm" type="button">Importuj</button></div>
@@ -305,7 +308,7 @@
               </dl>
             </article>
             <article class="card hardware-config-card">
-              <h3>Display</h3>
+              <h3>Wyświetlacz</h3>
               <label for="hardware-display">Typ wyświetlacza</label>
               <select id="hardware-display" class="setting-select" disabled></select>
               <div class="hardware-selection-state" aria-live="polite">
@@ -378,7 +381,7 @@
             <p id="config-backup-status" class="config-transfer-status" role="status" aria-live="polite"></p>
           </article>
           <article class="card config-transfer-card">
-            <h3>Przywracanie</h3>
+            <h3>Przywracanie konfiguracji</h3>
             <label for="config-restore-file">Plik backupu VXCF</label>
             <input id="config-restore-file" type="file" accept=".vxcf,application/octet-stream">
             <p id="config-restore-name" class="update-file-name">Nie wybrano pliku.</p>
@@ -392,7 +395,7 @@
 
       <section id="update" data-panel aria-labelledby="update-title" hidden>
         <div class="section-heading"><div><p class="eyebrow">SYSTEM</p><h2 id="update-title">Aktualizacja</h2></div><span class="badge">Web Update</span></div>
-        <article class="card"><h3>Urządzenie</h3><dl class="facts"><div><dt>Wersja VoxOne</dt><dd id="update-version">VoxOne —</dd></div><div><dt>Build</dt><dd id="update-build">—</dd></div><div><dt>Profil</dt><dd id="update-profile">—</dd></div></dl></article>
+        <article class="card"><h3>Urządzenie</h3><dl class="facts"><div><dt>Wersja VoxOne</dt><dd id="update-version">VoxOne —</dd></div><div><dt>Build</dt><dd id="update-build">—</dd></div><div><dt>Profil sprzętu</dt><dd id="update-profile">—</dd></div></dl></article>
         <div class="grid update-grid">
           <article class="card update-card">
             <h3>VoxOne Firmware</h3>
@@ -434,7 +437,7 @@
       <p class="muted">Zapisane ustawienia pozostaną bez zmian.</p>
       <div class="station-form-actions"><button id="reboot-cancel" type="button">Anuluj</button><button id="reboot-confirm" class="primary" type="button">Restart</button></div>
     </dialog>
-    <footer class="site-footer"><span id="footer-details">VoxOne</span><span id="footer-connection" data-state="connecting">Łączenie...</span></footer>
+    <footer class="site-footer">VoxOne © 2026 PMW Support: pmw.voxone@gmail.com</footer>
   </div>
 </body>
 </html>

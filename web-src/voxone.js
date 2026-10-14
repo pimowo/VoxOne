@@ -1576,12 +1576,11 @@ window.VoxOneRestartWaiter = Object.freeze({
     const bt = status?.source === "BT";
     document.getElementById("metadata").hidden = bt;
     document.getElementById("metadata-hint").hidden = bt;
-    document.getElementById("bt-artist").hidden = !bt || !status.btConnected;
-    document.getElementById("bt-title").hidden = !bt || !status.btConnected;
+    document.getElementById("bt-metadata").hidden = !bt || !status.btConnected;
     document.getElementById("bt-disconnected").hidden = !bt || status.btConnected;
     text("metadata", status?.metadata || "—");
-    text("bt-artist", "Artysta: " + (bt && status.btConnected && status.artist ? status.artist : "—"));
-    text("bt-title", "Utwór: " + (bt && status.btConnected && status.title ? status.title : "—"));
+    text("bt-artist", bt && status.btConnected && status.artist ? status.artist : "—");
+    text("bt-title", bt && status.btConnected && status.title ? status.title : "—");
   }
 
   function renderStream() {
@@ -1777,7 +1776,7 @@ window.VoxOneRestartWaiter = Object.freeze({
   function renderIdentity() {
     const version = state.version ? state.version + (state.channel ? "-" + state.channel : "") : "—";
     const profile = state.profile ? state.profile.toUpperCase() : "—";
-    text("header-version", "VoxOne " + version);
+    text("header-version", "Wersja " + version);
     text("header-profile", "Profil " + profile);
     text("system-version", "VoxOne " + version);
     text("system-build", state.build || "—");
