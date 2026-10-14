@@ -47,6 +47,21 @@ int main() {
   assert(scrollTextPixelWidth(11, 6) == 66);
   assert(scrollTextPixelWidth(std::numeric_limits<size_t>::max(), 255) ==
          std::numeric_limits<uint16_t>::max());
+  assert(scrollCyclePixelWidth(0, 0) == 0);
+  assert(scrollCyclePixelWidth(60, 18) == 78);
+  assert(scrollCyclePixelWidth(std::numeric_limits<uint16_t>::max(), 1) ==
+         std::numeric_limits<uint16_t>::max());
+  assert(scrollCyclePixelWidth(65000, 1000) ==
+         std::numeric_limits<uint16_t>::max());
+
+  int16_t coordinate = -1;
+  assert(scrollAbsoluteCoordinate(2, 0, 78, coordinate) && coordinate == 2);
+  assert(scrollAbsoluteCoordinate(2, 1, 78, coordinate) && coordinate == 1);
+  assert(scrollAbsoluteCoordinate(2, 77, 78, coordinate) && coordinate == -75);
+  assert(!scrollAbsoluteCoordinate(2, 78, 78, coordinate) && coordinate == 2);
+  assert(!scrollAbsoluteCoordinate(2, 1, 0, coordinate) && coordinate == 2);
+  assert(!scrollAbsoluteCoordinate(0, 65534, 65535, coordinate) &&
+         coordinate == 0);
 
   char text[8]{};
   int16_t offset = -123;
@@ -145,4 +160,10 @@ int main() {
          std::string::npos);
   assert(scroll.find("_scrolldelta = conf.scrolldelta;") != std::string::npos);
   assert(scroll.find("_scrolltime = conf.scrolltime;") != std::string::npos);
+  assert(scroll.find("if (_coreControlled) return;") != std::string::npos);
+  assert(scroll.find("ScrollWidget::coreScrollMetrics() const") !=
+         std::string::npos);
+  assert(scroll.find("ScrollWidget::renderScrollOffset(uint16_t offsetPixels)") !=
+         std::string::npos);
+  assert(scroll.find("scrollAbsoluteCoordinate(") != std::string::npos);
 }

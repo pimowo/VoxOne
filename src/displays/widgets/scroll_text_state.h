@@ -67,6 +67,33 @@ inline uint16_t scrollTextPixelWidth(size_t glyphCount, size_t charWidth) {
   return static_cast<uint16_t>(glyphCount * charWidth);
 }
 
+inline uint16_t scrollCyclePixelWidth(uint16_t textWidth,
+                                      uint16_t separatorWidth) {
+  constexpr uint32_t maximum = std::numeric_limits<uint16_t>::max();
+  const uint32_t total = static_cast<uint32_t>(textWidth) + separatorWidth;
+  return static_cast<uint16_t>(total > maximum ? maximum : total);
+}
+
+// Converts a CORE-owned absolute offset into the signed cursor coordinate
+// used by the existing rasterizer. Invalid/out-of-range input falls back to
+// the left edge instead of wrapping a signed coordinate.
+inline bool scrollAbsoluteCoordinate(int16_t origin, uint16_t offset,
+                                     uint16_t cyclePixels,
+                                     int16_t& coordinate) {
+  if (cyclePixels == 0 || offset >= cyclePixels) {
+    coordinate = origin;
+    return offset == 0;
+  }
+  const int32_t candidate = static_cast<int32_t>(origin) - offset;
+  if (candidate < std::numeric_limits<int16_t>::min() ||
+      candidate > std::numeric_limits<int16_t>::max()) {
+    coordinate = origin;
+    return false;
+  }
+  coordinate = static_cast<int16_t>(candidate);
+  return true;
+}
+
 inline bool scrollTextNeedsScrolling(uint16_t textWidth, uint16_t rowWidth,
                                      uint16_t charWidth, uint16_t rowHeight) {
   return rowWidth && charWidth && rowHeight && textWidth > rowWidth;

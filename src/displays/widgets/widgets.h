@@ -3,6 +3,7 @@
 #include "../display_profile.h"
 #if DSP_MODEL!=DSP_DUMMY
 #include "widgetsconfig.h"
+#include "../../core/player_scroll_controller.h"
 
   #define CHARWIDTH   6
   #define CHARHEIGHT  8
@@ -104,6 +105,10 @@ class ScrollWidget: public TextWidget {
     void setText(const char* txt);
     void setText(const char* txt, const char *format);
     bool scrollNeeded() const { return _doscroll; }
+    voxone::display_scroll::PlayerScrollRowMetrics coreScrollMetrics() const;
+    void setCoreControlled(bool enabled);
+    bool coreControlled() const { return _coreControlled; }
+    bool renderScrollOffset(uint16_t offsetPixels);
     void setExternallyScheduled(bool enabled);
     void startScheduledTurn();
     bool stepScheduledTurn(uint8_t pixels);
@@ -128,6 +133,8 @@ class ScrollWidget: public TextWidget {
     uint16_t _sepwidth, _startscrolldelay;
     uint8_t _charWidth;
     psFrameBuffer* _fb=nullptr;
+    bool _coreControlled = false;
+    uint32_t _contentRevision = 0;
     bool _externallyScheduled = false;
     void* _changeContext = nullptr;
     uint8_t _changeRow = 0;
@@ -295,4 +302,3 @@ class PlayListWidget: public Widget {
 
 #endif
 #endif
-

@@ -171,12 +171,19 @@ bool ScrollWidget::_frameBufferReady() const {
 
 void ScrollWidget::setText(const char* txt) {
   const char* encoded = utf8Rus(txt ? txt : "");
+  int16_t assignedOffset = _x;
   const bool changed = scrollTextAssign(
-      _text, _buffsize, encoded, _x, _frameBufferReady() ? 0 : _config.left);
-  if (changed && _changeObserver) _changeObserver(_changeContext, _changeRow);
+      _text, _buffsize, encoded, assignedOffset,
+      _frameBufferReady() ? 0 : _config.left);
+  if (changed && !_coreControlled) _x = assignedOffset;
+  if (changed && _changeObserver && !_coreControlled)
+    _changeObserver(_changeContext, _changeRow);
   if (!changed) return;
+  ++_contentRevision;
+  if (_contentRevision == 0) ++_contentRevision;
   _textwidth = scrollTextPixelWidth(strlen(_text), _charWidth);
   _doscroll = _checkIsScrollNeeded();
+  if (_coreControlled) return;
   if (dsp.getScrollId() == this) dsp.setScrollId(NULL);
   _scrolldelay = millis();
   if (_active) {
@@ -228,6 +235,7 @@ void ScrollWidget::setText(const char* txt, const char *format){
 
 void ScrollWidget::loop() {
   if(_locked) return;
+  if (_coreControlled) return;
   if (_externallyScheduled) return;
   if (!_doscroll || _config.textsize == 0) return;
 #if VOXONE_DISPLAY_PROFILE == VOXONE_DISPLAY_PROFILE_ST7789_284X76
@@ -243,6 +251,34 @@ void ScrollWidget::loop() {
     _calcX(_scrolldelta);
     if (_active) _draw();
   }
+}
+
+voxone::display_scroll::PlayerScrollRowMetrics
+ScrollWidget::coreScrollMetrics() const {
+  return voxone::display_scroll::PlayerScrollRowMetrics{
+      1, _width, _textwidth,
+      scrollCyclePixelWidth(_textwidth, _sepwidth), _contentRevision};
+}
+
+void ScrollWidget::setCoreControlled(bool enabled) {
+  _coreControlled = enabled;
+  const int16_t origin = _frameBufferReady() ? 0 : _config.left;
+  _x = origin;
+  if (!enabled) _scrolldelay = millis();
+}
+
+bool ScrollWidget::renderScrollOffset(uint16_t offsetPixels) {
+  if (!_coreControlled || !_active || _locked) return false;
+  const int16_t origin = _frameBufferReady() ? 0 : _config.left;
+  const uint16_t cyclePixels =
+      scrollCyclePixelWidth(_textwidth, _sepwidth);
+  int16_t coordinate = origin;
+  const bool valid = !_doscroll || scrollAbsoluteCoordinate(
+      origin, offsetPixels, cyclePixels, coordinate);
+  _x = _doscroll && valid ? coordinate : origin;
+  _draw();
+  strlcpy(_oldtext, _text, _buffsize);
+  return valid;
 }
 
 void ScrollWidget::setExternallyScheduled(bool enabled) {
@@ -354,6 +390,15 @@ bool ScrollWidget::_checkDelay(int m, uint32_t &tstamp) {
 }
 
 void ScrollWidget::_reset(){
+  if (_coreControlled) {
+    _doscroll = _checkIsScrollNeeded();
+    #ifdef PSFBUFFER
+    _fb->freeBuffer();
+    uint16_t _rl = (_config.align==WA_CENTER)?(dsp.width()-_width)/2:_config.left;
+    _fb->begin(&dsp, _rl, _config.top, _width, _textheight, _bgcolor);
+    #endif
+    return;
+  }
 #if VOXONE_DISPLAY_PROFILE == VOXONE_DISPLAY_PROFILE_ST7789_284X76
   if (!_st7789IndependentScroll)
 #endif
