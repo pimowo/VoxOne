@@ -103,6 +103,10 @@ window.updateTransportRequests = [];
 window.btUpdateResponses = [];
 window.hardwareRequests = [];
 window.hardwarePostResponses = [];
+window.mqttRequests = [];
+window.mqttSnapshot = {enabled:true,host:'mqtt.local',port:1883,username:'voxone',
+  passwordSet:true,rootTopic:'',effectiveRoot:'voxone/l0'};
+window.timeRequests = 0;
 window.configBackupRequests = 0;
 window.configDownloadedName = '';
 window.configRestoreRequests = [];
@@ -245,6 +249,16 @@ window.fetch = (url, options = {}) => {
     const result = {ok:true, changed:true, restartRequired:true,
       config:{display:request.display,input:request.input}};
     return Promise.resolve({ok:true,status:200,json:() => Promise.resolve(result)});
+  }
+  if (url === '/api/mqtt') {
+    window.mqttRequests.push(options);
+    if ((options.method || 'GET') === 'GET')
+      return Promise.resolve({ok:true,status:200,json:() => Promise.resolve({...window.mqttSnapshot})});
+    return Promise.resolve({ok:true,status:200,json:() => Promise.resolve({ok:true,restartRequired:true})});
+  }
+  if (url === '/api/time') {
+    window.timeRequests++;
+    return Promise.resolve({ok:true,status:200,json:() => Promise.resolve({rtcSupported:false})});
   }
   return originalFetch(url, options);
 };
@@ -728,7 +742,24 @@ setTimeout(async () => {
       'long station list keeps import and export below its final row');
     location.hash = '#settings';
     window.dispatchEvent(new Event('hashchange'));
+    await settleSecurity();
     check(btTestSocket.sent.some(item => item === 'getsystem=1'), 'network snapshot requested on Settings');
+    check(get('mqtt-enabled').checked && get('mqtt-host').value === 'mqtt.local' &&
+      get('mqtt-port').value === '1883' && get('mqtt-username').value === 'voxone',
+      'existing MQTT form loads its current configuration');
+    check(get('mqtt-password').value === '' &&
+      get('mqtt-password-state').textContent.includes('Hasło zapisane'),
+      'MQTT password remains write-only');
+    get('mqtt-form').requestSubmit();
+    await settleSecurity();
+    const mqttPost = mqttRequests.find(request => request.method === 'POST');
+    const mqttBody = new URLSearchParams(mqttPost?.body || '');
+    check(!!mqttPost && mqttBody.get('host') === 'mqtt.local' &&
+      !mqttBody.has('password') && !mqttBody.has('clearPassword') &&
+      get('mqtt-feedback').textContent.includes('Konfiguracja zapisana'),
+      'existing MQTT save preserves an undisclosed password');
+    check(timeRequests > 0 && get('rtc-card').hidden,
+      'RTC card follows the unsupported capability response');
     location.hash = '#update';
     window.dispatchEvent(new Event('hashchange'));
     check(btTestSocket.sent.some(item => item.includes('getwebstatus')), 'status request');
@@ -749,6 +780,46 @@ setTimeout(async () => {
     check(get('network-profiles').textContent.includes('kolejność prób: 2'), 'profile order');
     check(!networkCard.querySelector('input,button,select,textarea'), 'network card has no unsupported edit controls');
     check(!get('network-profiles').textContent.includes('secret'), 'no password value rendered');
+    const settingsLayout = get('settings').querySelector('.settings-layout');
+    const settingsColumns = [...settingsLayout.querySelectorAll(':scope > .settings-column')];
+    check(settingsColumns.length === 2 &&
+      settingsColumns[0].querySelectorAll(':scope > .card').length === 3 &&
+      settingsColumns[1].querySelectorAll(':scope > .card').length === 3,
+      'settings cards use balanced independent columns');
+    check(get('network-profiles').querySelector('.is-active')?.querySelector('strong')?.textContent === 'HomeNet' &&
+      get('network-profiles').querySelector('.is-active')?.getAttribute('aria-current') === 'true',
+      'active Wi-Fi profile is identified without exposing credentials');
+    check(networkCard.textContent.includes('Tylko podgląd') &&
+      networkCard.textContent.includes('Edycja i włączanie profili nie są obecnie obsługiwane'),
+      'network card describes the read-only contract');
+    btTestSocket.onmessage({data:JSON.stringify({canFlip:1,flip:0,canBrightness:1,br:72,
+      canVu:0,stationListTimeout:15,canBtTransport:0})});
+    check(!get('display-settings-card').hidden && !get('brightness-control').hidden &&
+      get('brightness-slider').value === '72' && get('brightness-value').textContent === '72%' &&
+      get('brightness-unavailable').hidden,
+      'TFT brightness follows the existing capability and value');
+    get('brightness-slider').value = '64';
+    get('brightness-slider').dispatchEvent(new Event('change'));
+    get('station-list-timeout').value = '20';
+    get('station-list-timeout').dispatchEvent(new Event('change'));
+    get('flip-screen-toggle').checked = true;
+    get('flip-screen-toggle').dispatchEvent(new Event('change'));
+    check(btTestSocket.sent.some(item => item === 'dim=64') &&
+      btTestSocket.sent.some(item => item === 'stationlisttimeout=20') &&
+      btTestSocket.sent.some(item => item === 'flipscreen=1'),
+      'existing display settings keep their WebSocket commands');
+    btTestSocket.onmessage({data:JSON.stringify({flip:1,br:64,stationListTimeout:20})});
+    btTestSocket.onmessage({data:JSON.stringify({canFlip:1,canBrightness:0,canVu:0})});
+    check(!get('display-settings-card').hidden && get('brightness-control').hidden &&
+      !get('brightness-unavailable').hidden,
+      'display without brightness capability has no active brightness control');
+    btTestSocket.onmessage({data:JSON.stringify({canFlip:0,canBrightness:0,canVu:0})});
+    check(get('display-settings-card').hidden, 'display card remains capability gated');
+    const sleepCard = get('sleep-card');
+    check(!sleepCard.querySelector('input,button,select,textarea') &&
+      sleepCard.textContent.includes('Niedostępne') &&
+      sleepCard.textContent.includes('nie jest obecnie dostępna w WWW'),
+      'sleep remains an explicit non-interactive placeholder');
     location.hash = '#hardware';
     window.dispatchEvent(new Event('hashchange'));
     await new Promise(resolve => setTimeout(resolve, 0));

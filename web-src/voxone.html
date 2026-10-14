@@ -221,16 +221,25 @@
 
       <section id="settings" data-panel aria-labelledby="settings-title" hidden>
         <div class="section-heading"><div><p class="eyebrow">KONFIGURACJA</p><h2 id="settings-title">Ustawienia</h2></div><span class="badge">Urządzenie</span></div>
-        <div class="grid">
-          <article class="card"><h3>Sieć</h3><dl class="facts"><div><dt>Hostname</dt><dd id="network-hostname">—</dd></div><div><dt>Aktywna sieć Wi-Fi</dt><dd id="network-active-ssid">—</dd></div></dl><h4>Profile Wi-Fi</h4><ol id="network-profiles" class="network-profiles"><li class="muted">Oczekiwanie na dane urządzenia.</li></ol><p class="hint">Hasła nie są wysyłane do przeglądarki. Kolejność określa kolejność prób połączenia; połączenie rozpoczyna się od ostatniego użytego profilu. Edycja profili nie jest obecnie obsługiwana.</p></article>
-          <article id="display-settings-card" class="card" hidden>
+        <div class="settings-layout">
+          <div class="settings-column">
+          <article class="card network-card" aria-labelledby="network-title">
+            <div class="settings-card-heading"><h3 id="network-title">Sieć</h3><span class="settings-state">Tylko podgląd</span></div>
+            <dl class="facts"><div><dt>Hostname</dt><dd id="network-hostname">—</dd></div><div><dt>Aktywna sieć Wi-Fi</dt><dd id="network-active-ssid">—</dd></div></dl>
+            <h4>Profile Wi-Fi</h4>
+            <ol id="network-profiles" class="network-profiles"><li class="muted">Oczekiwanie na dane urządzenia.</li></ol>
+            <p class="hint">Hasła nie są wysyłane do przeglądarki. Kolejność określa kolejność prób połączenia; połączenie rozpoczyna się od ostatniego użytego profilu. Edycja i włączanie profili nie są obecnie obsługiwane.</p>
+          </article>
+          <article id="display-settings-card" class="card display-settings-card" hidden>
             <h3>Wyświetlacz</h3>
             <label id="flip-screen-control" class="display-setting-toggle"><input id="flip-screen-toggle" type="checkbox" disabled><span>Odwróć ekran</span></label>
             <label id="vu-meter-control" class="display-setting-toggle" hidden><input id="vu-meter-toggle" type="checkbox" disabled><span>VU meter</span><strong id="vu-meter-value">—</strong></label>
             <div id="brightness-control" class="audio-control" hidden>
-              <div class="audio-control-heading"><label for="brightness-slider">Jasność LCD</label><output id="brightness-value">—</output></div>
+              <div class="audio-control-heading"><label for="brightness-slider">Jasność podświetlenia TFT</label><output id="brightness-value">—</output></div>
               <input id="brightness-slider" class="volume-slider" type="range" min="0" max="100" step="1" value="75" disabled>
+              <p class="hint">Regulacja dotyczy fizycznego podświetlenia obsługiwanego wyświetlacza.</p>
             </div>
+            <p id="brightness-unavailable" class="settings-notice" hidden>Ten sterownik nie udostępnia regulacji jasności w WWW.</p>
             <div id="auto-return-control" class="audio-control" hidden>
               <h4>Automatyczny powrót</h4>
               <label class="idle-setting" for="station-list-timeout">Lista stacji <span>(sekundy)</span><input id="station-list-timeout" type="number" min="0" max="120" step="1" inputmode="numeric" disabled></label>
@@ -256,9 +265,8 @@
             <button id="rtc-sync-now" type="button" disabled>Synchronizuj teraz</button>
             <p id="rtc-feedback" class="hint" role="status" aria-live="polite"></p>
           </article>
-          <article class="card"><h3>Sen</h3><dl class="facts"><div><dt>Timer wyłączenia</dt><dd>—</dd></div></dl><p class="hint">Konfiguracja w kolejnym etapie.</p></article>
-        </div>
-        <div class="grid settings-grid">
+          </div>
+          <div class="settings-column">
           <article class="card mqtt-card" aria-labelledby="mqtt-title">
             <h3 id="mqtt-title">MQTT</h3>
             <form id="mqtt-form" novalidate>
@@ -288,6 +296,12 @@
             <button id="ha-copy" type="button" disabled>Kopiuj</button><span id="ha-copy-status" class="mqtt-help" role="status" aria-live="polite"></span>
             <p class="hint">Jeżeli masz już sekcję media_player: w configuration.yaml, dopisz tylko wpis zaczynający się od - platform: yoradio.</p>
           </article>
+          <article id="sleep-card" class="card settings-placeholder-card" aria-labelledby="sleep-title">
+            <div class="settings-card-heading"><h3 id="sleep-title">Sen</h3><span class="settings-state">Niedostępne</span></div>
+            <dl class="facts"><div><dt>Timer wyłączenia</dt><dd>—</dd></div></dl>
+            <p class="hint">Konfiguracja timera nie jest obecnie dostępna w WWW.</p>
+          </article>
+          </div>
         </div>
       </section>
 

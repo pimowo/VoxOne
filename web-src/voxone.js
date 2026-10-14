@@ -455,6 +455,7 @@ window.VoxOneRestartWaiter = Object.freeze({
   const vuMeterToggle = document.getElementById("vu-meter-toggle");
   const vuMeterValue = document.getElementById("vu-meter-value");
   const brightnessControl = document.getElementById("brightness-control");
+  const brightnessUnavailable = document.getElementById("brightness-unavailable");
   const brightnessSlider = document.getElementById("brightness-slider");
   const brightnessValue = document.getElementById("brightness-value");
   const autoReturnControl = document.getElementById("auto-return-control");
@@ -768,6 +769,9 @@ window.VoxOneRestartWaiter = Object.freeze({
     }
     for (const profile of info.profiles) {
       const item = document.createElement("li");
+      const active = profile.ssid && profile.ssid === info.activeSsid;
+      item.classList.toggle("is-active", active);
+      if (active) item.setAttribute("aria-current", "true");
       const name = document.createElement("strong");
       name.textContent = profile.ssid || "(pusty SSID)";
       const detail = document.createElement("span");
@@ -1699,6 +1703,7 @@ window.VoxOneRestartWaiter = Object.freeze({
     vuMeterValue.textContent = vuAwaiting !== null ? "Zapisywanie…" :
       state.vu === null ? "—" : state.vu ? "ON" : "OFF";
     brightnessControl.hidden = !state.canBrightness;
+    brightnessUnavailable.hidden = state.canBrightness;
     brightnessSlider.disabled = state.connection !== "connected" ||
       !state.canBrightness || state.brightness === null;
     const brightnessShown = brightnessDragging && brightnessPending !== null
