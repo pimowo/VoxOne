@@ -105,6 +105,42 @@ uint32_t displayTaskStackHighWaterMark() {
 
 #ifndef DUMMYDISPLAY
 //============================================================================================================================
+namespace {
+using voxone::display_scroll::PlayerScrollRowMetrics;
+using voxone::display_scroll::PlayerScrollWidgetBinding;
+using voxone::display_scroll::ScrollRendererProfile;
+
+PlayerScrollRowMetrics playerScrollMetrics(const void* context) {
+  return static_cast<const ScrollWidget*>(context)->coreScrollMetrics();
+}
+
+void setPlayerScrollCoreControlled(void* context, bool enabled) {
+  static_cast<ScrollWidget*>(context)->setCoreControlled(enabled);
+}
+
+bool renderPlayerScrollOffset(void* context, uint16_t offsetPixels) {
+  return static_cast<ScrollWidget*>(context)->renderScrollOffset(offsetPixels);
+}
+
+constexpr ScrollRendererProfile activePlayerScrollProfile() {
+#if VOXONE_DISPLAY_PROFILE == VOXONE_DISPLAY_PROFILE_OLED_128X64
+  return ScrollRendererProfile::Oled128x64;
+#elif VOXONE_DISPLAY_PROFILE == VOXONE_DISPLAY_PROFILE_ST7789_284X76
+  return ScrollRendererProfile::St7789_284x76;
+#elif VOXONE_DISPLAY_PROFILE == VOXONE_DISPLAY_PROFILE_ST7796_480X320
+  return ScrollRendererProfile::St7796_480x320;
+#else
+  return ScrollRendererProfile::None;
+#endif
+}
+
+PlayerScrollWidgetBinding playerScrollBinding(ScrollWidget* widget) {
+  return PlayerScrollWidgetBinding{widget, playerScrollMetrics,
+                                   setPlayerScrollCoreControlled,
+                                   renderPlayerScrollOffset};
+}
+}  // namespace
+
 constexpr uint16_t kDisplayVolumeMax = 100;
 static uint8_t displayedVolume() { return config.userVolume; }
 
@@ -762,6 +798,7 @@ void Display::init() {
   analogSetAttenuation(ADC_0db);
 #endif
   _bootStep = 0;
+  _playerScrollReady = false;
 #if VOXONE_DISPLAY_PROFILE == VOXONE_DISPLAY_PROFILE_ST7796_480X320
   _st7796PlayerReady = false;
 #endif
@@ -876,6 +913,7 @@ void Display::_buildPager(){
   _title1->setChangeObserver(this, 1, onTextChanged);
   _title2->setChangeObserver(this, 2, onTextChanged);
 #endif
+  _playerScrollBind();
 #if VOXONE_DISPLAY_PROFILE == VOXONE_DISPLAY_PROFILE_ST7789_284X76
     _plbackground = new FillWidget(playlBGConf, config.theme.metabg);
 #else
@@ -1150,7 +1188,7 @@ void Display::_start() {
   }
   _buildPager();
 #if VOXONE_DISPLAY_PROFILE == VOXONE_DISPLAY_PROFILE_ST7796_480X320
-  _st7796ScrollMode(true);
+  if (!_playerScrollCoreEnabled()) _st7796ScrollMode(true);
 #endif
   _renderedMode = PLAYER;
   config.setTitle(LANG::const_PlReady);
@@ -1164,6 +1202,7 @@ void Display::_start() {
   if(_volip) _volip->lock();
 #endif
   _pager->setPage(pages[PG_PLAYER]);
+  _playerScrollEnter(millis());
   _volume();
   _station();
 #if VOXONE_DISPLAY_PROFILE == VOXONE_DISPLAY_PROFILE_ST7796_480X320
@@ -1233,9 +1272,14 @@ void Display::_updateUpdateScreen(const UpdateProgressSnapshot& snapshot) {
 
 void Display::_renderMode(displayMode_e newmode) {
   if (newmode == _renderedMode) return;
+  if (_playerScrollCoreEnabled() && _renderedMode == PLAYER &&
+      newmode != PLAYER)
+    _playerScrollLeave();
 #if VOXONE_DISPLAY_PROFILE == VOXONE_DISPLAY_PROFILE_ST7796_480X320
-  if (_renderedMode == PLAYER && newmode != PLAYER) _st7796ScrollMode(false);
-  else if (_renderedMode != PLAYER && newmode == PLAYER) _st7796ScrollMode(true);
+  if (!_playerScrollCoreEnabled()) {
+    if (_renderedMode == PLAYER && newmode != PLAYER) _st7796ScrollMode(false);
+    else if (_renderedMode != PLAYER && newmode == PLAYER) _st7796ScrollMode(true);
+  }
 #endif
   _renderedMode = newmode;
 #if VOXONE_DISPLAY_PROFILE == VOXONE_DISPLAY_PROFILE_ST7789_284X76
@@ -1262,6 +1306,7 @@ void Display::_renderMode(displayMode_e newmode) {
     _nums->setText("");
     config.isScreensaver = false;
     _pager->setPage(pages[PG_PLAYER]);
+    _playerScrollEnter(millis());
 #if VOXONE_DISPLAY_PROFILE == VOXONE_DISPLAY_PROFILE_ST7796_480X320
     _updatePlaybackStatus();
 #endif
@@ -1474,6 +1519,42 @@ void Display::_st7796ScrollTick() {
 }
 #endif
 
+bool Display::_playerScrollCoreEnabled() const {
+  return voxone::display_scroll::playerScrollCoreBuildEnabled();
+}
+
+void Display::_playerScrollBind() {
+  using namespace voxone::display_scroll;
+  _playerScrollRuntime.configure(_playerScrollCoreEnabled(),
+                                 activePlayerScrollProfile(),
+                                 defaultScrollSettings(),
+                                 ScrollSettingsSource::RendererDefaults);
+  PlayerScrollWidgetBinding rows[PlayerScrollRuntime::kMaximumRows]{};
+  uint8_t count = 0;
+#if VOXONE_DISPLAY_PROFILE == VOXONE_DISPLAY_PROFILE_ST7789_284X76
+  if (_st7789Station) rows[count++] = playerScrollBinding(_st7789Station);
+#else
+  if (_meta) rows[count++] = playerScrollBinding(_meta);
+#endif
+  if (_title1) rows[count++] = playerScrollBinding(_title1);
+  if (_title2) rows[count++] = playerScrollBinding(_title2);
+  _playerScrollReady = _playerScrollRuntime.setRows(rows, count);
+}
+
+void Display::_playerScrollEnter(uint32_t nowMs) {
+  if (_playerScrollReady && _playerScrollCoreEnabled())
+    _playerScrollRuntime.enter(nowMs);
+}
+
+void Display::_playerScrollLeave() {
+  if (_playerScrollReady) _playerScrollRuntime.leave();
+}
+
+void Display::_playerScrollTick(uint32_t nowMs) {
+  if (_playerScrollReady && _playerScrollRuntime.active())
+    (void)_playerScrollRuntime.tick(nowMs);
+}
+
 void Display::loop() {
   if(_bootStep==0) {
     _pager->begin();
@@ -1494,12 +1575,17 @@ void Display::loop() {
     dsp.loop();
     return;
   }
+  if (_playerScrollCoreEnabled()) {
+    if (_renderedMode == PLAYER && !systemUpdateAudioBlocked())
+      _playerScrollTick(millis());
+  } else {
 #if VOXONE_DISPLAY_PROFILE == VOXONE_DISPLAY_PROFILE_ST7789_284X76
-  if(_renderedMode == PLAYER && !systemUpdateAudioBlocked()) ScrollWidget::nextSt7789ScrollFrame();
+    if(_renderedMode == PLAYER && !systemUpdateAudioBlocked()) ScrollWidget::nextSt7789ScrollFrame();
 #endif
 #if VOXONE_DISPLAY_PROFILE == VOXONE_DISPLAY_PROFILE_ST7796_480X320
-  if (_st7796PlayerReady && _renderedMode == PLAYER && !systemUpdateAudioBlocked()) _st7796ScrollTick();
+    if (_st7796PlayerReady && _renderedMode == PLAYER && !systemUpdateAudioBlocked()) _st7796ScrollTick();
 #endif
+  }
   _pager->loop();
 #if VOXONE_DISPLAY_PROFILE == VOXONE_DISPLAY_PROFILE_ST7796_480X320
   if (_bootStep == 2) {

@@ -264,6 +264,7 @@ void ScrollWidget::setCoreControlled(bool enabled) {
   _coreControlled = enabled;
   const int16_t origin = _frameBufferReady() ? 0 : _config.left;
   _x = origin;
+  if (enabled && dsp.getScrollId() == this) dsp.setScrollId(NULL);
   if (!enabled) _scrolldelay = millis();
 }
 
@@ -275,7 +276,9 @@ bool ScrollWidget::renderScrollOffset(uint16_t offsetPixels) {
   int16_t coordinate = origin;
   const bool valid = !_doscroll || scrollAbsoluteCoordinate(
       origin, offsetPixels, cyclePixels, coordinate);
-  _x = _doscroll && valid ? coordinate : origin;
+  const int16_t next = _doscroll && valid ? coordinate : origin;
+  if (_x == next && strcmp(_oldtext, _text) == 0) return valid;
+  _x = next;
   _draw();
   strlcpy(_oldtext, _text, _buffsize);
   return valid;

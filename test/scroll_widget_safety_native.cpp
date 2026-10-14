@@ -166,4 +166,6 @@ int main() {
   assert(scroll.find("ScrollWidget::renderScrollOffset(uint16_t offsetPixels)") !=
          std::string::npos);
   assert(scroll.find("scrollAbsoluteCoordinate(") != std::string::npos);
+  assert(scroll.find("dsp.getScrollId() == this") != std::string::npos);
+  assert(scroll.find("strcmp(_oldtext, _text) == 0") != std::string::npos);
 }
