@@ -762,6 +762,16 @@ setTimeout(async () => {
       'display dropdown contains the complete M0 roadmap');
     check([...hardwareInput.options].map(option => option.value).join(',') === 'none,ec11,buttons3',
       'input options follow capabilities');
+    check([...hardwareInput.options].map(option => option.textContent).join(',') ===
+      'Brak,Enkoder,Przyciski', 'input labels use approved Polish names');
+    check(document.querySelector('label[for="hardware-input"]').textContent === 'Tryb sterowania',
+      'input field uses approved Polish label');
+    const hardwareLayout = get('hardware').querySelector('.hardware-layout');
+    const hardwareColumns = [...hardwareLayout.querySelectorAll(':scope > .hardware-column')];
+    check(hardwareColumns.length === 2 &&
+      hardwareColumns[0].querySelectorAll(':scope > .card').length === 3 &&
+      hardwareColumns[1].querySelectorAll(':scope > .card').length === 2,
+      'hardware cards use balanced independent columns');
     check(hardwareDisplay.querySelector('option[value="ch1116_128x64"]').disabled,
       'planned display remains visible and disabled');
     check(!hardwareInput.querySelector('option[value="buttons3"]').disabled,

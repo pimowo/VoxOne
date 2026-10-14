@@ -1333,13 +1333,15 @@ window.VoxOneRestartWaiter = Object.freeze({
     renderHardwareSelectionState("input", hardwareRoadmap.inputs);
   }
 
-  function replaceHardwareOptions(select, roadmap, supported, selected) {
+  const hardwareInputLabels = { none: "Brak", ec11: "Enkoder", buttons3: "Przyciski" };
+
+  function replaceHardwareOptions(select, roadmap, supported, selected, labels = {}) {
     const supportedValues = new Set(supported.map(item => item.value));
     select.replaceChildren();
     for (const item of roadmap) {
       const option = document.createElement("option");
       option.value = item.value;
-      option.textContent = item.label;
+      option.textContent = labels[item.value] || item.label;
       option.disabled = item.selectable !== true || !supportedValues.has(item.value);
       select.append(option);
     }
@@ -1417,7 +1419,7 @@ window.VoxOneRestartWaiter = Object.freeze({
       replaceHardwareOptions(hardwareDisplay, hardwareRoadmap.displays,
         snapshot.supportedDisplays, snapshot.config.display);
       replaceHardwareOptions(hardwareInput, hardwareRoadmap.inputs,
-        snapshot.supportedInputs, snapshot.config.input);
+        snapshot.supportedInputs, snapshot.config.input, hardwareInputLabels);
       if (!hardwareDisplay.value || !hardwareInput.value)
         throw new Error("Urządzenie zwróciło niezgodną konfigurację");
       savedHardwareConfig = {
