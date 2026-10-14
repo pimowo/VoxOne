@@ -27,6 +27,12 @@ void sourceManagerRadioStopConsumed() {
   portEXIT_CRITICAL(&sourceMux);
 }
 
+void sourceManagerPlaylistSelectionCleared() {
+  portENTER_CRITICAL(&sourceMux);
+  sourceState.playlistSelectionCleared();
+  portEXIT_CRITICAL(&sourceMux);
+}
+
 bool sourceManagerRadioResumeAllowed() {
   portENTER_CRITICAL(&sourceMux);
   const bool allowed = sourceState.radioResumeAllowed();

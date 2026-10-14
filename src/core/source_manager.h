@@ -8,6 +8,7 @@
 void sourceManagerRadioCommandQueued(bool play, uint16_t station);
 void sourceManagerRadioPlayConsumed();
 void sourceManagerRadioStopConsumed();
+void sourceManagerPlaylistSelectionCleared();
 bool sourceManagerRadioResumeAllowed();
 bool sourceManagerRadioPlayIntent();
 class TemporaryAudioState;

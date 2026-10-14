@@ -66,7 +66,7 @@ void Player::sendCommand(playerRequestParams_t request){
   if(playerQueue==NULL) return;
   if(systemUpdateAudioBlocked() && request.type != PR_UPDATE_STOP) return;
   if (request.type == PR_STATION_REFRESH) {
-    _pendingStationRefresh.publish();
+    _pendingStationRefresh.publishRefresh();
     return;
   }
   if(xQueueSend(playerQueue, &request, PLQ_SEND_DELAY) != pdPASS) return;
@@ -148,10 +148,17 @@ void Player::_clearStation(bool resetOvol) {
   netserver.requestOnChange(TITLE, 0);
 }
 
-bool Player::_refreshStation(uint16_t stationId) {
+bool Player::_refreshStation(uint16_t stationId, bool* identityChanged) {
+  const uint64_t previousId = config.station.id;
+  char previousUrl[sizeof(config.station.url)];
+  strlcpy(previousUrl, config.station.url, sizeof(previousUrl));
   const int previousOvol = config.station.ovol;
   const uint8_t previousMode = config.station.metadataMode;
   if (!config.loadStation(stationId)) return false;
+  if (identityChanged) {
+    *identityChanged = previousId != config.station.id ||
+        strcmp(previousUrl, config.station.url) != 0;
+  }
   const StationRefreshChanges changes = stationRefreshChanges(
       previousOvol, previousMode, config.station.ovol,
       config.station.metadataMode);
@@ -168,10 +175,61 @@ bool Player::_refreshStation(uint16_t stationId) {
 void Player::_servicePendingStationRefresh() {
   if (systemUpdateAudioBlocked() || !_pendingStationRefresh.pending()) return;
   PlaylistGuard guard(0);
-  if (!guard || !_pendingStationRefresh.take()) return;
+  if (!guard) return;
+  const PlayerPendingRefreshRequest request = _pendingStationRefresh.take();
+  if (!request) return;
+  // Commands accepted before this reconciliation retain FIFO precedence.
+  // A concurrent later command either appears here or runs after this method.
+  if (uxQueueMessagesWaiting(playerQueue) != 0) {
+    _pendingStationRefresh.republish(request);
+    return;
+  }
   const uint16_t stationId = config.lastStation();
-  if (stationId != 0 && !_refreshStation(stationId))
-    _pendingStationRefresh.publish();
+  if (stationId == 0) {
+    _clearStation(request.resetOvolIfEmpty);
+    guard.release();
+    // A newer playlist commit owns the next reconciliation. Commands queued
+    // after the guarded empty-queue check are ordered after this stop.
+    if (_pendingStationRefresh.pending()) return;
+    sourceManagerPlaylistSelectionCleared();
+    _applyStop(PR_STOP_KEEP_STATION, false);
+    return;
+  }
+  bool identityChanged = false;
+  if (!_refreshStation(stationId, &identityChanged)) {
+    _pendingStationRefresh.republish(request);
+    return;
+  }
+  guard.release();
+  if (_pendingStationRefresh.pending()) return;
+  if (temporaryBusy()) {
+    _pendingStationRefresh.publishRefresh();
+    return;
+  }
+  if (identityChanged && isRunning() && sourceManagerRadioResumeAllowed()) {
+    _radioReconnect.cancel();
+    _play(stationId);
+    if (player_on_station_change) player_on_station_change();
+  }
+}
+
+void Player::_applyStop(int payload, bool consumeUserCommand) {
+  if (payload < PR_STOP_KEEP_STATION) {
+    _clearStation(payload == PR_STOP_CLEAR_STATION_RESET_OVOL);
+  }
+  _radioReconnect.cancel();
+  network.lostPlaying = false;
+  if (_temporaryUrls) xQueueReset(_temporaryUrls);
+  if (temporaryBusy()) {
+    if (!consumeUserCommand) suppressTemporaryRadioRestore();
+    if (temporaryActive()) finishTemporary();
+    else if (systemUpdateAudioBlocked())
+      _stop(false, RadioStopReason::SourceSwitch);
+    if (!sourceManagerRadioPlayIntent()) stopInfo();
+  } else {
+    _stop();
+  }
+  if (consumeUserCommand) sourceManagerRadioStopConsumed();
 }
 
 void resetPlayer(){
@@ -232,22 +290,7 @@ void Player::loop() {
         else _stop(false, RadioStopReason::SourceSwitch);
         break;
       case PR_STOP:
-        if (requestP.payload < PR_STOP_KEEP_STATION) {
-          _clearStation(
-              requestP.payload == PR_STOP_CLEAR_STATION_RESET_OVOL);
-        }
-        _radioReconnect.cancel();
-        network.lostPlaying = false;
-        if (_temporaryUrls) xQueueReset(_temporaryUrls);
-        if (temporaryBusy()) {
-          if (temporaryActive()) finishTemporary();
-          else if (systemUpdateAudioBlocked())
-            _stop(false, RadioStopReason::SourceSwitch);
-          if (!sourceManagerRadioPlayIntent()) stopInfo();
-        } else {
-          _stop();
-        }
-        sourceManagerRadioStopConsumed();
+        _applyStop(requestP.payload, true);
         break;
       case PR_STATION_REFRESH:
         if (requestP.payload > 0)
@@ -324,7 +367,8 @@ void Player::loop() {
       default: break;
     }
   }
-  _servicePendingStationRefresh();
+  if (uxQueueMessagesWaiting(playerQueue) == 0)
+    _servicePendingStationRefresh();
   char url[MQTT_BURL_SIZE];
   if (_temporaryUrls && xQueueReceive(_temporaryUrls, url, 0) == pdTRUE &&
       !systemUpdateAudioBlocked()) browseUrl(url);

@@ -65,6 +65,11 @@ class SourceManagerState {
   }
   void radioPlayConsumed() { pendingRadioStation_ = 0; }
   void radioStopConsumed() { pendingRadioStop_ = false; }
+  void playlistSelectionCleared() {
+    // A committed empty playlist is not a user transport command. Clear the
+    // old running intent, but never overwrite a newer accepted PLAY.
+    if (pendingRadioStation_ == 0) radioPlayIntent_ = false;
+  }
   uint16_t radioStationForResume(uint16_t lastStation) const {
     return pendingRadioStation_ != 0 ? pendingRadioStation_ : lastStation;
   }

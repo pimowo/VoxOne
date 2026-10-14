@@ -2423,24 +2423,11 @@ void handleStationsImport(AsyncWebServerRequest* request) {
     finishPlaylistUpload(request);
     return;
   }
+  // Publish while PlaylistGuard still orders this request with the commit.
+  // Player derives STOP/reconnect/refresh from the latest committed state.
+  player.requestPlaylistSync(newCurrent == 0);
   guard.release();
   finishPlaylistUpload(request);
-  const bool reconnect = newCurrent != 0 && player.isRunning() &&
-      (oldActive.id != rows[newCurrent - 1].id ||
-       oldActive.url != rows[newCurrent - 1].url);
-  switch (stationRuntimeAction(true, newCurrent != 0, reconnect)) {
-    case StationRuntimeAction::Stop:
-      player.sendCommand({PR_STOP, PR_STOP_CLEAR_STATION_RESET_OVOL});
-      break;
-    case StationRuntimeAction::Play:
-      player.sendCommand({PR_PLAY, newCurrent});
-      break;
-    case StationRuntimeAction::Refresh:
-      player.sendCommand({PR_STATION_REFRESH, newCurrent});
-      break;
-    case StationRuntimeAction::None:
-      break;
-  }
   stationsReply(request, 200, String("{\"ok\":true,\"revision\":\"") +
       newRevision + "\",\"current\":" + String(newCurrent) +
       ",\"count\":" + String(rows.size()) + "}");
@@ -2526,8 +2513,8 @@ void handleStationMetadata(AsyncWebServerRequest* request) {
                   "station_write_failed");
     return;
   }
+  if (modeChanged) player.requestPlaylistSync();
   guard.release();
-  if (modeChanged) player.sendCommand({PR_STATION_REFRESH, current});
   stationsReply(request, 200, String("{\"ok\":true,\"revision\":\"") +
       newRevision + "\",\"id\":\"" + idText +
       "\",\"metadataMode\":\"" + (swapText == "1" ? "swap" : "normal") +
@@ -2689,22 +2676,23 @@ void handleStationsMutation(AsyncWebServerRequest *request) {
     else stationsError(request, 500, "playlist_write_failed");
     return;
   }
-  guard.release();
   const char* playerAction = "none";
   const bool affectsActive = (edit || remove) && number == oldCurrent;
-  switch (stationRuntimeAction(affectsActive, newCurrent != 0, reconnect)) {
+  const StationRuntimeAction runtimeAction =
+      stationRuntimeAction(affectsActive, newCurrent != 0, reconnect);
+  if (runtimeAction != StationRuntimeAction::None)
+    player.requestPlaylistSync();
+  guard.release();
+  switch (runtimeAction) {
   case StationRuntimeAction::Stop:
     playerAction = "PR_STOP";
-    player.sendCommand({PR_STOP, PR_STOP_CLEAR_STATION});
     break;
   case StationRuntimeAction::Play:
     netserver.requestOnChange(ITEM, 0);
     playerAction = "PR_PLAY";
-    player.sendCommand({PR_PLAY, newCurrent});
     break;
   case StationRuntimeAction::Refresh:
     playerAction = "PR_STATION_REFRESH";
-    player.sendCommand({PR_STATION_REFRESH, newCurrent});
     break;
   case StationRuntimeAction::None:
     if (refreshCurrent) netserver.requestOnChange(STATION, 0);

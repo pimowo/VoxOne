@@ -66,8 +66,9 @@ class Player: public Audio {
   private:
     void _stop(bool alreadyStopped = false,
                RadioStopReason reason = RadioStopReason::Normal);
+    void _applyStop(int payload, bool consumeUserCommand);
     void _play(uint16_t stationId, bool sourceResume = false);
-    bool _refreshStation(uint16_t stationId);
+    bool _refreshStation(uint16_t stationId, bool* identityChanged = nullptr);
     void _servicePendingStationRefresh();
     void _clearStation(bool resetOvol);
     void _loadVol(uint8_t volume);
@@ -88,6 +89,11 @@ class Player: public Audio {
     void setError(const char *e);
     //bool hasError() { return strlen(_plError)>0; }
     void sendCommand(playerRequestParams_t request);
+    // Playlist committers call this while still holding PlaylistGuard, making
+    // the latest committed request authoritative without blocking its task.
+    void requestPlaylistSync(bool resetOvolIfEmpty = false) {
+      _pendingStationRefresh.publish(resetOvolIfEmpty);
+    }
     void resetQueue();
     void requestTemporaryUrl(const char* url, size_t length);
     bool temporaryActive() const { return _temporary.active(); }

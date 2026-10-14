@@ -55,7 +55,7 @@ struct PlayerModel {
         playing = false;
       }
     }
-    if (pending.take()) runtime = playlist[current];
+    if (queue.empty() && pending.take()) runtime = playlist[current];
   }
 
   const std::size_t capacity;
@@ -102,13 +102,27 @@ int main() {
   full.pending.publish();
   full.pending.publish();
   assert(full.pending.pending());
+  while (!full.queue.empty()) full.service();
+  assert(!full.pending.pending());
 
   // A publication concurrent with consumption remains pending for the next
   // Player iteration rather than being erased by the earlier take().
+  full.pending.publish();
   assert(full.pending.take());
   full.pending.publish();
   assert(full.pending.take());
   assert(!full.pending.take());
+
+  // The latest committed transaction owns reset-OVOL semantics, while a
+  // legacy refresh cannot erase an already published import requirement.
+  full.pending.publish(true);
+  full.pending.publish(false);
+  PlayerPendingRefreshRequest resetRequest = full.pending.take();
+  assert(resetRequest && !resetRequest.resetOvolIfEmpty);
+  full.pending.publish(true);
+  full.pending.publishRefresh();
+  resetRequest = full.pending.take();
+  assert(resetRequest && resetRequest.resetOvolIfEmpty);
 
   PlayerModel refreshThenPlay(5);
   refreshThenPlay.playlist[1] = 11;
@@ -164,10 +178,12 @@ int main() {
   for (const std::string* handler :
        {&importHandler, &metadataHandler, &mutationHandler}) {
     assert(handler->find("config.station") == std::string::npos);
+    const std::size_t publish = handler->find("player.requestPlaylistSync");
     const std::size_t release = handler->find("guard.release();");
-    const std::size_t command = handler->find("player.sendCommand", release);
-    assert(release != std::string::npos && command != std::string::npos &&
-           release < command);
+    assert(publish != std::string::npos && release != std::string::npos &&
+           publish < release);
+    assert(handler->find("player.sendCommand({PR_PLAY") == std::string::npos);
+    assert(handler->find("player.sendCommand({PR_STOP") == std::string::npos);
   }
 
   assert(playerHeader.find("PR_STATION_REFRESH") != std::string::npos);
@@ -187,17 +203,18 @@ int main() {
          std::string::npos);
   assert(sendCommand.find("sourceManagerRadioCommandQueued", queueSend) !=
          std::string::npos);
-  assert(player.find("_servicePendingStationRefresh();\n  char url") !=
+  assert(player.find("if (uxQueueMessagesWaiting(playerQueue) == 0)\n"
+                     "    _servicePendingStationRefresh();\n  char url") !=
          std::string::npos);
   assert(player.find("_refreshStation(static_cast<uint16_t>(requestP.payload))") !=
          std::string::npos);
-  assert(player.find("PlaylistGuard guard(0);\n  if (!guard || !_pendingStationRefresh.take())") !=
+  assert(player.find("PlaylistGuard guard(0);\n  if (!guard) return;") !=
          std::string::npos);
   assert(player.find("if (!config.loadStation(stationId)) return false;") !=
          std::string::npos);
   assert(player.find("const StationRefreshChanges changes =") !=
          std::string::npos);
-  assert(player.find("case PR_STOP:\n        if (requestP.payload <") !=
+  assert(player.find("case PR_STOP:\n        _applyStop(requestP.payload, true);") !=
          std::string::npos);
   assert(store.find("PlaylistGuard::~PlaylistGuard() { release(); }") !=
          std::string::npos);
