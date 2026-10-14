@@ -128,6 +128,7 @@ $nativeSources=@{
  security_session_native=@('src/core/security_settings.cpp','src/core/security_session.cpp')
  station_directory_native=@('src/core/station_directory_format.cpp')
  volume_limits_native=@('src/core/volume_map.cpp')
+ websocket_command_native=@('src/core/websocket_command.cpp')
 }
 $tests=@(Get-ChildItem -LiteralPath (Join-Path $root 'test') -Filter '*_native.cpp' -File | Sort-Object Name)
 Invoke-Step 'Native tests' {
@@ -233,6 +234,13 @@ if(-not $onWindows) {
   if($LASTEXITCODE -ne 0) { throw 'Sanitized security HTTP adapter compile failed' }
   & $securityHttpExe
   if($LASTEXITCODE -ne 0) { throw 'Sanitized security HTTP adapter test failed' }
+  $websocketCommandExe=Join-Path $work 'websocket_command_sanitized'
+  & $Cxx @sanitizerArgs '-o' $websocketCommandExe `
+    (Join-Path $root 'test/websocket_command_native.cpp') `
+    (Join-Path $root 'src/core/websocket_command.cpp')
+  if($LASTEXITCODE -ne 0) { throw 'Sanitized WebSocket command compile failed' }
+  & $websocketCommandExe
+  if($LASTEXITCODE -ne 0) { throw 'Sanitized WebSocket command test failed' }
  }
 }
 Invoke-Step 'Web Update headless' {

@@ -66,6 +66,7 @@
 #include "rtcsupport.h"
 #include "security_api.h"
 #include "security_http_adapter.h"
+#include "websocket_command.h"
 #include "../displays/dspcore.h"
 #include "../displays/widgets/widgetsconfig.h" //BitrateFormat
 
@@ -3045,7 +3046,8 @@ void NetServer::serviceUpdateRestart() {
   }
 }
 
-void NetServer::onWsMessage(void *arg, uint8_t *data, size_t len, uint32_t clientId) {
+void NetServer::onWsMessage(void *arg, const uint8_t *data, size_t len,
+                            uint32_t clientId) {
   AwsFrameInfo *info = (AwsFrameInfo*)arg;
 #if defined(VOXONE_PROFILE_L0)
   if (info->index == 0 &&
@@ -3053,42 +3055,51 @@ void NetServer::onWsMessage(void *arg, uint8_t *data, size_t len, uint32_t clien
           info->final && info->len == len && info->opcode == WS_TEXT)) return;
 #endif
   if (info->final && info->index == 0 && info->len == len && info->opcode == WS_TEXT) {
-    data[len] = 0;
-    if (config.parseWsCommand((const char*)data, _wscmd, _wsval, 65)) {
-      if (voxone::security::securityHttpEnforcementEnabled() &&
-          !voxone::security::securityWebSocketCommandAllowed(_wscmd)) {
-        websocket.close(clientId, 1008, "Command not allowed");
-        return;
+    const auto parsed = voxone::websocket::parseCommand(
+        data, len, _wscmd, sizeof(_wscmd), _wsval, sizeof(_wsval));
+    if (parsed == voxone::websocket::CommandParseStatus::CommandTooLong ||
+        parsed == voxone::websocket::CommandParseStatus::ValueTooLong) {
+      websocket.close(clientId, 1009, "Command too long");
+      return;
+    }
+    if (parsed != voxone::websocket::CommandParseStatus::Ok) {
+      if (voxone::security::securityHttpEnforcementEnabled())
+        websocket.close(clientId, 1008, "Invalid command");
+      return;
+    }
+    if (voxone::security::securityHttpEnforcementEnabled() &&
+        !voxone::security::securityWebSocketCommandAllowed(_wscmd)) {
+      websocket.close(clientId, 1008, "Command not allowed");
+      return;
+    }
+    if (strcmp(_wscmd, "ping") == 0) {
+      securityWebSocketText(clientId, "{\"pong\": 1}");
+      return;
+    }
+    if (strcmp(_wscmd, "tone") == 0) {
+      int8_t bass, middle, trebble;
+      if (len <= 64 && parseToneValue(_wsval, bass, middle, trebble)) {
+        config.setTone(bass, middle, trebble);
       }
-      if (strcmp(_wscmd, "ping") == 0) {
-        securityWebSocketText(clientId, "{\"pong\": 1}");
-        return;
-      }
-      if (strcmp(_wscmd, "tone") == 0) {
-        int8_t bass, middle, trebble;
-        if (len <= 64 && parseToneValue(_wsval, bass, middle, trebble)) {
-          config.setTone(bass, middle, trebble);
-        }
-        return;
-      }
-      if (strcmp(_wscmd, "trebble") == 0) {
-        int8_t valb = atoi(_wsval);
-        config.setTone(config.store.bass, config.store.middle, valb);
-        return;
-      }
-      if (strcmp(_wscmd, "middle") == 0) {
-        int8_t valb = atoi(_wsval);
-        config.setTone(config.store.bass, valb, config.store.trebble);
-        return;
-      }
-      if (strcmp(_wscmd, "bass") == 0) {
-        int8_t valb = atoi(_wsval);
-        config.setTone(valb, config.store.middle, config.store.trebble);
-        return;
-      }
-      if(cmd.exec(_wscmd, _wsval, clientId)){
-        return;
-      }
+      return;
+    }
+    if (strcmp(_wscmd, "trebble") == 0) {
+      int8_t valb = atoi(_wsval);
+      config.setTone(config.store.bass, config.store.middle, valb);
+      return;
+    }
+    if (strcmp(_wscmd, "middle") == 0) {
+      int8_t valb = atoi(_wsval);
+      config.setTone(config.store.bass, valb, config.store.trebble);
+      return;
+    }
+    if (strcmp(_wscmd, "bass") == 0) {
+      int8_t valb = atoi(_wsval);
+      config.setTone(valb, config.store.middle, config.store.trebble);
+      return;
+    }
+    if(cmd.exec(_wscmd, _wsval, clientId)){
+      return;
     }
   }
 }

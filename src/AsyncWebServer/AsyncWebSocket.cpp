@@ -257,7 +257,7 @@ class AsyncWebSocketControl {
         _data = (uint8_t*)malloc(_len);
         if(_data == NULL)
           _len = 0;
-        else memcpy(_data, data, len);
+        else memcpy(_data, data, _len);
       } else _data = NULL;
     }
     virtual ~AsyncWebSocketControl(){
@@ -653,7 +653,6 @@ void AsyncWebSocketClient::_onData(void *pbuf, size_t plen){
     }
 
     const size_t datalen = std::min((size_t)(_pinfo.len - _pinfo.index), plen);
-    const auto datalast = data[datalen];
 
     if(_pinfo.masked){
       for(size_t i=0;i<datalen;i++)
@@ -675,12 +674,15 @@ void AsyncWebSocketClient::_onData(void *pbuf, size_t plen){
     } else if((datalen + _pinfo.index) == _pinfo.len){
       _pstate = 0;
       if(_pinfo.opcode == WS_DISCONNECT){
-        if(datalen){
+        if(datalen >= 2){
           uint16_t reasonCode = (uint16_t)(data[0] << 8) + data[1];
-          char * reasonString = (char*)(data+2);
           if(reasonCode > 1001){
-            _server->_handleEvent(this, WS_EVT_ERROR, (void *)&reasonCode, (uint8_t*)reasonString, strlen(reasonString));
+            _server->_handleEvent(this, WS_EVT_ERROR, (void *)&reasonCode,
+                                  data + 2, datalen - 2);
           }
+        } else if(datalen == 1){
+          close(1002, "Invalid close frame");
+          return;
         }
         if(_status == WS_DISCONNECTING){
           _status = WS_DISCONNECTED;
@@ -703,10 +705,6 @@ void AsyncWebSocketClient::_onData(void *pbuf, size_t plen){
       //what should we do?
       break;
     }
-
-    // restore byte as _handleEvent may have added a null terminator i.e., data[len] = 0;
-    if (datalen > 0)
-      data[datalen] = datalast;
 
     data += datalen;
     plen -= datalen;

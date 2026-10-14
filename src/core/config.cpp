@@ -820,18 +820,6 @@ bool Config::parseJSON(const char* line, char* name, char* url, int &ovol) {
   return true;
 }
 
-bool Config::parseWsCommand(const char* line, char* cmd, char* val, uint8_t cSize) {
-  char *tmpe;
-  tmpe = strstr(line, "=");
-  if (tmpe == NULL) return false;
-  memset(cmd, 0, cSize);
-  strlcpy(cmd, line, tmpe - line + 1);
-  //if (strlen(tmpe + 1) == 0) return false;
-  memset(val, 0, cSize);
-  strlcpy(val, tmpe + 1, strlen(line) - strlen(cmd) + 1);
-  return true;
-}
-
 bool Config::parseSsid(const char* line, char* ssid, char* pass) {
   char *tmpe;
   tmpe = strstr(line, "\t");

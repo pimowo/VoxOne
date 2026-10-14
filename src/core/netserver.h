@@ -139,7 +139,8 @@ class NetServer {
     void setRSSI(int val) { rssi = val; };
     int  getRSSI()        { return rssi; };
     void chunkedHtmlPage(const String& contentType, AsyncWebServerRequest *request, const char * path);
-    void onWsMessage(void *arg, uint8_t *data, size_t len, uint32_t clientId);
+    void onWsMessage(void *arg, const uint8_t *data, size_t len,
+                     uint32_t clientId);
     void resetQueue();
   private:
     bool _started = false;

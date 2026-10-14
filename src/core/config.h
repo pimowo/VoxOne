@@ -191,7 +191,6 @@ class Config {
     void setStation(const char* station);
     void escapeQuotes(const char* input, char* output, size_t maxLen);
     bool parseJSON(const char* line, char* name, char* url, int &ovol);
-    bool parseWsCommand(const char* line, char* cmd, char* val, uint8_t cSize);
     bool parseSsid(const char* line, char* ssid, char* pass);
     bool loadStation(uint16_t station);
     bool initNetwork();

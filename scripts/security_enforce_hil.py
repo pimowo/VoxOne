@@ -26,12 +26,29 @@ import sys
 import termios
 import time
 import urllib.parse
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from enum import Enum
 
 
 WS_PROTOCOL = "voxone.v1"
 SESSION_COOKIE = "voxone_session"
+SAFE_LOGIN_ERROR_CODES = frozenset({
+    "authentication_failed",
+    "body_required",
+    "body_too_large",
+    "internal_error",
+    "invalid_mode",
+    "invalid_password",
+    "invalid_request",
+    "invalid_state",
+    "locked",
+    "random_error",
+    "rate_limited",
+    "request_rejected",
+    "service_unavailable",
+    "storage_error",
+    "unsupported_media_type",
+})
 DEFAULT_UART = (
     "/dev/serial/by-id/"
     "usb-FTDI_FT232R_USB_UART_A7039N0Z-if00-port0"
@@ -53,6 +70,88 @@ class UartState(Enum):
     DATA_NO_BOOT = "data_no_boot"
     BOOT_EVIDENCE = "boot_evidence"
     DISCONNECTED = "disconnected"
+
+
+GETINDEX_REQUIRED_TOP_LEVEL = frozenset({"current"})
+GETINDEX_REQUIRED_PAYLOAD_IDS = frozenset({
+    "nameset", "meta", "volume", "volume100", "muted",
+    "maximumVolume", "startupMode", "startupFixedVolume",
+    "bass", "middle", "trebble", "balance", "bitrate", "fmt",
+    "playerwrap",
+})
+
+
+@dataclass
+class GetIndexSnapshotEvidence:
+    """Field-only GETINDEX evidence; response values are never retained."""
+
+    text_frames: int = 0
+    json_objects: int = 0
+    top_level_keys: set[str] = field(default_factory=set)
+    payload_ids: set[str] = field(default_factory=set)
+
+    def feed(self, payload: bytes) -> None:
+        self.text_frames += 1
+        try:
+            value = json.loads(payload)
+        except (UnicodeDecodeError, json.JSONDecodeError):
+            return
+        if not isinstance(value, dict):
+            return
+        self.json_objects += 1
+        self.top_level_keys.update(
+            key for key in value.keys() if isinstance(key, str)
+        )
+        entries = value.get("payload")
+        if not isinstance(entries, list):
+            return
+        for entry in entries:
+            if isinstance(entry, dict) and isinstance(entry.get("id"), str):
+                self.payload_ids.add(entry["id"])
+
+    @property
+    def missing_top_level(self) -> frozenset[str]:
+        return GETINDEX_REQUIRED_TOP_LEVEL.difference(self.top_level_keys)
+
+    @property
+    def missing_payload_ids(self) -> frozenset[str]:
+        return GETINDEX_REQUIRED_PAYLOAD_IDS.difference(self.payload_ids)
+
+    @property
+    def complete(self) -> bool:
+        return not self.missing_top_level and not self.missing_payload_ids
+
+
+def wait_getindex_snapshot(
+    websocket: "WebSocket",
+    timeout: float,
+    inspect_text=None,
+) -> GetIndexSnapshotEvidence:
+    """Collect the independent GETINDEX frames in any order before a hard deadline."""
+
+    evidence = GetIndexSnapshotEvidence()
+    deadline = time.monotonic() + timeout
+    while not evidence.complete:
+        try:
+            opcode, payload = websocket.receive(deadline=deadline)
+        except (socket.timeout, TimeoutError):
+            break
+        if opcode == 0x8:
+            raise HilFailure("WebSocket closed while waiting for GETINDEX snapshot")
+        if opcode != 0x1:
+            continue
+        if inspect_text is not None:
+            inspect_text(payload)
+        evidence.feed(payload)
+    if not evidence.complete:
+        missing_top = ",".join(sorted(evidence.missing_top_level)) or "none"
+        missing_ids = ",".join(sorted(evidence.missing_payload_ids)) or "none"
+        raise HilFailure(
+            "incomplete GETINDEX snapshot: "
+            f"textFrames={evidence.text_frames} jsonObjects={evidence.json_objects} "
+            f"missingTopLevel={missing_top} missingPayloadIds={missing_ids}"
+        )
+    return evidence
 
 
 @dataclass
@@ -118,6 +217,109 @@ class HttpResult:
         return [value for key, value in self.headers if key.lower() == wanted]
 
 
+@dataclass(frozen=True)
+class HttpTransportDiagnostic:
+    """Bounded, secret-free evidence for an HTTP transport failure."""
+
+    phase: str
+    elapsed_ms: int
+    response_status: int | None
+    partial_body_bytes: int | None
+    expected_more_bytes: int | None
+    exception_type: str
+    errno: int | None
+
+    def format(self) -> str:
+        status = str(self.response_status) if self.response_status is not None else "none"
+        partial = (
+            str(self.partial_body_bytes)
+            if self.partial_body_bytes is not None else "unknown"
+        )
+        expected = (
+            str(self.expected_more_bytes)
+            if self.expected_more_bytes is not None else "unknown"
+        )
+        error_number = str(self.errno) if self.errno is not None else "none"
+        return (
+            f"httpTransportPhase={self.phase} elapsedMs={self.elapsed_ms} "
+            f"responseStatus={status} partialBodyBytes={partial} "
+            f"expectedMoreBytes={expected} exception={self.exception_type} "
+            f"errno={error_number}"
+        )
+
+
+class HttpTransportFailure(HilFailure):
+    """HTTP failure whose printable form contains no request or response data."""
+
+    def __init__(self, diagnostic: HttpTransportDiagnostic) -> None:
+        self.diagnostic = diagnostic
+        super().__init__(diagnostic.format())
+
+
+@dataclass(frozen=True)
+class LoginHttpDiagnostic:
+    status: int
+    error: str
+    retry_after_seconds: int | None
+
+
+def login_http_diagnostic(response: HttpResult) -> LoginHttpDiagnostic:
+    """Return only bounded, non-secret fields suitable for a HIL log."""
+
+    error = "none" if response.status == 200 else "unavailable"
+    try:
+        value = json.loads(response.body)
+    except (UnicodeDecodeError, json.JSONDecodeError):
+        value = None
+    if isinstance(value, dict) and "error" in value:
+        candidate = value.get("error")
+        error = (
+            candidate if isinstance(candidate, str) and
+            candidate in SAFE_LOGIN_ERROR_CODES else "unrecognized"
+        )
+
+    retry_after_seconds = None
+    retry_values = response.header_values("Retry-After")
+    if len(retry_values) == 1 and re.fullmatch(r"[0-9]{1,6}", retry_values[0]):
+        retry_after_seconds = int(retry_values[0])
+    return LoginHttpDiagnostic(response.status, error, retry_after_seconds)
+
+
+def require_login_success(
+    response: HttpResult,
+    label: str = "administrator login",
+) -> None:
+    diagnostic = login_http_diagnostic(response)
+    retry = (
+        str(diagnostic.retry_after_seconds)
+        if diagnostic.retry_after_seconds is not None else "none"
+    )
+    print(
+        f"INFO loginHttpStatus={diagnostic.status} "
+        f"loginError={diagnostic.error} retryAfterSeconds={retry}",
+        flush=True,
+    )
+    if diagnostic.status != 200:
+        raise HilFailure(
+            f"{label}: HTTP {diagnostic.status}, error={diagnostic.error}"
+        )
+    passed(label)
+
+
+def remove_input_line_ending(value: str) -> str:
+    """Remove one transport line ending while preserving all other characters."""
+
+    if value.endswith("\r\n"):
+        return value[:-2]
+    if value.endswith("\r") or value.endswith("\n"):
+        return value[:-1]
+    return value
+
+
+def login_form_body(password: str) -> bytes:
+    return urllib.parse.urlencode({"password": password}).encode("utf-8")
+
+
 class Device:
     def __init__(self, host: str, port: int, timeout: float) -> None:
         self.host = host
@@ -137,22 +339,54 @@ class Device:
         host_header: str | None = None,
         limit: int = 512 * 1024,
     ) -> HttpResult:
-        connection = http.client.HTTPConnection(
-            self.host, self.port, timeout=self.timeout
-        )
-        request_headers = dict(headers or {})
-        request_headers.setdefault("Connection", "close")
-        connection.putrequest(method, path, skip_host=True, skip_accept_encoding=True)
-        connection.putheader("Host", host_header or self.authority)
-        for name, value in request_headers.items():
-            connection.putheader(name, value)
-        if body is not None:
-            connection.putheader("Content-Length", str(len(body)))
-        connection.endheaders(body)
-        response = connection.getresponse()
-        data = response.read(limit + 1)
-        result = HttpResult(response.status, response.getheaders(), data)
-        connection.close()
+        started = time.monotonic()
+        phase = "create_connection"
+        response_status = None
+        connection = None
+        try:
+            connection = http.client.HTTPConnection(
+                self.host, self.port, timeout=self.timeout
+            )
+            request_headers = dict(headers or {})
+            request_headers.setdefault("Connection", "close")
+            phase = "send_request"
+            connection.putrequest(
+                method, path, skip_host=True, skip_accept_encoding=True
+            )
+            connection.putheader("Host", host_header or self.authority)
+            for name, value in request_headers.items():
+                connection.putheader(name, value)
+            if body is not None:
+                connection.putheader("Content-Length", str(len(body)))
+            connection.endheaders(body)
+            phase = "await_response_headers"
+            response = connection.getresponse()
+            response_status = response.status
+            phase = "read_response_body"
+            data = response.read(limit + 1)
+            result = HttpResult(response.status, response.getheaders(), data)
+        except (OSError, http.client.HTTPException) as exc:
+            partial = None
+            expected = None
+            if isinstance(exc, http.client.IncompleteRead):
+                partial = len(exc.partial)
+                expected = exc.expected if isinstance(exc.expected, int) else None
+            error_number = getattr(exc, "errno", None)
+            if not isinstance(error_number, int):
+                error_number = None
+            elapsed_ms = max(0, int((time.monotonic() - started) * 1000))
+            raise HttpTransportFailure(HttpTransportDiagnostic(
+                phase=phase,
+                elapsed_ms=elapsed_ms,
+                response_status=response_status,
+                partial_body_bytes=partial,
+                expected_more_bytes=expected,
+                exception_type=type(exc).__name__,
+                errno=error_number,
+            )) from None
+        finally:
+            if connection is not None:
+                connection.close()
         if len(data) > limit:
             raise HilFailure(f"HTTP response exceeds {limit} bytes: {path}")
         return result
@@ -168,7 +402,8 @@ class Device:
                 boot_id if isinstance(boot_id, str) else None,
                 ready,
             )
-        except (OSError, ValueError, http.client.HTTPException):
+        except (OSError, ValueError, http.client.HTTPException,
+                HttpTransportFailure):
             return 0, None, False
 
 
@@ -200,7 +435,7 @@ def cookie_from_login(response: HttpResult) -> tuple[str, str]:
     name, separator, token = parts[0].partition("=")
     require(
         separator == "=" and name == SESSION_COOKIE and
-        re.fullmatch(r"[0-9a-f]{64}", token) is not None,
+        re.fullmatch(r"[0-9a-f]{32}", token) is not None,
         "session cookie has the expected opaque format",
     )
     attributes = {part.lower() for part in parts[1:]}
@@ -269,8 +504,13 @@ class WebSocket:
         self.sock = sock
         self.buffer = bytearray(buffered)
 
-    def _take(self, size: int) -> bytes:
+    def _take(self, size: int, deadline: float | None = None) -> bytes:
         while len(self.buffer) < size:
+            if deadline is not None:
+                remaining = deadline - time.monotonic()
+                if remaining <= 0:
+                    raise socket.timeout("WebSocket receive deadline expired")
+                self.sock.settimeout(remaining)
             chunk = self.sock.recv(max(2048, size - len(self.buffer)))
             if not chunk:
                 raise HilFailure("WebSocket closed before a complete frame")
@@ -279,10 +519,9 @@ class WebSocket:
         del self.buffer[:size]
         return result
 
-    def send_text(self, text: str) -> None:
-        payload = text.encode("utf-8")
+    def _send_masked_frame(self, opcode: int, payload: bytes) -> None:
         mask = os.urandom(4)
-        header = bytearray([0x81])
+        header = bytearray([0x80 | opcode])
         if len(payload) < 126:
             header.append(0x80 | len(payload))
         elif len(payload) <= 0xFFFF:
@@ -293,16 +532,19 @@ class WebSocket:
         masked = bytes(value ^ mask[index % 4] for index, value in enumerate(payload))
         self.sock.sendall(bytes(header) + mask + masked)
 
-    def receive(self) -> tuple[int, bytes]:
-        first, second = self._take(2)
+    def send_text(self, text: str) -> None:
+        self._send_masked_frame(0x1, text.encode("utf-8"))
+
+    def receive(self, deadline: float | None = None) -> tuple[int, bytes]:
+        first, second = self._take(2, deadline)
         opcode = first & 0x0F
         size = second & 0x7F
         if size == 126:
-            size = struct.unpack("!H", self._take(2))[0]
+            size = struct.unpack("!H", self._take(2, deadline))[0]
         elif size == 127:
-            size = struct.unpack("!Q", self._take(8))[0]
-        mask = self._take(4) if second & 0x80 else None
-        payload = self._take(size)
+            size = struct.unpack("!Q", self._take(8, deadline))[0]
+        mask = self._take(4, deadline) if second & 0x80 else None
+        payload = self._take(size, deadline)
         if mask:
             payload = bytes(
                 value ^ mask[index % 4] for index, value in enumerate(payload)
@@ -346,6 +588,25 @@ class WebSocket:
         except OSError:
             pass
 
+    def close_gracefully(self, timeout: float) -> int | None:
+        """Complete a client-initiated normal WS close before releasing TCP."""
+
+        code = None
+        try:
+            self._send_masked_frame(0x8, struct.pack("!H", 1000))
+            code = self.wait_close_code(timeout)
+            if code != 1000:
+                raise HilFailure(
+                    "WebSocket normal close handshake did not return code 1000"
+                )
+            try:
+                self.sock.shutdown(socket.SHUT_WR)
+            except OSError:
+                pass
+            return code
+        finally:
+            self.close()
+
 
 def open_ws(device: Device, cookie: str) -> WebSocket:
     status, headers, sock, buffered = websocket_handshake(
@@ -360,7 +621,7 @@ def open_ws(device: Device, cookie: str) -> WebSocket:
 
 
 def login(device: Device, password: str) -> str:
-    body = urllib.parse.urlencode({"password": password}).encode("utf-8")
+    body = login_form_body(password)
     response = device.http(
         "POST",
         "/api/security/login",
@@ -371,7 +632,7 @@ def login(device: Device, password: str) -> str:
         },
         limit=4096,
     )
-    require(response.status == 200, "administrator login")
+    require_login_success(response)
     cookie, _token = cookie_from_login(response)
     return cookie
 
@@ -867,7 +1128,7 @@ def watch_reboot(
 
 def password_from_args(args: argparse.Namespace) -> str:
     if args.password_stdin:
-        password = sys.stdin.readline().rstrip("\r\n")
+        password = remove_input_line_ending(sys.stdin.readline())
     else:
         password = os.environ.pop(args.password_env, "")
         if not password:
