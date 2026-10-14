@@ -38,9 +38,6 @@ const FillConfig  playlBGConf     PROGMEM = {{ 0, 0, 0, WA_LEFT }, DSP_WIDTH, 19
 /* WIDGETS  */                           /* { left, top, fontsize, align } */
 const WidgetConfig bootstrConf    PROGMEM = { 0, DSP_HEIGHT-10, 1, WA_CENTER };
 const WidgetConfig bitrateConf    PROGMEM = { TFT_FRAMEWDT, 64, 1, WA_LEFT };
-const WidgetConfig st7789RssiConf   PROGMEM = { 174, 64, 1, WA_LEFT };
-const WidgetConfig st7789VolumeConf PROGMEM = { 0, 64, 1, WA_CENTER };
-const WidgetConfig st7789ClockConf  PROGMEM = { TFT_FRAMEWDT, 64, 1, WA_RIGHT };
 //const WidgetConfig voltxtConf     PROGMEM = { 32, 108, 1, WA_RIGHT };
 const WidgetConfig  iptxtConf     PROGMEM = { TFT_FRAMEWDT, 64, 1, WA_LEFT };
 const WidgetConfig   rssiConf     PROGMEM = { TFT_FRAMEWDT, 64-11-10, 1, WA_LEFT };
@@ -52,7 +49,7 @@ const WidgetConfig apPass2Conf    PROGMEM = { 0, 45, 1, WA_CENTER };
 const WidgetConfig clockConf      PROGMEM = { 0, 57, 0, WA_RIGHT };
 const WidgetConfig playlistHeaderConf  PROGMEM = { 0, 2, 2, WA_CENTER };
 const WidgetConfig playlistCounterConf PROGMEM = { 0, 60, 1, WA_CENTER };
-const WidgetConfig playlistPlayingConf PROGMEM = { 4, 60, 1, WA_RIGHT };
+const WidgetConfig playlistPlayingConf PROGMEM = { 4, 60, 1, WA_LEFT };
 const WidgetConfig vuConf         PROGMEM = { 2, DSP_HEIGHT-14, 1, WA_CENTER };
 
 const WidgetConfig bootWdtConf    PROGMEM = { 0, DSP_HEIGHT-8*2-5, 1, WA_CENTER };

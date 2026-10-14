@@ -27,6 +27,9 @@
 #if (VOXONE_DISPLAY_PROFILE == VOXONE_DISPLAY_PROFILE_OLED_128X64)
 #include "../displays/conf/player128x64conf.h"
 #endif
+#if VOXONE_DISPLAY_PROFILE == VOXONE_DISPLAY_PROFILE_ST7789_284X76
+#include "st7789_284x76_layout.h"
+#endif
 
 Display display;
 static TaskHandle_t displayTaskHandle = nullptr;
@@ -302,6 +305,195 @@ class Oled128x64UpdateProgressWidget : public Widget {
     if (delta.fillWidth)
       dsp.fillRect(innerLeft + delta.fillX, innerTop, delta.fillWidth,
                    update128x64::barInteriorHeight, WHITE);
+  }
+};
+#endif
+
+#if VOXONE_DISPLAY_PROFILE == VOXONE_DISPLAY_PROFILE_ST7789_284X76
+class St7789PlayerStatusWidget : public Widget {
+ public:
+  St7789PlayerStatusWidget() {
+    Widget::init({0, st7789_284x76::statusTop, 1, WA_LEFT},
+                 config.theme.meta, config.theme.background);
+  }
+
+  void loop() override {
+    if (!_active || static_cast<uint32_t>(millis() - lastCheck_) < 100) return;
+    lastCheck_ = millis();
+    render(false);
+  }
+
+ private:
+  static constexpr uint16_t kMuteColor = 0xF800;
+  bool drawn_ = false;
+  uint32_t lastCheck_ = 0;
+  DisplaySourceKind source_ = DisplaySourceKind::Radio;
+  DisplayPlaybackState playback_ = DisplayPlaybackState::None;
+  uint8_t volume_ = 255;
+  uint8_t wifiLevel_ = 255;
+  bool muted_ = false;
+  bool btConnected_ = false;
+  char audioText_[20] = {};
+
+  void _draw() override { if (_active) render(true); }
+
+  static void drawCenteredText(const st7789_284x76::Rect& slot,
+                               const char* text, uint16_t color) {
+    dsp.setFont();
+    dsp.setTextSize(1);
+    dsp.setTextColor(color, config.theme.background);
+    dsp.setCursor(st7789_284x76::centeredTextLeft(slot, strlen(text)),
+                  slot.top + 2);
+    dsp.print(text);
+  }
+
+  static void drawPlayback(DisplayPlaybackState state) {
+    const auto& slot = st7789_284x76::playback;
+    const int16_t centerX = slot.left + slot.width / 2;
+    const int16_t centerY = slot.top + slot.height / 2;
+    switch (state) {
+      case DisplayPlaybackState::Playing:
+        dsp.fillTriangle(slot.left + 1, slot.top + 1, slot.left + 1,
+                         slot.top + slot.height - 2, slot.left + slot.width - 1,
+                         centerY, config.theme.meta);
+        break;
+      case DisplayPlaybackState::Paused:
+        dsp.fillRect(centerX - 4, slot.top + 1, 3, slot.height - 2,
+                     config.theme.meta);
+        dsp.fillRect(centerX + 1, slot.top + 1, 3, slot.height - 2,
+                     config.theme.meta);
+        break;
+      case DisplayPlaybackState::Stopped:
+        dsp.fillRect(centerX - 3, centerY - 3, 7, 7, config.theme.meta);
+        break;
+      case DisplayPlaybackState::None:
+        break;
+    }
+  }
+
+  static void drawBluetooth() {
+    const auto& slot = st7789_284x76::bluetooth;
+    const int16_t x = slot.left + 3;
+    const int16_t y = slot.top;
+    const uint16_t color = config.theme.meta;
+    dsp.drawLine(x + 3, y, x + 3, y + 11, color);
+    dsp.drawLine(x + 3, y, x + 7, y + 3, color);
+    dsp.drawLine(x + 7, y + 3, x, y + 9, color);
+    dsp.drawLine(x, y + 2, x + 7, y + 8, color);
+    dsp.drawLine(x + 7, y + 8, x + 3, y + 11, color);
+  }
+
+  static void drawWifi(uint8_t level) {
+    const auto& slot = st7789_284x76::wifi;
+    constexpr uint8_t heights[4] = {3, 5, 8, 11};
+    constexpr uint8_t barWidth = 5;
+    constexpr uint8_t gap = 3;
+    const uint16_t bottom = slot.top + slot.height - 1;
+    for (uint8_t i = 0; i < 4; ++i) {
+      const uint16_t color = i < level ? config.theme.rssi : config.theme.div;
+      dsp.fillRect(slot.left + 1 + i * (barWidth + gap),
+                   bottom - heights[i] + 1, barWidth, heights[i], color);
+    }
+  }
+
+  void render(bool force) {
+    PlayerDisplayView view{};
+    capturePlayerDisplayView(view, WiFi.RSSI());
+    if (!force && drawn_ && source_ == view.source && playback_ == view.playback &&
+        volume_ == view.userVolume && muted_ == view.muted &&
+        btConnected_ == view.btConnected && wifiLevel_ == view.wifiLevel &&
+        strcmp(audioText_, view.audioText) == 0) return;
+
+    dsp.fillRect(0, st7789_284x76::statusTop, st7789_284x76::width,
+                 st7789_284x76::statusHeight, config.theme.background);
+    drawPlayback(view.playback);
+
+    char sourceText[10];
+    snprintf(sourceText, sizeof(sourceText), "[%s]", displaySourceLabel(view.source));
+    drawCenteredText(st7789_284x76::source, sourceText, config.theme.meta);
+
+    char volumeBuffer[12];
+    const char* volumeText = displaySt7789VolumeText(
+        view.userVolume, view.muted, volumeBuffer, sizeof(volumeBuffer));
+    drawCenteredText(st7789_284x76::volume, volumeText,
+                     view.muted ? kMuteColor : config.theme.vol);
+    drawCenteredText(st7789_284x76::audio, view.audioText, config.theme.bitrate);
+    if (view.btConnected) drawBluetooth();
+    drawWifi(view.wifiLevel);
+
+    drawn_ = true;
+    source_ = view.source;
+    playback_ = view.playback;
+    volume_ = view.userVolume;
+    muted_ = view.muted;
+    btConnected_ = view.btConnected;
+    wifiLevel_ = view.wifiLevel;
+    strlcpy(audioText_, view.audioText, sizeof(audioText_));
+  }
+};
+
+class St7789UpdateProgressWidget : public Widget {
+ public:
+  St7789UpdateProgressWidget()
+      : bar_(st7789_284x76::updateBarInteriorWidth,
+             st7789_284x76::updateIndeterminateWidth,
+             st7789_284x76::updateIndeterminateStep) {
+    Widget::init({st7789_284x76::updateBarLeft,
+                  st7789_284x76::updateBarTop, 1, WA_LEFT},
+                 config.theme.volbarin, config.theme.background);
+  }
+
+  void setProgress(UpdateDisplayProgress progress, uint32_t acquisition) {
+    if (acquisition != acquisition_) {
+      acquisition_ = acquisition;
+      bar_.reset();
+    } else if (progress.determinate == progress_.determinate &&
+               progress.percent == progress_.percent) return;
+    progress_ = progress;
+    if (_active) render(bar_.apply(progress_));
+  }
+
+  void loop() override {
+    if (!_active || progress_.determinate) return;
+    const uint32_t now = millis();
+    if (static_cast<uint32_t>(now - lastStepMs_) < 100) return;
+    lastStepMs_ = now;
+    render(bar_.step());
+  }
+
+ private:
+  UpdateDisplayProgress progress_{};
+  UpdateBarRenderState bar_;
+  uint32_t acquisition_ = 0;
+  uint32_t lastStepMs_ = 0;
+
+  void _draw() override {
+    if (!_active) return;
+    bar_.reset();
+    render(bar_.apply(progress_));
+  }
+
+  void render(const UpdateBarRenderDelta& delta) {
+    const uint16_t innerLeft = st7789_284x76::updateBarLeft +
+                               st7789_284x76::updateBarInset;
+    const uint16_t innerTop = st7789_284x76::updateBarTop +
+                              st7789_284x76::updateBarInset;
+    if (delta.reset) {
+      dsp.fillRect(st7789_284x76::updateBarLeft, st7789_284x76::updateBarTop,
+                   st7789_284x76::updateBarWidth,
+                   st7789_284x76::updateBarHeight, config.theme.background);
+      dsp.drawRect(st7789_284x76::updateBarLeft, st7789_284x76::updateBarTop,
+                   st7789_284x76::updateBarWidth,
+                   st7789_284x76::updateBarHeight, config.theme.div);
+    }
+    if (delta.clearWidth)
+      dsp.fillRect(innerLeft + delta.clearX, innerTop, delta.clearWidth,
+                   st7789_284x76::updateBarInteriorHeight,
+                   config.theme.background);
+    if (delta.fillWidth)
+      dsp.fillRect(innerLeft + delta.fillX, innerTop, delta.fillWidth,
+                   st7789_284x76::updateBarInteriorHeight,
+                   config.theme.volbarin);
   }
 };
 #endif
@@ -742,9 +934,7 @@ void Display::_buildPager(){
   _st7796BluetoothIcon = new St7796BluetoothWidget(st7796BluetoothIconConf, config.theme.meta, config.theme.background);
 #endif
 #if VOXONE_DISPLAY_PROFILE == VOXONE_DISPLAY_PROFILE_ST7789_284X76
-  _st7789Rssi = new TextWidget(st7789RssiConf, 16, config.theme.rssi, config.theme.background);
-  _st7789Volume = new TextWidget(st7789VolumeConf, 12, config.theme.vol, config.theme.background);
-  _st7789Clock = new TextWidget(st7789ClockConf, 8, config.theme.clock, config.theme.background);
+  _st7789PlayerStatus = new St7789PlayerStatusWidget();
 #endif
 #if (VOXONE_DISPLAY_PROFILE == VOXONE_DISPLAY_PROFILE_OLED_128X64)
   _nums->init(player128x64::volumeNumber, 10, config.theme.digit, config.theme.background);
@@ -778,7 +968,10 @@ void Display::_buildPager(){
 #if (VOXONE_DISPLAY_PROFILE == VOXONE_DISPLAY_PROFILE_OLED_128X64)
   pages[PG_PLAYER]->addWidget(new Oled128x64PlayerStatusWidget());
   if (_rssi) pages[PG_PLAYER]->addWidget(_rssi);
-  #elif BITRATE_FULL
+#elif VOXONE_DISPLAY_PROFILE == VOXONE_DISPLAY_PROFILE_ST7789_284X76
+  pages[PG_PLAYER]->addWidget(new FillWidget(st7789DividerConf, config.theme.div));
+  pages[PG_PLAYER]->addWidget(_st7789PlayerStatus);
+#elif BITRATE_FULL
     _fullbitrate = new BitrateWidget(fullbitrateConf, config.theme.bitrate, config.theme.background);
 #if VOXONE_DISPLAY_PROFILE == VOXONE_DISPLAY_PROFILE_ST7796_480X320
     _fullbitrate->setFrameWidth(fullbitrateWidth);
@@ -792,10 +985,6 @@ void Display::_buildPager(){
 #if !(VOXONE_DISPLAY_PROFILE == VOXONE_DISPLAY_PROFILE_OLED_128X64)
   if(_vuwidget) pages[PG_PLAYER]->addWidget( _vuwidget);
 #if VOXONE_DISPLAY_PROFILE == VOXONE_DISPLAY_PROFILE_ST7789_284X76
-  pages[PG_PLAYER]->addWidget(new FillWidget(st7789DividerConf, config.theme.div));
-  pages[PG_PLAYER]->addWidget(_st7789Rssi);
-  pages[PG_PLAYER]->addWidget(_st7789Volume);
-  pages[PG_PLAYER]->addWidget(_st7789Clock);
 #else
   pages[PG_PLAYER]->addWidget(_clock);
 #if VOXONE_DISPLAY_PROFILE == VOXONE_DISPLAY_PROFILE_ST7796_480X320
@@ -899,6 +1088,29 @@ void Display::_buildPager(){
   _oled128x64UpdateActivity = new TextWidget(update128x64::activity, 24, WHITE, BLACK);
   _oled128x64UpdatePage->addWidget(_oled128x64UpdateActivity);
   _pager->addPage(_oled128x64UpdatePage);
+#endif
+#if VOXONE_DISPLAY_PROFILE == VOXONE_DISPLAY_PROFILE_ST7789_284X76
+  _st7789UpdatePage = new Page();
+  TextWidget* updateTitle = new TextWidget(
+      {0, st7789_284x76::updateTitleTop, 1, WA_CENTER}, 16,
+      config.theme.meta, config.theme.background);
+  updateTitle->setText("UPDATE");
+  _st7789UpdatePage->addWidget(updateTitle);
+  _st7789UpdateTarget = new TextWidget(
+      {0, st7789_284x76::updateTargetTop, 1, WA_CENTER}, 16,
+      config.theme.title1, config.theme.background);
+  _st7789UpdatePage->addWidget(_st7789UpdateTarget);
+  _st7789UpdatePercent = new TextWidget(
+      {0, st7789_284x76::updatePercentTop, 2, WA_CENTER}, 8,
+      config.theme.digit, config.theme.background);
+  _st7789UpdatePage->addWidget(_st7789UpdatePercent);
+  _st7789UpdateBar = new St7789UpdateProgressWidget();
+  _st7789UpdatePage->addWidget(_st7789UpdateBar);
+  _st7789UpdateActivity = new TextWidget(
+      {0, st7789_284x76::updateActivityTop, 1, WA_CENTER}, 24,
+      config.theme.title2, config.theme.background);
+  _st7789UpdatePage->addWidget(_st7789UpdateActivity);
+  _pager->addPage(_st7789UpdatePage);
 #endif
 #if VOXONE_DISPLAY_PROFILE == VOXONE_DISPLAY_PROFILE_ST7796_480X320
   _st7796PlayerReady = true;
@@ -1004,9 +1216,15 @@ void Display::_updateUpdateScreen(const UpdateProgressSnapshot& snapshot) {
     else _oled128x64UpdatePercent->setText("...");
   }
 #elif VOXONE_DISPLAY_PROFILE == VOXONE_DISPLAY_PROFILE_ST7789_284X76
-  if (_nums) {
-    if (progress.determinate) _nums->setText(progress.percent, "%d%%");
-    else _nums->setText("...");
+  if (_st7789UpdateTarget)
+    _st7789UpdateTarget->setText(updateTargetCompactDisplayName(snapshot.target));
+  if (_st7789UpdateActivity)
+    _st7789UpdateActivity->setText(updateActivityCompactDisplayText(snapshot.activity));
+  if (_st7789UpdateBar)
+    _st7789UpdateBar->setProgress(progress, snapshot.acquisition);
+  if (_st7789UpdatePercent) {
+    if (progress.determinate) _st7789UpdatePercent->setText(progress.percent, "%d%%");
+    else _st7789UpdatePercent->setText("...");
   }
 #else
   (void)progress;
@@ -1084,6 +1302,8 @@ void Display::_renderMode(displayMode_e newmode) {
     _pager->setPage(_st7796UpdatePage, true);
 #elif (VOXONE_DISPLAY_PROFILE == VOXONE_DISPLAY_PROFILE_OLED_128X64)
     _pager->setPage(_oled128x64UpdatePage, true);
+#elif VOXONE_DISPLAY_PROFILE == VOXONE_DISPLAY_PROFILE_ST7789_284X76
+    _pager->setPage(_st7789UpdatePage, true);
 #else
     _showDialog(LANG::const_DlgUpdate);
 #endif
@@ -1436,22 +1656,6 @@ void Display::loop() {
 }
 
 void Display::_setRSSI(int rssi) {
-#if VOXONE_DISPLAY_PROFILE == VOXONE_DISPLAY_PROFILE_ST7789_284X76
-  static bool st7789RssiDisplayed = false;
-  static int lastDisplayedRssi = 0;
-  static uint32_t lastRssiDisplayMs = 0;
-  const uint32_t now = millis();
-  const int rssiDelta = rssi - lastDisplayedRssi;
-  if(_st7789Rssi && (!st7789RssiDisplayed ||
-      ((uint32_t)(now - lastRssiDisplayMs) >= 10000 &&
-       (rssiDelta >= 2 || rssiDelta <= -2)))) {
-    _st7789Rssi->setText(rssi, "RSSI %ddBm");
-    lastDisplayedRssi = rssi;
-    lastRssiDisplayMs = now;
-    st7789RssiDisplayed = true;
-  }
-  if(_renderedMode == VOL) return;
-#endif
   if(!_rssi) return;
 #if RSSI_DIGIT
   _rssi->setText(rssi, rssiFmt);
@@ -1562,25 +1766,11 @@ void Display::_time(bool redraw) {
     _clock->moveTo({lt, ft, 0});
   }
   _clock->draw(redraw);
-#if VOXONE_DISPLAY_PROFILE == VOXONE_DISPLAY_PROFILE_ST7789_284X76
-  if(_renderedMode==PLAYER && _st7789Clock) {
-    char timeText[6];
-    strftime(timeText, sizeof(timeText), "%H:%M", &network.timeinfo);
-    _st7789Clock->setText(timeText);
-  }
-#endif
 }
 
 void Display::_volume() {
   _setVuVisibility(activeSourceVuVisible());
   if(_volbar) _volbar->setValue(displayedVolume());
-#if VOXONE_DISPLAY_PROFILE == VOXONE_DISPLAY_PROFILE_ST7789_284X76
-  if(_st7789Volume) {
-    char volumeText[12];
-    _st7789Volume->setText(displaySt7789VolumeText(displayedVolume(), player.isMuted(),
-                                               volumeText, sizeof(volumeText)));
-  }
-#endif
 #if VOXONE_DISPLAY_PROFILE == VOXONE_DISPLAY_PROFILE_ST7796_480X320
   if(_st7796Volume) {
     PlayerDisplayView view{};

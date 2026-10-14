@@ -601,9 +601,14 @@ void NumWidget::setText(int val, const char *format){
 }
 
 void NumWidget::_getBounds() {
-#if VOXONE_DISPLAY_PROFILE == VOXONE_DISPLAY_PROFILE_ST7796_480X320
+#if VOXONE_DISPLAY_PROFILE == VOXONE_DISPLAY_PROFILE_ST7796_480X320 || \
+    VOXONE_DISPLAY_PROFILE == VOXONE_DISPLAY_PROFILE_ST7789_284X76
   if (strcmp(_text, "MUTE") == 0) {
+#if VOXONE_DISPLAY_PROFILE == VOXONE_DISPLAY_PROFILE_ST7796_480X320
     _textwidth = 4 * CHARWIDTH * 8;
+#else
+    _textwidth = 4 * CHARWIDTH * 4;
+#endif
     return;
   }
 #endif
@@ -611,11 +616,16 @@ void NumWidget::_getBounds() {
 }
 
 void NumWidget::_draw() {
-#if VOXONE_DISPLAY_PROFILE == VOXONE_DISPLAY_PROFILE_ST7796_480X320
+#if VOXONE_DISPLAY_PROFILE == VOXONE_DISPLAY_PROFILE_ST7796_480X320 || \
+    VOXONE_DISPLAY_PROFILE == VOXONE_DISPLAY_PROFILE_ST7789_284X76
   if (strcmp(_text, "MUTE") == 0) {
     if (!_active) return;
     dsp.setFont();
+#if VOXONE_DISPLAY_PROFILE == VOXONE_DISPLAY_PROFILE_ST7796_480X320
     dsp.setTextSize(8);
+#else
+    dsp.setTextSize(4);
+#endif
     dsp.setTextColor(0xF800, _bgcolor);
     dsp.setCursor(_realLeft(), _config.top - _textheight + 4);
     dsp.print(_text);

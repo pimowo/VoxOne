@@ -119,6 +119,10 @@ class St7796PlaybackIconWidget;
 #if (VOXONE_DISPLAY_PROFILE == VOXONE_DISPLAY_PROFILE_OLED_128X64)
 class Oled128x64UpdateProgressWidget;
 #endif
+#if VOXONE_DISPLAY_PROFILE == VOXONE_DISPLAY_PROFILE_ST7789_284X76
+class St7789PlayerStatusWidget;
+class St7789UpdateProgressWidget;
+#endif
     
 class Display {
   public:
@@ -181,7 +185,11 @@ class Display {
 #endif
 #if VOXONE_DISPLAY_PROFILE == VOXONE_DISPLAY_PROFILE_ST7789_284X76
     ScrollWidget *_st7789Station;
-    TextWidget *_st7789Rssi, *_st7789Volume, *_st7789Clock;
+    St7789PlayerStatusWidget *_st7789PlayerStatus = nullptr;
+    Page *_st7789UpdatePage = nullptr;
+    TextWidget *_st7789UpdateTarget = nullptr, *_st7789UpdatePercent = nullptr;
+    TextWidget *_st7789UpdateActivity = nullptr;
+    St7789UpdateProgressWidget *_st7789UpdateBar = nullptr;
 #endif
     bool _locked = false;
     bool _runtimeEnabled = true;
