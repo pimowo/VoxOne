@@ -108,6 +108,7 @@ $nativeSources=@{
  config_restore_transaction_native=@('src/core/config_restore_transaction.cpp')
  config_startup_native=@('src/core/config_format.cpp','src/core/volume_map.cpp')
  config_persistence_native=@('src/core/config_format.cpp','src/core/volume_map.cpp')
+ display_scroll_persistence_native=@('src/core/display_scroll_persistence.cpp')
  dsp_model_native=@('src/core/dsp_model.cpp')
  dsp_storage_format_native=@('src/core/dsp_model.cpp','src/core/dsp_storage_format.cpp')
  dsp_service_native=@('src/core/dsp_model.cpp','src/core/dsp_service.cpp')
@@ -180,6 +181,13 @@ if(-not $onWindows) {
   if($LASTEXITCODE -ne 0) { throw 'Sanitized config backup compile failed' }
   & $backupExe
   if($LASTEXITCODE -ne 0) { throw 'Sanitized config backup test failed' }
+  $scrollPersistenceExe=Join-Path $work 'display_scroll_persistence_sanitized'
+  & $Cxx @sanitizerArgs '-o' $scrollPersistenceExe `
+    (Join-Path $root 'test/display_scroll_persistence_native.cpp') `
+    (Join-Path $root 'src/core/display_scroll_persistence.cpp')
+  if($LASTEXITCODE -ne 0) { throw 'Sanitized display scroll persistence compile failed' }
+  & $scrollPersistenceExe
+  if($LASTEXITCODE -ne 0) { throw 'Sanitized display scroll persistence test failed' }
   $restoreExe=Join-Path $work 'config_restore_sanitized'
   & $Cxx @sanitizerArgs '-o' $restoreExe `
     (Join-Path $root 'test/config_restore_transaction_native.cpp') `
