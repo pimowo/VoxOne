@@ -67,6 +67,7 @@
 #include "security_api.h"
 #include "security_http_adapter.h"
 #include "websocket_command.h"
+#include "display_scroll_api.h"
 #include "../displays/dspcore.h"
 #include "../displays/widgets/widgetsconfig.h" //BitrateFormat
 
@@ -104,6 +105,20 @@ static bool netserverLoopActive = false;
 static std::atomic<bool> updateNetworkQuiescing{false};
 static std::atomic<uint32_t> webSocketSessions{0};
 static bool updateNetworkShutdownStarted = false;  // MAIN-loop owner.
+
+namespace {
+constexpr UBaseType_t kScrollSettingsCommandQueueLength = 4;
+
+struct QueuedScrollSettingsCommand {
+  uint32_t clientId;
+  voxone::display_scroll::ScrollSettings settings;
+  voxone::security::SecuritySessionBinding binding;
+  bool bindingCaptured;
+};
+
+QueueHandle_t scrollSettingsCommandQueue = nullptr;
+SemaphoreHandle_t configurationMutationMutex = nullptr;
+}  // namespace
 
 static bool parseToneValue(const char* value, int8_t& bass, int8_t& middle, int8_t& trebble) {
   int8_t* fields[] = {&bass, &middle, &trebble};
@@ -670,6 +685,84 @@ void closeUnauthorizedWebSockets() {
   });
 }
 
+bool equalSecurityBinding(
+    const voxone::security::SecuritySessionBinding& left,
+    const voxone::security::SecuritySessionBinding& right) {
+  return left.securityGeneration == right.securityGeneration &&
+         left.mode == right.mode &&
+         memcmp(left.tokenHash, right.tokenHash,
+                sizeof(left.tokenHash)) == 0;
+}
+
+enum class ScrollCommandQueueStatus : uint8_t {
+  Queued,
+  Denied,
+  Busy
+};
+
+ScrollCommandQueueStatus enqueueScrollSettingsCommand(
+    uint32_t clientId,
+    const voxone::display_scroll::ScrollSettings& settings) {
+  QueuedScrollSettingsCommand command{};
+  command.clientId = clientId;
+  command.settings = settings;
+
+  AsyncWebSocketClient* client = websocket.client(clientId);
+  if (!client || client->status() != WS_CONNECTED)
+    return ScrollCommandQueueStatus::Denied;
+  if (voxone::security::securityHttpEnforcementEnabled()) {
+    SecurityRuntimeLock lock(true, 0);
+    if (!lock.locked()) return ScrollCommandQueueStatus::Busy;
+    const auto* binding = webSocketBinding(client);
+    if (!binding ||
+        !voxone::security::deviceSecuritySessionService().validateBinding(
+            *binding, millis(), false))
+      return ScrollCommandQueueStatus::Denied;
+    command.binding = *binding;
+    command.bindingCaptured = true;
+  }
+
+  if (!configurationMutationMutex || !scrollSettingsCommandQueue ||
+      xSemaphoreTake(configurationMutationMutex, 0) != pdTRUE)
+    return ScrollCommandQueueStatus::Busy;
+  const bool queued =
+      xQueueSend(scrollSettingsCommandQueue, &command, 0) == pdTRUE;
+  xSemaphoreGive(configurationMutationMutex);
+  return queued ? ScrollCommandQueueStatus::Queued
+                : ScrollCommandQueueStatus::Busy;
+}
+
+WebSocketAuthorization queuedScrollCommandAuthorization(
+    const QueuedScrollSettingsCommand& command) {
+  AsyncWebSocketClient* client = websocket.client(command.clientId);
+  if (!client || client->status() != WS_CONNECTED)
+    return WebSocketAuthorization::Denied;
+  if (!voxone::security::securityHttpEnforcementEnabled())
+    return WebSocketAuthorization::Authorized;
+  SecurityRuntimeLock lock(true, 0);
+  if (!lock.locked()) return WebSocketAuthorization::Busy;
+  const auto* binding = webSocketBinding(client);
+  if (!command.bindingCaptured || !binding ||
+      !equalSecurityBinding(command.binding, *binding))
+    return WebSocketAuthorization::Denied;
+  return voxone::security::deviceSecuritySessionService().validateBinding(
+             *binding, millis(), false)
+             ? WebSocketAuthorization::Authorized
+             : WebSocketAuthorization::Denied;
+}
+
+void sendScrollSettingsResult(
+    uint32_t clientId,
+    voxone::display_scroll::ScrollSettingsApplyStatus status,
+    bool coreActive = false) {
+  const voxone::display_scroll::ScrollSettingsApplyResult result{
+      status, false, false, false, coreActive};
+  char response[224];
+  if (voxone::display_scroll::formatScrollSettingsResultJson(
+          response, sizeof(response), result))
+    securityWebSocketText(clientId, response);
+}
+
 }  // namespace
 
 bool securityWebSocketText(uint32_t clientId, const char* message) {
@@ -807,6 +900,16 @@ bool NetServer::begin(bool quiet) {
   if (!securityRuntimeMutex) securityRuntimeMutex = xSemaphoreCreateMutex();
   if (!securityRuntimeMutex) {
     Serial.println("##[ERROR]# security runtime mutex unavailable");
+    return false;
+  }
+  if (!configurationMutationMutex)
+    configurationMutationMutex = xSemaphoreCreateMutex();
+  if (!scrollSettingsCommandQueue)
+    scrollSettingsCommandQueue = xQueueCreate(
+        kScrollSettingsCommandQueueLength,
+        sizeof(QueuedScrollSettingsCommand));
+  if (!configurationMutationMutex || !scrollSettingsCommandQueue) {
+    Serial.println("##[ERROR]# scroll settings queue unavailable");
     return false;
   }
   if(!quiet) Serial.print("##[BOOT]#\tnetserver.begin\t");
@@ -1813,11 +1916,17 @@ void handleConfigBackup(AsyncWebServerRequest* request) {
     configApiReply(request, 409, R"({"error":"backup_busy"})");
     return;
   }
+  if (!configurationMutationMutex ||
+      xSemaphoreTake(configurationMutationMutex, 0) != pdTRUE) {
+    configApiReply(request, 409, R"({"error":"configuration_busy"})");
+    return;
+  }
   std::shared_ptr<voxone::config_restore::ProductionBackupStream> stream =
       std::make_shared<voxone::config_restore::ProductionBackupStream>();
   voxone::config_backup::Status status = voxone::config_backup::Status::StorageReadFailed;
   const bool prepared = stream->begin(status);
   const std::size_t preparedSize = stream->size();
+  xSemaphoreGive(configurationMutationMutex);
   if (!prepared || !preparedSize ||
       preparedSize > voxone::config_backup_web::kMaxUploadBytes) {
     const char* stage = preparedSize > voxone::config_backup_web::kMaxUploadBytes
@@ -1932,7 +2041,19 @@ void handleConfigRestore(AsyncWebServerRequest* request) {
     return;
   }
 
+  const bool mutationLocked = configurationMutationMutex &&
+      xSemaphoreTake(configurationMutationMutex, 0) == pdTRUE;
+  if (!mutationLocked ||
+      (scrollSettingsCommandQueue &&
+       uxQueueMessagesWaiting(scrollSettingsCommandQueue) != 0)) {
+    if (mutationLocked) xSemaphoreGive(configurationMutationMutex);
+    configApiReply(request, 409, R"({"error":"configuration_busy"})");
+    finishConfigRestoreUpload(request);
+    return;
+  }
+
   const auto restored = session->upload->finish();
+  xSemaphoreGive(configurationMutationMutex);
   finishConfigRestoreUpload(request);
   const auto result = voxone::config_backup_web::mapRestoreResult(restored);
   if (result.error) {
@@ -2827,7 +2948,10 @@ void NetServer::processQueue(){
             !appendWebStatusLiteral(wsBuf, sizeof(wsBuf), used, "}")) wsBuf[0] = '\0';
         break;
       }
-      case GETSCREEN:     snprintf (wsBuf, sizeof(wsBuf), "{\"flip\":%d,\"canFlip\":%d,\"canBrightness\":%d,\"br\":%d,\"nump\":%d,\"dspon\":%d,\"con\":%d,\"scre\":%d,\"scrt\":%d,\"scrb\":%d,\"scrpe\":%d,\"scrpt\":%d,\"scrpb\":%d,\"stationListTimeout\":%u,\"btTransportTimeout\":%u,\"canBtTransport\":%d}",
+      case GETSCREEN: {
+        const auto scroll =
+            voxone::display_scroll::currentScrollSettingsWebView();
+        snprintf (wsBuf, sizeof(wsBuf), "{\"flip\":%d,\"canFlip\":%d,\"canBrightness\":%d,\"br\":%d,\"nump\":%d,\"dspon\":%d,\"con\":%d,\"scre\":%d,\"scrt\":%d,\"scrb\":%d,\"scrpe\":%d,\"scrpt\":%d,\"scrpb\":%d,\"stationListTimeout\":%u,\"btTransportTimeout\":%u,\"canBtTransport\":%d,\"canScrollSettings\":%s,\"scrollEnabled\":%s,\"scrollSpeed\":\"%s\",\"scrollPauseMs\":%u,\"scrollSettingsSource\":\"%s\",\"scrollCoreActive\":%s}",
                                   config.store.flipscreen,
                                   voxone::hardware::hardwareCapabilities().hasLocalDisplay(),
                                   BRIGHTNESS_PIN != 255,
@@ -2845,8 +2969,17 @@ void NetServer::processQueue(){
                                   uiTimeoutConfig().btTransportSeconds,
                                   VOXONE_HAS_BT &&
                                       VOXONE_DISPLAY_PROFILE ==
-                                          VOXONE_DISPLAY_PROFILE_ST7796_480X320);
-                                  break;
+                                          VOXONE_DISPLAY_PROFILE_ST7796_480X320,
+                                  scroll.canScrollSettings ? "true" : "false",
+                                  scroll.settings.enabled ? "true" : "false",
+                                  voxone::display_scroll::scrollSpeedApiName(
+                                      scroll.settings.speed),
+                                  scroll.settings.pauseMs,
+                                  voxone::display_scroll::scrollSettingsSourceApiName(
+                                      scroll.source),
+                                  scroll.scrollCoreActive ? "true" : "false");
+        break;
+      }
       case STATION:       requestOnChange(STATIONNAME, clientId); requestOnChange(ITEM, clientId); break;
       case STATIONNAME:   formatWsTextPayload(wsBuf, sizeof(wsBuf), "nameset", config.station.name); break;
       case ITEM:          sprintf (wsBuf, "{\"current\": %d}", config.lastStation()); break;
@@ -3046,6 +3179,50 @@ void NetServer::serviceUpdateRestart() {
   }
 }
 
+void NetServer::serviceScrollSettings() {
+  if (!scrollSettingsCommandQueue || !configurationMutationMutex ||
+      systemOperationState.blocksRequests() || updateNetworkQuiescing.load())
+    return;
+
+  QueuedScrollSettingsCommand command{};
+  if (xQueuePeek(scrollSettingsCommandQueue, &command, 0) != pdTRUE ||
+      xSemaphoreTake(configurationMutationMutex, 0) != pdTRUE)
+    return;
+
+  // Authorization is checked both when the AsyncTCP callback enqueues the
+  // command and immediately before the main loop starts the durable write.
+  const WebSocketAuthorization authorization =
+      queuedScrollCommandAuthorization(command);
+  if (authorization == WebSocketAuthorization::Busy) {
+    xSemaphoreGive(configurationMutationMutex);
+    return;
+  }
+  xQueueReceive(scrollSettingsCommandQueue, &command, 0);
+  if (authorization == WebSocketAuthorization::Denied) {
+    xSemaphoreGive(configurationMutationMutex);
+    websocket.close(command.clientId, 1008, "Session expired");
+    return;
+  }
+
+  const auto view = voxone::display_scroll::currentScrollSettingsWebView();
+  voxone::display_scroll::ScrollSettingsApplyResult result{
+      voxone::display_scroll::ScrollSettingsApplyStatus::Unsupported,
+      false, false, false, false};
+  if (view.canScrollSettings) {
+    result = voxone::display_scroll::applyPersistentScrollSettings(
+        command.settings, view.scrollCoreActive);
+  }
+  xSemaphoreGive(configurationMutationMutex);
+
+  char response[224];
+  if (voxone::display_scroll::formatScrollSettingsResultJson(
+          response, sizeof(response), result))
+    securityWebSocketText(command.clientId, response);
+  if (result.status ==
+      voxone::display_scroll::ScrollSettingsApplyStatus::Applied)
+    requestOnChange(GETSCREEN, 0);
+}
+
 void NetServer::onWsMessage(void *arg, const uint8_t *data, size_t len,
                             uint32_t clientId) {
   AwsFrameInfo *info = (AwsFrameInfo*)arg;
@@ -3074,6 +3251,39 @@ void NetServer::onWsMessage(void *arg, const uint8_t *data, size_t len,
     }
     if (strcmp(_wscmd, "ping") == 0) {
       securityWebSocketText(clientId, "{\"pong\": 1}");
+      return;
+    }
+    if (strcmp(_wscmd, "scrollsettings") == 0) {
+      voxone::display_scroll::ScrollSettings requested{};
+      if (voxone::display_scroll::parseScrollSettingsCommand(
+              _wsval, requested) !=
+          voxone::display_scroll::ScrollSettingsCommandStatus::Ok) {
+        sendScrollSettingsResult(
+            clientId,
+            voxone::display_scroll::ScrollSettingsApplyStatus::Invalid);
+        return;
+      }
+      const auto view =
+          voxone::display_scroll::currentScrollSettingsWebView();
+      if (!view.canScrollSettings) {
+        sendScrollSettingsResult(
+            clientId,
+            voxone::display_scroll::ScrollSettingsApplyStatus::Unsupported);
+        return;
+      }
+      switch (enqueueScrollSettingsCommand(clientId, requested)) {
+        case ScrollCommandQueueStatus::Queued:
+          break;
+        case ScrollCommandQueueStatus::Denied:
+          websocket.close(clientId, 1008, "Unauthorized");
+          break;
+        case ScrollCommandQueueStatus::Busy:
+          sendScrollSettingsResult(
+              clientId,
+              voxone::display_scroll::ScrollSettingsApplyStatus::Busy,
+              view.scrollCoreActive);
+          break;
+      }
       return;
     }
     if (strcmp(_wscmd, "tone") == 0) {

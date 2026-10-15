@@ -102,6 +102,7 @@ bool securityWebSocketCommandAllowed(const char* command) {
       "screenon", "contrast", "screensaverenabled", "screensavertimeout",
       "screensaverblank", "screensaverplayingenabled",
       "screensaverplayingtimeout", "screensaverplayingblank", "abuff",
+      "scrollsettings",
       "tzh", "tzm", "sntp2", "sntp1", "timeint", "timeintrtc",
       "volsteps", "encacc", "oneclickswitching", "balance", "reboot",
       "boot", "smartstart", "vumeter", "softap", "mdnsname"};

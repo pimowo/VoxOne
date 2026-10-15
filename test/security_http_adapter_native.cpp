@@ -220,6 +220,7 @@ void testSubprotocolAndCommandContract() {
 
   assert(securityWebSocketCommandAllowed("getsystem"));
   assert(securityWebSocketCommandAllowed("vol100"));
+  assert(securityWebSocketCommandAllowed("scrollsettings"));
   assert(!securityWebSocketCommandAllowed("format"));
   assert(!securityWebSocketCommandAllowed("clearspiffs"));
   assert(!securityWebSocketCommandAllowed("reset"));

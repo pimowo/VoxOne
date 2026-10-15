@@ -109,6 +109,7 @@ $nativeSources=@{
  config_startup_native=@('src/core/config_format.cpp','src/core/volume_map.cpp')
  config_persistence_native=@('src/core/config_format.cpp','src/core/volume_map.cpp')
  display_scroll_persistence_native=@('src/core/display_scroll_persistence.cpp')
+ display_scroll_api_native=@('src/core/display_scroll_api.cpp','src/core/display_scroll_runtime_config.cpp','src/core/display_scroll_persistence.cpp')
  display_scroll_runtime_config_native=@('src/core/display_scroll_runtime_config.cpp','src/core/display_scroll_persistence.cpp')
  dsp_model_native=@('src/core/dsp_model.cpp')
  dsp_storage_format_native=@('src/core/dsp_model.cpp','src/core/dsp_storage_format.cpp')
@@ -199,6 +200,15 @@ if(-not $onWindows) {
   if($LASTEXITCODE -ne 0) { throw 'Sanitized display scroll runtime config compile failed' }
   & $scrollRuntimeConfigExe
   if($LASTEXITCODE -ne 0) { throw 'Sanitized display scroll runtime config test failed' }
+  $scrollApiExe=Join-Path $work 'display_scroll_api_sanitized'
+  & $Cxx @sanitizerArgs '-o' $scrollApiExe `
+    (Join-Path $root 'test/display_scroll_api_native.cpp') `
+    (Join-Path $root 'src/core/display_scroll_api.cpp') `
+    (Join-Path $root 'src/core/display_scroll_runtime_config.cpp') `
+    (Join-Path $root 'src/core/display_scroll_persistence.cpp')
+  if($LASTEXITCODE -ne 0) { throw 'Sanitized display scroll API compile failed' }
+  & $scrollApiExe
+  if($LASTEXITCODE -ne 0) { throw 'Sanitized display scroll API test failed' }
   $restoreExe=Join-Path $work 'config_restore_sanitized'
   & $Cxx @sanitizerArgs '-o' $restoreExe `
     (Join-Path $root 'test/config_restore_transaction_native.cpp') `

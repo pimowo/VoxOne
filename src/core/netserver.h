@@ -135,6 +135,7 @@ class NetServer {
     void loop();
     void serviceBtFirmwareUpdate();  // Called from the main loop after BtLink::loop().
     void serviceUpdateRestart();  // MAIN-loop-only, after update state publication.
+    void serviceScrollSettings();  // MAIN-loop-only; may access NVS.
     void requestOnChange(requestType_e request, uint32_t clientId);
     void setRSSI(int val) { rssi = val; };
     int  getRSSI()        { return rssi; };
