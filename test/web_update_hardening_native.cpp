@@ -142,6 +142,10 @@ int main() {
          std::string::npos);
   assert(server.find("voxone::ota::formatBootHealthJson") !=
          std::string::npos);
+  assert(server.find("if (!voxone::ota::bootHealthReady())") !=
+         std::string::npos);
+  assert(server.find("Firmware boot health validation is still in progress") !=
+         std::string::npos);
   assert(server.find("Cache-Control\", \"no-store, max-age=0") !=
          std::string::npos);
   assert(server.find("request->url() == \"/emergency\" || request->url() == \"/update.html\"") !=

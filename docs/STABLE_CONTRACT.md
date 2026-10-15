@@ -177,12 +177,19 @@ ono dostępne; w przeciwnym razie używa osadzonego formularza emergency.
 
 MAIN OTA używa dwóch równych slotów `app0`/`app1` i `otadata`. Obraz
 `PENDING_VERIFY` nie jest automatycznie akceptowany przez Arduino: projektowy
-health gate wymaga poprawnej konfiguracji i danych, wymaganych usług, żywej
-pętli, sieci i rzeczywistego wywołania `/api/ready`, a następnie 5 s stabilności.
-Timeout wynosi 180 s. Błąd krytyczny powoduje żądanie rollbacku; powód jest
-zapisywany w NVS. `/api/ready.ota` zawiera `runningSlot`, `bootSlot`,
-`imageState`, `pending`, `rollbackAvailable`, `health`, `reason`,
-`lastFailure` i `elapsedMs`.
+health gate autonomicznie wymaga poprawnej konfiguracji i danych, wymaganych
+usług, żywej pętli głównej oraz lokalnego control plane: uruchomionego HTTP z
+potwierdzonym STA albo działającym Recovery AP. Wszystkie warunki muszą być
+stabilne przez pełne 5 s. Utrata lokalnego control plane zeruje to okno i
+pozwala czekać na jego powrót do limitu 180 s; Internet, dostępność stacji
+radiowej, klient WWW i wywołanie `/api/ready` nie są warunkami zatwierdzenia.
+Błąd krytyczny powoduje żądanie rollbacku, a brak zdrowego control plane do
+końca limitu powoduje rollback z przyczyną `timeout`; powód jest zapisywany w
+NVS. `/api/ready` pozostaje diagnostyką, a jego obiekt `ota` zawiera
+`runningSlot`, `bootSlot`, `imageState`, `pending`, `rollbackAvailable`,
+`health`, `reason`, `lastFailure` i `elapsedMs`. Wyłącznie izolowany,
+destrukcyjny profil `m0-ota-rollback-test` celowo czeka na pierwszy probe
+`/api/ready`, aby następnie wstrzyknąć testową awarię `runtime_service`.
 
 Software checkpoint OTA ma PASS, lecz całość pozostaje HIL PENDING. Obecny
 zachowany runtime M0 pochodzi sprzed tego checkpointu i nie jest dowodem

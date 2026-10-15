@@ -17,18 +17,20 @@ void beginBootHealthMonitor();
 // owns the eventual IDF rollback call so callers never reboot directly.
 void reportBootFatal(Failure failure);
 
-// Completes the static part of the health gate. Current VoxOne MAIN OTA is
-// network-originated for every profile, so networkRequired must remain true.
+// Completes the static part of the health gate. controlPlaneReady means that
+// the embedded HTTP server and either validated STA or Recovery AP started;
+// it does not require Internet access or an external browser request.
 void reportBootSetup(bool configurationReady, bool dataReady,
-                     bool runtimeReady, bool networkRequired,
-                     bool networkReady, bool httpApiReady);
+                     bool runtimeReady, bool controlPlaneReady);
 
-// Refreshes volatile connectivity and proves that the main loop remains live
-// while the five-second stability window is open.
-void serviceBootHealth(bool networkReady);
+// Proves that the main loop and local control plane remain live while the
+// five-second stability window is open. Internet availability is not tested.
+// Once the pending image is VALID the monitor exits, so later connectivity
+// changes cannot invalidate a successfully booted image.
+void serviceBootHealth(bool controlPlaneReady);
 
-// Called only after /api/ready has reached its handler. This proves the remote
-// control plane end-to-end; merely starting a listening socket is insufficient.
+// Called after /api/ready reaches its handler for diagnostics and the isolated
+// rollback HIL profile. Standard images never depend on this external probe.
 void reportHttpApiProbe();
 
 // /api/ready uses this to avoid reporting a PENDING_VERIFY image as ready.

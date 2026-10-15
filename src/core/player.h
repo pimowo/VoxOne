@@ -84,6 +84,7 @@ class Player: public Audio {
   public:
     Player();
     void init();
+    bool ready() const;
     void loop();
     void setError();
     void setError(const char *e);

@@ -95,17 +95,26 @@ bool bootConfigurationReady(
       config.storageMode() == voxone::config_format::ConfigStorageMode::V7;
 }
 
+bool currentBootControlPlaneReady(bool httpServerReady) {
+  return voxone::ota::bootControlPlaneReady(
+      httpServerReady,
+      network.status == CONNECTED && network.ready(),
+      network.status == SOFT_AP);
+}
+
 void completeBootHealth(
     voxone::hardware::RuntimeHardwareLoadStatus hardwareStatus,
-    bool netserverReady, bool networkReady) {
+    bool netserverReady) {
   const bool configurationReady = bootConfigurationReady(hardwareStatus);
   // currentWwwReady is deliberately not required: an older compatible
   // SPIFFS can serve its assets, while embedded /api/ready and /emergency
   // remain available independently of the current web bundle.
   const bool dataReady = config.spiffsMounted && config.webUpdateDataReady &&
       config.wifiConfigReady && config.radioPlaylistReady;
-  const bool runtimeReady = netserverReady && netserver.started() &&
-      display.ready();
+  const bool httpServerReady = netserverReady && netserver.started();
+  const bool controlPlaneReady =
+      currentBootControlPlaneReady(httpServerReady);
+  const bool runtimeReady = httpServerReady && display.ready() && player.ready();
   if (!configurationReady)
     voxone::ota::reportBootFatal(voxone::ota::Failure::Configuration);
   else if (!dataReady)
@@ -113,9 +122,7 @@ void completeBootHealth(
   else if (!runtimeReady)
     voxone::ota::reportBootFatal(voxone::ota::Failure::RuntimeService);
   voxone::ota::reportBootSetup(
-      configurationReady, dataReady, runtimeReady,
-      true,  // Every current MAIN OTA path is network-originated.
-      networkReady, false);  // Set only by an actual /api/ready request.
+      configurationReady, dataReady, runtimeReady, controlPlaneReady);
 }
 }  // namespace
 
@@ -223,7 +230,7 @@ void setup() {
     initControls();
     display.putRequest(DSP_START);
     while(!display.ready()) delay(10);
-    completeBootHealth(runtimeHardwareStatus, netserverReady, false);
+    completeBootHealth(runtimeHardwareStatus, netserverReady);
     return;
   }
   config.initRadioPlaylist();
@@ -236,7 +243,7 @@ void setup() {
   #endif
   player.lockOutput=false;
   // Preserve the selected station, but always enter the base source in STOP.
-  completeBootHealth(runtimeHardwareStatus, netserverReady, network.ready());
+  completeBootHealth(runtimeHardwareStatus, netserverReady);
 }
 
 void loop() {
@@ -247,7 +254,8 @@ void loop() {
   timekeeper.loop1();
   serialCli.loop();
   network.loop();
-  voxone::ota::serviceBootHealth(network.ready());
+  voxone::ota::serviceBootHealth(
+      currentBootControlPlaneReady(netserver.started()));
   #if VOXONE_HAS_BT && VOXONE_PIN_MAP_COMPLETE
     if (btRuntime.physicalStarted()) {
       btLink.loop();

@@ -3352,6 +3352,10 @@ void handleWebUpdateUpload(AsyncWebServerRequest *request, const String& filenam
     session->error = nullptr;
     session->filesystemNeedsRecovery =
         systemOperationState.filesystemUnavailable();
+    if (!voxone::ota::bootHealthReady()) {
+      session->error = "Firmware boot health validation is still in progress";
+      return;
+    }
     if (systemOperationState.blocksRequests() &&
         !session->filesystemNeedsRecovery) {
       session->error = "Update or restart already in progress";

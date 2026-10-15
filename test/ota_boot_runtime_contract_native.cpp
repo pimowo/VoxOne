@@ -20,6 +20,7 @@ int main() {
   const std::string main = readSource("src/main.cpp");
   const std::string config = readSource("src/core/config.cpp");
   const std::string server = readSource("src/core/netserver.cpp");
+  const std::string player = readSource("src/core/player.cpp");
   const std::string platform = readSource("platformio.ini");
 
   // This strong project symbol overrides the weak Arduino implementation;
@@ -43,7 +44,19 @@ int main() {
   assert(contains(main, "beginBootHealthMonitor();"));
   assert(contains(main, "Failure::ConfigRestore"));
   assert(contains(main, "completeBootHealth"));
-  assert(contains(main, "serviceBootHealth(network.ready())"));
+  assert(contains(main, "serviceBootHealth("));
+  assert(contains(main, "currentBootControlPlaneReady(netserver.started())"));
+  assert(contains(runtime, "evidenceBits.fetch_or(ControlPlaneReady)"));
+  assert(contains(runtime, "evidenceBits.fetch_and("));
+  assert(contains(main, "bootControlPlaneReady"));
+  assert(contains(main, "network.status == CONNECTED && network.ready()"));
+  assert(contains(main, "network.status == SOFT_AP"));
+  assert(contains(main, "player.ready()"));
+  assert(!contains(main, "reportBootFatal(voxone::ota::Failure::Network)"));
+  assert(contains(player,
+      "return playerQueue != nullptr && _temporaryUrls != nullptr;"));
+  assert(!contains(health, "httpApiReady"));
+  assert(!contains(health, "networkRequired"));
 
   // A pending MAIN image may observe corruption, but must never format the
   // shared data partition before rollback. Current WWW assets are not a gate,
@@ -54,6 +67,9 @@ int main() {
 
   assert(contains(server, "formatBootHealthJson"));
   assert(contains(server, "reportHttpApiProbe"));
+  assert(contains(server, "if (!voxone::ota::bootHealthReady())"));
+  assert(contains(server,
+      "Firmware boot health validation is still in progress"));
   assert(contains(runtime, "VOXONE_OTA_HIL_ROLLBACK_AFTER_PROBE"));
   assert(contains(platform, "[env:m0-ota-rollback-test]"));
   assert(contains(platform, "-DVOXONE_OTA_HIL_ROLLBACK_AFTER_PROBE=1"));

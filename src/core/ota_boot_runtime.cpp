@@ -31,8 +31,7 @@ enum EvidenceBit : uint32_t {
   ConfigurationReady = 1u << 1,
   DataReady = 1u << 2,
   RuntimeReady = 1u << 3,
-  NetworkRequired = 1u << 4,
-  NetworkReady = 1u << 5,
+  ControlPlaneReady = 1u << 4,
 };
 
 HealthGate gate;
@@ -101,9 +100,13 @@ Evidence currentEvidence(uint32_t nowMs) {
   evidence.dataReady = (bits & DataReady) != 0;
   evidence.runtimeReady = (bits & RuntimeReady) != 0 &&
       static_cast<uint32_t>(nowMs - lastServiceMs.load()) <= 1000;
-  evidence.networkRequired = (bits & NetworkRequired) != 0;
-  evidence.networkReady = (bits & NetworkReady) != 0;
-  evidence.httpApiReady = httpApiProbed.load();
+  evidence.controlPlaneReady = (bits & ControlPlaneReady) != 0;
+#if defined(VOXONE_OTA_HIL_ROLLBACK_AFTER_PROBE)
+  // The dedicated destructive HIL image deliberately remains pending until
+  // its HTTP probe arrives and injects the test failure below. Production
+  // profiles never take this branch.
+  if (!httpApiProbed.load()) evidence.controlPlaneReady = false;
+#endif
   evidence.fatalFailure = static_cast<Failure>(fatalFailure.load());
   return evidence;
 }
@@ -221,23 +224,20 @@ void reportBootFatal(Failure failure) {
 }
 
 void reportBootSetup(bool configurationReady, bool dataReady,
-                     bool runtimeReady, bool networkRequired,
-                     bool networkReady, bool httpApiReady) {
+                     bool runtimeReady, bool controlPlaneReady) {
   uint32_t bits = SetupComplete;
   if (configurationReady) bits |= ConfigurationReady;
   if (dataReady) bits |= DataReady;
   if (runtimeReady) bits |= RuntimeReady;
-  if (networkRequired) bits |= NetworkRequired;
-  if (networkReady) bits |= NetworkReady;
+  if (controlPlaneReady) bits |= ControlPlaneReady;
   evidenceBits.store(bits);
-  if (httpApiReady) httpApiProbed.store(true);
   lastServiceMs.store(millis());
 }
 
-void serviceBootHealth(bool networkReady) {
+void serviceBootHealth(bool controlPlaneReady) {
   lastServiceMs.store(millis());
-  if (networkReady) evidenceBits.fetch_or(NetworkReady);
-  else evidenceBits.fetch_and(~static_cast<uint32_t>(NetworkReady));
+  if (controlPlaneReady) evidenceBits.fetch_or(ControlPlaneReady);
+  else evidenceBits.fetch_and(~static_cast<uint32_t>(ControlPlaneReady));
 }
 
 void reportHttpApiProbe() {
@@ -250,9 +250,9 @@ void reportHttpApiProbe() {
 }
 
 bool bootHealthReady() {
-  if (!stateReadOk.load()) return false;
-  if (!pendingImage.load()) return true;
-  return static_cast<Phase>(publishedPhase.load()) == Phase::Validated;
+  return bootHealthAllowsUpdate(
+      stateReadOk.load(), pendingImage.load(),
+      static_cast<Phase>(publishedPhase.load()));
 }
 
 bool formatBootHealthJson(char* output, size_t capacity) {

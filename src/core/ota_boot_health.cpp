@@ -20,10 +20,7 @@ Failure HealthGate::waitingReason(const Evidence& evidence) const {
   if (!evidence.configurationReady) return Failure::Configuration;
   if (!evidence.dataReady) return Failure::DataPartition;
   if (!evidence.runtimeReady) return Failure::RuntimeService;
-  if (evidence.networkRequired && !evidence.networkReady)
-    return Failure::Network;
-  if (evidence.networkRequired && !evidence.httpApiReady)
-    return Failure::HttpApi;
+  if (!evidence.controlPlaneReady) return Failure::Network;
   return Failure::None;
 }
 

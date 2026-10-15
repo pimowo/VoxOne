@@ -62,6 +62,10 @@ void Player::init() {
   Serial.println("done");
 }
 
+bool Player::ready() const {
+  return playerQueue != nullptr && _temporaryUrls != nullptr;
+}
+
 void Player::sendCommand(playerRequestParams_t request){
   if(playerQueue==NULL) return;
   if(systemUpdateAudioBlocked() && request.type != PR_UPDATE_STOP) return;

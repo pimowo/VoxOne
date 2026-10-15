@@ -7,8 +7,10 @@ namespace voxone {
 namespace ota {
 
 // MAIN OTA is the only path which produces PENDING_VERIFY in VoxOne. A
-// pending image therefore has to restore the network control plane before it
-// may replace the last known-good slot. USB/recovery flashes do not enter this
+// pending image therefore has to restore its internal services and one legal
+// local control plane (validated STA or Recovery AP) before it may replace the
+// last known-good slot. Internet, radio-station and browser availability are
+// deliberately not health conditions. USB/recovery flashes do not enter this
 // state and are outside this policy.
 constexpr uint32_t kHealthTimeoutMs = 180000;
 constexpr uint32_t kHealthStableMs = 5000;
@@ -45,9 +47,7 @@ struct Evidence {
   bool configurationReady = false;
   bool dataReady = false;
   bool runtimeReady = false;
-  bool networkRequired = true;
-  bool networkReady = false;
-  bool httpApiReady = false;
+  bool controlPlaneReady = false;
   Failure fatalFailure = Failure::None;
 };
 
@@ -58,6 +58,18 @@ struct Snapshot {
   bool rollbackAvailable;
   uint32_t elapsedMs;
 };
+
+inline bool bootControlPlaneReady(bool httpServerReady,
+                                  bool stationNetworkReady,
+                                  bool recoveryApReady) {
+  return httpServerReady && (stationNetworkReady || recoveryApReady);
+}
+
+inline bool bootHealthAllowsUpdate(bool stateReadOk, bool pending,
+                                   Phase phase) {
+  return stateReadOk && !pending &&
+      (phase == Phase::NotPending || phase == Phase::Validated);
+}
 
 class HealthGate {
  public:
