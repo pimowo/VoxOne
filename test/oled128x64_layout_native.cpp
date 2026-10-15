@@ -1,4 +1,5 @@
 #include "../src/displays/conf/player128x64conf.h"
+#include "../src/displays/fonts/voxone_boot_logo_oled_128x64.h"
 
 #include <cassert>
 
@@ -11,27 +12,18 @@ constexpr uint16_t bottom(const WidgetConfig& widget) {
 int main() {
   constexpr uint16_t charWidth = 6;
   constexpr uint16_t charHeight = 8;
-  constexpr uint16_t brandWidth = startup128x64::brandChars * charWidth *
-                                  startup128x64::brand.textsize;
-  constexpr uint16_t brandLeft = (128 - brandWidth) / 2;
   constexpr uint16_t maxSsidWidth = startup128x64::maxSsidChars * charWidth;
   constexpr uint16_t maxSsidLeft = (128 - maxSsidWidth) / 2;
 
-  static_assert(startup128x64::brand.top == 8 &&
-                    startup128x64::brand.textsize == 2 &&
-                    startup128x64::brand.align == WA_CENTER,
-                "STARTUP brand must be centered in the top half");
-  static_assert(startup128x64::brandChars == 6 &&
-                    startup128x64::brandText[0] == 'V' &&
-                    startup128x64::brandText[1] == 'o' &&
-                    startup128x64::brandText[2] == 'x' &&
-                    startup128x64::brandText[3] == 'O' &&
-                    startup128x64::brandText[4] == 'N' &&
-                    startup128x64::brandText[5] == 'E',
-                "STARTUP brand spelling must remain VoxONE");
-  static_assert(brandLeft == 28 && brandWidth == 72 &&
-                    bottom(startup128x64::brand) == 24,
-                "STARTUP brand bounds changed unexpectedly");
+  static_assert(voxone::display_boot_branding::oled::kBootLogoLeft == 10 &&
+                    voxone::display_boot_branding::oled::kBootLogoTop == 5 &&
+                    voxone::display_boot_branding::oled::kBootLogoWidth == 108 &&
+                    voxone::display_boot_branding::oled::kBootLogoHeight == 23,
+                "STARTUP logo bounds changed unexpectedly");
+  static_assert(voxone::display_boot_branding::oled::kBootLogoTop +
+                    voxone::display_boot_branding::oled::kBootLogoHeight <=
+                    startup128x64::progress.top,
+                "STARTUP logo overlaps progress");
   static_assert(startup128x64::progress.top == 36 &&
                     startup128x64::progress.textsize == 1 &&
                     startup128x64::progress.align == WA_CENTER &&

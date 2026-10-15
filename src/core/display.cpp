@@ -843,9 +843,6 @@ uint16_t Display::height(){ return _runtimeEnabled ? dsp.height() : 0; }
 void Display::_bootScreen(){
   _boot = new Page();
 #if (VOXONE_DISPLAY_PROFILE == VOXONE_DISPLAY_PROFILE_OLED_128X64)
-  TextWidget* bootBrand = new TextWidget(startup128x64::brand, startup128x64::brandChars + 1, WHITE, BLACK);
-  bootBrand->setText(startup128x64::brandText);
-  _boot->addWidget(bootBrand);
   _boot->addWidget(new ProgressWidget(startup128x64::progress, bootPrgConf, WHITE, BLACK));
   _bootstring = (TextWidget*) &_boot->addWidget(new TextWidget(startup128x64::ssid, startup128x64::ssidBufferSize, WHITE, BLACK));
 #else
@@ -854,9 +851,7 @@ void Display::_bootScreen(){
 #endif
   _pager->addPage(_boot);
   _pager->setPage(_boot, true);
-#if (VOXONE_DISPLAY_PROFILE != VOXONE_DISPLAY_PROFILE_OLED_128X64)
   dsp.drawLogo(bootLogoTop);
-#endif
   _bootStep = 1;
 }
 

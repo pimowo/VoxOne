@@ -165,7 +165,8 @@ Obecna sekcja AUDIO jest zaakceptowana i nie wymaga zmian w kategorii A.
 - [POST-STABLE] Ustalić wspólną lub jawnie przypisaną szybkość przewijania dla stacji, artysty, utworu i list; usunąć przypadkowo różne timingi rendererów.
 - [POST-STABLE] Dodać source-aware PLAYER, ekran TTS, przyszłą przeglądarkę DLNA oraz konfigurację DSP.
 - [HARDWARE][STABLE][HIL PENDING] Na odpowiednich urządzeniach rewizji 0 M0, S0 i DIN0 fizycznie sprawdzić stabilność OLED, input i audio po zmianie tożsamości buildów. Wcześniejszy PHYSICAL PASS SSD1306 i SSD1309 na urządzeniu M0 pozostaje baseline wyłącznie M0 i nie kwalifikuje S0/DIN0. Dla każdego profilu sprawdzić PCM5102A, SSD1306/SSD1309/NONE oraz EC11/Buttons3/NONE zgodnie z faktycznie zainstalowanym sprzętem. VoxOneBT i MQTT/HA nie są capability bieżących profili M0/S0/DIN0.
-- [POST-STABLE] Użyć wspólnego `assets/branding` na ekranach splash/logo LCD oraz później w README/GitHub.
+- [HARDWARE][SOFTWARE PASS][HIL PENDING] Fizycznie zweryfikować oficjalne logo startowe z `assets/branding` na SSD1306/SSD1309 128×64, ST7789 284×76 i ST7796 480×320. Software baseline zachowuje pasek postępu i SSID, nie dodaje opóźnienia ani alokacji dynamicznych, używa 1-bitowej bitmapy OLED oraz RGB565-RLE dla TFT i ma pełny gate PASS; ocena rzeczywistej orientacji, kolorów i czytelności pozostaje HIL.
+- [POST-STABLE] Zastosować wspólny `assets/branding` później w README/GitHub.
 - [POST-STABLE] Rozważyć opcjonalną skórkę YAMAHA AMBER: czarne tło i jeden bursztynowy kolor, punkt startowy `#FF9A1F` / RGB565 `0xFCC3`.
 - [DECISION] Rozstrzygnąć zakres dalszego wsparcia ST7789 284×76 na rodzinie Wx.
 - [POST-STABLE] Uporządkować duplikację `_charSize` w widgetach tylko przy pracy nad rendererem; nie robić osobnego refaktoru bez korzyści testowej.

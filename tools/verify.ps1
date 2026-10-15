@@ -134,6 +134,10 @@ $nativeSources=@{
  websocket_command_native=@('src/core/websocket_command.cpp')
 }
 $tests=@(Get-ChildItem -LiteralPath (Join-Path $root 'test') -Filter '*_native.cpp' -File | Sort-Object Name)
+Invoke-Step 'Display boot branding assets' {
+ & $Python (Join-Path $root 'tools/generate_display_boot_branding.py') '--check'
+ if($LASTEXITCODE -ne 0) { throw 'Display boot branding assets are stale' }
+}
 Invoke-Step 'Native tests' {
  if($tests.Count -eq 0) { throw 'No native tests found' }
  foreach($test in $tests) {
@@ -172,6 +176,12 @@ Invoke-Step 'Native tests' {
 if(-not $onWindows) {
  Invoke-Step 'Native sanitizers' {
   $sanitizerArgs=@('-std=c++11','-O1','-g','-fsanitize=address,undefined','-fno-omit-frame-pointer','-Wall','-Wextra','-Werror','-Wno-unused-parameter')
+  $bootBrandingExe=Join-Path $work 'display_boot_branding_sanitized'
+  & $Cxx @sanitizerArgs '-o' $bootBrandingExe `
+    (Join-Path $root 'test/display_boot_branding_native.cpp')
+  if($LASTEXITCODE -ne 0) { throw 'Sanitized display boot branding compile failed' }
+  & $bootBrandingExe
+  if($LASTEXITCODE -ne 0) { throw 'Sanitized display boot branding test failed' }
   $backupExe=Join-Path $work 'config_backup_sanitized'
   $backupSources=@(
    (Join-Path $root 'test/config_backup_native.cpp'),

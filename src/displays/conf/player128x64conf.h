@@ -5,14 +5,11 @@
 #include "../widgets/widgetsconfig.h"
 
 // OLED 128x64 STARTUP coordinates shared by SSD1306 and SSD1309.
-// The four 16-pixel bands are kept visually independent: brand in the top
-// half, progress in band 3, and the attempted SSID in band 4.
+// The official bitmap occupies the top half; progress and attempted SSID keep
+// their existing independent bands below it.
 namespace startup128x64 {
-constexpr char brandText[] = "VoxONE";
-constexpr WidgetConfig brand = {0, 8, 2, WA_CENTER};
 constexpr WidgetConfig progress = {0, 36, 1, WA_CENTER};
 constexpr WidgetConfig ssid = {0, 52, 1, WA_CENTER};
-constexpr uint16_t brandChars = sizeof(brandText) - 1;
 constexpr uint16_t maxSsidChars = 21;
 constexpr uint16_t ssidBufferSize = maxSsidChars + 1;
 }
