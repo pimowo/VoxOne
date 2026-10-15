@@ -51,6 +51,16 @@ std::string readFile(const char* path) {
                      std::istreambuf_iterator<char>());
 }
 
+std::string iniSection(const std::string& source, const char* name) {
+  const std::string heading = std::string("[env:") + name + "]";
+  const std::size_t begin = source.find(heading);
+  assert(begin != std::string::npos);
+  const std::size_t end = source.find("\n[env:", begin + heading.size());
+  return source.substr(begin, end == std::string::npos
+                                  ? std::string::npos
+                                  : end - begin);
+}
+
 void testInitializationAndFallback() {
   ScrollSettingsRuntimeConfig runtime;
   assert(sameSnapshot(runtime.snapshot(), defaultScrollSettings(),
@@ -196,8 +206,18 @@ void testProductionBoundaries() {
          std::string::npos);
   assert(runtimeSource.find("writeScrollSettingsPersistent") ==
          std::string::npos);
-  assert(platformio.find("VOXONE_PLAYER_SCROLL_CORE_ENABLED") ==
-         std::string::npos);
+  const std::string coreFlag =
+      "-DVOXONE_PLAYER_SCROLL_CORE_ENABLED=1";
+  assert(iniSection(platformio, "m0").find(coreFlag) != std::string::npos);
+  for (const char* profile : {"w0", "s0", "din0", "l0"})
+    assert(iniSection(platformio, profile).find(
+               "VOXONE_PLAYER_SCROLL_CORE_ENABLED") == std::string::npos);
+  // Both dedicated M0 test profiles inherit env:m0 instead of carrying a
+  // second, independently maintained CORE switch.
+  assert(iniSection(platformio, "m0-security-test").find(
+             "VOXONE_PLAYER_SCROLL_CORE_ENABLED") == std::string::npos);
+  assert(iniSection(platformio, "m0-ota-rollback-test").find(
+             "VOXONE_PLAYER_SCROLL_CORE_ENABLED") == std::string::npos);
 }
 
 }  // namespace

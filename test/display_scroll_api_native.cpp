@@ -334,8 +334,12 @@ void testFirmwareIntegrationContract() {
   assert(server.find("scrollSettingsSource") != std::string::npos);
   assert(server.find("scrollCoreActive") != std::string::npos);
   assert(server.find("configurationMutationMutex") != std::string::npos);
-  assert(platformio.find("VOXONE_PLAYER_SCROLL_CORE_ENABLED") ==
-         std::string::npos);
+  const std::string coreFlag =
+      "-DVOXONE_PLAYER_SCROLL_CORE_ENABLED=1";
+  const std::string m0Profile = section(
+      platformio, "[env:m0]", "[env:m0-security-test]");
+  assert(m0Profile.find(coreFlag) != std::string::npos);
+  assert(platformio.find(coreFlag) == platformio.rfind(coreFlag));
 }
 
 }  // namespace
