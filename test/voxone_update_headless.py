@@ -835,46 +835,42 @@ setTimeout(async () => {
     check(get('hardware-family').textContent === 'M0' && get('hardware-mcu').textContent === 'ESP32-S3',
       'M0 hardware family from descriptor API');
     check([...hardwareDisplay.options].map(option => option.value).join(',') ===
-      'none,ssd1306_128x64,ssd1309_128x64,ch1116_128x64,sh1106_128x64,st7290_128x64_tbd,st7789v_320x240,ssd1322_256x64,st7796s_480x320,gc9a01_240x240',
-      'display dropdown contains the complete M0 roadmap');
+      'none,ssd1306_128x64,ssd1309_128x64' &&
+      [...hardwareDisplay.options].every(option => !option.disabled),
+      'display dropdown contains only supported M0 capabilities');
     check([...hardwareInput.options].map(option => option.value).join(',') === 'none,ec11,buttons3',
       'input options follow capabilities');
     check([...hardwareInput.options].map(option => option.textContent).join(',') ===
-      'Brak,Enkoder,Przyciski', 'input labels use approved Polish names');
+      'Brak,Enkoder,Przyciski' &&
+      [...hardwareInput.options].every(option => !option.disabled),
+      'input labels use approved Polish names and remain selectable');
     check(document.querySelector('label[for="hardware-input"]').textContent === 'Tryb sterowania',
       'input field uses approved Polish label');
     const hardwareLayout = get('hardware').querySelector('.hardware-layout');
     const hardwareColumns = [...hardwareLayout.querySelectorAll(':scope > .hardware-column')];
     check(hardwareColumns.length === 2 &&
-      hardwareColumns[0].querySelectorAll(':scope > .card').length === 3 &&
+      hardwareColumns[0].querySelectorAll(':scope > .card').length === 2 &&
       hardwareColumns[1].querySelectorAll(':scope > .card').length === 2,
       'hardware cards use balanced independent columns');
-    check(hardwareDisplay.querySelector('option[value="ch1116_128x64"]').disabled,
-      'planned display remains visible and disabled');
-    check(!hardwareInput.querySelector('option[value="buttons3"]').disabled,
-      'BUTTONS3 remains selectable');
+    check(!hardwareDisplay.querySelector('option[value="ch1116_128x64"]') &&
+      !hardwareAudio.querySelector('option[value="max98357a"]'),
+      'planned display and audio choices are not presented');
     check([...hardwareAudio.options].map(option => option.value).join(',') ===
-      'pcm5102a,max98357a' &&
+      'pcm5102a' &&
       [...hardwareAudio.options].map(option => option.textContent).join(',') ===
-      'PCM5102A,MAX98357A' && hardwareAudio.value === 'pcm5102a' &&
-      hardwareAudio.disabled && hardwareAudio.querySelector('option[value="max98357a"]').disabled,
-      'audio roadmap is an informational disabled select with API values');
-    check(get('hardware-audio-status').textContent === 'DOSTĘPNE' &&
-      !get('hardware-audio-current').hidden,
-      'audio select preserves current capability status');
-    check(get('hardware-module-roadmap').textContent.includes('VoxOneBT') &&
-      get('hardware-module-roadmap').textContent.includes('Pomiar baterii') &&
-      get('hardware-module-roadmap').textContent.includes('PLANOWANE'),
-      'module roadmap is informational');
-    const moduleToggles = [...get('hardware-module-roadmap').querySelectorAll('input[type=checkbox]')];
-    check(!hardwareAudio.name && moduleToggles.length === 3 &&
-      moduleToggles.every(toggle => toggle.disabled),
-      'audio select is excluded from configuration writes and module roadmap uses disabled toggles');
+      'PCM5102A' && hardwareAudio.value === 'pcm5102a' && hardwareAudio.disabled,
+      'audio is an informational disabled select containing only the current profile value');
+    check(!hardwareAudio.name,
+      'audio select remains excluded from configuration writes');
+    check(!document.querySelector('.hardware-legend') &&
+      !document.querySelector('.hardware-roadmap-status') &&
+      !document.querySelector('.hardware-roadmap-current') &&
+      !get('hardware-module-roadmap') &&
+      !['DOSTĘPNE', 'DO TESTU', 'PLANOWANE', 'AKTUALNE'].some(label =>
+        get('hardware').textContent.includes(label)),
+      'hardware tab does not expose roadmap statuses, badges, or planned modules');
     check(hardwareDisplay.value === 'ssd1309_128x64' && hardwareInput.value === 'ec11',
       'M0 current SSD1309 and EC11 selections selected');
-    check(get('hardware-display-status').textContent === 'DOSTĘPNE' &&
-      !get('hardware-display-current').hidden && !get('hardware-input-current').hidden,
-      'current selection status is compact');
     check(!get('hardware-save') && get('hardware-save-restart').disabled &&
       get('hardware-dirty-badge').hidden, 'no standalone save and apply initially disabled');
     hardwareDisplay.value = 'none';
@@ -887,23 +883,10 @@ setTimeout(async () => {
       'return to SSD1309 clears dirty state');
     hardwareInput.value = 'buttons3';
     hardwareInput.dispatchEvent(new Event('change'));
-    check(get('hardware-input-status').textContent === 'DO TESTU' &&
-      get('hardware-input-note').textContent === 'Brak fizycznego PASS' &&
-      !get('hardware-save-restart').disabled, 'BUTTONS3 status and note');
+    check(!get('hardware-save-restart').disabled && !get('hardware-dirty-badge').hidden,
+      'supported BUTTONS3 capability enables apply without exposing HIL status');
     hardwareInput.value = 'ec11';
     hardwareInput.dispatchEvent(new Event('change'));
-    hardwareDisplay.value = 'ch1116_128x64';
-    hardwareDisplay.dispatchEvent(new Event('change'));
-    check(get('hardware-display-status').textContent === 'PLANOWANE' &&
-      get('hardware-save-restart').disabled && get('hardware-dirty-badge').hidden,
-      'planned value cannot become saveable dirty state');
-    const requestsBeforePlannedSubmit = hardwareRequests.length;
-    get('hardware-form').requestSubmit();
-    await new Promise(resolve => setTimeout(resolve, 0));
-    check(hardwareRequests.length === requestsBeforePlannedSubmit,
-      'planned value cannot be submitted');
-    hardwareDisplay.value = 'ssd1309_128x64';
-    hardwareDisplay.dispatchEvent(new Event('change'));
     hardwareInput.value = 'none';
     hardwareInput.dispatchEvent(new Event('change'));
     check(!get('hardware-save-restart').disabled && !get('hardware-dirty-badge').hidden,

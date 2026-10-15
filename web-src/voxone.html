@@ -307,11 +307,6 @@
 
       <section id="hardware" data-panel aria-labelledby="hardware-title" hidden>
         <div class="section-heading"><div><p class="eyebrow">KONFIGURACJA</p><h2 id="hardware-title">Sprzęt</h2></div><span id="hardware-dirty-badge" class="badge" hidden>Niezapisane zmiany</span></div>
-        <div class="hardware-legend" aria-label="Legenda statusów sprzętu">
-          <span data-roadmap-status="supported">DOSTĘPNE</span>
-          <span data-roadmap-status="untested">DO TESTU</span>
-          <span data-roadmap-status="planned">PLANOWANE</span>
-        </div>
         <form id="hardware-form" novalidate>
           <div class="hardware-layout">
             <div class="hardware-column" aria-label="Konfiguracja sprzętu">
@@ -326,40 +321,21 @@
                 <h3>Wyświetlacz</h3>
                 <label for="hardware-display">Typ wyświetlacza</label>
                 <select id="hardware-display" class="setting-select" disabled></select>
-                <div class="hardware-selection-state" aria-live="polite">
-                  <span id="hardware-display-status" class="hardware-roadmap-status">—</span>
-                  <span id="hardware-display-current" class="hardware-roadmap-current" hidden>AKTUALNE</span>
-                </div>
                 <p class="hint">Brak oznacza, że wyświetlacz nie jest zainstalowany.</p>
               </article>
+            </div>
+            <div class="hardware-column" aria-label="Konfiguracja i informacje sprzętowe">
               <article class="card hardware-config-card">
                 <h3>Sterowanie lokalne</h3>
                 <label for="hardware-input">Tryb sterowania</label>
                 <select id="hardware-input" class="setting-select" disabled></select>
-                <div class="hardware-selection-state" aria-live="polite">
-                  <span id="hardware-input-status" class="hardware-roadmap-status">—</span>
-                  <span id="hardware-input-current" class="hardware-roadmap-current" hidden>AKTUALNE</span>
-                </div>
-                <p id="hardware-input-note" class="hardware-option-note" hidden></p>
                 <p class="hint">Brak — bez sterowania lokalnego. Enkoder — EC11. Przyciski — 3×SW: LEWO / OK / PRAWO.</p>
               </article>
-            </div>
-            <div class="hardware-column" aria-label="Możliwości sprzętu">
               <article class="card hardware-audio-card">
                 <h3>Audio</h3>
                 <label for="hardware-audio">Układ audio</label>
                 <select id="hardware-audio" class="setting-select" disabled aria-describedby="hardware-audio-help"></select>
-                <div class="hardware-selection-state" aria-live="polite">
-                  <span id="hardware-audio-status" class="hardware-roadmap-status">—</span>
-                  <span id="hardware-audio-current" class="hardware-roadmap-current" hidden>AKTUALNE</span>
-                </div>
-                <p id="hardware-audio-note" class="hardware-option-note" hidden></p>
                 <p id="hardware-audio-help" class="hint">Informacyjny wybór wynikający z profilu sprzętu. Audio nie jest konfigurowane na tej stronie.</p>
-              </article>
-              <article class="card">
-                <h3>Moduły i rozszerzenia</h3>
-                <p class="hint">Informacyjna roadmapa bez ustawień runtime.</p>
-                <ul id="hardware-module-roadmap" class="hardware-module-list" aria-label="Roadmapa modułów"></ul>
               </article>
             </div>
           </div>

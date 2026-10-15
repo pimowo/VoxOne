@@ -544,20 +544,6 @@ window.VoxOneRestartWaiter = Object.freeze({
   const hardwareSaveRestart = document.getElementById("hardware-save-restart");
   const hardwareFeedback = document.getElementById("hardware-feedback");
   const hardwareDirtyBadge = document.getElementById("hardware-dirty-badge");
-  const hardwareModuleRoadmap = document.getElementById("hardware-module-roadmap");
-  const hardwareSelectionState = {
-    display: {
-      select: hardwareDisplay,
-      status: document.getElementById("hardware-display-status"),
-      current: document.getElementById("hardware-display-current")
-    },
-    input: {
-      select: hardwareInput,
-      status: document.getElementById("hardware-input-status"),
-      current: document.getElementById("hardware-input-current"),
-      note: document.getElementById("hardware-input-note")
-    }
-  };
   let mqttConfigLoaded = false;
   let mqttPasswordSet = false;
   let mqttEffectiveRootValue = "";
@@ -567,7 +553,6 @@ window.VoxOneRestartWaiter = Object.freeze({
   let hardwareConfigLoaded = false;
   let hardwareSaving = false;
   let savedHardwareConfig = null;
-  let hardwareRoadmap = { displays: [], inputs: [] };
   const state = {
     connection: "connecting",
     webStatus: null,
@@ -1311,19 +1296,6 @@ window.VoxOneRestartWaiter = Object.freeze({
       select.selectedOptions.length === 1 && !select.selectedOptions[0].disabled);
   }
 
-  function renderHardwareSelectionState(kind, items) {
-    const state = hardwareSelectionState[kind];
-    const item = items.find(candidate => candidate.value === state.select.value);
-    state.status.textContent = item?.statusLabel || "—";
-    state.status.dataset.roadmapStatus = item?.status || "";
-    state.current.hidden = !savedHardwareConfig ||
-      state.select.value !== savedHardwareConfig[kind];
-    if (state.note) {
-      state.note.textContent = item?.note || "";
-      state.note.hidden = !item?.note;
-    }
-  }
-
   function renderHardwareFormState() {
     const dirty = hardwareDirty();
     hardwareDirtyBadge.hidden = !dirty;
@@ -1331,20 +1303,16 @@ window.VoxOneRestartWaiter = Object.freeze({
     hardwareInput.disabled = !hardwareConfigLoaded || hardwareSaving;
     hardwareSaveRestart.disabled = hardwareSaving || !hardwareConfigLoaded || !dirty ||
       !hardwareSelectionSaveable();
-    renderHardwareSelectionState("display", hardwareRoadmap.displays);
-    renderHardwareSelectionState("input", hardwareRoadmap.inputs);
   }
 
   const hardwareInputLabels = { none: "Brak", ec11: "Enkoder", buttons3: "Przyciski" };
 
-  function replaceHardwareOptions(select, roadmap, supported, selected, labels = {}) {
-    const supportedValues = new Set(supported.map(item => item.value));
+  function replaceHardwareOptions(select, supported, selected, labels = {}) {
     select.replaceChildren();
-    for (const item of roadmap) {
+    for (const item of supported) {
       const option = document.createElement("option");
       option.value = item.value;
       option.textContent = labels[item.value] || item.label;
-      option.disabled = item.selectable !== true || !supportedValues.has(item.value);
       select.append(option);
     }
     select.value = selected;
@@ -1354,48 +1322,11 @@ window.VoxOneRestartWaiter = Object.freeze({
     const current = items.find(item => item.current === true);
     if (!current) throw new Error("Brak aktualnego układu audio w profilu sprzętu");
     hardwareAudio.replaceChildren();
-    for (const item of items) {
-      const option = document.createElement("option");
-      option.value = item.value;
-      option.textContent = item.label;
-      option.disabled = item.current !== true;
-      hardwareAudio.append(option);
-    }
+    const option = document.createElement("option");
+    option.value = current.value;
+    option.textContent = current.label;
+    hardwareAudio.append(option);
     hardwareAudio.value = current.value;
-    const status = document.getElementById("hardware-audio-status");
-    status.dataset.roadmapStatus = current.status;
-    status.textContent = current.statusLabel;
-    document.getElementById("hardware-audio-current").hidden = false;
-    const note = document.getElementById("hardware-audio-note");
-    note.textContent = current.note || "";
-    note.hidden = !current.note;
-  }
-
-  function renderHardwareModules(items) {
-    hardwareModuleRoadmap.replaceChildren();
-    for (const item of items) {
-      const row = document.createElement("li");
-      const choice = document.createElement("label");
-      choice.className = "hardware-module-choice";
-      const checkbox = document.createElement("input");
-      checkbox.type = "checkbox";
-      checkbox.disabled = true;
-      const name = document.createElement("span");
-      name.textContent = item.label;
-      choice.append(checkbox, name);
-      const status = document.createElement("span");
-      status.className = "hardware-roadmap-status";
-      status.dataset.roadmapStatus = item.status;
-      status.textContent = item.statusLabel;
-      row.append(choice, status);
-      if (item.note) {
-        const note = document.createElement("span");
-        note.className = "hardware-roadmap-note";
-        note.textContent = item.note;
-        row.append(note);
-      }
-      hardwareModuleRoadmap.append(row);
-    }
   }
 
   async function loadHardwareConfig() {
@@ -1404,17 +1335,12 @@ window.VoxOneRestartWaiter = Object.freeze({
       const snapshot = await response.json();
       if (!response.ok || !snapshot.config || !Array.isArray(snapshot.supportedDisplays) ||
           !Array.isArray(snapshot.supportedInputs) || !snapshot.roadmap ||
-          ["displays", "inputs", "audio", "modules"].some(key =>
-            !Array.isArray(snapshot.roadmap[key])))
+          !Array.isArray(snapshot.roadmap.audio))
         throw new Error(snapshot.error || ("HTTP " + response.status));
-      hardwareRoadmap = {
-        displays: snapshot.roadmap.displays,
-        inputs: snapshot.roadmap.inputs
-      };
-      replaceHardwareOptions(hardwareDisplay, hardwareRoadmap.displays,
-        snapshot.supportedDisplays, snapshot.config.display);
-      replaceHardwareOptions(hardwareInput, hardwareRoadmap.inputs,
-        snapshot.supportedInputs, snapshot.config.input, hardwareInputLabels);
+      replaceHardwareOptions(hardwareDisplay, snapshot.supportedDisplays,
+        snapshot.config.display);
+      replaceHardwareOptions(hardwareInput, snapshot.supportedInputs,
+        snapshot.config.input, hardwareInputLabels);
       if (!hardwareDisplay.value || !hardwareInput.value)
         throw new Error("Urządzenie zwróciło niezgodną konfigurację");
       savedHardwareConfig = {
@@ -1424,7 +1350,6 @@ window.VoxOneRestartWaiter = Object.freeze({
       text("hardware-family", snapshot.family || "—");
       text("hardware-mcu", snapshot.mcu || "—");
       renderHardwareAudio(snapshot.roadmap.audio);
-      renderHardwareModules(snapshot.roadmap.modules);
       hardwareConfigLoaded = true;
       setHardwareFeedback("");
     } catch (error) {
