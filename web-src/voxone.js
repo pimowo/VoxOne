@@ -462,6 +462,13 @@ window.VoxOneRestartWaiter = Object.freeze({
   const stationListTimeoutInput = document.getElementById("station-list-timeout");
   const btTimeoutControl = document.getElementById("bt-timeout-control");
   const btTransportTimeoutInput = document.getElementById("bt-transport-timeout");
+  const scrollSettingsForm = document.getElementById("scroll-settings-form");
+  const scrollEnabledSelect = document.getElementById("scroll-enabled");
+  const scrollPauseSelect = document.getElementById("scroll-pause");
+  const scrollSpeedSelect = document.getElementById("scroll-speed");
+  const scrollSettingsStatus = document.getElementById("scroll-settings-status");
+  const scrollSettingsSource = document.getElementById("scroll-settings-source");
+  const scrollSettingsSave = document.getElementById("scroll-settings-save");
   const rtcCard = document.getElementById("rtc-card");
   const rtcNtpInterval = document.getElementById("rtc-ntp-interval");
   const rtcWriteInterval = document.getElementById("rtc-write-interval");
@@ -579,6 +586,12 @@ window.VoxOneRestartWaiter = Object.freeze({
     canFlip: false,
     vu: null,
     canVu: false,
+    canScrollSettings: false,
+    scrollEnabled: null,
+    scrollSpeed: null,
+    scrollPauseMs: null,
+    scrollSettingsSource: null,
+    scrollCoreActive: false,
     bass: null,
     middle: null,
     treble: null,
@@ -639,6 +652,12 @@ window.VoxOneRestartWaiter = Object.freeze({
   let brightnessTimer = 0;
   let brightnessAckTimer = 0;
   let lastBrightnessSentAt = 0;
+  let scrollSettingsDirty = false;
+  let scrollSettingsSaving = false;
+  let scrollSettingsPending = null;
+  let scrollSettingsTimer = 0;
+  let scrollSettingsFeedback = "";
+  let scrollSettingsFeedbackError = false;
 
   function text(id, value) {
     const node = document.getElementById(id);
@@ -1606,7 +1625,8 @@ window.VoxOneRestartWaiter = Object.freeze({
   }
 
   function renderDisplaySettings() {
-    displaySettingsCard.hidden = !state.canFlip && !state.canVu && !state.canBrightness;
+    displaySettingsCard.hidden = !state.canFlip && !state.canVu && !state.canBrightness &&
+      !state.canScrollSettings;
     flipScreenControl.hidden = !state.canFlip;
     flipScreenToggle.disabled = state.connection !== "connected" ||
       !state.canFlip || state.flip === null || flipPending;
@@ -1639,6 +1659,29 @@ window.VoxOneRestartWaiter = Object.freeze({
       stationListTimeoutInput.value = String(state.stationListTimeout);
     if (document.activeElement !== btTransportTimeoutInput && state.btTransportTimeout !== null)
       btTransportTimeoutInput.value = String(state.btTransportTimeout);
+    scrollSettingsForm.hidden = !state.canScrollSettings;
+    const scrollReady = state.scrollEnabled !== null && state.scrollSpeed !== null &&
+      state.scrollPauseMs !== null;
+    for (const control of [scrollEnabledSelect, scrollPauseSelect, scrollSpeedSelect]) {
+      control.disabled = state.connection !== "connected" || !state.canScrollSettings ||
+        !scrollReady || scrollSettingsSaving;
+    }
+    if (scrollReady && !scrollSettingsDirty && !scrollSettingsSaving) {
+      scrollEnabledSelect.value = String(state.scrollEnabled);
+      scrollPauseSelect.value = String(state.scrollPauseMs);
+      scrollSpeedSelect.value = state.scrollSpeed;
+    }
+    scrollSettingsSave.disabled = state.connection !== "connected" ||
+      !state.canScrollSettings || !scrollReady || !scrollSettingsDirty || scrollSettingsSaving;
+    scrollSettingsStatus.dataset.kind = scrollSettingsFeedbackError ? "error" : "notice";
+    scrollSettingsStatus.textContent = scrollSettingsSaving ? "Zapisywanie i weryfikacja…" :
+      scrollSettingsFeedback || (scrollSettingsDirty ? "Niezapisane zmiany." :
+      (state.canScrollSettings ? (state.scrollCoreActive
+        ? "Ustawienia są aktywnie stosowane przez wyświetlacz."
+        : "Ustawienia można zapisać, ale ten firmware nie stosuje ich aktywnie.") : ""));
+    scrollSettingsSource.textContent = !state.canScrollSettings ? "" :
+      "Źródło: " + (state.scrollSettingsSource === "userSettings"
+        ? "ustawienia użytkownika" : "wartości domyślne renderera") + ".";
     flipScreenFeedback.hidden = !state.canFlip;
     flipScreenFeedback.textContent = flipPending
       ? "Oczekiwanie na potwierdzenie urządzenia…"
@@ -2183,6 +2226,12 @@ window.VoxOneRestartWaiter = Object.freeze({
     state.canFlip = false;
     state.vu = null;
     state.canVu = false;
+    state.canScrollSettings = false;
+    state.scrollEnabled = null;
+    state.scrollSpeed = null;
+    state.scrollPauseMs = null;
+    state.scrollSettingsSource = null;
+    state.scrollCoreActive = false;
     flipPending = false;
     clearTimeout(flipTimer);
     vuAwaiting = null;
@@ -2192,6 +2241,12 @@ window.VoxOneRestartWaiter = Object.freeze({
     brightnessDragging = false;
     brightnessPending = null;
     brightnessAwaiting = null;
+    scrollSettingsSaving = false;
+    scrollSettingsPending = null;
+    scrollSettingsDirty = false;
+    scrollSettingsFeedback = "";
+    scrollSettingsFeedbackError = false;
+    clearTimeout(scrollSettingsTimer);
     for (const key of Object.keys(volumeSettingEditing)) {
       volumeSettingEditing[key] = null;
       clearTimeout(volumeSettingTimers[key]);
@@ -2335,6 +2390,44 @@ window.VoxOneRestartWaiter = Object.freeze({
       return;
     }
     if (advancedAudio.handleWsMessage(message)) return;
+    if (message.event === "scrollSettings.result") {
+      clearTimeout(scrollSettingsTimer);
+      const requested = scrollSettingsPending;
+      scrollSettingsSaving = false;
+      scrollSettingsPending = null;
+      if (message.ok === true && message.persisted === true &&
+          message.runtimePublished === true && requested) {
+        state.scrollEnabled = requested.enabled;
+        state.scrollSpeed = requested.speed;
+        state.scrollPauseMs = requested.pauseMs;
+        state.scrollSettingsSource = "userSettings";
+        state.scrollCoreActive = message.scrollCoreActive === true;
+        scrollSettingsDirty = false;
+        scrollSettingsFeedbackError = false;
+        scrollSettingsFeedback = message.activeApplied === true
+          ? (message.changed === true ? "Zapisano i zastosowano ustawienia."
+            : "Ustawienia są już zapisane i aktywne.")
+          : (message.changed === true ? "Zapisano ustawienia. Ten firmware nie stosuje ich aktywnie."
+            : "Ustawienia są już zapisane. Ten firmware nie stosuje ich aktywnie.");
+      } else {
+        const errors = {
+          invalid_value: "Urządzenie odrzuciło nieprawidłowe ustawienia.",
+          unsupported_display: "Bieżący wyświetlacz nie obsługuje tych ustawień.",
+          busy: "Urządzenie jest zajęte. Spróbuj ponownie.",
+          storage_read_failed: "Nie udało się odczytać ustawień z pamięci.",
+          storage_open_failed: "Nie udało się otworzyć pamięci ustawień.",
+          storage_write_failed: "Nie udało się zapisać ustawień.",
+          storage_commit_failed: "Nie udało się trwale zatwierdzić ustawień.",
+          storage_verify_failed: "Weryfikacja zapisu ustawień nie powiodła się.",
+          reload_failed: "Zapisano dane, ale przeładowanie ustawień nie powiodło się.",
+          runtime_verify_failed: "Zapisano dane, ale runtime nie potwierdził ustawień."
+        };
+        scrollSettingsFeedbackError = true;
+        scrollSettingsFeedback = errors[message.error] || "Nie udało się zapisać ustawień.";
+      }
+      renderDisplaySettings();
+      return;
+    }
     const status = message.webStatus;
     if (status && (status.source === "WEB" || status.source === "BT") &&
         ["name", "metadata", "artist", "title", "codec", "playback", "activeSource", "transport"]
@@ -2429,6 +2522,25 @@ window.VoxOneRestartWaiter = Object.freeze({
         clearTimeout(vuTimer);
       }
     }
+    const scrollSnapshotValid = typeof message.canScrollSettings === "boolean" &&
+      typeof message.scrollEnabled === "boolean" &&
+      ["slow", "normal", "fast"].includes(message.scrollSpeed) &&
+      [0, 1000, 2000, 3000, 4000, 5000].includes(message.scrollPauseMs) &&
+      ["rendererDefaults", "userSettings"].includes(message.scrollSettingsSource) &&
+      typeof message.scrollCoreActive === "boolean";
+    if (scrollSnapshotValid) {
+      state.canScrollSettings = message.canScrollSettings;
+      state.scrollEnabled = message.scrollEnabled;
+      state.scrollSpeed = message.scrollSpeed;
+      state.scrollPauseMs = message.scrollPauseMs;
+      state.scrollSettingsSource = message.scrollSettingsSource;
+      state.scrollCoreActive = message.scrollCoreActive;
+      if (!message.canScrollSettings) {
+        scrollSettingsDirty = false;
+        scrollSettingsFeedback = "";
+        scrollSettingsFeedbackError = false;
+      }
+    }
     if (message.canFlip === 0 || message.canFlip === 1 ||
         message.flip === 0 || message.flip === 1 ||
         message.canBrightness === 0 || message.canBrightness === 1 ||
@@ -2437,7 +2549,8 @@ window.VoxOneRestartWaiter = Object.freeze({
         message.vu === 0 || message.vu === 1 ||
         Number.isInteger(message.stationListTimeout) ||
         Number.isInteger(message.btTransportTimeout) ||
-        message.canBtTransport === 0 || message.canBtTransport === 1) renderDisplaySettings();
+        message.canBtTransport === 0 || message.canBtTransport === 1 ||
+        scrollSnapshotValid) renderDisplaySettings();
   }
 
   function connect() {
@@ -2804,6 +2917,65 @@ window.VoxOneRestartWaiter = Object.freeze({
     saveIdleTimeout(stationListTimeoutInput, "stationListTimeout", "stationlisttimeout"));
   btTransportTimeoutInput.addEventListener("change", () =>
     saveIdleTimeout(btTransportTimeoutInput, "btTransportTimeout", "bttransporttimeout"));
+
+  function scrollSettingsSelection() {
+    const enabled = scrollEnabledSelect.value === "true" ? true :
+      scrollEnabledSelect.value === "false" ? false : null;
+    const speed = ["slow", "normal", "fast"].includes(scrollSpeedSelect.value)
+      ? scrollSpeedSelect.value : null;
+    const pauseMs = Number(scrollPauseSelect.value);
+    if (enabled === null || speed === null ||
+        ![0, 1000, 2000, 3000, 4000, 5000].includes(pauseMs)) return null;
+    return { enabled, speed, pauseMs };
+  }
+
+  function updateScrollSettingsDirty() {
+    const selected = scrollSettingsSelection();
+    scrollSettingsFeedback = "";
+    scrollSettingsFeedbackError = false;
+    scrollSettingsDirty = selected !== null &&
+      (selected.enabled !== state.scrollEnabled || selected.speed !== state.scrollSpeed ||
+       selected.pauseMs !== state.scrollPauseMs);
+    renderDisplaySettings();
+  }
+
+  for (const control of [scrollEnabledSelect, scrollPauseSelect, scrollSpeedSelect])
+    control.addEventListener("change", updateScrollSettingsDirty);
+
+  scrollSettingsForm.addEventListener("submit", event => {
+    event.preventDefault();
+    const selected = scrollSettingsSelection();
+    if (!selected || !state.canScrollSettings || state.connection !== "connected" ||
+        scrollSettingsSaving || !scrollSettingsDirty) {
+      if (!selected) {
+        scrollSettingsFeedback = "Wybierz poprawne wartości wszystkich trzech ustawień.";
+        scrollSettingsFeedbackError = true;
+      }
+      renderDisplaySettings();
+      return;
+    }
+    const value = String(selected.enabled) + "," + selected.speed + "," + selected.pauseMs;
+    if (!send("scrollsettings", value)) {
+      scrollSettingsFeedback = "Brak połączenia z urządzeniem. Ustawienia nie zostały wysłane.";
+      scrollSettingsFeedbackError = true;
+      renderDisplaySettings();
+      return;
+    }
+    scrollSettingsSaving = true;
+    scrollSettingsPending = selected;
+    scrollSettingsFeedback = "";
+    scrollSettingsFeedbackError = false;
+    clearTimeout(scrollSettingsTimer);
+    scrollSettingsTimer = setTimeout(() => {
+      scrollSettingsSaving = false;
+      scrollSettingsPending = null;
+      scrollSettingsFeedback = "Brak potwierdzenia zapisu. Odczytaj ponownie stan urządzenia.";
+      scrollSettingsFeedbackError = true;
+      renderDisplaySettings();
+      send("getscreen", 1);
+    }, 6000);
+    renderDisplaySettings();
+  });
 
   rtcNtpInterval.addEventListener("change", () => saveTimeInterval(rtcNtpInterval, "timeint", 1, 10080));
   rtcWriteInterval.addEventListener("change", () => saveTimeInterval(rtcWriteInterval, "timeintrtc", 1, 1000));

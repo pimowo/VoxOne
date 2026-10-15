@@ -246,6 +246,17 @@
               <label id="bt-timeout-control" class="idle-setting" for="bt-transport-timeout" hidden>Sterowanie Bluetooth <span>(sekundy)</span><input id="bt-transport-timeout" type="number" min="0" max="120" step="1" inputmode="numeric" disabled></label>
               <p class="hint">0 wyłącza automatyczny powrót dla danego ekranu.</p>
             </div>
+            <form id="scroll-settings-form" class="scroll-settings audio-control" hidden>
+              <h4>Przewijanie tekstu</h4>
+              <div class="scroll-settings-grid">
+                <label for="scroll-enabled">Przewijanie<select id="scroll-enabled" class="setting-select" disabled><option value="true">TAK</option><option value="false">NIE</option></select></label>
+                <label for="scroll-pause">Pauza<select id="scroll-pause" class="setting-select" disabled><option value="0">NIE</option><option value="1000">1 s</option><option value="2000">2 s</option><option value="3000">3 s</option><option value="4000">4 s</option><option value="5000">5 s</option></select></label>
+                <label for="scroll-speed">Szybkość<select id="scroll-speed" class="setting-select" disabled><option value="slow">Wolno</option><option value="normal">Normalnie</option><option value="fast">Szybko</option></select></label>
+              </div>
+              <p id="scroll-settings-status" class="scroll-settings-status" role="status" aria-live="polite"></p>
+              <p id="scroll-settings-source" class="hint"></p>
+              <button id="scroll-settings-save" type="submit" disabled>Zapisz ustawienia</button>
+            </form>
             <p id="flip-screen-feedback" class="hint" role="status" aria-live="polite">Zmiana działa od razu, bez restartu.</p>
           </article>
           <article id="rtc-card" class="card rtc-card" aria-labelledby="rtc-title" hidden>

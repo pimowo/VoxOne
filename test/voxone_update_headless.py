@@ -820,6 +820,117 @@ setTimeout(async () => {
       'display without brightness capability has no active brightness control');
     btTestSocket.onmessage({data:JSON.stringify({canFlip:0,canBrightness:0,canVu:0})});
     check(get('display-settings-card').hidden, 'display card remains capability gated');
+    const scrollCommandsBeforeSnapshot = btTestSocket.sent.filter(item => item.startsWith('scrollsettings=')).length;
+    const scrollSnapshot = (overrides = {}) => ({canScrollSettings:true,scrollEnabled:true,
+      scrollSpeed:'normal',scrollPauseMs:5000,scrollSettingsSource:'rendererDefaults',
+      scrollCoreActive:true,...overrides});
+    btTestSocket.onmessage({data:JSON.stringify(scrollSnapshot())});
+    check(!get('display-settings-card').hidden && !get('scroll-settings-form').hidden &&
+      get('scroll-enabled').value === 'true' && get('scroll-pause').value === '5000' &&
+      get('scroll-speed').value === 'normal' && get('scroll-settings-save').disabled &&
+      get('scroll-settings-source').textContent.includes('wartości domyślne renderera'),
+      'GETSCREEN loads renderer defaults without enabling an unnecessary save');
+    check(btTestSocket.sent.filter(item => item.startsWith('scrollsettings=')).length ===
+      scrollCommandsBeforeSnapshot, 'opening display settings does not write scroll settings');
+    get('scroll-pause').value = '4000';
+    get('scroll-pause').dispatchEvent(new Event('change'));
+    btTestSocket.onmessage({data:JSON.stringify(scrollSnapshot())});
+    check(get('scroll-pause').value === '4000' && !get('scroll-settings-save').disabled,
+      'background GETSCREEN does not overwrite an unsaved complete scroll draft');
+    get('scroll-pause').value = '5000';
+    get('scroll-pause').dispatchEvent(new Event('change'));
+    check(get('scroll-settings-save').disabled,
+      'returning the draft to the saved values avoids an NVS write');
+    for (const [profile, coreActive] of [
+      ['L0',false],['M0',true],['S0',false],['DIN0',false],['W0',false]
+    ]) {
+      btTestSocket.onmessage({data:JSON.stringify(scrollSnapshot({scrollCoreActive:coreActive}))});
+      check(!get('scroll-settings-form').hidden &&
+        get('scroll-settings-status').textContent.includes(coreActive ? 'aktywnie stosowane' : 'nie stosuje ich aktywnie'),
+        profile + ' follows GETSCREEN scroll capability and active-core state');
+    }
+    let expectedScrollCommands = scrollCommandsBeforeSnapshot;
+    let savedScroll = {enabled:true,speed:'normal',pauseMs:5000};
+    for (const enabled of [true,false]) for (const speed of ['slow','normal','fast'])
+      for (const pauseMs of [0,1000,2000,3000,4000,5000]) {
+        get('scroll-enabled').value = String(enabled);
+        get('scroll-speed').value = speed;
+        get('scroll-pause').value = String(pauseMs);
+        get('scroll-speed').dispatchEvent(new Event('change'));
+        const unchanged = enabled === savedScroll.enabled && speed === savedScroll.speed &&
+          pauseMs === savedScroll.pauseMs;
+        if (unchanged) {
+          check(get('scroll-settings-save').disabled,
+            'identical scroll settings do not enable a write');
+          continue;
+        }
+        check(!get('scroll-settings-save').disabled, 'complete scroll selection enables save');
+        get('scroll-settings-form').requestSubmit();
+        expectedScrollCommands++;
+        check(btTestSocket.sent.at(-1) ===
+          'scrollsettings=' + enabled + ',' + speed + ',' + pauseMs &&
+          btTestSocket.sent.filter(item => item.startsWith('scrollsettings=')).length === expectedScrollCommands &&
+          get('scroll-settings-save').disabled,
+          'atomic scroll command ' + enabled + '/' + speed + '/' + pauseMs);
+        btTestSocket.onmessage({data:JSON.stringify({event:'scrollSettings.result',ok:true,error:'none',
+          changed:true,persisted:true,runtimePublished:true,activeApplied:true,scrollCoreActive:true})});
+        check(get('scroll-settings-status').textContent.includes('Zapisano i zastosowano') &&
+          get('scroll-settings-save').disabled,
+          'confirmed CORE=1 scroll update is active and no longer dirty');
+        savedScroll = {enabled,speed,pauseMs};
+      }
+    btTestSocket.onmessage({data:JSON.stringify(scrollSnapshot({scrollEnabled:savedScroll.enabled,
+      scrollSpeed:savedScroll.speed,scrollPauseMs:savedScroll.pauseMs,
+      scrollSettingsSource:'userSettings',scrollCoreActive:false}))});
+    get('scroll-enabled').value = String(!savedScroll.enabled);
+    get('scroll-enabled').dispatchEvent(new Event('change'));
+    get('scroll-settings-form').requestSubmit();
+    expectedScrollCommands++;
+    btTestSocket.onmessage({data:JSON.stringify({event:'scrollSettings.result',ok:true,error:'none',
+      changed:true,persisted:true,runtimePublished:true,activeApplied:false,scrollCoreActive:false})});
+    check(get('scroll-settings-status').textContent.includes('Zapisano ustawienia') &&
+      get('scroll-settings-status').textContent.includes('nie stosuje ich aktywnie'),
+      'CORE=0 distinguishes persistence from active application');
+    savedScroll.enabled = !savedScroll.enabled;
+    get('scroll-pause').value = savedScroll.pauseMs === 0 ? '1000' : '0';
+    get('scroll-pause').dispatchEvent(new Event('change'));
+    get('scroll-settings-form').requestSubmit();
+    expectedScrollCommands++;
+    btTestSocket.onmessage({data:JSON.stringify({event:'scrollSettings.result',ok:false,error:'busy',
+      changed:false,persisted:false,runtimePublished:false,activeApplied:false,scrollCoreActive:false})});
+    check(get('scroll-settings-status').textContent.includes('zajęte') &&
+      !get('scroll-settings-save').disabled,
+      'queue busy is explicit and keeps the validated draft available for retry');
+    get('scroll-settings-form').requestSubmit();
+    expectedScrollCommands++;
+    btTestSocket.onmessage({data:JSON.stringify({event:'scrollSettings.result',ok:false,
+      error:'storage_commit_failed',changed:false,persisted:false,runtimePublished:false,
+      activeApplied:false,scrollCoreActive:false})});
+    check(get('scroll-settings-status').textContent.includes('trwale zatwierdzić') &&
+      !get('scroll-settings-save').disabled,
+      'storage failure is not reported as a successful save');
+    get('scroll-settings-form').requestSubmit();
+    expectedScrollCommands++;
+    btTestSocket.onmessage({data:JSON.stringify({event:'scrollSettings.result',ok:false,
+      error:'reload_failed',changed:true,persisted:true,runtimePublished:false,
+      activeApplied:false,scrollCoreActive:false})});
+    check(get('scroll-settings-status').textContent.includes('przeładowanie') &&
+      !get('scroll-settings-status').textContent.includes('Zapisano i zastosowano'),
+      'persisted but unpublished settings are not reported as actively applied');
+    const commandsBeforeInvalid = expectedScrollCommands;
+    get('scroll-speed').value = '';
+    get('scroll-settings-form').dispatchEvent(new Event('submit', {bubbles:true,cancelable:true}));
+    check(btTestSocket.sent.filter(item => item.startsWith('scrollsettings=')).length === commandsBeforeInvalid &&
+      get('scroll-settings-status').textContent.includes('poprawne wartości'),
+      'invalid scroll form data is rejected before WebSocket send');
+    btTestSocket.onmessage({data:JSON.stringify(scrollSnapshot({canScrollSettings:false,
+      scrollEnabled:false,scrollSpeed:'normal',scrollPauseMs:0,
+      scrollSettingsSource:'userSettings',scrollCoreActive:false}))});
+    check(get('scroll-settings-form').hidden && get('display-settings-card').hidden,
+      'Display NONE does not expose scroll controls');
+    btTestSocket.onmessage({data:JSON.stringify(scrollSnapshot({scrollEnabled:savedScroll.enabled,
+      scrollSpeed:savedScroll.speed,scrollPauseMs:savedScroll.pauseMs,
+      scrollSettingsSource:'userSettings',scrollCoreActive:true}))});
     const sleepCard = get('sleep-card');
     check(!sleepCard.querySelector('input,button,select,textarea') &&
       sleepCard.textContent.includes('Niedostępne') &&
@@ -1020,10 +1131,18 @@ setTimeout(async () => {
         !get('update-status').textContent.includes('błąd sendera 0') &&
         get('update-status').dataset.kind === 'error', 'BT terminal state ' + terminalState);
     }
+    get('scroll-enabled').value = String(!savedScroll.enabled);
+    get('scroll-enabled').dispatchEvent(new Event('change'));
+    get('scroll-settings-form').requestSubmit();
+    check(get('scroll-settings-status').textContent.includes('Zapisywanie'),
+      'scroll save waits for the device result');
     btTestSocket.close();
     check(selector.querySelectorAll('button').length === 0 &&
       get('current-station-name').textContent === '—' && get('source').textContent === '—',
       'disconnect clears stale source and metadata');
+    check(get('scroll-settings-form').hidden &&
+      !get('scroll-settings-status').textContent.includes('Zapisano'),
+      'WebSocket loss never reports an unconfirmed scroll save as success');
     check(muteButtons.every(button => button.disabled && button.getAttribute('aria-pressed') === 'false'), 'disconnect clears mute state');
     check(document.querySelector('.site-footer a').getAttribute('href') ===
       'mailto:pmw.voxone@gmail.com', 'footer remains static after disconnect');
