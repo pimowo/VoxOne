@@ -540,12 +540,10 @@ window.VoxOneRestartWaiter = Object.freeze({
   const hardwareForm = document.getElementById("hardware-form");
   const hardwareDisplay = document.getElementById("hardware-display");
   const hardwareInput = document.getElementById("hardware-input");
+  const hardwareAudio = document.getElementById("hardware-audio");
   const hardwareSaveRestart = document.getElementById("hardware-save-restart");
   const hardwareFeedback = document.getElementById("hardware-feedback");
   const hardwareDirtyBadge = document.getElementById("hardware-dirty-badge");
-  const hardwareRoadmapLists = {
-    audio: document.getElementById("hardware-audio-roadmap")
-  };
   const hardwareModuleRoadmap = document.getElementById("hardware-module-roadmap");
   const hardwareSelectionState = {
     display: {
@@ -1352,32 +1350,25 @@ window.VoxOneRestartWaiter = Object.freeze({
     select.value = selected;
   }
 
-  function renderHardwareRoadmap(list, items) {
-    list.replaceChildren();
+  function renderHardwareAudio(items) {
+    const current = items.find(item => item.current === true);
+    if (!current) throw new Error("Brak aktualnego układu audio w profilu sprzętu");
+    hardwareAudio.replaceChildren();
     for (const item of items) {
-      const row = document.createElement("li");
-      const name = document.createElement("span");
-      name.className = "hardware-roadmap-name";
-      name.textContent = item.label;
-      if (item.current) {
-        const current = document.createElement("span");
-        current.className = "hardware-roadmap-current";
-        current.textContent = "AKTUALNE";
-        name.append(current);
-      }
-      const status = document.createElement("span");
-      status.className = "hardware-roadmap-status";
-      status.dataset.roadmapStatus = item.status;
-      status.textContent = item.statusLabel;
-      row.append(name, status);
-      if (item.note) {
-        const note = document.createElement("span");
-        note.className = "hardware-roadmap-note";
-        note.textContent = item.note;
-        row.append(note);
-      }
-      list.append(row);
+      const option = document.createElement("option");
+      option.value = item.value;
+      option.textContent = item.label;
+      option.disabled = item.current !== true;
+      hardwareAudio.append(option);
     }
+    hardwareAudio.value = current.value;
+    const status = document.getElementById("hardware-audio-status");
+    status.dataset.roadmapStatus = current.status;
+    status.textContent = current.statusLabel;
+    document.getElementById("hardware-audio-current").hidden = false;
+    const note = document.getElementById("hardware-audio-note");
+    note.textContent = current.note || "";
+    note.hidden = !current.note;
   }
 
   function renderHardwareModules(items) {
@@ -1432,8 +1423,7 @@ window.VoxOneRestartWaiter = Object.freeze({
       };
       text("hardware-family", snapshot.family || "—");
       text("hardware-mcu", snapshot.mcu || "—");
-      for (const [key, list] of Object.entries(hardwareRoadmapLists))
-        renderHardwareRoadmap(list, snapshot.roadmap[key]);
+      renderHardwareAudio(snapshot.roadmap.audio);
       renderHardwareModules(snapshot.roadmap.modules);
       hardwareConfigLoaded = true;
       setHardwareFeedback("");

@@ -661,7 +661,9 @@ setTimeout(async () => {
       get('header-version').textContent === 'Wersja 0.8.0-dev' &&
       get('header-profile').textContent === 'Profil L0', 'header version and hardware profile tiles');
     const footer = document.querySelector('.site-footer');
-    check(footer.textContent.trim() === 'VoxOne © 2026 PMW Support: pmw.voxone@gmail.com' &&
+    check(footer.children.length === 2 && footer.children[0].textContent === 'VoxOne © 2026 PMW' &&
+      footer.children[1].textContent === 'Support: pmw.voxone@gmail.com' &&
+      footer.children[1].getAttribute('href') === 'mailto:pmw.voxone@gmail.com' &&
       !get('footer-details') && !get('footer-connection'), 'static support footer without runtime identity');
     const stationTransfer = document.querySelector('.station-transfer-actions');
     check(stationTransfer?.contains(get('station-import')) && stationTransfer.contains(get('station-export')) &&
@@ -825,6 +827,7 @@ setTimeout(async () => {
     await new Promise(resolve => setTimeout(resolve, 0));
     const hardwareDisplay = get('hardware-display');
     const hardwareInput = get('hardware-input');
+    const hardwareAudio = get('hardware-audio');
     check(!get('hardware').hidden, 'SPRZĘT tab visible');
     check(get('hardware-family').textContent === 'M0' && get('hardware-mcu').textContent === 'ESP32-S3',
       'M0 hardware family from descriptor API');
@@ -847,18 +850,23 @@ setTimeout(async () => {
       'planned display remains visible and disabled');
     check(!hardwareInput.querySelector('option[value="buttons3"]').disabled,
       'BUTTONS3 remains selectable');
-    check(get('hardware-audio-roadmap').textContent.includes('PCM5102A') &&
-      get('hardware-audio-roadmap').textContent.includes('MAX98357A') &&
-      get('hardware-audio-roadmap').textContent.includes('PLANOWANE'),
-      'audio roadmap is informational');
+    check([...hardwareAudio.options].map(option => option.value).join(',') ===
+      'pcm5102a,max98357a' &&
+      [...hardwareAudio.options].map(option => option.textContent).join(',') ===
+      'PCM5102A,MAX98357A' && hardwareAudio.value === 'pcm5102a' &&
+      hardwareAudio.disabled && hardwareAudio.querySelector('option[value="max98357a"]').disabled,
+      'audio roadmap is an informational disabled select with API values');
+    check(get('hardware-audio-status').textContent === 'DOSTĘPNE' &&
+      !get('hardware-audio-current').hidden,
+      'audio select preserves current capability status');
     check(get('hardware-module-roadmap').textContent.includes('VoxOneBT') &&
       get('hardware-module-roadmap').textContent.includes('Pomiar baterii') &&
       get('hardware-module-roadmap').textContent.includes('PLANOWANE'),
       'module roadmap is informational');
     const moduleToggles = [...get('hardware-module-roadmap').querySelectorAll('input[type=checkbox]')];
-    check(!get('hardware-audio-roadmap').querySelector('input,button,select,textarea') &&
-      moduleToggles.length === 3 && moduleToggles.every(toggle => toggle.disabled),
-      'audio is informational and module roadmap uses disabled toggles');
+    check(!hardwareAudio.name && moduleToggles.length === 3 &&
+      moduleToggles.every(toggle => toggle.disabled),
+      'audio select is excluded from configuration writes and module roadmap uses disabled toggles');
     check(hardwareDisplay.value === 'ssd1309_128x64' && hardwareInput.value === 'ec11',
       'M0 current SSD1309 and EC11 selections selected');
     check(get('hardware-display-status').textContent === 'DOSTĘPNE' &&
@@ -921,8 +929,8 @@ setTimeout(async () => {
     check(btTestSocket.sent.some(item => item === 'getrssi=1'), 'system RSSI request');
     btTestSocket.onmessage({data:JSON.stringify({ipaddr:'192.168.1.42',
       payload:[{id:'rssi',value:-57}]})});
-    check(document.querySelector('.site-footer').textContent.trim() ===
-      'VoxOne © 2026 PMW Support: pmw.voxone@gmail.com', 'footer ignores runtime IP');
+    check(!document.querySelector('.site-footer').textContent.includes('192.168.1.42'),
+      'footer ignores runtime IP');
     check(get('system-version').textContent === '0.8.0-dev', 'identity firmware fallback');
     check(get('system-build').textContent === '192a400', 'identity build');
     check(get('update-version').textContent === 'VoxOne 0.8.0-dev', 'update firmware');
@@ -1031,8 +1039,8 @@ setTimeout(async () => {
       get('current-station-name').textContent === '—' && get('source').textContent === '—',
       'disconnect clears stale source and metadata');
     check(muteButtons.every(button => button.disabled && button.getAttribute('aria-pressed') === 'false'), 'disconnect clears mute state');
-    check(document.querySelector('.site-footer').textContent.trim() ===
-      'VoxOne © 2026 PMW Support: pmw.voxone@gmail.com', 'footer remains static after disconnect');
+    check(document.querySelector('.site-footer a').getAttribute('href') ===
+      'mailto:pmw.voxone@gmail.com', 'footer remains static after disconnect');
     check(get('network-active-ssid').textContent === '—', 'offline network info cleared');
     const transfer = new DataTransfer();
     transfer.items.add(new File(['image'], 'voxonebt.bin', {type:'application/octet-stream'}));
