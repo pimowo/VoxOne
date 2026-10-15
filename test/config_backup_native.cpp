@@ -370,6 +370,18 @@ int main() {
          Status::Ok);
   assertDataEqual(source, parsed);
 
+  // The signed BALANCE endpoints survive a complete VXCF round-trip.
+  for (int endpoint : {-16, 16}) {
+    Data endpointData = source;
+    endpointData.config.fields.balance = static_cast<int8_t>(endpoint);
+    endpointData.config.crc32 = calculateConfigV7Crc(endpointData.config);
+    const std::vector<uint8_t> endpointBackup = makeBackup(endpointData);
+    Data endpointParsed{};
+    assert(parse(endpointBackup.data(), endpointBackup.size(),
+                 hardwareCapabilities(), endpointParsed) == Status::Ok);
+    assert(endpointParsed.config.fields.balance == endpoint);
+  }
+
   // Canonical serialize -> parse -> serialize loses no persistent semantics.
   std::vector<uint8_t> second(serializedSize(parsed));
   std::size_t written = 0;

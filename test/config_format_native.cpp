@@ -443,6 +443,17 @@ int main() {
   assert(serializeConfigV7(decoded, again, sizeof(again)));
   assert(std::memcmp(bytes, again, sizeof(bytes)) == 0);
 
+  // Both BALANCE endpoints retain their signed value in Config v7.
+  for (int endpoint : {-16, 16}) {
+    config_v7_t endpointConfig = enabled;
+    endpointConfig.fields.balance = static_cast<int8_t>(endpoint);
+    endpointConfig.crc32 = calculateConfigV7Crc(endpointConfig);
+    assert(serializeConfigV7(endpointConfig, again, sizeof(again)));
+    config_v7_t endpointDecoded{};
+    assert(deserializeConfigV7(again, sizeof(again), endpointDecoded));
+    assert(endpointDecoded.fields.balance == endpoint);
+  }
+
   uint8_t corrupted[kConfigV7SerializedSize]{};
   std::memcpy(corrupted, bytes, sizeof(bytes));
   corrupted[4] ^= 1;

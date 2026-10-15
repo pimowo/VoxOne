@@ -14,6 +14,7 @@
 #include "aac_decoder/aac_decoder.h"
 #include "flac_decoder/flac_decoder.h"
 #include "../core/config.h"
+#include "../core/audio_balance.h"
 #include "../core/radio_format_detection.h"
 #include "../core/radio_reconnect_policy.h"
 #include "../core/system_operation_state.h"
@@ -4272,23 +4273,10 @@ uint8_t Audio::getI2sPort() {
 }
 //---------------------------------------------------------------------------------------------------------------------
 int32_t Audio::Gain(int16_t s[2]) {
-    int32_t v[2];
-    float step = (float)m_vol /254;
-    uint8_t l = 0, r = 0;
-
-    if(m_balance < 0){
-        step = step * (float)(abs(m_balance) * 16);
-        l = (uint8_t)(step);
-    }
-    if(m_balance > 0){
-        step = step * m_balance * 16;
-        r = (uint8_t)(step);
-    }
-
-    v[LEFTCHANNEL] = (s[LEFTCHANNEL]  * (m_vol - l)) >> 8;
-    v[RIGHTCHANNEL]= (s[RIGHTCHANNEL] * (m_vol - r)) >> 8;
-
-    return (v[LEFTCHANNEL] << 16) | (v[RIGHTCHANNEL] & 0xffff);
+    const voxone::audio_balance::StereoGain gain =
+        voxone::audio_balance::calculateStereoGain(m_vol, m_balance);
+    return voxone::audio_balance::applyStereoGain(
+        s[LEFTCHANNEL], s[RIGHTCHANNEL], gain);
 }
 //---------------------------------------------------------------------------------------------------------------------
 uint32_t Audio::inBufferFilled() {

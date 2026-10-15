@@ -16,6 +16,7 @@
 #include "web_transport.h"
 #include "update_progress.h"
 #include "ui_state.h"
+#include "audio_balance.h"
 
 #if DSP_MODEL==DSP_DUMMY
 #define DUMMYDISPLAY
@@ -89,7 +90,12 @@ bool CommandHandler::exec(const char *command, const char *value, uint32_t cid) 
   if (strEquals(command, "volm"))     { player.stepVol(false); return true; }
   if (strEquals(command, "volp"))     { player.stepVol(true); return true; }
   if (strEquals(command, "reset") && cid==0)    { config.reset(); return true; }
-  if (strEquals(command, "ballance")) { config.setBalance(atoi(value)); return true; }
+  if (voxone::audio_balance::isBalanceCommand(command)) {
+    int8_t balance;
+    if (!voxone::audio_balance::parseValue(value, balance)) return false;
+    config.setBalance(balance);
+    return true;
+  }
   if (strEquals(command, "playstation") || strEquals(command, "play")){ 
     int id = atoi(value);
     if (id < 1) id = 1;
@@ -195,7 +201,6 @@ bool CommandHandler::exec(const char *command, const char *value, uint32_t cid) 
   if (strEquals(command, "encacc"))  { setEncAcceleration(static_cast<uint16_t>(atoi(value))); return true; }
   if (strEquals(command, "oneclickswitching")){ config.saveValue(&config.store.skipPlaylistUpDown, static_cast<bool>(atoi(value))); return true; }
   
-  if (strEquals(command, "balance")) { config.setBalance(static_cast<uint8_t>(atoi(value))); return true; }
   if (strEquals(command, "reboot"))  { requestSystemRestart(); return true; }
   if (strEquals(command, "boot"))    { requestSystemRestart(); return true; }
   if (strEquals(command, "format"))  { SPIFFS.format(); ESP.restart(); return true; }
