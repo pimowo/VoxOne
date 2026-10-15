@@ -63,7 +63,7 @@ function Invoke-Pio([string]$label,[string[]]$arguments) {
  if(-not (Select-String -LiteralPath $log -Pattern '\[SUCCESS\]' -Quiet)) { throw "No SUCCESS marker: $log" }
  Write-Host "  log: $log"
 }
-$assetNames=@('voxone.html','voxone.css','voxone.js','advanced-audio.js','dsp-client.js','voxone-logo.svg')
+$assetNames=@('voxone.html','voxone.css','voxone.js','advanced-audio.js','dsp-client.js','voxone-logo.svg','voxone-symbol.svg')
 function Get-AssetHashes {
  $hashes=[ordered]@{}
  foreach($name in $assetNames) {
@@ -95,7 +95,7 @@ function Assert-WebAssets {
   if($actual.Length -ne $source.Length) { throw "Asset size mismatch: $name" }
   for($i=0;$i -lt $source.Length;$i++) { if($actual[$i] -ne $source[$i]) { throw "Asset content mismatch: $name" } }
  }
- Write-Host '  six gzip assets match web-src'
+ Write-Host '  seven gzip assets match web-src'
 }
 $nativeSources=@{
  bt_link_native=@('src/core/bt_link_protocol.cpp')

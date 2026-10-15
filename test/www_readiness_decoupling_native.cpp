@@ -21,7 +21,7 @@ bool contains(const std::string& source, const char* token) {
 }  // namespace
 
 int main() {
-  static_assert(voxone::kCurrentWwwAssetCount == 6,
+  static_assert(voxone::kCurrentWwwAssetCount == 7,
                 "Current WWW asset contract changed");
   static_assert(voxone::config_format::kConfigV7SerializedSize == 255,
                 "Config v7 layout changed");

@@ -654,9 +654,12 @@ setTimeout(async () => {
     check(selector.querySelectorAll('button').length === 1 && !sourceButton('bt'), 'target without BT');
     check(!btTestSocket.sent.some(item => /^(webtransport|stop)=/.test(item)), 'source selection sends no transport');
     const icon = document.querySelector('link[rel="icon"]');
-    const headerBrand = document.querySelector('.topbar .brand h1');
-    check(icon?.type === 'image/svg+xml' && headerBrand?.textContent === 'VoxOne' &&
-      !document.querySelector('.topbar .brand img'), 'text VoxOne brand replaces temporary Vn header mark');
+    const headerBrand = document.querySelector('.topbar .brand .brand-logo');
+    const securityBrand = document.querySelector('.security-brand .security-logo');
+    check(icon?.type === 'image/svg+xml' && icon.href.includes('/voxone-symbol.svg?v=') &&
+      headerBrand?.getAttribute('src')?.includes('/voxone-logo.svg?v=') &&
+      headerBrand?.alt === 'VoxOne' && securityBrand?.getAttribute('src')?.includes('/voxone-logo.svg?v=') &&
+      securityBrand?.alt === 'VoxOne', 'official VoxOne logo and symbol favicon');
     check(get('header-version').classList.contains('profile') &&
       get('header-version').textContent === 'Wersja 0.8.0-dev' &&
       get('header-profile').textContent === 'Profil L0', 'header version and hardware profile tiles');
@@ -1196,7 +1199,7 @@ def main():
         "login bootstrap assets must remain public in the prepared policy"
     compressed_assets = (
         "advanced-audio.js", "dsp-client.js", "voxone-logo.svg",
-        "voxone.css", "voxone.html", "voxone.js")
+        "voxone-symbol.svg", "voxone.css", "voxone.html", "voxone.js")
     expected_assets = {
         asset: (ROOT / "web-src" / asset).read_bytes()
         for asset in compressed_assets
@@ -1258,8 +1261,8 @@ def main():
            "window.location.replace('/emergency')" in recovery_html, \
         "embedded recovery login must confirm the cookie session before recovery"
     assert re.search(r'webserver\.on\("/favicon\.ico", HTTP_GET,.*?'
-                     r'request->redirect\("/voxone-logo\.svg"\);', route, re.S), \
-        "favicon.ico must redirect to the existing logo"
+                     r'request->redirect\("/voxone-symbol\.svg"\);', route, re.S), \
+        "favicon.ico must redirect to the official symbol"
     scripts = [
         (ROOT / "web-src" / name).read_text(encoding="utf-8")
         for name in ("advanced-audio.js", "dsp-client.js", "voxone.js")

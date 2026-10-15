@@ -34,6 +34,8 @@ const EndpointCase kEndpoints[] = {
      SecurityRouteClass::PublicBootstrap, false, false},
     {SecurityAccessMethod::Get, "/voxone-logo.svg", SecurityEndpoint::LoginAsset,
      SecurityRouteClass::PublicBootstrap, false, false},
+    {SecurityAccessMethod::Get, "/voxone-symbol.svg", SecurityEndpoint::LoginAsset,
+     SecurityRouteClass::PublicBootstrap, false, false},
     {SecurityAccessMethod::Get, "/favicon.ico", SecurityEndpoint::LoginAsset,
      SecurityRouteClass::PublicBootstrap, false, false},
     {SecurityAccessMethod::Get, "/advanced-audio.js.gz",
@@ -42,6 +44,9 @@ const EndpointCase kEndpoints[] = {
     {SecurityAccessMethod::Get, "/dsp-client.js.gz", SecurityEndpoint::LoginAsset,
      SecurityRouteClass::RejectedDirectCompressedAsset, false, false},
     {SecurityAccessMethod::Get, "/voxone-logo.svg.gz",
+     SecurityEndpoint::LoginAsset,
+     SecurityRouteClass::RejectedDirectCompressedAsset, false, false},
+    {SecurityAccessMethod::Get, "/voxone-symbol.svg.gz",
      SecurityEndpoint::LoginAsset,
      SecurityRouteClass::RejectedDirectCompressedAsset, false, false},
     {SecurityAccessMethod::Get, "/voxone.css.gz", SecurityEndpoint::LoginAsset,
@@ -233,11 +238,11 @@ void testCompleteEndpointInventory() {
     assert(std::strcmp(securityEndpointName(actual.endpoint), "unknown") != 0);
     assert(std::strcmp(securityRouteClassName(actual.routeClass), "unknown") != 0);
   }
-  assert(sizeof(kEndpoints) / sizeof(kEndpoints[0]) == 47);
+  assert(sizeof(kEndpoints) / sizeof(kEndpoints[0]) == 49);
 
   size_t ruleCount = 0;
   const SecurityRouteRule* rules = securityAccessRouteRules(ruleCount);
-  assert(rules != nullptr && ruleCount == 47);
+  assert(rules != nullptr && ruleCount == 49);
   for (size_t index = 0; index < ruleCount; ++index) {
     const SecurityRouteRule& rule = rules[index];
     assert(rule.path && rule.path[0] == '/');
@@ -301,11 +306,11 @@ void testHostOriginAndCsrfMatrix() {
 void testDirectCompressedAssetsAndCanonicalFallback() {
   const char* canonicalAssets[] = {
       "/advanced-audio.js", "/dsp-client.js", "/voxone-logo.svg",
-      "/voxone.css", "/voxone.html", "/voxone.js"};
+      "/voxone-symbol.svg", "/voxone.css", "/voxone.html", "/voxone.js"};
   const char* directCompressedAssets[] = {
       "/advanced-audio.js.gz", "/dsp-client.js.gz",
-      "/voxone-logo.svg.gz", "/voxone.css.gz", "/voxone.html.gz",
-      "/voxone.js.gz"};
+      "/voxone-logo.svg.gz", "/voxone-symbol.svg.gz", "/voxone.css.gz",
+      "/voxone.html.gz", "/voxone.js.gz"};
 
   for (size_t index = 0;
        index < sizeof(canonicalAssets) / sizeof(canonicalAssets[0]); ++index) {

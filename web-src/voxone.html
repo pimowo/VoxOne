@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="theme-color" content="#09111a">
   <title>VoxOne — Status</title>
-  <link rel="icon" type="image/svg+xml" href="/voxone-logo.svg?v={voxone-logo.svg-hash}">
+  <link rel="icon" type="image/svg+xml" href="/voxone-symbol.svg?v={voxone-symbol.svg-hash}">
   <link rel="stylesheet" href="/voxone.css?v={voxone.css-hash}">
   <script src="/variables.js"></script>
   <script src="/advanced-audio.js?v={advanced-audio.js-hash}" defer></script>
@@ -17,8 +17,8 @@
   <section id="security-gate" class="security-gate" aria-labelledby="security-title" hidden>
     <article class="security-card">
       <div class="security-brand">
-        <img src="/voxone-logo.svg?v={voxone-logo.svg-hash}" alt="" width="56" height="56">
-        <div><p class="eyebrow">DOSTĘP DO PANELU</p><h1 id="security-title">VoxOne</h1></div>
+        <img class="security-logo" src="/voxone-logo.svg?v={voxone-logo.svg-hash}" alt="VoxOne" width="207" height="50">
+        <div><p class="eyebrow">DOSTĘP DO PANELU</p><h1 id="security-title" class="sr-only">VoxOne</h1></div>
       </div>
 
       <div id="security-loading" class="security-view">
@@ -74,7 +74,7 @@
   <div id="app-shell" class="shell">
     <header class="topbar">
       <div class="brand">
-        <div><p class="eyebrow">RADIO INTERNETOWE</p><h1>VoxOne</h1></div>
+        <div><p class="eyebrow">RADIO INTERNETOWE</p><img class="brand-logo" src="/voxone-logo.svg?v={voxone-logo.svg-hash}" alt="VoxOne" width="207" height="50"></div>
       </div>
       <div class="identity"><div class="identity-badges"><span id="header-version" class="profile">Wersja —</span><span id="header-profile" class="profile">Profil —</span></div><button id="security-logout" class="security-logout" type="button" hidden>Wyloguj</button></div>
     </header>
