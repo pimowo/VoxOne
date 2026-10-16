@@ -23,6 +23,7 @@
 #include "core/dsp_runtime.h"
 #include "core/ui_state.h"
 #include "core/ota_boot_runtime.h"
+#include "core/security_recovery_key_runtime.h"
 #include "hardware/runtime_hardware_config.h"
 #include "displays/display_backend_selection.h"
 #include <esp_heap_caps.h>
@@ -167,6 +168,16 @@ void setupOTA(){
 void setup() {
   Serial.begin(115200);
   voxone::ota::beginBootHealthMonitor();
+  const auto recoveryKeyState =
+      voxone::security_recovery::detectBootKeyGesture();
+  if (recoveryKeyState ==
+      voxone::security_recovery::KeyState::Accepted) {
+    Serial.println("##[BOOT]# SECURITY recovery KEY gesture accepted "
+                   "(diagnostic only)");
+  } else if (recoveryKeyState ==
+             voxone::security_recovery::KeyState::StuckLow) {
+    Serial.println("##[WARN]# SECURITY recovery KEY stuck LOW; request ignored");
+  }
   const auto restoreRecovery = voxone::config_restore::recoverAtBoot();
   if (restoreRecovery == voxone::config_restore::BootRecoveryStatus::Failed) {
     Serial.println("##[ERROR]# Config restore recovery failed; boot halted");

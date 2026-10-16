@@ -9,6 +9,7 @@
 #include "ui_input.h"
 #include "ui_state.h"
 #include "local_input_backend.h"
+#include "security_recovery_key_runtime.h"
 #include "../hardware/hardware_descriptor.h"
 #include "../hardware/runtime_hardware_config.h"
 #include "../OneButton/OneButton.h"
@@ -160,13 +161,15 @@ void loopControls() {
 #if ENC_BTNL!=255
   if (activeLocalInput.ec11) {
     encoder1Loop();
-    localInputButtons[2].tick();
+    if (voxone::security_recovery::runtimeKeyInputReady())
+      localInputButtons[2].tick();
   }
 #endif
   if (activeLocalInput.buttons3) {
     localInputButtons[0].tick();
     localInputButtons[1].tick();
-    localInputButtons[2].tick();
+    if (voxone::security_recovery::runtimeKeyInputReady())
+      localInputButtons[2].tick();
   }
 #if ISPUSHBUTTONS
   for (unsigned i = 0; i < nrOfButtons; i++)
