@@ -449,7 +449,7 @@ void MyNetwork::raiseSoftAP() {
     if (firstBootSetup) {
       BOOTLOG("Connect to open AP %s", apSsid);
     } else {
-      BOOTLOG("Connect to AP %s with password %s", apSsid, apPassword);
+      BOOTLOG("Connect to protected AP %s", apSsid);
     }
     BOOTLOG("and go to http://%s/ to configure", apIp.c_str());
   }
