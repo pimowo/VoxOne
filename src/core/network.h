@@ -1,6 +1,7 @@
 #ifndef network_h
 #define network_h
 #include <WiFi.h>
+#include "first_boot_runtime_snapshot.h"
 #include "network_ready_state.h"
 #include "wifi_reassoc_policy.h"
 
@@ -20,7 +21,11 @@ class MyNetwork {
     void setWifiParams();
     bool wifiBegin(bool silent=false);
     bool ready() const { return readyState.ready(); }
+    voxone::first_boot::RuntimeSnapshot presentationSnapshot() const {
+      return presentationState.read();
+    }
   private:
+    voxone::first_boot::RuntimeSnapshotStore presentationState;
     voxone::network::NetworkReadyState readyState;
     voxone::wifi::ReassocPolicy reassocPolicy;
     portMUX_TYPE reassocMux = portMUX_INITIALIZER_UNLOCKED;

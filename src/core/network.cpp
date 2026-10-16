@@ -155,6 +155,8 @@ void MyNetwork::WiFiReconnected(WiFiEvent_t event, WiFiEventInfo_t info){
   if (!readyCandidate) {
     network.readyState.disconnected();
     network.status = DISCONNECTED;
+    network.presentationState.recordDisconnect(
+        voxone::first_boot::RuntimeInvalidIpv4Readiness);
     if (network.runtimeCallbacksEnabled)
       network.armWifiReassociation(millis());
     Serial.println("##[WIFI-READY]# GOT_IP rejected: IPv4/netif mismatch");
@@ -162,6 +164,7 @@ void MyNetwork::WiFiReconnected(WiFiEvent_t event, WiFiEventInfo_t info){
   }
   network.readyState.gotIp(evidence);
   network.status = CONNECTED;
+  network.presentationState.connected();
   network.resetWifiReassociation();
   if (!network.runtimeCallbacksEnabled) {
     Serial.println("##[WIFI-READY]# ready=1");
@@ -201,6 +204,8 @@ void MyNetwork::WiFiReconnected(WiFiEvent_t event, WiFiEventInfo_t info){
 void MyNetwork::WiFiLostConnection(WiFiEvent_t event, WiFiEventInfo_t info){
   network.readyState.disconnected();
   network.status = DISCONNECTED;
+  network.presentationState.recordDisconnect(
+      static_cast<int>(info.wifi_sta_disconnected.reason));
   logWifiEvent(event, info);
   Serial.println("##[WIFI-READY]# ready=0");
   if (!network.runtimeCallbacksEnabled) return;
@@ -271,6 +276,7 @@ void MyNetwork::loop() {
   portEXIT_CRITICAL(&reassocMux);
 
   if (!reconnect) return;
+  presentationState.beginStaAttempt();
   const bool requested = WiFi.reconnect();
   Serial.printf(
       "##[WIFI-REASSOC]# t=%lu attempt=%u request=%s nextDelay=%lu ms "
@@ -296,6 +302,7 @@ bool MyNetwork::wifiBegin(bool silent){
     //delay(100);
     WiFi.mode(WIFI_STA);
     if(strlen(config.store.mdnsname)>0) WiFi.setHostname(config.store.mdnsname);
+    presentationState.beginStaAttempt();
     WiFi.begin(config.ssids[ls].ssid, config.ssids[ls].password);
     while (WiFi.status() != WL_CONNECTED) {
       if(!silent) Serial.print(".");
@@ -303,6 +310,7 @@ bool MyNetwork::wifiBegin(bool silent){
       if(REAL_LEDBUILTIN!=255 && !silent) digitalWrite(REAL_LEDBUILTIN, !digitalRead(REAL_LEDBUILTIN));
       errcnt++;
       if (errcnt > WIFI_ATTEMPTS) {
+        presentationState.recordTimeout();
         errcnt = 0;
         ls++;
         if (ls > config.ssidsCount - 1) ls = 0;
@@ -341,6 +349,7 @@ void MyNetwork::begin() {
   }
 #endif
   const bool wifiInventoryReady = config.initNetwork();
+  presentationState.initialize(config.ssidsCount);
   const auto security = voxone::security::initializeDeviceSecurity(
       config.ssidsCount > 0);
   (void)voxone::security::deviceSecuritySessionService();
@@ -351,6 +360,7 @@ void MyNetwork::begin() {
       security.wifiConfigured ? 1U : 0U);
   if (!wifiInventoryReady) {
     status = FAILED;
+    presentationState.inventoryInvalid();
     Serial.println("##[ERROR]# Wi-Fi startup blocked: invalid configuration");
     return;
   }
@@ -436,6 +446,12 @@ void MyNetwork::raiseSoftAP() {
       (firstBootSetup ? WiFi.softAP(apSsid) :
                         WiFi.softAP(apSsid, apPassword));
   status = apReady ? SOFT_AP : FAILED;
+  if (apReady) {
+    const String apIp = WiFi.softAPIP().toString();
+    presentationState.activateAp(apSsid, apIp.c_str(), true);
+  } else {
+    presentationState.activateAp(nullptr, nullptr, false);
+  }
 
   Serial.println("##[BOOT]#");
   BOOTLOG("************************************************");
