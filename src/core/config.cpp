@@ -25,6 +25,7 @@
 #include "www_readiness.h"
 #include "ap_wifi_recovery.h"
 #include "wifi_config_atomic.h"
+#include "wifi_config_parser.h"
 #include "../displays/tools/l10n.h"
 #include <algorithm>
 #include <cstddef>
@@ -88,6 +89,22 @@ class WifiConfigSpiffsStorage {
     }
     file.close();
     return true;
+  }
+  bool validBytes(const uint8_t* bytes, size_t size) const {
+    return voxone::wifi_config::validSerializedConfig(bytes, size);
+  }
+  bool valid(const char* path) const {
+    File file = SPIFFS.open(path, "r");
+    if (!file || file.isDirectory() ||
+        file.size() > voxone::wifi_config::kMaxFileBytes) {
+      file.close();
+      return false;
+    }
+    uint8_t bytes[voxone::wifi_config::kMaxFileBytes];
+    const size_t size = file.size();
+    const bool read = !size || file.read(bytes, size) == size;
+    file.close();
+    return read && validBytes(bytes, size);
   }
 };
 
@@ -821,15 +838,14 @@ bool Config::parseJSON(const char* line, char* name, char* url, int &ovol) {
 }
 
 bool Config::parseSsid(const char* line, char* ssid, char* pass) {
-  char *tmpe;
-  tmpe = strstr(line, "\t");
-  if (tmpe == NULL) return false;
-  uint16_t pos = tmpe - line;
-  if (pos > 29 || strlen(line) > 71) return false;
-  memset(ssid, 0, 30);
-  strlcpy(ssid, line, pos + 1);
-  memset(pass, 0, 40);
-  strlcpy(pass, line + pos + 1, strlen(line) - pos);
+  if (!line || !ssid || !pass) return false;
+  voxone::wifi_config::Profile parsed{};
+  if (voxone::wifi_config::parseRecord(
+          reinterpret_cast<const uint8_t*>(line), strlen(line), parsed) !=
+      voxone::wifi_config::ParseStatus::Ok)
+    return false;
+  memcpy(ssid, parsed.ssid, sizeof(parsed.ssid));
+  memcpy(pass, parsed.password, sizeof(parsed.password));
   return true;
 }
 
@@ -838,7 +854,7 @@ bool Config::saveWifiCredentials(const char* ssid, const char* password) {
   const size_t ssidLength = strlen(ssid);
   const size_t passwordLength = strlen(password);
   const size_t recordSize = ssidLength + 1 + passwordLength + 1;
-  uint8_t record[72];
+  uint8_t record[voxone::wifi_config::kMaxRecordBytes];
   if (recordSize > sizeof(record)) return false;
   memcpy(record, ssid, ssidLength);
   record[ssidLength] = '\t';
@@ -858,21 +874,43 @@ void Config::setTimeConf(){
 }
 
 bool Config::initNetwork() {
+  memset(ssids, 0, sizeof(ssids));
+  ssidsCount = 0;
+  if (!wifiConfigReady) return false;
+  if (!SPIFFS.exists(SSIDS_PATH)) {
+    Serial.println("##[WIFI-CONFIG]# status=missing profiles=0");
+    return true;
+  }
   File file = SPIFFS.open(SSIDS_PATH, "r");
-  if (!file || file.isDirectory()) {
+  if (!file || file.isDirectory() ||
+      file.size() > voxone::wifi_config::kMaxFileBytes) {
+    file.close();
+    wifiConfigReady = false;
+    Serial.println("##[ERROR]# Wi-Fi config read failed status=file_error");
     return false;
   }
-  char ssidval[30], passval[40];
-  uint8_t c = 0;
-  while (file.available()) {
-    if (parseSsid(file.readStringUntil('\n').c_str(), ssidval, passval)) {
-      strlcpy(ssids[c].ssid, ssidval, 30);
-      strlcpy(ssids[c].password, passval, 40);
-      ssidsCount++;
-      c++;
-    }
+  uint8_t bytes[voxone::wifi_config::kMaxFileBytes];
+  const size_t size = file.size();
+  if (size && file.read(bytes, size) != size) {
+    file.close();
+    wifiConfigReady = false;
+    Serial.println("##[ERROR]# Wi-Fi config read failed status=io_error");
+    return false;
   }
   file.close();
+  const auto parsed = voxone::wifi_config::parseFile(
+      bytes, size, ssids, voxone::wifi_config::kMaxProfiles);
+  if (!parsed.valid()) {
+    wifiConfigReady = false;
+    Serial.printf("##[ERROR]# Wi-Fi config invalid status=%s record=%u\n",
+                  voxone::wifi_config::parseStatusName(parsed.status),
+                  static_cast<unsigned>(parsed.recordNumber));
+    return false;
+  }
+  ssidsCount = static_cast<uint8_t>(parsed.profileCount);
+  Serial.printf("##[WIFI-CONFIG]# status=%s profiles=%u\n",
+                voxone::wifi_config::parseStatusName(parsed.status),
+                static_cast<unsigned>(ssidsCount));
   return true;
 }
 

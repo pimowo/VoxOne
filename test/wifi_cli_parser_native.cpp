@@ -1,5 +1,6 @@
 #include "../src/core/wifi_cli_parser.h"
 #include "../src/core/wifi_config_atomic.h"
+#include "../src/core/wifi_config_parser.h"
 
 #include <cassert>
 #include <cstdint>
@@ -34,6 +35,15 @@ struct FakeStorage {
     const auto found = files.find(path);
     return found != files.end() && found->second.size() == size &&
            std::memcmp(found->second.data(), bytes, size) == 0;
+  }
+  bool validBytes(const uint8_t* bytes, std::size_t size) const {
+    return voxone::wifi_config::validSerializedConfig(bytes, size);
+  }
+  bool valid(const char* path) const {
+    const auto found = files.find(path);
+    return found != files.end() && validBytes(
+        reinterpret_cast<const uint8_t*>(found->second.data()),
+        found->second.size());
   }
 };
 
@@ -78,6 +88,9 @@ int main() {
          ParseStatus::Invalid);
   assert(parse("wifi.con(\"Home\",\"secret123\") trailing", ssid,
                password) == ParseStatus::Invalid);
+  const char invalidUtf8[] =
+      "wifi.con(\"Home\",\"\xc3\x28\")";
+  assert(parse(invalidUtf8, ssid, password) == ParseStatus::Invalid);
   assert(parse("wifi.con(Home,secret123)", ssid, password) ==
          ParseStatus::NotQuotedCommand);
 

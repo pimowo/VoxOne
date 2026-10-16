@@ -6,6 +6,7 @@
 #include <SPIFFS.h>
 #include <EEPROM.h>
 #include "config_persistence.h"
+#include "wifi_config_parser.h"
 #include <freertos/semphr.h>
 #include "../displays/widgets/widgetsconfig.h" //BitrateFormat
 
@@ -134,11 +135,7 @@ struct station_t
   int  ovol;
 };
 
-struct neworkItem
-{
-  char ssid[30];
-  char password[40];
-};
+using neworkItem = voxone::wifi_config::Profile;
 
 class Config {
   public:
@@ -148,7 +145,7 @@ class Config {
     station_t station;
     theme_t   theme;
     BitrateFormat configFmt = BF_UNKNOWN;
-    neworkItem ssids[5];
+    neworkItem ssids[voxone::wifi_config::kMaxProfiles];
     uint8_t ssidsCount;
     uint16_t sleepfor;
     bool     spiffsMounted;

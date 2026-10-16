@@ -139,7 +139,7 @@ void testProductionStartupOrderAndIsolation() {
   assert(configInit != std::string::npos && networkBegin != std::string::npos);
   assert(configInit < networkBegin);
 
-  const size_t wifiInventory = networkSource.find("config.initNetwork();");
+  const size_t wifiInventory = networkSource.find("config.initNetwork()");
   const size_t securityInit =
       networkSource.find("initializeDeviceSecurity(");
   const size_t sessionInit =

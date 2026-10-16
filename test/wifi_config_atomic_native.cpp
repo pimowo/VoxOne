@@ -1,4 +1,5 @@
 #include "../src/core/wifi_config_atomic.h"
+#include "../src/core/wifi_config_parser.h"
 
 #include <cassert>
 #include <cstdint>
@@ -37,6 +38,15 @@ struct FakeStorage {
     const auto found = files.find(path);
     return found != files.end() && found->second.size() == size &&
            std::memcmp(found->second.data(), bytes, size) == 0;
+  }
+  bool validBytes(const uint8_t* bytes, std::size_t size) const {
+    return voxone::wifi_config::validSerializedConfig(bytes, size);
+  }
+  bool valid(const char* path) const {
+    const auto found = files.find(path);
+    return found != files.end() && validBytes(
+        reinterpret_cast<const uint8_t*>(found->second.data()),
+        found->second.size());
   }
 };
 
@@ -128,6 +138,60 @@ int main() {
     FakeStorage storage;
     storage.files[kActivePath] = newRecord;
     storage.files[kRollbackPath] = oldRecord;
+    assert(recover(storage));
+    assert(storage.files[kActivePath] == newRecord);
+    assertClean(storage);
+  }
+
+  // A corrupt candidate is rejected before touching the active generation.
+  {
+    FakeStorage storage;
+    storage.files[kActivePath] = oldRecord;
+    const std::string invalidRecord = "missing-separator\n";
+    assert(!replaceText(storage, invalidRecord));
+    assert(storage.files[kActivePath] == oldRecord);
+    assertClean(storage);
+  }
+
+  // A partial temporary file is never promoted, with or without ACTIVE.
+  {
+    FakeStorage storage;
+    storage.files[kActivePath] = oldRecord;
+    storage.files[kTemporaryPath] = "partial";
+    assert(recover(storage));
+    assert(storage.files[kActivePath] == oldRecord);
+    assertClean(storage);
+  }
+  {
+    FakeStorage storage;
+    storage.files[kTemporaryPath] = "partial";
+    assert(recover(storage));
+    assert(!storage.exists(kActivePath));
+    assertClean(storage);
+  }
+
+  // A valid rollback replaces a corrupt ACTIVE generation.
+  {
+    FakeStorage storage;
+    storage.files[kActivePath] = "broken";
+    storage.files[kRollbackPath] = oldRecord;
+    assert(recover(storage));
+    assert(storage.files[kActivePath] == oldRecord);
+    assertClean(storage);
+  }
+
+  // A corrupt rollback cannot become ACTIVE. A valid ACTIVE still wins.
+  {
+    FakeStorage storage;
+    storage.files[kRollbackPath] = "broken";
+    assert(!recover(storage));
+    assert(!storage.exists(kActivePath));
+    assert(storage.files[kRollbackPath] == "broken");
+  }
+  {
+    FakeStorage storage;
+    storage.files[kActivePath] = newRecord;
+    storage.files[kRollbackPath] = "broken";
     assert(recover(storage));
     assert(storage.files[kActivePath] == newRecord);
     assertClean(storage);

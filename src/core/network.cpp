@@ -340,7 +340,7 @@ void MyNetwork::begin() {
     }
   }
 #endif
-  config.initNetwork();
+  const bool wifiInventoryReady = config.initNetwork();
   const auto security = voxone::security::initializeDeviceSecurity(
       config.ssidsCount > 0);
   (void)voxone::security::deviceSecuritySessionService();
@@ -349,6 +349,11 @@ void MyNetwork::begin() {
       voxone::security::securityStateName(security.state),
       voxone::security::securityLoadStatusName(security.loadStatus),
       security.wifiConfigured ? 1U : 0U);
+  if (!wifiInventoryReady) {
+    status = FAILED;
+    Serial.println("##[ERROR]# Wi-Fi startup blocked: invalid configuration");
+    return;
+  }
   setWifiParams();
   if (config.ssidsCount == 0 || DBGAP) {
     raiseSoftAP();

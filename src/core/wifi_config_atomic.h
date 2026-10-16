@@ -13,14 +13,27 @@ constexpr char kRollbackPath[] = "/data/wifi.csv.old";
 
 template <typename Storage>
 bool recover(Storage& storage) {
+  bool recovered = true;
+  const bool activeExists = storage.exists(kActivePath);
+  const bool activeValid = !activeExists || storage.valid(kActivePath);
   if (storage.exists(kRollbackPath)) {
-    if (storage.exists(kActivePath)) {
+    const bool rollbackValid = storage.valid(kRollbackPath);
+    if (activeExists && activeValid) {
       if (!storage.remove(kRollbackPath)) return false;
-    } else if (!storage.rename(kRollbackPath, kActivePath)) {
-      return false;
+    } else if (rollbackValid) {
+      if (activeExists && !storage.remove(kActivePath)) return false;
+      if (!storage.rename(kRollbackPath, kActivePath) ||
+          !storage.valid(kActivePath))
+        return false;
+    } else {
+      recovered = false;
     }
+  } else if (activeExists && !activeValid) {
+    recovered = false;
   }
-  return !storage.exists(kTemporaryPath) || storage.remove(kTemporaryPath);
+  if (storage.exists(kTemporaryPath) && !storage.remove(kTemporaryPath))
+    return false;
+  return recovered;
 }
 
 template <typename Storage>
@@ -29,14 +42,18 @@ bool restoreOld(Storage& storage, bool hadActive) {
     return !storage.exists(kActivePath) || storage.remove(kActivePath);
   if (!storage.exists(kRollbackPath)) return false;
   if (storage.exists(kActivePath) && !storage.remove(kActivePath)) return false;
-  return storage.rename(kRollbackPath, kActivePath);
+  return storage.rename(kRollbackPath, kActivePath) &&
+         storage.valid(kActivePath);
 }
 
 template <typename Storage>
 bool replace(Storage& storage, const uint8_t* bytes, std::size_t size) {
-  if ((!bytes && size) || !recover(storage)) return false;
+  if ((!bytes && size) || !storage.validBytes(bytes, size) ||
+      !recover(storage))
+    return false;
   if (!storage.write(kTemporaryPath, bytes, size) ||
-      !storage.matches(kTemporaryPath, bytes, size)) {
+      !storage.matches(kTemporaryPath, bytes, size) ||
+      !storage.valid(kTemporaryPath)) {
     if (storage.exists(kTemporaryPath)) storage.remove(kTemporaryPath);
     return false;
   }
@@ -51,7 +68,8 @@ bool replace(Storage& storage, const uint8_t* bytes, std::size_t size) {
     if (storage.exists(kTemporaryPath)) storage.remove(kTemporaryPath);
     return false;
   }
-  if (!storage.matches(kActivePath, bytes, size)) {
+  if (!storage.matches(kActivePath, bytes, size) ||
+      !storage.valid(kActivePath)) {
     restoreOld(storage, hadActive);
     return false;
   }
