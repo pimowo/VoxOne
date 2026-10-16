@@ -9,6 +9,20 @@
 namespace voxone {
 namespace ota {
 
+enum class RunningImageState : uint8_t {
+  Valid,
+  PendingVerify,
+  Invalid,
+  Aborted,
+  Unknown,
+};
+
+struct RunningImageSnapshot {
+  bool readable;
+  RunningImageState state;
+  bool pending;
+};
+
 // Starts read-only inspection of otadata and, only for PENDING_VERIFY, a
 // health monitor. Call at the beginning of setup(), before fallible recovery.
 void beginBootHealthMonitor();
@@ -35,6 +49,10 @@ void reportHttpApiProbe();
 
 // /api/ready uses this to avoid reporting a PENDING_VERIFY image as ready.
 bool bootHealthReady();
+
+// Read-only view of the state already inspected by beginBootHealthMonitor().
+// SECURITY Recovery uses it only as a fail-closed eligibility input.
+RunningImageSnapshot runningImageSnapshot();
 
 // A bounded, non-secret JSON object for read-only HTTP/UART diagnostics.
 // Returns false if the supplied buffer is too small.

@@ -682,6 +682,14 @@ class ProductionBackend : public Backend {
 
 }  // namespace
 
+BootRecoveryInspection inspectBootRecovery() {
+  Phase phase = Phase::Prepared;
+  const MarkerStatus marker = readMarkerRecord(phase);
+  if (marker == MarkerStatus::None) return BootRecoveryInspection::NotPending;
+  if (marker == MarkerStatus::Pending) return BootRecoveryInspection::Pending;
+  return BootRecoveryInspection::Error;
+}
+
 BootRecoveryStatus recoverAtBoot() {
   Phase phase = Phase::Prepared;
   const MarkerStatus marker = readMarkerRecord(phase);

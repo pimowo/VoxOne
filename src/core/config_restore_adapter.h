@@ -10,6 +10,7 @@ namespace voxone {
 namespace config_restore {
 
 enum class BootRecoveryStatus : uint8_t { NotPending, Recovered, Failed };
+enum class BootRecoveryInspection : uint8_t { NotPending, Pending, Error };
 
 enum class BackupStage : uint8_t {
   None,
@@ -33,6 +34,7 @@ enum class BackupStage : uint8_t {
 const char* backupStageName(BackupStage stage);
 
 BootRecoveryStatus recoverAtBoot();
+BootRecoveryInspection inspectBootRecovery();
 void cleanupStaleAfterStorageInit();
 
 class ProductionBackupStream {

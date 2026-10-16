@@ -129,6 +129,7 @@ $nativeSources=@{
  security_api_native=@('src/core/security_settings.cpp','src/core/security_session.cpp','src/core/security_api.cpp')
  security_runtime_native=@('src/core/security_settings.cpp','src/core/security_runtime.cpp')
  security_recovery_key_native=@('src/core/security_recovery_key.cpp','src/hardware/hardware_descriptor.cpp','src/hardware/runtime_hardware_config.cpp')
+ security_recovery_state_native=@('src/core/security_recovery_state.cpp','src/core/security_recovery_key.cpp','src/hardware/hardware_descriptor.cpp')
  security_session_native=@('src/core/security_settings.cpp','src/core/security_session.cpp')
  station_directory_native=@('src/core/station_directory_format.cpp')
  volume_limits_native=@('src/core/volume_map.cpp')
@@ -145,7 +146,7 @@ Invoke-Step 'Native tests' {
   $name=$test.BaseName
   $sources=@($test.FullName)
   if($nativeSources.ContainsKey($name)) { $sources+=@($nativeSources[$name] | ForEach-Object { Join-Path $root $_ }) }
-  $variants=if($name -eq 'config_backup_native' -or $name -eq 'hardware_descriptor_native' -or $name -eq 'runtime_hardware_config_native' -or $name -eq 'runtime_hardware_web_native' -or $name -eq 'runtime_display_activation_native' -or $name -eq 'security_recovery_key_native') { @('L0','M0','S0','DIN0','W0') } elseif($name -eq 'build_identity_native') { @('','L0','M0','S0','DIN0','W0','CLEAN','DIRTY') } else { @('') }
+  $variants=if($name -eq 'config_backup_native' -or $name -eq 'hardware_descriptor_native' -or $name -eq 'runtime_hardware_config_native' -or $name -eq 'runtime_hardware_web_native' -or $name -eq 'runtime_display_activation_native' -or $name -eq 'security_recovery_key_native' -or $name -eq 'security_recovery_state_native') { @('L0','M0','S0','DIN0','W0') } elseif($name -eq 'build_identity_native') { @('','L0','M0','S0','DIN0','W0','CLEAN','DIRTY') } else { @('') }
   foreach($variant in $variants) {
    $label=if($variant) { "$name-$variant" } else { $name }
    $exe=Join-Path $work ($label+$(if($onWindows) { '.exe' } else { '' }))
@@ -251,6 +252,15 @@ if(-not $onWindows) {
   if($LASTEXITCODE -ne 0) { throw 'Sanitized security recovery KEY compile failed' }
   & $securityRecoveryKeyExe
   if($LASTEXITCODE -ne 0) { throw 'Sanitized security recovery KEY test failed' }
+  $securityRecoveryStateExe=Join-Path $work 'security_recovery_state_sanitized'
+  & $Cxx @sanitizerArgs '-DVOXONE_PROFILE_M0=1' '-o' $securityRecoveryStateExe `
+    (Join-Path $root 'test/security_recovery_state_native.cpp') `
+    (Join-Path $root 'src/core/security_recovery_state.cpp') `
+    (Join-Path $root 'src/core/security_recovery_key.cpp') `
+    (Join-Path $root 'src/hardware/hardware_descriptor.cpp')
+  if($LASTEXITCODE -ne 0) { throw 'Sanitized security recovery state compile failed' }
+  & $securityRecoveryStateExe
+  if($LASTEXITCODE -ne 0) { throw 'Sanitized security recovery state test failed' }
   $securitySessionExe=Join-Path $work 'security_session_sanitized'
   & $Cxx @sanitizerArgs '-o' $securitySessionExe `
     (Join-Path $root 'test/security_session_native.cpp') `

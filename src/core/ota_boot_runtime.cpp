@@ -255,6 +255,28 @@ bool bootHealthReady() {
       static_cast<Phase>(publishedPhase.load()));
 }
 
+RunningImageSnapshot runningImageSnapshot() {
+  RunningImageState state = RunningImageState::Unknown;
+  switch (static_cast<esp_ota_img_states_t>(imageState.load())) {
+    case ESP_OTA_IMG_VALID:
+      state = RunningImageState::Valid;
+      break;
+    case ESP_OTA_IMG_PENDING_VERIFY:
+      state = RunningImageState::PendingVerify;
+      break;
+    case ESP_OTA_IMG_INVALID:
+      state = RunningImageState::Invalid;
+      break;
+    case ESP_OTA_IMG_ABORTED:
+      state = RunningImageState::Aborted;
+      break;
+    case ESP_OTA_IMG_NEW:
+    case ESP_OTA_IMG_UNDEFINED:
+      break;
+  }
+  return {stateReadOk.load(), state, pendingImage.load()};
+}
+
 bool formatBootHealthJson(char* output, size_t capacity) {
   if (!output || !capacity) return false;
   const Phase phase = static_cast<Phase>(publishedPhase.load());
