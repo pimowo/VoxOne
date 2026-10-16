@@ -5,7 +5,7 @@
 #include <string.h>
 
 enum class UpdateTarget : uint8_t {
-  None, VoxOneFirmware, Filesystem, VoxOneBtFirmware
+  None, VoxOneFirmware, Filesystem, VoxOneBtFirmware, SecurityRecovery
 };
 
 enum class UpdatePhase : uint8_t {

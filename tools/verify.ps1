@@ -132,6 +132,7 @@ $nativeSources=@{
  security_recovery_confirmation_native=@('src/core/security_recovery_confirmation.cpp')
  security_recovery_key_native=@('src/core/security_recovery_key.cpp','src/hardware/hardware_descriptor.cpp','src/hardware/runtime_hardware_config.cpp')
  security_recovery_pin_native=@('src/core/security_recovery_pin.cpp','src/core/security_settings.cpp')
+ security_recovery_transaction_native=@('src/core/security_recovery_transaction.cpp','src/core/security_settings.cpp')
  security_recovery_session_native=@('src/core/security_recovery_session.cpp','src/core/security_recovery_state.cpp','src/core/security_recovery_key.cpp','src/hardware/hardware_descriptor.cpp')
  security_recovery_state_native=@('src/core/security_recovery_state.cpp','src/core/security_recovery_key.cpp','src/hardware/hardware_descriptor.cpp')
  security_session_native=@('src/core/security_settings.cpp','src/core/security_session.cpp')
@@ -271,6 +272,14 @@ if(-not $onWindows) {
   if($LASTEXITCODE -ne 0) { throw 'Sanitized security recovery PIN compile failed' }
   & $securityRecoveryPinExe
   if($LASTEXITCODE -ne 0) { throw 'Sanitized security recovery PIN test failed' }
+  $securityRecoveryTransactionExe=Join-Path $work 'security_recovery_transaction_sanitized'
+  & $Cxx @sanitizerArgs '-o' $securityRecoveryTransactionExe `
+    (Join-Path $root 'test/security_recovery_transaction_native.cpp') `
+    (Join-Path $root 'src/core/security_recovery_transaction.cpp') `
+    (Join-Path $root 'src/core/security_settings.cpp')
+  if($LASTEXITCODE -ne 0) { throw 'Sanitized security recovery transaction compile failed' }
+  & $securityRecoveryTransactionExe
+  if($LASTEXITCODE -ne 0) { throw 'Sanitized security recovery transaction test failed' }
   $securityRecoveryStateExe=Join-Path $work 'security_recovery_state_sanitized'
   & $Cxx @sanitizerArgs '-DVOXONE_PROFILE_M0=1' '-o' $securityRecoveryStateExe `
     (Join-Path $root 'test/security_recovery_state_native.cpp') `

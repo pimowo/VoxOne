@@ -8,6 +8,7 @@ inline const char* updateTargetDisplayName(UpdateTarget target) {
     case UpdateTarget::VoxOneFirmware: return "VoxOne Firmware";
     case UpdateTarget::Filesystem: return "VoxOne system plików";
     case UpdateTarget::VoxOneBtFirmware: return "VoxOneBT Firmware";
+    case UpdateTarget::SecurityRecovery: return "SECURITY Recovery";
     case UpdateTarget::None: return "";
   }
   return "";
@@ -58,6 +59,7 @@ inline const char* updateTargetCompactDisplayName(UpdateTarget target) {
     case UpdateTarget::VoxOneFirmware: return "MAIN";
     case UpdateTarget::Filesystem: return "SPIFFS";
     case UpdateTarget::VoxOneBtFirmware: return "VoxOneBT";
+    case UpdateTarget::SecurityRecovery: return "SECURITY";
     case UpdateTarget::None: return "";
   }
   return "";

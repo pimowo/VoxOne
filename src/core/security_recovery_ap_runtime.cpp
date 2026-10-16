@@ -4,6 +4,7 @@
 #include "security_recovery_http.h"
 #include "security_recovery_pin.h"
 #include "security_recovery_session_runtime.h"
+#include "security_recovery_transaction.h"
 #include "../hardware/hardware_descriptor.h"
 
 #include <Arduino.h>
@@ -91,6 +92,11 @@ class RuntimeApPlatform : public RecoveryApPlatform {
 
   bool credentialConfigured() const override {
     return kRecoveryApCredentialConfigured;
+  }
+
+  bool securityBaselineEligible() override {
+    return inspectDeviceSecurityRecoveryBaseline() ==
+           RecoveryBaselineStatus::Eligible;
   }
 
   bool startWifi() override {
@@ -181,6 +187,8 @@ class RuntimeApPlatform : public RecoveryApPlatform {
     clientActive_ = false;
   }
 
+  void restart() override { ESP.restart(); }
+
  private:
   bool keyLow() const {
     const hardware::Pin key = hardware::currentHardware().localInput.key;
@@ -193,8 +201,14 @@ class RuntimeApPlatform : public RecoveryApPlatform {
     if (state == ConfirmationKeyState::Accepted) {
       confirmationHandled_ = true;
       const RecoveryTransition confirmed = confirmRecoveryKey(nowMs);
-      if (confirmed.to == RecoveryState::CommitReady)
-        (void)beginRecoveryCommit(nowMs);
+      if (confirmed.to == RecoveryState::CommitReady) {
+        const RecoveryTransition committing = beginRecoveryCommit(nowMs);
+        if (committing.to != RecoveryState::Committing) return;
+        const RecoveryTransactionResult committed =
+            commitDeviceSecurityRecovery(pinSession_.candidate());
+        (void)completeRecoverySession(
+            committed == RecoveryTransactionResult::Applied, nowMs);
+      }
     } else if (state == ConfirmationKeyState::StuckLow) {
       confirmationHandled_ = true;
       (void)failRecoverySession(nowMs);
@@ -282,7 +296,7 @@ class RuntimeApPlatform : public RecoveryApPlatform {
     const int length = std::snprintf(
         body, sizeof(body),
         "{\"mode\":\"security_recovery\",\"state\":\"%s\","
-        "\"diagnostic\":\"%s\",\"persistentWrite\":false}",
+        "\"diagnostic\":\"%s\",\"persistentWrite\":true}",
         recoveryStateName(current.state),
         recoveryDiagnosticName(current.diagnostic));
     if (length <= 0 || static_cast<size_t>(length) >= sizeof(body)) {

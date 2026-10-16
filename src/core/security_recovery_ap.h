@@ -10,6 +10,7 @@ enum class RecoveryApStartResult : uint8_t {
   NotRequested,
   CredentialUnavailable,
   GateDenied,
+  BaselineRejected,
   WifiFailed,
   HttpFailed,
   Active,
@@ -31,6 +32,7 @@ class RecoveryApPlatform {
  public:
   virtual ~RecoveryApPlatform() {}
   virtual bool credentialConfigured() const = 0;
+  virtual bool securityBaselineEligible() = 0;
   virtual bool startWifi() = 0;
   virtual bool startHttp() = 0;
   virtual bool serviceHttp(uint32_t nowMs) = 0;
@@ -38,6 +40,7 @@ class RecoveryApPlatform {
   virtual void disconnectClient() = 0;
   virtual void stopWifi() = 0;
   virtual void clearTemporary() = 0;
+  virtual void restart() = 0;
 };
 
 class RecoveryApController {
@@ -62,6 +65,7 @@ class RecoveryApController {
   bool ownsRuntime_ = false;
   bool running_ = false;
   bool cleaned_ = true;
+  bool restartIssued_ = false;
 };
 
 const char* recoveryApStartResultName(RecoveryApStartResult result);

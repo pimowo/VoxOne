@@ -54,6 +54,8 @@ int main() {
                      "VoxOne system plików") == 0);
   assert(std::strcmp(updateTargetDisplayName(UpdateTarget::VoxOneBtFirmware),
                      "VoxOneBT Firmware") == 0);
+  assert(std::strcmp(updateTargetDisplayName(UpdateTarget::SecurityRecovery),
+                     "SECURITY Recovery") == 0);
 
   const struct { UpdateActivity activity; const char* text; } labels[] = {
       {UpdateActivity::None, ""},
@@ -80,6 +82,9 @@ int main() {
                      "SPIFFS") == 0);
   assert(std::strcmp(updateTargetCompactDisplayName(UpdateTarget::VoxOneBtFirmware),
                      "VoxOneBT") == 0);
+  assert(std::strcmp(updateTargetCompactDisplayName(
+                         UpdateTarget::SecurityRecovery),
+                     "SECURITY") == 0);
   assert(std::strcmp(updateActivityCompactDisplayText(UpdateActivity::WritingFirmware),
                      "ZAPIS") == 0);
   assert(std::strcmp(updateActivityCompactDisplayText(UpdateActivity::Completed),

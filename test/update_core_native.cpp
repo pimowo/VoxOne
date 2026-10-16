@@ -195,6 +195,19 @@ int main() {
          filesystem.snapshot().phase == UpdatePhase::Success && filesystem.locked());
   assert(!filesystem.begin(UpdateTarget::VoxOneFirmware, UpdatePhase::Preparing));
 
+  UpdateProgressState securityRecovery;
+  assert(securityRecovery.begin(UpdateTarget::SecurityRecovery,
+                                UpdatePhase::Preparing));
+  assert(!securityRecovery.begin(UpdateTarget::VoxOneFirmware,
+                                 UpdatePhase::Writing));
+  securityRecovery.phase(UpdatePhase::Writing);
+  securityRecovery.phase(UpdatePhase::Verifying);
+  securityRecovery.terminal(UpdatePhase::Success);
+  assert(securityRecovery.snapshot().target ==
+         UpdateTarget::SecurityRecovery);
+  assert(securityRecovery.snapshot().locked &&
+         !securityRecovery.snapshot().active);
+
   UpdateProgressState next;
   assert(next.begin(UpdateTarget::Filesystem, UpdatePhase::Preparing));
   next.phase(UpdatePhase::Writing);

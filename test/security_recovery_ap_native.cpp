@@ -56,6 +56,7 @@ class SessionControl : public RecoveryApSessionControl {
 class FakePlatform : public RecoveryApPlatform {
  public:
   bool credential = true;
+  bool baselineEligible = true;
   bool wifiOk = true;
   bool httpOk = true;
   bool serviceOk = true;
@@ -66,8 +67,14 @@ class FakePlatform : public RecoveryApPlatform {
   unsigned disconnectCalls = 0;
   unsigned stopWifiCalls = 0;
   unsigned clearCalls = 0;
+  unsigned restartCalls = 0;
+  unsigned baselineChecks = 0;
 
   bool credentialConfigured() const override { return credential; }
+  bool securityBaselineEligible() override {
+    ++baselineChecks;
+    return baselineEligible;
+  }
   bool startWifi() override {
     ++wifiStarts;
     return wifiOk;
@@ -84,6 +91,7 @@ class FakePlatform : public RecoveryApPlatform {
   void disconnectClient() override { ++disconnectCalls; }
   void stopWifi() override { ++stopWifiCalls; }
   void clearTemporary() override { ++clearCalls; }
+  void restart() override { ++restartCalls; }
 
   void assertCleanedOnce() const {
     assert(stopHttpCalls == 1);
@@ -138,6 +146,7 @@ int main() {
   assert(active.controller.start(1) == RecoveryApStartResult::Active);
   assert(active.session.state() == RecoveryState::Active);
   assert(active.gate.reads == 2);
+  assert(active.platform.baselineChecks == 1);
   assert(active.controller.ownsRuntime() && active.controller.running());
   assert(active.platform.wifiStarts == 1 && active.platform.httpStarts == 1);
 
@@ -186,7 +195,20 @@ int main() {
   assert(staleGateDenied.controller.start(1) ==
          RecoveryApStartResult::GateDenied);
   assert(staleGateDenied.session.state() == RecoveryState::Failed);
+  assert(staleGateDenied.platform.baselineChecks == 0);
   assert(staleGateDenied.platform.wifiStarts == 0);
+
+  Fixture baselineRejected;
+  baselineRejected.ready();
+  baselineRejected.platform.baselineEligible = false;
+  assert(baselineRejected.controller.start(1) ==
+         RecoveryApStartResult::BaselineRejected);
+  assert(baselineRejected.session.state() == RecoveryState::Failed);
+  assert(baselineRejected.platform.baselineChecks == 1);
+  assert(!baselineRejected.controller.ownsRuntime());
+  assert(baselineRejected.platform.wifiStarts == 0);
+  baselineRejected.controller.complete(true, 2);
+  assert(baselineRejected.platform.restartCalls == 0);
 
   Fixture wifiFailure;
   wifiFailure.ready();
@@ -214,6 +236,7 @@ int main() {
   assert(timeout.session.state() == RecoveryState::Timeout);
   assert(!timeout.controller.running());
   timeout.platform.assertCleanedOnce();
+  assert(timeout.platform.restartCalls == 0);
   timeout.controller.service(20 + 600001U);
   timeout.platform.assertCleanedOnce();
 
@@ -224,6 +247,7 @@ int main() {
   assert(serviceFailure.controller.service(2));
   assert(serviceFailure.session.state() == RecoveryState::Failed);
   serviceFailure.platform.assertCleanedOnce();
+  assert(serviceFailure.platform.restartCalls == 0);
 
   Fixture cancelled;
   cancelled.ready();
@@ -240,6 +264,21 @@ int main() {
   assert(earlyComplete.session.state() == RecoveryState::Failed);
   assert(!earlyComplete.session.live());
   earlyComplete.platform.assertCleanedOnce();
+  assert(earlyComplete.platform.restartCalls == 0);
+
+  Fixture committed;
+  committed.ready();
+  assert(committed.controller.start(1) == RecoveryApStartResult::Active);
+  assert(committed.session.awaitConfirmation(2).to ==
+         RecoveryState::AwaitConfirmation);
+  assert(committed.session.confirm(3).to == RecoveryState::CommitReady);
+  assert(committed.session.beginCommit(4).to == RecoveryState::Committing);
+  assert(committed.session.complete(true, 5).to == RecoveryState::Completed);
+  assert(committed.controller.service(6));
+  committed.platform.assertCleanedOnce();
+  assert(committed.platform.restartCalls == 1);
+  assert(committed.controller.service(7));
+  assert(committed.platform.restartCalls == 1);
 
   const uint32_t wrapStart = UINT32_MAX - 100U;
   Fixture wrap;
@@ -359,7 +398,14 @@ int main() {
   assert(combined.find("Preferences") == std::string::npos);
   assert(combined.find("esp_ota_mark_app_valid") == std::string::npos);
   assert(combined.find("esp_ota_mark_app_invalid") == std::string::npos);
-  assert(combined.find("ESP.restart") == std::string::npos);
+  assert(core.find("platform_.restart()") != std::string::npos);
+  const size_t activated = core.find("session_.activate(nowMs)");
+  const size_t baseline = core.find("platform_.securityBaselineEligible()");
+  const size_t wifi = core.find("platform_.startWifi()");
+  assert(activated < baseline && baseline < wifi);
+  assert(runtime.find("ESP.restart()") != std::string::npos);
+  assert(runtime.find("inspectDeviceSecurityRecoveryBaseline()") !=
+         std::string::npos);
   assert(runtime.find("Serial") == std::string::npos);
   assert(runtime.find("VOXONE_SECURITY_RECOVERY_AP_PASSWORD") !=
          std::string::npos);
@@ -370,8 +416,12 @@ int main() {
   assert(runtime.find("X-Content-Type-Options: nosniff") !=
          std::string::npos);
   assert(runtime.find("beginRecoveryCommit(nowMs)") != std::string::npos);
+  assert(runtime.find("commitDeviceSecurityRecovery(pinSession_.candidate())") !=
+         std::string::npos);
+  assert(runtime.find("beginRecoveryCommit(nowMs)") <
+         runtime.find("commitDeviceSecurityRecovery(pinSession_.candidate())"));
   assert(runtime.find("securityValidateAdminPassword") == std::string::npos);
-  assert(runtime.find("persistentWrite\\\":false") != std::string::npos);
+  assert(runtime.find("persistentWrite\\\":true") != std::string::npos);
   assert(platformio.find("pre:scripts/recovery_ap_credential.py") !=
          std::string::npos);
   assert(platformio.find("VOXONE_SECURITY_RECOVERY_AP_PASSWORD") ==
