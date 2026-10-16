@@ -165,6 +165,7 @@ void handleSecurityState(AsyncWebServerRequest *request);
 void handleSecuritySetup(AsyncWebServerRequest *request);
 void handleSecurityLogin(AsyncWebServerRequest *request);
 void handleSecurityLogout(AsyncWebServerRequest *request);
+void handleWifiScan(AsyncWebServerRequest *request);
 void handleIndex(AsyncWebServerRequest * request);
 void handleNotFound(AsyncWebServerRequest * request);
 void onWsEvent(AsyncWebSocket *server, AsyncWebSocketClient *client, AwsEventType type, void *arg, uint8_t *data, size_t len);
@@ -966,6 +967,7 @@ bool NetServer::begin(bool quiet) {
                handleSecurityLogin);
   webserver.on(voxone::security::kSecurityLogoutRoute, HTTP_POST,
                handleSecurityLogout);
+  webserver.on("/api/wifi/scan", HTTP_GET, handleWifiScan);
   webserver.on("/api/ready", HTTP_GET, [](AsyncWebServerRequest* request) {
     voxone::ota::reportHttpApiProbe();
     char ota[320];
@@ -3694,6 +3696,10 @@ void handleIndex(AsyncWebServerRequest * request) {
   }
   if (request->url() == "/" && apWifiRecoveryAllowed(network.status == CONNECTED)) {
     if (request->method() == HTTP_GET) {
+      if (config.ssidsCount == 0) {
+        request->send_P(200, "text/html", first_boot_setup_html);
+        return;
+      }
       request->send_P(200, "text/html", emptyfs_html);
       return;
     }
@@ -3707,6 +3713,21 @@ void handleIndex(AsyncWebServerRequest * request) {
       if (!config.saveWifiCredentials(ssid.c_str(), password.c_str())) {
         request->send(500, "text/plain", "Could not save Wi-Fi credentials");
         return;
+      }
+      SecurityRuntimeLock securityLock;
+      if (!securityLock.locked()) {
+        request->send(503, "text/plain", "Security service unavailable");
+        return;
+      }
+      auto& security = voxone::security::deviceSecurityService();
+      if (security.state() == voxone::security::SecurityState::Unconfigured) {
+        const auto securityResult = security.completeWifiProvisioningOpen();
+        if (securityResult !=
+            voxone::security::SecurityOperationStatus::Applied) {
+          request->send(500, "text/plain",
+                        "Could not complete first-boot security setup");
+          return;
+        }
       }
       request->send(200, "text/plain", "Wi-Fi credentials saved. Restarting.");
       scheduleSystemRestart("SYSTEM");
@@ -3731,4 +3752,92 @@ void handleIndex(AsyncWebServerRequest * request) {
     return;
   }
   request->send(404, "text/plain", "Not found");
+}
+
+namespace {
+constexpr uint32_t kWifiScanTimeoutMs = 15000;
+constexpr int kWifiScanResultLimit = 32;
+uint32_t wifiScanStartedAtMs = 0;
+
+void beginWifiScan() {
+  WiFi.scanDelete();
+  wifiScanStartedAtMs = millis();
+  (void)WiFi.scanNetworks(true, false);
+}
+
+void writeJsonString(AsyncResponseStream* response, const String& value) {
+  response->print('"');
+  for (size_t index = 0; index < value.length(); ++index) {
+    const unsigned char ch = static_cast<unsigned char>(value[index]);
+    if (ch == '"' || ch == '\\') {
+      response->print('\\');
+      response->print(static_cast<char>(ch));
+    } else if (ch < 0x20) {
+      char escaped[7];
+      snprintf(escaped, sizeof(escaped), "\\u%04x", ch);
+      response->print(escaped);
+    } else {
+      response->print(static_cast<char>(ch));
+    }
+  }
+  response->print('"');
+}
+}
+
+void handleWifiScan(AsyncWebServerRequest* request) {
+  if (request->hasArg("refresh")) {
+    beginWifiScan();
+  }
+  int result = WiFi.scanComplete();
+  if (result == WIFI_SCAN_FAILED) {
+    beginWifiScan();
+    result = WIFI_SCAN_RUNNING;
+  }
+  if (result == WIFI_SCAN_RUNNING) {
+    if (wifiScanStartedAtMs == 0) wifiScanStartedAtMs = millis();
+    if (static_cast<uint32_t>(millis() - wifiScanStartedAtMs) >=
+        kWifiScanTimeoutMs) {
+      WiFi.scanDelete();
+      wifiScanStartedAtMs = 0;
+      request->send(504, "application/json; charset=utf-8",
+                    "{\"status\":\"error\",\"error\":\"timeout\","
+                    "\"networks\":[]}");
+      return;
+    }
+    request->send(202, "application/json; charset=utf-8",
+                  "{\"status\":\"scanning\",\"networks\":[]}");
+    return;
+  }
+  wifiScanStartedAtMs = 0;
+
+  AsyncResponseStream* response =
+      request->beginResponseStream("application/json; charset=utf-8");
+  response->addHeader("Cache-Control", "no-store, max-age=0");
+  response->print("{\"status\":\"ready\",\"networks\":[");
+  bool first = true;
+  const int count = result < 0 ? 0 : result;
+  int emitted = 0;
+  for (int index = 0; index < count; ++index) {
+    const String ssid = WiFi.SSID(index);
+    if (!ssid.length()) continue;
+    bool duplicate = false;
+    for (int earlier = 0; earlier < index; ++earlier) {
+      if (WiFi.SSID(earlier) == ssid) {
+        duplicate = true;
+        break;
+      }
+    }
+    if (duplicate) continue;
+    if (emitted >= kWifiScanResultLimit) break;
+    if (!first) response->print(',');
+    first = false;
+    ++emitted;
+    response->print("{\"ssid\":");
+    writeJsonString(response, ssid);
+    response->printf(",\"rssi\":%d,\"secure\":%s}", WiFi.RSSI(index),
+                     WiFi.encryptionType(index) == WIFI_AUTH_OPEN
+                         ? "false" : "true");
+  }
+  response->print("]}");
+  request->send(response);
 }

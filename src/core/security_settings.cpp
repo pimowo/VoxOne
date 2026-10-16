@@ -473,6 +473,12 @@ SecurityOperationStatus SecurityService::setWifiConfigured(
   return SecurityOperationStatus::Applied;
 }
 
+SecurityOperationStatus SecurityService::completeWifiProvisioningOpen() {
+  if (settings_.state != SecurityState::Unconfigured)
+    return SecurityOperationStatus::InvalidState;
+  return saveOpen();
+}
+
 SecurityOperationStatus SecurityService::chooseOpen() {
   if (settings_.state != SecurityState::LegacyUnclaimed)
     return SecurityOperationStatus::InvalidState;

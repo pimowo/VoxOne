@@ -27,7 +27,9 @@ enum class SecurityAccessMethod : uint8_t {
 enum class SecurityEndpoint : uint8_t {
   Root,
   LoginAsset,
+  BrandAsset,
   ProvisionWifi,
+  ProvisionWifiScan,
   SecurityState,
   SecuritySetup,
   SecurityLogin,

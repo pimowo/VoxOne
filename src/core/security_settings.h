@@ -104,6 +104,7 @@ class SecurityService {
 
   SecurityLoadStatus begin(bool wifiConfigured);
   SecurityOperationStatus setWifiConfigured(bool wifiConfigured);
+  SecurityOperationStatus completeWifiProvisioningOpen();
   SecurityOperationStatus chooseOpen();
   SecurityOperationStatus chooseProtected(const char* password);
   SecurityOperationStatus protectOpen(const char* password);

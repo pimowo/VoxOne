@@ -6,6 +6,7 @@
 #include "config.h"
 #include "display.h"
 #include "display_audio_info.h"
+#include "first_boot_core.h"
 #include "dac_mute.h"
 #include "eq_preset_label.h"
 #include "player.h"
@@ -1153,25 +1154,66 @@ void Display::_buildPager(){
 void Display::_apScreen() {
   if(_boot) _pager->removePage(_boot);
     _boot = new Page();
+    char setupUrl[32];
+    snprintf(setupUrl, sizeof(setupUrl), "http://%s/",
+             config.ipToStr(WiFi.softAPIP()));
+    const bool openSetupAp =
+        voxone::first_boot::shouldStartOpenSetupAp(config.ssidsCount);
+    const auto firstBootView = voxone::first_boot::makeView(
+        {config.ssidsCount,
+         openSetupAp ? voxone::first_boot::Connection::SetupAp :
+                       voxone::first_boot::Connection::RecoveryAp,
+         false, false, apSsid, setupUrl, 0});
+    const bool firstBootSetup =
+        firstBootView.mode == voxone::first_boot::Mode::FirstBootSetup;
       #if DSP_INVERT_TITLE || defined(DSP_OLED)
       _boot->addWidget(new FillWidget(metaBGConf, config.theme.metafill));
       #else
       _boot->addWidget(new FillWidget(metaBGConfInv, config.theme.metafill));
       #endif
     ScrollWidget *bootTitle = (ScrollWidget*) &_boot->addWidget(new ScrollWidget("*", apTitleConf, config.theme.meta, config.theme.metabg));
-    bootTitle->setText("VoxOne tryb AP");
-    TextWidget *apname = (TextWidget*) &_boot->addWidget(new TextWidget(apNameConf, 30, config.theme.title1, config.theme.background));
-    apname->setText(LANG::apNameTxt);
-    TextWidget *apname2 = (TextWidget*) &_boot->addWidget(new TextWidget(apName2Conf, 30, config.theme.clock, config.theme.background));
-    apname2->setText(apSsid);
-    TextWidget *appass = (TextWidget*) &_boot->addWidget(new TextWidget(apPassConf, 30, config.theme.title1, config.theme.background));
-    appass->setText(LANG::apPassTxt);
-    TextWidget *appass2 = (TextWidget*) &_boot->addWidget(new TextWidget(apPass2Conf, 30, config.theme.clock, config.theme.background));
-    appass2->setText(apPassword);
+    bootTitle->setText(firstBootSetup ? firstBootView.title :
+                                          "VoxOne tryb AP");
+    TextWidget *apname = (TextWidget*) &_boot->addWidget(new TextWidget(
+#if VOXONE_DISPLAY_PROFILE == VOXONE_DISPLAY_PROFILE_ST7796_480X320
+      firstBootSetup ? firstBootNameConf : apNameConf,
+#else
+      apNameConf,
+#endif
+      30, config.theme.title1, config.theme.background));
+    apname->setText(firstBootSetup ? firstBootView.product : LANG::apNameTxt);
+    TextWidget *apname2 = (TextWidget*) &_boot->addWidget(new TextWidget(
+#if VOXONE_DISPLAY_PROFILE == VOXONE_DISPLAY_PROFILE_ST7796_480X320
+      firstBootSetup ? firstBootName2Conf : apName2Conf,
+#else
+      apName2Conf,
+#endif
+      30, config.theme.clock, config.theme.background));
+    apname2->setText(firstBootView.apSsid);
+    TextWidget *appass = (TextWidget*) &_boot->addWidget(new TextWidget(
+#if VOXONE_DISPLAY_PROFILE == VOXONE_DISPLAY_PROFILE_ST7796_480X320
+      firstBootSetup ? firstBootUrlConf : apPassConf,
+#else
+      apPassConf,
+#endif
+      30, config.theme.title1, config.theme.background));
+    appass->setText(firstBootSetup ? "IP / URL" : LANG::apPassTxt);
+    TextWidget *appass2 = (TextWidget*) &_boot->addWidget(new TextWidget(
+#if VOXONE_DISPLAY_PROFILE == VOXONE_DISPLAY_PROFILE_ST7796_480X320
+      firstBootSetup ? firstBootUrl2Conf : apPass2Conf,
+#else
+      apPass2Conf,
+#endif
+      30, config.theme.clock, config.theme.background));
+    appass2->setText(firstBootSetup ? firstBootView.address : apPassword);
     ScrollWidget *bootSett = (ScrollWidget*) &_boot->addWidget(new ScrollWidget("*", apSettConf, config.theme.title2, config.theme.background));
-    bootSett->setText(config.ipToStr(WiFi.softAPIP()), LANG::apSettFmt);
+    if (firstBootSetup) bootSett->setText(firstBootView.statusText);
+    else bootSett->setText(config.ipToStr(WiFi.softAPIP()), LANG::apSettFmt);
     _pager->addPage(_boot);
     _pager->setPage(_boot);
+#if VOXONE_DISPLAY_PROFILE == VOXONE_DISPLAY_PROFILE_ST7796_480X320
+    if (firstBootSetup) dsp.drawLogo(bootLogoTop);
+#endif
 }
 
 void Display::_start() {

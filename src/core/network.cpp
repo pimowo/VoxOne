@@ -3,6 +3,7 @@
 #include "time.h"
 #include "rtcsupport.h"
 #include "network.h"
+#include "first_boot_core.h"
 #include "display.h"
 #include "config.h"
 #include "serialcli.h"
@@ -419,10 +420,16 @@ void MyNetwork::raiseSoftAP() {
     BOOTLOG("AP MAC read failed; using fallback SSID");
   }
 
-  const bool modeReady = WiFi.mode(WIFI_AP);
+  const bool firstBootSetup =
+      voxone::first_boot::shouldStartOpenSetupAp(config.ssidsCount);
+  // Only the clean first boot keeps STA enabled for passive provisioning
+  // scans. A later recovery AP preserves the existing protected behavior.
+  const bool modeReady = WiFi.mode(firstBootSetup ? WIFI_AP_STA : WIFI_AP);
   if (modeReady && strlen(config.store.mdnsname) > 0)
     WiFi.softAPsetHostname(config.store.mdnsname);
-  const bool apReady = modeReady && WiFi.softAP(apSsid, apPassword);
+  const bool apReady = modeReady &&
+      (firstBootSetup ? WiFi.softAP(apSsid) :
+                        WiFi.softAP(apSsid, apPassword));
   status = apReady ? SOFT_AP : FAILED;
 
   Serial.println("##[BOOT]#");
@@ -434,7 +441,11 @@ void MyNetwork::raiseSoftAP() {
     BOOTLOG("AP SSID: %s", apSsid);
     BOOTLOG("AP IP: %s", apIp.c_str());
     BOOTLOG("AP channel: %d", WiFi.channel());
-    BOOTLOG("Connect to AP %s with password %s", apSsid, apPassword);
+    if (firstBootSetup) {
+      BOOTLOG("Connect to open AP %s", apSsid);
+    } else {
+      BOOTLOG("Connect to AP %s with password %s", apSsid, apPassword);
+    }
     BOOTLOG("and go to http://%s/ to configure", apIp.c_str());
   }
   BOOTLOG("************************************************");

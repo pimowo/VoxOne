@@ -17,6 +17,9 @@ const SecurityRouteRule kRouteRules[] = {
      SecurityRouteClass::PublicBootstrap, false, false},
     {SecurityAccessMethod::Post, "/", SecurityEndpoint::ProvisionWifi,
      SecurityRouteClass::Provisioning, true, false},
+    {SecurityAccessMethod::Get, "/api/wifi/scan",
+     SecurityEndpoint::ProvisionWifiScan,
+     SecurityRouteClass::Provisioning, false, false},
     {SecurityAccessMethod::Get, "/voxone.html", SecurityEndpoint::LoginAsset,
      SecurityRouteClass::PublicBootstrap, false, false},
     {SecurityAccessMethod::Get, "/voxone.css", SecurityEndpoint::LoginAsset,
@@ -30,7 +33,7 @@ const SecurityRouteRule kRouteRules[] = {
      SecurityEndpoint::LoginAsset, SecurityRouteClass::PublicBootstrap, false,
      false},
     {SecurityAccessMethod::Get, "/voxone-logo.svg",
-     SecurityEndpoint::LoginAsset, SecurityRouteClass::PublicBootstrap, false,
+     SecurityEndpoint::BrandAsset, SecurityRouteClass::PublicBootstrap, false,
      false},
     {SecurityAccessMethod::Get, "/voxone-symbol.svg",
      SecurityEndpoint::LoginAsset, SecurityRouteClass::PublicBootstrap, false,
@@ -308,7 +311,9 @@ const char* securityEndpointName(SecurityEndpoint endpoint) {
   switch (endpoint) {
     case SecurityEndpoint::Root: return "root";
     case SecurityEndpoint::LoginAsset: return "login-asset";
+    case SecurityEndpoint::BrandAsset: return "brand-asset";
     case SecurityEndpoint::ProvisionWifi: return "provision-wifi";
+    case SecurityEndpoint::ProvisionWifiScan: return "provision-wifi-scan";
     case SecurityEndpoint::SecurityState: return "security-state";
     case SecurityEndpoint::SecuritySetup: return "security-setup";
     case SecurityEndpoint::SecurityLogin: return "security-login";

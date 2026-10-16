@@ -32,7 +32,7 @@ const EndpointCase kEndpoints[] = {
      SecurityRouteClass::PublicBootstrap, false, false},
     {SecurityAccessMethod::Get, "/dsp-client.js", SecurityEndpoint::LoginAsset,
      SecurityRouteClass::PublicBootstrap, false, false},
-    {SecurityAccessMethod::Get, "/voxone-logo.svg", SecurityEndpoint::LoginAsset,
+    {SecurityAccessMethod::Get, "/voxone-logo.svg", SecurityEndpoint::BrandAsset,
      SecurityRouteClass::PublicBootstrap, false, false},
     {SecurityAccessMethod::Get, "/voxone-symbol.svg", SecurityEndpoint::LoginAsset,
      SecurityRouteClass::PublicBootstrap, false, false},
@@ -57,6 +57,9 @@ const EndpointCase kEndpoints[] = {
      SecurityRouteClass::RejectedDirectCompressedAsset, false, false},
     {SecurityAccessMethod::Post, "/", SecurityEndpoint::ProvisionWifi,
      SecurityRouteClass::Provisioning, true, false},
+    {SecurityAccessMethod::Get, "/api/wifi/scan",
+     SecurityEndpoint::ProvisionWifiScan,
+     SecurityRouteClass::Provisioning, false, false},
     {SecurityAccessMethod::Get, "/api/security/state", SecurityEndpoint::SecurityState,
      SecurityRouteClass::SecurityApi, false, false},
     {SecurityAccessMethod::Post, "/api/security/setup", SecurityEndpoint::SecuritySetup,
@@ -238,11 +241,11 @@ void testCompleteEndpointInventory() {
     assert(std::strcmp(securityEndpointName(actual.endpoint), "unknown") != 0);
     assert(std::strcmp(securityRouteClassName(actual.routeClass), "unknown") != 0);
   }
-  assert(sizeof(kEndpoints) / sizeof(kEndpoints[0]) == 49);
+  assert(sizeof(kEndpoints) / sizeof(kEndpoints[0]) == 50);
 
   size_t ruleCount = 0;
   const SecurityRouteRule* rules = securityAccessRouteRules(ruleCount);
-  assert(rules != nullptr && ruleCount == 49);
+  assert(rules != nullptr && ruleCount == 50);
   for (size_t index = 0; index < ruleCount; ++index) {
     const SecurityRouteRule& rule = rules[index];
     assert(rule.path && rule.path[0] == '/');
@@ -278,7 +281,8 @@ void testHostOriginAndCsrfMatrix() {
         request(SecurityState::Open, endpoint.method, endpoint.path);
     candidate.provisioningMode = true;
     candidate.recoveryMode = true;
-    if (endpoint.endpoint == SecurityEndpoint::ProvisionWifi)
+    if (endpoint.endpoint == SecurityEndpoint::ProvisionWifi ||
+        endpoint.endpoint == SecurityEndpoint::ProvisionWifiScan)
       candidate.state = SecurityState::Unconfigured;
     if (endpoint.endpoint == SecurityEndpoint::SecuritySetup)
       candidate.state = SecurityState::LegacyUnclaimed;
@@ -474,6 +478,11 @@ void testProvisioningMigrationRecoveryAndOtaRestart() {
       SecurityState::Unconfigured, SecurityAccessMethod::Get, "/");
   firstApRoot.provisioningMode = true;
   assert(evaluateSecurityAccess(firstApRoot) == SecurityAccessStatus::Allowed);
+  SecurityAccessRequest firstApScan = request(
+      SecurityState::Unconfigured, SecurityAccessMethod::Get,
+      "/api/wifi/scan");
+  firstApScan.provisioningMode = true;
+  assert(evaluateSecurityAccess(firstApScan) == SecurityAccessStatus::Allowed);
   SecurityAccessRequest firstApPanel = request(
       SecurityState::Unconfigured, SecurityAccessMethod::Get, "/voxone.html");
   firstApPanel.provisioningMode = true;

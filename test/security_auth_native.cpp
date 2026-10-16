@@ -110,6 +110,25 @@ void testPbkdf2Vectors() {
 }
 
 void testMigrationAndModeSelection() {
+  FakeStorage firstBootStorage;
+  DeterministicRandom firstBootRandom;
+  SecurityService firstBoot(firstBootStorage, firstBootRandom);
+  assert(firstBoot.begin(false) == SecurityLoadStatus::Unconfigured);
+  assert(firstBoot.completeWifiProvisioningOpen() ==
+         SecurityOperationStatus::Applied);
+  assert(firstBoot.state() == SecurityState::Open);
+  assert(firstBootStorage.writes == 1);
+  assert(firstBoot.completeWifiProvisioningOpen() ==
+         SecurityOperationStatus::InvalidState);
+
+  FakeStorage failedFirstBootStorage;
+  failedFirstBootStorage.writeError = true;
+  SecurityService failedFirstBoot(failedFirstBootStorage, firstBootRandom);
+  assert(failedFirstBoot.begin(false) == SecurityLoadStatus::Unconfigured);
+  assert(failedFirstBoot.completeWifiProvisioningOpen() ==
+         SecurityOperationStatus::StorageError);
+  assert(failedFirstBoot.state() == SecurityState::Unconfigured);
+
   FakeStorage storage;
   DeterministicRandom random;
   SecurityService service(storage, random);

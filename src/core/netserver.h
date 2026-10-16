@@ -2,6 +2,92 @@
 #define netserver_h
 #include "../AsyncWebServer/ESPAsyncWebServer.h"
 enum requestType_e : uint8_t  { STATION=2, STATIONNAME=3, ITEM=4, TITLE=5, VOLUME=6, NRSSI=7, BITRATE=8, MODE=9, EQUALIZER=10, BALANCE=11, GETINDEX=14, GETSYSTEM=16, GETSCREEN=17, WEBSTATUS=28 };
+const char first_boot_setup_html[] PROGMEM = R"(
+<!DOCTYPE html>
+<html lang="pl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#0b121b">
+<title>VoxOne &#8212; Konfiguracja Wi-Fi</title>
+<style>
+:root{color-scheme:dark;--bg:#0b121b;--panel:#151f2b;--panel-2:#1b2937;--line:#314456;--text:#edf5fa;--muted:#a2b5c5;--cyan:#71d8e8;--cyan-dark:#173f4b}
+*{box-sizing:border-box}
+body{margin:0;min-height:100vh;background:var(--bg);color:var(--text);font:16px/1.5 system-ui,-apple-system,"Segoe UI",sans-serif;display:flex;flex-direction:column}
+main{width:calc(100% - 32px);max-width:480px;margin:auto}
+.logo{display:block;width:min(260px,72%);height:auto;margin:0 auto 22px}
+h2{margin:0 0 12px;font-size:1.3rem}
+p{margin:0 0 20px;color:var(--muted)}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:15px;padding:24px;margin:20px 0}
+label{display:block;margin:16px 0 6px;font-weight:600}
+input[type=text],input[type=password],select{display:block;width:100%;min-width:0;padding:12px;border:1px solid var(--line);border-radius:10px;background:var(--panel-2);color:var(--text);font:inherit}
+input::placeholder{color:var(--muted);opacity:1}
+input:focus-visible,select:focus-visible,button:focus-visible{outline:2px solid var(--cyan);outline-offset:2px}
+button{width:100%;min-height:46px;margin-top:22px;padding:13px;border:1px solid var(--cyan);border-radius:10px;background:var(--cyan-dark);color:var(--text);font:650 1rem system-ui,sans-serif;cursor:pointer}
+.secondary{margin-top:10px;background:transparent}.status{min-height:1.5em;margin:10px 0 0}
+details{margin:24px 0;color:var(--muted)}
+summary{cursor:pointer;color:var(--cyan)}
+.service{margin-top:16px;padding-top:16px;border-top:1px solid var(--line)}
+a{color:var(--cyan)}
+footer{text-align:center;padding:16px;color:var(--muted);font-size:.85rem}
+.hidden{display:none}
+@media(max-width:480px){.card{padding:20px}}
+</style>
+</head>
+<body>
+<main>
+<img class="logo" src="/voxone-logo.svg" alt="VoxOne" width="207" height="50">
+<section class="card" id="wifi-setup">
+<h2>Konfiguracja</h2>
+<p>Wybierz sie&#263; Wi-Fi. Po zapisaniu VoxOne uruchomi si&#281; ponownie i otworzy panel bez has&#322;a.</p>
+<form id="wifi-form" action="/" method="post">
+<label for="ssid-list">Dost&#281;pne sieci</label>
+<select id="ssid-list"><option value="">Skanowanie sieci&#8230;</option></select>
+<button id="scan" class="secondary" type="button">Skanuj ponownie</button>
+<p id="scan-status" class="status" role="status" aria-live="polite"></p>
+<details id="manual"><summary>Sie&#263; ukryta / wpisz SSID r&#281;cznie</summary>
+<label for="manual-ssid">Nazwa sieci (SSID)</label>
+<input id="manual-ssid" type="text" maxlength="29" autocomplete="off"></details>
+<input id="ssid" name="ssid" type="hidden">
+<label for="pass">Has&#322;o</label>
+<input id="pass" name="pass" type="password" maxlength="39" autocomplete="new-password">
+<button type="submit">Zapisz i po&#322;&#261;cz</button>
+</form>
+</section>
+<details>
+<summary>Tryb serwisowy / Recovery</summary>
+<div class="service">
+<p>Awaryjnie mo&#380;esz wgra&#263; firmware lub pe&#322;ny obraz systemu plik&#243;w z buildu VoxOne.</p>
+<p><a href="/emergency">Awaryjna aktualizacja firmware / WWW</a></p>
+</div>
+</details>
+</main>
+<footer>VoxOne &#8212; Konfiguracja</footer>
+<script>
+(function(){
+var list=document.getElementById('ssid-list'),status=document.getElementById('scan-status'),manual=document.getElementById('manual-ssid'),scan=document.getElementById('scan'),form=document.getElementById('wifi-form'),ssid=document.getElementById('ssid'),polls=0;
+function show(text){status.textContent=text}
+async function load(refresh){
+ scan.disabled=true;show('Skanowanie sieci Wi-Fi...');
+ try{
+  var response=await fetch('/api/wifi/scan'+(refresh?'?refresh=1':''),{cache:'no-store'});
+  if(response.status===202){if(++polls<20){setTimeout(function(){load(false)},700);return}throw new Error()}
+  if(!response.ok)throw new Error();
+  var data=await response.json(),selected=list.value;polls=0;list.textContent='';
+  var prompt=document.createElement('option');prompt.value='';prompt.textContent=data.networks.length?'Wybierz sieć':'Nie znaleziono sieci';list.appendChild(prompt);
+  data.networks.forEach(function(network){var option=document.createElement('option');option.value=network.ssid;option.textContent=network.ssid+' ('+network.rssi+' dBm, '+(network.secure?'zabezpieczona':'otwarta')+')';list.appendChild(option)});
+  if(selected)list.value=selected;show(data.networks.length?'Znaleziono sieci: '+data.networks.length:'Możesz wpisać SSID sieci ukrytej ręcznie.');
+ }catch(error){show('Nie udało się odczytać listy. Wpisz SSID ręcznie.')}
+ finally{scan.disabled=false}
+}
+scan.addEventListener('click',function(){load(true)});
+form.addEventListener('submit',function(event){var value=manual.value.trim()||list.value;if(!value){event.preventDefault();show('Wybierz sieć lub wpisz SSID ręcznie.');return}ssid.value=value});
+load(false);
+})();
+</script>
+</body>
+</html>
+)";
 const char emptyfs_html[] PROGMEM = R"(
 <!DOCTYPE html>
 <html lang="pl">
