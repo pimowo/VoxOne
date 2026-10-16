@@ -24,7 +24,7 @@
 #include "core/ui_state.h"
 #include "core/ota_boot_runtime.h"
 #include "core/security_recovery_key_runtime.h"
-#include "core/security_recovery_state_runtime.h"
+#include "core/security_recovery_session_runtime.h"
 #include "hardware/runtime_hardware_config.h"
 #include "displays/display_backend_selection.h"
 #include <esp_heap_caps.h>
@@ -172,7 +172,7 @@ void setup() {
   const auto recoveryKeyState =
       voxone::security_recovery::detectBootKeyGesture();
   const auto recoveryEvaluation =
-      voxone::security_recovery::evaluateBootRecoveryRequest(
+      voxone::security_recovery::beginRecoverySession(
           recoveryKeyState, millis());
   if (recoveryKeyState ==
       voxone::security_recovery::KeyState::Accepted) {
@@ -275,6 +275,7 @@ void loop() {
   network.loop();
   voxone::ota::serviceBootHealth(
       currentBootControlPlaneReady(netserver.started()));
+  voxone::security_recovery::serviceRecoverySession(millis());
   #if VOXONE_HAS_BT && VOXONE_PIN_MAP_COMPLETE
     if (btRuntime.physicalStarted()) {
       btLink.loop();

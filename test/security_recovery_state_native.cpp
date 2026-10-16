@@ -196,7 +196,7 @@ int main() {
   const std::string main = readFile("src/main.cpp");
   const size_t health = main.find("beginBootHealthMonitor()");
   const size_t key = main.find("detectBootKeyGesture()");
-  const size_t gate = main.find("evaluateBootRecoveryRequest(");
+  const size_t gate = main.find("beginRecoverySession(");
   const size_t restore = main.find("recoverAtBoot()");
   assert(health < key && key < gate && gate < restore);
 }

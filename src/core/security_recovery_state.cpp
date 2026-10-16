@@ -129,32 +129,50 @@ RecoveryTransition RecoveryStateMachine::evaluateGate(
   if (sessionExpired(nowMs))
     return transition(RecoveryState::Timeout,
                       RecoveryDiagnostic::SessionTimeout);
+  const RecoveryDiagnostic failure = gateFailure(conditions);
+  if (failure != RecoveryDiagnostic::None)
+    return transition(RecoveryState::Failed, failure);
+  return transition(RecoveryState::Ready, RecoveryDiagnostic::Ready);
+}
+
+RecoveryTransition RecoveryStateMachine::recheckGate(
+    const GateConditions& conditions, uint32_t nowMs) {
+  if (state_ != RecoveryState::Ready &&
+      state_ != RecoveryState::AwaitConfirmation)
+    return report(RecoveryDiagnostic::InvalidEvent);
+  if (sessionExpired(nowMs))
+    return transition(RecoveryState::Timeout,
+                      RecoveryDiagnostic::SessionTimeout);
+  if (state_ == RecoveryState::AwaitConfirmation &&
+      confirmationExpired(nowMs))
+    return transition(RecoveryState::Timeout,
+                      RecoveryDiagnostic::ConfirmationTimeout);
+  const RecoveryDiagnostic failure = gateFailure(conditions);
+  if (failure != RecoveryDiagnostic::None)
+    return transition(RecoveryState::Failed, failure);
+  return report(RecoveryDiagnostic::GateRechecked);
+}
+
+RecoveryDiagnostic RecoveryStateMachine::gateFailure(
+    const GateConditions& conditions) const {
   if (!conditions.otaStatusReadable)
-    return transition(RecoveryState::Failed,
-                      RecoveryDiagnostic::OtaStatusReadError);
+    return RecoveryDiagnostic::OtaStatusReadError;
   if (conditions.pending ||
       conditions.imageState == RecoveryImageState::PendingVerify)
-    return transition(RecoveryState::Failed,
-                      RecoveryDiagnostic::OtaPendingVerify);
+    return RecoveryDiagnostic::OtaPendingVerify;
   if (conditions.imageState == RecoveryImageState::Invalid)
-    return transition(RecoveryState::Failed,
-                      RecoveryDiagnostic::OtaImageInvalid);
+    return RecoveryDiagnostic::OtaImageInvalid;
   if (conditions.imageState == RecoveryImageState::Aborted)
-    return transition(RecoveryState::Failed,
-                      RecoveryDiagnostic::OtaImageAborted);
+    return RecoveryDiagnostic::OtaImageAborted;
   if (conditions.imageState != RecoveryImageState::Valid)
-    return transition(RecoveryState::Failed,
-                      RecoveryDiagnostic::OtaImageUnknown);
+    return RecoveryDiagnostic::OtaImageUnknown;
   if (conditions.otaUploadActive)
-    return transition(RecoveryState::Failed,
-                      RecoveryDiagnostic::OtaUploadActive);
+    return RecoveryDiagnostic::OtaUploadActive;
   if (!conditions.configStatusReadable)
-    return transition(RecoveryState::Failed,
-                      RecoveryDiagnostic::ConfigStatusReadError);
+    return RecoveryDiagnostic::ConfigStatusReadError;
   if (conditions.configRestoreActive)
-    return transition(RecoveryState::Failed,
-                      RecoveryDiagnostic::ConfigRestoreActive);
-  return transition(RecoveryState::Ready, RecoveryDiagnostic::Ready);
+    return RecoveryDiagnostic::ConfigRestoreActive;
+  return RecoveryDiagnostic::None;
 }
 
 const char* recoveryStateName(RecoveryState state) {
@@ -185,6 +203,7 @@ const char* recoveryDiagnosticName(RecoveryDiagnostic diagnostic) {
     case RecoveryDiagnostic::Activated: return "activated";
     case RecoveryDiagnostic::ConfirmationRequired: return "confirmation_required";
     case RecoveryDiagnostic::ConfirmationAccepted: return "confirmation_accepted";
+    case RecoveryDiagnostic::GateRechecked: return "gate_rechecked";
     case RecoveryDiagnostic::Committing: return "committing";
     case RecoveryDiagnostic::Completed: return "completed";
     case RecoveryDiagnostic::Cancelled: return "cancelled";

@@ -52,6 +52,7 @@ enum class RecoveryDiagnostic : uint8_t {
   Activated,
   ConfirmationRequired,
   ConfirmationAccepted,
+  GateRechecked,
   Committing,
   Completed,
   Cancelled,
@@ -102,6 +103,8 @@ class RecoveryStateMachine {
   RecoveryTransition dispatch(RecoveryEvent event, uint32_t nowMs);
   RecoveryTransition evaluateGate(const GateConditions& conditions,
                                   uint32_t nowMs);
+  RecoveryTransition recheckGate(const GateConditions& conditions,
+                                 uint32_t nowMs);
 
   RecoveryState state() const { return state_; }
   RecoveryDiagnostic diagnostic() const { return diagnostic_; }
@@ -114,6 +117,7 @@ class RecoveryStateMachine {
   bool sessionExpired(uint32_t nowMs) const;
   bool confirmationExpired(uint32_t nowMs) const;
   bool sessionActive() const;
+  RecoveryDiagnostic gateFailure(const GateConditions& conditions) const;
 
   RecoveryTimings timings_;
   RecoveryState state_ = RecoveryState::Idle;

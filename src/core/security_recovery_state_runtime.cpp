@@ -24,6 +24,20 @@ RecoveryImageState mapImageState(ota::RunningImageState state) {
 }
 }
 
+GateConditions readRecoveryGateConditions() {
+  const ota::RunningImageSnapshot otaStatus = ota::runningImageSnapshot();
+  const config_restore::BootRecoveryInspection configStatus =
+      config_restore::inspectBootRecovery();
+  return {
+      otaStatus.readable,
+      mapImageState(otaStatus.state),
+      otaStatus.pending,
+      updateLockActive(),
+      configStatus != config_restore::BootRecoveryInspection::Error,
+      configStatus == config_restore::BootRecoveryInspection::Pending,
+  };
+}
+
 BootRecoveryEvaluation evaluateBootRecoveryRequest(KeyState keyState,
                                                     uint32_t nowMs) {
   RecoveryStateMachine machine;
@@ -32,17 +46,7 @@ BootRecoveryEvaluation evaluateBootRecoveryRequest(KeyState keyState,
     return {machine.state(), machine.diagnostic(), false};
 
   machine.dispatch(RecoveryEvent::BeginOtaCheck, nowMs);
-  const ota::RunningImageSnapshot otaStatus = ota::runningImageSnapshot();
-  const config_restore::BootRecoveryInspection configStatus =
-      config_restore::inspectBootRecovery();
-  const GateConditions conditions = {
-      otaStatus.readable,
-      mapImageState(otaStatus.state),
-      otaStatus.pending,
-      updateLockActive(),
-      configStatus != config_restore::BootRecoveryInspection::Error,
-      configStatus == config_restore::BootRecoveryInspection::Pending,
-  };
+  const GateConditions conditions = readRecoveryGateConditions();
   machine.evaluateGate(conditions, nowMs);
   return {machine.state(), machine.diagnostic(), true};
 }

@@ -17,6 +17,9 @@ struct BootRecoveryEvaluation {
 BootRecoveryEvaluation evaluateBootRecoveryRequest(KeyState keyState,
                                                     uint32_t nowMs);
 
+// Fresh production snapshot used for every lifecycle safety gate.
+GateConditions readRecoveryGateConditions();
+
 }  // namespace security_recovery
 }  // namespace voxone
 
