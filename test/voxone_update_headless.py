@@ -1281,6 +1281,266 @@ setTimeout(async () => {
 </script>
 """
 
+FIRST_BOOT_MOCK = r"""
+<script>
+window.scanRequests = [];
+window.scanPollTimers = new Map();
+let scanTimerSequence = 10000;
+const scanNativeSetTimeout = window.setTimeout.bind(window);
+const scanNativeClearTimeout = window.clearTimeout.bind(window);
+window.setTimeout = (handler, delay, ...args) => {
+  if (delay === 700) {
+    const id = ++scanTimerSequence;
+    window.scanPollTimers.set(id, () => handler(...args));
+    return id;
+  }
+  return scanNativeSetTimeout(handler, delay, ...args);
+};
+window.clearTimeout = id => {
+  if (window.scanPollTimers.delete(id)) return;
+  scanNativeClearTimeout(id);
+};
+window.runNextScanPoll = () => {
+  const next = window.scanPollTimers.entries().next();
+  if (next.done) throw new Error('missing scan poll timer');
+  const [id, handler] = next.value;
+  window.scanPollTimers.delete(id);
+  handler();
+};
+window.fetch = (url, options = {}) => new Promise((resolve, reject) => {
+  const overlapAtStart = window.scanRequests.filter(
+    request => !request.settled && !request.aborted).length;
+  const request = {
+    url:String(url), options, overlapAtStart, settled:false, aborted:false,
+    resolve(status, body = {}) {
+      request.settled = true;
+      resolve({
+        ok:status >= 200 && status < 300, status,
+        json:() => Promise.resolve(body)
+      });
+    },
+    reject(error) {
+      request.settled = true;
+      reject(error);
+    }
+  };
+  options.signal?.addEventListener('abort', () => { request.aborted = true; });
+  window.scanRequests.push(request);
+});
+</script>
+"""
+
+FIRST_BOOT_CHECK = r"""
+<output id="first-boot-headless-result">PENDING</output>
+<script>
+const firstBootCheck = (condition, message) => {
+  if (!condition) throw new Error(message);
+};
+const firstBootSettle = async () => {
+  await Promise.resolve();
+  await new Promise(resolve => setTimeout(resolve, 0));
+  await Promise.resolve();
+};
+const scanReady = networks => ({status:'ready', networks});
+setTimeout(async () => {
+  const output = document.getElementById('first-boot-headless-result');
+  const get = id => document.getElementById(id);
+  try {
+    const form = get('wifi-form');
+    const list = get('ssid-list');
+    const manual = get('manual-ssid');
+    const hiddenSsid = get('ssid');
+    const password = get('pass');
+    const eye = get('pass-toggle');
+    const scan = get('scan');
+    const status = get('scan-status');
+    const submit = () => {
+      const event = new Event('submit', {bubbles:true, cancelable:true});
+      form.dispatchEvent(event);
+      return event;
+    };
+
+    firstBootCheck(window.scanRequests.length === 1 &&
+      window.scanRequests[0].url === '/api/wifi/scan',
+      'first boot must start one initial scan');
+    window.scanRequests[0].resolve(200, scanReady([
+      {ssid:'Home',rssi:-41,secure:true},
+      {ssid:' Edge ',rssi:-53,secure:false},
+      {ssid:'Spec & = + ąć',rssi:-62,secure:true}
+    ]));
+    await firstBootSettle();
+    firstBootCheck(!scan.disabled && list.options.length === 4,
+      'initial scan results');
+
+    let submitted = 0;
+    form.addEventListener('submit', () => { submitted++; });
+    password.value = 'unchanged-secret';
+    password.focus();
+    password.setSelectionRange(2, 8, 'forward');
+    eye.click();
+    firstBootCheck(password.type === 'text' &&
+      password.value === 'unchanged-secret' && password.selectionStart === 2 &&
+      password.selectionEnd === 8 && eye.type === 'button' && submitted === 0 &&
+      eye.getAttribute('aria-pressed') === 'true' &&
+      eye.getAttribute('aria-label') === 'Ukryj hasło',
+      'eye shows password without submit or value change');
+    eye.focus();
+    eye.click();
+    firstBootCheck(password.type === 'password' && eye.tabIndex === 0 &&
+      eye.getAttribute('aria-label') === 'Pokaż hasło' &&
+      eye.getBoundingClientRect().width >= 40 &&
+      eye.getBoundingClientRect().height >= 40,
+      'native button is keyboard focusable and hides password');
+
+    list.value = 'Home';
+    list.dispatchEvent(new Event('change', {bubbles:true}));
+    firstBootCheck(manual.value === '' && !submit().defaultPrevented &&
+      hiddenSsid.value === 'Home', 'list selection is authoritative');
+
+    password.value = 'preserve-selected-secret';
+    scan.click();
+    let request = window.scanRequests.at(-1);
+    request.resolve(200, scanReady([
+      {ssid:' Edge ',rssi:-54,secure:false},
+      {ssid:'Spec & = + ąć',rssi:-63,secure:true}
+    ]));
+    await firstBootSettle();
+    firstBootCheck(list.value === 'Home' && manual.value === '' &&
+      password.value === 'preserve-selected-secret' &&
+      [...list.options].some(option => option.value === 'Home'),
+      'rescan never overwrites an explicit list selection');
+
+    manual.value = ' Hidden SSID ';
+    manual.dispatchEvent(new Event('input', {bubbles:true}));
+    firstBootCheck(list.value === '' && !submit().defaultPrevented &&
+      hiddenSsid.value === ' Hidden SSID ',
+      'manual mode preserves legal surrounding spaces');
+
+    list.value = ' Edge ';
+    list.dispatchEvent(new Event('change', {bubbles:true}));
+    firstBootCheck(manual.value === '' && !submit().defaultPrevented &&
+      hiddenSsid.value === ' Edge ',
+      'switching back to the list clears stale manual SSID');
+
+    list.value = 'Spec & = + ąć';
+    list.dispatchEvent(new Event('change', {bubbles:true}));
+    password.value = 'p&=+ ąć';
+    firstBootCheck(!submit().defaultPrevented, 'special characters accepted');
+    const encoded = new URLSearchParams(new FormData(form)).toString();
+    const decoded = new URLSearchParams(encoded);
+    firstBootCheck(decoded.get('ssid') === 'Spec & = + ąć' &&
+      decoded.get('pass') === 'p&=+ ąć' && form.method === 'post' &&
+      form.getAttribute('action') === '/' && !location.href.includes('p%26') &&
+      !location.href.includes('ąć') && localStorage.length === 0 &&
+      sessionStorage.length === 0,
+      'native POST encoding preserves special characters without URL/storage leak');
+
+    list.value = '';
+    list.dispatchEvent(new Event('change', {bubbles:true}));
+    manual.value = '';
+    manual.dispatchEvent(new Event('input', {bubbles:true}));
+    firstBootCheck(submit().defaultPrevented && hiddenSsid.value === '' &&
+      status.textContent.includes('Wybierz sieć'), 'empty SSID rejected');
+
+    manual.value = 's'.repeat(29);
+    manual.dispatchEvent(new Event('input', {bubbles:true}));
+    password.value = 'p'.repeat(39);
+    firstBootCheck(!submit().defaultPrevented &&
+      hiddenSsid.value === 's'.repeat(29), '29/39-byte boundary accepted');
+    manual.value = 's'.repeat(30);
+    manual.dispatchEvent(new Event('input', {bubbles:true}));
+    firstBootCheck(submit().defaultPrevented && status.textContent.includes('30 bajtów'),
+      'overlong ASCII SSID rejected without truncation');
+    manual.value = 'ą'.repeat(15);
+    manual.dispatchEvent(new Event('input', {bubbles:true}));
+    firstBootCheck(submit().defaultPrevented && status.textContent.includes('30 bajtów'),
+      'UTF-8 SSID limit counts bytes instead of characters');
+    manual.value = 'Hidden';
+    manual.dispatchEvent(new Event('input', {bubbles:true}));
+    password.value = 'p'.repeat(40);
+    firstBootCheck(submit().defaultPrevented && status.textContent.includes('40 bajtów'),
+      'overlong password rejected without truncation');
+
+    password.value = 'keep-during-scan';
+    scan.click();
+    request = window.scanRequests.at(-1);
+    firstBootCheck(request.url === '/api/wifi/scan?refresh=1',
+      'rescan starts a fresh server cycle');
+    request.resolve(200, scanReady([]));
+    await firstBootSettle();
+    firstBootCheck(!scan.disabled && password.value === 'keep-during-scan' &&
+      manual.value === 'Hidden' && list.value === '' &&
+      status.textContent.includes('Nie znaleziono'),
+      'empty scan preserves password and manual hidden SSID');
+
+    scan.click();
+    request = window.scanRequests.at(-1);
+    request.resolve(500, {status:'error'});
+    await firstBootSettle();
+    firstBootCheck(!scan.disabled && password.value === 'keep-during-scan' &&
+      status.textContent.includes('Nie udało się'),
+      'scan error permits manual entry and retry');
+
+    scan.click();
+    request = window.scanRequests.at(-1);
+    request.resolve(504, {status:'error',error:'timeout',networks:[]});
+    await firstBootSettle();
+    firstBootCheck(!scan.disabled &&
+      status.textContent.includes('przekroczyło limit czasu') &&
+      password.value === 'keep-during-scan',
+      'server timeout is explicit and permits retry');
+
+    scan.click();
+    request = window.scanRequests.at(-1);
+    request.resolve(202, {status:'scanning',networks:[]});
+    await firstBootSettle();
+    let timeoutGuard = 0;
+    while (scan.disabled && timeoutGuard++ < 30) {
+      firstBootCheck(window.scanPollTimers.size === 1,
+        'one pending poll timer per cycle');
+      window.runNextScanPoll();
+      await firstBootSettle();
+      request = window.scanRequests.at(-1);
+      request.resolve(202, {status:'scanning',networks:[]});
+      await firstBootSettle();
+    }
+    firstBootCheck(timeoutGuard < 30 && !scan.disabled &&
+      status.textContent.includes('przekroczyło limit czasu') &&
+      password.value === 'keep-during-scan',
+      'timeout is explicit and retains credentials');
+
+    scan.click();
+    request = window.scanRequests.at(-1);
+    request.resolve(200, scanReady([{ssid:'After timeout',rssi:-50,secure:true}]));
+    await firstBootSettle();
+    firstBootCheck(!scan.disabled &&
+      [...list.options].some(option => option.value === 'After timeout'),
+      'rescan after timeout resets the poll counter');
+
+    scan.click();
+    const stale = window.scanRequests.at(-1);
+    scan.dispatchEvent(new Event('click'));
+    const fresh = window.scanRequests.at(-1);
+    firstBootCheck(stale !== fresh && stale.aborted &&
+      fresh.overlapAtStart === 0,
+      'new cycle aborts the previous request before starting');
+    fresh.resolve(200, scanReady([{ssid:'Fresh',rssi:-48,secure:true}]));
+    await firstBootSettle();
+    stale.resolve(200, scanReady([{ssid:'Stale',rssi:-20,secure:false}]));
+    await firstBootSettle();
+    firstBootCheck([...list.options].some(option => option.value === 'Fresh') &&
+      ![...list.options].some(option => option.value === 'Stale') &&
+      window.scanRequests.every(item => item.overlapAtStart === 0),
+      'late result from an obsolete scan is ignored');
+
+    output.textContent = 'PASS';
+  } catch (error) {
+    output.textContent = 'FAIL: ' + error.message;
+  }
+}, 0);
+</script>
+"""
+
 
 def main():
     chrome = resolve_chrome()
@@ -1362,6 +1622,30 @@ def main():
            "fetch('/api/security/state'" in recovery_html and \
            "window.location.replace('/emergency')" in recovery_html, \
         "embedded recovery login must confirm the cookie session before recovery"
+    first_boot_match = re.search(
+        r'const char first_boot_setup_html\[\] PROGMEM = R"\((.*?)\)";',
+        netserver_header, re.S)
+    assert first_boot_match, "embedded first-boot Wi-Fi page is missing"
+    first_boot_html = first_boot_match.group(1)
+    assert '<script src=' not in first_boot_html and \
+           '<link rel="stylesheet"' not in first_boot_html and \
+           'https://' not in first_boot_html and 'http://' not in first_boot_html, \
+        "first-boot form must remain independent of SPIFFS and Internet assets"
+    assert 'method="post"' in first_boot_html and \
+           "fetch('/api/wifi/scan'" in first_boot_html and \
+           'new TextEncoder()' in first_boot_html and \
+           'manual.value.trim()' not in first_boot_html and \
+           'maxlength=' not in first_boot_html, \
+        "first-boot form must use byte validation without silent truncation"
+    assert 'id="pass-toggle"' in first_boot_html and \
+           'class="eye-slash"' in first_boot_html and \
+           'type="button"' in first_boot_html and \
+           'aria-label="Poka&#380; has&#322;o"' in first_boot_html, \
+        "first-boot password eye must be an accessible native button"
+    assert 'console.' not in first_boot_html and \
+           'localStorage' not in first_boot_html and \
+           'sessionStorage' not in first_boot_html, \
+        "first-boot form must not log or persist credentials"
     assert re.search(r'webserver\.on\("/favicon\.ico", HTTP_GET,.*?'
                      r'request->redirect\("/voxone-symbol\.svg"\);', route, re.S), \
         "favicon.ico must redirect to the official symbol"
@@ -1385,6 +1669,10 @@ def main():
         "</head>", RECOVERY_MOCK + "</head>", 1)
     recovery_test_html = recovery_test_html.replace(
         "</body>", RECOVERY_CHECK + "</body>", 1)
+    first_boot_test_html = first_boot_html.replace(
+        "</head>", FIRST_BOOT_MOCK + "</head>", 1)
+    first_boot_test_html = first_boot_test_html.replace(
+        "</body>", FIRST_BOOT_CHECK + "</body>", 1)
     with tempfile.TemporaryDirectory(prefix="voxone-web-test-", ignore_cleanup_errors=True) as temporary:
         page = Path(temporary) / "test.html"
         page.write_text(html, encoding="utf-8")
@@ -1410,6 +1698,33 @@ def main():
         recovery_result = subprocess.run(
             recovery_command, capture_output=True, text=True,
             encoding="utf-8", errors="replace", timeout=30)
+        first_boot_page = Path(temporary) / "first-boot-test.html"
+        first_boot_page.write_text(first_boot_test_html, encoding="utf-8")
+        first_boot_command = [
+            str(chrome), "--headless", "--disable-gpu",
+            "--disable-gpu-compositing",
+            "--disable-features=Vulkan,UseSkiaRenderer,CanvasOopRasterization",
+            "--disable-extensions", "--no-first-run",
+            "--no-default-browser-check", "--allow-file-access-from-files",
+            "--user-data-dir=" + str(Path(temporary) / "first-boot-profile"),
+            "--virtual-time-budget=2500", "--dump-dom", first_boot_page.as_uri()
+        ]
+        first_boot_result = subprocess.run(
+            first_boot_command, capture_output=True, text=True,
+            encoding="utf-8", errors="replace", timeout=30)
+        first_boot_mobile_command = [
+            str(chrome), "--headless", "--disable-gpu",
+            "--disable-gpu-compositing",
+            "--disable-features=Vulkan,UseSkiaRenderer,CanvasOopRasterization",
+            "--disable-extensions", "--no-first-run",
+            "--no-default-browser-check", "--allow-file-access-from-files",
+            "--window-size=390,844",
+            "--user-data-dir=" + str(Path(temporary) / "first-boot-mobile-profile"),
+            "--virtual-time-budget=2500", "--dump-dom", first_boot_page.as_uri()
+        ]
+        first_boot_mobile_result = subprocess.run(
+            first_boot_mobile_command, capture_output=True, text=True,
+            encoding="utf-8", errors="replace", timeout=30)
     match = re.search(r'<output id="headless-result">([^<]+)</output>', result.stdout)
     outcome = match.group(1) if match else "FAIL: Chrome did not return the test result"
     print(outcome)
@@ -1424,6 +1739,25 @@ def main():
     print("Recovery " + recovery_outcome)
     if recovery_outcome != "PASS":
         print(recovery_result.stderr[-2000:])
+        raise SystemExit(1)
+    first_boot_match = re.search(
+        r'<output id="first-boot-headless-result">([^<]+)</output>',
+        first_boot_result.stdout)
+    first_boot_outcome = first_boot_match.group(1) if first_boot_match else \
+        "FAIL: Chrome did not return the first-boot result"
+    print("First boot " + first_boot_outcome)
+    if first_boot_outcome != "PASS":
+        print(first_boot_result.stderr[-2000:])
+        raise SystemExit(1)
+    first_boot_mobile_match = re.search(
+        r'<output id="first-boot-headless-result">([^<]+)</output>',
+        first_boot_mobile_result.stdout)
+    first_boot_mobile_outcome = first_boot_mobile_match.group(1) \
+        if first_boot_mobile_match else \
+        "FAIL: Chrome did not return the mobile first-boot result"
+    print("First boot mobile viewport " + first_boot_mobile_outcome)
+    if first_boot_mobile_outcome != "PASS":
+        print(first_boot_mobile_result.stderr[-2000:])
         raise SystemExit(1)
 
 

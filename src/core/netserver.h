@@ -20,11 +20,13 @@ h2{margin:0 0 12px;font-size:1.3rem}
 p{margin:0 0 20px;color:var(--muted)}
 .card{background:var(--panel);border:1px solid var(--line);border-radius:15px;padding:24px;margin:20px 0}
 label{display:block;margin:16px 0 6px;font-weight:600}
-input[type=text],input[type=password],select{display:block;width:100%;min-width:0;padding:12px;border:1px solid var(--line);border-radius:10px;background:var(--panel-2);color:var(--text);font:inherit}
+input[type=text],input[type=password],select{display:block;width:100%;min-width:0;min-height:46px;padding:12px;border:1px solid var(--line);border-radius:10px;background:var(--panel-2);color:var(--text);font:inherit}
 input::placeholder{color:var(--muted);opacity:1}
 input:focus-visible,select:focus-visible,button:focus-visible{outline:2px solid var(--cyan);outline-offset:2px}
 button{width:100%;min-height:46px;margin-top:22px;padding:13px;border:1px solid var(--cyan);border-radius:10px;background:var(--cyan-dark);color:var(--text);font:650 1rem system-ui,sans-serif;cursor:pointer}
 .secondary{margin-top:10px;background:transparent}.status{min-height:1.5em;margin:10px 0 0}
+.status[data-kind=error]{color:#ffb4ae}
+.password-control{position:relative}.password-control input{padding-right:54px}.password-toggle{position:absolute;top:3px;right:3px;width:42px;min-height:40px;margin:0;padding:8px;border:0;background:transparent}.password-toggle svg{display:block;width:23px;height:23px;margin:auto;fill:none;stroke:currentColor;stroke-width:1.7;stroke-linecap:round;stroke-linejoin:round}.password-toggle .eye-slash{display:none}.password-toggle[aria-pressed=true] .eye-slash{display:block}
 details{margin:24px 0;color:var(--muted)}
 summary{cursor:pointer;color:var(--cyan)}
 .service{margin-top:16px;padding-top:16px;border-top:1px solid var(--line)}
@@ -47,10 +49,10 @@ footer{text-align:center;padding:16px;color:var(--muted);font-size:.85rem}
 <p id="scan-status" class="status" role="status" aria-live="polite"></p>
 <details id="manual"><summary>Sie&#263; ukryta / wpisz SSID r&#281;cznie</summary>
 <label for="manual-ssid">Nazwa sieci (SSID)</label>
-<input id="manual-ssid" type="text" maxlength="29" autocomplete="off"></details>
+<input id="manual-ssid" type="text" autocomplete="off" autocapitalize="off" spellcheck="false"></details>
 <input id="ssid" name="ssid" type="hidden">
 <label for="pass">Has&#322;o</label>
-<input id="pass" name="pass" type="password" maxlength="39" autocomplete="new-password">
+<div class="password-control"><input id="pass" name="pass" type="password" autocomplete="new-password" autocapitalize="off" spellcheck="false"><button id="pass-toggle" class="password-toggle" type="button" aria-label="Poka&#380; has&#322;o" aria-pressed="false"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M2.5 12s3.5-6 9.5-6 9.5 6 9.5 6-3.5 6-9.5 6-9.5-6-9.5-6Z"/><circle cx="12" cy="12" r="2.7"/><path class="eye-slash" d="m4 4 16 16"/></svg></button></div>
 <button type="submit">Zapisz i po&#322;&#261;cz</button>
 </form>
 </section>
@@ -65,24 +67,34 @@ footer{text-align:center;padding:16px;color:var(--muted);font-size:.85rem}
 <footer>VoxOne &#8212; Konfiguracja</footer>
 <script>
 (function(){
-var list=document.getElementById('ssid-list'),status=document.getElementById('scan-status'),manual=document.getElementById('manual-ssid'),scan=document.getElementById('scan'),form=document.getElementById('wifi-form'),ssid=document.getElementById('ssid'),polls=0;
-function show(text){status.textContent=text}
-async function load(refresh){
- scan.disabled=true;show('Skanowanie sieci Wi-Fi...');
+var list=document.getElementById('ssid-list'),status=document.getElementById('scan-status'),manual=document.getElementById('manual-ssid'),scan=document.getElementById('scan'),form=document.getElementById('wifi-form'),ssid=document.getElementById('ssid'),pass=document.getElementById('pass'),passToggle=document.getElementById('pass-toggle'),mode='',cycle=0,polls=0,pollTimer=0,requestController=null,maxPolls=24;
+function show(text,error){status.textContent=text;status.dataset.kind=error&&text?'error':'status'}
+function validUnicode(value){for(var index=0;index<value.length;++index){var unit=value.charCodeAt(index);if(unit>=0xd800&&unit<=0xdbff){if(++index>=value.length)return false;var low=value.charCodeAt(index);if(low<0xdc00||low>0xdfff)return false}else if(unit>=0xdc00&&unit<=0xdfff)return false}return true}
+function byteLength(value){return validUnicode(value)?new TextEncoder().encode(value).length:-1}
+function addOption(value,text){var option=document.createElement('option');option.value=value;option.textContent=text;list.appendChild(option)}
+function renderNetworks(networks){var selected=mode==='list'?list.value:'',found=false;list.textContent='';addOption('',networks.length?'Wybierz sieć':'Nie znaleziono sieci');networks.forEach(function(network){if(!network||typeof network.ssid!=='string'||!network.ssid.length)return;addOption(network.ssid,network.ssid+' ('+network.rssi+' dBm, '+(network.secure?'zabezpieczona':'otwarta')+')');if(network.ssid===selected)found=true});if(selected&&!found)addOption(selected,selected+' (wybrana wcześniej)');list.value=mode==='list'?selected:''}
+function finishScan(activeCycle){if(activeCycle!==cycle)return;if(pollTimer){clearTimeout(pollTimer);pollTimer=0}requestController=null;polls=0;scan.disabled=false}
+async function pollScan(activeCycle,refresh){
+ if(activeCycle!==cycle)return;
+ requestController=new AbortController();
  try{
-  var response=await fetch('/api/wifi/scan'+(refresh?'?refresh=1':''),{cache:'no-store'});
-  if(response.status===202){if(++polls<20){setTimeout(function(){load(false)},700);return}throw new Error()}
-  if(!response.ok)throw new Error();
-  var data=await response.json(),selected=list.value;polls=0;list.textContent='';
-  var prompt=document.createElement('option');prompt.value='';prompt.textContent=data.networks.length?'Wybierz sieć':'Nie znaleziono sieci';list.appendChild(prompt);
-  data.networks.forEach(function(network){var option=document.createElement('option');option.value=network.ssid;option.textContent=network.ssid+' ('+network.rssi+' dBm, '+(network.secure?'zabezpieczona':'otwarta')+')';list.appendChild(option)});
-  if(selected)list.value=selected;show(data.networks.length?'Znaleziono sieci: '+data.networks.length:'Możesz wpisać SSID sieci ukrytej ręcznie.');
- }catch(error){show('Nie udało się odczytać listy. Wpisz SSID ręcznie.')}
- finally{scan.disabled=false}
+  var response=await fetch('/api/wifi/scan'+(refresh?'?refresh=1':''),{cache:'no-store',signal:requestController.signal});
+  if(activeCycle!==cycle)return;
+  requestController=null;
+  if(response.status===202){if(++polls>=maxPolls){show('Skanowanie przekroczyło limit czasu. Spróbuj ponownie lub wpisz SSID ręcznie.',true);finishScan(activeCycle);return}pollTimer=setTimeout(function(){pollTimer=0;pollScan(activeCycle,false)},700);return}
+  if(response.status===504){show('Skanowanie przekroczyło limit czasu. Spróbuj ponownie lub wpisz SSID ręcznie.',true);finishScan(activeCycle);return}
+  if(!response.ok)throw new Error('scan');
+  var data=await response.json();if(activeCycle!==cycle)return;if(!data||!Array.isArray(data.networks))throw new Error('response');renderNetworks(data.networks);show(data.networks.length?'Znaleziono sieci: '+data.networks.length:'Nie znaleziono sieci. Możesz wpisać SSID ręcznie.');finishScan(activeCycle)
+ }catch(error){if(activeCycle!==cycle)return;requestController=null;if(error&&error.name==='AbortError')return;show('Nie udało się odczytać listy. Wpisz SSID ręcznie lub spróbuj ponownie.',true);finishScan(activeCycle)}
 }
-scan.addEventListener('click',function(){load(true)});
-form.addEventListener('submit',function(event){var value=manual.value.trim()||list.value;if(!value){event.preventDefault();show('Wybierz sieć lub wpisz SSID ręcznie.');return}ssid.value=value});
-load(false);
+function startScan(refresh){++cycle;polls=0;if(pollTimer){clearTimeout(pollTimer);pollTimer=0}if(requestController)requestController.abort();requestController=null;scan.disabled=true;show('Skanowanie sieci Wi-Fi...');pollScan(cycle,refresh)}
+function setPasswordVisible(visible){var start=pass.selectionStart,end=pass.selectionEnd,direction=pass.selectionDirection;pass.type=visible?'text':'password';passToggle.setAttribute('aria-pressed',visible?'true':'false');passToggle.setAttribute('aria-label',visible?'Ukryj hasło':'Pokaż hasło');pass.focus({preventScroll:true});if(start!==null&&end!==null)pass.setSelectionRange(start,end,direction||'none')}
+scan.addEventListener('click',function(){startScan(true)});
+list.addEventListener('change',function(){ssid.value='';if(list.value.length){mode='list';manual.value='';show('Wybrano sieć z listy.')}else{mode='';show('Wybierz sieć lub wpisz SSID ręcznie.')}});
+manual.addEventListener('input',function(){ssid.value='';list.value='';mode=manual.value.length?'manual':'';show(mode==='manual'?'Tryb ręczny: użyte zostanie wpisane SSID.':'Wybierz sieć lub wpisz SSID ręcznie.')});
+passToggle.addEventListener('click',function(){setPasswordVisible(pass.type==='password')});
+form.addEventListener('submit',function(event){var value=mode==='manual'?manual.value:mode==='list'?list.value:'';var ssidBytes=byteLength(value),passBytes=byteLength(pass.value);ssid.value='';if(!value.length){event.preventDefault();show('Wybierz sieć lub wpisz SSID ręcznie.',true);return}if(ssidBytes<0||passBytes<0){event.preventDefault();show('SSID lub hasło zawiera nieprawidłowy tekst Unicode.',true);return}if(/[\u0000\t\r\n]/.test(value)||/[\u0000\t\r\n]/.test(pass.value)){event.preventDefault();show('SSID i hasło nie mogą zawierać tabulatorów ani znaków końca linii.',true);return}if(ssidBytes>29){event.preventDefault();show('SSID ma '+ssidBytes+' bajtów UTF-8. Maksymalnie 29.',true);return}if(passBytes>39){event.preventDefault();show('Hasło ma '+passBytes+' bajtów UTF-8. Maksymalnie 39.',true);return}ssid.value=value});
+startScan(false);
 })();
 </script>
 </body>
