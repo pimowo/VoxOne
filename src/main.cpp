@@ -24,6 +24,7 @@
 #include "core/ui_state.h"
 #include "core/ota_boot_runtime.h"
 #include "core/security_recovery_key_runtime.h"
+#include "core/security_recovery_ap_runtime.h"
 #include "core/security_recovery_session_runtime.h"
 #include "hardware/runtime_hardware_config.h"
 #include "displays/display_backend_selection.h"
@@ -194,6 +195,19 @@ void setup() {
   }
   if (restoreRecovery == voxone::config_restore::BootRecoveryStatus::Recovered)
     Serial.println("##[BOOT]# Incomplete config restore rolled back");
+  const auto recoveryApResult =
+      voxone::security_recovery::beginSecurityRecoveryAp(millis());
+  if (recoveryApResult ==
+      voxone::security_recovery::RecoveryApStartResult::CredentialUnavailable) {
+    Serial.println("##[WARN]# SECURITY Recovery AP disabled: shared AP "
+                   "credential is not configured");
+  }
+  if (voxone::security_recovery::securityRecoveryApOwnsRuntime()) {
+    Serial.printf("##[BOOT]# SECURITY Recovery AP result=%s exclusive=1\n",
+                  voxone::security_recovery::recoveryApStartResultName(
+                      recoveryApResult));
+    return;
+  }
   const auto runtimeHardwareStatus =
       voxone::hardware::loadRuntimeHardwareConfig();
   Serial.printf("##[BOOT]#\truntime hardware: %s "
@@ -266,6 +280,11 @@ void setup() {
 }
 
 void loop() {
+  if (voxone::security_recovery::securityRecoveryApOwnsRuntime()) {
+    voxone::security_recovery::serviceSecurityRecoveryAp(millis());
+    delay(1);
+    return;
+  }
   const uint32_t loopStartedUs = micros();
   displayMode_e systemMode;
   if (uiSystemModeRequest(updateProgress(), systemMode))

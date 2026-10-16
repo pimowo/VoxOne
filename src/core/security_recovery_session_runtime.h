@@ -20,6 +20,10 @@ RecoverySessionSnapshot beginRecoverySession(KeyState keyState,
                                              uint32_t nowMs);
 void serviceRecoverySession(uint32_t nowMs);
 RecoverySessionSnapshot recoverySessionSnapshot();
+RecoveryTransition activateRecoverySession(uint32_t nowMs);
+RecoveryTransition cancelRecoverySession(uint32_t nowMs);
+RecoveryTransition failRecoverySession(uint32_t nowMs);
+RecoveryTransition completeRecoverySession(bool success, uint32_t nowMs);
 
 }  // namespace security_recovery
 }  // namespace voxone

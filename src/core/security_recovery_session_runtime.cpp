@@ -35,5 +35,21 @@ void serviceRecoverySession(uint32_t nowMs) {
 
 RecoverySessionSnapshot recoverySessionSnapshot() { return snapshot(); }
 
+RecoveryTransition activateRecoverySession(uint32_t nowMs) {
+  return session.activate(nowMs);
+}
+
+RecoveryTransition cancelRecoverySession(uint32_t nowMs) {
+  return session.cancel(nowMs);
+}
+
+RecoveryTransition failRecoverySession(uint32_t nowMs) {
+  return session.fail(nowMs);
+}
+
+RecoveryTransition completeRecoverySession(bool success, uint32_t nowMs) {
+  return session.complete(success, nowMs);
+}
+
 }  // namespace security_recovery
 }  // namespace voxone

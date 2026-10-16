@@ -11,3 +11,4 @@ data/data/*
 *.elf
 *.map
 *.log
+.voxone-recovery-ap-password
