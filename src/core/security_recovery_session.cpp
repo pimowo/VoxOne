@@ -18,6 +18,7 @@ bool RecoverySession::live() const {
     case RecoveryState::Ready:
     case RecoveryState::Active:
     case RecoveryState::AwaitConfirmation:
+    case RecoveryState::CommitReady:
     case RecoveryState::Committing:
       return true;
     case RecoveryState::Idle:
@@ -33,6 +34,7 @@ bool RecoverySession::live() const {
 bool RecoverySession::activated() const {
   return machine_.state() == RecoveryState::Active ||
          machine_.state() == RecoveryState::AwaitConfirmation ||
+         machine_.state() == RecoveryState::CommitReady ||
          machine_.state() == RecoveryState::Committing;
 }
 
@@ -65,6 +67,15 @@ RecoveryTransition RecoverySession::confirm(uint32_t nowMs) {
       machine_.recheckGate(gateSource_.read(), nowMs);
   if (machine_.state() != RecoveryState::AwaitConfirmation) return checked;
   return machine_.dispatch(RecoveryEvent::Confirm, nowMs);
+}
+
+RecoveryTransition RecoverySession::beginCommit(uint32_t nowMs) {
+  if (machine_.state() != RecoveryState::CommitReady)
+    return machine_.dispatch(RecoveryEvent::BeginCommit, nowMs);
+  const RecoveryTransition checked =
+      machine_.recheckGate(gateSource_.read(), nowMs);
+  if (machine_.state() != RecoveryState::CommitReady) return checked;
+  return machine_.dispatch(RecoveryEvent::BeginCommit, nowMs);
 }
 
 RecoveryTransition RecoverySession::complete(bool success, uint32_t nowMs) {

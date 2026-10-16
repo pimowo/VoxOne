@@ -39,6 +39,18 @@ RecoveryTransition activateRecoverySession(uint32_t nowMs) {
   return session.activate(nowMs);
 }
 
+RecoveryTransition awaitRecoveryConfirmation(uint32_t nowMs) {
+  return session.awaitConfirmation(nowMs);
+}
+
+RecoveryTransition confirmRecoveryKey(uint32_t nowMs) {
+  return session.confirm(nowMs);
+}
+
+RecoveryTransition beginRecoveryCommit(uint32_t nowMs) {
+  return session.beginCommit(nowMs);
+}
+
 RecoveryTransition cancelRecoverySession(uint32_t nowMs) {
   return session.cancel(nowMs);
 }

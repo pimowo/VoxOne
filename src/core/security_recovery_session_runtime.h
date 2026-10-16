@@ -21,6 +21,11 @@ RecoverySessionSnapshot beginRecoverySession(KeyState keyState,
 void serviceRecoverySession(uint32_t nowMs);
 RecoverySessionSnapshot recoverySessionSnapshot();
 RecoveryTransition activateRecoverySession(uint32_t nowMs);
+RecoveryTransition awaitRecoveryConfirmation(uint32_t nowMs);
+RecoveryTransition confirmRecoveryKey(uint32_t nowMs);
+// Diagnostic-only transition. It rechecks the production gate and never
+// writes SECURITY/NVS or completes a credential transaction.
+RecoveryTransition beginRecoveryCommit(uint32_t nowMs);
 RecoveryTransition cancelRecoverySession(uint32_t nowMs);
 RecoveryTransition failRecoverySession(uint32_t nowMs);
 RecoveryTransition completeRecoverySession(bool success, uint32_t nowMs);

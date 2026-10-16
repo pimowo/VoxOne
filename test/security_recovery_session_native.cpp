@@ -79,8 +79,12 @@ int main() {
 
   RecoverySession completed(gate);
   beginAwaitingConfirmation(completed);
-  assert(completed.confirm(3).to == RecoveryState::Committing);
-  assert(completed.complete(true, 4).to == RecoveryState::Completed);
+  assert(completed.confirm(3).to == RecoveryState::CommitReady);
+  assert(completed.complete(true, 4).diagnostic ==
+         RecoveryDiagnostic::InvalidEvent);
+  assert(completed.live() && completed.activated());
+  assert(completed.beginCommit(5).to == RecoveryState::Committing);
+  assert(completed.complete(true, 6).to == RecoveryState::Completed);
   assert(!completed.live() && !completed.activated());
 
   RecoverySession sessionTimeout(gate);
@@ -172,6 +176,24 @@ int main() {
          RecoveryDiagnostic::ConfirmationAccepted);
   assert(gate.reads == readsBeforeConfirmation + 1U);
 
+  RecoverySession commitRecheck(gate);
+  beginAwaitingConfirmation(commitRecheck);
+  assert(commitRecheck.confirm(3).to == RecoveryState::CommitReady);
+  const unsigned readsBeforeCommit = gate.reads;
+  assert(commitRecheck.beginCommit(4).to == RecoveryState::Committing);
+  assert(gate.reads == readsBeforeCommit + 1U);
+
+  gate.conditions = upload;
+  RecoverySession commitDenied(gate);
+  gate.conditions = eligible();
+  beginAwaitingConfirmation(commitDenied);
+  assert(commitDenied.confirm(3).to == RecoveryState::CommitReady);
+  gate.conditions = upload;
+  assert(commitDenied.beginCommit(4).diagnostic ==
+         RecoveryDiagnostic::OtaUploadActive);
+  assert(commitDenied.state() == RecoveryState::Failed);
+  gate.conditions = eligible();
+
   const uint32_t wrapStart = UINT32_MAX - 100U;
   RecoverySession wrap(gate);
   beginReady(wrap, wrapStart);
@@ -207,6 +229,7 @@ int main() {
   assert(combined.find("esp_ota_mark_app_invalid") == std::string::npos);
   assert(combined.find("ESP.restart") == std::string::npos);
   assert(runtime.find("readRecoveryGateConditions()") != std::string::npos);
+  assert(runtime.find("beginRecoveryCommit") != std::string::npos);
   assert(main.find("beginRecoverySession(") != std::string::npos);
   assert(main.find("serviceRecoverySession(millis())") != std::string::npos);
   assert(main.find("recoverAtBoot()") > main.find("beginRecoverySession("));

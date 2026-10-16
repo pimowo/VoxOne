@@ -121,6 +121,14 @@ RecoveryHttpDecision request(const char* text, bool allowed = true) {
                                      allowed);
 }
 
+RecoveryHttpDecision authenticatedRequest(const std::string& text,
+                                          const char* token,
+                                          RecoveryHttpRequest& parsed,
+                                          bool allowed = true) {
+  return evaluateRecoveryHttpRequest(text.data(), text.size(),
+                                     "192.168.4.1", token, allowed, parsed);
+}
+
 }  // namespace
 
 int main() {
@@ -247,14 +255,15 @@ int main() {
   assert(request("GET / HTTP/1.1\r\nHost: 192.168.4.1\r\n\r\n") ==
          RecoveryHttpDecision::Root);
   assert(request("GET /status HTTP/1.1\r\nHost: 192.168.4.1:80\r\n\r\n") ==
-         RecoveryHttpDecision::Status);
+         RecoveryHttpDecision::Unauthorized);
   assert(request("GET /update HTTP/1.1\r\nHost: 192.168.4.1\r\n\r\n") ==
          RecoveryHttpDecision::NotFound);
   assert(request("GET /emergency HTTP/1.1\r\nHost: 192.168.4.1\r\n\r\n") ==
          RecoveryHttpDecision::NotFound);
   assert(request("GET /ws HTTP/1.1\r\nHost: 192.168.4.1\r\n\r\n") ==
          RecoveryHttpDecision::NotFound);
-  assert(request("POST / HTTP/1.1\r\nHost: 192.168.4.1\r\n\r\n") ==
+  assert(request("POST / HTTP/1.1\r\nHost: 192.168.4.1\r\n"
+                 "Content-Length: 1\r\n\r\nx") ==
          RecoveryHttpDecision::MethodNotAllowed);
   assert(request("GET / HTTP/1.1\r\nHost: evil.invalid\r\n\r\n") ==
          RecoveryHttpDecision::HostRejected);
@@ -273,7 +282,57 @@ int main() {
   std::memset(oversized, 'A', sizeof(oversized));
   assert(evaluateRecoveryHttpRequest(oversized, sizeof(oversized),
                                      "192.168.4.1", true) ==
-         RecoveryHttpDecision::BadRequest);
+         RecoveryHttpDecision::PayloadTooLarge);
+
+  size_t expectedLength = 0;
+  const char partial[] =
+      "POST /prepare HTTP/1.1\r\nHost: 192.168.4.1\r\n"
+      "Content-Length: 4\r\n\r\nab";
+  assert(inspectRecoveryHttpFraming(partial, std::strlen(partial),
+                                    expectedLength) ==
+         RecoveryHttpFraming::Incomplete);
+  assert(expectedLength == std::strlen(partial) + 2U);
+  const char complete[] =
+      "POST /prepare HTTP/1.1\r\nHost: 192.168.4.1\r\n"
+      "Content-Length: 4\r\n\r\nabcd";
+  assert(inspectRecoveryHttpFraming(complete, std::strlen(complete),
+                                    expectedLength) ==
+         RecoveryHttpFraming::Complete);
+
+  constexpr char token[] =
+      "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef";
+  RecoveryHttpRequest parsed{};
+  const std::string status =
+      std::string("GET /status HTTP/1.1\r\nHost: 192.168.4.1\r\n") +
+      "Cookie: voxone_recovery=" + token + "\r\n\r\n";
+  assert(authenticatedRequest(status, token, parsed) ==
+         RecoveryHttpDecision::Status);
+  const std::string body =
+      "pin=1293&new_password=abcd&repeat_password=abcd&csrf=token";
+  const std::string prepare =
+      std::string("POST /prepare HTTP/1.1\r\nHost: 192.168.4.1\r\n") +
+      "Origin: http://192.168.4.1\r\nCookie: voxone_recovery=" + token +
+      "\r\nContent-Type: application/x-www-form-urlencoded\r\n"
+      "Content-Length: " + std::to_string(body.size()) + "\r\n\r\n" + body;
+  assert(authenticatedRequest(prepare, token, parsed) ==
+         RecoveryHttpDecision::Prepare);
+  assert(parsed.bodyLength == body.size());
+  assert(prepare.substr(parsed.bodyOffset, parsed.bodyLength) == body);
+  std::string foreignOrigin = prepare;
+  foreignOrigin.replace(foreignOrigin.find("http://192.168.4.1"),
+                        std::strlen("http://192.168.4.1"),
+                        "http://evil.invalid");
+  assert(authenticatedRequest(foreignOrigin, token, parsed) ==
+         RecoveryHttpDecision::OriginRejected);
+  const std::string noOrigin =
+      std::string("POST /prepare HTTP/1.1\r\nHost: 192.168.4.1\r\n") +
+      "Cookie: voxone_recovery=" + token +
+      "\r\nContent-Type: application/x-www-form-urlencoded\r\n"
+      "Content-Length: " + std::to_string(body.size()) + "\r\n\r\n" + body;
+  assert(authenticatedRequest(noOrigin, token, parsed) ==
+         RecoveryHttpDecision::OriginRejected);
+  assert(authenticatedRequest(prepare, "bad", parsed) ==
+         RecoveryHttpDecision::Unauthorized);
 
   const auto& hardware = voxone::hardware::currentHardware();
 #if defined(VOXONE_PROFILE_W0)
@@ -310,6 +369,9 @@ int main() {
   assert(runtime.find("Cache-Control: no-store") != std::string::npos);
   assert(runtime.find("X-Content-Type-Options: nosniff") !=
          std::string::npos);
+  assert(runtime.find("beginRecoveryCommit(nowMs)") != std::string::npos);
+  assert(runtime.find("securityValidateAdminPassword") == std::string::npos);
+  assert(runtime.find("persistentWrite\\\":false") != std::string::npos);
   assert(platformio.find("pre:scripts/recovery_ap_credential.py") !=
          std::string::npos);
   assert(platformio.find("VOXONE_SECURITY_RECOVERY_AP_PASSWORD") ==

@@ -35,6 +35,7 @@ bool RecoveryStateMachine::sessionActive() const {
          state_ == RecoveryState::OtaCheck ||
          state_ == RecoveryState::Ready || state_ == RecoveryState::Active ||
          state_ == RecoveryState::AwaitConfirmation ||
+         state_ == RecoveryState::CommitReady ||
          state_ == RecoveryState::Committing;
 }
 
@@ -96,9 +97,14 @@ RecoveryTransition RecoveryStateMachine::dispatch(RecoveryEvent event,
       break;
     case RecoveryState::AwaitConfirmation:
       if (event == RecoveryEvent::Confirm) {
-        return transition(RecoveryState::Committing,
+        return transition(RecoveryState::CommitReady,
                           RecoveryDiagnostic::ConfirmationAccepted);
       }
+      break;
+    case RecoveryState::CommitReady:
+      if (event == RecoveryEvent::BeginCommit)
+        return transition(RecoveryState::Committing,
+                          RecoveryDiagnostic::Committing);
       break;
     case RecoveryState::Committing:
       if (event == RecoveryEvent::CommitSucceeded)
@@ -138,7 +144,8 @@ RecoveryTransition RecoveryStateMachine::evaluateGate(
 RecoveryTransition RecoveryStateMachine::recheckGate(
     const GateConditions& conditions, uint32_t nowMs) {
   if (state_ != RecoveryState::Ready &&
-      state_ != RecoveryState::AwaitConfirmation)
+      state_ != RecoveryState::AwaitConfirmation &&
+      state_ != RecoveryState::CommitReady)
     return report(RecoveryDiagnostic::InvalidEvent);
   if (sessionExpired(nowMs))
     return transition(RecoveryState::Timeout,
@@ -183,6 +190,7 @@ const char* recoveryStateName(RecoveryState state) {
     case RecoveryState::Ready: return "ready";
     case RecoveryState::Active: return "active";
     case RecoveryState::AwaitConfirmation: return "await_confirmation";
+    case RecoveryState::CommitReady: return "commit_ready";
     case RecoveryState::Committing: return "committing";
     case RecoveryState::Completed: return "completed";
     case RecoveryState::Cancelled: return "cancelled";

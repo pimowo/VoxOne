@@ -99,8 +99,12 @@ int main() {
   assert(flow.dispatch(RecoveryEvent::RequireConfirmation, 12).to ==
          RecoveryState::AwaitConfirmation);
   assert(flow.dispatch(RecoveryEvent::Confirm, 13).to ==
+         RecoveryState::CommitReady);
+  assert(flow.recheckGate(eligible(), 14).diagnostic ==
+         RecoveryDiagnostic::GateRechecked);
+  assert(flow.dispatch(RecoveryEvent::BeginCommit, 14).to ==
          RecoveryState::Committing);
-  assert(flow.dispatch(RecoveryEvent::CommitSucceeded, 14).to ==
+  assert(flow.dispatch(RecoveryEvent::CommitSucceeded, 15).to ==
          RecoveryState::Completed);
 
   RecoveryStateMachine commitFailure;
@@ -108,7 +112,8 @@ int main() {
   commitFailure.dispatch(RecoveryEvent::Activate, 1);
   commitFailure.dispatch(RecoveryEvent::RequireConfirmation, 2);
   commitFailure.dispatch(RecoveryEvent::Confirm, 3);
-  assert(commitFailure.dispatch(RecoveryEvent::CommitFailed, 4).diagnostic ==
+  commitFailure.dispatch(RecoveryEvent::BeginCommit, 4);
+  assert(commitFailure.dispatch(RecoveryEvent::CommitFailed, 5).diagnostic ==
          RecoveryDiagnostic::CommitFailed);
 
   RecoveryStateMachine committingTimeout;
@@ -116,7 +121,8 @@ int main() {
   committingTimeout.dispatch(RecoveryEvent::Activate, 1);
   committingTimeout.dispatch(RecoveryEvent::RequireConfirmation, 2);
   committingTimeout.dispatch(RecoveryEvent::Confirm, 3);
-  assert(committingTimeout.dispatch(RecoveryEvent::Cancel, 4).diagnostic ==
+  committingTimeout.dispatch(RecoveryEvent::BeginCommit, 4);
+  assert(committingTimeout.dispatch(RecoveryEvent::Cancel, 5).diagnostic ==
          RecoveryDiagnostic::InvalidEvent);
   assert(committingTimeout.dispatch(RecoveryEvent::CommitSucceeded,
                                     600000U).diagnostic ==

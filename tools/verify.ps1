@@ -129,7 +129,9 @@ $nativeSources=@{
  security_api_native=@('src/core/security_settings.cpp','src/core/security_session.cpp','src/core/security_api.cpp')
  security_runtime_native=@('src/core/security_settings.cpp','src/core/security_runtime.cpp')
  security_recovery_ap_native=@('src/core/security_recovery_ap.cpp','src/core/security_recovery_http.cpp','src/core/security_recovery_session.cpp','src/core/security_recovery_state.cpp','src/core/security_recovery_key.cpp','src/hardware/hardware_descriptor.cpp')
+ security_recovery_confirmation_native=@('src/core/security_recovery_confirmation.cpp')
  security_recovery_key_native=@('src/core/security_recovery_key.cpp','src/hardware/hardware_descriptor.cpp','src/hardware/runtime_hardware_config.cpp')
+ security_recovery_pin_native=@('src/core/security_recovery_pin.cpp','src/core/security_settings.cpp')
  security_recovery_session_native=@('src/core/security_recovery_session.cpp','src/core/security_recovery_state.cpp','src/core/security_recovery_key.cpp','src/hardware/hardware_descriptor.cpp')
  security_recovery_state_native=@('src/core/security_recovery_state.cpp','src/core/security_recovery_key.cpp','src/hardware/hardware_descriptor.cpp')
  security_session_native=@('src/core/security_settings.cpp','src/core/security_session.cpp')
@@ -254,6 +256,21 @@ if(-not $onWindows) {
   if($LASTEXITCODE -ne 0) { throw 'Sanitized security recovery KEY compile failed' }
   & $securityRecoveryKeyExe
   if($LASTEXITCODE -ne 0) { throw 'Sanitized security recovery KEY test failed' }
+  $securityRecoveryConfirmationExe=Join-Path $work 'security_recovery_confirmation_sanitized'
+  & $Cxx @sanitizerArgs '-o' $securityRecoveryConfirmationExe `
+    (Join-Path $root 'test/security_recovery_confirmation_native.cpp') `
+    (Join-Path $root 'src/core/security_recovery_confirmation.cpp')
+  if($LASTEXITCODE -ne 0) { throw 'Sanitized security recovery confirmation compile failed' }
+  & $securityRecoveryConfirmationExe
+  if($LASTEXITCODE -ne 0) { throw 'Sanitized security recovery confirmation test failed' }
+  $securityRecoveryPinExe=Join-Path $work 'security_recovery_pin_sanitized'
+  & $Cxx @sanitizerArgs '-o' $securityRecoveryPinExe `
+    (Join-Path $root 'test/security_recovery_pin_native.cpp') `
+    (Join-Path $root 'src/core/security_recovery_pin.cpp') `
+    (Join-Path $root 'src/core/security_settings.cpp')
+  if($LASTEXITCODE -ne 0) { throw 'Sanitized security recovery PIN compile failed' }
+  & $securityRecoveryPinExe
+  if($LASTEXITCODE -ne 0) { throw 'Sanitized security recovery PIN test failed' }
   $securityRecoveryStateExe=Join-Path $work 'security_recovery_state_sanitized'
   & $Cxx @sanitizerArgs '-DVOXONE_PROFILE_M0=1' '-o' $securityRecoveryStateExe `
     (Join-Path $root 'test/security_recovery_state_native.cpp') `
@@ -391,5 +408,3 @@ foreach($name in $firmwareMemory.Keys) {
 if($script:failed) { Write-Host 'RESULT: FAIL'; exit 1 }
 Write-Host 'RESULT: PASS'
 exit 0
-
-\n

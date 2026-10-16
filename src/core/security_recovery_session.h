@@ -25,6 +25,7 @@ class RecoverySession {
   RecoveryTransition activate(uint32_t nowMs);
   RecoveryTransition awaitConfirmation(uint32_t nowMs);
   RecoveryTransition confirm(uint32_t nowMs);
+  RecoveryTransition beginCommit(uint32_t nowMs);
   RecoveryTransition complete(bool success, uint32_t nowMs);
   RecoveryTransition cancel(uint32_t nowMs);
   RecoveryTransition fail(uint32_t nowMs);
