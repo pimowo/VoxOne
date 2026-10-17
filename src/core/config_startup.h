@@ -7,6 +7,8 @@
 namespace voxone {
 namespace config_format {
 
+constexpr uint8_t kDefaultUserVolume = 20;
+
 struct ConfigStartupResult {
   ConfigRecordStatus status;
   bool btEnabled;
@@ -111,7 +113,7 @@ void buildConfigDefaults(Runtime& store, const char* ntp1, const char* ntp2,
                          const char* mdns, uint16_t audioBuffer) {
   store.config_set = kConfigV7Magic;
   store.version = kConfigV7;
-  store.volume = 12;
+  store.volume = volumeUserToRaw(kDefaultUserVolume);
   store.balance = 0;
   store.trebble = 0;
   store.middle = 0;
@@ -173,7 +175,7 @@ void buildConfigDefaults(Runtime& store, const char* ntp1, const char* ntp2,
   store.maximumVolume = 100;
   store.startupMode = 0;
   store.startupFixedVolume = 20;
-  store.lastUserVolume = volumeRawToUser(store.volume);
+  store.lastUserVolume = kDefaultUserVolume;
 }
 
 // EEPROM area adapter: format code chooses the exact record length.

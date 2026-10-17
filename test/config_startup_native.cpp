@@ -189,6 +189,22 @@ ConfigStartupResult run(const uint8_t* data, std::size_t size, bool supports,
 int main() {
   Runtime runtime{};
   uint8_t area[268]{};
+
+  // A missing/invalid record and a factory reset share these defaults.
+  Runtime fresh{};
+  defaults(fresh);
+  assert(fresh.volume == volumeUserToRaw(kDefaultUserVolume));
+  assert(fresh.volume == 31 && fresh.lastUserVolume == 20);
+  assert(fresh.startupMode == 0 && fresh.startupFixedVolume == 20);
+  const VolumeState freshLast = volumeStateAtStartup(
+      fresh.volume, fresh.lastUserVolume, fresh.maximumVolume,
+      fresh.startupMode == 1, fresh.startupFixedVolume, false);
+  assert(freshLast.user == 20 && freshLast.raw == fresh.volume);
+  const VolumeState freshFixed = volumeStateAtStartup(
+      fresh.volume, 73, fresh.maximumVolume, true,
+      fresh.startupFixedVolume, false);
+  assert(freshFixed.user == 20 && freshFixed.raw == fresh.volume);
+
   for (uint16_t version : {5, 6}) {
     legacy(area, version);
     config_v7_t golden{};
@@ -226,6 +242,7 @@ int main() {
     for (bool supports : {false, true}) {
       const auto result = run(area, sizeof(area), supports, runtime, S::LOADED_V7, false);
       equalFields(runtime, v6);
+      assert(runtime.volume == 111 && runtime.lastUserVolume == 53);
       assert(result.btEnabled == (supports && enabled));
       assert(result.storedBtEnabled == (enabled != 0));
       assert(!result.migratingVolume);

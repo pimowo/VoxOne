@@ -123,6 +123,27 @@ int main() {
       assert(stored(backend).btEnabled == enabled);
     }
   }
+
+  // A restart or firmware replacement sees the same valid v7 record and must
+  // neither apply new-device defaults nor rewrite the stored user volume.
+  FakeEeprom existing;
+  config_v6_t existingRuntime{};
+  defaults(existingRuntime);
+  existingRuntime.volume = volumeUserToRaw(64);
+  existingRuntime.lastUserVolume = 64;
+  ConfigPersistence existingState;
+  existingState.begin(S::DEFAULTS_REQUIRED, false);
+  assert(existingState.persist(existingRuntime, existing) == W::OK);
+  const unsigned writesBeforeReload = existing.writes;
+  config_v6_t reloadedExisting{};
+  ConfigPersistence reloadedState;
+  const auto reloaded = startup(
+      existing, reloadedExisting, reloadedState, false);
+  assert(reloaded.status == S::LOADED_V7);
+  assert(reloadedExisting.volume == volumeUserToRaw(64));
+  assert(reloadedExisting.lastUserVolume == 64);
+  assert(existing.writes == writesBeforeReload);
+
   for (uint8_t version : {5, 6}) {
     FakeEeprom old;
     legacy(old, version);
@@ -143,7 +164,10 @@ int main() {
     legacy(old, version);
     ConfigPersistence reset;
     assert(startup(old, runtime, reset, false).status == S::DEFAULTS_REQUIRED);
-    assert(old.commits == 1 && stored(old).fields.volume == 12);
+    const auto value = stored(old);
+    assert(old.commits == 1);
+    assert(value.fields.volume == volumeUserToRaw(kDefaultUserVolume));
+    assert(value.fields.lastUserVolume == kDefaultUserVolume);
     assert(stored(old).btEnabled == 0);
   }
   for (bool badBool : {false, true}) {
@@ -157,7 +181,10 @@ int main() {
     ConfigPersistence reset;
     const auto result = startup(corrupt, runtime, reset, true);
     assert(result.status == (badBool ? S::INVALID_BOOL : S::INVALID_CRC));
-    assert(corrupt.commits == 2 && stored(corrupt).fields.volume == 12);
+    const auto value = stored(corrupt);
+    assert(corrupt.commits == 2);
+    assert(value.fields.volume == volumeUserToRaw(kDefaultUserVolume));
+    assert(value.fields.lastUserVolume == kDefaultUserVolume);
   }
   FakeEeprom future;
   future.durable[500] = 0xa7; future.durable[501] = 0xc7;
@@ -247,8 +274,11 @@ int main() {
     assert(state.factoryReset(runtime, supports, backend, defaults) == W::OK);
     const auto value = stored(backend);
     assert(backend.commits == before + 1);
-    assert(value.fields.lastStation == 0 && value.fields.volume == 12);
-    assert(value.fields.maximumVolume == 100 && value.fields.startupFixedVolume == 20);
+    assert(value.fields.lastStation == 0);
+    assert(value.fields.volume == volumeUserToRaw(kDefaultUserVolume));
+    assert(value.fields.lastUserVolume == kDefaultUserVolume);
+    assert(value.fields.maximumVolume == 100 && value.fields.startupMode == 0);
+    assert(value.fields.startupFixedVolume == 20);
     assert(value.btEnabled == supports);
   }
   ConfigPersistence unavailable;
