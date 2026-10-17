@@ -71,6 +71,19 @@ capability. Ich definicje należy dodać jako osobne profile, bez modyfikowania
 historycznych S0/DIN0. Projekt, implementacja i HIL S1/DIN1 są POST-STABLE i
 nie blokują Stable 1.0.0 dla obowiązkowych rewizji 0.
 
+Zatwierdzony kierunek, nadal niezaimplementowany w bieżących BIN:
+
+- S1 ma używać podstawowego `SSD1306_128X32` przez I²C i osobnego layoutu
+  `OLED_128X32`;
+- DIN1 ma startować bez zainstalowanego display i input (`NONE`/`NONE`), z
+  opcjonalnym wyświetlaczem I²C oraz EC11 albo 3×SW dopiero po zdefiniowaniu
+  pinoutu i capabilities;
+- przyszła rodzina XL oraz wybór I²C/SPI dla docelowych M/L/XL wymagają
+  osobnej decyzji o magistralach, GPIO, zasilaniu i pamięci.
+
+Te kierunki nie zmieniają GPIO, defaultów ani deklarowanych możliwości S0 i
+DIN0. Ich szczegółowy backlog pozostaje w [TODO.md](TODO.md).
+
 ### Flash i partycje
 
 Wszystkie env używają `partitions_yoradio.csv`: NVS `0x5000`, `otadata`

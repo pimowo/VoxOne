@@ -2,6 +2,17 @@
 
 Stan odniesienia: commit 4436dce4d71ad1bb7d3d9d9b785c2825a33ee086. Ten dokument klasyfikuje obecne użycie, nie usuwa kodu. KEEP oznacza potrzebny bez istotnej zmiany architektury; REFACTOR oznacza potrzebny, ale sprzężony z dawnymi profilami lub nazwami; REMOVE_LATER oznacza kandydat do późniejszego usunięcia po osobnej weryfikacji; UNKNOWN oznacza brak wystarczających dowodów.
 
+Aktualizacja audytu 2026-10-17: poniższa tabela zachowuje historyczny stan
+checkpointu PROJECT-CLEANUP-1A. W aktualnym drzewie nie ma już katalogów
+`src/audioVS1053`, `src/IRremoteESP8266`, `src/GT911_Touchscreen`,
+`src/LiquidCrystalI2C`, `src/ILI9488`, `src/pluginsManager` ani `src/plugins`.
+Nie należy na tej podstawie usuwać kolejnych bibliotek: bieżące `SSD1322` i
+`ST7920` pozostają kodem odziedziczonym/przyszłym, niewłączonym w pięciu
+profilach, a ich ewentualne usunięcie nadal wymaga osobnego audytu zależności.
+Aktywne profile i capabilities opisuje teraz
+[HARDWARE_TARGETS.md](HARDWARE_TARGETS.md), a otwarte decyzje wyłącznie
+[TODO.md](TODO.md).
+
 | Moduł / plik | Obecna rola | VoxOne używa? | Przyszłość | Akcja |
 |---|---|---|---|---|
 | src/audioI2S/Audio.cpp, AudioEx.h | Strumień i dekodowanie radia przez I2S, współpraca z Player | Tak, aktualny PCM5102A | Zachować tor i wydzielić wybór backendu sprzętowego w późniejszym etapie | REFACTOR |
