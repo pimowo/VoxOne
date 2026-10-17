@@ -66,6 +66,14 @@ class DspCore: public yoDisplay {
 #endif
       }
     #endif
+#if VOXONE_DISPLAY_PROFILE == VOXONE_DISPLAY_PROFILE_ST7796_480X320
+    inline void drawFirstBootLogo(uint16_t top) {
+      using namespace voxone::display_boot_branding::st7796;
+      _drawBootLogoRle(kBootLogoRle565, kBootLogoRle565Size,
+                       kBootLogoLeft, top, kBootLogoWidth,
+                       kBootLogoPixelCount);
+    }
+#endif
     void flip();
     void invert();
     void sleep();

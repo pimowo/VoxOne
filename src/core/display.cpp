@@ -1154,16 +1154,21 @@ void Display::_buildPager(){
 void Display::_apScreen() {
   if(_boot) _pager->removePage(_boot);
     _boot = new Page();
-    char setupUrl[32];
-    snprintf(setupUrl, sizeof(setupUrl), "http://%s/",
+    char setupAddress[32];
+#if VOXONE_DISPLAY_PROFILE == VOXONE_DISPLAY_PROFILE_ST7796_480X320
+    snprintf(setupAddress, sizeof(setupAddress), "%s",
              config.ipToStr(WiFi.softAPIP()));
+#else
+    snprintf(setupAddress, sizeof(setupAddress), "http://%s/",
+             config.ipToStr(WiFi.softAPIP()));
+#endif
     const bool openSetupAp =
         voxone::first_boot::shouldStartOpenSetupAp(config.ssidsCount);
     const auto firstBootView = voxone::first_boot::makeView(
         {config.ssidsCount,
          openSetupAp ? voxone::first_boot::Connection::SetupAp :
                        voxone::first_boot::Connection::RecoveryAp,
-         false, false, apSsid, setupUrl, 0});
+         false, false, apSsid, setupAddress, 0});
     const bool firstBootSetup =
         firstBootView.mode == voxone::first_boot::Mode::FirstBootSetup;
       #if DSP_INVERT_TITLE || defined(DSP_OLED)
@@ -1174,9 +1179,32 @@ void Display::_apScreen() {
     ScrollWidget *bootTitle = (ScrollWidget*) &_boot->addWidget(new ScrollWidget("*", apTitleConf, config.theme.meta, config.theme.metabg));
     bootTitle->setText(firstBootSetup ? firstBootView.title :
                                           "VoxOne tryb AP");
+#if VOXONE_DISPLAY_PROFILE == VOXONE_DISPLAY_PROFILE_ST7796_480X320
+    if (firstBootSetup) {
+      TextWidget* firstBootSsid = (TextWidget*) &_boot->addWidget(
+          new TextWidget(firstBootSsidConf, 30, config.theme.clock,
+                         config.theme.background));
+      firstBootSsid->setText(firstBootView.apSsid, "SSID %s");
+
+      TextWidget* firstBootStatus = (TextWidget*) &_boot->addWidget(
+          new TextWidget(firstBootStatusConf, 30, config.theme.title2,
+                         config.theme.background));
+      firstBootStatus->setText("SIEĆ OTWARTA");
+
+      TextWidget* firstBootIp = (TextWidget*) &_boot->addWidget(
+          new TextWidget(firstBootIpConf, 30, config.theme.clock,
+                         config.theme.background));
+      firstBootIp->setText(firstBootView.address, "IP %s");
+
+      _pager->addPage(_boot);
+      _pager->setPage(_boot);
+      dsp.drawFirstBootLogo(firstBootLogoTop);
+      return;
+    }
+#endif
     TextWidget *apname = (TextWidget*) &_boot->addWidget(new TextWidget(
 #if VOXONE_DISPLAY_PROFILE == VOXONE_DISPLAY_PROFILE_ST7796_480X320
-      firstBootSetup ? firstBootNameConf : apNameConf,
+      apNameConf,
 #else
       apNameConf,
 #endif
@@ -1184,7 +1212,7 @@ void Display::_apScreen() {
     apname->setText(firstBootSetup ? firstBootView.product : LANG::apNameTxt);
     TextWidget *apname2 = (TextWidget*) &_boot->addWidget(new TextWidget(
 #if VOXONE_DISPLAY_PROFILE == VOXONE_DISPLAY_PROFILE_ST7796_480X320
-      firstBootSetup ? firstBootName2Conf : apName2Conf,
+      apName2Conf,
 #else
       apName2Conf,
 #endif
@@ -1192,7 +1220,7 @@ void Display::_apScreen() {
     apname2->setText(firstBootView.apSsid);
     TextWidget *appass = (TextWidget*) &_boot->addWidget(new TextWidget(
 #if VOXONE_DISPLAY_PROFILE == VOXONE_DISPLAY_PROFILE_ST7796_480X320
-      firstBootSetup ? firstBootUrlConf : apPassConf,
+      apPassConf,
 #else
       apPassConf,
 #endif
@@ -1200,7 +1228,7 @@ void Display::_apScreen() {
     appass->setText(firstBootSetup ? "IP / URL" : LANG::apPassTxt);
     TextWidget *appass2 = (TextWidget*) &_boot->addWidget(new TextWidget(
 #if VOXONE_DISPLAY_PROFILE == VOXONE_DISPLAY_PROFILE_ST7796_480X320
-      firstBootSetup ? firstBootUrl2Conf : apPass2Conf,
+      apPass2Conf,
 #else
       apPass2Conf,
 #endif
@@ -1211,9 +1239,6 @@ void Display::_apScreen() {
     else bootSett->setText(config.ipToStr(WiFi.softAPIP()), LANG::apSettFmt);
     _pager->addPage(_boot);
     _pager->setPage(_boot);
-#if VOXONE_DISPLAY_PROFILE == VOXONE_DISPLAY_PROFILE_ST7796_480X320
-    if (firstBootSetup) dsp.drawLogo(bootLogoTop);
-#endif
 }
 
 void Display::_start() {

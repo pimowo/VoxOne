@@ -15,6 +15,7 @@
 #define HIDE_VOLBAR
 
 #define bootLogoTop     110
+#define firstBootLogoTop 68
 
 /* SROLLS  */                            /* {{ left, top, fontsize, align }, buffsize, width, scrolldelay, scrolldelta, scrolltime } */
 const ScrollConfig metaConf       PROGMEM = {{ TFT_FRAMEWDT, TFT_FRAMEWDT, 4, WA_LEFT }, 140, MAX_WIDTH, 5000, 5, 40 };
@@ -58,10 +59,9 @@ const WidgetConfig apNameConf     PROGMEM = { TFT_FRAMEWDT, 88, 3, WA_CENTER };
 const WidgetConfig apName2Conf    PROGMEM = { TFT_FRAMEWDT, 120, 3, WA_CENTER };
 const WidgetConfig apPassConf     PROGMEM = { TFT_FRAMEWDT, 173, 3, WA_CENTER };
 const WidgetConfig apPass2Conf    PROGMEM = { TFT_FRAMEWDT, 205, 3, WA_CENTER };
-const WidgetConfig firstBootNameConf  PROGMEM = { TFT_FRAMEWDT, 58, 2, WA_CENTER };
-const WidgetConfig firstBootName2Conf PROGMEM = { TFT_FRAMEWDT, 82, 3, WA_CENTER };
-const WidgetConfig firstBootUrlConf   PROGMEM = { TFT_FRAMEWDT, 224, 2, WA_CENTER };
-const WidgetConfig firstBootUrl2Conf  PROGMEM = { TFT_FRAMEWDT, 250, 2, WA_CENTER };
+const WidgetConfig firstBootSsidConf   PROGMEM = { 0, 176, 3, WA_CENTER };
+const WidgetConfig firstBootStatusConf PROGMEM = { 0, 216, 2, WA_CENTER };
+const WidgetConfig firstBootIpConf     PROGMEM = { 0, 294, 2, WA_CENTER };
 const WidgetConfig  clockConf     PROGMEM = { TFT_FRAMEWDT*2, 230, 0, WA_RIGHT };
 const WidgetConfig vuConf         PROGMEM = { TFT_FRAMEWDT, 136, 1, WA_LEFT };
 

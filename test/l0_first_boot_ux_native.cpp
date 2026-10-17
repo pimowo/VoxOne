@@ -33,6 +33,18 @@ int main() {
   assert(page.find("src=\"/voxone-logo.svg\"") != std::string::npos);
   assert(display.find("firstBootView.title") !=
          std::string::npos);
-  assert(display.find("if (firstBootSetup) dsp.drawLogo(bootLogoTop)") !=
+  assert(display.find("firstBootSsid->setText(firstBootView.apSsid, \"SSID %s\")") !=
          std::string::npos);
+  assert(display.find("firstBootStatus->setText(\"SIEĆ OTWARTA\")") !=
+         std::string::npos);
+  assert(display.find("firstBootIp->setText(firstBootView.address, \"IP %s\")") !=
+         std::string::npos);
+  const std::size_t l0Logo =
+      display.find("dsp.drawFirstBootLogo(firstBootLogoTop)");
+  const std::size_t l0Return = display.find("return;", l0Logo);
+  const std::size_t sharedLegacyLayout = display.find("firstBootView.product");
+  assert(l0Logo != std::string::npos);
+  assert(l0Return != std::string::npos);
+  assert(sharedLegacyLayout != std::string::npos);
+  assert(l0Logo < l0Return && l0Return < sharedLegacyLayout);
 }
