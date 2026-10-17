@@ -31,18 +31,18 @@ int main() {
   assert(page.find("id=\"ssid-list\"") != std::string::npos);
   assert(page.find("id=\"manual-ssid\"") != std::string::npos);
   assert(page.find("src=\"/voxone-logo.svg\"") != std::string::npos);
-  assert(display.find("firstBootView.title") !=
+  assert(display.find("presentation.title") !=
          std::string::npos);
-  assert(display.find("firstBootSsid->setText(firstBootView.apSsid, \"SSID %s\")") !=
+  assert(display.find("firstBootSsid->setText(presentation.apSsid, \"SSID %s\")") !=
          std::string::npos);
-  assert(display.find("firstBootStatus->setText(\"SIEĆ OTWARTA\")") !=
+  assert(display.find("firstBootStatus->setText(presentation.statusText)") !=
          std::string::npos);
-  assert(display.find("firstBootIp->setText(firstBootView.address, \"IP %s\")") !=
+  assert(display.find("firstBootIp->setText(presentation.apAddress, \"IP %s\")") !=
          std::string::npos);
   const std::size_t l0Logo =
       display.find("dsp.drawFirstBootLogo(firstBootLogoTop)");
   const std::size_t l0Return = display.find("return;", l0Logo);
-  const std::size_t sharedLegacyLayout = display.find("firstBootView.product");
+  const std::size_t sharedLegacyLayout = display.find("apname->setText(\"VoxOne\")");
   assert(l0Logo != std::string::npos);
   assert(l0Return != std::string::npos);
   assert(sharedLegacyLayout != std::string::npos);

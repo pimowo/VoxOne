@@ -105,7 +105,7 @@ int main() {
          fallback.apSecurity == ApSecurity::Protected);
   assert(fallback.presentApCredential && !fallback.setupApOpen);
   assert(!fallback.wifiScanAvailable && fallback.hasError);
-  assert(std::string(fallback.title) == "VoxOne tryb AP");
+  assert(std::string(fallback.title) == "KONFIGURACJA WI-FI");
 
   Inputs security = input(1, Connection::RecoveryAp);
   security.securityRecovery = true;
@@ -146,10 +146,8 @@ int main() {
   assert(server.find("first_boot_setup_html") != std::string::npos);
   assert(server.find("kWifiScanTimeoutMs") != std::string::npos);
   assert(server.find("kWifiScanResultLimit") != std::string::npos);
-  assert(display.find("first_boot::makeView") != std::string::npos);
-  assert(display.find("firstBootView.product") != std::string::npos);
-  assert(display.find("firstBootView.apSsid") != std::string::npos);
-  assert(display.find("firstBootView.address") != std::string::npos);
+  assert(display.find("network.presentationSnapshot()") != std::string::npos);
+  assert(display.find("first_boot::makeView") == std::string::npos);
   assert(main.find("securityRecoveryApOwnsRuntime()") != std::string::npos);
   assert(main.find("display.configureRuntime") != std::string::npos);
 }

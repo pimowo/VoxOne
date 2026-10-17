@@ -1154,47 +1154,72 @@ void Display::_buildPager(){
 void Display::_apScreen() {
   if(_boot) _pager->removePage(_boot);
     _boot = new Page();
-    char setupAddress[32];
-#if VOXONE_DISPLAY_PROFILE == VOXONE_DISPLAY_PROFILE_ST7796_480X320
-    snprintf(setupAddress, sizeof(setupAddress), "%s",
-             config.ipToStr(WiFi.softAPIP()));
-#else
-    snprintf(setupAddress, sizeof(setupAddress), "http://%s/",
-             config.ipToStr(WiFi.softAPIP()));
-#endif
-    const bool openSetupAp =
-        voxone::first_boot::shouldStartOpenSetupAp(config.ssidsCount);
-    const auto firstBootView = voxone::first_boot::makeView(
-        {config.ssidsCount,
-         openSetupAp ? voxone::first_boot::Connection::SetupAp :
-                       voxone::first_boot::Connection::RecoveryAp,
-         false, false, apSsid, setupAddress, 0});
+    const auto presentation = network.presentationSnapshot();
+    const bool presentationReady = presentation.initialized;
+    const bool activeAp = presentationReady && presentation.apActive;
     const bool firstBootSetup =
-        firstBootView.mode == voxone::first_boot::Mode::FirstBootSetup;
+        activeAp &&
+        presentation.mode == voxone::first_boot::Mode::FirstBootSetup;
+#if VOXONE_DISPLAY_PROFILE == VOXONE_DISPLAY_PROFILE_ST7796_480X320
+    const bool wifiRecovery =
+        activeAp &&
+        presentation.mode == voxone::first_boot::Mode::WifiRecovery;
+#endif
       #if DSP_INVERT_TITLE || defined(DSP_OLED)
       _boot->addWidget(new FillWidget(metaBGConf, config.theme.metafill));
       #else
       _boot->addWidget(new FillWidget(metaBGConfInv, config.theme.metafill));
       #endif
     ScrollWidget *bootTitle = (ScrollWidget*) &_boot->addWidget(new ScrollWidget("*", apTitleConf, config.theme.meta, config.theme.metabg));
-    bootTitle->setText(firstBootSetup ? firstBootView.title :
-                                          "VoxOne tryb AP");
+    bootTitle->setText(presentationReady ? presentation.title : "VoxOne");
+
+    if (!activeAp) {
+      ScrollWidget *bootStatus = (ScrollWidget*) &_boot->addWidget(
+          new ScrollWidget("*", apSettConf, config.theme.title2,
+                           config.theme.background));
+      bootStatus->setText(presentationReady ? presentation.statusText : "");
+      _pager->addPage(_boot);
+      _pager->setPage(_boot);
+      return;
+    }
 #if VOXONE_DISPLAY_PROFILE == VOXONE_DISPLAY_PROFILE_ST7796_480X320
     if (firstBootSetup) {
       TextWidget* firstBootSsid = (TextWidget*) &_boot->addWidget(
           new TextWidget(firstBootSsidConf, 30, config.theme.clock,
                          config.theme.background));
-      firstBootSsid->setText(firstBootView.apSsid, "SSID %s");
+      firstBootSsid->setText(presentation.apSsid, "SSID %s");
 
       TextWidget* firstBootStatus = (TextWidget*) &_boot->addWidget(
           new TextWidget(firstBootStatusConf, 30, config.theme.title2,
                          config.theme.background));
-      firstBootStatus->setText("SIEĆ OTWARTA");
+      firstBootStatus->setText(presentation.statusText);
 
       TextWidget* firstBootIp = (TextWidget*) &_boot->addWidget(
           new TextWidget(firstBootIpConf, 30, config.theme.clock,
                          config.theme.background));
-      firstBootIp->setText(firstBootView.address, "IP %s");
+      firstBootIp->setText(presentation.apAddress, "IP %s");
+
+      _pager->addPage(_boot);
+      _pager->setPage(_boot);
+      dsp.drawFirstBootLogo(firstBootLogoTop);
+      return;
+    }
+    if (wifiRecovery) {
+      TextWidget* recoverySsid = (TextWidget*) &_boot->addWidget(
+          new TextWidget(wifiRecoverySsidConf, 30, config.theme.clock,
+                         config.theme.background));
+      recoverySsid->setText(presentation.apSsid, "SSID %s");
+
+      TextWidget* recoveryPassword = (TextWidget*) &_boot->addWidget(
+          new TextWidget(wifiRecoveryPasswordConf, 30, config.theme.title2,
+                         config.theme.background));
+      if (presentation.presentApCredential)
+        recoveryPassword->setText(apPassword, "HASŁO %s");
+
+      TextWidget* recoveryIp = (TextWidget*) &_boot->addWidget(
+          new TextWidget(wifiRecoveryIpConf, 30, config.theme.clock,
+                         config.theme.background));
+      recoveryIp->setText(presentation.apAddress, "IP %s");
 
       _pager->addPage(_boot);
       _pager->setPage(_boot);
@@ -1209,7 +1234,7 @@ void Display::_apScreen() {
       apNameConf,
 #endif
       30, config.theme.title1, config.theme.background));
-    apname->setText(firstBootSetup ? firstBootView.product : LANG::apNameTxt);
+    apname->setText("VoxOne");
     TextWidget *apname2 = (TextWidget*) &_boot->addWidget(new TextWidget(
 #if VOXONE_DISPLAY_PROFILE == VOXONE_DISPLAY_PROFILE_ST7796_480X320
       apName2Conf,
@@ -1217,7 +1242,7 @@ void Display::_apScreen() {
       apName2Conf,
 #endif
       30, config.theme.clock, config.theme.background));
-    apname2->setText(firstBootView.apSsid);
+    apname2->setText(presentation.apSsid);
     TextWidget *appass = (TextWidget*) &_boot->addWidget(new TextWidget(
 #if VOXONE_DISPLAY_PROFILE == VOXONE_DISPLAY_PROFILE_ST7796_480X320
       apPassConf,
@@ -1225,7 +1250,8 @@ void Display::_apScreen() {
       apPassConf,
 #endif
       30, config.theme.title1, config.theme.background));
-    appass->setText(firstBootSetup ? "IP / URL" : LANG::apPassTxt);
+    appass->setText(firstBootSetup ? "IP" :
+        (presentation.presentApCredential ? LANG::apPassTxt : ""));
     TextWidget *appass2 = (TextWidget*) &_boot->addWidget(new TextWidget(
 #if VOXONE_DISPLAY_PROFILE == VOXONE_DISPLAY_PROFILE_ST7796_480X320
       apPass2Conf,
@@ -1233,10 +1259,11 @@ void Display::_apScreen() {
       apPass2Conf,
 #endif
       30, config.theme.clock, config.theme.background));
-    appass2->setText(firstBootSetup ? firstBootView.address : apPassword);
+    appass2->setText(firstBootSetup ? presentation.apAddress :
+        (presentation.presentApCredential ? apPassword : ""));
     ScrollWidget *bootSett = (ScrollWidget*) &_boot->addWidget(new ScrollWidget("*", apSettConf, config.theme.title2, config.theme.background));
-    if (firstBootSetup) bootSett->setText(firstBootView.statusText);
-    else bootSett->setText(config.ipToStr(WiFi.softAPIP()), LANG::apSettFmt);
+    if (firstBootSetup) bootSett->setText(presentation.statusText);
+    else bootSett->setText(presentation.apAddress, "IP %s");
     _pager->addPage(_boot);
     _pager->setPage(_boot);
 }

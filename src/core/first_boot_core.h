@@ -114,7 +114,7 @@ inline const char* titleText(Mode mode) {
     case Mode::FirstBootSetup: return "KONFIGURACJA";
     case Mode::WifiConnecting: return "LACZENIE WI-FI";
     case Mode::WifiConfigured: return "WI-FI SKONFIGUROWANE";
-    case Mode::WifiRecovery: return "VoxOne tryb AP";
+    case Mode::WifiRecovery: return "KONFIGURACJA WI-FI";
     case Mode::SecurityRecovery: return "SECURITY RECOVERY";
   }
   return "";
@@ -123,7 +123,7 @@ inline const char* titleText(Mode mode) {
 inline const char* statusText(Mode mode) {
   switch (mode) {
     case Mode::Normal: return "GOTOWY";
-    case Mode::FirstBootSetup: return "SIEC OTWARTA";
+    case Mode::FirstBootSetup: return "SIEĆ OTWARTA";
     case Mode::WifiConnecting: return "LACZENIE WI-FI";
     case Mode::WifiConfigured: return "WI-FI SKONFIGUROWANE";
     case Mode::WifiRecovery: return "WI-FI RECOVERY";

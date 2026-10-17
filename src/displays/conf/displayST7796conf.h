@@ -62,6 +62,9 @@ const WidgetConfig apPass2Conf    PROGMEM = { TFT_FRAMEWDT, 205, 3, WA_CENTER };
 const WidgetConfig firstBootSsidConf   PROGMEM = { 0, 176, 3, WA_CENTER };
 const WidgetConfig firstBootStatusConf PROGMEM = { 0, 216, 2, WA_CENTER };
 const WidgetConfig firstBootIpConf     PROGMEM = { 0, 294, 2, WA_CENTER };
+const WidgetConfig wifiRecoverySsidConf     PROGMEM = { 0, 176, 3, WA_CENTER };
+const WidgetConfig wifiRecoveryPasswordConf PROGMEM = { 0, 224, 2, WA_CENTER };
+const WidgetConfig wifiRecoveryIpConf       PROGMEM = { 0, 294, 2, WA_CENTER };
 const WidgetConfig  clockConf     PROGMEM = { TFT_FRAMEWDT*2, 230, 0, WA_RIGHT };
 const WidgetConfig vuConf         PROGMEM = { TFT_FRAMEWDT, 136, 1, WA_LEFT };
 

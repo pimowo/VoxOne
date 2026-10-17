@@ -151,7 +151,7 @@ Invoke-Step 'Native tests' {
   $name=$test.BaseName
   $sources=@($test.FullName)
   if($nativeSources.ContainsKey($name)) { $sources+=@($nativeSources[$name] | ForEach-Object { Join-Path $root $_ }) }
-  $variants=if($name -eq 'config_backup_native' -or $name -eq 'first_boot_core_native' -or $name -eq 'first_boot_runtime_snapshot_native' -or $name -eq 'hardware_descriptor_native' -or $name -eq 'runtime_hardware_config_native' -or $name -eq 'runtime_hardware_web_native' -or $name -eq 'runtime_display_activation_native' -or $name -eq 'security_recovery_ap_native' -or $name -eq 'security_recovery_key_native' -or $name -eq 'security_recovery_session_native' -or $name -eq 'security_recovery_state_native') { @('L0','M0','S0','DIN0','W0') } elseif($name -eq 'build_identity_native') { @('','L0','M0','S0','DIN0','W0','CLEAN','DIRTY') } else { @('') }
+  $variants=if($name -eq 'ap_ui_display_binding_native' -or $name -eq 'config_backup_native' -or $name -eq 'first_boot_core_native' -or $name -eq 'first_boot_runtime_snapshot_native' -or $name -eq 'hardware_descriptor_native' -or $name -eq 'runtime_hardware_config_native' -or $name -eq 'runtime_hardware_web_native' -or $name -eq 'runtime_display_activation_native' -or $name -eq 'security_recovery_ap_native' -or $name -eq 'security_recovery_key_native' -or $name -eq 'security_recovery_session_native' -or $name -eq 'security_recovery_state_native') { @('L0','M0','S0','DIN0','W0') } elseif($name -eq 'build_identity_native') { @('','L0','M0','S0','DIN0','W0','CLEAN','DIRTY') } else { @('') }
   foreach($variant in $variants) {
    $label=if($variant) { "$name-$variant" } else { $name }
    $exe=Join-Path $work ($label+$(if($onWindows) { '.exe' } else { '' }))
