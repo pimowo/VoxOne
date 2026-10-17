@@ -147,7 +147,8 @@ void testWebViews() {
   assert(st7789.settings.pauseMs == 5000);
 
   const auto st7796 = makeScrollSettingsWebView(
-      ScrollRendererProfile::St7796_480x320, fallback, true);
+      ScrollRendererProfile::St7796_480x320, fallback, false);
+  assert(st7796.canScrollSettings && !st7796.scrollCoreActive);
   assert(st7796.settings.pauseMs == 2500);
 
   const ScrollSettings user{false, ScrollSpeed::Slow, 0};

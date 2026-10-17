@@ -469,6 +469,8 @@ window.VoxOneRestartWaiter = Object.freeze({
   const scrollSettingsStatus = document.getElementById("scroll-settings-status");
   const scrollSettingsSource = document.getElementById("scroll-settings-source");
   const scrollSettingsSave = document.getElementById("scroll-settings-save");
+  const scrollReadablePauseValues = [0, 1000, 2000, 2500, 3000, 4000, 5000];
+  const scrollWritablePauseValues = [0, 1000, 2000, 3000, 4000, 5000];
   const rtcCard = document.getElementById("rtc-card");
   const rtcNtpInterval = document.getElementById("rtc-ntp-interval");
   const rtcWriteInterval = document.getElementById("rtc-write-interval");
@@ -1664,7 +1666,7 @@ window.VoxOneRestartWaiter = Object.freeze({
       state.scrollPauseMs !== null;
     for (const control of [scrollEnabledSelect, scrollPauseSelect, scrollSpeedSelect]) {
       control.disabled = state.connection !== "connected" || !state.canScrollSettings ||
-        !scrollReady || scrollSettingsSaving;
+        !state.scrollCoreActive || !scrollReady || scrollSettingsSaving;
     }
     if (scrollReady && !scrollSettingsDirty && !scrollSettingsSaving) {
       scrollEnabledSelect.value = String(state.scrollEnabled);
@@ -1672,13 +1674,14 @@ window.VoxOneRestartWaiter = Object.freeze({
       scrollSpeedSelect.value = state.scrollSpeed;
     }
     scrollSettingsSave.disabled = state.connection !== "connected" ||
-      !state.canScrollSettings || !scrollReady || !scrollSettingsDirty || scrollSettingsSaving;
+      !state.canScrollSettings || !state.scrollCoreActive || !scrollReady ||
+      !scrollSettingsDirty || scrollSettingsSaving;
     scrollSettingsStatus.dataset.kind = scrollSettingsFeedbackError ? "error" : "notice";
     scrollSettingsStatus.textContent = scrollSettingsSaving ? "Zapisywanie i weryfikacja…" :
       scrollSettingsFeedback || (scrollSettingsDirty ? "Niezapisane zmiany." :
       (state.canScrollSettings ? (state.scrollCoreActive
         ? "Ustawienia są aktywnie stosowane przez wyświetlacz."
-        : "Ustawienia można zapisać, ale ten firmware nie stosuje ich aktywnie.") : ""));
+        : "Przewijanie automatyczne działa według ustawień renderera. Regulacja przez WWW wymaga aktywacji wspólnego silnika CORE.") : ""));
     scrollSettingsSource.textContent = !state.canScrollSettings ? "" :
       "Źródło: " + (state.scrollSettingsSource === "userSettings"
         ? "ustawienia użytkownika" : "wartości domyślne renderera") + ".";
@@ -2525,7 +2528,7 @@ window.VoxOneRestartWaiter = Object.freeze({
     const scrollSnapshotValid = typeof message.canScrollSettings === "boolean" &&
       typeof message.scrollEnabled === "boolean" &&
       ["slow", "normal", "fast"].includes(message.scrollSpeed) &&
-      [0, 1000, 2000, 3000, 4000, 5000].includes(message.scrollPauseMs) &&
+      scrollReadablePauseValues.includes(message.scrollPauseMs) &&
       ["rendererDefaults", "userSettings"].includes(message.scrollSettingsSource) &&
       typeof message.scrollCoreActive === "boolean";
     if (scrollSnapshotValid) {
@@ -2535,7 +2538,7 @@ window.VoxOneRestartWaiter = Object.freeze({
       state.scrollPauseMs = message.scrollPauseMs;
       state.scrollSettingsSource = message.scrollSettingsSource;
       state.scrollCoreActive = message.scrollCoreActive;
-      if (!message.canScrollSettings) {
+      if (!message.canScrollSettings || !message.scrollCoreActive) {
         scrollSettingsDirty = false;
         scrollSettingsFeedback = "";
         scrollSettingsFeedbackError = false;
@@ -2925,7 +2928,7 @@ window.VoxOneRestartWaiter = Object.freeze({
       ? scrollSpeedSelect.value : null;
     const pauseMs = Number(scrollPauseSelect.value);
     if (enabled === null || speed === null ||
-        ![0, 1000, 2000, 3000, 4000, 5000].includes(pauseMs)) return null;
+        !scrollWritablePauseValues.includes(pauseMs)) return null;
     return { enabled, speed, pauseMs };
   }
 
@@ -2944,13 +2947,15 @@ window.VoxOneRestartWaiter = Object.freeze({
 
   scrollSettingsForm.addEventListener("submit", event => {
     event.preventDefault();
+    if (!state.canScrollSettings || !state.scrollCoreActive ||
+        state.connection !== "connected" || scrollSettingsSaving || !scrollSettingsDirty) {
+      renderDisplaySettings();
+      return;
+    }
     const selected = scrollSettingsSelection();
-    if (!selected || !state.canScrollSettings || state.connection !== "connected" ||
-        scrollSettingsSaving || !scrollSettingsDirty) {
-      if (!selected) {
-        scrollSettingsFeedback = "Wybierz poprawne wartości wszystkich trzech ustawień.";
-        scrollSettingsFeedbackError = true;
-      }
+    if (!selected) {
+      scrollSettingsFeedback = "Wybierz poprawne wartości wszystkich trzech ustawień.";
+      scrollSettingsFeedbackError = true;
       renderDisplaySettings();
       return;
     }

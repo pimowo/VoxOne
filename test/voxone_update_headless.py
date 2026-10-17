@@ -830,6 +830,10 @@ setTimeout(async () => {
       get('scroll-speed').value === 'normal' && get('scroll-settings-save').disabled &&
       get('scroll-settings-source').textContent.includes('wartości domyślne renderera'),
       'GETSCREEN loads renderer defaults without enabling an unnecessary save');
+    const scrollGridColumns = getComputedStyle(document.querySelector('.scroll-settings-grid'))
+      .gridTemplateColumns.split(' ').filter(Boolean).length;
+    check(scrollGridColumns === (window.innerWidth <= 640 ? 1 : 3),
+      'scroll settings use the expected desktop/mobile grid');
     check(btTestSocket.sent.filter(item => item.startsWith('scrollsettings=')).length ===
       scrollCommandsBeforeSnapshot, 'opening display settings does not write scroll settings');
     get('scroll-pause').value = '4000';
@@ -841,14 +845,25 @@ setTimeout(async () => {
     get('scroll-pause').dispatchEvent(new Event('change'));
     check(get('scroll-settings-save').disabled,
       'returning the draft to the saved values avoids an NVS write');
-    for (const [profile, coreActive] of [
-      ['L0',false],['M0',true],['S0',false],['DIN0',false],['W0',false]
+    for (const [profile, coreActive, pauseMs] of [
+      ['L0',false,2500],['M0',true,5000],['S0',false,5000],
+      ['DIN0',false,5000],['W0',false,5000]
     ]) {
-      btTestSocket.onmessage({data:JSON.stringify(scrollSnapshot({scrollCoreActive:coreActive}))});
-      check(!get('scroll-settings-form').hidden &&
-        get('scroll-settings-status').textContent.includes(coreActive ? 'aktywnie stosowane' : 'nie stosuje ich aktywnie'),
+      btTestSocket.onmessage({data:JSON.stringify(scrollSnapshot({
+        scrollCoreActive:coreActive,scrollPauseMs:pauseMs}))});
+      const controls = [get('scroll-enabled'),get('scroll-pause'),get('scroll-speed')];
+      check(!get('scroll-settings-form').hidden && get('scroll-pause').value === String(pauseMs) &&
+        (coreActive ? controls.every(control => !control.disabled) : controls.every(control => control.disabled)) &&
+        get('scroll-settings-save').disabled &&
+        get('scroll-settings-status').textContent.includes(coreActive
+          ? 'aktywnie stosowane' : 'wspólnego silnika CORE'),
         profile + ' follows GETSCREEN scroll capability and active-core state');
     }
+    check(get('scroll-pause').querySelector('option[value="2500"]').disabled &&
+      [...get('scroll-pause').options].filter(option => option.value !== '2500')
+        .every(option => !option.disabled),
+      'renderer-only 2500 ms is represented exactly but is not a writable choice');
+    btTestSocket.onmessage({data:JSON.stringify(scrollSnapshot())});
     let expectedScrollCommands = scrollCommandsBeforeSnapshot;
     let savedScroll = {enabled:true,speed:'normal',pauseMs:5000};
     for (const enabled of [true,false]) for (const speed of ['slow','normal','fast'])
@@ -880,24 +895,29 @@ setTimeout(async () => {
         savedScroll = {enabled,speed,pauseMs};
       }
     btTestSocket.onmessage({data:JSON.stringify(scrollSnapshot({scrollEnabled:savedScroll.enabled,
-      scrollSpeed:savedScroll.speed,scrollPauseMs:savedScroll.pauseMs,
-      scrollSettingsSource:'userSettings',scrollCoreActive:false}))});
-    get('scroll-enabled').value = String(!savedScroll.enabled);
-    get('scroll-enabled').dispatchEvent(new Event('change'));
+      scrollSpeed:savedScroll.speed,scrollPauseMs:2500,
+      scrollSettingsSource:'rendererDefaults',scrollCoreActive:false}))});
+    const commandsBeforeInactiveSubmit = expectedScrollCommands;
     get('scroll-settings-form').requestSubmit();
-    expectedScrollCommands++;
-    btTestSocket.onmessage({data:JSON.stringify({event:'scrollSettings.result',ok:true,error:'none',
-      changed:true,persisted:true,runtimePublished:true,activeApplied:false,scrollCoreActive:false})});
-    check(get('scroll-settings-status').textContent.includes('Zapisano ustawienia') &&
-      get('scroll-settings-status').textContent.includes('nie stosuje ich aktywnie'),
-      'CORE=0 distinguishes persistence from active application');
-    savedScroll.enabled = !savedScroll.enabled;
+    check(get('scroll-pause').value === '2500' && get('scroll-settings-save').disabled &&
+      btTestSocket.sent.filter(item => item.startsWith('scrollsettings=')).length === commandsBeforeInactiveSubmit &&
+      get('scroll-settings-status').textContent.includes('Przewijanie automatyczne') &&
+      get('scroll-settings-status').textContent.includes('wspólnego silnika CORE'),
+      'L0 presents its 2500 ms renderer state read-only without promising WWW control');
+    btTestSocket.onmessage({data:JSON.stringify(scrollSnapshot({scrollPauseMs:2501,
+      scrollCoreActive:true}))});
+    check(get('scroll-pause').value === '2500' && get('scroll-pause').disabled &&
+      get('scroll-settings-status').textContent.includes('wspólnego silnika CORE'),
+      'partially invalid snapshot is rejected without corrupting the last complete state');
+    btTestSocket.onmessage({data:JSON.stringify(scrollSnapshot({scrollEnabled:savedScroll.enabled,
+      scrollSpeed:savedScroll.speed,scrollPauseMs:savedScroll.pauseMs,
+      scrollSettingsSource:'userSettings',scrollCoreActive:true}))});
     get('scroll-pause').value = savedScroll.pauseMs === 0 ? '1000' : '0';
     get('scroll-pause').dispatchEvent(new Event('change'));
     get('scroll-settings-form').requestSubmit();
     expectedScrollCommands++;
     btTestSocket.onmessage({data:JSON.stringify({event:'scrollSettings.result',ok:false,error:'busy',
-      changed:false,persisted:false,runtimePublished:false,activeApplied:false,scrollCoreActive:false})});
+      changed:false,persisted:false,runtimePublished:false,activeApplied:false,scrollCoreActive:true})});
     check(get('scroll-settings-status').textContent.includes('zajęte') &&
       !get('scroll-settings-save').disabled,
       'queue busy is explicit and keeps the validated draft available for retry');
@@ -905,7 +925,7 @@ setTimeout(async () => {
     expectedScrollCommands++;
     btTestSocket.onmessage({data:JSON.stringify({event:'scrollSettings.result',ok:false,
       error:'storage_commit_failed',changed:false,persisted:false,runtimePublished:false,
-      activeApplied:false,scrollCoreActive:false})});
+      activeApplied:false,scrollCoreActive:true})});
     check(get('scroll-settings-status').textContent.includes('trwale zatwierdzić') &&
       !get('scroll-settings-save').disabled,
       'storage failure is not reported as a successful save');
@@ -913,7 +933,7 @@ setTimeout(async () => {
     expectedScrollCommands++;
     btTestSocket.onmessage({data:JSON.stringify({event:'scrollSettings.result',ok:false,
       error:'reload_failed',changed:true,persisted:true,runtimePublished:false,
-      activeApplied:false,scrollCoreActive:false})});
+      activeApplied:false,scrollCoreActive:true})});
     check(get('scroll-settings-status').textContent.includes('przeładowanie') &&
       !get('scroll-settings-status').textContent.includes('Zapisano i zastosowano'),
       'persisted but unpublished settings are not reported as actively applied');
@@ -1744,6 +1764,19 @@ def main():
                    "--virtual-time-budget=2500", "--dump-dom", page.as_uri()]
         result = subprocess.run(command, capture_output=True, text=True,
                                 encoding="utf-8", errors="replace", timeout=30)
+        mobile_command = [
+            str(chrome), "--headless", "--disable-gpu",
+            "--disable-gpu-compositing",
+            "--disable-features=Vulkan,UseSkiaRenderer,CanvasOopRasterization",
+            "--disable-extensions", "--no-first-run",
+            "--no-default-browser-check", "--allow-file-access-from-files",
+            "--window-size=390,844",
+            "--user-data-dir=" + str(Path(temporary) / "mobile-profile"),
+            "--virtual-time-budget=2500", "--dump-dom", page.as_uri()
+        ]
+        mobile_result = subprocess.run(
+            mobile_command, capture_output=True, text=True,
+            encoding="utf-8", errors="replace", timeout=30)
         recovery_page = Path(temporary) / "recovery-test.html"
         recovery_page.write_text(recovery_test_html, encoding="utf-8")
         recovery_command = [
@@ -1805,6 +1838,14 @@ def main():
     print(outcome)
     if outcome != "PASS":
         print(result.stderr[-2000:])
+        raise SystemExit(1)
+    mobile_match = re.search(
+        r'<output id="headless-result">([^<]+)</output>', mobile_result.stdout)
+    mobile_outcome = mobile_match.group(1) if mobile_match else \
+        "FAIL: Chrome did not return the mobile test result"
+    print("Mobile " + mobile_outcome)
+    if mobile_outcome != "PASS":
+        print(mobile_result.stderr[-2000:])
         raise SystemExit(1)
     recovery_match = re.search(
         r'<output id="recovery-headless-result">([^<]+)</output>',
