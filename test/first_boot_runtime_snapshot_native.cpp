@@ -45,6 +45,8 @@ void assertTerminated(const RuntimeSnapshot& snapshot) {
 
 void assertCoherent(const RuntimeSnapshot& snapshot) {
   assertTerminated(snapshot);
+  if (snapshot.connection == Connection::Connected)
+    assert(snapshot.staValidatedInThisBoot);
   if (snapshot.apActive) {
     assert(snapshot.connection == Connection::SetupAp ||
            snapshot.connection == Connection::RecoveryAp);
@@ -68,6 +70,7 @@ void testLifecycle() {
   assert(!snapshot.initialized && snapshot.generation == 0);
   assert(snapshot.mode == Mode::Normal && snapshot.screen == Screen::Player);
   assert(snapshot.connection == Connection::Idle && !snapshot.apActive);
+  assert(!snapshot.staValidatedInThisBoot);
   assertCoherent(snapshot);
 
   runtime.initialize(0);
@@ -97,6 +100,7 @@ void testLifecycle() {
   assert(snapshot.mode == Mode::WifiConnecting);
   assert(snapshot.screen == Screen::WifiProgress);
   assert(snapshot.connection == Connection::Connecting);
+  assert(!snapshot.staValidatedInThisBoot);
   assert(!snapshot.hasError);
 
   sta.recordDisconnect(15);
@@ -140,20 +144,30 @@ void testLifecycle() {
   snapshot = sta.read();
   assert(snapshot.mode == Mode::Normal && snapshot.screen == Screen::Player);
   assert(snapshot.connection == Connection::Connected);
+  assert(snapshot.staValidatedInThisBoot);
   assert(!snapshot.hasError && !snapshot.apActive);
   assert(snapshot.mode != Mode::WifiConfigured);
 
   // Runtime loss and reassociation expose CONNECTING until validated GOT_IP.
   sta.recordDisconnect(15);
-  assert(sta.read().errorCode == 15);
+  snapshot = sta.read();
+  assert(snapshot.errorCode == 15 && snapshot.staValidatedInThisBoot);
   sta.beginStaAttempt();
   snapshot = sta.read();
   assert(snapshot.mode == Mode::WifiConnecting && snapshot.errorCode == 0);
+  assert(snapshot.staValidatedInThisBoot);
   sta.recordDisconnect(RuntimeInvalidIpv4Readiness);
   assert(sta.read().errorCode == RuntimeInvalidIpv4Readiness);
   sta.beginStaAttempt();
   sta.connected();
-  assert(sta.read().mode == Mode::Normal);
+  snapshot = sta.read();
+  assert(snapshot.mode == Mode::Normal && snapshot.staValidatedInThisBoot);
+
+  // A new Network lifecycle, unlike a runtime reassociation, clears the
+  // current-boot validation history.
+  sta.initialize(1);
+  snapshot = sta.read();
+  assert(!snapshot.staValidatedInThisBoot);
 }
 
 void testInitializationFailureAndSecrets() {
@@ -204,6 +218,7 @@ void testConcurrentPublication() {
         runtime.activateAp("VoxOne-BBBBBB", "10.0.0.2", true);
       }
       runtime.beginStaAttempt();
+      if ((iteration & 3U) == 3U) runtime.connected();
     }
     done.store(true, std::memory_order_release);
   });
@@ -220,7 +235,11 @@ void testConcurrentPublication() {
             std::strcmp(snapshot.apAddress, "10.0.0.2") == 0;
         if (!first && !second) valid.store(false, std::memory_order_release);
       } else if (snapshot.connection != Connection::Idle &&
-                 snapshot.connection != Connection::Connecting) {
+                 snapshot.connection != Connection::Connecting &&
+                 snapshot.connection != Connection::Connected) {
+        valid.store(false, std::memory_order_release);
+      } else if (snapshot.connection == Connection::Connected &&
+                 !snapshot.staValidatedInThisBoot) {
         valid.store(false, std::memory_order_release);
       }
     } while (!done.load(std::memory_order_acquire));

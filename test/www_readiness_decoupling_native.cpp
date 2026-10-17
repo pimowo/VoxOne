@@ -71,7 +71,8 @@ int main() {
   assert(contains(server, "/api/stations/import"));
   assert(contains(server, "/api/stations/export"));
 
-  assert(contains(server, "apWifiRecoveryAllowed"));
+  assert(contains(server, "network.presentationSnapshot()"));
+  assert(contains(server, "webBinding.wifiProvisioning"));
   assert(contains(server, "request->url()==\"/emergency\""));
   assert(contains(server, "request->url()==\"/update\""));
   assert(contains(serverHeader, "emptyfs_html"));

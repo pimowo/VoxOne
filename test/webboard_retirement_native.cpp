@@ -36,7 +36,8 @@ int main() {
   assert(!contains(server, "formAction"));
 
   // Wi-Fi can still be provisioned from the embedded root recovery page.
-  assert(contains(server, "apWifiRecoveryAllowed"));
+  assert(contains(server, "network.presentationSnapshot()"));
+  assert(contains(server, "webBinding.wifiProvisioning"));
   assert(contains(server, "config.saveWifiCredentials"));
   assert(contains(serverHeader, "emptyfs_html"));
   assert(contains(serverHeader, "form action=\"/\" method=\"post\""));

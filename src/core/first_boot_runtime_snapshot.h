@@ -31,6 +31,9 @@ struct RuntimeSnapshot {
   Mode mode;
   Screen screen;
   Connection connection;
+  // Set only after Network accepts a GOT_IP readiness event in this boot.
+  // It is runtime history, not persisted configuration or authentication.
+  bool staValidatedInThisBoot;
   ApSecurity apSecurity;
   bool apActive;
   bool presentApCredential;
@@ -49,7 +52,7 @@ class RuntimeSnapshotStore {
  public:
   RuntimeSnapshotStore()
       : wifiProfileCount_(0), connection_(Connection::Idle), errorCode_(0),
-        initialized_(false), generation_(0) {
+        staValidatedInThisBoot_(false), initialized_(false), generation_(0) {
     apSsid_[0] = '\0';
     apAddress_[0] = '\0';
     RuntimeSnapshot initial{};
@@ -58,6 +61,7 @@ class RuntimeSnapshotStore {
     initial.mode = Mode::Normal;
     initial.screen = Screen::Player;
     initial.connection = Connection::Idle;
+    initial.staValidatedInThisBoot = false;
     initial.apSecurity = ApSecurity::NotActive;
     copyText(initial.title, sizeof(initial.title), titleText(Mode::Normal));
     copyText(initial.statusText, sizeof(initial.statusText),
@@ -80,6 +84,7 @@ class RuntimeSnapshotStore {
     wifiProfileCount_ = wifiProfileCount;
     connection_ = Connection::Idle;
     errorCode_ = RuntimeNoError;
+    staValidatedInThisBoot_ = false;
     clearApLocked();
     initialized_ = true;
     rebuildLocked();
@@ -90,6 +95,7 @@ class RuntimeSnapshotStore {
     lock();
     connection_ = Connection::Failed;
     errorCode_ = RuntimeWifiInventoryInvalid;
+    staValidatedInThisBoot_ = false;
     clearApLocked();
     initialized_ = true;
     rebuildLocked();
@@ -133,6 +139,7 @@ class RuntimeSnapshotStore {
     if (!apConnectionLocked()) {
       connection_ = Connection::Connected;
       errorCode_ = RuntimeNoError;
+      staValidatedInThisBoot_ = true;
       clearApLocked();
       rebuildLocked();
     }
@@ -189,6 +196,7 @@ class RuntimeSnapshotStore {
     next.mode = view.mode;
     next.screen = view.screen;
     next.connection = view.connection;
+    next.staValidatedInThisBoot = staValidatedInThisBoot_;
     next.apSecurity = view.apSecurity;
     next.apActive = view.apActive;
     next.presentApCredential = view.presentApCredential;
@@ -220,6 +228,7 @@ class RuntimeSnapshotStore {
   uint8_t wifiProfileCount_;
   Connection connection_;
   int errorCode_;
+  bool staValidatedInThisBoot_;
   bool initialized_;
   uint32_t generation_;
   char apSsid_[33];

@@ -5,10 +5,6 @@
 
 #include "wifi_config_parser.h"
 
-inline bool apWifiRecoveryAllowed(bool connected) {
-  return !connected;
-}
-
 inline bool apWifiCredentialsValid(const char* ssid, const char* password) {
   if (!ssid || !password) return false;
   const size_t ssidLength = std::strlen(ssid);

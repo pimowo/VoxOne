@@ -1281,6 +1281,48 @@ setTimeout(async () => {
 </script>
 """
 
+WIFI_RECOVERY_MOCK = r"""
+<script>
+var playMode='ap';
+var voxOneVersion='test';
+</script>
+"""
+
+WIFI_RECOVERY_CHECK = r"""
+<output id="wifi-recovery-headless-result">PENDING</output>
+<script>
+setTimeout(() => {
+  const output = document.getElementById('wifi-recovery-headless-result');
+  try {
+    const section = document.getElementById('wifi-setup');
+    const form = section.querySelector('form');
+    const ssid = document.getElementById('ssid');
+    const password = document.getElementById('pass');
+    if (section.classList.contains('hidden'))
+      throw new Error('Wi-Fi recovery form hidden in AP mode');
+    if (form.method !== 'post' || form.getAttribute('action') !== '/')
+      throw new Error('Wi-Fi recovery must preserve root POST');
+    if (password.type !== 'password' || password.name !== 'pass' ||
+        ssid.name !== 'ssid')
+      throw new Error('Wi-Fi recovery credential fields changed');
+    ssid.value = 'Spec & = + ąć';
+    password.value = 'p&=+ ąć';
+    const encoded = new URLSearchParams(new FormData(form)).toString();
+    const decoded = new URLSearchParams(encoded);
+    if (decoded.get('ssid') !== 'Spec & = + ąć' ||
+        decoded.get('pass') !== 'p&=+ ąć')
+      throw new Error('Wi-Fi recovery POST encoding changed');
+    if (location.href.includes('p%26') || location.href.includes('ąć') ||
+        localStorage.length !== 0 || sessionStorage.length !== 0)
+      throw new Error('Wi-Fi recovery leaked credentials');
+    output.textContent = 'PASS';
+  } catch (error) {
+    output.textContent = 'FAIL: ' + error.message;
+  }
+}, 0);
+</script>
+"""
+
 FIRST_BOOT_MOCK = r"""
 <script>
 window.scanRequests = [];
@@ -1646,6 +1688,20 @@ def main():
            'localStorage' not in first_boot_html and \
            'sessionStorage' not in first_boot_html, \
         "first-boot form must not log or persist credentials"
+    wifi_recovery_match = re.search(
+        r'const char emptyfs_html\[\] PROGMEM = R"\((.*?)\)";',
+        netserver_header, re.S)
+    assert wifi_recovery_match, "embedded Wi-Fi recovery page is missing"
+    wifi_recovery_html = wifi_recovery_match.group(1)
+    assert 'form action="/" method="post"' in wifi_recovery_html and \
+           'name="ssid"' in wifi_recovery_html and \
+           'name="pass"' in wifi_recovery_html and \
+           'type="password"' in wifi_recovery_html, \
+        "Wi-Fi recovery must preserve its credential POST form"
+    assert 'console.' not in wifi_recovery_html and \
+           'localStorage' not in wifi_recovery_html and \
+           'sessionStorage' not in wifi_recovery_html, \
+        "Wi-Fi recovery must not log or persist credentials"
     assert re.search(r'webserver\.on\("/favicon\.ico", HTTP_GET,.*?'
                      r'request->redirect\("/voxone-symbol\.svg"\);', route, re.S), \
         "favicon.ico must redirect to the official symbol"
@@ -1673,6 +1729,10 @@ def main():
         "</head>", FIRST_BOOT_MOCK + "</head>", 1)
     first_boot_test_html = first_boot_test_html.replace(
         "</body>", FIRST_BOOT_CHECK + "</body>", 1)
+    wifi_recovery_test_html = wifi_recovery_html.replace(
+        '<script src="/variables.js"></script>', WIFI_RECOVERY_MOCK, 1)
+    wifi_recovery_test_html = wifi_recovery_test_html.replace(
+        "</body>", WIFI_RECOVERY_CHECK + "</body>", 1)
     with tempfile.TemporaryDirectory(prefix="voxone-web-test-", ignore_cleanup_errors=True) as temporary:
         page = Path(temporary) / "test.html"
         page.write_text(html, encoding="utf-8")
@@ -1697,6 +1757,21 @@ def main():
         ]
         recovery_result = subprocess.run(
             recovery_command, capture_output=True, text=True,
+            encoding="utf-8", errors="replace", timeout=30)
+        wifi_recovery_page = Path(temporary) / "wifi-recovery-test.html"
+        wifi_recovery_page.write_text(wifi_recovery_test_html, encoding="utf-8")
+        wifi_recovery_command = [
+            str(chrome), "--headless", "--disable-gpu",
+            "--disable-gpu-compositing",
+            "--disable-features=Vulkan,UseSkiaRenderer,CanvasOopRasterization",
+            "--disable-extensions", "--no-first-run",
+            "--no-default-browser-check", "--allow-file-access-from-files",
+            "--user-data-dir=" + str(Path(temporary) / "wifi-recovery-profile"),
+            "--virtual-time-budget=1500", "--dump-dom",
+            wifi_recovery_page.as_uri()
+        ]
+        wifi_recovery_result = subprocess.run(
+            wifi_recovery_command, capture_output=True, text=True,
             encoding="utf-8", errors="replace", timeout=30)
         first_boot_page = Path(temporary) / "first-boot-test.html"
         first_boot_page.write_text(first_boot_test_html, encoding="utf-8")
@@ -1739,6 +1814,16 @@ def main():
     print("Recovery " + recovery_outcome)
     if recovery_outcome != "PASS":
         print(recovery_result.stderr[-2000:])
+        raise SystemExit(1)
+    wifi_recovery_match = re.search(
+        r'<output id="wifi-recovery-headless-result">([^<]+)</output>',
+        wifi_recovery_result.stdout)
+    wifi_recovery_outcome = wifi_recovery_match.group(1) \
+        if wifi_recovery_match else \
+        "FAIL: Chrome did not return the Wi-Fi recovery result"
+    print("Wi-Fi recovery " + wifi_recovery_outcome)
+    if wifi_recovery_outcome != "PASS":
+        print(wifi_recovery_result.stderr[-2000:])
         raise SystemExit(1)
     first_boot_match = re.search(
         r'<output id="first-boot-headless-result">([^<]+)</output>',

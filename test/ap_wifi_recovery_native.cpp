@@ -3,13 +3,7 @@
 #include <cassert>
 
 int main() {
-  // WWW content on SPIFFS is independent of AP credential recovery.
-  assert(apWifiRecoveryAllowed(false));
   assert(apWifiCredentialsValid("Home", "secret"));
-  // Empty SPIFFS uses the same recovery path.
-  assert(apWifiRecoveryAllowed(false));
-  // Connected requests must continue through the normal authenticated handler.
-  assert(!apWifiRecoveryAllowed(true));
   assert(!apWifiCredentialsValid("", "secret"));
   assert(apWifiCredentialsValid("OpenNetwork", ""));
   assert(!apWifiCredentialsValid("bad\tssid", "secret"));

@@ -1,4 +1,5 @@
 #include "../src/core/security_access_policy.h"
+#include "../src/core/ap_ui_www_binding.h"
 
 #include <cassert>
 #include <cstring>
@@ -468,6 +469,38 @@ void testProtectedOpenAndLockedPolicy() {
   assert(evaluateSecurityAccess(state) == SecurityAccessStatus::Allowed);
 }
 
+void testRuntimeReconnectPreservesSecurityPolicy() {
+  voxone::first_boot::RuntimeSnapshotStore runtime;
+  runtime.initialize(1);
+  runtime.beginStaAttempt();
+  runtime.connected();
+  runtime.recordDisconnect(15);
+  runtime.beginStaAttempt();
+
+  const auto binding =
+      voxone::first_boot::webBindingFor(runtime.read());
+  assert(binding.normalPanel);
+  assert(!binding.wifiProvisioning);
+
+  SecurityAccessRequest protectedAsset = request(
+      SecurityState::Protected, SecurityAccessMethod::Get, "/variables.js");
+  protectedAsset.provisioningMode = binding.wifiProvisioning;
+  assert(evaluateSecurityAccess(protectedAsset) ==
+         SecurityAccessStatus::AuthenticationRequired);
+  protectedAsset.sessionValid = true;
+  assert(evaluateSecurityAccess(protectedAsset) ==
+         SecurityAccessStatus::Allowed);
+
+  // Logout or expiry is represented by an invalid session and must not gain
+  // provisioning privileges merely because STA is reconnecting.
+  protectedAsset.sessionValid = false;
+  assert(evaluateSecurityAccess(protectedAsset) ==
+         SecurityAccessStatus::AuthenticationRequired);
+  protectedAsset.state = SecurityState::Open;
+  assert(evaluateSecurityAccess(protectedAsset) ==
+         SecurityAccessStatus::Allowed);
+}
+
 void testProvisioningMigrationRecoveryAndOtaRestart() {
   SecurityAccessRequest provisioning = request(
       SecurityState::Unconfigured, SecurityAccessMethod::Post, "/");
@@ -628,6 +661,7 @@ int main() {
   testCompleteMethodStateSessionHostOriginMatrix();
   testDirectCompressedAssetsAndCanonicalFallback();
   testProtectedOpenAndLockedPolicy();
+  testRuntimeReconnectPreservesSecurityPolicy();
   testProvisioningMigrationRecoveryAndOtaRestart();
   testFailClosedUnknownAndMethodMismatch();
   testProductionInventoryAndHttpOnlyIntegration();

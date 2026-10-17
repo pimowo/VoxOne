@@ -151,13 +151,13 @@ Invoke-Step 'Native tests' {
   $name=$test.BaseName
   $sources=@($test.FullName)
   if($nativeSources.ContainsKey($name)) { $sources+=@($nativeSources[$name] | ForEach-Object { Join-Path $root $_ }) }
-  $variants=if($name -eq 'ap_ui_display_binding_native' -or $name -eq 'config_backup_native' -or $name -eq 'first_boot_core_native' -or $name -eq 'first_boot_runtime_snapshot_native' -or $name -eq 'hardware_descriptor_native' -or $name -eq 'runtime_hardware_config_native' -or $name -eq 'runtime_hardware_web_native' -or $name -eq 'runtime_display_activation_native' -or $name -eq 'security_recovery_ap_native' -or $name -eq 'security_recovery_key_native' -or $name -eq 'security_recovery_session_native' -or $name -eq 'security_recovery_state_native') { @('L0','M0','S0','DIN0','W0') } elseif($name -eq 'build_identity_native') { @('','L0','M0','S0','DIN0','W0','CLEAN','DIRTY') } else { @('') }
+  $variants=if($name -eq 'ap_ui_display_binding_native' -or $name -eq 'ap_ui_www_binding_native' -or $name -eq 'config_backup_native' -or $name -eq 'first_boot_core_native' -or $name -eq 'first_boot_runtime_snapshot_native' -or $name -eq 'hardware_descriptor_native' -or $name -eq 'runtime_hardware_config_native' -or $name -eq 'runtime_hardware_web_native' -or $name -eq 'runtime_display_activation_native' -or $name -eq 'security_recovery_ap_native' -or $name -eq 'security_recovery_key_native' -or $name -eq 'security_recovery_session_native' -or $name -eq 'security_recovery_state_native') { @('L0','M0','S0','DIN0','W0') } elseif($name -eq 'build_identity_native') { @('','L0','M0','S0','DIN0','W0','CLEAN','DIRTY') } else { @('') }
   foreach($variant in $variants) {
    $label=if($variant) { "$name-$variant" } else { $name }
    $exe=Join-Path $work ($label+$(if($onWindows) { '.exe' } else { '' }))
    $compileLog=Join-Path $work ($label+'.compile.log')
    $compileArgs=@('-std=c++11','-O2','-Wall','-Wextra','-Werror','-Wno-unused-parameter')
-   if($name -eq 'display_scroll_runtime_config_native' -or $name -eq 'first_boot_runtime_snapshot_native') { $compileArgs+='-pthread' }
+   if($name -eq 'ap_ui_www_binding_native' -or $name -eq 'display_scroll_runtime_config_native' -or $name -eq 'first_boot_runtime_snapshot_native') { $compileArgs+='-pthread' }
    if($variant) {
     if($variant -eq 'CLEAN' -or $variant -eq 'DIRTY') { $compileArgs+="-DBUILD_ID_TEST_$variant=1" }
     else { $compileArgs+="-DVOXONE_PROFILE_$variant=1" }
@@ -223,6 +223,12 @@ if(-not $onWindows) {
   if($LASTEXITCODE -ne 0) { throw 'Sanitized FIRST BOOT runtime snapshot compile failed' }
   & $runtimeSnapshotExe
   if($LASTEXITCODE -ne 0) { throw 'Sanitized FIRST BOOT runtime snapshot test failed' }
+  $wwwBindingExe=Join-Path $work 'ap_ui_www_binding_sanitized'
+  & $Cxx @sanitizerArgs '-pthread' '-DVOXONE_PROFILE_L0=1' '-o' $wwwBindingExe `
+    (Join-Path $root 'test/ap_ui_www_binding_native.cpp')
+  if($LASTEXITCODE -ne 0) { throw 'Sanitized AP UI WWW binding compile failed' }
+  & $wwwBindingExe
+  if($LASTEXITCODE -ne 0) { throw 'Sanitized AP UI WWW binding test failed' }
   $scrollApiExe=Join-Path $work 'display_scroll_api_sanitized'
   & $Cxx @sanitizerArgs '-o' $scrollApiExe `
     (Join-Path $root 'test/display_scroll_api_native.cpp') `

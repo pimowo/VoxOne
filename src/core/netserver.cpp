@@ -44,6 +44,7 @@
 #include "dsp_transport_runtime.h"
 #endif
 #include "ap_wifi_recovery.h"
+#include "ap_ui_www_binding.h"
 #include "playlist_store.h"
 #include "playlist_mapping.h"
 #include "station_metadata.h"
@@ -1704,13 +1705,15 @@ voxone::security::SecurityHttpDecision authorizeHttpRequest(
   }
   clearSensitive(token, sizeof(token));
 
+  const auto presentation = network.presentationSnapshot();
+  const auto webBinding = voxone::first_boot::webBindingFor(presentation);
   const bool originPresent = originHeaders != 0;
   const SecurityAccessRequest access{
       deviceSecurityService().state(), accessMethod,
       request->url().c_str(), sessionValid,
       hostHeaders == 1 && securityRequestHostAllowed(context), originPresent,
       originHeaders == 1 && securityRequestOriginAllowed(context),
-      apWifiRecoveryAllowed(network.status == CONNECTED),
+      webBinding.wifiProvisioning,
       !config.currentWwwReady || systemOperationState.filesystemUnavailable()};
   const SecurityHttpDecision decision =
       evaluateSecurityHttpRequest(access, true, websocketRequest);
@@ -3675,7 +3678,9 @@ void handleNotFound(AsyncWebServerRequest * request) {
   }// if (request->method() == HTTP_POST)
   
   if (request->url() == "/variables.js") {
-    sprintf (netserver.nsBuf, "var voxOneVersion='%s';\nvar voxOneChannel='%s';\nvar voxOneBuild='%s';\nvar yoRadioVersion='%s';\nvar yoVersion=voxOneVersion;\nvar voxOneProfile='%s';\nvar playMode='%s';\n", VOXONE_VERSION, VOXONE_BUILD_CHANNEL, VOXONE_BUILD_SHA, YOVERSION, VOXONE_BUILD_PROFILE, (network.status == CONNECTED)?"player":"ap");
+    const auto presentation = network.presentationSnapshot();
+    const auto webBinding = voxone::first_boot::webBindingFor(presentation);
+    sprintf (netserver.nsBuf, "var voxOneVersion='%s';\nvar voxOneChannel='%s';\nvar voxOneBuild='%s';\nvar yoRadioVersion='%s';\nvar yoVersion=voxOneVersion;\nvar voxOneProfile='%s';\nvar playMode='%s';\n", VOXONE_VERSION, VOXONE_BUILD_CHANNEL, VOXONE_BUILD_SHA, YOVERSION, VOXONE_BUILD_PROFILE, webBinding.normalPanel?"player":"ap");
     request->send(200, "text/html", netserver.nsBuf);
     return;
   }
@@ -3694,9 +3699,11 @@ void handleIndex(AsyncWebServerRequest * request) {
     request->send(503, "text/plain", "Update in progress");
     return;
   }
-  if (request->url() == "/" && apWifiRecoveryAllowed(network.status == CONNECTED)) {
+  const auto presentation = network.presentationSnapshot();
+  const auto webBinding = voxone::first_boot::webBindingFor(presentation);
+  if (request->url() == "/" && webBinding.wifiProvisioning) {
     if (request->method() == HTTP_GET) {
-      if (config.ssidsCount == 0) {
+      if (webBinding.page == voxone::first_boot::WebPage::FirstBootSetup) {
         request->send_P(200, "text/html", first_boot_setup_html);
         return;
       }
@@ -3734,6 +3741,16 @@ void handleIndex(AsyncWebServerRequest * request) {
       Serial.println("##[BOOT]# AP Wi-Fi credentials saved; restart scheduled");
       return;
     }
+    request->send(405, "text/plain", "Method not allowed");
+    return;
+  }
+  if (request->url() == "/" && !webBinding.normalPanel) {
+    AsyncWebServerResponse* response = request->beginResponse(
+        503, "text/plain", "Web interface unavailable during network transition");
+    response->addHeader("Cache-Control", "no-store, max-age=0");
+    response->addHeader("Retry-After", "1");
+    request->send(response);
+    return;
   }
   if(!config.currentWwwReady){
     Serial.print("Not Found: ");
@@ -3742,7 +3759,7 @@ void handleIndex(AsyncWebServerRequest * request) {
     return;
   } // end if(!config.currentWwwReady)
 #if defined(HTTP_USER) && defined(HTTP_PASS)
-  if(network.status == CONNECTED)
+  if(webBinding.normalPanel)
     if (!request->authenticate(HTTP_USER, HTTP_PASS)) {
       return request->requestAuthentication();
     }
