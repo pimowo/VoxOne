@@ -11,4 +11,6 @@ data/data/*
 *.elf
 *.map
 *.log
+__pycache__/
+*.py[cod]
 .voxone-recovery-ap-password
