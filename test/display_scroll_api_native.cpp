@@ -1,6 +1,8 @@
 #include "../src/core/display_scroll_api.h"
+#include "../src/core/player_scroll_runtime.h"
 
 #include <cassert>
+#include <cstdio>
 #include <cstring>
 #include <fstream>
 #include <iterator>
@@ -32,6 +34,129 @@ struct FakeOperations {
   ScrollSettingsSaveStatus saveStatus = ScrollSettingsSaveStatus::Saved;
   std::string calls;
 };
+
+class MemoryScrollStorage final : public ScrollSettingsStorage {
+ public:
+  ScrollSettingsStorageReadStatus read(uint8_t* output, size_t capacity,
+                                       size_t& outputSize) override {
+    if (size == 0) {
+      outputSize = 0;
+      return ScrollSettingsStorageReadStatus::Missing;
+    }
+    assert(output && capacity >= size);
+    std::memcpy(output, bytes, size);
+    outputSize = size;
+    return ScrollSettingsStorageReadStatus::Found;
+  }
+
+  ScrollSettingsStorageWriteStatus write(const uint8_t* input,
+                                          size_t inputSize) override {
+    assert(input && inputSize == kScrollSettingsRecordSize);
+    std::memcpy(bytes, input, inputSize);
+    size = inputSize;
+    return ScrollSettingsStorageWriteStatus::Stored;
+  }
+
+  ScrollSettingsStorageEraseStatus erase() override {
+    size = 0;
+    return ScrollSettingsStorageEraseStatus::Erased;
+  }
+
+  uint8_t bytes[kScrollSettingsRecordSize]{};
+  size_t size = 0;
+};
+
+struct IntegratedSettingsPath {
+  MemoryScrollStorage storage;
+  ScrollSettingsRuntimeConfig runtime;
+};
+
+ScrollSettingsLoadResult integratedRead(void* context) {
+  return loadScrollSettings(
+      static_cast<IntegratedSettingsPath*>(context)->storage);
+}
+
+ScrollSettingsSaveStatus integratedSave(
+    void* context, const ScrollSettingsLoadResult& current,
+    const ScrollSettings& requested) {
+  return saveScrollSettings(
+      static_cast<IntegratedSettingsPath*>(context)->storage, current,
+      requested);
+}
+
+ScrollSettingsLoadResult integratedReload(void* context) {
+  auto& path = *static_cast<IntegratedSettingsPath*>(context);
+  const ScrollSettingsLoadResult loaded = loadScrollSettings(path.storage);
+  const ScrollSettings settings =
+      loaded.source == ScrollSettingsSource::UserSettings
+          ? loaded.settings
+          : defaultScrollSettings();
+  assert(path.runtime.publish(settings, loaded.source) !=
+         ScrollSettingsPublishStatus::Invalid);
+  return loaded;
+}
+
+ScrollSettingsRuntimeSnapshot integratedSnapshot(void* context) {
+  return static_cast<IntegratedSettingsPath*>(context)->runtime.snapshot();
+}
+
+ScrollSettingsApiOperations integratedOperations(
+    IntegratedSettingsPath& path) {
+  return ScrollSettingsApiOperations{&path, integratedRead, integratedSave,
+                                     integratedReload, integratedSnapshot};
+}
+
+struct ScrollRenderProbe {
+  PlayerScrollRowMetrics metrics{1, 100, 220, 250, 1};
+  bool coreControlled = false;
+  uint32_t renderCalls = 0;
+  uint16_t lastOffset = 0;
+};
+
+PlayerScrollRowMetrics probeMetrics(const void* context) {
+  return static_cast<const ScrollRenderProbe*>(context)->metrics;
+}
+
+void probeCoreControlled(void* context, bool enabled) {
+  auto& probe = *static_cast<ScrollRenderProbe*>(context);
+  probe.coreControlled = enabled;
+  probe.lastOffset = 0;
+}
+
+bool probeRenderOffset(void* context, uint16_t offset) {
+  auto& probe = *static_cast<ScrollRenderProbe*>(context);
+  assert(probe.coreControlled);
+  ++probe.renderCalls;
+  probe.lastOffset = offset;
+  return true;
+}
+
+PlayerScrollRuntimeTick runL0UntilFirstMotion(
+    const ScrollSettingsRuntimeSnapshot& snapshot, ScrollRenderProbe& probe) {
+  PlayerScrollRuntime runtime;
+  assert(runtime.configure(true, ScrollRendererProfile::St7796_480x320,
+                           snapshot.settings, snapshot.source));
+  const PlayerScrollWidgetBinding binding{
+      &probe, probeMetrics, probeCoreControlled, probeRenderOffset};
+  assert(runtime.setRows(&binding, 1));
+  runtime.enter(0);
+  const PlayerScrollRuntimeTick reset = runtime.tick(0);
+  assert(reset.renderRequested && reset.command.offsetPixels == 0);
+  if (!runtime.controller().parameters().enabled) {
+    const PlayerScrollRuntimeTick disabled = runtime.tick(100000);
+    assert(!disabled.renderRequested && probe.lastOffset == 0);
+    return disabled;
+  }
+  const uint16_t pause = runtime.controller().parameters().pauseMs;
+  const uint16_t interval = runtime.controller().parameters().intervalMs;
+  if (pause != 0) {
+    assert(!runtime.tick(static_cast<uint32_t>(pause - 1)).renderRequested);
+    assert(!runtime.tick(pause).renderRequested);
+  }
+  assert(!runtime.tick(static_cast<uint32_t>(pause + interval - 1))
+              .renderRequested);
+  return runtime.tick(static_cast<uint32_t>(pause + interval));
+}
 
 ScrollSettingsLoadResult fakeRead(void* context) {
   auto& fake = *static_cast<FakeOperations*>(context);
@@ -288,6 +413,137 @@ void testSequentialUpdatesAndResults() {
   assert(strstr(json, "\"activeApplied\":false") != nullptr);
 }
 
+void testL0PersistentSettingsDriveRenderer() {
+  IntegratedSettingsPath path;
+
+  const ScrollSettingsLoadResult missing = loadScrollSettings(path.storage);
+  assert(missing.status ==
+         ScrollSettingsLoadStatus::RendererDefaultsMissing);
+  assert(missing.source == ScrollSettingsSource::RendererDefaults);
+  const auto defaultView = makeScrollSettingsWebView(
+      ScrollRendererProfile::St7796_480x320, path.runtime.snapshot(), true);
+  assert(defaultView.canScrollSettings && defaultView.scrollCoreActive);
+  assert(defaultView.settings.enabled);
+  assert(defaultView.settings.speed == ScrollSpeed::Normal);
+  assert(defaultView.settings.pauseMs == 2500);
+
+  ScrollRenderProbe defaultProbe;
+  const PlayerScrollRuntimeTick defaultMotion =
+      runL0UntilFirstMotion(path.runtime.snapshot(), defaultProbe);
+  assert(defaultMotion.renderRequested && defaultMotion.renderAccepted);
+  assert(defaultMotion.command.offsetPixels == 2);
+  assert(defaultProbe.lastOffset == 2 && defaultProbe.renderCalls == 2);
+
+  const char* speeds[] = {"slow", "normal", "fast"};
+  const ScrollSpeed speedValues[] = {ScrollSpeed::Slow, ScrollSpeed::Normal,
+                                     ScrollSpeed::Fast};
+  const uint16_t pauses[] = {0, 1000, 2000, 3000, 4000, 5000};
+  char command[32];
+  for (size_t speed = 0; speed < 3; ++speed) {
+    for (uint16_t pause : pauses) {
+      std::snprintf(command, sizeof(command), "true,%s,%u", speeds[speed],
+                    pause);
+      ScrollSettings requested{};
+      assert(parseScrollSettingsCommand(command, requested) ==
+             ScrollSettingsCommandStatus::Ok);
+      const ScrollSettingsApplyResult applied = applyScrollSettingsUpdate(
+          requested, true, integratedOperations(path));
+      assert(applied.status == ScrollSettingsApplyStatus::Applied);
+      assert(applied.persisted && applied.runtimePublished &&
+             applied.scrollCoreActive);
+
+      const ScrollSettingsLoadResult persisted =
+          loadScrollSettings(path.storage);
+      assert(persisted.status == ScrollSettingsLoadStatus::UserSettings);
+      assert(persisted.recordStatus == ScrollSettingsRecordStatus::Valid);
+      assert(equalScrollSettings(persisted.settings, requested));
+      const ScrollSettingsRuntimeSnapshot snapshot = path.runtime.snapshot();
+      assert(snapshot.source == ScrollSettingsSource::UserSettings);
+      assert(equalScrollSettings(snapshot.settings, requested));
+
+      const auto view = makeScrollSettingsWebView(
+          ScrollRendererProfile::St7796_480x320, snapshot, true);
+      assert(view.canScrollSettings && view.scrollCoreActive);
+      assert(equalScrollSettings(view.settings, requested));
+
+      ScrollRenderProbe probe;
+      const PlayerScrollRuntimeTick motion =
+          runL0UntilFirstMotion(snapshot, probe);
+      const ScrollMotion expected = scrollMotion(
+          ScrollRendererProfile::St7796_480x320, speedValues[speed]);
+      assert(motion.renderRequested && motion.renderAccepted);
+      assert(motion.command.offsetPixels == expected.stepPixels);
+      assert(probe.lastOffset == expected.stepPixels);
+    }
+  }
+
+  ScrollSettings disabled{};
+  assert(parseScrollSettingsCommand("false,fast,5000", disabled) ==
+         ScrollSettingsCommandStatus::Ok);
+  assert(applyScrollSettingsUpdate(disabled, true, integratedOperations(path))
+             .status == ScrollSettingsApplyStatus::Applied);
+  ScrollRenderProbe disabledProbe;
+  const PlayerScrollRuntimeTick disabledTick =
+      runL0UntilFirstMotion(path.runtime.snapshot(), disabledProbe);
+  assert(!disabledTick.renderRequested);
+  assert(disabledProbe.lastOffset == 0 && disabledProbe.renderCalls == 1);
+
+  const ScrollSettings normalNoPause{true, ScrollSpeed::Normal, 0};
+  assert(applyScrollSettingsUpdate(normalNoPause, true,
+                                   integratedOperations(path))
+             .status == ScrollSettingsApplyStatus::Applied);
+  PlayerScrollRuntime activeRuntime;
+  ScrollRenderProbe activeProbe;
+  const PlayerScrollWidgetBinding activeBinding{
+      &activeProbe, probeMetrics, probeCoreControlled, probeRenderOffset};
+  assert(activeRuntime.configure(true,
+                                 ScrollRendererProfile::St7796_480x320,
+                                 path.runtime.snapshot().settings,
+                                 path.runtime.snapshot().source));
+  assert(activeRuntime.setRows(&activeBinding, 1));
+  activeRuntime.enter(100);
+  assert(activeRuntime.tick(100).command.offsetPixels == 0);
+  assert(activeRuntime.tick(150).command.offsetPixels == 2);
+
+  const ScrollSettings fastWithPause{true, ScrollSpeed::Fast, 1000};
+  assert(applyScrollSettingsUpdate(fastWithPause, true,
+                                   integratedOperations(path))
+             .status == ScrollSettingsApplyStatus::Applied);
+  const ScrollSettingsRuntimeSnapshot changed = path.runtime.snapshot();
+  assert(activeRuntime.configure(true,
+                                 ScrollRendererProfile::St7796_480x320,
+                                 changed.settings, changed.source));
+  assert(!activeRuntime.active() && !activeProbe.coreControlled);
+  activeRuntime.enter(200);
+  assert(activeRuntime.tick(200).command.offsetPixels == 0);
+  assert(!activeRuntime.tick(1199).renderRequested);
+  assert(!activeRuntime.tick(1200).renderRequested);
+  assert(!activeRuntime.tick(1249).renderRequested);
+  const PlayerScrollRuntimeTick changedMotion = activeRuntime.tick(1250);
+  assert(changedMotion.renderRequested && changedMotion.renderAccepted);
+  assert(changedMotion.command.offsetPixels == 4);
+
+  ScrollSettingsRuntimeConfig restartedRuntime;
+  const ScrollSettingsLoadResult restarted = loadScrollSettings(path.storage);
+  assert(restarted.source == ScrollSettingsSource::UserSettings);
+  assert(restarted.recordStatus == ScrollSettingsRecordStatus::Valid);
+  assert(restartedRuntime.publish(restarted.settings, restarted.source) ==
+         ScrollSettingsPublishStatus::Changed);
+  assert(equalScrollSettings(restartedRuntime.snapshot().settings,
+                             fastWithPause));
+
+  const size_t savedSize = path.storage.size;
+  uint8_t savedRecord[kScrollSettingsRecordSize]{};
+  std::memcpy(savedRecord, path.storage.bytes, savedSize);
+  const uint32_t savedRevision = path.runtime.snapshot().revision;
+  ScrollSettings rejected{};
+  assert(parseScrollSettingsCommand("true,normal,2500", rejected) ==
+         ScrollSettingsCommandStatus::InvalidPause);
+  assert(path.storage.size == savedSize);
+  assert(std::memcmp(path.storage.bytes, savedRecord, savedSize) == 0);
+  assert(path.runtime.snapshot().revision == savedRevision);
+}
+
 void testFirmwareIntegrationContract() {
   const std::string server = readFile("src/core/netserver.cpp");
   const std::string main = readFile("src/main.cpp");
@@ -340,7 +596,12 @@ void testFirmwareIntegrationContract() {
   const std::string m0Profile = section(
       platformio, "[env:m0]", "[env:m0-security-test]");
   assert(m0Profile.find(coreFlag) != std::string::npos);
-  assert(platformio.find(coreFlag) == platformio.rfind(coreFlag));
+  const std::size_t firstFlag = platformio.find(coreFlag);
+  const std::size_t secondFlag = platformio.find(coreFlag, firstFlag + 1);
+  const std::size_t l0Profile = platformio.find("[env:l0]");
+  assert(firstFlag != std::string::npos && secondFlag != std::string::npos);
+  assert(platformio.find(coreFlag, secondFlag + 1) == std::string::npos);
+  assert(secondFlag > l0Profile);
 }
 
 }  // namespace
@@ -350,6 +611,7 @@ int main() {
   testWebViews();
   testApplyOrderAndFailures();
   testSequentialUpdatesAndResults();
+  testL0PersistentSettingsDriveRenderer();
   testFirmwareIntegrationContract();
   return 0;
 }

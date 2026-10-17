@@ -846,7 +846,7 @@ setTimeout(async () => {
     check(get('scroll-settings-save').disabled,
       'returning the draft to the saved values avoids an NVS write');
     for (const [profile, coreActive, pauseMs] of [
-      ['L0',false,2500],['M0',true,5000],['S0',false,5000],
+      ['L0',true,2500],['M0',true,5000],['S0',false,5000],
       ['DIN0',false,5000],['W0',false,5000]
     ]) {
       btTestSocket.onmessage({data:JSON.stringify(scrollSnapshot({
@@ -863,6 +863,16 @@ setTimeout(async () => {
       [...get('scroll-pause').options].filter(option => option.value !== '2500')
         .every(option => !option.disabled),
       'renderer-only 2500 ms is represented exactly but is not a writable choice');
+    btTestSocket.onmessage({data:JSON.stringify(scrollSnapshot({
+      scrollPauseMs:2500,scrollSettingsSource:'rendererDefaults',scrollCoreActive:true}))});
+    check(get('scroll-pause').value === '2500' && !get('scroll-pause').disabled &&
+      get('scroll-settings-save').disabled &&
+      get('scroll-settings-status').textContent.includes('aktywnie stosowane'),
+      'L0 actively applies 2500 ms while requiring an explicit writable replacement');
+    get('scroll-pause').value = '2000';
+    get('scroll-pause').dispatchEvent(new Event('change'));
+    check(!get('scroll-settings-save').disabled,
+      'L0 can replace renderer-only 2500 ms with an explicit writable pause');
     btTestSocket.onmessage({data:JSON.stringify(scrollSnapshot())});
     let expectedScrollCommands = scrollCommandsBeforeSnapshot;
     let savedScroll = {enabled:true,speed:'normal',pauseMs:5000};
@@ -903,7 +913,7 @@ setTimeout(async () => {
       btTestSocket.sent.filter(item => item.startsWith('scrollsettings=')).length === commandsBeforeInactiveSubmit &&
       get('scroll-settings-status').textContent.includes('Przewijanie automatyczne') &&
       get('scroll-settings-status').textContent.includes('wspólnego silnika CORE'),
-      'L0 presents its 2500 ms renderer state read-only without promising WWW control');
+      'an inactive CORE presents 2500 ms read-only without promising WWW control');
     btTestSocket.onmessage({data:JSON.stringify(scrollSnapshot({scrollPauseMs:2501,
       scrollCoreActive:true}))});
     check(get('scroll-pause').value === '2500' && get('scroll-pause').disabled &&

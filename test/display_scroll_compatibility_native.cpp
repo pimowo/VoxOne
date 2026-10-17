@@ -575,13 +575,17 @@ void testProductionIntegrationGuards() {
   assert(widgets.find("if (_coreControlled) return;") != std::string::npos);
   assert(widgets.find("scrollComposeWindow(") != std::string::npos);
   assert(widgets.find("const char* encoded = utf8Rus") != std::string::npos);
-  assert(countText(platformio, "-DVOXONE_PLAYER_SCROLL_CORE_ENABLED=1") == 1);
+  assert(countText(platformio, "-DVOXONE_PLAYER_SCROLL_CORE_ENABLED=1") == 2);
   const std::size_t m0 = platformio.find("[env:m0]");
   const std::size_t m0Security = platformio.find("[env:m0-security-test]");
-  const std::size_t flag =
+  const std::size_t m0Flag =
       platformio.find("-DVOXONE_PLAYER_SCROLL_CORE_ENABLED=1");
+  const std::size_t l0 = platformio.find("[env:l0]");
+  const std::size_t l0Flag = platformio.find(
+      "-DVOXONE_PLAYER_SCROLL_CORE_ENABLED=1", m0Flag + 1);
   assert(m0 != std::string::npos && m0Security != std::string::npos &&
-         flag > m0 && flag < m0Security);
+         m0Flag > m0 && m0Flag < m0Security);
+  assert(l0 != std::string::npos && l0Flag > l0);
 }
 
 }  // namespace
