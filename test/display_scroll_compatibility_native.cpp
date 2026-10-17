@@ -323,8 +323,16 @@ void testSettingsMatrix() {
         if (pause != 0) {
           assert(!display.tick(static_cast<uint32_t>(100 + pause - 1))
                       .renderRequested);
-          const PlayerScrollRuntimeTick first =
-              display.tick(static_cast<uint32_t>(100 + pause));
+          uint32_t firstStepMs = static_cast<uint32_t>(100 + pause);
+          if (profile == ScrollRendererProfile::St7796_480x320) {
+            assert(!display.tick(firstStepMs).renderRequested);
+            assert(!display.tick(static_cast<uint32_t>(
+                        firstStepMs + parameters.intervalMs - 1))
+                        .renderRequested);
+            firstStepMs = static_cast<uint32_t>(
+                firstStepMs + parameters.intervalMs);
+          }
+          const PlayerScrollRuntimeTick first = display.tick(firstStepMs);
           assert(first.renderRequested && first.command.offsetPixels > 0);
         } else {
           assert(!display.tick(static_cast<uint32_t>(

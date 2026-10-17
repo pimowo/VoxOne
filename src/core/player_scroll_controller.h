@@ -77,11 +77,15 @@ class PlayerScrollController {
     const uint8_t boundedCount =
         validPointer && validCount ? count : static_cast<uint8_t>(0);
     uint8_t changedMask = 0;
+    uint8_t contentChangedMask = 0;
 
     for (uint8_t row = 0; row < kMaximumRows; ++row) {
       const PlayerScrollRowMetrics next =
           row < boundedCount ? normalizeMetrics(rows[row]) : emptyMetrics();
       if (!sameMetrics(metrics_[row], next)) {
+        if (metrics_[row].contentRevision != next.contentRevision)
+          contentChangedMask = static_cast<uint8_t>(
+              contentChangedMask | (1U << row));
         metrics_[row] = next;
         descriptorRevisions_[row] = nextDescriptorRevision(
             descriptorRevisions_[row]);
@@ -93,9 +97,12 @@ class PlayerScrollController {
 
     rowCount_ = boundedCount;
     (void)engine_.setRows(descriptors_, rowCount_);
-    if (active_)
+    if (active_) {
       pendingResetMask_ = static_cast<uint8_t>(
           pendingResetMask_ | (changedMask & presentRowsMask()));
+      if (engine_.usesSt7796LegacyTiming() && contentChangedMask != 0)
+        engine_.restartAtRow(lastChangedRow(contentChangedMask));
+    }
     return validPointer && validCount;
   }
 
@@ -118,6 +125,11 @@ class PlayerScrollController {
     if (!active_) return noCommand();
 
     if (pendingResetMask_ != 0) {
+      // Legacy ST7796 text changes select the replacement turn in the same
+      // display tick that redraws the changed row at its origin.
+      if (engine_.usesSt7796LegacyTiming() &&
+          engine_.activeRow() == ScrollGroupEngine::kNoRow)
+        (void)engine_.tick(nowMs);
       const uint8_t row = firstPendingReset();
       pendingResetMask_ = static_cast<uint8_t>(
           pendingResetMask_ & ~(static_cast<uint8_t>(1U << row)));
@@ -127,6 +139,10 @@ class PlayerScrollController {
     }
 
     const ScrollEngineEvent event = engine_.tick(nowMs);
+    if (event.action == ScrollEngineAction::TurnStarted &&
+        engine_.usesSt7796LegacyTiming())
+      return PlayerScrollCommand{PlayerScrollCommandAction::RenderOffset,
+                                 event.phase, event.row, 0, 0};
     if (event.action != ScrollEngineAction::Step)
       return PlayerScrollCommand{PlayerScrollCommandAction::None, event.phase,
                                  event.row, event.offsetPixels,
@@ -206,6 +222,13 @@ class PlayerScrollController {
   uint8_t firstPendingReset() const {
     for (uint8_t row = 0; row < kMaximumRows; ++row)
       if (pendingResetMask_ & (1U << row)) return row;
+    return 0;
+  }
+
+  uint8_t lastChangedRow(uint8_t changedMask) const {
+    for (uint8_t row = rowCount_; row > 0; --row)
+      if (changedMask & (1U << (row - 1U)))
+        return static_cast<uint8_t>(row - 1U);
     return 0;
   }
 

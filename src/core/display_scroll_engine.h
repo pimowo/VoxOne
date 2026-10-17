@@ -50,16 +50,30 @@ class ScrollGroupEngine {
         rows_{},
         phaseStartedMs_(0),
         lastStepMs_(0),
+        profile_(ScrollRendererProfile::None),
         rowCount_(0),
         nextRow_(0),
         activeRow_(kNoRow),
-        phase_(ScrollEnginePhase::Idle) {}
+        phase_(ScrollEnginePhase::Idle),
+        cycleBoundaryReached_(false) {}
 
   void configure(ScrollRendererProfile profile,
                  const ScrollSettings& settings,
                  ScrollSettingsSource source) {
+    profile_ = profile;
     parameters_ = resolveScrollParameters(profile, settings, source);
     resetSchedule(true);
+  }
+
+  // The historical ST7796 scheduler gives the last changed PLAYER field the
+  // next turn, even when another row was moving. The controller calls this
+  // only for that renderer; other CORE renderers retain their fair-yield rule.
+  void restartAtRow(uint8_t row) {
+    if (rowCount_ == 0 || row >= rowCount_) return;
+    nextRow_ = row;
+    activeRow_ = kNoRow;
+    phase_ = ScrollEnginePhase::Idle;
+    cycleBoundaryReached_ = false;
   }
 
   // Applies at most kMaximumRows descriptors. A false result reports an
@@ -117,6 +131,9 @@ class ScrollGroupEngine {
         return noEvent();
       phase_ = ScrollEnginePhase::Moving;
       lastStepMs_ = nowMs;
+      // ST7796 historically changes state at the end of its 2500 ms pause,
+      // then waits one complete 50 ms cadence before moving two pixels.
+      if (usesSt7796LegacyTiming()) return noEvent();
       return advanceOneStep();
     }
 
@@ -135,6 +152,9 @@ class ScrollGroupEngine {
     return row < rowCount_ ? rows_[row].offsetPixels : 0;
   }
   const ResolvedScrollParameters& parameters() const { return parameters_; }
+  bool usesSt7796LegacyTiming() const {
+    return profile_ == ScrollRendererProfile::St7796_480x320;
+  }
 
  private:
   struct RowState {
@@ -184,6 +204,7 @@ class ScrollGroupEngine {
       rows_[row].offsetPixels = 0;
       phaseStartedMs_ = nowMs;
       lastStepMs_ = nowMs;
+      cycleBoundaryReached_ = false;
       phase_ = parameters_.pauseMs == 0 ? ScrollEnginePhase::Moving
                                         : ScrollEnginePhase::Waiting;
       return ScrollEngineEvent{ScrollEngineAction::TurnStarted, phase_,
@@ -197,19 +218,43 @@ class ScrollGroupEngine {
   ScrollEngineEvent advanceOneStep() {
     const uint8_t row = static_cast<uint8_t>(activeRow_);
     RowState& state = rows_[row];
+
+    // ScrollWidget's legacy ST7796 path regards an offset exactly equal to a
+    // cycle as the origin visually, but reports cycle completion only on the
+    // following scheduled step. Preserve that one-cadence hold for parity.
+    if (usesSt7796LegacyTiming() && cycleBoundaryReached_) {
+      cycleBoundaryReached_ = false;
+      return finishTurn(row, parameters_.stepPixels);
+    }
+
     const uint16_t remaining = static_cast<uint16_t>(
         state.descriptor.cyclePixels - state.offsetPixels);
-    const uint8_t step = remaining < parameters_.stepPixels
-                             ? static_cast<uint8_t>(remaining)
-                             : parameters_.stepPixels;
-    const uint16_t nextOffset =
-        static_cast<uint16_t>(state.offsetPixels + step);
+    const uint8_t step = usesSt7796LegacyTiming()
+                             ? parameters_.stepPixels
+                             : (remaining < parameters_.stepPixels
+                                    ? static_cast<uint8_t>(remaining)
+                                    : parameters_.stepPixels);
+    const uint32_t nextOffset =
+        static_cast<uint32_t>(state.offsetPixels) + step;
     if (nextOffset < state.descriptor.cyclePixels) {
-      state.offsetPixels = nextOffset;
+      state.offsetPixels = static_cast<uint16_t>(nextOffset);
       return ScrollEngineEvent{ScrollEngineAction::Step, phase_, activeRow_,
                                step, state.offsetPixels, 0};
     }
 
+    if (usesSt7796LegacyTiming() &&
+        nextOffset == state.descriptor.cyclePixels) {
+      state.offsetPixels = 0;
+      cycleBoundaryReached_ = true;
+      return ScrollEngineEvent{ScrollEngineAction::Step, phase_, activeRow_,
+                               step, 0, 0};
+    }
+
+    return finishTurn(row, step);
+  }
+
+  ScrollEngineEvent finishTurn(uint8_t row, uint8_t step) {
+    RowState& state = rows_[row];
     // A complete renderer-defined cycle is visually equivalent to offset 0.
     // Reset before yielding the turn so non-active rows always remain at their
     // left edge.
@@ -218,6 +263,7 @@ class ScrollGroupEngine {
     advanceCursorAfter(row);
     activeRow_ = kNoRow;
     phase_ = ScrollEnginePhase::Idle;
+    cycleBoundaryReached_ = false;
     return ScrollEngineEvent{ScrollEngineAction::Step, phase_, completedRow,
                              step, 0, 1};
   }
@@ -235,6 +281,7 @@ class ScrollGroupEngine {
     }
     activeRow_ = kNoRow;
     phase_ = ScrollEnginePhase::Idle;
+    cycleBoundaryReached_ = false;
   }
 
   void advanceCursorAfter(uint8_t row) {
@@ -253,16 +300,19 @@ class ScrollGroupEngine {
     nextRow_ = 0;
     activeRow_ = kNoRow;
     phase_ = ScrollEnginePhase::Idle;
+    cycleBoundaryReached_ = false;
   }
 
   ResolvedScrollParameters parameters_;
   RowState rows_[kMaximumRows];
   uint32_t phaseStartedMs_;
   uint32_t lastStepMs_;
+  ScrollRendererProfile profile_;
   uint8_t rowCount_;
   uint8_t nextRow_;
   int8_t activeRow_;
   ScrollEnginePhase phase_;
+  bool cycleBoundaryReached_;
 };
 
 }  // namespace display_scroll
