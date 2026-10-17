@@ -944,7 +944,7 @@ void BitrateWidget::setCustomText(const char* top, const char* bottom){
   _draw();
 }
 
-//TODO move to parent
+// Kept local to BitrateWidget; any hierarchy change is tracked in docs/TODO.md.
 void BitrateWidget::_charSize(uint8_t textsize, uint8_t& width, uint16_t& height){
   width = textsize * CHARWIDTH;
   height = textsize * CHARHEIGHT;

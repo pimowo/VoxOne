@@ -20,7 +20,7 @@
 #include <WiFi.h>
 #include <WiFiClientSecure.h>
 #include <vector>
-//TODO
+// Suppress the legacy ESP-IDF driver warning around this compatibility include.
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wcpp"
 #include <driver/i2s.h>

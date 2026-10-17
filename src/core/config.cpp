@@ -532,7 +532,8 @@ void Config::setTimezoneOffset(uint16_t tzo) {
 }
 
 uint16_t Config::getTimezoneOffset() {
-  return 0; // TODO
+  // Reserved compatibility API; the active timezone decision is tracked in docs/TODO.md.
+  return 0;
 }
 
 void Config::saveVolume(){
