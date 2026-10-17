@@ -732,7 +732,7 @@ setTimeout(async () => {
       card.querySelector('h3')?.textContent === 'VoxOneBT Firmware');
     check([...btUpdateCard.querySelectorAll('dt')].map(node => node.textContent).join(',') === 'Status',
       'BT update card contains only compact status fact');
-    check(btUpdateCard.textContent.includes('Aktualizacja VoxOneBT: bezpośrednio przez USB (X0).'),
+    check(btUpdateCard.textContent.includes('Aktualizacja VoxOneBT: bezpośrednio przez USB (Wx).'),
       'BT update card keeps direct USB guidance');
     const networkCard = [...get('settings').querySelectorAll('.card')].find(card => card.querySelector('h3')?.textContent === 'Sieć');
     check(!!networkCard, 'network card');
