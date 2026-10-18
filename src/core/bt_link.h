@@ -25,6 +25,9 @@ class BtLink : private BtFirmwareTransport {
   bool next();
   bool prev();
   bool setVolume(uint8_t absoluteVolume);
+  bool setSessionVolume(const BtVolumeSessionCommand& command);
+  bool takeVolumeSessionEvent(BtVolumeSessionEvent& event);
+  bool volumeSessionCapable() const;
   bool startFirmwareUpdate(BtFirmwareImage& image);
   void abortFirmwareUpdate();
   bool firmwareUpdateInProgress() const { return sender_.exclusive(); }

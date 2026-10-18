@@ -37,7 +37,7 @@ int main() {
   link.line("PROTO 2", 11);
   link.line("FW_VERSION 0.6.1-dev", 12);
   link.line("BT_NAME VoxOneBT-EFF35A", 13);
-  link.line("CAPS AVRCP,A2DP,VOLUME", 14);
+  link.line("CAPS AVRCP,A2DP,VOLUME,VOL_SESSION_1", 14);
   assert(link.sent.size() == 1);
   assert(!link.link.state().runtimeAvailable);
 
@@ -45,6 +45,10 @@ int main() {
   link.line("STATUS_END", 15);
   assert(!link.link.state().runtimeAvailable);
   link.line("STATUS_BEGIN", 20);
+  link.line("PROTO 2", 20);
+  link.line("FW_VERSION 0.6.1-dev", 20);
+  link.line("CAPS AVRCP,A2DP,VOLUME,VOL_SESSION_1", 20);
+  link.line("OTA_STATE NOT_PENDING", 20);
   link.line("CONNECTED", 21);
   link.line("DEVICE Telefon Żółć", 22);
   link.line("PLAYING", 23);
@@ -54,13 +58,18 @@ int main() {
   link.line("TITLE Tytuł Śląsk", 26);
   link.line("ALBUM Płyta", 27);
   link.line("VOLUME 73", 28);
+  link.line("VOL_SESSION_BEGIN 123 4", 28);
+  link.line("VOL_SNAPSHOT 123 4 1 73", 28);
   link.line("SAMPLE_RATE 44100", 29);
+  assert(!link.link.volumeSessionCapable());
   link.line("STATUS_END", 30);
   assert(link.link.state().runtimeAvailable);
   assert(link.link.state().protocolVersion == 2);
   assert(std::strcmp(link.link.state().firmwareVersion, "0.6.1-dev") == 0);
   assert(std::strcmp(link.link.state().btName, "VoxOneBT-EFF35A") == 0);
-  assert(std::strcmp(link.link.state().capabilities, "AVRCP,A2DP,VOLUME") == 0);
+  assert(std::strcmp(link.link.state().capabilities,
+                     "AVRCP,A2DP,VOLUME,VOL_SESSION_1") == 0);
+  assert(link.link.volumeSessionCapable());
   assert(link.link.state().connected);
   assert(link.link.state().playback == BtPlayback::Playing);
   assert(std::strcmp(link.link.state().peerName, "Telefon Żółć") == 0);
@@ -78,6 +87,109 @@ int main() {
   assert(link.link.state().rawVuLastMs == 31);
   assert(link.events.size() == 1 && link.events[0] == BtLinkEvent::Online);
   assert(link.sent.size() == 2 && link.sent[1] == "GET_DIAG");
+
+  // Session frames never authorize themselves. A complete status without the
+  // exact capability token discards the bounded pre-END BEGIN/SNAPSHOT queue.
+  LinkHarness noCapability;
+  noCapability.link.begin(0);
+  noCapability.line("STATUS_BEGIN", 1);
+  noCapability.line("PROTO 2", 2);
+  noCapability.line("FW_VERSION 0.6.7-dev", 3);
+  noCapability.line("CAPS A2DP AVRCP ABSVOL VOL_SESSION_10", 4);
+  noCapability.line("OTA_STATE NOT_PENDING", 5);
+  noCapability.line("CONNECTED", 6);
+  noCapability.line("VOL_SESSION_BEGIN 50 1", 7);
+  noCapability.line("VOL_SNAPSHOT 50 1 1 60", 8);
+  noCapability.line("VOL_PEER 50 1 2 70", 9);
+  assert(!noCapability.link.volumeSessionCapable());
+  noCapability.line("STATUS_END", 10);
+  assert(noCapability.link.state().runtimeAvailable);
+  assert(noCapability.link.state().connected);
+  assert(!noCapability.link.volumeSessionCapable());
+  BtVolumeSessionEvent rejectedEvent;
+  assert(!noCapability.link.takeVolumeSessionEvent(rejectedEvent));
+
+  // Capability is insufficient without A2DP, and session-like input from an
+  // old peer remains unauthorized.
+  LinkHarness disconnectedCapability;
+  disconnectedCapability.link.begin(0);
+  disconnectedCapability.line("STATUS_BEGIN", 1);
+  disconnectedCapability.line("PROTO 2", 2);
+  disconnectedCapability.line("FW_VERSION 0.6.7-dev", 3);
+  disconnectedCapability.line("CAPS A2DP VOL_SESSION_1", 4);
+  disconnectedCapability.line("OTA_STATE NOT_PENDING", 5);
+  disconnectedCapability.line("DISCONNECTED", 6);
+  disconnectedCapability.line("VOL_SESSION_BEGIN 51 1", 7);
+  disconnectedCapability.line("VOL_SNAPSHOT 51 1 1 60", 8);
+  disconnectedCapability.line("STATUS_END", 9);
+  assert(disconnectedCapability.link.state().runtimeAvailable);
+  assert(!disconnectedCapability.link.volumeSessionCapable());
+
+  // PROTO other than 2 cannot authorize the extension even with an exact CAP.
+  LinkHarness wrongProtocol;
+  wrongProtocol.link.begin(0);
+  wrongProtocol.line("STATUS_BEGIN", 1);
+  wrongProtocol.line("PROTO 3", 2);
+  wrongProtocol.line("FW_VERSION 0.6.7-dev", 3);
+  wrongProtocol.line("CAPS A2DP VOL_SESSION_1", 4);
+  wrongProtocol.line("OTA_STATE NOT_PENDING", 5);
+  wrongProtocol.line("CONNECTED", 6);
+  wrongProtocol.line("STATUS_END", 7);
+  assert(!wrongProtocol.link.volumeSessionCapable());
+
+  // Losing the advertised capability revokes trust. Delayed session frames
+  // remain unauthorized and the next STATUS_BEGIN removes them before a
+  // fresh in-snapshot BEGIN/SNAPSHOT restores the session deterministically.
+  LinkHarness trustRecovery;
+  trustRecovery.link.begin(0);
+  trustRecovery.line("STATUS_BEGIN", 1);
+  trustRecovery.line("PROTO 2", 2);
+  trustRecovery.line("FW_VERSION 0.6.7-dev", 3);
+  trustRecovery.line("CAPS A2DP VOL_SESSION_1", 4);
+  trustRecovery.line("OTA_STATE NOT_PENDING", 5);
+  trustRecovery.line("CONNECTED", 6);
+  trustRecovery.line("VOL_SESSION_BEGIN 60 1", 7);
+  trustRecovery.line("VOL_SNAPSHOT 60 1 1 45", 8);
+  trustRecovery.line("STATUS_END", 9);
+  assert(trustRecovery.link.volumeSessionCapable());
+  assert(trustRecovery.link.takeVolumeSessionEvent(rejectedEvent));
+  assert(trustRecovery.link.takeVolumeSessionEvent(rejectedEvent));
+  assert(!trustRecovery.link.takeVolumeSessionEvent(rejectedEvent));
+
+  trustRecovery.line("STATUS_BEGIN", 10);
+  assert(!trustRecovery.link.volumeSessionCapable());
+  trustRecovery.line("PROTO 2", 11);
+  trustRecovery.line("FW_VERSION 0.6.7-dev", 12);
+  trustRecovery.line("CAPS A2DP AVRCP", 13);
+  trustRecovery.line("OTA_STATE NOT_PENDING", 14);
+  trustRecovery.line("CONNECTED", 15);
+  trustRecovery.line("VOL_SESSION_BEGIN 60 1", 16);
+  trustRecovery.line("VOL_PEER 60 1 2 80", 17);
+  trustRecovery.line("STATUS_END", 18);
+  assert(!trustRecovery.link.volumeSessionCapable());
+  assert(!trustRecovery.link.takeVolumeSessionEvent(rejectedEvent));
+  trustRecovery.line("VOL_SESSION_BEGIN 60 1", 19);
+  trustRecovery.line("VOL_PEER 60 1 3 81", 20);
+  assert(!trustRecovery.link.volumeSessionCapable());
+
+  trustRecovery.line("STATUS_BEGIN", 21);
+  trustRecovery.line("PROTO 2", 22);
+  trustRecovery.line("FW_VERSION 0.6.7-dev", 23);
+  trustRecovery.line("CAPS A2DP VOL_SESSION_1", 24);
+  trustRecovery.line("OTA_STATE NOT_PENDING", 25);
+  trustRecovery.line("CONNECTED", 26);
+  trustRecovery.line("VOL_SESSION_BEGIN 60 1", 27);
+  trustRecovery.line("VOL_SNAPSHOT 60 1 3 81", 28);
+  assert(!trustRecovery.link.volumeSessionCapable());
+  trustRecovery.line("STATUS_END", 29);
+  assert(trustRecovery.link.volumeSessionCapable());
+  assert(trustRecovery.link.takeVolumeSessionEvent(rejectedEvent));
+  assert(rejectedEvent.kind == BtVolumeSessionEventKind::Begin &&
+         rejectedEvent.fromStatus);
+  assert(trustRecovery.link.takeVolumeSessionEvent(rejectedEvent));
+  assert(rejectedEvent.kind == BtVolumeSessionEventKind::Snapshot &&
+         rejectedEvent.fromStatus);
+  assert(!trustRecovery.link.takeVolumeSessionEvent(rejectedEvent));
   assert(link.link.play());
   assert(link.link.pause());
   assert(link.link.next());
@@ -90,6 +202,34 @@ int main() {
   assert(link.sent.back() == "SET_VOLUME 0");
   assert(link.link.setVolume(127));
   assert(link.sent.back() == "SET_VOLUME 127");
+  BtVolumeSessionCommand sessionCommand;
+  sessionCommand.session = {123, 4};
+  sessionCommand.commandSequence = 8;
+  sessionCommand.absoluteVolume = 74;
+  assert(link.link.setSessionVolume(sessionCommand));
+  assert(link.sent.back() == "SET_VOLUME_SESSION 123 4 8 74");
+  BtVolumeSessionEvent sessionEvent;
+  assert(link.link.takeVolumeSessionEvent(sessionEvent));
+  assert(sessionEvent.kind == BtVolumeSessionEventKind::Begin &&
+         sessionEvent.fromStatus);
+  assert(link.link.takeVolumeSessionEvent(sessionEvent));
+  assert(sessionEvent.kind == BtVolumeSessionEventKind::Snapshot);
+  assert(sessionEvent.sequence == 1 && sessionEvent.absoluteVolume == 73 &&
+         sessionEvent.fromStatus);
+  link.line("VOL_PEER 123 4 2 75", 38);
+  link.line("VOL_LOCAL_ACK 123 4 3 8 74", 38);
+  link.line("VOL_UNKNOWN 122 9 4 76", 38);
+  link.line("VOL_SESSION_END 123 4", 38);
+  assert(link.link.takeVolumeSessionEvent(sessionEvent));
+  assert(sessionEvent.kind == BtVolumeSessionEventKind::PeerVolume);
+  assert(link.link.takeVolumeSessionEvent(sessionEvent));
+  assert(sessionEvent.kind == BtVolumeSessionEventKind::LocalAck &&
+         sessionEvent.commandSequence == 8);
+  assert(link.link.takeVolumeSessionEvent(sessionEvent));
+  assert(sessionEvent.kind == BtVolumeSessionEventKind::Unknown);
+  assert(link.link.takeVolumeSessionEvent(sessionEvent));
+  assert(sessionEvent.kind == BtVolumeSessionEventKind::End);
+  assert(!link.link.takeVolumeSessionEvent(sessionEvent));
   assert(link.link.state().volume == 73);  // Only a phone callback changes state.
   const size_t sentBeforeVolumeCallback = link.sent.size();
   const uint32_t revisionBeforeVolumeCallback = link.link.state().volumeRevision;

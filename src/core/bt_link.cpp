@@ -111,6 +111,16 @@ bool BtLink::setVolume(uint8_t absoluteVolume) {
   return started_ && btRuntime.available() && !sender_.exclusive() &&
          protocol_.setVolume(absoluteVolume);
 }
+bool BtLink::setSessionVolume(const BtVolumeSessionCommand& command) {
+  return started_ && btRuntime.available() && !sender_.exclusive() &&
+         protocol_.setSessionVolume(command);
+}
+bool BtLink::takeVolumeSessionEvent(BtVolumeSessionEvent& event) {
+  return protocol_.takeVolumeSessionEvent(event);
+}
+bool BtLink::volumeSessionCapable() const {
+  return btRuntime.available() && protocol_.volumeSessionCapable();
+}
 
 bool BtLink::onLine(void* context, const char* line, uint32_t nowMs) {
   return static_cast<BtLink*>(context)->sender_.onLine(line, nowMs);

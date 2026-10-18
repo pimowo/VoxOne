@@ -2,73 +2,59 @@
 #include "../src/core/source_manager_state.h"
 
 #include <cassert>
+#include <fstream>
+#include <sstream>
 #include <string>
 #include <vector>
 
-struct VolumeHarness {
+namespace {
+
+std::string readFile(const char* path) {
+  std::ifstream input(path, std::ios::binary);
+  assert(input.good());
+  std::ostringstream contents;
+  contents << input.rdbuf();
+  return contents.str();
+}
+
+BtVolumeSessionEvent event(BtVolumeSessionEventKind kind,
+                           uint32_t epoch, uint32_t generation,
+                           uint32_t sequence, uint8_t absolute,
+                           uint32_t commandSequence = 0,
+                           bool fromStatus = false) {
+  BtVolumeSessionEvent result;
+  result.kind = kind;
+  result.session = {epoch, generation};
+  result.sequence = sequence;
+  result.commandSequence = commandSequence;
+  result.absoluteVolume = absolute;
+  result.fromStatus = fromStatus;
+  return result;
+}
+
+struct LinkHarness {
   std::vector<std::string> sent;
   BtLinkProtocol link;
-  SourceManagerState sources;
-  BtVolumeSync sync;
-  uint8_t userVolume = 25;  // Shared VoxOne volume, analogous to config.userVolume.
-  unsigned volumeSaves = 0;
-
-  VolumeHarness() : link(&VolumeHarness::send, nullptr, this) {}
-
+  LinkHarness() : link(&LinkHarness::send, nullptr, this) {}
   static void send(void* context, const char* command) {
-    static_cast<VolumeHarness*>(context)->sent.emplace_back(command);
+    static_cast<LinkHarness*>(context)->sent.emplace_back(command);
   }
-
   void line(const char* value, uint32_t now) {
     for (const char* it = value; *it; ++it) link.feed(*it, now);
     link.feed('\n', now);
   }
-
-  SourceUpdate observe(uint32_t now) {
-    const SourceUpdate update = sources.observe(link.state());
-    if (update.btDisconnected) sync.disconnect();
-    if (update.btConnected) {
-      assert(link.setVolume(btUserToAbsolute(userVolume)));
-      sync.connect(userVolume, now);
-    }
-    if (update.volumeCallback &&
-        sync.acceptPhoneVolume(update.absoluteVolume, now)) {
-      const uint8_t fromPhone = btAbsoluteToUser(update.absoluteVolume);
-      if (fromPhone != userVolume) {
-        userVolume = fromPhone;
-        ++volumeSaves;
-      }
-    }
-    if (sync.needsUserCommand(userVolume)) {
-      assert(link.setVolume(btUserToAbsolute(userVolume)));
-      sync.sentUserCommand(userVolume);
-    }
-    uint8_t retryAbsolute = 0;
-    if (sync.retryDue(now, retryAbsolute))
-      assert(link.setVolume(retryAbsolute));
-    return update;
-  }
-
-  bool turnBt(int8_t delta) {
-    if (!sources.canControlBluetooth()) return false;
-    int next = static_cast<int>(userVolume) + delta;
-    if (next < 0) next = 0;
-    if (next > 100) next = 100;
-    if (next == userVolume) return false;
-    if (!link.setVolume(btUserToAbsolute(static_cast<uint8_t>(next)))) return false;
-    userVolume = static_cast<uint8_t>(next);
-    ++volumeSaves;
-    sync.sentUserCommand(userVolume);
-    return true;
-  }
 };
+
+}  // namespace
 
 int main() {
   assert(btUserToAbsolute(0) == 0 && btUserToAbsolute(100) == 127);
   assert(btAbsoluteToUser(0) == 0 && btAbsoluteToUser(127) == 100);
   assert(btUserToAbsolute(255) == 127 && btAbsoluteToUser(255) == 100);
-  const uint8_t expectedAbsolute[] = {0, 10, 18, 32, 46, 58, 70, 82, 94, 105, 116, 127};
-  const uint8_t expectedUser[] = {0, 5, 10, 20, 30, 40, 50, 60, 70, 80, 90, 100};
+  const uint8_t expectedAbsolute[] =
+      {0, 10, 18, 32, 46, 58, 70, 82, 94, 105, 116, 127};
+  const uint8_t expectedUser[] =
+      {0, 5, 10, 20, 30, 40, 50, 60, 70, 80, 90, 100};
   for (size_t i = 0; i < sizeof(expectedUser); ++i)
     assert(btUserToAbsolute(expectedUser[i]) == expectedAbsolute[i]);
 
@@ -90,156 +76,362 @@ int main() {
       assert(user >= btAbsoluteToUser(static_cast<uint8_t>(absolute - 1)));
     const int error = static_cast<int>(btUserToAbsolute(user)) - absolute;
     const int distance = error < 0 ? -error : error;
-    if (distance > maxAbsoluteRoundTripError) maxAbsoluteRoundTripError = distance;
+    if (distance > maxAbsoluteRoundTripError)
+      maxAbsoluteRoundTripError = distance;
   }
   assert(maxAbsoluteRoundTripError <= 1);
 
-  VolumeHarness vox;
-  vox.link.begin(0);
-  vox.line("PROTO 2", 1);
-  vox.line("STATUS_BEGIN", 2);
-  vox.line("CONNECTED", 3);
-  vox.line("VOLUME 100", 4);  // Initial phone value must not replace VoxOne 25.
-  vox.line("STATUS_END", 5);
-  const SourceUpdate connected = vox.observe(5);
-  assert(connected.btConnected && connected.activeChanged);
-  assert(!connected.volumeCallback && vox.userVolume == 25);
-  assert(vox.sent.back() == "SET_VOLUME 39");
-  assert(vox.volumeSaves == 0);
+  BtVolumeSessionPolicy policy;
+  uint8_t accepted = 25;
+  assert(policy.receive(event(BtVolumeSessionEventKind::Begin, 11, 1, 0, 0),
+                        25, true, accepted) == BtVolumeDecision::Ignored);
+  assert(policy.active() && !policy.snapshotSeen());
+  assert(policy.phase() == BtVolumeSessionPhase::AwaitingPeerBaseline);
+  assert(policy.receive(event(BtVolumeSessionEventKind::Snapshot, 11, 1, 1, 90),
+                        25, true, accepted) ==
+         BtVolumeDecision::SnapshotAccepted);
+  assert(accepted == 25 && policy.snapshotSeen() &&
+         !policy.peerBaselineSeen());
 
-  // A late initial phone value in the next loop is not the new master.
-  const size_t sentBeforeLateInitial = vox.sent.size();
-  vox.line("VOLUME 100", 6);
-  vox.observe(6);
-  assert(vox.userVolume == 25 && vox.volumeSaves == 0);
-  assert(vox.sent.size() == sentBeforeLateInitial);
-  assert(vox.sync.pending());
+  assert(policy.receive(event(BtVolumeSessionEventKind::PeerVolume, 11, 1, 2, 58),
+                        25, true, accepted) ==
+         BtVolumeDecision::PeerBaselineAccepted);
+  assert(accepted == 25 && policy.peerBaselineSeen());
+  assert(policy.phase() == BtVolumeSessionPhase::BaselineEstablished);
+  assert(policy.receive(event(BtVolumeSessionEventKind::PeerVolume, 11, 1, 2, 70),
+                        25, true, accepted) == BtVolumeDecision::Ignored);
+  assert(policy.receive(event(BtVolumeSessionEventKind::PeerVolume, 11, 1, 3, 58),
+                        25, true, accepted) == BtVolumeDecision::Ignored);
+  assert(policy.phase() == BtVolumeSessionPhase::Active);
 
-  // Local shared volume advances on every detent without waiting for callbacks.
-  assert(vox.turnBt(1) && vox.userVolume == 26);
-  assert(vox.turnBt(1) && vox.userVolume == 27);
-  assert(vox.turnBt(1) && vox.userVolume == 28);
-  assert(vox.sent[vox.sent.size() - 3] == "SET_VOLUME 40");
-  assert(vox.sent[vox.sent.size() - 2] == "SET_VOLUME 42");
-  assert(vox.sent.back() == "SET_VOLUME 43");
-  assert(vox.volumeSaves == 3);
-  vox.observe(9);
-  assert(vox.userVolume == 28 && vox.volumeSaves == 3);
+  BtVolumeSessionCommand command;
+  assert(policy.prepareLocalCommand(28, command));
+  assert(command.session.epoch == 11 && command.session.generation == 1);
+  assert(command.commandSequence != 0 &&
+         command.absoluteVolume == btUserToAbsolute(28));
+  assert(policy.pending());
+  assert(policy.receive(event(BtVolumeSessionEventKind::LocalAck, 11, 1, 4,
+                              command.absoluteVolume,
+                              command.commandSequence + 1),
+                        28, true, accepted) == BtVolumeDecision::Ignored);
+  assert(policy.pending());
+  assert(policy.receive(event(BtVolumeSessionEventKind::LocalAck, 11, 1, 5,
+                              command.absoluteVolume,
+                              command.commandSequence),
+                        28, true, accepted) ==
+         BtVolumeDecision::LocalAckAccepted);
+  assert(!policy.pending() &&
+         policy.phase() == BtVolumeSessionPhase::Active);
 
-  vox.line("VOLUME 43", 10);  // Confirmation of the last local target.
-  vox.observe(10);
-  assert(vox.userVolume == 28 && !vox.sync.pending());
+  assert(policy.receive(event(BtVolumeSessionEventKind::PeerVolume, 11, 1, 6, 70),
+                        28, false, accepted) == BtVolumeDecision::Ignored);
+  assert(accepted == btAbsoluteToUser(70));
+  assert(policy.receive(event(BtVolumeSessionEventKind::PeerVolume, 11, 1, 6, 82),
+                        28, true, accepted) == BtVolumeDecision::Ignored);
 
-  const size_t sentBeforePhoneCallback = vox.sent.size();
-  vox.line("VOLUME 58", 11);  // Phone volume maps to VoxOne user 40.
-  const SourceUpdate phone = vox.observe(11);
-  assert(phone.volumeCallback && phone.absoluteVolume == 58);
-  assert(vox.userVolume == 40 && vox.volumeSaves == 4);
-  assert(vox.sent.size() == sentBeforePhoneCallback);
+  assert(policy.receive(event(BtVolumeSessionEventKind::End, 11, 1, 0, 0),
+                        28, true, accepted) == BtVolumeDecision::Ignored);
+  assert(!policy.active() &&
+         policy.phase() == BtVolumeSessionPhase::Invalidated);
+  assert(policy.receive(event(BtVolumeSessionEventKind::Begin, 11, 2, 0, 0),
+                        28, true, accepted) == BtVolumeDecision::Ignored);
+  assert(policy.receive(event(BtVolumeSessionEventKind::Snapshot, 11, 2, 1, 70),
+                        28, true, accepted) ==
+         BtVolumeDecision::SnapshotAccepted);
+  assert(policy.receive(event(BtVolumeSessionEventKind::PeerVolume, 11, 1, 99, 127),
+                        28, true, accepted) == BtVolumeDecision::Ignored);
+  assert(policy.receive(event(BtVolumeSessionEventKind::LocalAck, 11, 1, 100, 127, 7),
+                        28, true, accepted) == BtVolumeDecision::Ignored);
+  assert(policy.receive(event(BtVolumeSessionEventKind::End, 11, 1, 0, 0),
+                        28, true, accepted) == BtVolumeDecision::Ignored);
+  assert(policy.active() && policy.session().generation == 2);
 
-  // Switching to RADIO retains the same master value.
-  vox.sources.cycle(vox.link.state());
-  assert(vox.sources.active() == ActiveSource::Radio && vox.userVolume == 40);
-  vox.userVolume = 20;  // Existing radio Player path changes shared volume.
-  ++vox.volumeSaves;
-  vox.observe(12);
-  assert(vox.sent.back() == "SET_VOLUME 32");
-  const size_t sentAfterRadioChange = vox.sent.size();
-  vox.observe(13);
-  assert(vox.sent.size() == sentAfterRadioChange);
+  assert(policy.receive(event(BtVolumeSessionEventKind::Begin, 12, 1, 0, 0,
+                              0, true),
+                        28, true, accepted) == BtVolumeDecision::Ignored);
+  assert(policy.session().epoch == 12 && policy.session().generation == 1);
+  assert(policy.receive(event(BtVolumeSessionEventKind::Unknown, 12, 1, 1, 100),
+                        28, true, accepted) == BtVolumeDecision::Ignored);
+  assert(!policy.snapshotSeen());
+  assert(policy.receive(event(BtVolumeSessionEventKind::PeerVolume, 12, 1, 2, 100),
+                        28, true, accepted) ==
+         BtVolumeDecision::PeerBaselineAccepted);
+  assert(policy.snapshotSeen() && policy.peerBaselineSeen());
 
-  vox.line("DISCONNECTED", 14);
-  vox.observe(14);
-  vox.sources.cycle(vox.link.state());  // BT selected without a phone.
-  assert(vox.sources.active() == ActiveSource::Bluetooth);
-  const size_t sentBeforeDisconnectedTurn = vox.sent.size();
-  assert(!vox.turnBt(1));
-  assert(vox.userVolume == 20 && vox.sent.size() == sentBeforeDisconnectedTurn);
+  // A restarted MAIN can attach to the active BT session from STATUS without
+  // emitting a command or treating the current value as a peer change.
+  BtVolumeSessionPolicy restartedMain;
+  accepted = 31;
+  assert(restartedMain.receive(
+             event(BtVolumeSessionEventKind::Begin, 12, 1, 0, 0, 0, true),
+             31, true, accepted) == BtVolumeDecision::Ignored);
+  assert(restartedMain.receive(
+             event(BtVolumeSessionEventKind::Snapshot, 12, 1, 2, 100),
+             31, true, accepted) == BtVolumeDecision::SnapshotAccepted);
+  assert(accepted == 31 && !restartedMain.pending());
 
-  vox.line("CONNECTED", 16);
-  const SourceUpdate reconnected = vox.observe(16);
-  assert(reconnected.btConnected && !reconnected.volumeCallback);
-  assert(vox.userVolume == 20);
-  assert(vox.sent.back() == "SET_VOLUME 32");
+  // UART loss invalidates local state. A fresh handshake may restore the same
+  // BT-owned session; delayed pre-loss events still lose on sequence ordering.
+  restartedMain.disconnect();
+  assert(restartedMain.receive(
+             event(BtVolumeSessionEventKind::Begin, 12, 1, 0, 0, 0, true),
+             31, true, accepted) == BtVolumeDecision::Ignored);
 
-  // No confirmation: scheduled retries at +300, +800 and +1500 ms only.
-  const size_t sentOnReconnect = vox.sent.size();
-  vox.observe(315);
-  assert(vox.sent.size() == sentOnReconnect);
-  vox.observe(316);
-  assert(vox.sent.size() == sentOnReconnect + 1 && vox.sent.back() == "SET_VOLUME 32");
-  vox.observe(815);
-  assert(vox.sent.size() == sentOnReconnect + 1);
-  vox.observe(816);
-  assert(vox.sent.size() == sentOnReconnect + 2 && vox.sent.back() == "SET_VOLUME 32");
-  vox.observe(1515);
-  assert(vox.sent.size() == sentOnReconnect + 2);
-  vox.observe(1516);
-  assert(vox.sent.size() == sentOnReconnect + 3 && vox.sent.back() == "SET_VOLUME 32");
-  assert(vox.sync.pending());
-  vox.observe(1816);  // Finite confirmation window after the fourth send.
-  assert(!vox.sync.pending() && vox.sent.size() == sentOnReconnect + 3);
-  vox.observe(10000);
-  assert(vox.sent.size() == sentOnReconnect + 3);
-  vox.line("VOLUME 58", 10001);
-  vox.observe(10001);
-  assert(vox.userVolume == 40 && vox.sent.size() == sentOnReconnect + 3);
+  // Capability is a separate authority. BEGIN/SNAPSHOT/PEER cannot activate
+  // the policy or call the production-equivalent Player/Config sink without it.
+  BtVolumeSessionGate gate;
+  unsigned playerSetUserVolumeCalls = 0;
+  unsigned configWrites = 0;
+  auto applyThroughGate = [&](const BtVolumeSessionEvent& input,
+                              bool btSelected) {
+    uint8_t value = 31;
+    const BtVolumeDecision decision =
+        gate.receive(input, 31, btSelected, value);
+    if (decision == BtVolumeDecision::PeerVolumeAccepted) {
+      ++playerSetUserVolumeCalls;
+      ++configWrites;
+    }
+    return decision;
+  };
+  gate.setAuthorized(false);
+  assert(applyThroughGate(
+             event(BtVolumeSessionEventKind::Begin, 20, 1, 0, 0), true) ==
+         BtVolumeDecision::Ignored);
+  assert(applyThroughGate(
+             event(BtVolumeSessionEventKind::Snapshot, 20, 1, 1, 40), true) ==
+         BtVolumeDecision::Ignored);
+  assert(applyThroughGate(
+             event(BtVolumeSessionEventKind::PeerVolume, 20, 1, 2, 80), true) ==
+         BtVolumeDecision::Ignored);
+  assert(!gate.active() && playerSetUserVolumeCalls == 0 && configWrites == 0);
 
-  // A stale phone callback leaves pending active; a later retry can confirm it.
-  VolumeHarness stale;
-  stale.link.begin(0);
-  stale.line("PROTO 2", 1);
-  stale.line("STATUS_BEGIN", 2);
-  stale.line("CONNECTED", 3);
-  stale.line("STATUS_END", 5);
-  stale.observe(5);
-  const size_t staleInitialSend = stale.sent.size();
-  stale.line("VOLUME 100", 100);
-  stale.observe(100);
-  assert(stale.userVolume == 25 && stale.sync.pending());
-  assert(stale.sent.size() == staleInitialSend);
-  stale.observe(305);
-  assert(stale.sent.size() == staleInitialSend + 1);
-  assert(stale.sent.back() == "SET_VOLUME 39");
-  stale.line("VOLUME 39", 400);
-  stale.observe(400);
-  assert(!stale.sync.pending() && stale.userVolume == 25);
-  stale.observe(2000);
-  assert(stale.sent.size() == staleInitialSend + 1);
+  gate.setAuthorized(true);
+  assert(gate.phase() == BtVolumeSessionPhase::AwaitingSession);
+  assert(applyThroughGate(
+             event(BtVolumeSessionEventKind::Begin, 20, 1, 0, 0, 0, true),
+             true) == BtVolumeDecision::Ignored);
+  assert(applyThroughGate(
+             event(BtVolumeSessionEventKind::Snapshot, 20, 1, 1, 40, 0, true),
+             true) == BtVolumeDecision::SnapshotAccepted);
+  assert(playerSetUserVolumeCalls == 0 && configWrites == 0);
+  assert(applyThroughGate(
+             event(BtVolumeSessionEventKind::PeerVolume, 20, 1, 2, 60), false) ==
+         BtVolumeDecision::PeerBaselineAccepted);
+  assert(playerSetUserVolumeCalls == 0 && configWrites == 0);
+  assert(applyThroughGate(
+             event(BtVolumeSessionEventKind::PeerVolume, 20, 1, 3, 80), true) ==
+         BtVolumeDecision::PeerVolumeAccepted);
+  assert(playerSetUserVolumeCalls == 1 && configWrites == 1);
+  BtVolumeSessionCommand gatedCommand;
+  assert(gate.prepareLocalCommand(35, gatedCommand));
+  assert(gatedCommand.session.epoch == 20 &&
+         gatedCommand.session.generation == 1 &&
+         gatedCommand.absoluteVolume == btUserToAbsolute(35));
+  assert(applyThroughGate(
+             event(BtVolumeSessionEventKind::LocalAck, 20, 1, 4,
+                   gatedCommand.absoluteVolume,
+                   gatedCommand.commandSequence),
+             true) == BtVolumeDecision::LocalAckAccepted);
+  assert(playerSetUserVolumeCalls == 1 && configWrites == 1 && !gate.pending());
+  assert(applyThroughGate(
+             event(BtVolumeSessionEventKind::LocalAck, 20, 1, 4,
+                   gatedCommand.absoluteVolume,
+                   gatedCommand.commandSequence),
+             true) == BtVolumeDecision::Ignored);
+  gate.setAuthorized(false);  // Capability/runtime/A2DP trust loss.
+  assert(applyThroughGate(
+             event(BtVolumeSessionEventKind::Begin, 20, 1, 0, 0), true) ==
+         BtVolumeDecision::Ignored);
+  assert(applyThroughGate(
+             event(BtVolumeSessionEventKind::PeerVolume, 20, 1, 5, 90), true) ==
+         BtVolumeDecision::Ignored);
+  assert(!gate.active() && playerSetUserVolumeCalls == 1 && configWrites == 1);
 
-  // Encoder commands replace the target without resetting the retry schedule.
-  VolumeHarness turns;
-  turns.link.begin(0);
-  turns.line("PROTO 2", 1);
-  turns.line("STATUS_BEGIN", 2);
-  turns.line("CONNECTED", 3);
-  turns.line("STATUS_END", 5);
-  turns.observe(5);
-  assert(turns.turnBt(1) && turns.turnBt(1) && turns.turnBt(1));
-  assert(turns.userVolume == 28);
-  turns.observe(305);
-  assert(turns.sent.back() == "SET_VOLUME 43");
-  turns.observe(805);
-  turns.observe(1505);
-  const size_t turnSends = turns.sent.size();
-  turns.observe(1805);
-  turns.observe(10000);
-  assert(turns.sent.size() == turnSends && !turns.sync.pending());
+  // Physical HIL regression: the sink starts at zero, then LG supplies its
+  // automatic Absolute Volume during connection setup. Neither value is a
+  // user action, so MAIN keeps its configured volume and performs no write.
+  BtVolumeSessionGate initialization;
+  initialization.setAuthorized(true);
+  unsigned initializationPlayerCalls = 0;
+  unsigned initializationConfigWrites = 0;
+  uint8_t initializationUser = 20;
+  auto applyInitialization = [&](const BtVolumeSessionEvent& input) {
+    uint8_t value = initializationUser;
+    const BtVolumeDecision decision = initialization.receive(
+        input, initializationUser, true, value);
+    if (decision == BtVolumeDecision::PeerVolumeAccepted) {
+      initializationUser = value;
+      ++initializationPlayerCalls;
+      ++initializationConfigWrites;
+    }
+    return decision;
+  };
+  assert(applyInitialization(
+             event(BtVolumeSessionEventKind::Begin, 30, 1, 0, 0)) ==
+         BtVolumeDecision::Ignored);
+  assert(applyInitialization(
+             event(BtVolumeSessionEventKind::Snapshot, 30, 1, 1, 0)) ==
+         BtVolumeDecision::SnapshotAccepted);
+  assert(applyInitialization(
+             event(BtVolumeSessionEventKind::PeerVolume, 30, 1, 2, 25)) ==
+         BtVolumeDecision::PeerBaselineAccepted);
+  assert(initializationUser == 20 && initializationPlayerCalls == 0 &&
+         initializationConfigWrites == 0);
+  assert(initialization.phase() ==
+         BtVolumeSessionPhase::BaselineEstablished);
 
-  // Disconnect cancels every remaining retry.
-  VolumeHarness dropped;
-  dropped.link.begin(0);
-  dropped.line("PROTO 2", 1);
-  dropped.line("STATUS_BEGIN", 2);
-  dropped.line("CONNECTED", 3);
-  dropped.line("STATUS_END", 5);
-  dropped.observe(5);
-  dropped.line("DISCONNECTED", 100);
-  dropped.observe(100);
-  assert(!dropped.sync.pending());
-  const size_t sendsBeforeDisconnectWait = dropped.sent.size();
-  dropped.observe(305);
-  dropped.observe(805);
-  dropped.observe(1505);
-  assert(dropped.sent.size() == sendsBeforeDisconnectWait);
+  // Once the baseline is known, a later distinct peer value can represent a
+  // remote adjustment. AVRCP cannot prove its physical origin, but it is no
+  // longer the ambiguous first value of the session.
+  assert(applyInitialization(
+             event(BtVolumeSessionEventKind::PeerVolume, 30, 1, 3, 21)) ==
+         BtVolumeDecision::PeerVolumeAccepted);
+  assert(initializationUser == btAbsoluteToUser(21) &&
+         initializationPlayerCalls == 1 && initializationConfigWrites == 1);
+  assert(initialization.phase() == BtVolumeSessionPhase::Active);
+  assert(applyInitialization(
+             event(BtVolumeSessionEventKind::PeerVolume, 30, 1, 3, 80)) ==
+         BtVolumeDecision::Ignored);  // duplicate sequence
+  assert(initializationPlayerCalls == 1 && initializationConfigWrites == 1);
+
+  // A snapshot that already contains a non-zero sink value is still only a
+  // local library snapshot. With no peer callback it cannot alter MAIN.
+  BtVolumeSessionGate snapshotOnly;
+  snapshotOnly.setAuthorized(true);
+  uint8_t snapshotUser = 20;
+  assert(snapshotOnly.receive(
+             event(BtVolumeSessionEventKind::Begin, 31, 1, 0, 0),
+             snapshotUser, true, snapshotUser) == BtVolumeDecision::Ignored);
+  assert(snapshotOnly.receive(
+             event(BtVolumeSessionEventKind::Snapshot, 31, 1, 1, 25),
+             snapshotUser, true, snapshotUser) ==
+         BtVolumeDecision::SnapshotAccepted);
+  assert(snapshotUser == 20 && !snapshotOnly.peerBaselineSeen() &&
+         snapshotOnly.phase() ==
+             BtVolumeSessionPhase::AwaitingPeerBaseline);
+
+  // An explicit local action remains available before peer baseline. The
+  // matching LOCAL_ACK proves only local VoxOneBT application, but safely
+  // activates the session because the originating user intent is known.
+  BtVolumeSessionCommand earlyLocal;
+  assert(snapshotOnly.prepareLocalCommand(24, earlyLocal));
+  assert(earlyLocal.absoluteVolume == btUserToAbsolute(24));
+  assert(snapshotOnly.receive(
+             event(BtVolumeSessionEventKind::PeerVolume, 31, 1, 2, 25),
+             24, true, snapshotUser) ==
+         BtVolumeDecision::PeerBaselineAccepted);
+  assert(snapshotUser == 20);
+  assert(snapshotOnly.receive(
+             event(BtVolumeSessionEventKind::LocalAck, 31, 1, 3,
+                   earlyLocal.absoluteVolume, earlyLocal.commandSequence),
+             24, true, snapshotUser) ==
+         BtVolumeDecision::LocalAckAccepted);
+  assert(snapshotOnly.phase() == BtVolumeSessionPhase::Active &&
+         !snapshotOnly.pending());
+
+  // Reconnect creates a new baseline boundary. Delayed callbacks from the old
+  // generation cannot activate or mutate the new session.
+  assert(initialization.receive(
+             event(BtVolumeSessionEventKind::End, 30, 1, 0, 0),
+             initializationUser, true, accepted) == BtVolumeDecision::Ignored);
+  assert(initialization.receive(
+             event(BtVolumeSessionEventKind::Begin, 30, 2, 0, 0),
+             initializationUser, true, accepted) == BtVolumeDecision::Ignored);
+  assert(initialization.receive(
+             event(BtVolumeSessionEventKind::Snapshot, 30, 2, 1, 21),
+             initializationUser, true, accepted) ==
+         BtVolumeDecision::SnapshotAccepted);
+  assert(initialization.receive(
+             event(BtVolumeSessionEventKind::PeerVolume, 30, 1, 99, 127),
+             initializationUser, true, accepted) == BtVolumeDecision::Ignored);
+  assert(initialization.phase() ==
+         BtVolumeSessionPhase::AwaitingPeerBaseline);
+
+  assert(restartedMain.receive(
+             event(BtVolumeSessionEventKind::Snapshot, 12, 1, 4, 100),
+             31, true, accepted) == BtVolumeDecision::SnapshotAccepted);
+  assert(restartedMain.receive(
+             event(BtVolumeSessionEventKind::PeerVolume, 12, 1, 3, 127),
+             31, true, accepted) == BtVolumeDecision::Ignored);
+
+  assert(restartedMain.receive(
+             event(BtVolumeSessionEventKind::Begin, 12, 2, 0, 0),
+             31, true, accepted) == BtVolumeDecision::Ignored);
+  assert(restartedMain.receive(
+             event(BtVolumeSessionEventKind::Snapshot, 12, 2, 1, 100),
+             31, true, accepted) == BtVolumeDecision::SnapshotAccepted);
+  // A delayed BEGIN cannot roll the policy back to an older generation or
+  // boot epoch; consequently its following PEER frame cannot touch Config.
+  assert(restartedMain.receive(
+             event(BtVolumeSessionEventKind::Begin, 12, 1, 0, 0),
+             31, true, accepted) == BtVolumeDecision::Ignored);
+  assert(restartedMain.session().generation == 2);
+  assert(restartedMain.receive(
+             event(BtVolumeSessionEventKind::Begin, 11, 99, 0, 0),
+             31, true, accepted) == BtVolumeDecision::Ignored);
+  assert(restartedMain.session().epoch == 12);
+  assert(restartedMain.receive(
+             event(BtVolumeSessionEventKind::PeerVolume, 12, 1, 99, 127),
+             31, true, accepted) == BtVolumeDecision::Ignored);
+
+  LinkHarness legacy;
+  legacy.link.begin(0);
+  legacy.line("PROTO 2", 1);
+  legacy.line("STATUS_BEGIN", 2);
+  legacy.line("CAPS A2DP AVRCP ABSVOL", 3);
+  legacy.line("CONNECTED", 4);
+  legacy.line("VOLUME 100", 5);
+  legacy.line("STATUS_END", 6);
+  SourceManagerState source;
+  const SourceUpdate connected = source.observe(legacy.link.state());
+  assert(connected.btConnected && !connected.volumeCallback);
+  assert(!legacy.link.volumeSessionCapable());
+  assert(legacy.sent.size() == 2);
+  legacy.line("VOLUME 90", 7);
+  assert(source.observe(legacy.link.state()).volumeCallback);
+  assert(legacy.sent.size() == 2);
+  assert(legacy.link.setVolume(btUserToAbsolute(30)));
+  assert(legacy.sent.size() == 3 && legacy.sent.back() == "SET_VOLUME 46");
+
+  // Exercise the real UART writer for an explicit local action before peer
+  // baseline. Connection setup itself emits no SET_VOLUME command.
+  LinkHarness sessionWriter;
+  sessionWriter.link.begin(0);
+  sessionWriter.line("STATUS_BEGIN", 1);
+  sessionWriter.line("PROTO 2", 2);
+  sessionWriter.line("FW_VERSION 0.6.7-dev", 3);
+  sessionWriter.line("CAPS A2DP AVRCP ABSVOL VOL_SESSION_1", 4);
+  sessionWriter.line("OTA_STATE NOT_PENDING", 5);
+  sessionWriter.line("CONNECTED", 6);
+  sessionWriter.line("VOL_SESSION_BEGIN 70 1", 7);
+  sessionWriter.line("VOL_SNAPSHOT 70 1 1 0", 8);
+  sessionWriter.line("STATUS_END", 9);
+  assert(sessionWriter.link.volumeSessionCapable());
+  assert(sessionWriter.sent.size() == 2);  // GET_STATUS, GET_DIAG only.
+  BtVolumeSessionGate writerGate;
+  writerGate.setAuthorized(true);
+  BtVolumeSessionEvent writerEvent;
+  while (sessionWriter.link.takeVolumeSessionEvent(writerEvent)) {
+    uint8_t ignoredUser = 20;
+    writerGate.receive(writerEvent, 20, true, ignoredUser);
+  }
+  BtVolumeSessionCommand writerCommand;
+  assert(writerGate.prepareLocalCommand(21, writerCommand));
+  assert(sessionWriter.link.setSessionVolume(writerCommand));
+  assert(sessionWriter.sent.back() ==
+         "SET_VOLUME_SESSION 70 1 1 34");
+  for (const std::string& sent : sessionWriter.sent)
+    assert(sent.rfind("SET_VOLUME ", 0) != 0);
+
+  const std::string manager = readFile("src/core/source_manager.cpp");
+  const std::string commandHandler = readFile("src/core/commandhandler.cpp");
+  const std::string temporary = readFile("src/core/temporary_audio_state.h");
+  assert(manager.find("retryDue(") == std::string::npos);
+  assert(manager.find("needsUserCommand(") == std::string::npos);
+  assert(manager.find("if (update.btConnected)") == std::string::npos);
+  assert(manager.find("sourceManagerSetBluetoothVolume(") != std::string::npos);
+  assert(commandHandler.find("sourceManagerSetBluetoothVolume(") !=
+         std::string::npos);
+  assert(manager.find("setMuted(") == std::string::npos);
+  assert(temporary.find("volume") == std::string::npos);
 }

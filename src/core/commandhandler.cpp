@@ -115,8 +115,14 @@ bool CommandHandler::exec(const char *command, const char *value, uint32_t cid) 
   }
   if (strEquals(command, "vol100")) {
     long user;
-    if (parseVolumeValue(value, user) && user >= 0 && user <= 100)
-      player.setUserVol(static_cast<uint8_t>(user));
+    if (parseVolumeValue(value, user) && user >= 0 && user <= 100) {
+#if VOXONE_HAS_BT && VOXONE_PIN_MAP_COMPLETE
+      if (bluetoothSourceSelected() && bluetoothTransportAvailable())
+        sourceManagerSetBluetoothVolume(static_cast<uint8_t>(user));
+      else
+#endif
+        player.setUserVol(static_cast<uint8_t>(user));
+    }
     return true;
   }
   if (strEquals(command, "mute")) {

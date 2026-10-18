@@ -6,6 +6,42 @@
 #include "bt_ota_state.h"
 
 enum class BtPlayback : uint8_t { Stopped, Playing, Paused };
+struct BtVolumeSessionId {
+  constexpr BtVolumeSessionId(uint32_t epochValue = 0,
+                              uint32_t generationValue = 0)
+      : epoch(epochValue), generation(generationValue) {}
+  uint32_t epoch;
+  uint32_t generation;
+};
+
+inline bool sameBtVolumeSession(const BtVolumeSessionId& left,
+                                const BtVolumeSessionId& right) {
+  return left.epoch == right.epoch && left.generation == right.generation;
+}
+
+enum class BtVolumeSessionEventKind : uint8_t {
+  Begin,
+  End,
+  Snapshot,
+  PeerVolume,
+  LocalAck,
+  Unknown,
+};
+
+struct BtVolumeSessionEvent {
+  BtVolumeSessionEventKind kind = BtVolumeSessionEventKind::Unknown;
+  BtVolumeSessionId session{};
+  uint32_t sequence = 0;
+  uint32_t commandSequence = 0;
+  uint8_t absoluteVolume = 0;
+  bool fromStatus = false;
+};
+
+struct BtVolumeSessionCommand {
+  BtVolumeSessionId session{};
+  uint32_t commandSequence = 0;
+  uint8_t absoluteVolume = 0;
+};
 enum class BtLinkEvent : uint8_t {
   Online, Offline, Diagnostics, UnsupportedProtocol, UpdateIdentity
 };
@@ -66,6 +102,9 @@ class BtLinkProtocol {
   bool next();
   bool prev();
   bool setVolume(uint8_t absoluteVolume);
+  bool setSessionVolume(const BtVolumeSessionCommand& command);
+  bool takeVolumeSessionEvent(BtVolumeSessionEvent& event);
+  bool volumeSessionCapable() const;
 
   const BtLinkState& state() const { return state_; }
   const BtLinkDiagnostics& diagnostics() const { return diagnostics_; }
@@ -80,6 +119,8 @@ class BtLinkProtocol {
   void send(const char* command);
   bool sendTransport(const char* command);
   void notify(BtLinkEvent event);
+  bool queueVolumeSessionEvent(const BtVolumeSessionEvent& event);
+  void clearVolumeSessionEvents();
 
   SendCommand sendCommand_;
   OnEvent onEvent_;
@@ -99,10 +140,16 @@ class BtLinkProtocol {
   bool protocolSeen_ = false;
   bool unsupportedProtocolReported_ = false;
   bool diagnosticsRequested_ = false;
+  bool volumeSessionHandshakeTrusted_ = false;
   uint8_t diagnosticsFields_ = 0;
   uint32_t lastRxMs_ = 0;
   uint32_t lastProbeMs_ = 0;
   uint32_t lastPingMs_ = 0;
+  static constexpr uint8_t VolumeSessionQueueCapacity = 16;
+  BtVolumeSessionEvent volumeSessionQueue_[VolumeSessionQueueCapacity]{};
+  uint8_t volumeSessionHead_ = 0;
+  uint8_t volumeSessionTail_ = 0;
+  uint8_t volumeSessionCount_ = 0;
 };
 
 #endif

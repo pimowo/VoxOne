@@ -31,6 +31,38 @@ bool parseUnsigned(const char* text, uint32_t maximum, uint32_t& result) {
   return true;
 }
 
+bool parseToken(const char*& text, uint32_t maximum, uint32_t& result) {
+  while (*text == ' ') ++text;
+  if (*text == '\0') return false;
+  const char* begin = text;
+  while (*text >= '0' && *text <= '9') ++text;
+  if (text == begin || static_cast<size_t>(text - begin) >= 11) return false;
+  char token[11];
+  const size_t length = static_cast<size_t>(text - begin);
+  memcpy(token, begin, length);
+  token[length] = '\0';
+  return parseUnsigned(token, maximum, result);
+}
+
+bool atEnd(const char* text) {
+  while (*text == ' ') ++text;
+  return *text == '\0';
+}
+
+bool hasCapabilityToken(const char* capabilities, const char* token) {
+  const size_t tokenLength = strlen(token);
+  const char* position = capabilities;
+  while ((position = strstr(position, token)) != nullptr) {
+    const bool leftBoundary = position == capabilities || position[-1] == ' ' ||
+                              position[-1] == ',';
+    const char right = position[tokenLength];
+    const bool rightBoundary = right == '\0' || right == ' ' || right == ',';
+    if (leftBoundary && rightBoundary) return true;
+    position += tokenLength;
+  }
+  return false;
+}
+
 }  // namespace
 
 BtLinkProtocol::BtLinkProtocol(SendCommand sendCommand, OnEvent onEvent,
@@ -49,10 +81,12 @@ void BtLinkProtocol::begin(uint32_t nowMs) {
   protocolSeen_ = false;
   unsupportedProtocolReported_ = false;
   diagnosticsRequested_ = false;
+  volumeSessionHandshakeTrusted_ = false;
   diagnosticsFields_ = 0;
   lastRxMs_ = nowMs;
   lastPingMs_ = nowMs;
   lastProbeMs_ = nowMs - ProbeIntervalMs;
+  clearVolumeSessionEvents();
   requestStatus(nowMs);
 }
 
@@ -91,6 +125,56 @@ bool BtLinkProtocol::setVolume(uint8_t absoluteVolume) {
   return true;
 }
 
+bool BtLinkProtocol::setSessionVolume(
+    const BtVolumeSessionCommand& command) {
+  if (updateExclusive_ || !volumeSessionCapable() ||
+      command.session.epoch == 0 || command.session.generation == 0 ||
+      command.commandSequence == 0 || command.absoluteVolume > 127 ||
+      !state_.runtimeAvailable || !state_.connected || statusOpen_)
+    return false;
+  char line[80];
+  snprintf(line, sizeof(line), "SET_VOLUME_SESSION %lu %lu %lu %u",
+           static_cast<unsigned long>(command.session.epoch),
+           static_cast<unsigned long>(command.session.generation),
+           static_cast<unsigned long>(command.commandSequence),
+           command.absoluteVolume);
+  send(line);
+  return true;
+}
+
+bool BtLinkProtocol::takeVolumeSessionEvent(BtVolumeSessionEvent& event) {
+  if (volumeSessionCount_ == 0) return false;
+  event = volumeSessionQueue_[volumeSessionTail_];
+  volumeSessionTail_ = static_cast<uint8_t>(
+      (volumeSessionTail_ + 1U) % VolumeSessionQueueCapacity);
+  --volumeSessionCount_;
+  return true;
+}
+
+bool BtLinkProtocol::volumeSessionCapable() const {
+  return volumeSessionHandshakeTrusted_ && !statusOpen_ &&
+         state_.runtimeAvailable && state_.connected &&
+         state_.protocolVersion == 2 &&
+         hasCapabilityToken(state_.capabilities, "VOL_SESSION_1");
+}
+
+bool BtLinkProtocol::queueVolumeSessionEvent(
+    const BtVolumeSessionEvent& event) {
+  if (volumeSessionCount_ == VolumeSessionQueueCapacity) {
+    clearVolumeSessionEvents();
+    return false;
+  }
+  volumeSessionQueue_[volumeSessionHead_] = event;
+  volumeSessionHead_ = static_cast<uint8_t>(
+      (volumeSessionHead_ + 1U) % VolumeSessionQueueCapacity);
+  ++volumeSessionCount_;
+  return true;
+}
+
+void BtLinkProtocol::clearVolumeSessionEvents() {
+  volumeSessionHead_ = volumeSessionTail_ = volumeSessionCount_ = 0;
+}
+
 void BtLinkProtocol::ping(uint32_t nowMs) {
   send("PING");
   lastPingMs_ = nowMs;
@@ -119,12 +203,14 @@ void BtLinkProtocol::goOffline() {
   state_.capabilities[0] = '\0';
   state_.otaState = BtOtaState::Missing;
   clearSession();
+  clearVolumeSessionEvents();
   statusOpen_ = false;
   statusIdentityFields_ = 0;
   statusOtaMalformed_ = false;
   diagnosticsOpen_ = false;
   protocolSeen_ = false;
   diagnosticsRequested_ = false;
+  volumeSessionHandshakeTrusted_ = false;
   if (wasOnline) notify(BtLinkEvent::Offline);
 }
 
@@ -179,6 +265,11 @@ bool BtLinkProtocol::handleLine(uint32_t nowMs) {
   if (strcmp(line_, "STATUS_BEGIN") == 0) {
     if (updateExclusive_) statusBackup_ = state_;
     clearSession();
+    // A new status snapshot is the only handshake authority. Discard frames
+    // buffered before its boundary; a capable VoxOneBT includes a fresh
+    // BEGIN/SNAPSHOT pair inside this bounded snapshot.
+    clearVolumeSessionEvents();
+    volumeSessionHandshakeTrusted_ = false;
     statusOpen_ = true;
     statusIdentityFields_ = 0;
     statusOtaMalformed_ = false;
@@ -194,6 +285,10 @@ bool BtLinkProtocol::handleLine(uint32_t nowMs) {
       state_ = statusBackup_;  // A partial OTA snapshot is not a disconnect.
       return true;
     }
+    volumeSessionHandshakeTrusted_ =
+        completeOtaIdentity && state_.protocolVersion == 2 &&
+        hasCapabilityToken(state_.capabilities, "VOL_SESSION_1");
+    if (!volumeSessionHandshakeTrusted_) clearVolumeSessionEvents();
     // OTA identity must come from this complete post-READY snapshot, not
     // from startup announcements or fields retained from an older snapshot.
     if ((!updateExclusive_ || completeOtaIdentity) &&
@@ -322,6 +417,55 @@ bool BtLinkProtocol::handleLine(uint32_t nowMs) {
     state_.volume = static_cast<int16_t>(number);
     ++state_.volumeRevision;
     return true;
+  }
+  BtVolumeSessionEvent volumeEvent;
+  volumeEvent.fromStatus = statusOpen_;
+  const char* sessionPayload = nullptr;
+  if ((sessionPayload = fieldValue(line_, "VOL_SESSION_BEGIN ")) != nullptr ||
+      (sessionPayload = fieldValue(line_, "VOL_SESSION_END ")) != nullptr) {
+    volumeEvent.kind = strncmp(line_, "VOL_SESSION_BEGIN ", 18) == 0
+                           ? BtVolumeSessionEventKind::Begin
+                           : BtVolumeSessionEventKind::End;
+    if (!parseToken(sessionPayload, UINT32_MAX, volumeEvent.session.epoch) ||
+        !parseToken(sessionPayload, UINT32_MAX,
+                    volumeEvent.session.generation) ||
+        !atEnd(sessionPayload) || volumeEvent.session.epoch == 0 ||
+        volumeEvent.session.generation == 0)
+      return false;
+    return queueVolumeSessionEvent(volumeEvent);
+  }
+  struct SessionPrefix {
+    const char* text;
+    BtVolumeSessionEventKind kind;
+  };
+  static const SessionPrefix prefixes[] = {
+      {"VOL_SNAPSHOT ", BtVolumeSessionEventKind::Snapshot},
+      {"VOL_PEER ", BtVolumeSessionEventKind::PeerVolume},
+      {"VOL_LOCAL_ACK ", BtVolumeSessionEventKind::LocalAck},
+      {"VOL_UNKNOWN ", BtVolumeSessionEventKind::Unknown},
+  };
+  for (const SessionPrefix& prefix : prefixes) {
+    sessionPayload = fieldValue(line_, prefix.text);
+    if (sessionPayload == nullptr) continue;
+    volumeEvent.kind = prefix.kind;
+    uint32_t absolute = 0;
+    if (!parseToken(sessionPayload, UINT32_MAX, volumeEvent.session.epoch) ||
+        !parseToken(sessionPayload, UINT32_MAX,
+                    volumeEvent.session.generation) ||
+        !parseToken(sessionPayload, UINT32_MAX, volumeEvent.sequence))
+      return false;
+    if (prefix.kind == BtVolumeSessionEventKind::LocalAck &&
+        !parseToken(sessionPayload, UINT32_MAX,
+                    volumeEvent.commandSequence))
+      return false;
+    if (!parseToken(sessionPayload, 127, absolute) || !atEnd(sessionPayload) ||
+        volumeEvent.session.epoch == 0 ||
+        volumeEvent.session.generation == 0 || volumeEvent.sequence == 0 ||
+        (prefix.kind == BtVolumeSessionEventKind::LocalAck &&
+         volumeEvent.commandSequence == 0))
+      return false;
+    volumeEvent.absoluteVolume = static_cast<uint8_t>(absolute);
+    return queueVolumeSessionEvent(volumeEvent);
   }
   if ((value = fieldValue(line_, "VU ")) != nullptr) {
     uint32_t left = 0;
