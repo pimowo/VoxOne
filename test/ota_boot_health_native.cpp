@@ -153,9 +153,24 @@ int main() {
   markFailure.begin(true, true, 0);
   assert(markFailure.evaluate(healthy(), 0) == Action::None);
   assert(markFailure.evaluate(healthy(), kHealthStableMs) == Action::Validate);
-  markFailure.actionFailed(Action::Validate);
-  assert(markFailure.snapshot(kHealthStableMs).phase == Phase::ValidationFailed);
+  assert(markFailure.validationFailed(true) == Action::Rollback);
+  assert(markFailure.snapshot(kHealthStableMs).phase == Phase::RollbackRequested);
   assert(markFailure.snapshot(kHealthStableMs).reason == Failure::MarkValid);
+
+  HealthGate markFailureNoRollback;
+  markFailureNoRollback.begin(true, true, 0);
+  assert(markFailureNoRollback.validationFailed(false) == Action::None);
+  assert(markFailureNoRollback.snapshot(0).phase == Phase::ValidationFailed);
+  assert(markFailureNoRollback.snapshot(0).reason == Failure::MarkValid);
+  assert(!markFailureNoRollback.snapshot(0).rollbackAvailable);
+
+  HealthGate lostRollback;
+  lostRollback.begin(true, true, 0);
+  assert(lostRollback.evaluate(fatal, 1) == Action::Rollback);
+  lostRollback.rollbackBecameUnavailable();
+  assert(lostRollback.snapshot(1).phase == Phase::RollbackUnavailable);
+  assert(lostRollback.snapshot(1).reason == Failure::RollbackUnavailable);
+  assert(!lostRollback.snapshot(1).rollbackAvailable);
 
   HealthGate rollbackFailure;
   rollbackFailure.begin(true, true, 0xfffffff0u);

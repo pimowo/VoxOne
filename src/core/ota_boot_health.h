@@ -75,6 +75,8 @@ class HealthGate {
  public:
   void begin(bool pending, bool rollbackAvailable, uint32_t nowMs);
   Action evaluate(const Evidence& evidence, uint32_t nowMs);
+  Action validationFailed(bool rollbackAvailable);
+  void rollbackBecameUnavailable();
   void actionFailed(Action action);
   Snapshot snapshot(uint32_t nowMs) const;
 

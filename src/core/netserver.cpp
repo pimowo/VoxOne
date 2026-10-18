@@ -971,8 +971,8 @@ bool NetServer::begin(bool quiet) {
   webserver.on("/api/wifi/scan", HTTP_GET, handleWifiScan);
   webserver.on("/api/ready", HTTP_GET, [](AsyncWebServerRequest* request) {
     voxone::ota::reportHttpApiProbe();
-    char ota[320];
-    char body[448];
+    char ota[448];
+    char body[576];
     if (!voxone::ota::formatBootHealthJson(ota, sizeof(ota)))
       std::snprintf(ota, sizeof(ota),
                     "{\"health\":\"diagnostic_error\"}");
@@ -3398,6 +3398,21 @@ void handleWebUpdateUpload(AsyncWebServerRequest *request, const String& filenam
     } else {
       session->error = "Unknown update target";
       return;
+    }
+    if (session->target == U_FLASH) {
+      const voxone::ota::FirmwareUpdatePreflight preflight =
+          voxone::ota::firmwareUpdatePreflight();
+      if (preflight.block != voxone::ota::FirmwareUpdateBlock::None) {
+        Serial.printf(
+            "##[UPDATE]# firmware preflight blocked: reason=%s "
+            "running=%s boot=%s update=%s\n",
+            voxone::ota::firmwareUpdateBlockName(preflight.block),
+            preflight.runningSlot, preflight.bootSlot, preflight.updateSlot);
+        session->error =
+            "Firmware OTA requires the running image to be VALID and selected "
+            "for boot; use verified USB recovery/provisioning";
+        return;
+      }
     }
     String lowerName = filename;
     lowerName.toLowerCase();

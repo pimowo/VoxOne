@@ -2,6 +2,7 @@
 #define VOXONE_OTA_BOOT_RUNTIME_H
 
 #include "ota_boot_health.h"
+#include "ota_update_policy.h"
 
 #include <stddef.h>
 #include <stdint.h>
@@ -21,6 +22,13 @@ struct RunningImageSnapshot {
   bool readable;
   RunningImageState state;
   bool pending;
+};
+
+struct FirmwareUpdatePreflight {
+  FirmwareUpdateBlock block;
+  const char* runningSlot;
+  const char* bootSlot;
+  const char* updateSlot;
 };
 
 // Starts read-only inspection of otadata and, only for PENDING_VERIFY, a
@@ -49,6 +57,11 @@ void reportHttpApiProbe();
 
 // /api/ready uses this to avoid reporting a PENDING_VERIFY image as ready.
 bool bootHealthReady();
+
+// Re-reads IDF partition and otadata state immediately before a firmware
+// upload. A ready result proves that overwriting the inactive slot preserves
+// the currently running VALID image as the rollback candidate.
+FirmwareUpdatePreflight firmwareUpdatePreflight();
 
 // Read-only view of the state already inspected by beginBootHealthMonitor().
 // SECURITY Recovery uses it only as a fail-closed eligibility input.

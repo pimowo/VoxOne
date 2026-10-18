@@ -67,6 +67,25 @@ Action HealthGate::evaluate(const Evidence& evidence, uint32_t nowMs) {
   return Action::None;
 }
 
+Action HealthGate::validationFailed(bool rollbackAvailable) {
+  rollbackAvailable_ = rollbackAvailable;
+  reason_ = Failure::MarkValid;
+  stabilityStarted_ = false;
+  if (rollbackAvailable_) {
+    phase_ = Phase::RollbackRequested;
+    return Action::Rollback;
+  }
+  phase_ = Phase::ValidationFailed;
+  return Action::None;
+}
+
+void HealthGate::rollbackBecameUnavailable() {
+  rollbackAvailable_ = false;
+  stabilityStarted_ = false;
+  phase_ = Phase::RollbackUnavailable;
+  reason_ = Failure::RollbackUnavailable;
+}
+
 void HealthGate::actionFailed(Action action) {
   if (action == Action::Validate) {
     phase_ = Phase::ValidationFailed;

@@ -146,6 +146,10 @@ int main() {
          std::string::npos);
   assert(server.find("Firmware boot health validation is still in progress") !=
          std::string::npos);
+  assert(server.find("voxone::ota::firmwareUpdatePreflight()") !=
+         std::string::npos);
+  assert(server.find("Firmware OTA requires the running image to be VALID") !=
+         std::string::npos);
   assert(server.find("Cache-Control\", \"no-store, max-age=0") !=
          std::string::npos);
   assert(server.find("request->url() == \"/emergency\" || request->url() == \"/update.html\"") !=

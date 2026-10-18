@@ -71,6 +71,18 @@ const char* imageStateName(esp_ota_img_states_t state) {
   return "unknown";
 }
 
+DurableImageState durableImageState(esp_ota_img_states_t state) {
+  switch (state) {
+    case ESP_OTA_IMG_NEW: return DurableImageState::New;
+    case ESP_OTA_IMG_PENDING_VERIFY: return DurableImageState::PendingVerify;
+    case ESP_OTA_IMG_VALID: return DurableImageState::Valid;
+    case ESP_OTA_IMG_INVALID: return DurableImageState::Invalid;
+    case ESP_OTA_IMG_ABORTED: return DurableImageState::Aborted;
+    case ESP_OTA_IMG_UNDEFINED: return DurableImageState::Undefined;
+  }
+  return DurableImageState::Unknown;
+}
+
 void loadLastFailure() {
   nvs_handle_t handle = 0;
   if (nvs_open(kNvsNamespace, NVS_READONLY, &handle) != ESP_OK) return;
@@ -136,19 +148,49 @@ void monitorTask(void*) {
     const Action action = gate.evaluate(currentEvidence(nowMs), nowMs);
     publish(nowMs);
     if (action == Action::Validate) {
+      const esp_partition_t* running = esp_ota_get_running_partition();
       const esp_err_t result = esp_ota_mark_app_valid_cancel_rollback();
-      if (result == ESP_OK) {
+      esp_ota_img_states_t confirmedState = ESP_OTA_IMG_UNDEFINED;
+      const esp_err_t confirmResult = running
+          ? esp_ota_get_state_partition(running, &confirmedState)
+          : ESP_ERR_INVALID_ARG;
+      const bool canRollback = esp_ota_check_rollback_is_possible();
+      rollbackAvailable.store(canRollback);
+      const MarkValidRecovery recovery = markValidRecovery(
+          result == ESP_OK, confirmResult == ESP_OK,
+          durableImageState(confirmedState), canRollback);
+      if (recovery == MarkValidRecovery::ConfirmedValid) {
         imageState.store(static_cast<uint8_t>(ESP_OTA_IMG_VALID));
         pendingImage.store(false);
-        rollbackAvailable.store(esp_ota_check_rollback_is_possible());
         logSnapshot("validated", nowMs);
         vTaskDelete(nullptr);
         return;
       }
-      gate.actionFailed(action);
+      const Action failureAction = gate.validationFailed(canRollback);
       publish(nowMs);
       saveLastFailure(Failure::MarkValid);
+      Serial.printf(
+          "##[OTA-HEALTH]# mark-valid not confirmed: call=%d read=%d "
+          "state=%s rollback=%u\n",
+          static_cast<int>(result), static_cast<int>(confirmResult),
+          imageStateName(confirmedState), canRollback ? 1U : 0U);
       logSnapshot("mark-valid-failed", nowMs);
+      if (failureAction == Action::Rollback) {
+        Serial.println(
+            "##[OTA-HEALTH]# rolling back after unconfirmed mark-valid");
+        Serial.flush();
+        const esp_err_t rollbackResult =
+            esp_ota_mark_app_invalid_rollback_and_reboot();
+        (void)rollbackResult;  // Success does not return.
+        gate.actionFailed(Action::Rollback);
+        publish(nowMs);
+        saveLastFailure(Failure::RollbackFailed);
+        logSnapshot("mark-valid-rollback-failed", nowMs);
+      } else {
+        Serial.println(
+            "##[OTA-HEALTH]# BLOCKED: mark-valid failed without a safe "
+            "rollback image; keep running for diagnostics and USB recovery");
+      }
       vTaskDelete(nullptr);
       return;
     }
@@ -156,6 +198,18 @@ void monitorTask(void*) {
       const Failure reason = gate.snapshot(nowMs).reason;
       if (!saveLastFailure(reason))
         Serial.println("##[OTA-HEALTH]# could not persist rollback reason");
+      const bool canRollback = esp_ota_check_rollback_is_possible();
+      rollbackAvailable.store(canRollback);
+      if (!canRollback) {
+        gate.rollbackBecameUnavailable();
+        publish(nowMs);
+        logSnapshot("rollback-candidate-lost", nowMs);
+        Serial.println(
+            "##[OTA-HEALTH]# BLOCKED: rollback candidate is no longer "
+            "bootable; keep running for diagnostics and USB recovery");
+        vTaskDelete(nullptr);
+        return;
+      }
       logSnapshot("rollback", nowMs);
       Serial.flush();
       const esp_err_t result = esp_ota_mark_app_invalid_rollback_and_reboot();
@@ -212,9 +266,19 @@ void beginBootHealthMonitor() {
                   &task) != pdPASS) {
     reportBootFatal(Failure::RuntimeService);
     saveLastFailure(Failure::RuntimeService);
-    Serial.println("##[OTA-HEALTH]# monitor task unavailable; rolling back");
-    Serial.flush();
-    esp_ota_mark_app_invalid_rollback_and_reboot();
+    const bool stillCanRollback = esp_ota_check_rollback_is_possible();
+    rollbackAvailable.store(stillCanRollback);
+    if (stillCanRollback) {
+      Serial.println("##[OTA-HEALTH]# monitor task unavailable; rolling back");
+      Serial.flush();
+      esp_ota_mark_app_invalid_rollback_and_reboot();
+    } else {
+      gate.rollbackBecameUnavailable();
+      publish(millis());
+      Serial.println(
+          "##[OTA-HEALTH]# BLOCKED: monitor task unavailable and no safe "
+          "rollback image; use USB recovery");
+    }
   }
 }
 
@@ -255,6 +319,31 @@ bool bootHealthReady() {
       static_cast<Phase>(publishedPhase.load()));
 }
 
+FirmwareUpdatePreflight firmwareUpdatePreflight() {
+  const esp_partition_t* running = esp_ota_get_running_partition();
+  const esp_partition_t* boot = esp_ota_get_boot_partition();
+  const esp_partition_t* update = esp_ota_get_next_update_partition(nullptr);
+  esp_ota_img_states_t state = ESP_OTA_IMG_UNDEFINED;
+  const esp_err_t stateResult = running
+      ? esp_ota_get_state_partition(running, &state) : ESP_ERR_INVALID_ARG;
+  const bool stateReadable = stateResult == ESP_OK ||
+      stateResult == ESP_ERR_NOT_FOUND;
+  const FirmwareUpdatePreflightInput input{
+      stateReadable,
+      stateResult == ESP_OK ? durableImageState(state)
+                            : DurableImageState::Undefined,
+      running && boot && running->address == boot->address,
+      update != nullptr,
+      running && update && running->address != update->address,
+  };
+  return {
+      firmwareUpdateBlock(input),
+      running ? running->label : "unknown",
+      boot ? boot->label : "unknown",
+      update ? update->label : "unknown",
+  };
+}
+
 RunningImageSnapshot runningImageSnapshot() {
   RunningImageState state = RunningImageState::Unknown;
   switch (static_cast<esp_ota_img_states_t>(imageState.load())) {
@@ -282,18 +371,22 @@ bool formatBootHealthJson(char* output, size_t capacity) {
   const Phase phase = static_cast<Phase>(publishedPhase.load());
   const Failure reason = static_cast<Failure>(publishedReason.load());
   const Failure previous = static_cast<Failure>(lastFailure.load());
+  const FirmwareUpdatePreflight preflight = firmwareUpdatePreflight();
   const int written = std::snprintf(
       output, capacity,
       "{\"runningSlot\":\"%s\",\"bootSlot\":\"%s\","
       "\"imageState\":\"%s\",\"pending\":%s,"
       "\"rollbackAvailable\":%s,\"health\":\"%s\","
       "\"reason\":\"%s\",\"lastFailure\":\"%s\","
+      "\"firmwareUpdateReady\":%s,\"firmwareUpdateReason\":\"%s\","
       "\"elapsedMs\":%lu}",
       runningSlot, bootSlot,
       imageStateName(static_cast<esp_ota_img_states_t>(imageState.load())),
       pendingImage.load() ? "true" : "false",
       rollbackAvailable.load() ? "true" : "false", phaseName(phase),
       failureName(reason), failureName(previous),
+      preflight.block == FirmwareUpdateBlock::None ? "true" : "false",
+      firmwareUpdateBlockName(preflight.block),
       static_cast<unsigned long>(publishedElapsed.load()));
   return written >= 0 && static_cast<size_t>(written) < capacity;
 }

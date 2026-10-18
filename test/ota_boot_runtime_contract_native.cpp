@@ -33,6 +33,12 @@ int main() {
   assert(contains(runtime, "esp_ota_check_rollback_is_possible"));
   assert(contains(runtime, "esp_ota_mark_app_valid_cancel_rollback"));
   assert(contains(runtime, "esp_ota_mark_app_invalid_rollback_and_reboot"));
+  assert(contains(runtime, "markValidRecovery("));
+  assert(contains(runtime, "esp_ota_get_state_partition(running, &confirmedState)"));
+  assert(contains(runtime, "firmwareUpdatePreflight()"));
+  assert(contains(runtime, "rollback-candidate-lost"));
+  assert(contains(server, "FirmwareUpdatePreflight preflight"));
+  assert(contains(server, "firmware preflight blocked"));
 
   // The timeout runs in its own task, so a setup/loop stall cannot silently
   // approve an image. A live main-loop heartbeat is part of runtime health.
@@ -78,4 +84,6 @@ int main() {
   assert(contains(runtime, "\\\"bootSlot\\\""));
   assert(contains(runtime, "\\\"imageState\\\""));
   assert(contains(runtime, "\\\"lastFailure\\\""));
+  assert(contains(runtime, "\\\"firmwareUpdateReady\\\""));
+  assert(contains(runtime, "\\\"firmwareUpdateReason\\\""));
 }
