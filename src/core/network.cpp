@@ -15,6 +15,7 @@
 #include "source_manager.h"
 #include "radio_source_policy.h"
 #include "network_diagnostics.h"
+#include "wifi_startup_retry.h"
 #include "security_runtime.h"
 #include "security_api.h"
 #include "timekeeper.h"
@@ -23,10 +24,6 @@
 #include <sys/time.h>
 #include <atomic>
 #include <freertos/task.h>
-
-#ifndef WIFI_ATTEMPTS
-  #define WIFI_ATTEMPTS  16
-#endif
 
 MyNetwork network;
 char apSsid[14] = "VoxOne-Setup";
@@ -149,23 +146,48 @@ void logWifiEvent(WiFiEvent_t event, const WiFiEventInfo_t& info,
 }  // namespace
 
 void MyNetwork::WiFiReconnected(WiFiEvent_t event, WiFiEventInfo_t info){
+  uint8_t profileIndex = 0;
+  uint8_t attempt = 0;
+  uint32_t generation = 0;
+  if (!network.activeStaIdentity(profileIndex, attempt, generation)) {
+    logWifiEvent(event, info, false);
+    Serial.println("##[WIFI-STA]# event=got_ip decision=ignored reason=no_active_sta");
+    return;
+  }
   const auto evidence = gotIpReadinessEvidence(info);
   const bool readyCandidate = voxone::network::validIpv4Readiness(evidence);
   logWifiEvent(event, info, readyCandidate);
-  if (!readyCandidate) {
+  const bool profileMatches = network.activeStaSsidMatches(profileIndex);
+  if (!readyCandidate || !profileMatches ||
+      !network.activeStaIdentityStillMatches(profileIndex, generation)) {
     network.readyState.disconnected();
     network.status = DISCONNECTED;
     network.presentationState.recordDisconnect(
         voxone::first_boot::RuntimeInvalidIpv4Readiness);
     if (network.runtimeCallbacksEnabled)
       network.armWifiReassociation(millis());
-    Serial.println("##[WIFI-READY]# GOT_IP rejected: IPv4/netif mismatch");
+    Serial.printf(
+        "##[WIFI-STA]# attempt=%u profile=%u generation=%lu event=got_ip "
+        "validation=rejected ipv4=%u profileMatch=%u current=%u\n",
+        static_cast<unsigned>(attempt),
+        static_cast<unsigned>(profileIndex + 1),
+        static_cast<unsigned long>(generation), readyCandidate ? 1U : 0U,
+        profileMatches ? 1U : 0U,
+        network.activeStaIdentityStillMatches(profileIndex, generation) ? 1U
+                                                                        : 0U);
+    Serial.println("##[WIFI-READY]# GOT_IP rejected: attempt/IPv4/netif mismatch");
     return;
   }
   network.readyState.gotIp(evidence);
   network.status = CONNECTED;
   network.presentationState.connected();
   network.resetWifiReassociation();
+  Serial.printf(
+      "##[WIFI-STA]# attempt=%u profile=%u generation=%lu event=got_ip "
+      "validation=accepted ready=1\n",
+      static_cast<unsigned>(attempt),
+      static_cast<unsigned>(profileIndex + 1),
+      static_cast<unsigned long>(generation));
   if (!network.runtimeCallbacksEnabled) {
     Serial.println("##[WIFI-READY]# ready=1");
     return;
@@ -202,11 +224,29 @@ void MyNetwork::WiFiReconnected(WiFiEvent_t event, WiFiEventInfo_t info){
 }
 
 void MyNetwork::WiFiLostConnection(WiFiEvent_t event, WiFiEventInfo_t info){
+  uint8_t profileIndex = 0;
+  uint8_t attempt = 0;
+  uint32_t generation = 0;
+  if (!network.activeStaIdentity(profileIndex, attempt, generation)) {
+    logWifiEvent(event, info);
+    Serial.printf(
+        "##[WIFI-STA]# event=disconnect reason=%u decision=ignored "
+        "cause=no_active_sta\n",
+        static_cast<unsigned>(info.wifi_sta_disconnected.reason));
+    return;
+  }
   network.readyState.disconnected();
   network.status = DISCONNECTED;
   network.presentationState.recordDisconnect(
       static_cast<int>(info.wifi_sta_disconnected.reason));
   logWifiEvent(event, info);
+  Serial.printf(
+      "##[WIFI-STA]# attempt=%u profile=%u generation=%lu "
+      "event=disconnect reason=%u\n",
+      static_cast<unsigned>(attempt),
+      static_cast<unsigned>(profileIndex + 1),
+      static_cast<unsigned long>(generation),
+      static_cast<unsigned>(info.wifi_sta_disconnected.reason));
   Serial.println("##[WIFI-READY]# ready=0");
   if (!network.runtimeCallbacksEnabled) return;
   if (!wifiRecoveryAllowed(systemRestartPending())) {
@@ -238,6 +278,49 @@ void MyNetwork::WiFiLostConnection(WiFiEvent_t event, WiFiEventInfo_t info){
   }
   network.beginReconnect = true;
   mqttWifiDisconnected();
+}
+
+void MyNetwork::activateStaAttempt(uint8_t profileIndex, uint8_t attempt,
+                                   uint32_t generation) {
+  staEventsAccepted.store(false, std::memory_order_release);
+  readyState.disconnected();
+  activeStaProfile.store(profileIndex, std::memory_order_relaxed);
+  activeStaAttempt.store(attempt, std::memory_order_relaxed);
+  activeStaGeneration.store(generation, std::memory_order_relaxed);
+  staEventsAccepted.store(true, std::memory_order_release);
+}
+
+void MyNetwork::deactivateStaAttempt() {
+  staEventsAccepted.store(false, std::memory_order_release);
+  readyState.disconnected();
+}
+
+bool MyNetwork::activeStaIdentity(uint8_t& profileIndex, uint8_t& attempt,
+                                  uint32_t& generation) const {
+  if (!staEventsAccepted.load(std::memory_order_acquire)) return false;
+  profileIndex = activeStaProfile.load(std::memory_order_relaxed);
+  attempt = activeStaAttempt.load(std::memory_order_relaxed);
+  generation = activeStaGeneration.load(std::memory_order_relaxed);
+  return staEventsAccepted.load(std::memory_order_acquire) &&
+      profileIndex < config.ssidsCount;
+}
+
+bool MyNetwork::activeStaIdentityStillMatches(uint8_t profileIndex,
+                                              uint32_t generation) const {
+  return staEventsAccepted.load(std::memory_order_acquire) &&
+      activeStaProfile.load(std::memory_order_relaxed) == profileIndex &&
+      activeStaGeneration.load(std::memory_order_relaxed) == generation;
+}
+
+bool MyNetwork::activeStaSsidMatches(uint8_t profileIndex) const {
+  if (profileIndex >= config.ssidsCount) return false;
+  const wifi_mode_t mode = WiFi.getMode();
+  if ((mode != WIFI_STA && mode != WIFI_AP_STA) ||
+      WiFi.status() != WL_CONNECTED)
+    return false;
+  const String currentSsid = WiFi.SSID();
+  return currentSsid.length() == strlen(config.ssids[profileIndex].ssid) &&
+      currentSsid.equals(config.ssids[profileIndex].ssid);
 }
 
 void MyNetwork::armWifiReassociation(uint32_t nowMs) {
@@ -288,45 +371,104 @@ void MyNetwork::loop() {
 }
 
 bool MyNetwork::wifiBegin(bool silent){
-  uint8_t ls = (config.store.lastSSID == 0 || config.store.lastSSID > config.ssidsCount) ? 0 : config.store.lastSSID - 1;
-  uint8_t startedls = ls;
-  uint8_t errcnt = 0;
-  //WiFi.mode(WIFI_STA);
-  while (true) {
+  voxone::wifi::StartupRetryPolicy retry;
+  retry.begin(config.ssidsCount, config.store.lastSSID, millis());
+  while (retry.hasRemaining()) {
+    while (!retry.due(millis())) delay(10);
+    const auto current = retry.start(millis());
+    if (!current.valid) continue;
+    const uint8_t ls = current.profileIndex;
     if(!silent){
-      Serial.printf("##[BOOT]#\tAttempt to connect to %s\n", config.ssids[ls].ssid);
+      Serial.printf("##[BOOT]#\tAttempt to connect using Wi-Fi profile %u\n",
+                    static_cast<unsigned>(ls + 1));
       Serial.print("##[BOOT]#\t");
       display.putRequest(BOOTSTRING, ls);
     }
-    //WiFi.disconnect(true, true); //disconnect & erase internal credentials https://github.com/e2002/yoradio/pull/164/commits/89d8b4450dde99cd7930b84bb14d81dab920b879
-    //delay(100);
-    WiFi.mode(WIFI_STA);
-    if(strlen(config.store.mdnsname)>0) WiFi.setHostname(config.store.mdnsname);
     presentationState.beginStaAttempt();
-    WiFi.begin(config.ssids[ls].ssid, config.ssids[ls].password);
-    while (WiFi.status() != WL_CONNECTED) {
-      if(!silent) Serial.print(".");
-      delay(500);
-      if(REAL_LEDBUILTIN!=255 && !silent) digitalWrite(REAL_LEDBUILTIN, !digitalRead(REAL_LEDBUILTIN));
-      errcnt++;
-      if (errcnt > WIFI_ATTEMPTS) {
-        presentationState.recordTimeout();
-        errcnt = 0;
-        ls++;
-        if (ls > config.ssidsCount - 1) ls = 0;
-        if(!silent) Serial.println();
-        WiFi.mode(WIFI_OFF);
-        break;
+    activateStaAttempt(ls, current.ordinal, current.generation);
+    const bool modeReady = WiFi.mode(WIFI_STA);
+    if(strlen(config.store.mdnsname)>0) WiFi.setHostname(config.store.mdnsname);
+    const wl_status_t beginStatus = modeReady
+        ? WiFi.begin(config.ssids[ls].ssid, config.ssids[ls].password)
+        : WL_CONNECT_FAILED;
+    Serial.printf(
+        "##[WIFI-STARTUP]# attempt=%u/%u profile=%u generation=%lu "
+        "stage=begin modeReady=%u driverStatus=%d timeout=%lu ms\n",
+        static_cast<unsigned>(current.ordinal),
+        static_cast<unsigned>(current.total), static_cast<unsigned>(ls + 1),
+        static_cast<unsigned long>(current.generation),
+        modeReady ? 1U : 0U, static_cast<int>(beginStatus),
+        static_cast<unsigned long>(
+            voxone::wifi::StartupRetryPolicy::kAttemptTimeoutMs));
+
+    uint32_t nextProgressAt = millis();
+    bool sawAssociated = false;
+    bool sawDriverConnectedBeforeReady = false;
+    while (!ready() && !retry.timedOut(millis())) {
+      const wl_status_t driverStatus = WiFi.status();
+      if (driverStatus == WL_IDLE_STATUS) sawAssociated = true;
+      if (driverStatus == WL_CONNECTED) {
+        sawAssociated = true;
+        if (!sawDriverConnectedBeforeReady) {
+          sawDriverConnectedBeforeReady = true;
+          Serial.printf(
+              "##[WIFI-STARTUP]# attempt=%u profile=%u "
+              "stage=wait_validated_got_ip\n",
+              static_cast<unsigned>(current.ordinal),
+              static_cast<unsigned>(ls + 1));
+        }
       }
+      const uint32_t now = millis();
+      if (!silent && static_cast<int32_t>(now - nextProgressAt) >= 0) {
+        Serial.print(".");
+        nextProgressAt = now + 500;
+        if (REAL_LEDBUILTIN != 255)
+          digitalWrite(REAL_LEDBUILTIN, !digitalRead(REAL_LEDBUILTIN));
+      }
+      delay(voxone::wifi::StartupRetryPolicy::kPollIntervalMs);
     }
-    if (WiFi.status() != WL_CONNECTED && ls == startedls) {
-      return false; break;
-    }
-    if (WiFi.status() == WL_CONNECTED) {
+
+    if (ready() && retry.succeed(current.generation, ls) &&
+        activeStaIdentityStillMatches(ls, current.generation)) {
+      if (!silent) Serial.println();
       config.setLastSSID(ls + 1);
-      return true; break;
+      Serial.printf(
+          "##[WIFI-STARTUP]# attempt=%u/%u profile=%u decision=connected "
+          "ready=1\n",
+          static_cast<unsigned>(current.ordinal),
+          static_cast<unsigned>(current.total), static_cast<unsigned>(ls + 1));
+      return true;
     }
+
+    presentationState.recordTimeout();
+    const auto snapshot = presentationState.read();
+    const wl_status_t finalDriverStatus = WiFi.status();
+    const char* timeoutStage = sawDriverConnectedBeforeReady
+                                   ? "got_ip_validation"
+                                   : (sawAssociated ? "dhcp" : "association");
+    deactivateStaAttempt();
+    WiFi.mode(WIFI_OFF);
+    const uint32_t failedAt = millis();
+    const auto decision = retry.fail(current.generation, ls, failedAt);
+    const uint32_t retryDelay = decision == voxone::wifi::StartupFailureDecision::Retry
+                                    ? static_cast<uint32_t>(retry.dueAtMs() - failedAt)
+                                    : 0;
+    Serial.printf(
+        "##[WIFI-STARTUP]# attempt=%u/%u profile=%u stage=%s "
+        "driverStatus=%d error=%d decision=%s retryDelay=%lu ms\n",
+        static_cast<unsigned>(current.ordinal),
+        static_cast<unsigned>(current.total), static_cast<unsigned>(ls + 1),
+        timeoutStage, static_cast<int>(finalDriverStatus), snapshot.errorCode,
+        decision == voxone::wifi::StartupFailureDecision::Retry ? "retry"
+                                                                 : "recovery",
+        static_cast<unsigned long>(retryDelay));
+    if (!silent) Serial.println();
   }
+  Serial.printf(
+      "##[WIFI-STARTUP]# recovery reason=attempts_exhausted attempts=%u "
+      "profiles=%u\n",
+      static_cast<unsigned>(retry.startedAttempts()),
+      static_cast<unsigned>(config.ssidsCount));
   return false;
 }
 
@@ -426,6 +568,7 @@ void rebootTime() {
 }
 
 void MyNetwork::raiseSoftAP() {
+  deactivateStaAttempt();
   staReconnectEnabled = false;
   resetWifiReassociation();
   char autoRoot[14];

@@ -1325,13 +1325,18 @@ setTimeout(() => {
   const output = document.getElementById('wifi-recovery-headless-result');
   try {
     const section = document.getElementById('wifi-setup');
-    const form = section.querySelector('form');
+    const form = document.getElementById('wifi-form');
+    const retryForm = document.getElementById('wifi-retry');
     const ssid = document.getElementById('ssid');
     const password = document.getElementById('pass');
     if (section.classList.contains('hidden'))
       throw new Error('Wi-Fi recovery form hidden in AP mode');
     if (form.method !== 'post' || form.getAttribute('action') !== '/')
       throw new Error('Wi-Fi recovery must preserve root POST');
+    if (!retryForm || retryForm.method !== 'post' ||
+        retryForm.getAttribute('action') !== '/' ||
+        new FormData(retryForm).get('retry') !== 'saved')
+      throw new Error('Wi-Fi recovery saved-profile retry is missing');
     if (password.type !== 'password' || password.name !== 'pass' ||
         ssid.name !== 'ssid')
       throw new Error('Wi-Fi recovery credential fields changed');
@@ -1723,11 +1728,15 @@ def main():
         netserver_header, re.S)
     assert wifi_recovery_match, "embedded Wi-Fi recovery page is missing"
     wifi_recovery_html = wifi_recovery_match.group(1)
-    assert 'form action="/" method="post"' in wifi_recovery_html and \
+    assert 'form action="/" method="post" id="wifi-form"' in wifi_recovery_html and \
            'name="ssid"' in wifi_recovery_html and \
            'name="pass"' in wifi_recovery_html and \
            'type="password"' in wifi_recovery_html, \
         "Wi-Fi recovery must preserve its credential POST form"
+    assert 'form action="/" method="post" id="wifi-retry"' in wifi_recovery_html and \
+           'name="retry"' in wifi_recovery_html and \
+           'value="saved"' in wifi_recovery_html, \
+        "Wi-Fi recovery must retry saved data without resubmitting credentials"
     assert 'console.' not in wifi_recovery_html and \
            'localStorage' not in wifi_recovery_html and \
            'sessionStorage' not in wifi_recovery_html, \

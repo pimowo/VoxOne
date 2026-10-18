@@ -223,6 +223,12 @@ if(-not $onWindows) {
   if($LASTEXITCODE -ne 0) { throw 'Sanitized FIRST BOOT runtime snapshot compile failed' }
   & $runtimeSnapshotExe
   if($LASTEXITCODE -ne 0) { throw 'Sanitized FIRST BOOT runtime snapshot test failed' }
+  $wifiStartupRetryExe=Join-Path $work 'wifi_startup_retry_sanitized'
+  & $Cxx @sanitizerArgs '-pthread' '-DVOXONE_PROFILE_L0=1' '-o' $wifiStartupRetryExe `
+    (Join-Path $root 'test/wifi_startup_retry_native.cpp')
+  if($LASTEXITCODE -ne 0) { throw 'Sanitized Wi-Fi startup retry compile failed' }
+  & $wifiStartupRetryExe
+  if($LASTEXITCODE -ne 0) { throw 'Sanitized Wi-Fi startup retry test failed' }
   $wwwBindingExe=Join-Path $work 'ap_ui_www_binding_sanitized'
   & $Cxx @sanitizerArgs '-pthread' '-DVOXONE_PROFILE_L0=1' '-o' $wwwBindingExe `
     (Join-Path $root 'test/ap_ui_www_binding_native.cpp')

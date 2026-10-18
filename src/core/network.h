@@ -4,6 +4,7 @@
 #include "first_boot_runtime_snapshot.h"
 #include "network_ready_state.h"
 #include "wifi_reassoc_policy.h"
+#include <atomic>
 
 enum n_Status_e { CONNECTED, SOFT_AP, FAILED, DISCONNECTED };
 
@@ -30,7 +31,19 @@ class MyNetwork {
     voxone::wifi::ReassocPolicy reassocPolicy;
     portMUX_TYPE reassocMux = portMUX_INITIALIZER_UNLOCKED;
     bool staReconnectEnabled = false;
+    std::atomic<bool> staEventsAccepted{false};
+    std::atomic<uint8_t> activeStaProfile{0};
+    std::atomic<uint8_t> activeStaAttempt{0};
+    std::atomic<uint32_t> activeStaGeneration{0};
     void raiseSoftAP();
+    void activateStaAttempt(uint8_t profileIndex, uint8_t attempt,
+                            uint32_t generation);
+    void deactivateStaAttempt();
+    bool activeStaIdentity(uint8_t& profileIndex, uint8_t& attempt,
+                           uint32_t& generation) const;
+    bool activeStaIdentityStillMatches(uint8_t profileIndex,
+                                       uint32_t generation) const;
+    bool activeStaSsidMatches(uint8_t profileIndex) const;
     void armWifiReassociation(uint32_t nowMs);
     void resetWifiReassociation();
     static void WiFiLostConnection(WiFiEvent_t event, WiFiEventInfo_t info);

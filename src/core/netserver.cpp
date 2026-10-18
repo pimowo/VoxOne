@@ -3711,6 +3711,19 @@ void handleIndex(AsyncWebServerRequest * request) {
       return;
     }
     if (request->method() == HTTP_POST) {
+      if (webBinding.page == voxone::first_boot::WebPage::WifiRecovery &&
+          request->arg("retry") == "saved" &&
+          !request->hasArg("ssid") && !request->hasArg("pass")) {
+        // Reuse the existing provisioning POST and its Host/Origin checks.
+        // This adds no unauthenticated route and never reads or writes a
+        // credential; possession of the protected Recovery AP is unchanged.
+        request->send(200, "text/plain",
+                      "Retrying saved Wi-Fi configuration. Restarting.");
+        scheduleSystemRestart("SYSTEM");
+        Serial.println(
+            "##[BOOT]# Saved Wi-Fi retry requested; restart scheduled");
+        return;
+      }
       const String ssid = request->arg("ssid");
       const String password = request->arg("pass");
       if (!apWifiCredentialsValid(ssid.c_str(), password.c_str())) {

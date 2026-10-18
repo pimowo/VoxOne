@@ -137,8 +137,13 @@ footer{text-align:center;padding:16px;color:var(--muted);font-size:.85rem}
 <h1>VoxOne</h1>
 <section class="card" id="wifi-setup">
 <h2>Konfiguracja Wi-Fi</h2>
-<p>Wprowad&#378; dane swojej sieci Wi-Fi. VoxOne zapisze ustawienia i uruchomi si&#281; ponownie.</p>
-<form action="/" method="post">
+<p>Nie uda&#322;o si&#281; po&#322;&#261;czy&#263; z zapisanymi sieciami po kilku pr&#243;bach. Dane pozosta&#322;y zapisane.</p>
+<form action="/" method="post" id="wifi-retry">
+<input name="retry" type="hidden" value="saved">
+<button type="submit">Pon&#243;w zapisane po&#322;&#261;czenie</button>
+</form>
+<p>Je&#380;eli dane s&#261; b&#322;&#281;dne lub sie&#263; zosta&#322;a zmieniona, wprowad&#378; nowe ustawienia.</p>
+<form action="/" method="post" id="wifi-form">
 <label for="ssid">Nazwa sieci (SSID)</label>
 <input id="ssid" name="ssid" type="text" maxlength="29" autocomplete="off" required>
 <label for="pass">Has&#322;o</label>
