@@ -21,15 +21,49 @@
 #error "Security HTTP enforcement flags must be 0 or 1"
 #endif
 
+#if VOXONE_SECURITY_HTTP_ENFORCEMENT && \
+    VOXONE_SECURITY_HTTP_ENFORCEMENT_TEST
+#error "Security HTTP enforcement cannot be both production and test"
+#endif
+
 namespace voxone {
 namespace security {
 
-// Production enforcement is monotonic: once the production flag is enabled,
-// disabling the test flag cannot weaken it. Ordinary profiles currently keep
-// both flags off; the dedicated M0 test profile enables only the test flag.
+enum class SecurityHttpEnforcementMode : uint8_t {
+  Disabled,
+  Test,
+  Production
+};
+
+constexpr bool securityHttpProductionEnforcementEnabled() {
+  return VOXONE_SECURITY_HTTP_ENFORCEMENT != 0;
+}
+
+constexpr bool securityHttpTestEnforcementEnabled() {
+  return VOXONE_SECURITY_HTTP_ENFORCEMENT_TEST != 0;
+}
+
+constexpr SecurityHttpEnforcementMode securityHttpEnforcementMode() {
+  return securityHttpProductionEnforcementEnabled()
+             ? SecurityHttpEnforcementMode::Production
+         : securityHttpTestEnforcementEnabled()
+             ? SecurityHttpEnforcementMode::Test
+             : SecurityHttpEnforcementMode::Disabled;
+}
+
+constexpr const char* securityHttpEnforcementModeName(
+    SecurityHttpEnforcementMode mode) {
+  return mode == SecurityHttpEnforcementMode::Production
+             ? "production"
+         : mode == SecurityHttpEnforcementMode::Test ? "test" : "disabled";
+}
+
+// This is the actual runtime gate used by HTTP and WebSocket access checks.
+// Ordinary profiles keep both flags off; the dedicated M0 test profile enables
+// only the test flag and must never be reported as production protection.
 constexpr bool securityHttpEnforcementEnabled() {
-  return VOXONE_SECURITY_HTTP_ENFORCEMENT != 0 ||
-         VOXONE_SECURITY_HTTP_ENFORCEMENT_TEST != 0;
+  return securityHttpEnforcementMode() !=
+         SecurityHttpEnforcementMode::Disabled;
 }
 
 constexpr char kSecurityWebSocketProtocol[] = "voxone.v1";

@@ -496,10 +496,12 @@ void MyNetwork::begin() {
       config.ssidsCount > 0);
   (void)voxone::security::deviceSecuritySessionService();
   Serial.printf(
-      "##[SECURITY]# state=%s load=%s wifiConfigured=%u policy=backend-only\n",
+      "##[SECURITY]# state=%s load=%s wifiConfigured=%u enforcement=%s\n",
       voxone::security::securityStateName(security.state),
       voxone::security::securityLoadStatusName(security.loadStatus),
-      security.wifiConfigured ? 1U : 0U);
+      security.wifiConfigured ? 1U : 0U,
+      voxone::security::securityHttpEnforcementModeName(
+          voxone::security::securityHttpEnforcementMode()));
   if (!wifiInventoryReady) {
     status = FAILED;
     presentationState.inventoryInvalid();

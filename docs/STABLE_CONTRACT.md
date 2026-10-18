@@ -46,7 +46,7 @@ trasy i metody; nieznana trasa kończy się `404`, znana trasa ze złą metodą
 | `GET /`, zasoby `voxone.*`, `advanced-audio.js`, `dsp-client.js`, logo i favicon | Bootstrap i aplikacja WWW. Bezpośrednie żądania plików `*.gz` są odrzucane; kompresję obsługuje statyczny handler. |
 | `GET /variables.js` | Tożsamość wersji, kanału, buildu, profilu i trybu WWW. Trasa chroniona po enforcement. |
 | `GET /api/ready` | Publiczna diagnostyka: `ready`, losowy dla bootu `bootId` oraz obiekt `ota`. Sam HTTP 200 nie oznacza akceptacji obrazu `PENDING_VERIFY`, jeżeli `ready=false`. |
-| `GET /api/security/state` | Publiczny stan bootstrapu SECURITY; zawiera `state`, `setupAllowed`, `loginAllowed`, `authenticated`, `protectionEnforced`. |
+| `GET /api/security/state` | Publiczny stan bootstrapu SECURITY; zawiera `state`, `setupAllowed`, `loginAllowed`, `authenticated`, rzeczywiste `protectionEnforced` oraz `enforcementMode` (`disabled`, `test`, `production`). |
 | `POST /api/security/setup`, `/login`, `/logout` | Formularz security setup/login/logout; Host i same-origin są walidowane. Setup jest dozwolony tylko dla `legacy-unclaimed`. |
 | `GET /api/stations`, `/api/directory/search`, `/api/stations/export` | Odczyt stacji, Radio Directory i eksport. |
 | `POST /api/stations/import`, `/add`, `/edit`, `/delete`, `/reorder`, `/metadata` | Mutacje listy stacji. Import jest uploadem multipart i ma osobną walidację formatu. |
@@ -91,8 +91,13 @@ rozwiązywania tej nazwy: publikowanie mDNS nie jest aktywne w bieżącej ście�
 startowej firmware.
 
 Bieżący stan produkcyjny pozostaje observe-only: zwykłe profile mają
-`VOXONE_SECURITY_HTTP_ENFORCEMENT=0`, a API raportuje
-`protectionEnforced=false`. Tylko `m0-security-test` włącza testową bramkę.
+`VOXONE_SECURITY_HTTP_ENFORCEMENT=0` i
+`VOXONE_SECURITY_HTTP_ENFORCEMENT_TEST=0`, dlatego API raportuje
+`protectionEnforced=false` oraz `enforcementMode=disabled` także wtedy, gdy
+skonfigurowano hasło. Tylko `m0-security-test` włącza testową bramkę i raportuje
+`protectionEnforced=true`, `enforcementMode=test`; nie jest to ochrona
+produkcyjna. Jednoczesne włączenie flag production i test jest błędem
+kompilacji. Flagi są wyłącznie build-time i nie mogą być zmieniane przez klienta.
 Produkcji nie wolno włączyć przed HIL PBKDF2, HTTP/WS, migracji i recovery.
 MQTT zachowuje osobną politykę i nie korzysta z cookie HTTP.
 

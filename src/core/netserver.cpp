@@ -1776,7 +1776,8 @@ void handleSecurityState(AsyncWebServerRequest* request) {
   char token[kSecuritySessionTokenBufferSize]{};
   const bool hasToken = requestSessionToken(request, token);
   SecurityApiService api(deviceSecurityService(),
-                         deviceSecuritySessionService());
+                         deviceSecuritySessionService(),
+                         securityHttpEnforcementMode());
   SecurityApiState state{};
   {
     SecurityRuntimeLock lock;
@@ -1808,7 +1809,8 @@ void handleSecuritySetup(AsyncWebServerRequest* request) {
     return;
   }
   SecurityApiService api(deviceSecurityService(),
-                         deviceSecuritySessionService());
+                         deviceSecuritySessionService(),
+                         securityHttpEnforcementMode());
   SecurityApiResult result{};
   {
     SecurityRuntimeLock lock;
@@ -1833,7 +1835,8 @@ void handleSecurityLogin(AsyncWebServerRequest* request) {
     return;
   }
   SecurityApiService api(deviceSecurityService(),
-                         deviceSecuritySessionService());
+                         deviceSecuritySessionService(),
+                         securityHttpEnforcementMode());
   SecurityApiResult result{};
   {
     SecurityRuntimeLock lock;
@@ -1859,7 +1862,8 @@ void handleSecurityLogout(AsyncWebServerRequest* request) {
   char token[kSecuritySessionTokenBufferSize]{};
   const bool hasToken = requestSessionToken(request, token);
   SecurityApiService api(deviceSecurityService(),
-                         deviceSecuritySessionService());
+                         deviceSecuritySessionService(),
+                         securityHttpEnforcementMode());
   SecurityApiResult result{};
   {
     SecurityRuntimeLock lock;

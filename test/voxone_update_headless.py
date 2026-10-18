@@ -119,7 +119,7 @@ window.securitySetupResponses = [];
 window.securityLoginResponses = [];
 window.securityServerState = {
   state:'legacy-unclaimed', setupAllowed:true, loginAllowed:false,
-  authenticated:false, protectionEnforced:false
+  authenticated:false, protectionEnforced:true, enforcementMode:'test'
 };
 const securityResponse = (status, body = {}, headers = {}) => ({
   ok:status >= 200 && status < 300, status,
@@ -200,7 +200,8 @@ window.fetch = (url, options = {}) => {
     window.securityServerState = {
       state:request.mode, setupAllowed:false,
       loginAllowed:request.mode === 'protected', authenticated:false,
-      protectionEnforced:false
+      protectionEnforced:window.securityServerState.protectionEnforced,
+      enforcementMode:window.securityServerState.enforcementMode
     };
     return Promise.resolve(prepared || securityResponse(200, {ok:true}));
   }
@@ -432,6 +433,9 @@ setTimeout(async () => {
     await settleSecurity();
     check(!get('app-shell').hidden && !get('security-logout').hidden,
       'successful login reveals panel and logout');
+    check(!get('security-api-warning').hidden &&
+      get('security-api-warning').textContent.includes('trybie testowym'),
+      'test enforcement is not presented as production protection');
     const authenticatedSocket = window.btTestSocket;
     check(authenticatedSocket.readyState === MockWebSocket.OPEN,
       'authenticated UI opens WebSocket only after session confirmation');
@@ -487,6 +491,15 @@ setTimeout(async () => {
       get('security-save-confirmation').textContent === 'Ustawienia ochrony zostały zapisane',
       'confirmed OPEN setup shows exact success message');
     window.securityServerState = {
+      state:'protected', setupAllowed:false, loginAllowed:true,
+      authenticated:false, protectionEnforced:false, enforcementMode:'disabled'
+    };
+    await VoxOneSecurityUi.refresh();
+    check(!get('app-shell').hidden && get('security-logout').hidden &&
+      !get('security-api-warning').hidden &&
+      get('security-api-warning').textContent.includes('nie jest aktywna'),
+      'configured password without enforcement remains accessible and is reported truthfully');
+    window.securityServerState = {
       state:'unconfigured', setupAllowed:false, loginAllowed:false,
       authenticated:false, protectionEnforced:false
     };
@@ -531,7 +544,7 @@ setTimeout(async () => {
     window.deviceReadinessBootId = 'post-ota-boot';
     window.securityServerState = {
       state:'protected', setupAllowed:false, loginAllowed:true,
-      authenticated:false, protectionEnforced:false
+      authenticated:false, protectionEnforced:true, enforcementMode:'test'
     };
     const postOtaReady = await (await fetch('/api/ready?update=post-ota')).json();
     check(postOtaReady.ready === true && postOtaReady.bootId === 'post-ota-boot',

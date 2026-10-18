@@ -55,9 +55,11 @@ class DeterministicRandom : public SecurityRandomSource {
 };
 
 struct Fixture {
-  Fixture(bool wifiConfigured = true)
+  Fixture(bool wifiConfigured = true,
+          SecurityHttpEnforcementMode enforcementMode =
+              SecurityHttpEnforcementMode::Disabled)
       : security(storage, random), sessions(security, random),
-        api(security, sessions) {
+        api(security, sessions, enforcementMode) {
     security.begin(wifiConfigured);
   }
 
@@ -163,6 +165,7 @@ void testStateMachineAndSetup() {
   assert(state.state == SecurityState::Unconfigured);
   assert(!state.setupAllowed && !state.loginAllowed &&
          !state.protectionEnforced);
+  assert(state.enforcementMode == SecurityHttpEnforcementMode::Disabled);
   assert(firstBoot.api.setup("open", nullptr).httpStatus == 409);
 
   Fixture open;
@@ -189,10 +192,26 @@ void testStateMachineAndSetup() {
   assert(securityStateJson(state, json, sizeof(json)));
   assert(std::strstr(json, "\"state\":\"protected\"") != nullptr);
   assert(std::strstr(json, "\"protectionEnforced\":false") != nullptr);
+  assert(std::strstr(json, "\"enforcementMode\":\"disabled\"") != nullptr);
   assert(std::strstr(json, "hasło") == nullptr);
   assert(std::strstr(json, "salt") == nullptr);
   assert(std::strstr(json, "verifier") == nullptr);
   assert(std::strstr(json, "token") == nullptr);
+
+  Fixture testProtected(true, SecurityHttpEnforcementMode::Test);
+  assert(testProtected.api.setup("protected", "hasło").httpStatus == 200);
+  state = testProtected.api.state(nullptr, 4);
+  assert(state.protectionEnforced &&
+         state.enforcementMode == SecurityHttpEnforcementMode::Test);
+  assert(securityStateJson(state, json, sizeof(json)));
+  assert(std::strstr(json, "\"protectionEnforced\":true") != nullptr);
+  assert(std::strstr(json, "\"enforcementMode\":\"test\"") != nullptr);
+
+  Fixture productionProtected(true, SecurityHttpEnforcementMode::Production);
+  assert(productionProtected.api.setup("protected", "hasło").httpStatus == 200);
+  state = productionProtected.api.state(nullptr, 5);
+  assert(state.protectionEnforced &&
+         state.enforcementMode == SecurityHttpEnforcementMode::Production);
 
   Fixture locked;
   locked.storage.readError = true;
@@ -257,7 +276,7 @@ void testProductionIntegrationContract() {
   const size_t wifi = network.find("setWifiParams();");
   assert(settings != std::string::npos && sessions != std::string::npos &&
          wifi != std::string::npos && settings < sessions && sessions < wifi);
-  assert(network.find("policy=backend-only") != std::string::npos);
+  assert(network.find("enforcement=%s") != std::string::npos);
 
   assert(server.find("kSecurityStateRoute, HTTP_GET") != std::string::npos);
   assert(server.find("kSecuritySetupRoute, HTTP_POST") != std::string::npos);

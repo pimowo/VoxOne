@@ -205,8 +205,10 @@ bool securitySessionTokenFromCookie(
 }
 
 SecurityApiService::SecurityApiService(SecurityService& security,
-                                       SecuritySessionService& sessions)
-    : security_(security), sessions_(sessions) {}
+                                       SecuritySessionService& sessions,
+                                       SecurityHttpEnforcementMode enforcementMode)
+    : security_(security), sessions_(sessions),
+      enforcementMode_(enforcementMode) {}
 
 SecurityApiState SecurityApiService::state(const char* sessionToken,
                                            uint32_t nowMs) {
@@ -214,7 +216,9 @@ SecurityApiState SecurityApiService::state(const char* sessionToken,
   const bool authenticated = current == SecurityState::Protected &&
                              sessions_.validate(sessionToken, nowMs);
   return {current, current == SecurityState::LegacyUnclaimed,
-          current == SecurityState::Protected, authenticated, false};
+          current == SecurityState::Protected, authenticated,
+          enforcementMode_ != SecurityHttpEnforcementMode::Disabled,
+          enforcementMode_};
 }
 
 SecurityApiResult SecurityApiService::setup(const char* mode,
@@ -274,11 +278,13 @@ bool securityStateJson(const SecurityApiState& state, char* output,
   const int written = std::snprintf(
       output, outputSize,
       "{\"state\":\"%s\",\"setupAllowed\":%s,\"loginAllowed\":%s,"
-      "\"authenticated\":%s,\"protectionEnforced\":%s}",
+      "\"authenticated\":%s,\"protectionEnforced\":%s,"
+      "\"enforcementMode\":\"%s\"}",
       securityStateName(state.state), state.setupAllowed ? "true" : "false",
       state.loginAllowed ? "true" : "false",
       state.authenticated ? "true" : "false",
-      state.protectionEnforced ? "true" : "false");
+      state.protectionEnforced ? "true" : "false",
+      securityHttpEnforcementModeName(state.enforcementMode));
   return written > 0 && static_cast<size_t>(written) < outputSize;
 }
 

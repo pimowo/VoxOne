@@ -902,13 +902,13 @@ def verify(device: Device, password: str, previous_boot_id: str | None) -> None:
     state = json_object(state_response, "security state")
     require(state.get("state") == "protected", "existing protected state survived update")
     require(state.get("authenticated") is False, "new process has no inherited session")
-    # The dedicated test switch exercises the gate without advertising the
-    # not-yet-enabled production policy to the browser.  HIL proves enforcement
-    # from the HTTP/WS behavior below; production stays explicitly false until
-    # the separate rollout checkpoint after approval.
+    # The dedicated test switch exercises the real gate but is reported
+    # explicitly as test, never as production protection.  HIL still proves
+    # enforcement independently from the HTTP/WS behavior below.
     require(
-        state.get("protectionEnforced") is False,
-        "test checkpoint still advertises production enforcement OFF",
+        state.get("protectionEnforced") is True and
+        state.get("enforcementMode") == "test",
+        "test checkpoint reports active test enforcement, not production",
     )
 
     root = device.http("GET", "/", limit=64 * 1024)

@@ -195,6 +195,13 @@ window.VoxOneRestartWaiter = Object.freeze({
   function renderSecurityState(state) {
     const known = ["unconfigured", "legacy-unclaimed", "protected", "open", "locked"];
     if (!state || !known.includes(state.state)) throw new Error("invalid security state");
+    const modes = ["disabled", "test", "production"];
+    const enforcementMode = state.enforcementMode === undefined
+      ? (state.protectionEnforced === true ? "production" : "disabled")
+      : state.enforcementMode;
+    if (!modes.includes(enforcementMode) ||
+        state.protectionEnforced !== (enforcementMode !== "disabled"))
+      throw new Error("inconsistent security enforcement state");
     securityLogout.hidden = true;
     if (state.state === "legacy-unclaimed") {
       if (state.setupAllowed !== true) throw new Error("inconsistent setup state");
@@ -203,8 +210,13 @@ window.VoxOneRestartWaiter = Object.freeze({
       return;
     }
     if (state.state === "protected") {
+      if (enforcementMode === "disabled") {
+        showApplication({warning: "Hasło jest skonfigurowane, ale ochrona dostępu nie jest aktywna w tym firmware."});
+        return;
+      }
       if (state.authenticated === true) {
-        showApplication({authenticated: true});
+        showApplication({authenticated: true, warning: enforcementMode === "test"
+          ? "Ochrona dostępu działa w trybie testowym, nie produkcyjnym." : ""});
       } else {
         if (state.loginAllowed !== true) throw new Error("inconsistent login state");
         showSecurityView("security-login-form");

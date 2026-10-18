@@ -1,6 +1,7 @@
 #ifndef VOXONE_SECURITY_API_H
 #define VOXONE_SECURITY_API_H
 
+#include "security_http_adapter.h"
 #include "security_session.h"
 
 #include <stddef.h>
@@ -15,7 +16,7 @@ constexpr char kSecurityLoginRoute[] = "/api/security/login";
 constexpr char kSecurityLogoutRoute[] = "/api/security/logout";
 constexpr char kSecuritySessionCookieName[] = "voxone_session";
 constexpr size_t kSecurityMaxRequestBodyBytes = 256;
-constexpr size_t kSecurityStateJsonSize = 192;
+constexpr size_t kSecurityStateJsonSize = 224;
 
 enum class SecurityRequestStatus : uint8_t {
   Allowed,
@@ -70,6 +71,7 @@ struct SecurityApiState {
   bool loginAllowed;
   bool authenticated;
   bool protectionEnforced;
+  SecurityHttpEnforcementMode enforcementMode;
 };
 
 struct SecurityApiResult {
@@ -83,7 +85,8 @@ struct SecurityApiResult {
 class SecurityApiService {
  public:
   SecurityApiService(SecurityService& security,
-                     SecuritySessionService& sessions);
+                     SecuritySessionService& sessions,
+                     SecurityHttpEnforcementMode enforcementMode);
 
   SecurityApiState state(const char* sessionToken, uint32_t nowMs);
   SecurityApiResult setup(const char* mode, const char* password);
@@ -93,6 +96,7 @@ class SecurityApiService {
  private:
   SecurityService& security_;
   SecuritySessionService& sessions_;
+  SecurityHttpEnforcementMode enforcementMode_;
 };
 
 bool securityStateJson(const SecurityApiState& state, char* output,

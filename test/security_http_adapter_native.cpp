@@ -477,6 +477,22 @@ void testBuildSwitchIsMonotonic() {
   static_assert(!securityHttpEnforcementEnabled(),
                 "ordinary build must remain disabled in 1B");
 #endif
+#if VOXONE_SECURITY_HTTP_ENFORCEMENT
+  static_assert(securityHttpEnforcementMode() ==
+                    SecurityHttpEnforcementMode::Production,
+                "production flag must be reported as production");
+#elif VOXONE_SECURITY_HTTP_ENFORCEMENT_TEST
+  static_assert(securityHttpEnforcementMode() ==
+                    SecurityHttpEnforcementMode::Test,
+                "test flag must not be reported as production");
+#else
+  static_assert(securityHttpEnforcementMode() ==
+                    SecurityHttpEnforcementMode::Disabled,
+                "ordinary build must report disabled enforcement");
+#endif
+  static_assert(!securityHttpProductionEnforcementEnabled() ||
+                    securityHttpEnforcementEnabled(),
+                "production enforcement cannot be weakened");
   const std::string platform = readFile("platformio.ini");
   assert(platform.find("[env:m0-security-test]") != std::string::npos);
   assert(platform.find("-DVOXONE_SECURITY_HTTP_ENFORCEMENT_TEST=1") !=
