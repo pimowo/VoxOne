@@ -52,6 +52,8 @@ OTA_STATES = {
     4: "ABORTED",
     0xFFFFFFFF: "UNDEFINED",
 }
+OTA_UNDEFINED = 0xFFFFFFFF
+OTA_INVALID_STATES = {3, 4}
 
 
 class HilError(RuntimeError):
@@ -358,6 +360,57 @@ def validate_esp_image(partition: bytes) -> dict[str, object]:
     }
 
 
+def inspect_app_partition(partition: bytes) -> dict[str, object]:
+    """Classify one complete app partition without treating EMPTY as corrupt.
+
+    ESP-IDF OTA writes may leave the image header erased until the transfer is
+    committed.  An erased header with programmed bytes later in the partition
+    is therefore reported separately from both an entirely erased slot and a
+    programmed image with an invalid header.
+    """
+    programmed_bytes = sum(value != 0xFF for value in partition)
+    base: dict[str, object] = {
+        "status": "EMPTY" if programmed_bytes == 0 else "INVALID",
+        "bootable": False,
+        "programmedBytes": programmed_bytes,
+        "espImageMagic": bool(partition) and partition[0] == ESP_IMAGE_MAGIC,
+        "imageValidation": None,
+        "validationError": None,
+    }
+    if programmed_bytes == 0:
+        return base
+
+    if len(partition) < 24:
+        base["status"] = "PARTIAL"
+        base["validationError"] = "partition is shorter than the ESP image header"
+        return base
+    if partition[0] != ESP_IMAGE_MAGIC:
+        if partition[:24] == b"\xff" * 24:
+            base["status"] = "PARTIAL"
+            base["validationError"] = "erased ESP image header with programmed payload"
+        else:
+            base["validationError"] = "invalid ESP application image magic"
+        return base
+
+    try:
+        validation = validate_esp_image(partition)
+    except HilError as error:
+        message = str(error)
+        if "truncated" in message or "no checksum byte" in message:
+            base["status"] = "PARTIAL"
+        base["validationError"] = message
+        return base
+
+    base.update(
+        {
+            "status": "VALID",
+            "bootable": True,
+            "imageValidation": validation,
+        }
+    )
+    return base
+
+
 def validate_nvs(partition: bytes) -> dict[str, object]:
     if not partition or len(partition) % NVS_PAGE_SIZE:
         raise HilError("NVS partition is not page-aligned")
@@ -519,24 +572,126 @@ def validate_spiffs(partition: bytes, tool: Path | None = None) -> dict[str, obj
 
 
 def ota_record(raw: bytes, sector: int, app_count: int) -> dict[str, object]:
+    if len(raw) < 32:
+        raise HilError(f"otadata sector {sector} has no complete selection record")
+    erased = raw[:32] == b"\xff" * 32
     sequence, _, state, stored_crc = struct.unpack("<I20sII", raw[:32])
     calculated_crc = esp_ota_crc32(sequence)
     crc_valid = stored_crc == calculated_crc
     selectable = (
-        sequence != 0xFFFFFFFF
-        and state not in (3, 4)
+        sequence != OTA_UNDEFINED
+        and state not in OTA_INVALID_STATES
         and crc_valid
     )
     slot_index = (sequence - 1) % app_count if selectable and app_count else None
     return {
         "sector": sector,
+        "recordStatus": "ERASED" if erased else "PRESENT",
+        "present": not erased,
         "sequence": sequence,
+        "stateCode": state,
         "state": OTA_STATES.get(state, f"UNKNOWN_0x{state:08x}"),
         "storedCrc": f"{stored_crc:08x}",
         "calculatedCrc": f"{calculated_crc:08x}",
         "crcValid": crc_valid,
         "selectable": selectable,
         "slotIndex": slot_index,
+        "nextBootStateWithoutValidation": OTA_STATES.get(
+            state, f"UNKNOWN_0x{state:08x}"
+        ),
+    }
+
+
+def otadata_summary(
+    records: list[dict[str, object]], apps: list[dict[str, object]]
+) -> dict[str, object]:
+    candidates = [record for record in records if record["selectable"]]
+    active = max(candidates, key=lambda record: int(record["sequence"])) \
+        if candidates else None
+
+    for record in records:
+        index = record["slotIndex"]
+        record["slotLabel"] = (
+            apps[int(index)]["label"]
+            if index is not None and 0 <= int(index) < len(apps)
+            else None
+        )
+
+    active_slot = active["slotLabel"] if active else None
+    active_image = next(
+        (app for app in apps if app["label"] == active_slot), None
+    )
+    active_bootable = bool(active_image and active_image["bootable"])
+    if active is not None and active["stateCode"] == 0:
+        active["nextBootStateWithoutValidation"] = "PENDING_VERIFY"
+    elif active is not None and active["stateCode"] == 1:
+        # With rollback enabled, ESP-IDF 4.4.x marks the selected
+        # PENDING_VERIFY entry ABORTED before trying another boot unless the
+        # running application first confirms it as VALID.
+        active["nextBootStateWithoutValidation"] = "ABORTED"
+
+    # ESP-IDF 4.4.x checks the record not selected as active, maps its
+    # sequence to an OTA slot, and validates the actual image.  Partition
+    # presence or a CRC-valid record alone is not rollback availability.
+    rollback_record = None
+    if active is not None:
+        rollback_record = next(
+            (record for record in records if record["sector"] != active["sector"]),
+            None,
+        )
+    rollback_image = None
+    if rollback_record is not None and rollback_record["selectable"]:
+        rollback_image = next(
+            (app for app in apps if app["label"] == rollback_record["slotLabel"]),
+            None,
+        )
+    rollback_available = bool(
+        active_bootable and rollback_image and rollback_image["bootable"]
+    )
+    next_boot_slot = active_slot if active_bootable else None
+    if active is not None and active["stateCode"] == 1:
+        next_boot_slot = rollback_record["slotLabel"] \
+            if rollback_available and rollback_record is not None else None
+
+    initial_contents = all(
+        int(record["sequence"]) == OTA_UNDEFINED or not record["crcValid"]
+        for record in records
+    )
+    initial_boot_slot = None
+    if initial_contents:
+        first_ota = next((app for app in apps if app["label"] == "app0"), None)
+        if first_ota is not None and first_ota["bootable"]:
+            initial_boot_slot = "app0"
+    issues = []
+    if initial_contents:
+        issues.append("OTADATA_INITIAL_CONTENTS")
+    if active is not None and not active_bootable:
+        issues.append("SELECTED_SLOT_NOT_BOOTABLE")
+    if rollback_record is not None and rollback_record["selectable"] \
+            and not rollback_available:
+        issues.append("ROLLBACK_RECORD_WITHOUT_BOOTABLE_IMAGE")
+    if any(record["present"] and not record["crcValid"] for record in records):
+        issues.append("OTADATA_BAD_CRC")
+    if any(str(record["state"]).startswith("UNKNOWN_") for record in records):
+        issues.append("OTADATA_UNKNOWN_STATE")
+    return {
+        "bothSectorsErased": all(not record["present"] for record in records),
+        "initialContents": initial_contents,
+        "selectableRecordCount": len(candidates),
+        "activeRecordSector": active["sector"] if active else None,
+        "activeSequence": active["sequence"] if active else None,
+        "activeState": active["state"] if active else None,
+        "activeSlot": active_slot,
+        "activeImageBootable": active_bootable,
+        "selectionConsistent": active is not None and active_bootable,
+        "nextBootSlotWithoutValidation": next_boot_slot,
+        "initialBootSlot": initial_boot_slot,
+        "rollbackRecordSector": rollback_record["sector"] if rollback_record else None,
+        "rollbackCandidateSlot": (
+            rollback_record["slotLabel"] if rollback_record else None
+        ),
+        "rollbackAvailable": rollback_available,
+        "issues": issues,
     }
 
 
@@ -569,35 +724,29 @@ def inspect_image(image_path: Path, output_dir: Path | None = None) -> dict[str,
         ota_record(image[ota_offset:ota_offset + 32], 0, len(apps)),
         ota_record(image[ota_offset + 0x1000:ota_offset + 0x1000 + 32], 1, len(apps)),
     ]
-    candidates = [record for record in records if record["selectable"]]
-    active_record = max(candidates, key=lambda record: int(record["sequence"])) if candidates else None
-
     app_report: list[dict[str, object]] = []
     for index, app in enumerate(apps):
         offset, size = int(app["offset"]), int(app["size"])
         partition = image[offset:offset + size]
         states = [record["state"] for record in records if record["slotIndex"] == index]
+        classification = inspect_app_partition(partition)
         app_report.append(
             {
                 "label": app["label"],
                 "offset": offset,
                 "size": size,
-                "espImageMagic": image[offset] == ESP_IMAGE_MAGIC,
                 "recordedStates": states,
                 "partitionSha256": hashlib.sha256(partition).hexdigest(),
-                "imageValidation": validate_esp_image(partition),
+                **classification,
             }
         )
 
-    active_slot = None
-    if active_record is not None:
-        index = int(active_record["slotIndex"])
-        if 0 <= index < len(apps):
-            active_slot = apps[index]["label"]
+    ota_status = otadata_summary(records, app_report)
+    active_slot = ota_status["activeSlot"]
     previous_candidates = [
         app["label"] for index, app in enumerate(app_report)
         if app["label"] != active_slot
-        and app["espImageMagic"]
+        and app["bootable"]
         and "VALID" in app["recordedStates"]
     ]
 
@@ -608,8 +757,10 @@ def inspect_image(image_path: Path, output_dir: Path | None = None) -> dict[str,
         "partitions": partitions,
         "partitionTable": partition_table,
         "otadata": records,
+        "otadataSummary": ota_status,
         "selectedBootSlot": active_slot,
-        "selectedRecordSector": active_record["sector"] if active_record else None,
+        "selectedRecordSector": ota_status["activeRecordSector"],
+        "rollbackAvailable": ota_status["rollbackAvailable"],
         "apps": app_report,
         "nvsIntegrity": validate_nvs(
             image[
@@ -627,7 +778,9 @@ def inspect_image(image_path: Path, output_dir: Path | None = None) -> dict[str,
         "limitations": [
             "selectedBootSlot is inferred from otadata captured after manual ROM-loader entry",
             "offline inspection cannot prove chip revision, anti-rollback eFuse, or runtime health",
-            "a rollback candidate is reported only with image magic and a CRC-valid VALID record",
+            "selectedBootSlot models otadata selection; a damaged selected image may still make the bootloader fall back to another partition",
+            "rollbackAvailable models ESP-IDF 4.4.x record selection plus full offline ESP image validation, not runtime health",
+            "PARTIAL distinguishes an erased/deferred header or structurally truncated image; arbitrary interrupted writes can still classify as INVALID",
             "NVS and SPIFFS reports expose aggregate integrity only, never keys, names, or values",
         ],
     }
