@@ -399,7 +399,7 @@ def manifest_for_image(
         },
         "requiredAssets": validation["requiredAssets"],
         "limitations": [
-            "wwwBuild is service metadata until WWW-ASSET-INTEGRITY-1 embeds a contract in the image",
+            "wwwBuild is operator service metadata, not a cryptographic identity",
             "this manifest is not a cryptographic release signature",
         ],
     }

@@ -972,17 +972,24 @@ bool NetServer::begin(bool quiet) {
   webserver.on("/api/ready", HTTP_GET, [](AsyncWebServerRequest* request) {
     voxone::ota::reportHttpApiProbe();
     char ota[448];
-    char body[576];
+    char www[768];
     if (!voxone::ota::formatBootHealthJson(ota, sizeof(ota)))
       std::snprintf(ota, sizeof(ota),
                     "{\"health\":\"diagnostic_error\"}");
-    snprintf(body, sizeof(body),
-             "{\"ready\":%s,\"bootId\":\"%08lx\",\"ota\":%s}",
-             voxone::ota::bootHealthReady() ? "true" : "false",
-             static_cast<unsigned long>(webBootId), ota);
-    AsyncWebServerResponse* response = request->beginResponse(
-        200, "application/json; charset=utf-8", body);
+    if (!voxone::www_integrity::formatJson(config.wwwAssetIntegrity, www,
+                                            sizeof(www)))
+      std::snprintf(www, sizeof(www),
+                    "{\"status\":\"READ_ERROR\","
+                    "\"integrity\":\"failed\","
+                    "\"contract\":\"unverifiable\"}");
+    AsyncResponseStream* response =
+        request->beginResponseStream("application/json; charset=utf-8");
     response->addHeader("Cache-Control", "no-store, max-age=0");
+    response->printf(
+        "{\"ready\":%s,\"bootId\":\"%08lx\",\"ota\":%s,"
+        "\"www\":%s}",
+        voxone::ota::bootHealthReady() ? "true" : "false",
+        static_cast<unsigned long>(webBootId), ota, www);
     request->send(response);
   });
 #if VOXONE_BT_UPDATE_UPLOAD

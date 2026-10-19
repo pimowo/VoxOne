@@ -7,10 +7,16 @@ import os
 import re
 import shutil
 import subprocess
+import sys
 import tempfile
 
 
 ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT / "scripts"))
+
+from www_asset_manifest import (  # noqa: E402
+    contract_from_header, parse_manifest, verify_assets,
+)
 
 
 def resolve_chrome():
@@ -1669,6 +1675,15 @@ def main():
         stored = gzip.decompress((ROOT / "data/www" / f"{asset}.gz").read_bytes())
         assert stored == expected_assets[asset], \
             f"canonical gzip fallback asset {asset} must match its source"
+    www_manifest = parse_manifest(
+        (ROOT / "data/www/assets.vxwm").read_bytes())
+    verify_assets(ROOT / "data/www", www_manifest)
+    www_contract = contract_from_header(ROOT / "src/core/www_readiness.h")
+    assert [item["path"] for item in www_manifest["assets"]] == \
+        www_contract["paths"], \
+        "WWW manifest must inventory the exact canonical asset set"
+    assert r'\"www\":%s' in route and "wwwAssetIntegrity" in route, \
+        "/api/ready must append cached WWW integrity diagnostics"
     assert "RejectedDirectCompressedAsset" in access_policy and \
            "DirectCompressedAssetDenied" in access_policy, \
         "direct compressed asset URLs must have an explicit deny policy"

@@ -23,6 +23,7 @@
 #include "ui_timeout_config.h"
 #include "ui_state.h"
 #include "www_readiness.h"
+#include "www_asset_integrity.h"
 #include "ap_wifi_recovery.h"
 #include "wifi_config_atomic.h"
 #include "wifi_config_parser.h"
@@ -108,6 +109,52 @@ class WifiConfigSpiffsStorage {
   }
 };
 
+class SpiffsAssetFile : public voxone::www_integrity::AssetFile {
+ public:
+  bool open(const char* path) override {
+    close();
+    file_ = SPIFFS.open(path, "r");
+    return file_ && !file_.isDirectory();
+  }
+  void close() override {
+    if (file_) file_.close();
+  }
+  uint32_t size() const override {
+    return file_ ? static_cast<uint32_t>(file_.size()) : 0;
+  }
+  bool seek(uint32_t offset) override {
+    return file_ && file_.seek(offset);
+  }
+  bool read(uint8_t* output, std::size_t capacity,
+            std::size_t& bytesRead) override {
+    bytesRead = 0;
+    if (!file_ || (!output && capacity)) return false;
+    bytesRead = file_.read(output, capacity);
+    return bytesRead > 0 || capacity == 0;
+  }
+
+ private:
+  File file_;
+};
+
+class SpiffsAssetStore : public voxone::www_integrity::AssetStore {
+ public:
+  explicit SpiffsAssetStore(bool mounted) : mounted_(mounted) {}
+  bool mounted() const override { return mounted_; }
+  bool exists(const char* path) const override {
+    return mounted_ && SPIFFS.exists(path);
+  }
+  voxone::www_integrity::AssetFile& manifestFile() override {
+    return manifest_;
+  }
+  voxone::www_integrity::AssetFile& assetFile() override { return asset_; }
+
+ private:
+  bool mounted_;
+  SpiffsAssetFile manifest_;
+  SpiffsAssetFile asset_;
+};
+
 int8_t clampTone(int8_t value) {
   return constrain(value, TONE_MIN, TONE_MAX);
 }
@@ -126,12 +173,6 @@ Config config;
 void u8fix(char *src){
   char last = src[strlen(src)-1]; 
   if ((uint8_t)last >= 0xC2) src[strlen(src)-1]='\0';
-}
-
-bool Config::_hasCurrentWwwAssets() {
-  return voxone::currentWwwAssetsReady([](const char* path) {
-    return SPIFFS.exists(path);
-  });
 }
 
 void Config::init() {
@@ -159,6 +200,7 @@ void Config::init() {
   webUpdateDataReady = false;
   wifiConfigReady = false;
   currentWwwReady = false;
+  wwwAssetIntegrity = voxone::www_integrity::Report{};
   radioPlaylistReady = false;
   uint8_t configArea[EEPROM_SIZE - EEPROM_START]{};
   if (eepromReady) {
@@ -216,8 +258,21 @@ void Config::init() {
   radioPlaylistReady = playlistStore.begin() && playlistStore.recover();
   if (!radioPlaylistReady)
     Serial.println("##[ERROR]# Playlist recovery incomplete");
-  currentWwwReady = _hasCurrentWwwAssets();
-  if (!currentWwwReady) BOOTLOG("Current VoxOne WWW assets are incomplete!");
+  SpiffsAssetStore wwwAssets(spiffsMounted);
+  const uint32_t wwwVerifyStarted = millis();
+  wwwAssetIntegrity = voxone::www_integrity::verify(
+      wwwAssets, voxone::kFirmwareWwwContract);
+  wwwAssetIntegrity.elapsedMs = millis() - wwwVerifyStarted;
+  currentWwwReady = wwwAssetIntegrity.wwwUsable;
+  BOOTLOG("WWW assets status=%s contract=%s files=%u bytes=%lu time=%lums",
+          voxone::www_integrity::statusName(wwwAssetIntegrity.status),
+          voxone::www_integrity::contractStatusName(wwwAssetIntegrity.contract),
+          static_cast<unsigned>(wwwAssetIntegrity.filesChecked),
+          static_cast<unsigned long>(wwwAssetIntegrity.bytesChecked),
+          static_cast<unsigned long>(wwwAssetIntegrity.elapsedMs));
+  if (!currentWwwReady)
+    BOOTLOG("Current VoxOne WWW assets are not usable: %s",
+            wwwAssetIntegrity.problemAsset);
   ssidsCount = 0;
   setTimeConf();
 }

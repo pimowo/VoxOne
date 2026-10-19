@@ -55,7 +55,9 @@ int main() {
   assert(!contains(configHeader, "_removeObsoleteWwwFiles"));
 
   assert(contains(configHeader, "currentWwwReady"));
-  assert(contains(config, "currentWwwReady = _hasCurrentWwwAssets()"));
+  assert(contains(config, "www_integrity::verify"));
+  assert(contains(config, "currentWwwReady = wwwAssetIntegrity.wwwUsable"));
+  assert(exists("data/www/assets.vxwm"));
   for (const char* path : {"/www/voxone.html.gz", "/www/voxone.css.gz",
                            "/www/voxone.js.gz", "/www/advanced-audio.js.gz",
                            "/www/dsp-client.js.gz", "/www/voxone-logo.svg.gz",

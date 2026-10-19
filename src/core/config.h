@@ -6,6 +6,7 @@
 #include <SPIFFS.h>
 #include <EEPROM.h>
 #include "config_persistence.h"
+#include "www_asset_integrity.h"
 #include "wifi_config_parser.h"
 #include <freertos/semphr.h>
 #include "../displays/widgets/widgetsconfig.h" //BitrateFormat
@@ -152,6 +153,7 @@ class Config {
     bool     webUpdateDataReady;
     bool     wifiConfigReady;
     bool     currentWwwReady;
+    voxone::www_integrity::Report wwwAssetIntegrity;
     bool     radioPlaylistReady;
     uint16_t vuThreshold;
     uint16_t screensaverTicks;
@@ -277,7 +279,6 @@ class Config {
     void _normalizeProductConfig();
     void _normalizeAudioConfig();
     void _initHW();
-    bool _hasCurrentWwwAssets();
 };
 
 extern Config config;

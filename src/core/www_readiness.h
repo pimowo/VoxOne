@@ -1,8 +1,16 @@
 #pragma once
 
 #include <cstddef>
+#include <cstdint>
 
 namespace voxone {
+
+constexpr uint16_t kWwwManifestSchema = 1;
+constexpr uint16_t kFirmwareWwwContract = 1;
+constexpr uint16_t kCurrentBundleWwwContract = 1;
+constexpr uint16_t kCurrentBundleFirmwareContractMin = 1;
+constexpr uint16_t kCurrentBundleFirmwareContractMax = 1;
+constexpr const char* kWwwAssetManifestPath = "/www/assets.vxwm";
 
 static const char* const kCurrentWwwAssetPaths[] = {
     "/www/voxone.html.gz",

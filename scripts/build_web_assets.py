@@ -7,11 +7,13 @@ import hashlib
 from io import BytesIO
 from pathlib import Path
 
+from www_asset_manifest import build_manifest, contract_from_header, MANIFEST_NAME
+
 
 PROJECT_DIR = Path(env.subst("$PROJECT_DIR"))
 SOURCE_DIR = PROJECT_DIR / "web-src"
 TARGET_DIR = PROJECT_DIR / "data" / "www"
-ASSETS = ("voxone.html", "voxone.css", "voxone.js", "advanced-audio.js", "dsp-client.js", "voxone-logo.svg", "voxone-symbol.svg")
+CONTRACT_HEADER = PROJECT_DIR / "src" / "core" / "www_readiness.h"
 
 
 def compress(data):
@@ -26,21 +28,33 @@ def source_bytes(name):
 
 
 def build_assets():
+    contract = contract_from_header(CONTRACT_HEADER)
+    assets = tuple(path.removeprefix("/www/").removesuffix(".gz")
+                   for path in contract["paths"])
     hashes = {
         name: hashlib.sha256(source_bytes(name)).hexdigest()[:12]
-        for name in ASSETS if name != "voxone.html"
+        for name in assets if name != "voxone.html"
     }
     html = source_bytes("voxone.html").decode("utf-8")
     for name, digest in hashes.items():
         html = html.replace("{" + name + "-hash}", digest)
 
-    for name in ASSETS:
+    for name in assets:
         data = html.encode("utf-8") if name == "voxone.html" else source_bytes(name)
         target = TARGET_DIR / (name + ".gz")
         compressed = compress(data)
         if not target.exists() or target.read_bytes() != compressed:
             target.write_bytes(compressed)
         print(f"WEB-1A asset: {name} {len(data)} B -> {len(compressed)} B")
+
+    manifest, report = build_manifest(TARGET_DIR, contract)
+    manifest_path = TARGET_DIR / MANIFEST_NAME
+    if not manifest_path.exists() or manifest_path.read_bytes() != manifest:
+        manifest_path.write_bytes(manifest)
+    print(
+        f"WWW manifest: {len(manifest)} B assetSet={report['assetSetId']} "
+        f"contract={report['wwwContract']}"
+    )
 
 
 build_assets()

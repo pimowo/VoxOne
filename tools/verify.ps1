@@ -71,6 +71,9 @@ function Get-AssetHashes {
   if(-not (Test-Path -LiteralPath $path)) { throw "Missing $path" }
   $hashes[$name]=(Get-FileHash -LiteralPath $path -Algorithm SHA256).Hash
  }
+ $manifest=Join-Path $root 'data/www/assets.vxwm'
+ if(-not (Test-Path -LiteralPath $manifest)) { throw "Missing $manifest" }
+ $hashes['assets.vxwm']=(Get-FileHash -LiteralPath $manifest -Algorithm SHA256).Hash
  return $hashes
 }
 function Assert-WebAssets {
@@ -95,7 +98,11 @@ function Assert-WebAssets {
   if($actual.Length -ne $source.Length) { throw "Asset size mismatch: $name" }
   for($i=0;$i -lt $source.Length;$i++) { if($actual[$i] -ne $source[$i]) { throw "Asset content mismatch: $name" } }
  }
- Write-Host '  seven gzip assets match web-src'
+ & $Python (Join-Path $root 'scripts/www_asset_manifest.py') `
+   (Join-Path $root 'data/www/assets.vxwm') '--asset-dir' `
+   (Join-Path $root 'data/www') '--verify-assets'
+ if($LASTEXITCODE -ne 0) { throw 'WWW asset manifest validation failed' }
+ Write-Host '  seven gzip assets and manifest match web-src'
 }
 $nativeSources=@{
  bt_link_native=@('src/core/bt_link_protocol.cpp')
@@ -140,6 +147,7 @@ $nativeSources=@{
  station_directory_native=@('src/core/station_directory_format.cpp')
  volume_limits_native=@('src/core/volume_map.cpp')
  websocket_command_native=@('src/core/websocket_command.cpp')
+ www_asset_integrity_native=@('src/core/www_asset_integrity.cpp')
 }
 $tests=@(Get-ChildItem -LiteralPath (Join-Path $root 'test') -Filter '*_native.cpp' -File | Sort-Object Name)
 Invoke-Step 'Display boot branding assets' {
@@ -362,6 +370,13 @@ if(-not $onWindows) {
   if($LASTEXITCODE -ne 0) { throw 'Sanitized security HTTP adapter compile failed' }
   & $securityHttpExe
   if($LASTEXITCODE -ne 0) { throw 'Sanitized security HTTP adapter test failed' }
+  $wwwIntegrityExe=Join-Path $work 'www_asset_integrity_sanitized'
+  & $Cxx @sanitizerArgs '-o' $wwwIntegrityExe `
+    (Join-Path $root 'test/www_asset_integrity_native.cpp') `
+    (Join-Path $root 'src/core/www_asset_integrity.cpp')
+  if($LASTEXITCODE -ne 0) { throw 'Sanitized WWW asset integrity compile failed' }
+  & $wwwIntegrityExe
+  if($LASTEXITCODE -ne 0) { throw 'Sanitized WWW asset integrity test failed' }
   $websocketCommandExe=Join-Path $work 'websocket_command_sanitized'
   & $Cxx @sanitizerArgs '-o' $websocketCommandExe `
     (Join-Path $root 'test/websocket_command_native.cpp') `
@@ -376,7 +391,7 @@ Invoke-Step 'Web Update headless' {
  if($LASTEXITCODE -ne 0) { throw 'Existing Chrome test failed' }
 }
 Invoke-Step 'HIL diagnostics' {
- foreach($testName in @('m0_flash_backup_test.py','security_enforce_hil_test.py','spiffs_usb_recovery_test.py')) {
+ foreach($testName in @('m0_flash_backup_test.py','security_enforce_hil_test.py','spiffs_usb_recovery_test.py','www_asset_manifest_test.py')) {
   & $Python (Join-Path $root "test/$testName") 2>&1 | ForEach-Object { Write-Host $_ }
   if($LASTEXITCODE -ne 0) { throw "HIL diagnostic test failed: $testName" }
  }
