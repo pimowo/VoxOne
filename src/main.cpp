@@ -169,6 +169,9 @@ void setupOTA(){
 
 void setup() {
   Serial.begin(115200);
+#if !VOXONE_SERIALCLI_RX_ENABLED
+  Serial.println("##[SERIALCLI]# RX commands disabled; UART0 TX-only build");
+#endif
   voxone::ota::beginBootHealthMonitor();
   const auto recoveryKeyState =
       voxone::security_recovery::detectBootKeyGesture();

@@ -384,6 +384,12 @@ if(-not $onWindows) {
   if($LASTEXITCODE -ne 0) { throw 'Sanitized WebSocket command compile failed' }
   & $websocketCommandExe
   if($LASTEXITCODE -ne 0) { throw 'Sanitized WebSocket command test failed' }
+  $serialCliInputExe=Join-Path $work 'serialcli_input_sanitized'
+  & $Cxx @sanitizerArgs '-o' $serialCliInputExe `
+    (Join-Path $root 'test/serialcli_input_native.cpp')
+  if($LASTEXITCODE -ne 0) { throw 'Sanitized SerialCli input compile failed' }
+  & $serialCliInputExe
+  if($LASTEXITCODE -ne 0) { throw 'Sanitized SerialCli input test failed' }
  }
 }
 Invoke-Step 'Web Update headless' {
@@ -391,7 +397,7 @@ Invoke-Step 'Web Update headless' {
  if($LASTEXITCODE -ne 0) { throw 'Existing Chrome test failed' }
 }
 Invoke-Step 'HIL diagnostics' {
- foreach($testName in @('m0_flash_backup_test.py','security_enforce_hil_test.py','spiffs_usb_recovery_test.py','www_asset_manifest_test.py')) {
+ foreach($testName in @('m0_flash_backup_test.py','security_enforce_hil_test.py','spiffs_usb_recovery_test.py','uart_rx_logger_test.py','www_asset_manifest_test.py')) {
   & $Python (Join-Path $root "test/$testName") 2>&1 | ForEach-Object { Write-Host $_ }
   if($LASTEXITCODE -ne 0) { throw "HIL diagnostic test failed: $testName" }
  }
@@ -428,6 +434,14 @@ foreach($target in @('l0','m0','s0','din0','w0')) {
    Free=$appPartitionSize-$firmwareSize
   }
  }
+}
+Invoke-Step 'L0 TX-only' {
+ Invoke-Pio 'l0-tx-only-firmware' @('run','-e','l0-tx-only')
+ $bin=Join-Path $root '.pio/build/l0-tx-only/firmware.bin'
+ if(-not (Test-Path -LiteralPath $bin)) { throw 'Missing L0 TX-only firmware.bin' }
+ $firmwareSize=(Get-Item -LiteralPath $bin).Length
+ if($firmwareSize -gt $appPartitionSize) { throw 'L0 TX-only firmware exceeds app partition' }
+ $sizes['L0-TX-ONLY']=$firmwareSize
 }
 Invoke-Step 'WWW repeatability' {
  Assert-WebAssets

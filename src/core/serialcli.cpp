@@ -7,6 +7,7 @@
 #include "network.h"
 #include "network_diagnostics.h"
 #include "serialcli.h"
+#include "serialcli_command_match.h"
 #include "update_progress.h"
 #include "wifi_cli_parser.h"
 #include "../hardware/runtime_hardware_config.h"
@@ -75,10 +76,15 @@ const char* runtimeHardwareSaveStatusName(
 SerialCli serialCli;
 
 void SerialCli::handleSerial() {
-  if (!Serial.available()) return;
-  String request = Serial.readStringUntil('\n');
-  request.trim();
-  on_input(request.c_str(), 0);
+  uint16_t remaining = voxone::serialcli::kMaxBytesPerLoop;
+  while (remaining-- != 0 && Serial.available() > 0) {
+    const int value = Serial.read();
+    if (value < 0) break;
+    const auto event = input_.feed(static_cast<uint8_t>(value), millis());
+    if (event == voxone::serialcli::InputEvent::FrameReady)
+      on_input(input_.frame(), 0);
+  }
+  input_.tick(millis());
 }
 
 void SerialCli::loop() {
@@ -106,6 +112,12 @@ void SerialCli::printf(uint8_t id, const char *format, ...) {
   va_end(args);
   Serial.print(message);
 }
+
+void SerialCli::commandError(uint8_t clientId) {
+  if (commandErrorLimiter_.allow(millis()))
+    printf(clientId, "##CMD_ERROR#\tunknown command\n> ");
+}
+
 void SerialCli::info() {
   printf("##CLI.INFO#\n");
   strftime(config.tmpBuf, sizeof(config.tmpBuf), "%Y-%m-%dT%H:%M:%S%z", &network.timeinfo);
@@ -241,7 +253,9 @@ void SerialCli::on_input(const char* str, uint8_t clientId) {
       return;
     }
     int volume;
-    if (sscanf(str, "vol(%d)", &volume) == 1 || sscanf(str, "cli.vol(\"%d\")", &volume) == 1 || sscanf(str, "vol %d", &volume) == 1) {
+    if (voxone::serialcli::matchInt(str, "vol(%d)%n", volume) ||
+        voxone::serialcli::matchInt(str, "cli.vol(\"%d\")%n", volume) ||
+        voxone::serialcli::matchInt(str, "vol %d%n", volume)) {
       if (volume < 0) volume = 0;
       if (volume > 254) volume = 254;
       player.setVol(volume);
@@ -252,7 +266,9 @@ void SerialCli::on_input(const char* str, uint8_t clientId) {
       return;
     }
     int ainfo;
-    if (sscanf(str, "audioinfo(%d)", &ainfo) == 1 || sscanf(str, "cli.audioinfo(\"%d\")", &ainfo) == 1 || sscanf(str, "audioinfo %d", &ainfo) == 1) {
+    if (voxone::serialcli::matchInt(str, "audioinfo(%d)%n", ainfo) ||
+        voxone::serialcli::matchInt(str, "cli.audioinfo(\"%d\")%n", ainfo) ||
+        voxone::serialcli::matchInt(str, "audioinfo %d%n", ainfo)) {
       config.saveValue(&config.store.audioinfo, ainfo > 0);
       printf(clientId, "new audioinfo value is: %d\n> ", config.store.audioinfo);
       return;
@@ -262,7 +278,9 @@ void SerialCli::on_input(const char* str, uint8_t clientId) {
       return;
     }
     int sstart;
-    if (sscanf(str, "smartstart(%d)", &sstart) == 1 || sscanf(str, "cli.smartstart(\"%d\")", &sstart) == 1 || sscanf(str, "smartstart %d", &sstart) == 1) {
+    if (voxone::serialcli::matchInt(str, "smartstart(%d)%n", sstart) ||
+        voxone::serialcli::matchInt(str, "cli.smartstart(\"%d\")%n", sstart) ||
+        voxone::serialcli::matchInt(str, "smartstart %d%n", sstart)) {
       config.saveValue(&config.store.smartstart, static_cast<uint8_t>(sstart));
       printf(clientId, "new smartstart value is: %d\n> ", config.store.smartstart);
       return;
@@ -301,7 +319,9 @@ void SerialCli::on_input(const char* str, uint8_t clientId) {
       return;
     }
     int sb;
-    if (sscanf(str, "play(%d)", &sb) == 1 || sscanf(str, "cli.play(\"%d\")", &sb) == 1 || sscanf(str, "play %d", &sb) == 1 ) {
+    if (voxone::serialcli::matchInt(str, "play(%d)%n", sb) ||
+        voxone::serialcli::matchInt(str, "cli.play(\"%d\")%n", sb) ||
+        voxone::serialcli::matchInt(str, "play %d%n", sb)) {
       if (sb < 1) sb = 1;
       uint16_t cs = config.playlistLength();
       if (sb >= cs) sb = cs;
@@ -314,7 +334,10 @@ void SerialCli::on_input(const char* str, uint8_t clientId) {
     }
     //int16_t tzh, tzm;
     int tzh, tzm;
-    if (sscanf(str, "tzo(%d:%d)", &tzh, &tzm) == 2 || sscanf(str, "sys.tzo(\"%d:%d\")", &tzh, &tzm) == 2 || sscanf(str, "tzo %d:%d", &tzh, &tzm) == 2) {
+    if (voxone::serialcli::matchTwoInts(str, "tzo(%d:%d)%n", tzh, tzm) ||
+        voxone::serialcli::matchTwoInts(
+            str, "sys.tzo(\"%d:%d\")%n", tzh, tzm) ||
+        voxone::serialcli::matchTwoInts(str, "tzo %d:%d%n", tzh, tzm)) {
       if (tzh < -12) tzh = -12;
       if (tzh > 14) tzh = 14;
       if (tzm < 0) tzm = 0;
@@ -328,7 +351,9 @@ void SerialCli::on_input(const char* str, uint8_t clientId) {
       network.requestTimeSync(true);
       return;
     }
-    if (sscanf(str, "tzo(%d)", &tzh) == 1 || sscanf(str, "sys.tzo(\"%d\")", &tzh) == 1 || sscanf(str, "tzo %d", &tzh) == 1) {
+    if (voxone::serialcli::matchInt(str, "tzo(%d)%n", tzh) ||
+        voxone::serialcli::matchInt(str, "sys.tzo(\"%d\")%n", tzh) ||
+        voxone::serialcli::matchInt(str, "tzo %d%n", tzh)) {
       if (tzh < -12) tzh = -12;
       if (tzh > 14) tzh = 14;
       config.setTimezone((int8_t)tzh, 0);
@@ -340,32 +365,43 @@ void SerialCli::on_input(const char* str, uint8_t clientId) {
       network.requestTimeSync(true);
       return;
     }
-    if (sscanf(str, "dspon(%d)", &tzh) == 1 || sscanf(str, "cli.dspon(\"%d\")", &tzh) == 1 || sscanf(str, "dspon %d", &tzh) == 1) {
+    if (voxone::serialcli::matchInt(str, "dspon(%d)%n", tzh) ||
+        voxone::serialcli::matchInt(str, "cli.dspon(\"%d\")%n", tzh) ||
+        voxone::serialcli::matchInt(str, "dspon %d%n", tzh)) {
       config.setDspOn(tzh!=0);
       return;
     }
-    if (sscanf(str, "dim(%d)", &tzh) == 1 || sscanf(str, "cli.dim(\"%d\")", &tzh) == 1 || sscanf(str, "dim %d", &tzh) == 1) {
+    if (voxone::serialcli::matchInt(str, "dim(%d)%n", tzh) ||
+        voxone::serialcli::matchInt(str, "cli.dim(\"%d\")%n", tzh) ||
+        voxone::serialcli::matchInt(str, "dim %d%n", tzh)) {
       if (tzh < 0) tzh = 0;
       if (tzh > 100) tzh = 100;
       config.store.brightness = (uint8_t)tzh;
       config.setBrightness(true);
       return;
     }
-    if (sscanf(str, "sleep(%d,%d)", &tzh, &tzm) == 2 || sscanf(str, "cli.sleep(\"%d\",\"%d\")", &tzh, &tzm) == 2 || sscanf(str, "sleep %d %d", &tzh, &tzm) == 2) {
+    if (voxone::serialcli::matchTwoInts(
+            str, "sleep(%d,%d)%n", tzh, tzm) ||
+        voxone::serialcli::matchTwoInts(
+            str, "cli.sleep(\"%d\",\"%d\")%n", tzh, tzm) ||
+        voxone::serialcli::matchTwoInts(
+            str, "sleep %d %d%n", tzh, tzm)) {
       if(tzh>0 && tzm>0) {
         printf(clientId, "sleep for %d minutes after %d minutes ...\n> ", tzh, tzm);
         config.sleepForAfter(tzh, tzm);
       }else{
-        printf(clientId, "##CMD_ERROR#\tunknown command <%s>\n> ", str);
+        commandError(clientId);
       }
       return;
     }
-    if (sscanf(str, "sleep(%d)", &tzh) == 1 || sscanf(str, "cli.sleep(\"%d\")", &tzh) == 1 || sscanf(str, "sleep %d", &tzh) == 1) {
+    if (voxone::serialcli::matchInt(str, "sleep(%d)%n", tzh) ||
+        voxone::serialcli::matchInt(str, "cli.sleep(\"%d\")%n", tzh) ||
+        voxone::serialcli::matchInt(str, "sleep %d%n", tzh)) {
       if(tzh>0) {
         printf(clientId, "sleep for %d minutes ...\n> ", tzh);
         config.sleepForAfter(tzh);
       }else{
-        printf(clientId, "##CMD_ERROR#\tunknown command <%s>\n> ", str);
+        commandError(clientId);
       }
       return;
     }
@@ -445,9 +481,12 @@ void SerialCli::on_input(const char* str, uint8_t clientId) {
     return;
   }
   if (quotedCredentials == voxone::wifi_cli::ParseStatus::Valid ||
-      sscanf(str, "wifi.con(%49[^,],%49[^)])", ssidbuf, passbuff) == 2 ||
-      sscanf(str, "wifi.con(%49[^ ] %49[^)])", ssidbuf, passbuff) == 2 ||
-      sscanf(str, "wifi %49[^ ] %49s", ssidbuf, passbuff) == 2) {
+      voxone::serialcli::matchTwoStrings(
+          str, "wifi.con(%49[^,],%49[^)])%n", ssidbuf, passbuff) ||
+      voxone::serialcli::matchTwoStrings(
+          str, "wifi.con(%49[^ ] %49[^)])%n", ssidbuf, passbuff) ||
+      voxone::serialcli::matchTwoStrings(
+          str, "wifi %49[^ ] %49s%n", ssidbuf, passbuff)) {
     if (!config.saveWifiCredentials(ssidbuf, passbuff)) {
       printf(clientId, "Wi-Fi credentials invalid or save failed\n> ");
       return;
@@ -524,5 +563,5 @@ void SerialCli::on_input(const char* str, uint8_t clientId) {
     WiFi.disconnect();
     return;
   }
-  printf(clientId, "##CMD_ERROR#\tunknown command <%s>\n> ", str);
+  commandError(clientId);
 }
