@@ -1,9 +1,11 @@
 #include "options.h"
+#include <DNSServer.h>
 #include <ESPmDNS.h>
 #include "time.h"
 #include "rtcsupport.h"
 #include "network.h"
 #include "first_boot_core.h"
+#include "first_boot_captive.h"
 #include "display.h"
 #include "config.h"
 #include "serialcli.h"
@@ -29,6 +31,16 @@ MyNetwork network;
 char apSsid[14] = "VoxOne-Setup";
 
 namespace {
+
+constexpr uint16_t kCaptiveDnsPort = 53;
+DNSServer captiveDnsServer;
+bool captiveDnsActive = false;
+
+void stopCaptiveDns() {
+  if (!captiveDnsActive) return;
+  captiveDnsServer.stop();
+  captiveDnsActive = false;
+}
 
 void formatIpAddress(char* output, size_t outputSize, const IPAddress& address) {
   voxone::network_diagnostics::formatIpv4(
@@ -345,6 +357,8 @@ void MyNetwork::resetWifiReassociation() {
 void MyNetwork::loop() {
   if (systemRestartPending()) return;
 
+  if (captiveDnsActive) captiveDnsServer.processNextRequest();
+
   const uint32_t nowMs = millis();
   bool reconnect = false;
   uint8_t attempt = 0;
@@ -570,6 +584,7 @@ void rebootTime() {
 }
 
 void MyNetwork::raiseSoftAP() {
+  stopCaptiveDns();
   deactivateStaAttempt();
   staReconnectEnabled = false;
   resetWifiReassociation();
@@ -594,6 +609,14 @@ void MyNetwork::raiseSoftAP() {
   if (apReady) {
     const String apIp = WiFi.softAPIP().toString();
     presentationState.activateAp(apSsid, apIp.c_str(), true);
+    const auto binding = voxone::first_boot::webBindingFor(
+        presentationState.read());
+    if (voxone::first_boot::captivePortalActive(binding)) {
+      captiveDnsActive = captiveDnsServer.start(
+          kCaptiveDnsPort, "*", WiFi.softAPIP());
+      BOOTLOG("FIRST BOOT captive DNS: %s",
+              captiveDnsActive ? "ready" : "failed");
+    }
   } else {
     presentationState.activateAp(nullptr, nullptr, false);
   }

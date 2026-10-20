@@ -40,6 +40,7 @@
 #include "config_backup_web.h"
 #include "config_restore_adapter.h"
 #include "configuration_mutation.h"
+#include "first_boot_captive.h"
 #include "first_boot_transaction_runtime.h"
 #include "version.h"
 #if defined(VOXONE_PROFILE_L0)
@@ -1737,6 +1738,12 @@ voxone::security::SecurityHttpDecision authorizeHttpRequest(
                                              request->url().length())) {
     return {SecurityAccessStatus::UnknownRoute, 404, false, false};
   }
+  const auto presentation = network.presentationSnapshot();
+  const auto webBinding = voxone::first_boot::webBindingFor(presentation);
+  if (voxone::first_boot::captivePortalRedirectAllowed(
+          webBinding, request->method() == HTTP_GET,
+          request->url().c_str()))
+    return {SecurityAccessStatus::Allowed, 200, true, false};
   size_t hostHeaders = 0;
   size_t originHeaders = 0;
   for (size_t index = 0; index < request->headers(); ++index) {
@@ -1757,8 +1764,6 @@ voxone::security::SecurityHttpDecision authorizeHttpRequest(
   }
   clearSensitive(token, sizeof(token));
 
-  const auto presentation = network.presentationSnapshot();
-  const auto webBinding = voxone::first_boot::webBindingFor(presentation);
   const bool originPresent = originHeaders != 0;
   const SecurityAccessRequest access{
       deviceSecurityService().state(), accessMethod,
@@ -3693,6 +3698,21 @@ void handleNotFound(AsyncWebServerRequest * request) {
       !(request->method() == HTTP_POST && request->url() == "/update")) {
     request->send(503, "text/plain", "Update in progress");
     return;
+  }
+  if (request->method() == HTTP_GET) {
+    const auto presentation = network.presentationSnapshot();
+    const auto binding = voxone::first_boot::webBindingFor(presentation);
+    if (voxone::first_boot::captivePortalRedirectAllowed(
+            binding, true, request->url().c_str())) {
+      String location = "http://";
+      location += presentation.apAddress;
+      location += "/";
+      AsyncWebServerResponse* response = request->beginResponse(302);
+      response->addHeader("Location", location);
+      response->addHeader("Cache-Control", "no-store, max-age=0");
+      request->send(response);
+      return;
+    }
   }
 #if defined(HTTP_USER) && defined(HTTP_PASS)
   if(network.status == CONNECTED)

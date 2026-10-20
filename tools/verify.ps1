@@ -234,6 +234,12 @@ if(-not $onWindows) {
   if($LASTEXITCODE -ne 0) { throw 'Sanitized FIRST BOOT runtime snapshot compile failed' }
   & $runtimeSnapshotExe
   if($LASTEXITCODE -ne 0) { throw 'Sanitized FIRST BOOT runtime snapshot test failed' }
+  $firstBootCaptiveExe=Join-Path $work 'first_boot_captive_sanitized'
+  & $Cxx @sanitizerArgs '-o' $firstBootCaptiveExe `
+    (Join-Path $root 'test/first_boot_captive_native.cpp')
+  if($LASTEXITCODE -ne 0) { throw 'Sanitized FIRST BOOT captive compile failed' }
+  & $firstBootCaptiveExe
+  if($LASTEXITCODE -ne 0) { throw 'Sanitized FIRST BOOT captive test failed' }
   $firstBootTransactionExe=Join-Path $work 'first_boot_transaction_sanitized'
   & $Cxx @sanitizerArgs '-pthread' '-DVOXONE_PROFILE_L0=1' '-o' $firstBootTransactionExe `
     (Join-Path $root 'test/first_boot_transaction_native.cpp') `
