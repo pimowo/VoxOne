@@ -6,7 +6,8 @@
 using namespace voxone::ota;
 
 static FirmwareUpdatePreflightInput validPreflight() {
-  return {true, DurableImageState::Valid, true, true, true};
+  return {OtaStateReadStatus::Readable, DurableImageState::Valid,
+          true, true, true};
 }
 
 int main() {
@@ -28,9 +29,17 @@ int main() {
          FirmwareUpdateBlock::RunningImageNotValid);
 
   input = validPreflight();
-  input.otaStateReadable = false;
+  input.otaStateStatus = OtaStateReadStatus::Unreadable;
   assert(firmwareUpdateBlock(input) ==
          FirmwareUpdateBlock::OtaStateUnreadable);
+
+  input = validPreflight();
+  input.otaStateStatus = OtaStateReadStatus::Missing;
+  assert(firmwareUpdateBlock(input) == FirmwareUpdateBlock::OtaStateMissing);
+
+  input = validPreflight();
+  input.runningState = DurableImageState::Unknown;
+  assert(firmwareUpdateBlock(input) == FirmwareUpdateBlock::OtaStateUnknown);
 
   input = validPreflight();
   input.bootPartitionMatchesRunning = false;
@@ -58,9 +67,61 @@ int main() {
   assert(markValidRecovery(false, false, DurableImageState::Unknown, false) ==
          MarkValidRecovery::DiagnosticHold);
 
+  // The full-width IDF sentinel must survive diagnostics and policy. Missing,
+  // unreadable and unknown values remain distinct fail-closed states.
+  assert(durableImageState(UINT32_MAX) == DurableImageState::Undefined);
+  assert(strcmp(otaImageStateName(OtaStateReadStatus::Readable, UINT32_MAX),
+                "undefined") == 0);
+  assert(strcmp(otaImageStateName(OtaStateReadStatus::Missing, UINT32_MAX),
+                "missing") == 0);
+  assert(strcmp(otaImageStateName(OtaStateReadStatus::Unreadable, UINT32_MAX),
+                "unreadable") == 0);
+  assert(strcmp(otaImageStateName(OtaStateReadStatus::Readable, 0x12345678U),
+                "unknown") == 0);
+
+  assert(initialImageValidationDecision(
+             OtaStateReadStatus::Readable, DurableImageState::Undefined,
+             true) == InitialImageValidationDecision::Validate);
+  assert(initialImageValidationDecision(
+             OtaStateReadStatus::Readable, DurableImageState::Undefined,
+             false) == InitialImageValidationDecision::BootPartitionMismatch);
+  assert(initialImageValidationDecision(
+             OtaStateReadStatus::Missing, DurableImageState::Unknown,
+             true) == InitialImageValidationDecision::Missing);
+  assert(initialImageValidationDecision(
+             OtaStateReadStatus::Unreadable, DurableImageState::Unknown,
+             true) == InitialImageValidationDecision::Unreadable);
+  assert(initialImageValidationDecision(
+             OtaStateReadStatus::Readable, DurableImageState::Unknown,
+             true) == InitialImageValidationDecision::UnknownState);
+  assert(initialImageValidationDecision(
+             OtaStateReadStatus::Readable, DurableImageState::PendingVerify,
+             true) == InitialImageValidationDecision::NotApplicable);
+  assert(initialImageValidationDecision(
+             OtaStateReadStatus::Readable, DurableImageState::New,
+             true) == InitialImageValidationDecision::NotApplicable);
+  assert(initialImageValidationDecision(
+             OtaStateReadStatus::Readable, DurableImageState::Invalid,
+             true) == InitialImageValidationDecision::NotApplicable);
+  assert(initialImageValidationDecision(
+             OtaStateReadStatus::Readable, DurableImageState::Aborted,
+             true) == InitialImageValidationDecision::NotApplicable);
+  assert(initialImageValidationDecision(
+             OtaStateReadStatus::Readable, DurableImageState::Valid,
+             true) == InitialImageValidationDecision::NotApplicable);
+
+  // Once the base app is durably VALID, the existing preflight allows writing
+  // an available, different app1 even when that inactive slot starts empty.
+  input = validPreflight();
+  assert(firmwareUpdateBlock(input) == FirmwareUpdateBlock::None);
+
   assert(strcmp(firmwareUpdateBlockName(FirmwareUpdateBlock::None), "none") ==
          0);
   assert(strcmp(firmwareUpdateBlockName(
                     FirmwareUpdateBlock::RunningImageNotValid),
                 "running_image_not_valid") == 0);
+  assert(strcmp(firmwareUpdateBlockName(FirmwareUpdateBlock::OtaStateMissing),
+                "ota_state_missing") == 0);
+  assert(strcmp(firmwareUpdateBlockName(FirmwareUpdateBlock::OtaStateUnknown),
+                "ota_state_unknown") == 0);
 }

@@ -19,9 +19,32 @@ enum class DurableImageState : uint8_t {
   Unknown,
 };
 
+enum class OtaStateReadStatus : uint8_t {
+  Readable,
+  Missing,
+  Unreadable,
+};
+
+// Numeric values are the durable ESP-IDF otadata ABI. Keeping this mapping in
+// the host-testable policy layer prevents ESP_OTA_IMG_UNDEFINED (0xFFFFFFFF)
+// from ever being narrowed to a byte again.
+const char* otaImageStateName(OtaStateReadStatus status, uint32_t rawState);
+DurableImageState durableImageState(uint32_t rawState);
+
+enum class InitialImageValidationDecision : uint8_t {
+  NotApplicable,
+  Validate,
+  Missing,
+  Unreadable,
+  UnknownState,
+  BootPartitionMismatch,
+};
+
 enum class FirmwareUpdateBlock : uint8_t {
   None,
   OtaStateUnreadable,
+  OtaStateMissing,
+  OtaStateUnknown,
   RunningImageNotValid,
   BootPartitionMismatch,
   UpdatePartitionUnavailable,
@@ -29,7 +52,7 @@ enum class FirmwareUpdateBlock : uint8_t {
 };
 
 struct FirmwareUpdatePreflightInput {
-  bool otaStateReadable;
+  OtaStateReadStatus otaStateStatus;
   DurableImageState runningState;
   bool bootPartitionMatchesRunning;
   bool updatePartitionAvailable;
@@ -38,8 +61,12 @@ struct FirmwareUpdatePreflightInput {
 
 inline FirmwareUpdateBlock firmwareUpdateBlock(
     const FirmwareUpdatePreflightInput& input) {
-  if (!input.otaStateReadable)
+  if (input.otaStateStatus == OtaStateReadStatus::Unreadable)
     return FirmwareUpdateBlock::OtaStateUnreadable;
+  if (input.otaStateStatus == OtaStateReadStatus::Missing)
+    return FirmwareUpdateBlock::OtaStateMissing;
+  if (input.runningState == DurableImageState::Unknown)
+    return FirmwareUpdateBlock::OtaStateUnknown;
   if (input.runningState != DurableImageState::Valid)
     return FirmwareUpdateBlock::RunningImageNotValid;
   if (!input.bootPartitionMatchesRunning)
@@ -49,6 +76,22 @@ inline FirmwareUpdateBlock firmwareUpdateBlock(
   if (!input.updatePartitionDiffersFromRunning)
     return FirmwareUpdateBlock::UpdatePartitionConflict;
   return FirmwareUpdateBlock::None;
+}
+
+inline InitialImageValidationDecision initialImageValidationDecision(
+    OtaStateReadStatus status, DurableImageState state,
+    bool bootPartitionMatchesRunning) {
+  if (status == OtaStateReadStatus::Unreadable)
+    return InitialImageValidationDecision::Unreadable;
+  if (status == OtaStateReadStatus::Missing)
+    return InitialImageValidationDecision::Missing;
+  if (state == DurableImageState::Unknown)
+    return InitialImageValidationDecision::UnknownState;
+  if (state != DurableImageState::Undefined)
+    return InitialImageValidationDecision::NotApplicable;
+  if (!bootPartitionMatchesRunning)
+    return InitialImageValidationDecision::BootPartitionMismatch;
+  return InitialImageValidationDecision::Validate;
 }
 
 enum class MarkValidRecovery : uint8_t {

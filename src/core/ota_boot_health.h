@@ -38,9 +38,16 @@ enum class Failure : uint8_t {
   MarkValid,
   RollbackUnavailable,
   RollbackFailed,
+  BootPartitionMismatch,
 };
 
-enum class Action : uint8_t { None, Validate, Rollback };
+enum class Action : uint8_t { None, Validate, Rollback, DiagnosticHold };
+
+enum class ValidationMode : uint8_t {
+  None,
+  PendingVerify,
+  InitialUndefined,
+};
 
 struct Evidence {
   bool setupComplete = false;
@@ -65,16 +72,17 @@ inline bool bootControlPlaneReady(bool httpServerReady,
   return httpServerReady && (stationNetworkReady || recoveryApReady);
 }
 
-inline bool bootHealthAllowsUpdate(bool stateReadOk, bool pending,
-                                   Phase phase) {
-  return stateReadOk && !pending &&
+inline bool bootHealthAllowsUpdate(bool stateReadOk, bool validationRequired,
+                                   bool pending, Phase phase) {
+  return stateReadOk && !validationRequired && !pending &&
       (phase == Phase::NotPending || phase == Phase::Validated);
 }
 
 class HealthGate {
  public:
-  void begin(bool pending, bool rollbackAvailable, uint32_t nowMs);
+  void begin(ValidationMode mode, bool rollbackAvailable, uint32_t nowMs);
   Action evaluate(const Evidence& evidence, uint32_t nowMs);
+  Action fail(Failure reason);
   Action validationFailed(bool rollbackAvailable);
   void rollbackBecameUnavailable();
   void actionFailed(Action action);
@@ -87,6 +95,8 @@ class HealthGate {
   Phase phase_ = Phase::NotPending;
   Failure reason_ = Failure::None;
   bool pending_ = false;
+  bool validationRequired_ = false;
+  ValidationMode mode_ = ValidationMode::None;
   bool rollbackAvailable_ = false;
   bool stabilityStarted_ = false;
   uint32_t startedAtMs_ = 0;

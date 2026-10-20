@@ -36,11 +36,15 @@ int main() {
   assert(!contains(runtime, "bool verifyOta("));
   assert(contains(runtime, "esp_ota_get_state_partition"));
   assert(contains(runtime, "ESP_OTA_IMG_PENDING_VERIFY"));
+  assert(contains(runtime, "ValidationMode::InitialUndefined"));
+  assert(contains(runtime, "std::atomic<uint32_t> imageState"));
   assert(contains(runtime, "esp_ota_check_rollback_is_possible"));
   assert(contains(runtime, "esp_ota_mark_app_valid_cancel_rollback"));
   assert(contains(runtime, "esp_ota_mark_app_invalid_rollback_and_reboot"));
   assert(contains(runtime, "markValidRecovery("));
   assert(contains(runtime, "esp_ota_get_state_partition(running, &confirmedState)"));
+  assert(contains(runtime, "initial-mark-valid-retry-blocked"));
+  assert(contains(runtime, "BootPartitionMismatch"));
   assert(contains(runtime, "firmwareUpdatePreflight()"));
   assert(contains(runtime, "rollback-candidate-lost"));
   assert(contains(server, "FirmwareUpdatePreflight preflight"));

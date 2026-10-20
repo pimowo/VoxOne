@@ -3,16 +3,20 @@
 namespace voxone {
 namespace ota {
 
-void HealthGate::begin(bool pending, bool rollbackAvailable, uint32_t nowMs) {
-  pending_ = pending;
+void HealthGate::begin(ValidationMode mode, bool rollbackAvailable,
+                       uint32_t nowMs) {
+  mode_ = mode;
+  pending_ = mode == ValidationMode::PendingVerify;
+  validationRequired_ = mode != ValidationMode::None;
   rollbackAvailable_ = rollbackAvailable;
   startedAtMs_ = nowMs;
   stableAtMs_ = nowMs;
   stabilityStarted_ = false;
-  reason_ = pending && !rollbackAvailable
+  reason_ = pending_ && !rollbackAvailable
       ? Failure::RollbackUnavailable : Failure::None;
-  phase_ = !pending ? Phase::NotPending
-      : (rollbackAvailable ? Phase::Waiting : Phase::RollbackUnavailable);
+  phase_ = !validationRequired_ ? Phase::NotPending
+      : (pending_ && !rollbackAvailable ? Phase::RollbackUnavailable
+                                        : Phase::Waiting);
 }
 
 Failure HealthGate::waitingReason(const Evidence& evidence) const {
@@ -27,6 +31,10 @@ Failure HealthGate::waitingReason(const Evidence& evidence) const {
 Action HealthGate::reject(Failure reason) {
   reason_ = reason;
   stabilityStarted_ = false;
+  if (mode_ == ValidationMode::InitialUndefined) {
+    phase_ = Phase::ValidationFailed;
+    return Action::DiagnosticHold;
+  }
   if (!rollbackAvailable_) {
     phase_ = Phase::RollbackUnavailable;
     reason_ = Failure::RollbackUnavailable;
@@ -37,7 +45,7 @@ Action HealthGate::reject(Failure reason) {
 }
 
 Action HealthGate::evaluate(const Evidence& evidence, uint32_t nowMs) {
-  if (!pending_ || phase_ == Phase::Validated ||
+  if (!validationRequired_ || phase_ == Phase::Validated ||
       phase_ == Phase::RollbackRequested ||
       phase_ == Phase::RollbackUnavailable ||
       phase_ == Phase::ValidationFailed)
@@ -67,16 +75,19 @@ Action HealthGate::evaluate(const Evidence& evidence, uint32_t nowMs) {
   return Action::None;
 }
 
+Action HealthGate::fail(Failure reason) { return reject(reason); }
+
 Action HealthGate::validationFailed(bool rollbackAvailable) {
   rollbackAvailable_ = rollbackAvailable;
   reason_ = Failure::MarkValid;
   stabilityStarted_ = false;
-  if (rollbackAvailable_) {
+  if (mode_ == ValidationMode::PendingVerify && rollbackAvailable_) {
     phase_ = Phase::RollbackRequested;
     return Action::Rollback;
   }
   phase_ = Phase::ValidationFailed;
-  return Action::None;
+  return mode_ == ValidationMode::InitialUndefined
+      ? Action::DiagnosticHold : Action::None;
 }
 
 void HealthGate::rollbackBecameUnavailable() {
@@ -128,6 +139,7 @@ const char* failureName(Failure failure) {
     case Failure::MarkValid: return "mark_valid";
     case Failure::RollbackUnavailable: return "rollback_unavailable";
     case Failure::RollbackFailed: return "rollback_failed";
+    case Failure::BootPartitionMismatch: return "boot_partition_mismatch";
   }
   return "unknown";
 }

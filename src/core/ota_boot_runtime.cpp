@@ -21,6 +21,19 @@ namespace voxone {
 namespace ota {
 namespace {
 
+static_assert(static_cast<uint32_t>(ESP_OTA_IMG_NEW) == 0U,
+              "ESP-IDF OTA state ABI changed");
+static_assert(static_cast<uint32_t>(ESP_OTA_IMG_PENDING_VERIFY) == 1U,
+              "ESP-IDF OTA state ABI changed");
+static_assert(static_cast<uint32_t>(ESP_OTA_IMG_VALID) == 2U,
+              "ESP-IDF OTA state ABI changed");
+static_assert(static_cast<uint32_t>(ESP_OTA_IMG_INVALID) == 3U,
+              "ESP-IDF OTA state ABI changed");
+static_assert(static_cast<uint32_t>(ESP_OTA_IMG_ABORTED) == 4U,
+              "ESP-IDF OTA state ABI changed");
+static_assert(static_cast<uint32_t>(ESP_OTA_IMG_UNDEFINED) == UINT32_MAX,
+              "ESP-IDF OTA undefined sentinel changed");
+
 constexpr char kNvsNamespace[] = "vox_ota";
 constexpr char kNvsLastFailure[] = "last_fail";
 constexpr uint32_t kMonitorPeriodMs = 200;
@@ -41,9 +54,13 @@ std::atomic<uint8_t> publishedPhase{static_cast<uint8_t>(Phase::NotPending)};
 std::atomic<uint8_t> publishedReason{static_cast<uint8_t>(Failure::None)};
 std::atomic<uint32_t> publishedElapsed{0};
 std::atomic<bool> pendingImage{false};
+std::atomic<bool> validationRequiredImage{false};
 std::atomic<bool> rollbackAvailable{false};
-std::atomic<bool> stateReadOk{true};
-std::atomic<uint8_t> imageState{static_cast<uint8_t>(ESP_OTA_IMG_UNDEFINED)};
+std::atomic<bool> stateReadOk{false};
+std::atomic<uint8_t> imageStateReadStatus{
+    static_cast<uint8_t>(OtaStateReadStatus::Unreadable)};
+std::atomic<uint32_t> imageState{
+    static_cast<uint32_t>(ESP_OTA_IMG_UNDEFINED)};
 std::atomic<uint8_t> lastFailure{static_cast<uint8_t>(Failure::None)};
 std::atomic<uint32_t> lastServiceMs{0};
 std::atomic<bool> httpApiProbed{false};
@@ -59,28 +76,14 @@ void copyLabel(char* output, size_t capacity, const esp_partition_t* partition) 
   std::snprintf(output, capacity, "%s", partition->label);
 }
 
-const char* imageStateName(esp_ota_img_states_t state) {
-  switch (state) {
-    case ESP_OTA_IMG_NEW: return "new";
-    case ESP_OTA_IMG_PENDING_VERIFY: return "pending_verify";
-    case ESP_OTA_IMG_VALID: return "valid";
-    case ESP_OTA_IMG_INVALID: return "invalid";
-    case ESP_OTA_IMG_ABORTED: return "aborted";
-    case ESP_OTA_IMG_UNDEFINED: return "undefined";
-  }
-  return "unknown";
+OtaStateReadStatus otaStateReadStatus(esp_err_t result) {
+  if (result == ESP_OK) return OtaStateReadStatus::Readable;
+  if (result == ESP_ERR_NOT_FOUND) return OtaStateReadStatus::Missing;
+  return OtaStateReadStatus::Unreadable;
 }
 
-DurableImageState durableImageState(esp_ota_img_states_t state) {
-  switch (state) {
-    case ESP_OTA_IMG_NEW: return DurableImageState::New;
-    case ESP_OTA_IMG_PENDING_VERIFY: return DurableImageState::PendingVerify;
-    case ESP_OTA_IMG_VALID: return DurableImageState::Valid;
-    case ESP_OTA_IMG_INVALID: return DurableImageState::Invalid;
-    case ESP_OTA_IMG_ABORTED: return DurableImageState::Aborted;
-    case ESP_OTA_IMG_UNDEFINED: return DurableImageState::Undefined;
-  }
-  return DurableImageState::Unknown;
+OtaStateReadStatus currentImageStateReadStatus() {
+  return static_cast<OtaStateReadStatus>(imageStateReadStatus.load());
 }
 
 void loadLastFailure() {
@@ -88,7 +91,7 @@ void loadLastFailure() {
   if (nvs_open(kNvsNamespace, NVS_READONLY, &handle) != ESP_OK) return;
   uint8_t value = static_cast<uint8_t>(Failure::None);
   if (nvs_get_u8(handle, kNvsLastFailure, &value) == ESP_OK &&
-      value <= static_cast<uint8_t>(Failure::RollbackFailed))
+      value <= static_cast<uint8_t>(Failure::BootPartitionMismatch))
     lastFailure.store(value);
   nvs_close(handle);
 }
@@ -136,7 +139,7 @@ void logSnapshot(const char* event, uint32_t nowMs) {
       "##[OTA-HEALTH]# event=%s running=%s boot=%s image=%s phase=%s "
       "reason=%s rollback=%u elapsedMs=%lu\n",
       event, runningSlot, bootSlot,
-      imageStateName(static_cast<esp_ota_img_states_t>(imageState.load())),
+      otaImageStateName(currentImageStateReadStatus(), imageState.load()),
       phaseName(snapshot.phase), failureName(snapshot.reason),
       snapshot.rollbackAvailable ? 1U : 0U,
       static_cast<unsigned long>(snapshot.elapsedMs));
@@ -147,6 +150,16 @@ void monitorTask(void*) {
     const uint32_t nowMs = millis();
     const Action action = gate.evaluate(currentEvidence(nowMs), nowMs);
     publish(nowMs);
+    if (action == Action::DiagnosticHold) {
+      const Failure reason = gate.snapshot(nowMs).reason;
+      saveLastFailure(reason);
+      logSnapshot("initial-validation-hold", nowMs);
+      Serial.println(
+          "##[OTA-HEALTH]# BLOCKED: initial image validation failed; "
+          "keep running for diagnostics and USB recovery");
+      vTaskDelete(nullptr);
+      return;
+    }
     if (action == Action::Validate) {
       const esp_partition_t* running = esp_ota_get_running_partition();
       const esp_err_t result = esp_ota_mark_app_valid_cancel_rollback();
@@ -158,10 +171,13 @@ void monitorTask(void*) {
       rollbackAvailable.store(canRollback);
       const MarkValidRecovery recovery = markValidRecovery(
           result == ESP_OK, confirmResult == ESP_OK,
-          durableImageState(confirmedState), canRollback);
+          durableImageState(static_cast<uint32_t>(confirmedState)), canRollback);
       if (recovery == MarkValidRecovery::ConfirmedValid) {
-        imageState.store(static_cast<uint8_t>(ESP_OTA_IMG_VALID));
+        imageStateReadStatus.store(
+            static_cast<uint8_t>(OtaStateReadStatus::Readable));
+        imageState.store(static_cast<uint32_t>(ESP_OTA_IMG_VALID));
         pendingImage.store(false);
+        validationRequiredImage.store(false);
         logSnapshot("validated", nowMs);
         vTaskDelete(nullptr);
         return;
@@ -173,7 +189,9 @@ void monitorTask(void*) {
           "##[OTA-HEALTH]# mark-valid not confirmed: call=%d read=%d "
           "state=%s rollback=%u\n",
           static_cast<int>(result), static_cast<int>(confirmResult),
-          imageStateName(confirmedState), canRollback ? 1U : 0U);
+          otaImageStateName(otaStateReadStatus(confirmResult),
+                            static_cast<uint32_t>(confirmedState)),
+          canRollback ? 1U : 0U);
       logSnapshot("mark-valid-failed", nowMs);
       if (failureAction == Action::Rollback) {
         Serial.println(
@@ -237,26 +255,73 @@ void beginBootHealthMonitor() {
   esp_ota_img_states_t state = ESP_OTA_IMG_UNDEFINED;
   const esp_err_t stateResult = running
       ? esp_ota_get_state_partition(running, &state) : ESP_ERR_INVALID_ARG;
-  const bool readable = stateResult == ESP_OK || stateResult == ESP_ERR_NOT_FOUND;
+  const OtaStateReadStatus readStatus = otaStateReadStatus(stateResult);
+  imageStateReadStatus.store(static_cast<uint8_t>(readStatus));
+  imageState.store(static_cast<uint32_t>(state));
+  const bool readable = readStatus == OtaStateReadStatus::Readable;
   stateReadOk.store(readable);
   if (!readable) {
+    validationRequiredImage.store(true);
     publishedPhase.store(static_cast<uint8_t>(Phase::ValidationFailed));
     publishedReason.store(static_cast<uint8_t>(Failure::OtaStateRead));
-    Serial.printf("##[OTA-HEALTH]# OTA state read failed: %d\n",
+    Serial.printf("##[OTA-HEALTH]# OTA state %s: %d\n",
+                  readStatus == OtaStateReadStatus::Missing
+                      ? "record missing" : "read failed",
                   static_cast<int>(stateResult));
     return;
   }
 
-  imageState.store(static_cast<uint8_t>(state));
   const bool pending = state == ESP_OTA_IMG_PENDING_VERIFY;
   const bool canRollback = esp_ota_check_rollback_is_possible();
+  const bool bootMatchesRunning = running && boot &&
+      running->address == boot->address;
+  const InitialImageValidationDecision initialDecision =
+      initialImageValidationDecision(
+          readStatus, durableImageState(static_cast<uint32_t>(state)),
+          bootMatchesRunning);
+  ValidationMode mode = pending ? ValidationMode::PendingVerify
+                                : ValidationMode::None;
+  if (initialDecision == InitialImageValidationDecision::Validate)
+    mode = ValidationMode::InitialUndefined;
+
   pendingImage.store(pending);
+  validationRequiredImage.store(mode != ValidationMode::None);
   rollbackAvailable.store(canRollback);
-  gate.begin(pending, canRollback, millis());
+  gate.begin(mode, canRollback, millis());
+
+  if (initialDecision ==
+      InitialImageValidationDecision::BootPartitionMismatch) {
+    validationRequiredImage.store(true);
+    gate.begin(ValidationMode::InitialUndefined, canRollback, millis());
+    (void)gate.fail(Failure::BootPartitionMismatch);
+    publish(millis());
+    logSnapshot("initial-boot-mismatch", millis());
+    Serial.println(
+        "##[OTA-HEALTH]# BLOCKED: initial running and boot slots differ");
+    return;
+  }
+  if (initialDecision == InitialImageValidationDecision::UnknownState) {
+    validationRequiredImage.store(true);
+    publishedPhase.store(static_cast<uint8_t>(Phase::ValidationFailed));
+    publishedReason.store(static_cast<uint8_t>(Failure::OtaStateRead));
+    logSnapshot("unknown-image-state", millis());
+    return;
+  }
+  if (mode == ValidationMode::InitialUndefined &&
+      static_cast<Failure>(lastFailure.load()) == Failure::MarkValid) {
+    (void)gate.validationFailed(false);
+    publish(millis());
+    logSnapshot("initial-mark-valid-retry-blocked", millis());
+    Serial.println(
+        "##[OTA-HEALTH]# BLOCKED: previous initial mark-valid failed; "
+        "automatic retry disabled");
+    return;
+  }
+
   publish(millis());
   logSnapshot("begin", millis());
-  if (!pending) return;
-  if (!canRollback) {
+  if (mode == ValidationMode::None) return;
+  if (mode == ValidationMode::PendingVerify && !canRollback) {
     Serial.println(
         "##[OTA-HEALTH]# BLOCKED: PENDING_VERIFY has no bootable rollback slot");
     return;
@@ -268,16 +333,16 @@ void beginBootHealthMonitor() {
     saveLastFailure(Failure::RuntimeService);
     const bool stillCanRollback = esp_ota_check_rollback_is_possible();
     rollbackAvailable.store(stillCanRollback);
-    if (stillCanRollback) {
+    const Action failureAction = gate.fail(Failure::RuntimeService);
+    publish(millis());
+    if (failureAction == Action::Rollback && stillCanRollback) {
       Serial.println("##[OTA-HEALTH]# monitor task unavailable; rolling back");
       Serial.flush();
       esp_ota_mark_app_invalid_rollback_and_reboot();
     } else {
-      gate.rollbackBecameUnavailable();
-      publish(millis());
       Serial.println(
-          "##[OTA-HEALTH]# BLOCKED: monitor task unavailable and no safe "
-          "rollback image; use USB recovery");
+          "##[OTA-HEALTH]# BLOCKED: monitor task unavailable; "
+          "use USB recovery");
     }
   }
 }
@@ -315,7 +380,7 @@ void reportHttpApiProbe() {
 
 bool bootHealthReady() {
   return bootHealthAllowsUpdate(
-      stateReadOk.load(), pendingImage.load(),
+      stateReadOk.load(), validationRequiredImage.load(), pendingImage.load(),
       static_cast<Phase>(publishedPhase.load()));
 }
 
@@ -326,12 +391,12 @@ FirmwareUpdatePreflight firmwareUpdatePreflight() {
   esp_ota_img_states_t state = ESP_OTA_IMG_UNDEFINED;
   const esp_err_t stateResult = running
       ? esp_ota_get_state_partition(running, &state) : ESP_ERR_INVALID_ARG;
-  const bool stateReadable = stateResult == ESP_OK ||
-      stateResult == ESP_ERR_NOT_FOUND;
+  const OtaStateReadStatus readStatus = otaStateReadStatus(stateResult);
   const FirmwareUpdatePreflightInput input{
-      stateReadable,
-      stateResult == ESP_OK ? durableImageState(state)
-                            : DurableImageState::Undefined,
+      readStatus,
+      readStatus == OtaStateReadStatus::Readable
+          ? durableImageState(static_cast<uint32_t>(state))
+          : DurableImageState::Unknown,
       running && boot && running->address == boot->address,
       update != nullptr,
       running && update && running->address != update->address,
@@ -346,21 +411,22 @@ FirmwareUpdatePreflight firmwareUpdatePreflight() {
 
 RunningImageSnapshot runningImageSnapshot() {
   RunningImageState state = RunningImageState::Unknown;
-  switch (static_cast<esp_ota_img_states_t>(imageState.load())) {
-    case ESP_OTA_IMG_VALID:
+  switch (durableImageState(imageState.load())) {
+    case DurableImageState::Valid:
       state = RunningImageState::Valid;
       break;
-    case ESP_OTA_IMG_PENDING_VERIFY:
+    case DurableImageState::PendingVerify:
       state = RunningImageState::PendingVerify;
       break;
-    case ESP_OTA_IMG_INVALID:
+    case DurableImageState::Invalid:
       state = RunningImageState::Invalid;
       break;
-    case ESP_OTA_IMG_ABORTED:
+    case DurableImageState::Aborted:
       state = RunningImageState::Aborted;
       break;
-    case ESP_OTA_IMG_NEW:
-    case ESP_OTA_IMG_UNDEFINED:
+    case DurableImageState::New:
+    case DurableImageState::Undefined:
+    case DurableImageState::Unknown:
       break;
   }
   return {stateReadOk.load(), state, pendingImage.load()};
@@ -381,7 +447,7 @@ bool formatBootHealthJson(char* output, size_t capacity) {
       "\"firmwareUpdateReady\":%s,\"firmwareUpdateReason\":\"%s\","
       "\"elapsedMs\":%lu}",
       runningSlot, bootSlot,
-      imageStateName(static_cast<esp_ota_img_states_t>(imageState.load())),
+      otaImageStateName(currentImageStateReadStatus(), imageState.load()),
       pendingImage.load() ? "true" : "false",
       rollbackAvailable.load() ? "true" : "false", phaseName(phase),
       failureName(reason), failureName(previous),

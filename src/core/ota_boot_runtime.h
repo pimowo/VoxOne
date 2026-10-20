@@ -31,8 +31,9 @@ struct FirmwareUpdatePreflight {
   const char* updateSlot;
 };
 
-// Starts read-only inspection of otadata and, only for PENDING_VERIFY, a
-// health monitor. Call at the beginning of setup(), before fallible recovery.
+// Inspects otadata and starts the single health monitor for PENDING_VERIFY or
+// a real initial UNDEFINED image. Only that monitor may durably mark it VALID.
+// Call at the beginning of setup(), before fallible recovery.
 void beginBootHealthMonitor();
 
 // Fatal startup failures are reported as soon as they are known. The monitor
