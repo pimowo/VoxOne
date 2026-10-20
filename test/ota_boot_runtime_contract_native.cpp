@@ -21,6 +21,12 @@ int main() {
   const std::string config = readSource("src/core/config.cpp");
   const std::string server = readSource("src/core/netserver.cpp");
   const std::string player = readSource("src/core/player.cpp");
+  const std::string securityPolicy =
+      readSource("src/core/security_access_policy.cpp");
+  const std::string securityAdapter =
+      readSource("src/core/security_http_adapter.h");
+  const std::string securityApi = readSource("src/core/security_api.cpp");
+  const std::string web = readSource("web-src/voxone.js");
   const std::string platform = readSource("platformio.ini");
 
   // This strong project symbol overrides the weak Arduino implementation;
@@ -39,6 +45,34 @@ int main() {
   assert(contains(runtime, "rollback-candidate-lost"));
   assert(contains(server, "FirmwareUpdatePreflight preflight"));
   assert(contains(server, "firmware preflight blocked"));
+
+  // Stable 1.0 uses one autonomous owner for the durable IDF image decision.
+  // SECURITY authorizes starting /update, while HTTP, WebSocket and WWW remain
+  // read-only observers of boot health and can never confirm a pending image.
+  assert(contains(securityPolicy, "SecurityRouteClass::ProtectedUpdate"));
+  assert(contains(securityPolicy,
+                  "SecurityEndpoint::MainOrSpiffsUpdate"));
+  assert(contains(securityPolicy, "return updateAccess(request);"));
+  assert(!contains(server, "/api/security/ota-confirm"));
+  assert(!contains(securityPolicy, "/api/security/ota-confirm"));
+  assert(!contains(securityApi, "/api/security/ota-confirm"));
+  assert(!contains(web, "ota-confirm"));
+  assert(!contains(server, "esp_ota_mark_app_valid"));
+  assert(!contains(server, "esp_ota_mark_app_invalid"));
+  assert(!contains(securityPolicy, "esp_ota_mark_app_valid"));
+  assert(!contains(securityPolicy, "esp_ota_mark_app_invalid"));
+  assert(!contains(securityApi, "esp_ota_mark_app_valid"));
+  assert(!contains(securityApi, "esp_ota_mark_app_invalid"));
+
+  // Production enforcement remains an explicit future activation gate. The
+  // integration may be tested without silently protecting every profile.
+  assert(contains(securityAdapter,
+                  "SecurityHttpEnforcementMode::Production"));
+  assert(contains(securityAdapter,
+                  "SecurityHttpEnforcementMode::Test"));
+  assert(!contains(platform, "-DVOXONE_SECURITY_HTTP_ENFORCEMENT=1"));
+  assert(contains(platform,
+                  "-DVOXONE_SECURITY_HTTP_ENFORCEMENT_TEST=1"));
 
   // The timeout runs in its own task, so a setup/loop stall cannot silently
   // approve an image. A live main-loop heartbeat is part of runtime health.
@@ -73,6 +107,8 @@ int main() {
 
   assert(contains(server, "formatBootHealthJson"));
   assert(contains(server, "reportHttpApiProbe"));
+  assert(contains(server, "bootHealthReady() ? \"true\" : \"false\""));
+  assert(contains(server, "\\\"ota\\\":%s"));
   assert(contains(server, "if (!voxone::ota::bootHealthReady())"));
   assert(contains(server,
       "Firmware boot health validation is still in progress"));
