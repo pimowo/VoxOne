@@ -35,13 +35,19 @@ const char* hardwareRoadmapStatusLabel(HardwareRoadmapStatus status);
 
 const char* runtimeDisplayWebValue(RuntimeDisplay display);
 const char* runtimeInputWebValue(RuntimeInput input);
+const char* runtimeAudioOutputWebValue(RuntimeAudioOutput audio);
 bool parseRuntimeDisplayWebValue(const char* value, RuntimeDisplay& display);
 bool parseRuntimeInputWebValue(const char* value, RuntimeInput& input);
+bool parseRuntimeAudioOutputWebValue(const char* value,
+                                     RuntimeAudioOutput& audio);
 
 size_t supportedRuntimeDisplayOptions(
     const HardwareCapabilities& capabilities, RuntimeHardwareWebOption* output,
     size_t capacity);
 size_t supportedRuntimeInputOptions(
+    const HardwareCapabilities& capabilities, RuntimeHardwareWebOption* output,
+    size_t capacity);
+size_t supportedRuntimeAudioOutputOptions(
     const HardwareCapabilities& capabilities, RuntimeHardwareWebOption* output,
     size_t capacity);
 
@@ -60,6 +66,11 @@ RuntimeHardwareValidation makeRuntimeHardwareWebCandidate(
     const RuntimeHardwareConfig& current,
     const HardwareCapabilities& capabilities, const char* displayValue,
     const char* inputValue, RuntimeHardwareConfig& candidate);
+RuntimeHardwareValidation makeRuntimeHardwareWebCandidate(
+    const RuntimeHardwareConfig& current,
+    const HardwareCapabilities& capabilities, const char* displayValue,
+    const char* inputValue, const char* audioValue,
+    RuntimeHardwareConfig& candidate);
 
 bool formatRuntimeHardwareWebJson(char* output, size_t capacity,
                                   const HardwareDescriptor& hardware,

@@ -96,6 +96,16 @@ int main() {
   assert(hasOption(inputs, inputCount, "ec11"));
   assert(hasOption(inputs, inputCount, "buttons3"));
 
+  RuntimeHardwareWebOption audioOutputs[4]{};
+  const size_t audioOutputCount =
+      supportedRuntimeAudioOutputOptions(capabilities, audioOutputs, 4);
+  assert(audioOutputCount == 1);
+  assert(std::strcmp(audioOutputs[0].value, "pcm5102a") == 0);
+  assert(std::strcmp(audioOutputs[0].label, "PCM5102A") == 0);
+  assert(!hasOption(audioOutputs, audioOutputCount, "none"));
+  assert(!hasOption(audioOutputs, audioOutputCount, "max98357a"));
+  assert(!hasOption(audioOutputs, audioOutputCount, "dspmini"));
+
   assert(std::strcmp(hardwareRoadmapStatusValue(
                          HardwareRoadmapStatus::Supported),
                      "supported") == 0);
@@ -204,8 +214,10 @@ int main() {
   assert(contains(snapshot, "\"config\":{"));
   assert(contains(snapshot, runtimeDisplayWebValue(current.display)));
   assert(contains(snapshot, runtimeInputWebValue(current.input)));
+  assert(contains(snapshot, runtimeAudioOutputWebValue(current.audio)));
   assert(contains(snapshot, "\"supportedDisplays\":["));
   assert(contains(snapshot, "\"supportedInputs\":["));
+  assert(contains(snapshot, "\"supportedAudioOutputs\":["));
   assert(contains(snapshot, "\"roadmap\":{\"displays\":["));
   assert(contains(snapshot, "\"audio\":["));
   assert(contains(snapshot, "\"modules\":["));
@@ -223,6 +235,29 @@ int main() {
   assert(candidate.display == RuntimeDisplay::None);
   assert(candidate.input == RuntimeInput::None);
   assert(candidate.audio == current.audio);
+
+  assert(makeRuntimeHardwareWebCandidate(
+             current, capabilities, "none", "none", "pcm5102a",
+             candidate) == RuntimeHardwareValidation::Valid);
+  assert(candidate.display == RuntimeDisplay::None);
+  assert(candidate.input == RuntimeInput::None);
+  assert(candidate.audio == RuntimeAudioOutput::Pcm5102a);
+  assert(makeRuntimeHardwareWebCandidate(
+             current, capabilities, runtimeDisplayWebValue(current.display),
+             "ec11", "none", candidate) ==
+         RuntimeHardwareValidation::Unsupported);
+  assert(makeRuntimeHardwareWebCandidate(
+             current, capabilities, runtimeDisplayWebValue(current.display),
+             "ec11", "bad", candidate) ==
+         RuntimeHardwareValidation::Invalid);
+  assert(makeRuntimeHardwareWebCandidate(
+             current, capabilities, runtimeDisplayWebValue(current.display),
+             "ec11", "max98357a", candidate) ==
+         RuntimeHardwareValidation::Unsupported);
+  assert(makeRuntimeHardwareWebCandidate(
+             current, capabilities, runtimeDisplayWebValue(current.display),
+             "ec11", "dspmini", candidate) ==
+         RuntimeHardwareValidation::Unsupported);
 
   assert(makeRuntimeHardwareWebCandidate(
              current, capabilities, runtimeDisplayWebValue(current.display),
@@ -329,6 +364,7 @@ int main() {
   assert(contains(saved, "\"restartRequired\":true"));
   assert(contains(saved, "\"display\":\"none\""));
   assert(contains(saved, "\"input\":\"none\""));
+  assert(contains(saved, "\"audio\":\"pcm5102a\""));
   assert(formatRuntimeHardwareWebSaveJson(savedJson, sizeof(savedJson),
                                           requested, false));
   assert(contains(savedJson, "\"changed\":false"));

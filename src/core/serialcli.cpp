@@ -7,6 +7,7 @@
 #include "network.h"
 #include "network_diagnostics.h"
 #include "serialcli.h"
+#include "configuration_mutation.h"
 #include "serialcli_command_match.h"
 #include "update_progress.h"
 #include "wifi_cli_parser.h"
@@ -177,6 +178,13 @@ void SerialCli::on_input(const char* str, uint8_t clientId) {
     setRuntimeDisplay = true;
   }
   if (setRuntimeDisplay) {
+    voxone::configuration_mutation::Lease mutation(
+        voxone::configuration_mutation::deviceCoordinator(),
+        voxone::configuration_mutation::Owner::SerialHardware);
+    if (!mutation.acquired()) {
+      printf(clientId, "Configuration busy\n> ");
+      return;
+    }
     auto requested = voxone::hardware::runtimeHardwareConfig();
     requested.display = requestedDisplay;
     const auto status =
@@ -202,6 +210,13 @@ void SerialCli::on_input(const char* str, uint8_t clientId) {
     setRuntimeInput = true;
   }
   if (setRuntimeInput) {
+    voxone::configuration_mutation::Lease mutation(
+        voxone::configuration_mutation::deviceCoordinator(),
+        voxone::configuration_mutation::Owner::SerialHardware);
+    if (!mutation.acquired()) {
+      printf(clientId, "Configuration busy\n> ");
+      return;
+    }
     auto requested = voxone::hardware::runtimeHardwareConfig();
     requested.input = requestedInput;
     const auto status =
@@ -487,6 +502,13 @@ void SerialCli::on_input(const char* str, uint8_t clientId) {
           str, "wifi.con(%49[^ ] %49[^)])%n", ssidbuf, passbuff) ||
       voxone::serialcli::matchTwoStrings(
           str, "wifi %49[^ ] %49s%n", ssidbuf, passbuff)) {
+    voxone::configuration_mutation::Lease mutation(
+        voxone::configuration_mutation::deviceCoordinator(),
+        voxone::configuration_mutation::Owner::SerialWifi);
+    if (!mutation.acquired()) {
+      printf(clientId, "Configuration busy\n> ");
+      return;
+    }
     if (!config.saveWifiCredentials(ssidbuf, passbuff)) {
       printf(clientId, "Wi-Fi credentials invalid or save failed\n> ");
       return;

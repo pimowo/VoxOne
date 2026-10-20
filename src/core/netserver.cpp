@@ -39,6 +39,8 @@
 #include "config.h"
 #include "config_backup_web.h"
 #include "config_restore_adapter.h"
+#include "configuration_mutation.h"
+#include "first_boot_transaction_runtime.h"
 #include "version.h"
 #if defined(VOXONE_PROFILE_L0)
 #include "dsp_transport_runtime.h"
@@ -1617,6 +1619,46 @@ const char* postParameter(AsyncWebServerRequest* request, const char* name) {
   return parameter ? parameter->value().c_str() : nullptr;
 }
 
+String firstBootHardwareOptions(
+    const voxone::hardware::RuntimeHardwareWebOption* options, size_t count,
+    const char* selected) {
+  String output;
+  output.reserve(count * 72);
+  for (size_t index = 0; index < count; ++index) {
+    output += "<option value=\"";
+    output += options[index].value;
+    output += "\"";
+    if (selected && strcmp(options[index].value, selected) == 0)
+      output += " selected";
+    output += ">";
+    output += options[index].label;
+    output += "</option>";
+  }
+  return output;
+}
+
+String firstBootTemplateValue(const String& name) {
+  using namespace voxone::hardware;
+  const auto& capabilities = hardwareCapabilities();
+  const auto& config = runtimeHardwareConfig();
+  RuntimeHardwareWebOption options[5]{};
+  size_t count = 0;
+  const char* selected = nullptr;
+  if (name == "FIRST_BOOT_DISPLAY_OPTIONS") {
+    count = supportedRuntimeDisplayOptions(capabilities, options, 5);
+    selected = runtimeDisplayWebValue(config.display);
+  } else if (name == "FIRST_BOOT_INPUT_OPTIONS") {
+    count = supportedRuntimeInputOptions(capabilities, options, 5);
+    selected = runtimeInputWebValue(config.input);
+  } else if (name == "FIRST_BOOT_AUDIO_OPTIONS") {
+    count = supportedRuntimeAudioOutputOptions(capabilities, options, 5);
+    selected = runtimeAudioOutputWebValue(config.audio);
+  } else {
+    return String();
+  }
+  return firstBootHardwareOptions(options, count, selected);
+}
+
 bool requestSessionToken(
     AsyncWebServerRequest* request,
     char token[voxone::security::kSecuritySessionTokenBufferSize]) {
@@ -1642,6 +1684,9 @@ voxone::security::SecurityHttpDecision authorizeHttpRequest(
     AsyncWebServerRequest* request,
     voxone::security::SecuritySessionBinding* websocketBinding) {
   using namespace voxone::security;
+  if (voxone::first_boot_transaction::deviceFirstBootTransactionBlocked())
+    return {SecurityAccessStatus::Locked, 503, false,
+            request->requestedConnType() == RCT_WS};
   SecurityAccessMethod accessMethod =
       securityAccessMethod(request->method());
   SecurityWebSocketHandshake handshake{
@@ -1932,6 +1977,13 @@ void handleConfigBackup(AsyncWebServerRequest* request) {
     configApiReply(request, 409, R"({"error":"backup_busy"})");
     return;
   }
+  voxone::configuration_mutation::Lease mutation(
+      voxone::configuration_mutation::deviceCoordinator(),
+      voxone::configuration_mutation::Owner::ConfigBackup);
+  if (!mutation.acquired()) {
+    configApiReply(request, 409, R"({"error":"configuration_busy"})");
+    return;
+  }
   if (!configurationMutationMutex ||
       xSemaphoreTake(configurationMutationMutex, 0) != pdTRUE) {
     configApiReply(request, 409, R"({"error":"configuration_busy"})");
@@ -2057,6 +2109,22 @@ void handleConfigRestore(AsyncWebServerRequest* request) {
     return;
   }
 
+  // Global order for operations needing both domains:
+  // configuration mutation lease -> SECURITY lock -> legacy queue mutex.
+  voxone::configuration_mutation::Lease mutation(
+      voxone::configuration_mutation::deviceCoordinator(),
+      voxone::configuration_mutation::Owner::ConfigRestore);
+  if (!mutation.acquired()) {
+    configApiReply(request, 409, R"({"error":"configuration_busy"})");
+    finishConfigRestoreUpload(request);
+    return;
+  }
+  SecurityRuntimeLock securityLock;
+  if (!securityLock.locked()) {
+    configApiReply(request, 503, R"({"error":"service_unavailable"})");
+    finishConfigRestoreUpload(request);
+    return;
+  }
   const bool mutationLocked = configurationMutationMutex &&
       xSemaphoreTake(configurationMutationMutex, 0) == pdTRUE;
   if (!mutationLocked ||
@@ -2105,6 +2173,13 @@ void handleHardwareConfigSave(AsyncWebServerRequest* request) {
   if (!deviceApiAuthorized(request)) return;
   if (systemRestartPending()) {
     stationsReply(request, 409, R"({"error":"reboot_pending"})");
+    return;
+  }
+  voxone::configuration_mutation::Lease mutation(
+      voxone::configuration_mutation::deviceCoordinator(),
+      voxone::configuration_mutation::Owner::HardwareApi);
+  if (!mutation.acquired()) {
+    stationsReply(request, 409, R"({"error":"configuration_busy"})");
     return;
   }
   if (!request->hasParam("display", true) ||
@@ -3730,7 +3805,8 @@ void handleIndex(AsyncWebServerRequest * request) {
   if (request->url() == "/" && webBinding.wifiProvisioning) {
     if (request->method() == HTTP_GET) {
       if (webBinding.page == voxone::first_boot::WebPage::FirstBootSetup) {
-        request->send_P(200, "text/html", first_boot_setup_html);
+        request->send_P(200, "text/html", first_boot_setup_html,
+                        firstBootTemplateValue);
         return;
       }
       request->send_P(200, "text/html", emptyfs_html);
@@ -3756,22 +3832,79 @@ void handleIndex(AsyncWebServerRequest * request) {
         request->send(400, "text/plain", "Invalid Wi-Fi credentials");
         return;
       }
-      if (!config.saveWifiCredentials(ssid.c_str(), password.c_str())) {
-        request->send(500, "text/plain", "Could not save Wi-Fi credentials");
+      voxone::hardware::RuntimeHardwareConfig requestedHardware =
+          voxone::hardware::runtimeHardwareConfig();
+      const bool configureHardware =
+          webBinding.page == voxone::first_boot::WebPage::FirstBootSetup;
+      if (configureHardware) {
+        if (!request->hasParam("display", true) ||
+            !request->hasParam("input", true) ||
+            !request->hasParam("audio", true)) {
+          request->send(400, "text/plain", "Missing hardware selection");
+          return;
+        }
+        const String display = request->getParam("display", true)->value();
+        const String input = request->getParam("input", true)->value();
+        const String audio = request->getParam("audio", true)->value();
+        if (!display.length() || display.length() > 31 || !input.length() ||
+            input.length() > 15 || !audio.length() || audio.length() > 15) {
+          request->send(400, "text/plain", "Invalid hardware selection");
+          return;
+        }
+        const auto validation =
+            voxone::hardware::makeRuntimeHardwareWebCandidate(
+                voxone::hardware::runtimeHardwareConfig(),
+                voxone::hardware::hardwareCapabilities(), display.c_str(),
+                input.c_str(), audio.c_str(), requestedHardware);
+        if (validation ==
+            voxone::hardware::RuntimeHardwareValidation::Invalid) {
+          request->send(400, "text/plain", "Invalid hardware selection");
+          return;
+        }
+        if (validation ==
+            voxone::hardware::RuntimeHardwareValidation::Unsupported) {
+          request->send(422, "text/plain", "Unsupported hardware selection");
+          return;
+        }
+      }
+
+      voxone::configuration_mutation::Lease mutation(
+          voxone::configuration_mutation::deviceCoordinator(),
+          configureHardware
+              ? voxone::configuration_mutation::Owner::FirstBoot
+              : voxone::configuration_mutation::Owner::WifiRecovery);
+      if (!mutation.acquired()) {
+        request->send(409, "text/plain", "Configuration busy");
         return;
       }
+      // Keep the global order identical to config-restore: configuration
+      // mutation lease is acquired before SECURITY.
       SecurityRuntimeLock securityLock;
       if (!securityLock.locked()) {
         request->send(503, "text/plain", "Security service unavailable");
         return;
       }
-      auto& security = voxone::security::deviceSecurityService();
-      if (security.state() == voxone::security::SecurityState::Unconfigured) {
-        const auto securityResult = security.completeWifiProvisioningOpen();
-        if (securityResult !=
-            voxone::security::SecurityOperationStatus::Applied) {
-          request->send(500, "text/plain",
-                        "Could not complete first-boot security setup");
+      if (configureHardware) {
+        const auto transactionResult =
+            voxone::first_boot_transaction::commitDeviceFirstBootTransaction(
+                requestedHardware, ssid.c_str(), password.c_str(),
+                true);
+        if (transactionResult !=
+            voxone::first_boot_transaction::Result::Applied) {
+          Serial.print("##[ERROR]# FIRST BOOT transaction failed result=");
+          Serial.println(voxone::first_boot_transaction::resultName(
+              transactionResult));
+          request->send(
+              transactionResult == voxone::first_boot_transaction::Result::
+                                       SecurityUnavailable
+                  ? 503
+                  : 500,
+              "text/plain", "Could not commit first-boot configuration");
+          return;
+        }
+      } else {
+        if (!config.saveWifiCredentials(ssid.c_str(), password.c_str())) {
+          request->send(500, "text/plain", "Could not save Wi-Fi credentials");
           return;
         }
       }

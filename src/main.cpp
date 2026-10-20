@@ -2,6 +2,7 @@
 #include "core/options.h"
 #include "core/config.h"
 #include "core/config_restore_adapter.h"
+#include "core/first_boot_transaction_runtime.h"
 #include "core/serialcli.h"
 #include "core/player.h"
 #include "core/display.h"
@@ -198,6 +199,22 @@ void setup() {
   }
   if (restoreRecovery == voxone::config_restore::BootRecoveryStatus::Recovered)
     Serial.println("##[BOOT]# Incomplete config restore rolled back");
+  const auto firstBootRecovery =
+      voxone::first_boot_transaction::
+          recoverDeviceFirstBootTransactionAtBoot();
+  if (firstBootRecovery ==
+      voxone::first_boot_transaction::RecoveryStatus::Failed) {
+    Serial.println(
+        "##[ERROR]# FIRST BOOT transaction recovery failed; boot halted");
+    Serial.println(
+        "##[RECOVERY]# USB restore required: restore a verified, "
+        "device-specific NVS and SPIFFS backup; do not erase only the "
+        "FIRST BOOT marker");
+    for (;;) delay(1000);
+  }
+  if (firstBootRecovery ==
+      voxone::first_boot_transaction::RecoveryStatus::Recovered)
+    Serial.println("##[BOOT]# Incomplete FIRST BOOT transaction rolled back");
   const auto recoveryApResult =
       voxone::security_recovery::beginSecurityRecoveryAp(millis());
   if (recoveryApResult ==

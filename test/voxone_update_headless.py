@@ -1450,11 +1450,24 @@ setTimeout(async () => {
     const eye = get('pass-toggle');
     const scan = get('scan');
     const status = get('scan-status');
+    const hardwareDisplay = get('hardware-display');
+    const hardwareInput = get('hardware-input');
+    const hardwareAudio = get('hardware-audio');
     const submit = () => {
       const event = new Event('submit', {bubbles:true, cancelable:true});
       form.dispatchEvent(event);
       return event;
     };
+
+    firstBootCheck(hardwareDisplay && hardwareInput && hardwareAudio &&
+      [...hardwareDisplay.options].map(option => option.value).join(',') ===
+        'none,ssd1306_128x64,ssd1309_128x64' &&
+      [...hardwareInput.options].map(option => option.value).join(',') ===
+        'none,ec11,buttons3' &&
+      [...hardwareAudio.options].map(option => option.value).join(',') ===
+        'pcm5102a' && hardwareDisplay.value === 'ssd1306_128x64' &&
+      hardwareInput.value === 'ec11' && hardwareAudio.value === 'pcm5102a',
+      'first boot hardware choices must be capability-filtered');
 
     firstBootCheck(window.scanRequests.length === 1 &&
       window.scanRequests[0].url === '/api/wifi/scan',
@@ -1525,7 +1538,10 @@ setTimeout(async () => {
     const encoded = new URLSearchParams(new FormData(form)).toString();
     const decoded = new URLSearchParams(encoded);
     firstBootCheck(decoded.get('ssid') === 'Spec & = + ąć' &&
-      decoded.get('pass') === 'p&=+ ąć' && form.method === 'post' &&
+      decoded.get('pass') === 'p&=+ ąć' &&
+      decoded.get('display') === 'ssd1306_128x64' &&
+      decoded.get('input') === 'ec11' && decoded.get('audio') === 'pcm5102a' &&
+      form.method === 'post' &&
       form.getAttribute('action') === '/' && !location.href.includes('p%26') &&
       !location.href.includes('ąć') && localStorage.length === 0 &&
       sessionStorage.length === 0,
@@ -1742,6 +1758,14 @@ def main():
            'manual.value.trim()' not in first_boot_html and \
            'maxlength=' not in first_boot_html, \
         "first-boot form must use byte validation without silent truncation"
+    assert 'name="display"' in first_boot_html and \
+           'name="input"' in first_boot_html and \
+           'name="audio"' in first_boot_html and \
+           '%FIRST_BOOT_DISPLAY_OPTIONS%' in first_boot_html and \
+           '%FIRST_BOOT_INPUT_OPTIONS%' in first_boot_html and \
+           '%FIRST_BOOT_AUDIO_OPTIONS%' in first_boot_html and \
+           '20%%' in first_boot_html, \
+        "first-boot hardware form must be generated from runtime capabilities"
     assert 'id="pass-toggle"' in first_boot_html and \
            'class="eye-slash"' in first_boot_html and \
            'type="button"' in first_boot_html and \
@@ -1792,7 +1816,21 @@ def main():
         "</head>", RECOVERY_MOCK + "</head>", 1)
     recovery_test_html = recovery_test_html.replace(
         "</body>", RECOVERY_CHECK + "</body>", 1)
-    first_boot_test_html = first_boot_html.replace(
+    first_boot_rendered_html = first_boot_html.replace('%%', '%')
+    first_boot_rendered_html = first_boot_rendered_html.replace(
+        '%FIRST_BOOT_DISPLAY_OPTIONS%',
+        '<option value="none">Brak</option>'
+        '<option value="ssd1306_128x64" selected>SSD1306_128X64</option>'
+        '<option value="ssd1309_128x64">SSD1309_128X64</option>')
+    first_boot_rendered_html = first_boot_rendered_html.replace(
+        '%FIRST_BOOT_INPUT_OPTIONS%',
+        '<option value="none">Brak</option>'
+        '<option value="ec11" selected>EC11</option>'
+        '<option value="buttons3">BUTTONS3</option>')
+    first_boot_rendered_html = first_boot_rendered_html.replace(
+        '%FIRST_BOOT_AUDIO_OPTIONS%',
+        '<option value="pcm5102a" selected>PCM5102A</option>')
+    first_boot_test_html = first_boot_rendered_html.replace(
         "</head>", FIRST_BOOT_MOCK + "</head>", 1)
     first_boot_test_html = first_boot_test_html.replace(
         "</body>", FIRST_BOOT_CHECK + "</body>", 1)

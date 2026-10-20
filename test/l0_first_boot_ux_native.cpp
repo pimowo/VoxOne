@@ -16,6 +16,8 @@ int main() {
   const std::string driver = readFile("src/displays/displayST7796.cpp");
   const std::string network = readFile("src/core/network.cpp");
   const std::string server = readFile("src/core/netserver.cpp");
+  const std::string transaction =
+      readFile("src/core/first_boot_transaction_runtime.cpp");
   const std::string page = readFile("src/core/netserver.h");
   const std::string display = readFile("src/core/display.cpp");
 
@@ -27,10 +29,20 @@ int main() {
   assert(server.find("WiFi.scanNetworks(true, false)") != std::string::npos);
   assert(server.find("webserver.on(\"/api/wifi/scan\", HTTP_GET") !=
          std::string::npos);
-  assert(server.find("completeWifiProvisioningOpen()") != std::string::npos);
+  assert(server.find("commitDeviceFirstBootTransaction") !=
+         std::string::npos);
+  assert(transaction.find("completeWifiProvisioningOpen()") !=
+         std::string::npos);
   assert(page.find("id=\"ssid-list\"") != std::string::npos);
   assert(page.find("id=\"manual-ssid\"") != std::string::npos);
   assert(page.find("src=\"/voxone-logo.svg\"") != std::string::npos);
+  assert(page.find("name=\"display\"") != std::string::npos);
+  assert(page.find("name=\"input\"") != std::string::npos);
+  assert(page.find("name=\"audio\"") != std::string::npos);
+  assert(page.find("%FIRST_BOOT_DISPLAY_OPTIONS%") != std::string::npos);
+  assert(page.find("%FIRST_BOOT_INPUT_OPTIONS%") != std::string::npos);
+  assert(page.find("%FIRST_BOOT_AUDIO_OPTIONS%") != std::string::npos);
+  assert(page.find("20%%") != std::string::npos);
   assert(display.find("presentation.title") !=
          std::string::npos);
   assert(display.find("firstBootSsid->setText(presentation.apSsid, \"SSID %s\")") !=

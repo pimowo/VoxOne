@@ -176,6 +176,8 @@ void testNoSecretProjection() {
 
 void testProductionBinding() {
   const std::string server = readFile("src/core/netserver.cpp");
+  const std::string firstBootTransaction =
+      readFile("src/core/first_boot_transaction_runtime.cpp");
   const std::string index = functionSource(
       server, "void handleIndex(AsyncWebServerRequest * request) {",
       "namespace {\nconstexpr uint32_t kWifiScanTimeoutMs");
@@ -196,7 +198,10 @@ void testProductionBinding() {
   assert(index.find("emptyfs_html") != std::string::npos);
   assert(index.find("webBinding.normalPanel") != std::string::npos);
   assert(index.find("config.saveWifiCredentials") != std::string::npos);
-  assert(index.find("completeWifiProvisioningOpen()") != std::string::npos);
+  assert(index.find("commitDeviceFirstBootTransaction") !=
+         std::string::npos);
+  assert(firstBootTransaction.find("completeWifiProvisioningOpen()") !=
+         std::string::npos);
   assert(index.find("scheduleSystemRestart(\"SYSTEM\")") !=
          std::string::npos);
   assert(index.find("Cache-Control") != std::string::npos);

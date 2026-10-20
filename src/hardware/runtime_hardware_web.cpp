@@ -14,6 +14,9 @@ constexpr RuntimeDisplay kDisplays[] = {
     RuntimeDisplay::St7796s_480x320};
 constexpr RuntimeInput kInputs[] = {
     RuntimeInput::None, RuntimeInput::Ec11, RuntimeInput::Buttons3};
+constexpr RuntimeAudioOutput kAudioOutputs[] = {
+    RuntimeAudioOutput::None, RuntimeAudioOutput::Pcm5102a,
+    RuntimeAudioOutput::DspMini, RuntimeAudioOutput::Max98357};
 
 struct CatalogItem {
   const char* value;
@@ -200,6 +203,13 @@ bool inputSupported(RuntimeInput input,
   return runtimeInputKind(input, kind) && capabilities.supportsInput(kind);
 }
 
+bool audioSupported(RuntimeAudioOutput audio,
+                    const HardwareCapabilities& capabilities) {
+  AudioOutputKind kind = AudioOutputKind::None;
+  return runtimeAudioOutputKind(audio, kind) &&
+         capabilities.supportsAudioOutput(kind);
+}
+
 class JsonWriter {
  public:
   JsonWriter(char* output, size_t capacity)
@@ -257,6 +267,20 @@ bool appendOptions(JsonWriter& writer, const HardwareDescriptor& hardware,
             options[index].value, options[index].label,
             hardwareRoadmapStatusValue(status),
             hardwareRoadmapStatusLabel(status))) return false;
+  }
+  return true;
+}
+
+bool appendAudioOptions(JsonWriter& writer,
+                        const HardwareCapabilities& capabilities) {
+  RuntimeHardwareWebOption options[4];
+  const size_t count =
+      supportedRuntimeAudioOutputOptions(capabilities, options, 4);
+  for (size_t index = 0; index < count; ++index) {
+    if (index && !writer.append(",")) return false;
+    if (!writer.append("{\"value\":\"%s\",\"label\":\"%s\"}",
+                       options[index].value, options[index].label))
+      return false;
   }
   return true;
 }
@@ -319,6 +343,16 @@ const char* runtimeInputWebValue(RuntimeInput input) {
   return nullptr;
 }
 
+const char* runtimeAudioOutputWebValue(RuntimeAudioOutput audio) {
+  switch (audio) {
+    case RuntimeAudioOutput::None: return "none";
+    case RuntimeAudioOutput::Pcm5102a: return "pcm5102a";
+    case RuntimeAudioOutput::DspMini: return "dspmini";
+    case RuntimeAudioOutput::Max98357: return "max98357a";
+  }
+  return nullptr;
+}
+
 bool parseRuntimeDisplayWebValue(const char* value, RuntimeDisplay& display) {
   if (!value) return false;
   for (RuntimeDisplay candidate : kDisplays) {
@@ -335,6 +369,18 @@ bool parseRuntimeInputWebValue(const char* value, RuntimeInput& input) {
   for (RuntimeInput candidate : kInputs) {
     if (strcmp(value, runtimeInputWebValue(candidate)) == 0) {
       input = candidate;
+      return true;
+    }
+  }
+  return false;
+}
+
+bool parseRuntimeAudioOutputWebValue(const char* value,
+                                     RuntimeAudioOutput& audio) {
+  if (!value) return false;
+  for (RuntimeAudioOutput candidate : kAudioOutputs) {
+    if (strcmp(value, runtimeAudioOutputWebValue(candidate)) == 0) {
+      audio = candidate;
       return true;
     }
   }
@@ -363,6 +409,21 @@ size_t supportedRuntimeInputOptions(
     if (!inputSupported(input, capabilities)) continue;
     if (output && count < capacity)
       output[count] = {runtimeInputWebValue(input), runtimeInputWebLabel(input)};
+    ++count;
+  }
+  return count;
+}
+
+size_t supportedRuntimeAudioOutputOptions(
+    const HardwareCapabilities& capabilities, RuntimeHardwareWebOption* output,
+    size_t capacity) {
+  size_t count = 0;
+  for (RuntimeAudioOutput audio : kAudioOutputs) {
+    if (!audioSupported(audio, capabilities)) continue;
+    AudioOutputKind kind = AudioOutputKind::None;
+    if (!runtimeAudioOutputKind(audio, kind)) continue;
+    if (output && count < capacity)
+      output[count] = {runtimeAudioOutputWebValue(audio), audioLabel(kind)};
     ++count;
   }
   return count;
@@ -478,12 +539,31 @@ RuntimeHardwareValidation makeRuntimeHardwareWebCandidate(
   return validateRuntimeHardwareConfig(candidate, capabilities);
 }
 
+RuntimeHardwareValidation makeRuntimeHardwareWebCandidate(
+    const RuntimeHardwareConfig& current,
+    const HardwareCapabilities& capabilities, const char* displayValue,
+    const char* inputValue, const char* audioValue,
+    RuntimeHardwareConfig& candidate) {
+  candidate = current;
+  if (!parseRuntimeDisplayWebValue(displayValue, candidate.display) ||
+      !parseRuntimeInputWebValue(inputValue, candidate.input) ||
+      !parseRuntimeAudioOutputWebValue(audioValue, candidate.audio))
+    return RuntimeHardwareValidation::Invalid;
+  AudioOutputKind audio = AudioOutputKind::None;
+  if (!runtimeAudioOutputKind(candidate.audio, audio))
+    return RuntimeHardwareValidation::Invalid;
+  if (!capabilities.supportsAudioOutput(audio))
+    return RuntimeHardwareValidation::Unsupported;
+  return validateRuntimeHardwareConfig(candidate, capabilities);
+}
+
 bool formatRuntimeHardwareWebJson(char* output, size_t capacity,
                                   const HardwareDescriptor& hardware,
                                   const RuntimeHardwareConfig& config) {
   const char* display = runtimeDisplayWebValue(config.display);
   const char* input = runtimeInputWebValue(config.input);
-  if (!display || !input ||
+  const char* audio = runtimeAudioOutputWebValue(config.audio);
+  if (!display || !input || !audio ||
       validateRuntimeHardwareConfig(config, hardware.capabilities) !=
           RuntimeHardwareValidation::Valid)
     return false;
@@ -492,12 +572,15 @@ bool formatRuntimeHardwareWebJson(char* output, size_t capacity,
                         : "ESP32";
   JsonWriter writer(output, capacity);
   writer.append("{\"family\":\"%s\",\"mcu\":\"%s\","
-                "\"config\":{\"display\":\"%s\",\"input\":\"%s\"},"
+                "\"config\":{\"display\":\"%s\",\"input\":\"%s\","
+                "\"audio\":\"%s\"},"
                 "\"supportedDisplays\":[",
-                hardware.board.name, mcu, display, input);
+                hardware.board.name, mcu, display, input, audio);
   appendOptions(writer, hardware, true);
   writer.append("],\"supportedInputs\":[");
   appendOptions(writer, hardware, false);
+  writer.append("],\"supportedAudioOutputs\":[");
+  appendAudioOptions(writer, hardware.capabilities);
   HardwareRoadmapItem roadmap[12];
   size_t count = hardwareDisplayRoadmap(hardware, config, roadmap, 12);
   writer.append("],\"roadmap\":{\"displays\":[");
@@ -520,12 +603,14 @@ bool formatRuntimeHardwareWebSaveJson(char* output, size_t capacity,
                                       bool changed) {
   const char* display = runtimeDisplayWebValue(config.display);
   const char* input = runtimeInputWebValue(config.input);
-  if (!display || !input || !output || !capacity) return false;
+  const char* audio = runtimeAudioOutputWebValue(config.audio);
+  if (!display || !input || !audio || !output || !capacity) return false;
   const int length = snprintf(
       output, capacity,
       "{\"ok\":true,\"changed\":%s,\"restartRequired\":true,"
-      "\"config\":{\"display\":\"%s\",\"input\":\"%s\"}}",
-      changed ? "true" : "false", display, input);
+      "\"config\":{\"display\":\"%s\",\"input\":\"%s\","
+      "\"audio\":\"%s\"}}",
+      changed ? "true" : "false", display, input, audio);
   return length >= 0 && static_cast<size_t>(length) < capacity;
 }
 

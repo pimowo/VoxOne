@@ -136,6 +136,9 @@ int main() {
 
   const std::string network = readFile("src/core/network.cpp");
   const std::string server = readFile("src/core/netserver.cpp");
+  const std::string transaction =
+      readFile("src/core/first_boot_transaction_runtime.cpp");
+  const std::string serial = readFile("src/core/serialcli.cpp");
   const std::string display = readFile("src/core/display.cpp");
   const std::string main = readFile("src/main.cpp");
   assert(network.find("VOXONE_PROFILE_L0") == std::string::npos);
@@ -144,10 +147,44 @@ int main() {
   assert(server.find("webserver.on(\"/api/wifi/scan\", HTTP_GET") !=
          std::string::npos);
   assert(server.find("first_boot_setup_html") != std::string::npos);
+  assert(server.find("firstBootTemplateValue") != std::string::npos);
+  assert(server.find("makeRuntimeHardwareWebCandidate") != std::string::npos);
+  assert(server.find("Missing hardware selection") != std::string::npos);
+  assert(server.find("Unsupported hardware selection") != std::string::npos);
+  assert(server.find("commitDeviceFirstBootTransaction") !=
+         std::string::npos);
+  assert(server.find("Owner::HardwareApi") != std::string::npos);
+  assert(server.find("Owner::ConfigRestore") != std::string::npos);
+  assert(server.find("Owner::FirstBoot") != std::string::npos);
+  assert(server.find("Owner::WifiRecovery") != std::string::npos);
+  assert(serial.find("Owner::SerialHardware") != std::string::npos);
+  assert(serial.find("Owner::SerialWifi") != std::string::npos);
+  const std::size_t restoreLease = server.find("Owner::ConfigRestore");
+  const std::size_t restoreSecurity =
+      server.find("SecurityRuntimeLock securityLock", restoreLease);
+  const std::size_t restoreQueueMutex =
+      server.find("xSemaphoreTake(configurationMutationMutex", restoreSecurity);
+  assert(restoreLease < restoreSecurity);
+  assert(restoreSecurity < restoreQueueMutex);
+  const std::size_t firstBootLease = server.find("Owner::FirstBoot");
+  const std::size_t firstBootSecurity =
+      server.find("SecurityRuntimeLock securityLock", firstBootLease);
+  assert(firstBootLease < firstBootSecurity);
+  assert(transaction.find("eraseRuntimeHardwarePersistent") !=
+         std::string::npos);
   assert(server.find("kWifiScanTimeoutMs") != std::string::npos);
   assert(server.find("kWifiScanResultLimit") != std::string::npos);
   assert(display.find("network.presentationSnapshot()") != std::string::npos);
   assert(display.find("first_boot::makeView") == std::string::npos);
   assert(main.find("securityRecoveryApOwnsRuntime()") != std::string::npos);
   assert(main.find("display.configureRuntime") != std::string::npos);
+  const std::size_t transactionRecovery =
+      main.find("recoverDeviceFirstBootTransactionAtBoot()");
+  const std::size_t recoveryAp = main.find("beginSecurityRecoveryAp(millis())");
+  const std::size_t runtimeHardware =
+      main.find("hardware::loadRuntimeHardwareConfig()");
+  assert(transactionRecovery != std::string::npos);
+  assert(transactionRecovery < recoveryAp);
+  assert(transactionRecovery < runtimeHardware);
+  assert(main.find("USB restore required") != std::string::npos);
 }

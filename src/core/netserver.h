@@ -14,16 +14,16 @@ const char first_boot_setup_html[] PROGMEM = R"(
 :root{color-scheme:dark;--bg:#0b121b;--panel:#151f2b;--panel-2:#1b2937;--line:#314456;--text:#edf5fa;--muted:#a2b5c5;--cyan:#71d8e8;--cyan-dark:#173f4b}
 *{box-sizing:border-box}
 body{margin:0;min-height:100vh;background:var(--bg);color:var(--text);font:16px/1.5 system-ui,-apple-system,"Segoe UI",sans-serif;display:flex;flex-direction:column}
-main{width:calc(100% - 32px);max-width:480px;margin:auto}
-.logo{display:block;width:min(260px,72%);height:auto;margin:0 auto 22px}
+main{width:calc(100%% - 32px);max-width:480px;margin:auto}
+.logo{display:block;width:min(260px,72%%);height:auto;margin:0 auto 22px}
 h2{margin:0 0 12px;font-size:1.3rem}
 p{margin:0 0 20px;color:var(--muted)}
 .card{background:var(--panel);border:1px solid var(--line);border-radius:15px;padding:24px;margin:20px 0}
 label{display:block;margin:16px 0 6px;font-weight:600}
-input[type=text],input[type=password],select{display:block;width:100%;min-width:0;min-height:46px;padding:12px;border:1px solid var(--line);border-radius:10px;background:var(--panel-2);color:var(--text);font:inherit}
+input[type=text],input[type=password],select{display:block;width:100%%;min-width:0;min-height:46px;padding:12px;border:1px solid var(--line);border-radius:10px;background:var(--panel-2);color:var(--text);font:inherit}
 input::placeholder{color:var(--muted);opacity:1}
 input:focus-visible,select:focus-visible,button:focus-visible{outline:2px solid var(--cyan);outline-offset:2px}
-button{width:100%;min-height:46px;margin-top:22px;padding:13px;border:1px solid var(--cyan);border-radius:10px;background:var(--cyan-dark);color:var(--text);font:650 1rem system-ui,sans-serif;cursor:pointer}
+button{width:100%%;min-height:46px;margin-top:22px;padding:13px;border:1px solid var(--cyan);border-radius:10px;background:var(--cyan-dark);color:var(--text);font:650 1rem system-ui,sans-serif;cursor:pointer}
 .secondary{margin-top:10px;background:transparent}.status{min-height:1.5em;margin:10px 0 0}
 .status[data-kind=error]{color:#ffb4ae}
 .password-control{position:relative}.password-control input{padding-right:54px}.password-toggle{position:absolute;top:3px;right:3px;width:42px;min-height:40px;margin:0;padding:8px;border:0;background:transparent}.password-toggle svg{display:block;width:23px;height:23px;margin:auto;fill:none;stroke:currentColor;stroke-width:1.7;stroke-linecap:round;stroke-linejoin:round}.password-toggle .eye-slash{display:none}.password-toggle[aria-pressed=true] .eye-slash{display:block}
@@ -43,6 +43,16 @@ footer{text-align:center;padding:16px;color:var(--muted);font-size:.85rem}
 <h2>Konfiguracja</h2>
 <p>Wybierz sie&#263; Wi-Fi. Po zapisaniu VoxOne uruchomi si&#281; ponownie i otworzy panel bez has&#322;a.</p>
 <form id="wifi-form" action="/" method="post">
+<fieldset>
+<legend>Sprz&#281;t</legend>
+<label for="hardware-display">Wy&#347;wietlacz</label>
+<select id="hardware-display" name="display" required>%FIRST_BOOT_DISPLAY_OPTIONS%</select>
+<label for="hardware-input">Tryb sterowania</label>
+<select id="hardware-input" name="input" required>%FIRST_BOOT_INPUT_OPTIONS%</select>
+<label for="hardware-audio">Wyj&#347;cie audio</label>
+<select id="hardware-audio" name="audio" required>%FIRST_BOOT_AUDIO_OPTIONS%</select>
+<p>G&#322;o&#347;no&#347;&#263; startowa pozostaje na bezpiecznym poziomie 20%%.</p>
+</fieldset>
 <label for="ssid-list">Dost&#281;pne sieci</label>
 <select id="ssid-list"><option value="">Skanowanie sieci&#8230;</option></select>
 <button id="scan" class="secondary" type="button">Skanuj ponownie</button>
