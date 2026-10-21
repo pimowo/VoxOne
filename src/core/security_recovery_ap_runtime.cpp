@@ -5,6 +5,7 @@
 #include "security_recovery_pin.h"
 #include "security_recovery_session_runtime.h"
 #include "security_recovery_transaction.h"
+#include "network.h"
 #include "../hardware/hardware_descriptor.h"
 
 #include <Arduino.h>
@@ -127,6 +128,11 @@ class RuntimeApPlatform : public RecoveryApPlatform {
     if (written <= 0 || static_cast<size_t>(written) >= sizeof(expectedHost_) ||
         !pinSession_.begin())
       return false;
+    const int addressWritten = std::snprintf(
+        panelAddress_, sizeof(panelAddress_), "http://%s/", expectedHost_);
+    if (addressWritten <= 0 ||
+        static_cast<size_t>(addressWritten) >= sizeof(panelAddress_))
+      return false;
     server_.begin();
     server_.setNoDelay(true);
     return static_cast<bool>(server_);
@@ -181,6 +187,7 @@ class RuntimeApPlatform : public RecoveryApPlatform {
     confirmationHandled_ = false;
     std::memset(ssid_, 0, sizeof(ssid_));
     std::memset(expectedHost_, 0, sizeof(expectedHost_));
+    std::memset(panelAddress_, 0, sizeof(panelAddress_));
     clearRequest();
     requestCount_ = 0;
     clientStartedMs_ = 0;
@@ -188,6 +195,9 @@ class RuntimeApPlatform : public RecoveryApPlatform {
   }
 
   void restart() override { ESP.restart(); }
+
+  const char* ssid() const { return ssid_; }
+  const char* panelAddress() const { return panelAddress_; }
 
  private:
   bool keyLow() const {
@@ -475,6 +485,7 @@ class RuntimeApPlatform : public RecoveryApPlatform {
   ConfirmationKeyDetector confirmation_;
   char ssid_[32]{};
   char expectedHost_[16]{};
+  char panelAddress_[32]{};
   char request_[kRecoveryHttpMaxRequestBytes]{};
   size_t requestLength_ = 0;
   uint32_t clientStartedMs_ = 0;
@@ -491,7 +502,12 @@ RecoveryApController controller(sessionControl, platform);
 }  // namespace
 
 RecoveryApStartResult beginSecurityRecoveryAp(uint32_t nowMs) {
-  return controller.start(nowMs);
+  const RecoveryApStartResult result = controller.start(nowMs);
+  if (result == RecoveryApStartResult::Active) {
+    ::network.publishSecurityRecoveryAp(platform.ssid(),
+                                        platform.panelAddress(), true);
+  }
+  return result;
 }
 
 bool serviceSecurityRecoveryAp(uint32_t nowMs) {

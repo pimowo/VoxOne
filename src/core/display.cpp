@@ -25,6 +25,8 @@
 #include "../displays/widgets/widgets.h"
 #include "../displays/widgets/pages.h"
 #include "../displays/tools/l10n.h"
+#include "../hardware/hardware_descriptor.h"
+#include <new>
 #if (VOXONE_DISPLAY_PROFILE == VOXONE_DISPLAY_PROFILE_OLED_128X64)
 #include "../displays/conf/player128x64conf.h"
 #endif
@@ -827,6 +829,45 @@ void Display::init() {
   Serial.println("done");
 }
 
+bool Display::initSecurityRecovery() {
+  _securityRecoveryOnly = true;
+  if (!_runtimeEnabled) return false;
+
+  config.loadTheme();
+  const auto backlight =
+      voxone::hardware::currentHardware().display.backlight;
+  if (voxone::hardware::hasPin(backlight)) {
+    pinMode(backlight, OUTPUT);
+    analogWrite(backlight, 255);
+  }
+  dsp.initDisplay();
+#if defined(VOXONE_RUNTIME_OLED_128X64_BACKENDS)
+  if (!dsp.ready()) {
+    _runtimeEnabled = false;
+    Serial.println("##[WARN]# SECURITY Recovery display backend unavailable");
+    return false;
+  }
+#endif
+  _pager = new (std::nothrow) Pager();
+  if (!_pager) {
+    _runtimeEnabled = false;
+    Serial.println("##[WARN]# SECURITY Recovery display allocation failed");
+    return false;
+  }
+  _pager->begin();
+  _bootStep = 1;
+  _apScreen();
+  _bootStep = 2;
+  dsp.loop(true);
+  return true;
+}
+
+void Display::serviceSecurityRecovery() {
+  if (!_securityRecoveryOnly || !_runtimeEnabled || !_pager) return;
+  _pager->loop();
+  dsp.loop();
+}
+
 uint16_t Display::width(){ return _runtimeEnabled ? dsp.width() : 0; }
 uint16_t Display::height(){ return _runtimeEnabled ? dsp.height() : 0; }
 #if TIME_SIZE>19
@@ -1160,6 +1201,9 @@ void Display::_apScreen() {
     const bool firstBootSetup =
         activeAp &&
         presentation.mode == voxone::first_boot::Mode::FirstBootSetup;
+    const bool securityRecovery =
+        activeAp &&
+        presentation.screen == voxone::first_boot::Screen::SecurityRecovery;
 #if VOXONE_DISPLAY_PROFILE == VOXONE_DISPLAY_PROFILE_ST7796_480X320
     const bool wifiRecovery =
         activeAp &&
@@ -1171,13 +1215,52 @@ void Display::_apScreen() {
       _boot->addWidget(new FillWidget(metaBGConfInv, config.theme.metafill));
       #endif
     ScrollWidget *bootTitle = (ScrollWidget*) &_boot->addWidget(new ScrollWidget("*", apTitleConf, config.theme.meta, config.theme.metabg));
-    bootTitle->setText(presentationReady ? presentation.title : "VoxOne");
+    bootTitle->setText(
+        securityRecovery ? presentation.product :
+        (presentationReady ? presentation.title : "VoxOne"));
 
     if (!activeAp) {
       ScrollWidget *bootStatus = (ScrollWidget*) &_boot->addWidget(
           new ScrollWidget("*", apSettConf, config.theme.title2,
                            config.theme.background));
       bootStatus->setText(presentationReady ? presentation.statusText : "");
+      _pager->addPage(_boot);
+      _pager->setPage(_boot);
+      return;
+    }
+    if (securityRecovery) {
+      TextWidget* recoveryTitle = (TextWidget*) &_boot->addWidget(
+          new TextWidget(apNameConf, 30, config.theme.title1,
+                         config.theme.background));
+      recoveryTitle->setText(presentation.title);
+      TextWidget* recoverySsid = (TextWidget*) &_boot->addWidget(
+          new TextWidget(apName2Conf, 30, config.theme.clock,
+                         config.theme.background));
+#if VOXONE_DISPLAY_PROFILE == VOXONE_DISPLAY_PROFILE_OLED_128X64
+      constexpr size_t kOledLineCharacters = 21;
+      const size_t ssidLength = strlen(presentation.apSsid);
+      if (ssidLength > kOledLineCharacters) {
+        const size_t split = (ssidLength + 1) / 2;
+        char firstLine[17]{};
+        char secondLine[17]{};
+        memcpy(firstLine, presentation.apSsid, split);
+        memcpy(secondLine, presentation.apSsid + split,
+               ssidLength - split);
+        recoverySsid->setText(firstLine);
+        TextWidget* recoverySsidSecond = (TextWidget*) &_boot->addWidget(
+            new TextWidget(apPassConf, 30, config.theme.clock,
+                           config.theme.background));
+        recoverySsidSecond->setText(secondLine);
+      } else {
+        recoverySsid->setText(presentation.apSsid);
+      }
+#else
+      recoverySsid->setText(presentation.apSsid);
+#endif
+      TextWidget* recoveryAddress = (TextWidget*) &_boot->addWidget(
+          new TextWidget(apPass2Conf, 30, config.theme.clock,
+                         config.theme.background));
+      recoveryAddress->setText(presentation.apAddress);
       _pager->addPage(_boot);
       _pager->setPage(_boot);
       return;

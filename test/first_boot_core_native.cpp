@@ -178,11 +178,14 @@ int main() {
   assert(display.find("first_boot::makeView") == std::string::npos);
   assert(main.find("securityRecoveryApOwnsRuntime()") != std::string::npos);
   assert(main.find("display.configureRuntime") != std::string::npos);
+  const std::size_t setup = main.find("void setup()");
   const std::size_t transactionRecovery =
-      main.find("recoverDeviceFirstBootTransactionAtBoot()");
-  const std::size_t recoveryAp = main.find("beginSecurityRecoveryAp(millis())");
+      main.find("recoverDeviceFirstBootTransactionAtBoot()", setup);
+  const std::size_t recoveryAp =
+      main.find("beginSecurityRecoveryAp(millis())", setup);
   const std::size_t runtimeHardware =
-      main.find("hardware::loadRuntimeHardwareConfig()");
+      main.find("hardware::loadRuntimeHardwareConfig()", setup);
+  assert(setup != std::string::npos);
   assert(transactionRecovery != std::string::npos);
   assert(transactionRecovery < recoveryAp);
   assert(transactionRecovery < runtimeHardware);

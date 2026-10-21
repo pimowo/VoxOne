@@ -132,6 +132,8 @@ class Display {
     ~Display();
     displayMode_e mode() const { return uiState.mode(); }
     void init();
+    bool initSecurityRecovery();
+    void serviceSecurityRecovery();
     void loop();
     void _start();
     void configureRuntime(bool enabled) { _runtimeEnabled = enabled; }
@@ -198,6 +200,7 @@ class Display {
 #endif
     bool _locked = false;
     bool _runtimeEnabled = true;
+    bool _securityRecoveryOnly = false;
     volatile bool _volumePending = false;
     volatile bool _volumeModePending = false;
     uint32_t _lastVolumeDraw = 0;
@@ -252,6 +255,8 @@ class Display {
     void configureRuntime(bool enabled) { (void)enabled; }
     bool active() const { return false; }
     void init();
+    bool initSecurityRecovery() { return false; }
+    void serviceSecurityRecovery() {}
     void _start();
     void putRequest(displayRequestType_e type, int payload=0);
     void queueModeRender(displayMode_e mode) {}

@@ -128,6 +128,23 @@ void completeBootHealth(
   voxone::ota::reportBootSetup(
       configurationReady, dataReady, runtimeReady, controlPlaneReady);
 }
+
+void startSecurityRecoveryDisplay() {
+  const auto hardwareStatus =
+      voxone::hardware::loadRuntimeHardwareConfig();
+  const auto selection = voxone::display_backend::select(
+      voxone::hardware::runtimeHardwareConfig(),
+      voxone::hardware::currentHardware(),
+      voxone::display_backend::compiledBackends());
+  const auto plan = voxone::display_backend::activationPlan(selection);
+  display.configureRuntime(plan.runRenderer);
+  Serial.printf("##[BOOT]# SECURITY Recovery display hardware=%s backend=%s\n",
+                voxone::hardware::runtimeHardwareLoadStatusName(hardwareStatus),
+                voxone::display_backend::controllerName(selection.controller));
+  if (!plan.initializeBackend || !plan.runRenderer) return;
+  if (!display.initSecurityRecovery())
+    Serial.println("##[WARN]# SECURITY Recovery continues without display");
+}
 }  // namespace
 
 #if USE_OTA
@@ -226,6 +243,9 @@ void setup() {
     Serial.printf("##[BOOT]# SECURITY Recovery AP result=%s exclusive=1\n",
                   voxone::security_recovery::recoveryApStartResultName(
                       recoveryApResult));
+    if (recoveryApResult ==
+        voxone::security_recovery::RecoveryApStartResult::Active)
+      startSecurityRecoveryDisplay();
     return;
   }
   const auto runtimeHardwareStatus =
@@ -302,6 +322,7 @@ void setup() {
 void loop() {
   if (voxone::security_recovery::securityRecoveryApOwnsRuntime()) {
     voxone::security_recovery::serviceSecurityRecoveryAp(millis());
+    display.serviceSecurityRecovery();
     delay(1);
     return;
   }

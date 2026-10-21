@@ -37,6 +37,7 @@ bool contains(const RuntimeSnapshot& snapshot, const char* value) {
 }
 
 void assertTerminated(const RuntimeSnapshot& snapshot) {
+  assert(snapshot.product[sizeof(snapshot.product) - 1] == '\0');
   assert(snapshot.apSsid[sizeof(snapshot.apSsid) - 1] == '\0');
   assert(snapshot.apAddress[sizeof(snapshot.apAddress) - 1] == '\0');
   assert(snapshot.title[sizeof(snapshot.title) - 1] == '\0');

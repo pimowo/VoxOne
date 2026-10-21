@@ -39,8 +39,9 @@ struct RuntimeSnapshot {
   bool presentApCredential;
   bool hasError;
   int errorCode;
+  char product[16];
   char apSsid[33];
-  char apAddress[16];
+  char apAddress[32];
   char title[32];
   char statusText[32];
 };
@@ -52,7 +53,8 @@ class RuntimeSnapshotStore {
  public:
   RuntimeSnapshotStore()
       : wifiProfileCount_(0), connection_(Connection::Idle), errorCode_(0),
-        staValidatedInThisBoot_(false), initialized_(false), generation_(0) {
+        staValidatedInThisBoot_(false), securityRecovery_(false),
+        initialized_(false), generation_(0) {
     apSsid_[0] = '\0';
     apAddress_[0] = '\0';
     RuntimeSnapshot initial{};
@@ -63,6 +65,7 @@ class RuntimeSnapshotStore {
     initial.connection = Connection::Idle;
     initial.staValidatedInThisBoot = false;
     initial.apSecurity = ApSecurity::NotActive;
+    copyText(initial.product, sizeof(initial.product), "VoxOne");
     copyText(initial.title, sizeof(initial.title), titleText(Mode::Normal));
     copyText(initial.statusText, sizeof(initial.statusText),
              statusText(Mode::Normal));
@@ -85,6 +88,7 @@ class RuntimeSnapshotStore {
     connection_ = Connection::Idle;
     errorCode_ = RuntimeNoError;
     staValidatedInThisBoot_ = false;
+    securityRecovery_ = false;
     clearApLocked();
     initialized_ = true;
     rebuildLocked();
@@ -96,6 +100,7 @@ class RuntimeSnapshotStore {
     connection_ = Connection::Failed;
     errorCode_ = RuntimeWifiInventoryInvalid;
     staValidatedInThisBoot_ = false;
+    securityRecovery_ = false;
     clearApLocked();
     initialized_ = true;
     rebuildLocked();
@@ -106,6 +111,7 @@ class RuntimeSnapshotStore {
     lock();
     connection_ = Connection::Connecting;
     errorCode_ = RuntimeNoError;
+    securityRecovery_ = false;
     clearApLocked();
     rebuildLocked();
     unlock();
@@ -148,11 +154,33 @@ class RuntimeSnapshotStore {
 
   void activateAp(const char* ssid, const char* address, bool started) {
     lock();
+    securityRecovery_ = false;
     const bool complete = started && ssid && ssid[0] != '\0' && address &&
         address[0] != '\0';
     if (complete) {
       connection_ = wifiProfileCount_ == 0 ? Connection::SetupAp
                                            : Connection::RecoveryAp;
+      copyText(apSsid_, sizeof(apSsid_), ssid);
+      copyText(apAddress_, sizeof(apAddress_), address);
+    } else {
+      connection_ = Connection::Failed;
+      clearApLocked();
+    }
+    rebuildLocked();
+    unlock();
+  }
+
+  void activateSecurityRecoveryAp(const char* ssid, const char* address,
+                                  bool started) {
+    lock();
+    const bool complete = started && ssid && ssid[0] != '\0' && address &&
+        address[0] != '\0';
+    securityRecovery_ = complete;
+    initialized_ = true;
+    errorCode_ = RuntimeNoError;
+    staValidatedInThisBoot_ = false;
+    if (complete) {
+      connection_ = Connection::RecoveryAp;
       copyText(apSsid_, sizeof(apSsid_), ssid);
       copyText(apAddress_, sizeof(apAddress_), address);
     } else {
@@ -187,7 +215,8 @@ class RuntimeSnapshotStore {
   }
 
   void rebuildLocked() {
-    const Inputs inputs{wifiProfileCount_, connection_, false, false,
+    const Inputs inputs{wifiProfileCount_, connection_, false,
+                        securityRecovery_,
                         apSsid_, apAddress_, errorCode_};
     const View view = makeView(inputs);
     RuntimeSnapshot next{};
@@ -202,6 +231,7 @@ class RuntimeSnapshotStore {
     next.presentApCredential = view.presentApCredential;
     next.hasError = view.hasError;
     next.errorCode = view.errorCode;
+    copyText(next.product, sizeof(next.product), view.product);
     copyText(next.apSsid, sizeof(next.apSsid), view.apSsid);
     copyText(next.apAddress, sizeof(next.apAddress), view.address);
     copyText(next.title, sizeof(next.title), view.title);
@@ -229,10 +259,11 @@ class RuntimeSnapshotStore {
   Connection connection_;
   int errorCode_;
   bool staValidatedInThisBoot_;
+  bool securityRecovery_;
   bool initialized_;
   uint32_t generation_;
   char apSsid_[33];
-  char apAddress_[16];
+  char apAddress_[32];
   RuntimeSnapshot snapshot_;
 #if defined(ARDUINO)
   mutable portMUX_TYPE mux_ = portMUX_INITIALIZER_UNLOCKED;

@@ -25,6 +25,10 @@ class MyNetwork {
     voxone::first_boot::RuntimeSnapshot presentationSnapshot() const {
       return presentationState.read();
     }
+    void publishSecurityRecoveryAp(const char* ssid, const char* address,
+                                   bool started) {
+      presentationState.activateSecurityRecoveryAp(ssid, address, started);
+    }
   private:
     voxone::first_boot::RuntimeSnapshotStore presentationState;
     voxone::network::NetworkReadyState readyState;
