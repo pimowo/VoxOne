@@ -128,15 +128,16 @@ klient używa czterech tematów:
 | Sufiks | Kierunek i dane |
 |---|---|
 | `command` | Subscribe QoS 2. Przyjmuje krótkie komendy sterujące, `volm`, `volp`, `turnon`, `turnoff`, `vol <n>`, `play <n>` oraz dłuższy URL jako temporary audio/TTS. |
-| `status` | Retained JSON: stan play, numer/nazwa stacji, metadata title oraz legacy `on=config.store.dspon`. |
+| `status` | Retained JSON: `status=1` wyłącznie dla rzeczywistego `PLAYING`, poza nim `status=0`; numer/nazwa stacji, metadata title oraz niezależne legacy `on=config.store.dspon`. `on` nie jest synonimem odtwarzania. |
 | `volume` | Retained poziom w kompatybilnej skali MQTT. |
 | `playlist` | Retained URL HTTP do `/data/stations.tsv`. |
 
 MQTT przestaje reconnectować i zamyka TCP przed restartem po update. Bieżąca
 integracja Home Assistant to odziedziczony kontrakt MQTT `ha_yoradio`; native
 HA, `_voxone._tcp`, config flow i wersjonowany model encji pozostają
-POST-STABLE. Znaczenie legacy pola `status.on` wymaga HIL i nie jest w tym
-checkpointcie zmieniane.
+POST-STABLE. Legacy `turnoff` nadal wyłącza DSP/display, zatrzymuje player i
+zachowuje `smartstart`; `turnon` włącza DSP/display i uruchamia PLAY tylko przy
+`smartstart=1`. Fizyczna regresja MQTT/HA pozostaje wymagana przed Stable.
 
 ## RADIO, SourceManager i Bluetooth
 

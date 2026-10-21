@@ -168,6 +168,7 @@ Invoke-Step 'Native tests' {
    $exe=Join-Path $work ($label+$(if($onWindows) { '.exe' } else { '' }))
    $compileLog=Join-Path $work ($label+'.compile.log')
    $compileArgs=@('-std=c++11','-O2','-Wall','-Wextra','-Werror','-Wno-unused-parameter')
+   if($name -eq 'mqtt_contract_native') { $compileArgs+=@('-I',(Join-Path $root 'test')) }
    if($name -eq 'ap_ui_www_binding_native' -or $name -eq 'display_scroll_runtime_config_native' -or $name -eq 'first_boot_runtime_snapshot_native' -or $name -eq 'first_boot_transaction_native') { $compileArgs+='-pthread' }
    if($variant) {
     if($variant -eq 'CLEAN' -or $variant -eq 'DIRTY') { $compileArgs+="-DBUILD_ID_TEST_$variant=1" }
