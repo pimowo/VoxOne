@@ -127,8 +127,6 @@ Poniższy pakiet doprecyzowuje zatwierdzony zakres LCD i WWW. Nie zastępuje ani
 
 - [HARDWARE][STABLE][SOFTWARE PASS][HIL PENDING] Fizycznie zweryfikować poprawki `ST7789_284X76`: brak nakładania tekstów i ikon dla długich nazw i pustych metadanych; PLAYER bez zegara i tekstowego RSSI, z PLAY/PAUSE/STOP, rzeczywistym źródłem, głośnością, audio info, niezależnym stanem ikony BT oraz słupkami Wi-Fi; czerwone MUTE na VOL; `GRA` po lewej na STATIONS; pełne ekrany UPDATE wraz z powrotem po Error/Aborted i zachowaniem ekranu do restartu po sukcesie. Software baseline obejmuje layout 284×76, zachowany mechanizm przewijania z pauzami, testy native i ASan/UBSan, podglądy offline oraz buildy W0/M0/S0/DIN0/L0, ale nie zastępuje oceny na fizycznym panelu.
 - [HARDWARE][PENDING] Przed udostępnieniem `ST7789_284X76` w M0 lub innym profilu osobno zatwierdzić jego `supportedDisplays`, kontroler, pinout, zasilanie i fizyczny HIL. Współdzielony renderer nie stanowi deklaracji kompatybilności sprzętowej i nie może sam rozszerzać capabilities istniejących profili.
-- [STABLE] Ujednolicić tytuły kart WWW, preferując nazwy rozpoczynane wielką literą, oraz przenieść do VoxOne wizualny język NexaPanel: paletę kolorów, fonty, przyciski, suwaki, checkboxy, paski postępu, pola formularzy, karty, odstępy, zaokrąglenia i responsywność. Referencją tylko do odczytu jest `/home/piotrek/projects/NexaPanel/src/WebPanelPage.cpp`; zachować funkcjonalność, kontrakty WWW i SECURITY VoxOne, bez kopiowania logiki NexaPanel.
-
 Obecna sekcja AUDIO jest zaakceptowana i nie wymaga zmian w kategorii A.
 
 ### B. Funkcje wymagające backendu, persistence lub wspólnego modelu
