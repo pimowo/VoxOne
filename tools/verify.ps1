@@ -161,7 +161,7 @@ Invoke-Step 'Native tests' {
   $name=$test.BaseName
   $sources=@($test.FullName)
   if($nativeSources.ContainsKey($name)) { $sources+=@($nativeSources[$name] | ForEach-Object { Join-Path $root $_ }) }
-  $variants=if($name -eq 'ap_ui_display_binding_native' -or $name -eq 'ap_ui_www_binding_native' -or $name -eq 'config_backup_native' -or $name -eq 'first_boot_core_native' -or $name -eq 'first_boot_runtime_snapshot_native' -or $name -eq 'first_boot_spiffs_transaction_native' -or $name -eq 'first_boot_transaction_native' -or $name -eq 'hardware_descriptor_native' -or $name -eq 'runtime_hardware_config_native' -or $name -eq 'runtime_hardware_web_native' -or $name -eq 'runtime_display_activation_native' -or $name -eq 'security_recovery_ap_native' -or $name -eq 'security_recovery_display_native' -or $name -eq 'security_recovery_key_native' -or $name -eq 'security_recovery_session_native' -or $name -eq 'security_recovery_state_native') { @('L0','M0','S0','DIN0','W0') } elseif($name -eq 'build_identity_native') { @('','L0','M0','S0','DIN0','W0','CLEAN','DIRTY') } else { @('') }
+  $variants=if($name -eq 'security_http_adapter_native') { @('','L0','M0','S0','DIN0','W0','SECURITY-TEST') } elseif($name -eq 'ap_ui_display_binding_native' -or $name -eq 'ap_ui_www_binding_native' -or $name -eq 'config_backup_native' -or $name -eq 'first_boot_core_native' -or $name -eq 'first_boot_runtime_snapshot_native' -or $name -eq 'first_boot_spiffs_transaction_native' -or $name -eq 'first_boot_transaction_native' -or $name -eq 'hardware_descriptor_native' -or $name -eq 'runtime_hardware_config_native' -or $name -eq 'runtime_hardware_web_native' -or $name -eq 'runtime_display_activation_native' -or $name -eq 'security_recovery_ap_native' -or $name -eq 'security_recovery_display_native' -or $name -eq 'security_recovery_key_native' -or $name -eq 'security_recovery_session_native' -or $name -eq 'security_recovery_state_native') { @('L0','M0','S0','DIN0','W0') } elseif($name -eq 'build_identity_native') { @('','L0','M0','S0','DIN0','W0','CLEAN','DIRTY') } else { @('') }
   foreach($variant in $variants) {
    $label=if($variant) { "$name-$variant" } else { $name }
    $exe=Join-Path $work ($label+$(if($onWindows) { '.exe' } else { '' }))
@@ -171,6 +171,7 @@ Invoke-Step 'Native tests' {
    if($name -eq 'ap_ui_www_binding_native' -or $name -eq 'display_scroll_runtime_config_native' -or $name -eq 'first_boot_runtime_snapshot_native' -or $name -eq 'first_boot_transaction_native') { $compileArgs+='-pthread' }
    if($variant) {
     if($variant -eq 'CLEAN' -or $variant -eq 'DIRTY') { $compileArgs+="-DBUILD_ID_TEST_$variant=1" }
+    elseif($variant -eq 'SECURITY-TEST') { $compileArgs+=@('-DVOXONE_PROFILE_M0=1','-DVOXONE_SECURITY_HTTP_ENFORCEMENT_TEST=1') }
     else { $compileArgs+="-DVOXONE_PROFILE_$variant=1" }
     $sourcesForVariant=if($name -eq 'config_backup_native' -or $name -eq 'first_boot_spiffs_transaction_native' -or $name -eq 'first_boot_transaction_native' -or $name -eq 'hardware_descriptor_native' -or $name -eq 'runtime_hardware_config_native' -or $name -eq 'runtime_hardware_web_native' -or $name -eq 'runtime_display_activation_native' -or $name -eq 'security_recovery_display_native') { $sources+@(Join-Path $root 'src/hardware/hardware_descriptor.cpp') } else { $sources }
    } else { $sourcesForVariant=$sources }

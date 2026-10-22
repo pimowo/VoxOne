@@ -469,26 +469,34 @@ void testProtectedRecoveryLoginSelection() {
 }
 
 void testBuildSwitchIsMonotonic() {
-#if VOXONE_SECURITY_HTTP_ENFORCEMENT || \
-    VOXONE_SECURITY_HTTP_ENFORCEMENT_TEST
+#if VOXONE_SECURITY_HTTP_ENFORCEMENT_TEST
+  static_assert(VOXONE_SECURITY_STANDARD_PROFILE,
+                "the dedicated test variant must retain an M0 profile");
+  static_assert(!securityHttpProductionEnforcementEnabled(),
+                "test variant must not advertise production enforcement");
+  static_assert(securityHttpTestEnforcementEnabled(),
+                "test variant must retain test enforcement");
   static_assert(securityHttpEnforcementEnabled(),
-                "enabled build must enforce HTTP policy");
-#else
-  static_assert(!securityHttpEnforcementEnabled(),
-                "ordinary build must remain disabled in 1B");
-#endif
-#if VOXONE_SECURITY_HTTP_ENFORCEMENT
-  static_assert(securityHttpEnforcementMode() ==
-                    SecurityHttpEnforcementMode::Production,
-                "production flag must be reported as production");
-#elif VOXONE_SECURITY_HTTP_ENFORCEMENT_TEST
+                "test variant must enforce HTTP policy");
   static_assert(securityHttpEnforcementMode() ==
                     SecurityHttpEnforcementMode::Test,
-                "test flag must not be reported as production");
+                "test variant must report test enforcement");
+#elif VOXONE_SECURITY_STANDARD_PROFILE
+  static_assert(securityHttpProductionEnforcementEnabled(),
+                "standard profiles must enable production enforcement");
+  static_assert(!securityHttpTestEnforcementEnabled(),
+                "standard profiles must not enable test enforcement");
+  static_assert(securityHttpEnforcementEnabled(),
+                "standard profiles must enforce HTTP policy");
+  static_assert(securityHttpEnforcementMode() ==
+                    SecurityHttpEnforcementMode::Production,
+                "standard profiles must report production enforcement");
 #else
+  static_assert(!securityHttpEnforcementEnabled(),
+                "non-profile native builds must remain disabled");
   static_assert(securityHttpEnforcementMode() ==
                     SecurityHttpEnforcementMode::Disabled,
-                "ordinary build must report disabled enforcement");
+                "non-profile native builds must report disabled enforcement");
 #endif
   static_assert(!securityHttpProductionEnforcementEnabled() ||
                     securityHttpEnforcementEnabled(),

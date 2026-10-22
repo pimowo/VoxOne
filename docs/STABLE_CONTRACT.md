@@ -95,15 +95,21 @@ Akceptacja `hostname.local` przez politykę Host nie gwarantuje obecnie
 rozwiązywania tej nazwy: publikowanie mDNS nie jest aktywne w bieżącej ścieżce
 startowej firmware.
 
-Bieżący stan produkcyjny pozostaje observe-only: zwykłe profile mają
-`VOXONE_SECURITY_HTTP_ENFORCEMENT=0` i
-`VOXONE_SECURITY_HTTP_ENFORCEMENT_TEST=0`, dlatego API raportuje
-`protectionEnforced=false` oraz `enforcementMode=disabled` także wtedy, gdy
-skonfigurowano hasło. Tylko `m0-security-test` włącza testową bramkę i raportuje
+Standardowe profile W0, M0, L0, S0 i DIN0 włączają
+`VOXONE_SECURITY_HTTP_ENFORCEMENT=1`, dlatego API raportuje
+`protectionEnforced=true` oraz `enforcementMode=production`. Odrębny
+`m0-security-test` włącza wyłącznie flagę testową i raportuje
 `protectionEnforced=true`, `enforcementMode=test`; nie jest to ochrona
-produkcyjna. Jednoczesne włączenie flag production i test jest błędem
-kompilacji. Flagi są wyłącznie build-time i nie mogą być zmieniane przez klienta.
-Produkcji nie wolno włączyć przed HIL PBKDF2, HTTP/WS, migracji i recovery.
+produkcyjna. Jednoczesne włączenie flag production i test oraz próba wyłączenia
+production w standardowym profilu są błędami kompilacji. Flagi są wyłącznie
+build-time i nie mogą być zmieniane przez klienta.
+
+Aktualizacja istniejącego urządzenia nie modyfikuje rekordu SECURITY,
+konfiguracji ani danych użytkownika. Zapisane stany OPEN i PROTECTED pozostają
+odpowiednio otwarte lub chronione. Starsze urządzenie z Wi-Fi, ale bez rekordu
+SECURITY, przechodzi do `legacy-unclaimed`: publiczny bootstrap WWW pozwala
+jawnie wybrać OPEN albo ustawić hasło, a dotychczasowa trasa Web Update
+pozostaje dostępna; chronione API i WebSocket nie są w tym stanie otwierane.
 MQTT zachowuje osobną politykę i nie korzysta z cookie HTTP.
 
 ## WebSocket

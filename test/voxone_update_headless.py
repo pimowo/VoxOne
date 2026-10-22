@@ -1777,9 +1777,14 @@ def main():
            "websocketHandshake" in http_adapter_header and \
            "validateBinding" in route, \
         "SECURITY-ENFORCE-1C must enforce handshake and live WS bindings"
-    assert "VOXONE_SECURITY_HTTP_ENFORCEMENT 0" in http_adapter_header and \
-           "VOXONE_SECURITY_HTTP_ENFORCEMENT_TEST 0" in http_adapter_header, \
-        "ordinary builds must keep HTTP enforcement disabled"
+    for profile in ("W0", "M0", "L0", "S0", "DIN0"):
+        assert f"defined(VOXONE_PROFILE_{profile})" in http_adapter_header, \
+            f"production enforcement must cover {profile}"
+    assert "VOXONE_SECURITY_STANDARD_PROFILE" in http_adapter_header and \
+           "!VOXONE_SECURITY_HTTP_ENFORCEMENT_TEST" in http_adapter_header and \
+           "Standard VoxOne profiles require production HTTP enforcement" \
+           in http_adapter_header, \
+        "standard profile enforcement must be mandatory and distinct from test"
     assert "[env:m0-security-test]" in platformio and \
            "-DVOXONE_SECURITY_HTTP_ENFORCEMENT_TEST=1" in platformio, \
         "dedicated M0 enforcement test profile is missing"

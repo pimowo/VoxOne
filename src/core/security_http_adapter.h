@@ -6,12 +6,28 @@
 #include <stddef.h>
 #include <stdint.h>
 
-#ifndef VOXONE_SECURITY_HTTP_ENFORCEMENT
-#define VOXONE_SECURITY_HTTP_ENFORCEMENT 0
-#endif
-
 #ifndef VOXONE_SECURITY_HTTP_ENFORCEMENT_TEST
 #define VOXONE_SECURITY_HTTP_ENFORCEMENT_TEST 0
+#endif
+
+#if defined(VOXONE_PROFILE_W0) || defined(VOXONE_PROFILE_M0) || \
+    defined(VOXONE_PROFILE_L0) || defined(VOXONE_PROFILE_S0) || \
+    defined(VOXONE_PROFILE_DIN0)
+#define VOXONE_SECURITY_STANDARD_PROFILE 1
+#else
+#define VOXONE_SECURITY_STANDARD_PROFILE 0
+#endif
+
+#ifndef VOXONE_SECURITY_HTTP_ENFORCEMENT
+// Every standard firmware profile enforces the reviewed HTTP/API/WebSocket
+// policy. The dedicated M0 HIL profile selects TEST first, which keeps the
+// production bit clear while exercising the same runtime gate.
+#if VOXONE_SECURITY_STANDARD_PROFILE && \
+    !VOXONE_SECURITY_HTTP_ENFORCEMENT_TEST
+#define VOXONE_SECURITY_HTTP_ENFORCEMENT 1
+#else
+#define VOXONE_SECURITY_HTTP_ENFORCEMENT 0
+#endif
 #endif
 
 #if (VOXONE_SECURITY_HTTP_ENFORCEMENT != 0 && \
@@ -24,6 +40,12 @@
 #if VOXONE_SECURITY_HTTP_ENFORCEMENT && \
     VOXONE_SECURITY_HTTP_ENFORCEMENT_TEST
 #error "Security HTTP enforcement cannot be both production and test"
+#endif
+
+#if VOXONE_SECURITY_STANDARD_PROFILE && \
+    !VOXONE_SECURITY_HTTP_ENFORCEMENT_TEST && \
+    !VOXONE_SECURITY_HTTP_ENFORCEMENT
+#error "Standard VoxOne profiles require production HTTP enforcement"
 #endif
 
 namespace voxone {
@@ -59,7 +81,7 @@ constexpr const char* securityHttpEnforcementModeName(
 }
 
 // This is the actual runtime gate used by HTTP and WebSocket access checks.
-// Ordinary profiles keep both flags off; the dedicated M0 test profile enables
+// Standard profiles use production mode; the dedicated M0 test profile enables
 // only the test flag and must never be reported as production protection.
 constexpr bool securityHttpEnforcementEnabled() {
   return securityHttpEnforcementMode() !=

@@ -68,13 +68,15 @@ int main() {
   assert(!contains(securityApi, "esp_ota_mark_app_valid"));
   assert(!contains(securityApi, "esp_ota_mark_app_invalid"));
 
-  // Production enforcement remains an explicit future activation gate. The
-  // integration may be tested without silently protecting every profile.
+  // All standard profiles select production enforcement, while the dedicated
+  // M0 test environment remains explicitly test-only.
   assert(contains(securityAdapter,
                   "SecurityHttpEnforcementMode::Production"));
   assert(contains(securityAdapter,
                   "SecurityHttpEnforcementMode::Test"));
-  assert(!contains(platform, "-DVOXONE_SECURITY_HTTP_ENFORCEMENT=1"));
+  assert(contains(securityAdapter, "VOXONE_SECURITY_STANDARD_PROFILE"));
+  assert(contains(securityAdapter,
+                  "Standard VoxOne profiles require production HTTP enforcement"));
   assert(contains(platform,
                   "-DVOXONE_SECURITY_HTTP_ENFORCEMENT_TEST=1"));
 
