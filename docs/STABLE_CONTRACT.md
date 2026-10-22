@@ -47,7 +47,7 @@ trasy i metody; nieznana trasa kończy się `404`, znana trasa ze złą metodą
 | `GET /variables.js` | Tożsamość wersji, kanału, buildu, profilu i trybu WWW. Trasa chroniona po enforcement. |
 | `GET /api/ready` | Publiczna diagnostyka: `ready`, losowy dla bootu `bootId` oraz obiekt `ota`. Sam HTTP 200 nie oznacza akceptacji obrazu `PENDING_VERIFY`, jeżeli `ready=false`. |
 | `GET /api/security/state` | Publiczny stan bootstrapu SECURITY; zawiera `state`, `setupAllowed`, `loginAllowed`, `authenticated`, rzeczywiste `protectionEnforced` oraz `enforcementMode` (`disabled`, `test`, `production`). |
-| `POST /api/security/setup`, `/login`, `/logout` | Formularz security setup/login/logout; Host i same-origin są walidowane. Setup jest dozwolony tylko dla `legacy-unclaimed`. |
+| `POST /api/security/setup`, `/login`, `/logout`, `/manage` | Formularze security setup/login/logout oraz zarządzania ochroną; Host i same-origin są walidowane. Setup jest dozwolony tylko dla `legacy-unclaimed`; `manage` włącza hasło w OPEN, a jego zmiana lub wyłączenie w PROTECTED wymaga ważnej sesji. |
 | `GET /api/stations`, `/api/directory/search`, `/api/stations/export` | Odczyt stacji, Radio Directory i eksport. |
 | `POST /api/stations/import`, `/add`, `/edit`, `/delete`, `/reorder`, `/metadata` | Mutacje listy stacji. Import jest uploadem multipart i ma osobną walidację formatu. |
 | `GET/POST /api/mqtt` | Odczyt i zapis bieżącej konfiguracji MQTT. API nigdy nie zwraca zapisanego hasła; raportuje jedynie, czy hasło istnieje. |
@@ -85,6 +85,11 @@ albo `hostname.local`, opcjonalnie z portem 80. Mutacje i handshake WebSocket
 wymagają zgodnego `Origin: http://<Host>`. Zmiana trybu/hasła lub generation,
 logout i wygaśnięcie unieważniają autoryzację; aktywny chroniony WebSocket jest
 zamykany kodem 1008.
+
+Normalny panel SYSTEM udostępnia włączenie opcjonalnego hasła, jego zmianę i
+wyłączenie. Przejście OPEN → PROTECTED nie wymaga wcześniejszej sesji; każda
+mutacja stanu PROTECTED wymaga ważnej sesji administratora. Udana operacja
+unieważnia wszystkie sesje RAM i wymusza ponowne ustalenie dostępu.
 
 Akceptacja `hostname.local` przez politykę Host nie gwarantuje obecnie
 rozwiązywania tej nazwy: publikowanie mDNS nie jest aktywne w bieżącej ścieżce
@@ -180,6 +185,38 @@ lock, audio jest zatrzymywane, a MQTT/HTTP/WS są wygaszane przed restartem.
 Błąd lub abort wykonuje cleanup, nie uruchamia automatycznie audio i próbuje
 odzyskać filesystem. `update.html` przekierowuje do normalnego WWW, gdy jest
 ono dostępne; w przeciwnym razie używa osadzonego formularza emergency.
+
+SECURITY Recovery jest wybierane wyłącznie przy starcie: aktywny LOW na
+profilowym wejściu KEY po 50 ms debounce uruchamia tryb Recovery, a HIGH
+kontynuuje zwykły start. Nie ma przytrzymania 3–10 s, oczekiwania na zwolnienie,
+`StuckLow`, drugiego gestu ani okna czasowego. Przycisk enkodera i zworka do GND
+mają tę samą semantykę tego samego wejścia; pin i wymagany zewnętrzny pull-up
+wynikają z capability profilu (M0 używa GPIO4).
+
+Recovery uruchamia ekskluzywny, otwarty AP `VoxOne-Recovery-XXXXXX` i panel
+`http://192.168.4.1/`. Nie uruchamia RADIO, Bluetooth ani normalnego API, OTA i
+WebSocket. Dopuszczone są tylko `GET /`, `POST /password` i
+`POST /factory-reset`; pozostałe trasy są odrzucane. Host, Origin, metoda,
+Content-Type, rozmiar i tempo żądań są sprawdzane, a mutacje mają ukryty token
+CSRF. Nie ma hasła AP, PIN-u Recovery, cookie uwierzytelniającego ani sekretu
+na wyświetlaczu. Ekran, jeśli działa, pokazuje jedynie nazwę produktu, tryb,
+SSID i adres panelu, a jego awaria nie blokuje AP.
+
+`POST /password` ustawia nowe hasło (4–64 według kontraktu SECURITY), także
+przełączając OPEN → PROTECTED, używa istniejącego hashowanego rekordu i
+unieważnia sesje; po trwałym zapisie urządzenie automatycznie się restartuje.
+`POST /factory-reset` kasuje dane użytkownika z namespaces `eeprom`,
+`nvs.net80211`, `voxhw`, `voxmqtt`, `voxui`, `voxscroll`, `voxsecurity`,
+`voxrestore`, `voxfirstboot` i `voxupdate` oraz pliki Wi-Fi, playlist/stacji i
+stagingu restore w SPIFFS.
+Weryfikacja wymaga pustych danych użytkownika i zachowanego
+`/www/assets.vxwm`; firmware, bootloader, tablica partycji, `otadata`, oba sloty
+OTA, namespace systemowy `vox_ota` i fabryczne WWW nie są kasowane ani
+formatowane. Dopiero po udanej weryfikacji zapisywany jest jednorazowy marker
+FIRST BOOT i następuje restart. Marker jest konsumowany przed odczytem KEY,
+więc pierwszy start po resecie omija aktywny KEY; kolejne starty znów go
+respektują. Błąd kasowania, weryfikacji lub markera nie jest sukcesem i nie
+planuje restartu.
 
 MAIN OTA używa dwóch równych slotów `app0`/`app1` i `otadata`. Obraz
 `PENDING_VERIFY` nie jest automatycznie akceptowany przez Arduino: projektowy

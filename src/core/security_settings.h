@@ -111,6 +111,11 @@ class SecurityService {
   SecurityOperationStatus unprotect(const char* currentPassword);
   SecurityOperationStatus changePassword(const char* currentPassword,
                                          const char* newPassword);
+  // Recovery is already authorized by the boot-time physical KEY decision.
+  // It never accepts Unconfigured/Legacy/Locked baselines.
+  SecurityOperationStatus recoverProtected(const char* newPassword);
+  SecurityOperationStatus changePasswordAuthorized(const char* newPassword);
+  SecurityOperationStatus unprotectAuthorized();
   SecurityOperationStatus eraseForFactoryReset();
 
   bool verifyPassword(const char* password) const;
@@ -132,6 +137,7 @@ class SecurityService {
 // Device-owned instance. Startup is coordinated by security_runtime; route
 // enforcement and session handling remain outside this service.
 SecurityService& deviceSecurityService();
+SecurityOperationStatus recoverDeviceSecurityPassword(const char* newPassword);
 
 const char* securityStateName(SecurityState state);
 const char* securityLoadStatusName(SecurityLoadStatus status);

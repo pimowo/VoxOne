@@ -143,10 +143,10 @@ inline View makeView(const Inputs& inputs) {
   const bool apActive = setupApActive || wifiRecoveryApActive ||
       securityRecoveryApActive;
   const ApSecurity apSecurity = !apActive ? ApSecurity::NotActive :
-      (setupApActive ? ApSecurity::Open : ApSecurity::Protected);
-  // Ordinary Wi-Fi recovery keeps the existing local-display behaviour. The
-  // SECURITY Recovery shared credential is intentionally never exposed by
-  // this model and remains owned by its dedicated recovery implementation.
+      ((setupApActive || securityRecoveryApActive) ? ApSecurity::Open
+                                                   : ApSecurity::Protected);
+  // Ordinary Wi-Fi recovery keeps its existing protected-AP behaviour.
+  // SECURITY Recovery is deliberately open and carries no credential.
   const bool presentApCredential = wifiRecoveryApActive;
   const bool hasError = inputs.errorCode != 0 ||
       inputs.connection == Connection::Failed;

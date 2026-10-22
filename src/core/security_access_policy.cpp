@@ -77,6 +77,9 @@ const SecurityRouteRule kRouteRules[] = {
     {SecurityAccessMethod::Post, "/api/security/logout",
      SecurityEndpoint::SecurityLogout, SecurityRouteClass::SecurityApi, true,
      false},
+    {SecurityAccessMethod::Post, "/api/security/manage",
+     SecurityEndpoint::SecurityManage, SecurityRouteClass::SecurityApi, true,
+     false},
     {SecurityAccessMethod::Get, "/variables.js", SecurityEndpoint::Variables,
      SecurityRouteClass::ProtectedWeb, false, false},
     {SecurityAccessMethod::Get, "/api/stations",
@@ -214,6 +217,8 @@ SecurityAccessStatus securityApiAccess(SecurityEndpoint endpoint,
       return request.state == SecurityState::Locked
                  ? SecurityAccessStatus::Locked
                  : SecurityAccessStatus::Allowed;
+    case SecurityEndpoint::SecurityManage:
+      return protectedAccess(request);
     default:
       return SecurityAccessStatus::UnknownRoute;
   }
@@ -318,6 +323,7 @@ const char* securityEndpointName(SecurityEndpoint endpoint) {
     case SecurityEndpoint::SecuritySetup: return "security-setup";
     case SecurityEndpoint::SecurityLogin: return "security-login";
     case SecurityEndpoint::SecurityLogout: return "security-logout";
+    case SecurityEndpoint::SecurityManage: return "security-manage";
     case SecurityEndpoint::Variables: return "variables";
     case SecurityEndpoint::StationsSnapshot: return "stations-snapshot";
     case SecurityEndpoint::DirectorySearch: return "directory-search";

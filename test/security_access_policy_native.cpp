@@ -69,6 +69,8 @@ const EndpointCase kEndpoints[] = {
      SecurityRouteClass::SecurityApi, true, false},
     {SecurityAccessMethod::Post, "/api/security/logout", SecurityEndpoint::SecurityLogout,
      SecurityRouteClass::SecurityApi, true, false},
+    {SecurityAccessMethod::Post, "/api/security/manage", SecurityEndpoint::SecurityManage,
+     SecurityRouteClass::SecurityApi, true, false},
     {SecurityAccessMethod::Get, "/variables.js", SecurityEndpoint::Variables,
      SecurityRouteClass::ProtectedWeb, false, false},
     {SecurityAccessMethod::Get, "/api/stations", SecurityEndpoint::StationsSnapshot,
@@ -175,6 +177,14 @@ SecurityAccessStatus expectedForTrustedRequest(const EndpointCase& endpoint,
           return state == SecurityState::Locked
                      ? SecurityAccessStatus::Locked
                      : SecurityAccessStatus::Allowed;
+        case SecurityEndpoint::SecurityManage:
+          if (state == SecurityState::Open) return SecurityAccessStatus::Allowed;
+          if (state == SecurityState::Protected)
+            return sessionValid ? SecurityAccessStatus::Allowed
+                                : SecurityAccessStatus::AuthenticationRequired;
+          return state == SecurityState::Locked
+                     ? SecurityAccessStatus::Locked
+                     : SecurityAccessStatus::InvalidState;
         default:
           assert(false);
       }
@@ -242,11 +252,11 @@ void testCompleteEndpointInventory() {
     assert(std::strcmp(securityEndpointName(actual.endpoint), "unknown") != 0);
     assert(std::strcmp(securityRouteClassName(actual.routeClass), "unknown") != 0);
   }
-  assert(sizeof(kEndpoints) / sizeof(kEndpoints[0]) == 50);
+  assert(sizeof(kEndpoints) / sizeof(kEndpoints[0]) == 51);
 
   size_t ruleCount = 0;
   const SecurityRouteRule* rules = securityAccessRouteRules(ruleCount);
-  assert(rules != nullptr && ruleCount == 50);
+  assert(rules != nullptr && ruleCount == 51);
   for (size_t index = 0; index < ruleCount; ++index) {
     const SecurityRouteRule& rule = rules[index];
     assert(rule.path && rule.path[0] == '/');
@@ -617,7 +627,8 @@ void testProductionInventoryAndHttpOnlyIntegration() {
       "/api/stations/reorder", "/api/stations/metadata", "/api/mqtt",
       "/api/hardware", "kBackupRoute", "kRestoreRoute", "/api/time",
       "/api/time/sync", "kSecurityStateRoute", "kSecuritySetupRoute",
-      "kSecurityLoginRoute", "kSecurityLogoutRoute", "/api/ready",
+      "kSecurityLoginRoute", "kSecurityLogoutRoute", "kSecurityManageRoute",
+      "/api/ready",
       "/api/bt/update", "/api/dsp/state", "AsyncWebSocket websocket(\"/ws\")",
       "request->url()==\"/update\"", "request->url() == \"/update/bt\"",
       "request->url()==\"/emergency\"", "request->url() == \"/update.html\"",

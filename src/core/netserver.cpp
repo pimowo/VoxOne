@@ -169,6 +169,7 @@ void handleSecurityState(AsyncWebServerRequest *request);
 void handleSecuritySetup(AsyncWebServerRequest *request);
 void handleSecurityLogin(AsyncWebServerRequest *request);
 void handleSecurityLogout(AsyncWebServerRequest *request);
+void handleSecurityManage(AsyncWebServerRequest *request);
 void handleWifiScan(AsyncWebServerRequest *request);
 void handleIndex(AsyncWebServerRequest * request);
 void handleNotFound(AsyncWebServerRequest * request);
@@ -971,6 +972,8 @@ bool NetServer::begin(bool quiet) {
                handleSecurityLogin);
   webserver.on(voxone::security::kSecurityLogoutRoute, HTTP_POST,
                handleSecurityLogout);
+  webserver.on(voxone::security::kSecurityManageRoute, HTTP_POST,
+               handleSecurityManage);
   webserver.on("/api/wifi/scan", HTTP_GET, handleWifiScan);
   webserver.on("/api/ready", HTTP_GET, [](AsyncWebServerRequest* request) {
     voxone::ota::reportHttpApiProbe();
@@ -1932,6 +1935,35 @@ void handleSecurityLogout(AsyncWebServerRequest* request) {
     result = api.logout(hasToken ? token : nullptr);
   }
   closeUnauthorizedWebSockets();
+  securityApiResultReply(request, result);
+  clearSensitive(token, sizeof(token));
+}
+
+void handleSecurityManage(AsyncWebServerRequest* request) {
+  using namespace voxone::security;
+  const String localAddress = request->client()->localIP().toString();
+  const SecurityRequestStatus validation =
+      validateSecurityFormRequest(securityRequestContext(request, localAddress));
+  if (validation != SecurityRequestStatus::Allowed) {
+    securityRequestRejected(request, validation);
+    return;
+  }
+  char token[kSecuritySessionTokenBufferSize]{};
+  const bool hasToken = requestSessionToken(request, token);
+  SecurityApiService api(deviceSecurityService(), deviceSecuritySessionService(),
+                         securityHttpEnforcementMode());
+  SecurityApiResult result{};
+  {
+    SecurityRuntimeLock lock;
+    if (!lock.locked()) {
+      clearSensitive(token, sizeof(token));
+      securityJsonReply(request, 503, R"({"error":"service_unavailable"})");
+      return;
+    }
+    result = api.manage(hasToken ? token : nullptr, postParameter(request, "mode"),
+                        postParameter(request, "password"), millis());
+  }
+  if (result.error == SecurityApiError::None) closeUnauthorizedWebSockets();
   securityApiResultReply(request, result);
   clearSensitive(token, sizeof(token));
 }

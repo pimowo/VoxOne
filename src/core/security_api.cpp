@@ -272,6 +272,39 @@ SecurityApiResult SecurityApiService::logout(const char* sessionToken) {
   return response;
 }
 
+SecurityApiResult SecurityApiService::manage(const char* sessionToken,
+                                             const char* mode,
+                                             const char* password,
+                                             uint32_t nowMs) {
+  const SecurityState current = security_.state();
+  if (current == SecurityState::Locked)
+    return result(423, SecurityApiError::Locked);
+  if (!mode) return result(400, SecurityApiError::InvalidMode);
+  SecurityOperationStatus status = SecurityOperationStatus::InvalidState;
+  if (current == SecurityState::Open) {
+    if (std::strcmp(mode, "protected") != 0 || !password)
+      return result(400, SecurityApiError::InvalidMode);
+    status = security_.protectOpen(password);
+  } else if (current == SecurityState::Protected) {
+    if (!sessions_.validate(sessionToken, nowMs))
+      return result(401, SecurityApiError::AuthenticationFailed);
+    if (std::strcmp(mode, "protected") == 0 && password)
+      status = security_.changePasswordAuthorized(password);
+    else if (std::strcmp(mode, "open") == 0 && (!password || !*password))
+      status = security_.unprotectAuthorized();
+    else
+      return result(400, SecurityApiError::InvalidMode);
+  } else {
+    return result(409, SecurityApiError::InvalidState);
+  }
+  SecurityApiResult response = mapSetupResult(status);
+  if (status == SecurityOperationStatus::Applied) {
+    sessions_.invalidateAll();
+    response.clearSessionCookie = true;
+  }
+  return response;
+}
+
 bool securityStateJson(const SecurityApiState& state, char* output,
                        size_t outputSize) {
   if (!output || !outputSize) return false;

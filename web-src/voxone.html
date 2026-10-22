@@ -52,7 +52,7 @@
       <form id="security-login-form" class="security-view" novalidate hidden>
         <h2>Panel chroniony</h2>
         <p class="muted">Podaj hasło administratora VoxOne.</p>
-        <p class="security-warning">Połączenie HTTP nie szyfruje hasła. Zapomniane hasło można usunąć tylko przez reset fabryczny w VoxOne Installer USB.</p>
+        <p class="security-warning">Połączenie HTTP nie szyfruje hasła. Dostęp można odzyskać przez SECURITY Recovery uruchamiane przy starcie przyciskiem KEY.</p>
         <label for="security-login-password">Hasło</label>
         <div class="security-password-control"><input id="security-login-password" type="password" autocomplete="off" autocapitalize="off" spellcheck="false"><button class="security-password-toggle" type="button" data-password-target="security-login-password" aria-label="Pokaż hasło" aria-pressed="false"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M2.5 12s3.5-6 9.5-6 9.5 6 9.5 6-3.5 6-9.5 6-9.5-6-9.5-6Z"/><circle cx="12" cy="12" r="2.7"/><path class="security-eye-slash" d="m4 4 16 16"/></svg></button></div>
         <p id="security-login-message" class="security-message" role="alert"></p>
@@ -66,7 +66,7 @@
 
       <div id="security-locked" class="security-view" hidden>
         <h2>Ustawienia ochrony są zablokowane</h2>
-        <p class="security-message" data-kind="error">Nie można bezpiecznie odczytać ustawień. Odzyskanie dostępu wymaga resetu fabrycznego przez VoxOne Installer USB.</p>
+        <p class="security-message" data-kind="error">Nie można bezpiecznie odczytać ustawień. Użyj SECURITY Recovery uruchamianego przy starcie przyciskiem KEY.</p>
       </div>
     </article>
   </section>
@@ -383,6 +383,29 @@
             <div><dt>Możliwości</dt><dd id="system-bt-capabilities">—</dd></div>
           </dl></article>
         </div>
+        <article class="card security-management-card" aria-labelledby="security-management-title">
+          <h3 id="security-management-title">Ochrona panelu WWW</h3>
+          <p id="security-management-summary" class="muted">Odczytywanie stanu ochrony…</p>
+          <form id="security-management-form" novalidate hidden>
+            <div id="security-management-current-wrap" hidden>
+              <label for="security-management-current">Bieżące hasło</label>
+              <input id="security-management-current" type="password" autocomplete="current-password" maxlength="64">
+            </div>
+            <label for="security-management-mode">Tryb ochrony</label>
+            <select id="security-management-mode" class="setting-select">
+              <option value="protected">Chroniony hasłem</option>
+              <option value="open">Bez hasła</option>
+            </select>
+            <div id="security-management-password-fields">
+              <label for="security-management-password">Nowe hasło</label>
+              <input id="security-management-password" type="password" autocomplete="new-password" maxlength="64">
+              <label for="security-management-repeat">Powtórz nowe hasło</label>
+              <input id="security-management-repeat" type="password" autocomplete="new-password" maxlength="64">
+            </div>
+            <p id="security-management-message" class="security-message" role="status" aria-live="polite"></p>
+            <button id="security-management-submit" type="submit">Zapisz ochronę</button>
+          </form>
+        </article>
         <div class="grid config-transfer-grid">
           <article class="card config-transfer-card">
             <h3>Backup konfiguracji</h3>

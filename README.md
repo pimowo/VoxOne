@@ -67,6 +67,6 @@ zasoby `data/www/*.gz`. Nie należy edytować gzipów ręcznie ani używać obra
 innego profilu. Pełna instalacja może skasować NVS, Wi-Fi, `otadata` i
 SPIFFS, dlatego wymaga właściwego backupu i osobno zatwierdzonej procedury.
 
-Nie commituj haseł, tokenów, plików `.voxone-recovery-ap-password`, zrzutów
-Flash ani logów zawierających dane prywatne. Repozytorium jest udostępniane na
+Nie commituj haseł, tokenów, zrzutów Flash ani logów zawierających dane
+prywatne. Repozytorium jest udostępniane na
 warunkach [GPLv3](LICENSE); zależności zachowują własne licencje.

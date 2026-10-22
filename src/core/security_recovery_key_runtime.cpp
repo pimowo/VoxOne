@@ -6,10 +6,10 @@
 namespace voxone {
 namespace security_recovery {
 namespace {
-bool suppressRuntimeKeyUntilRelease = false;
+bool runtimeKeySuppressedUntilRelease = false;
 }
 
-KeyState detectBootKeyGesture() {
+KeyState detectBootKeyAtStartup() {
   const auto keyPin = hardware::currentHardware().localInput.key;
   pinMode(keyPin, INPUT);
 
@@ -17,19 +17,22 @@ KeyState detectBootKeyGesture() {
   const uint32_t startedMs = millis();
   detector.begin(digitalRead(keyPin) == LOW, startedMs);
   while (!detector.finished()) {
-    delay(1);  // Yield to the RTOS and watchdog while KEY is held.
+    delay(1);  // Yield during the short contact-debounce window.
     detector.update(digitalRead(keyPin) == LOW, millis());
   }
 
-  suppressRuntimeKeyUntilRelease = detector.state() == KeyState::StuckLow;
   return detector.state();
 }
 
+void suppressRuntimeKeyUntilRelease() {
+  runtimeKeySuppressedUntilRelease = true;
+}
+
 bool runtimeKeyInputReady() {
-  if (!suppressRuntimeKeyUntilRelease) return true;
+  if (!runtimeKeySuppressedUntilRelease) return true;
   const auto keyPin = hardware::currentHardware().localInput.key;
   if (digitalRead(keyPin) == LOW) return false;
-  suppressRuntimeKeyUntilRelease = false;
+  runtimeKeySuppressedUntilRelease = false;
   return true;
 }
 

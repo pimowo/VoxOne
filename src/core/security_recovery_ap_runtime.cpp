@@ -1,12 +1,10 @@
 #include "security_recovery_ap_runtime.h"
 
-#include "security_recovery_confirmation.h"
-#include "security_recovery_http.h"
-#include "security_recovery_pin.h"
-#include "security_recovery_session_runtime.h"
-#include "security_recovery_transaction.h"
+#include "factory_reset.h"
 #include "network.h"
-#include "../hardware/hardware_descriptor.h"
+#include "security_recovery_http.h"
+#include "security_recovery_session_runtime.h"
+#include "security_settings.h"
 
 #include <Arduino.h>
 #include <WiFi.h>
@@ -15,508 +13,199 @@
 #include <cstdio>
 #include <cstring>
 
-namespace voxone {
-namespace security_recovery {
-namespace {
-
-#if defined(VOXONE_SECURITY_RECOVERY_AP_PASSWORD)
-constexpr char kRecoveryApPassword[] = VOXONE_SECURITY_RECOVERY_AP_PASSWORD;
-constexpr bool kRecoveryApCredentialConfigured = true;
-static_assert(sizeof(kRecoveryApPassword) - 1U >= 12U,
-              "Recovery AP password must contain at least 12 characters");
-static_assert(sizeof(kRecoveryApPassword) - 1U <= 63U,
-              "Recovery AP password must contain at most 63 characters");
-#else
-// Deliberately empty: the build-time shared credential is supplied from the
-// ignored local credential file and never stored in the repository.
-constexpr char kRecoveryApPassword[] = "";
-constexpr bool kRecoveryApCredentialConfigured = false;
-#endif
+namespace voxone { namespace security_recovery { namespace {
 
 constexpr char kBadRequestBody[] = "Bad Request\n";
-constexpr char kUnauthorizedBody[] = "Unauthorized\n";
 constexpr char kForbiddenBody[] = "Forbidden\n";
 constexpr char kNotFoundBody[] = "Not Found\n";
 constexpr char kMethodBody[] = "Method Not Allowed\n";
 constexpr char kRateBody[] = "Too Many Requests\n";
 constexpr char kPayloadBody[] = "Payload Too Large\n";
 constexpr char kMediaTypeBody[] = "Unsupported Media Type\n";
-constexpr char kConflictBody[] = "Recovery request already prepared\n";
-constexpr char kInternalBody[] = "Recovery unavailable\n";
-constexpr char kInvalidPinBody[] = "Invalid recovery credentials\n";
-constexpr char kInvalidPasswordBody[] = "Invalid password fields\n";
-constexpr char kConfirmationPage[] =
-    "<!doctype html><html lang=\"pl\"><head><meta charset=\"utf-8\">"
-    "<meta name=\"viewport\" content=\"width=device-width,initial-scale=1\">"
-    "<title>VoxOne Recovery</title></head><body><main>"
-    "<h1>Potwierdzenie fizyczne</h1>"
-    "<p>Zwolnij KEY, a nastepnie przytrzymaj go przez 1 sekunde. "
-    "Masz 30 sekund.</p></main></body></html>";
+constexpr char kInternalBody[] = "Recovery operation failed\n";
+constexpr size_t kCsrfBytes = 24U;
+constexpr size_t kCsrfCharacters = kCsrfBytes * 2U;
 
-class RuntimeRandomSource : public RecoveryRandomSource {
- public:
-  bool fill(uint8_t* output, size_t size) override {
-    if (!output && size) return false;
-    if (size) esp_fill_random(output, size);
-    return true;
+void secureZero(void* memory, size_t size) {
+  volatile uint8_t* bytes = static_cast<volatile uint8_t*>(memory);
+  while (size--) *bytes++ = 0;
+}
+
+void encodeHex(const uint8_t* input, size_t size, char* output) {
+  static const char digits[] = "0123456789abcdef";
+  for (size_t i=0;i<size;++i) { output[i*2U]=digits[input[i]>>4U]; output[i*2U+1U]=digits[input[i]&0x0fU]; }
+  output[size*2U]='\0';
+}
+
+uint8_t hexValue(char value) {
+  if(value>='0'&&value<='9') return static_cast<uint8_t>(value-'0');
+  if(value>='a'&&value<='f') return static_cast<uint8_t>(value-'a'+10);
+  if(value>='A'&&value<='F') return static_cast<uint8_t>(value-'A'+10);
+  return 0xffU;
+}
+
+bool decodeComponent(const char* input,size_t length,char* output,size_t capacity) {
+  size_t written=0;
+  if(!input||!output||!capacity) return false;
+  for(size_t i=0;i<length;++i) {
+    uint8_t value=static_cast<uint8_t>(input[i]);
+    if(value=='+') value=' ';
+    else if(value=='%') { if(i+2U>=length) return false; const uint8_t hi=hexValue(input[i+1U]),lo=hexValue(input[i+2U]); if(hi==0xffU||lo==0xffU) return false; value=static_cast<uint8_t>((hi<<4U)|lo); i+=2U; }
+    if(!value||written+1U>=capacity) return false;
+    output[written++]=static_cast<char>(value);
   }
-};
+  output[written]='\0'; return true;
+}
+
+bool tokenMatches(const char* supplied,const char* expected) {
+  if(!supplied||!expected) return false;
+  uint8_t difference=0;
+  for(size_t i=0;i<=kCsrfCharacters;++i) difference|=static_cast<uint8_t>(supplied[i]^expected[i]);
+  return difference==0;
+}
+
+bool parseForm(const char* body,size_t length,const char* expectedCsrf,
+               char* password,size_t passwordCapacity,bool passwordRequired) {
+  char csrf[kCsrfCharacters+1U]{}; uint8_t fields=0; size_t cursor=0;
+  if(password&&passwordCapacity) password[0]='\0';
+  while(body&&cursor<length) {
+    size_t end=cursor; while(end<length&&body[end]!='&') ++end;
+    size_t equals=cursor; while(equals<end&&body[equals]!='=') ++equals;
+    if(equals==cursor||equals==end) { secureZero(csrf,sizeof(csrf)); return false; }
+    char name[24]{}; const bool named=decodeComponent(body+cursor,equals-cursor,name,sizeof(name));
+    bool assigned=false;
+    if(named&&std::strcmp(name,"csrf")==0&&!(fields&1U)) { assigned=decodeComponent(body+equals+1U,end-equals-1U,csrf,sizeof(csrf)); fields|=assigned?1U:0U; }
+    else if(named&&std::strcmp(name,"new_password")==0&&password&&!(fields&2U)) { assigned=decodeComponent(body+equals+1U,end-equals-1U,password,passwordCapacity); fields|=assigned?2U:0U; }
+    secureZero(name,sizeof(name));
+    if(!assigned) { secureZero(csrf,sizeof(csrf)); if(password) secureZero(password,passwordCapacity); return false; }
+    if(end==length) break; cursor=end+1U; if(cursor==length) return false;
+  }
+  const bool valid=fields==(passwordRequired?3U:1U)&&tokenMatches(csrf,expectedCsrf);
+  secureZero(csrf,sizeof(csrf)); if(!valid&&password) secureZero(password,passwordCapacity); return valid;
+}
 
 class RuntimeSessionControl : public RecoveryApSessionControl {
  public:
-  RecoveryState state() const override {
-    return recoverySessionSnapshot().state;
-  }
+  RecoveryState state() const override { return recoverySessionSnapshot().state; }
   bool live() const override { return recoverySessionSnapshot().live; }
-  RecoveryTransition activate(uint32_t nowMs) override {
-    return activateRecoverySession(nowMs);
-  }
-  RecoveryTransition service(uint32_t nowMs) override {
-    serviceRecoverySession(nowMs);
-    const RecoverySessionSnapshot current = recoverySessionSnapshot();
-    return {current.state, current.state, current.diagnostic, false};
-  }
-  RecoveryTransition cancel(uint32_t nowMs) override {
-    return cancelRecoverySession(nowMs);
-  }
-  RecoveryTransition fail(uint32_t nowMs) override {
-    return failRecoverySession(nowMs);
-  }
-  RecoveryTransition complete(bool success, uint32_t nowMs) override {
-    return completeRecoverySession(success, nowMs);
-  }
+  RecoveryTransition activate() override { return activateRecoverySession(); }
+  RecoveryTransition fail() override { return failRecoverySession(); }
+  RecoveryTransition complete(bool success) override { return completeRecoverySession(success); }
 };
 
 class RuntimeApPlatform : public RecoveryApPlatform {
  public:
-  RuntimeApPlatform() : pinSession_(randomSource_) {}
-
-  bool credentialConfigured() const override {
-    return kRecoveryApCredentialConfigured;
-  }
-
-  bool securityBaselineEligible() override {
-    return inspectDeviceSecurityRecoveryBaseline() ==
-           RecoveryBaselineStatus::Eligible;
-  }
-
   bool startWifi() override {
-    if (!credentialConfigured()) return false;
-    const uint32_t suffix =
-        static_cast<uint32_t>(ESP.getEfuseMac() & 0x00ffffffULL);
-    const int written = std::snprintf(
-        ssid_, sizeof(ssid_), "VoxOne-Recovery-%06lX",
-        static_cast<unsigned long>(suffix));
-    if (written <= 0 || static_cast<size_t>(written) >= sizeof(ssid_))
-      return false;
-    WiFi.persistent(false);
-    WiFi.setAutoReconnect(false);
-    if (!WiFi.mode(WIFI_AP)) return false;
-    if (!WiFi.softAP(ssid_, kRecoveryApPassword, 1, 0, 1)) {
-      WiFi.mode(WIFI_OFF);
-      return false;
-    }
-    return WiFi.getMode() == WIFI_AP;
+    const uint32_t suffix=static_cast<uint32_t>(ESP.getEfuseMac()&0x00ffffffULL);
+    const int written=std::snprintf(ssid_,sizeof(ssid_),"VoxOne-Recovery-%06lX",static_cast<unsigned long>(suffix));
+    if(written<=0||static_cast<size_t>(written)>=sizeof(ssid_)) return false;
+    WiFi.persistent(false); WiFi.setAutoReconnect(false);
+    if(!WiFi.mode(WIFI_AP)||!WiFi.softAP(ssid_)) { WiFi.mode(WIFI_OFF); return false; }
+    return WiFi.getMode()==WIFI_AP;
   }
 
   bool startHttp() override {
-    const IPAddress address = WiFi.softAPIP();
-    const int written = std::snprintf(
-        expectedHost_, sizeof(expectedHost_), "%u.%u.%u.%u",
-        static_cast<unsigned>(address[0]), static_cast<unsigned>(address[1]),
-        static_cast<unsigned>(address[2]), static_cast<unsigned>(address[3]));
-    if (written <= 0 || static_cast<size_t>(written) >= sizeof(expectedHost_) ||
-        !pinSession_.begin())
-      return false;
-    const int addressWritten = std::snprintf(
-        panelAddress_, sizeof(panelAddress_), "http://%s/", expectedHost_);
-    if (addressWritten <= 0 ||
-        static_cast<size_t>(addressWritten) >= sizeof(panelAddress_))
-      return false;
-    server_.begin();
-    server_.setNoDelay(true);
-    return static_cast<bool>(server_);
+    const IPAddress address=WiFi.softAPIP();
+    if(std::snprintf(expectedHost_,sizeof(expectedHost_),"%u.%u.%u.%u",address[0],address[1],address[2],address[3])<=0) return false;
+    if(std::snprintf(panelAddress_,sizeof(panelAddress_),"http://%s/",expectedHost_)<=0) return false;
+    uint8_t random[kCsrfBytes]; esp_fill_random(random,sizeof(random)); encodeHex(random,sizeof(random),csrf_); secureZero(random,sizeof(random));
+    server_.begin(); server_.setNoDelay(true); return static_cast<bool>(server_);
   }
 
   bool serviceHttp(uint32_t nowMs) override {
-    if (!server_ || WiFi.getMode() != WIFI_AP ||
-        WiFi.softAPgetStationNum() > 1U)
-      return false;
-
-    serviceConfirmation(nowMs);
-    if (client_ && client_.connected()) {
-      if (server_.hasClient()) {
-        WiFiClient extra = server_.available();
-        extra.stop();
-      }
-      readClient(nowMs);
-      return true;
+    if(!server_||WiFi.getMode()!=WIFI_AP||WiFi.softAPgetStationNum()>1U) return false;
+    if(client_&&client_.connected()) {
+      if(server_.hasClient()) { WiFiClient extra=server_.available(); extra.stop(); }
+      readClient(nowMs); return true;
     }
-
-    client_.stop();
-    clearRequest();
-    client_ = server_.available();
-    if (client_) {
-      clientStartedMs_ = nowMs;
-      clientActive_ = true;
-    }
+    client_.stop(); clearRequest(); client_=server_.available();
+    if(client_) { clientStartedMs_=nowMs; clientActive_=true; }
     return true;
   }
 
-  void stopHttp() override {
-    server_.stopAll();
-    server_.end();
-  }
-
-  void disconnectClient() override {
-    client_.stop();
-    client_ = WiFiClient();
-    clientActive_ = false;
-    clearRequest();
-  }
-
-  void stopWifi() override {
-    WiFi.softAPdisconnect(true);
-    WiFi.mode(WIFI_OFF);
-  }
-
-  void clearTemporary() override {
-    pinSession_.clear();
-    confirmation_ = ConfirmationKeyDetector();
-    confirmationActive_ = false;
-    confirmationHandled_ = false;
-    std::memset(ssid_, 0, sizeof(ssid_));
-    std::memset(expectedHost_, 0, sizeof(expectedHost_));
-    std::memset(panelAddress_, 0, sizeof(panelAddress_));
-    clearRequest();
-    requestCount_ = 0;
-    clientStartedMs_ = 0;
-    clientActive_ = false;
-  }
-
+  void stopHttp() override { server_.stopAll(); server_.end(); }
+  void disconnectClient() override { client_.stop(); client_=WiFiClient(); clientActive_=false; clearRequest(); }
+  void stopWifi() override { WiFi.softAPdisconnect(true); WiFi.mode(WIFI_OFF); }
+  void clearTemporary() override { secureZero(csrf_,sizeof(csrf_)); std::memset(ssid_,0,sizeof(ssid_)); std::memset(expectedHost_,0,sizeof(expectedHost_)); std::memset(panelAddress_,0,sizeof(panelAddress_)); clearRequest(); requestCount_=0; }
   void restart() override { ESP.restart(); }
-
   const char* ssid() const { return ssid_; }
   const char* panelAddress() const { return panelAddress_; }
 
  private:
-  bool keyLow() const {
-    const hardware::Pin key = hardware::currentHardware().localInput.key;
-    return hardware::hasPin(key) && digitalRead(key) == LOW;
-  }
-
-  void serviceConfirmation(uint32_t nowMs) {
-    if (!confirmationActive_ || confirmationHandled_) return;
-    const ConfirmationKeyState state = confirmation_.update(keyLow(), nowMs);
-    if (state == ConfirmationKeyState::Accepted) {
-      confirmationHandled_ = true;
-      const RecoveryTransition confirmed = confirmRecoveryKey(nowMs);
-      if (confirmed.to == RecoveryState::CommitReady) {
-        const RecoveryTransition committing = beginRecoveryCommit(nowMs);
-        if (committing.to != RecoveryState::Committing) return;
-        const RecoveryTransactionResult committed =
-            commitDeviceSecurityRecovery(pinSession_.candidate());
-        (void)completeRecoverySession(
-            committed == RecoveryTransactionResult::Applied, nowMs);
-      }
-    } else if (state == ConfirmationKeyState::StuckLow) {
-      confirmationHandled_ = true;
-      (void)failRecoverySession(nowMs);
-    }
-  }
-
-  void clearRequest() {
-    volatile uint8_t* bytes =
-        reinterpret_cast<volatile uint8_t*>(request_);
-    for (size_t index = 0; index < sizeof(request_); ++index)
-      bytes[index] = 0;
-    requestLength_ = 0;
-  }
-
-  void closeClient() {
-    client_.flush();
-    client_.stop();
-    clientActive_ = false;
-    clearRequest();
-  }
-
-  void sendResponse(int status, const char* reason, const char* contentType,
-                    const char* body, const char* extraHeader = nullptr) {
-    char header[768];
-    const size_t bodyLength = std::strlen(body);
-    const int length = std::snprintf(
-        header, sizeof(header),
-        "HTTP/1.1 %d %s\r\nContent-Type: %s\r\nContent-Length: %u\r\n"
-        "Cache-Control: no-store, max-age=0\r\nPragma: no-cache\r\n"
-        "X-Content-Type-Options: nosniff\r\n"
-        "Content-Security-Policy: default-src 'none'; style-src 'unsafe-inline'; "
-        "form-action 'self'; base-uri 'none'; frame-ancestors 'none'\r\n"
-        "Referrer-Policy: no-referrer\r\n%sConnection: close\r\n\r\n",
-        status, reason, contentType, static_cast<unsigned>(bodyLength),
-        extraHeader ? extraHeader : "");
-    if (length > 0 && static_cast<size_t>(length) < sizeof(header)) {
-      client_.write(reinterpret_cast<const uint8_t*>(header),
-                    static_cast<size_t>(length));
-      client_.write(reinterpret_cast<const uint8_t*>(body), bodyLength);
-    }
+  void clearRequest() { secureZero(request_,sizeof(request_)); requestLength_=0; }
+  void closeClient() { client_.flush(); client_.stop(); clientActive_=false; clearRequest(); }
+  void sendResponse(int status,const char* reason,const char* type,const char* body) {
+    char header[768]; const size_t bodyLength=std::strlen(body);
+    const int length=std::snprintf(header,sizeof(header),"HTTP/1.1 %d %s\r\nContent-Type: %s\r\nContent-Length: %u\r\nCache-Control: no-store, max-age=0\r\nPragma: no-cache\r\nX-Content-Type-Options: nosniff\r\nContent-Security-Policy: default-src 'none'; style-src 'unsafe-inline'; form-action 'self'; base-uri 'none'; frame-ancestors 'none'\r\nReferrer-Policy: no-referrer\r\nConnection: close\r\n\r\n",status,reason,type,static_cast<unsigned>(bodyLength));
+    if(length>0&&static_cast<size_t>(length)<sizeof(header)) { client_.write(reinterpret_cast<const uint8_t*>(header),static_cast<size_t>(length)); client_.write(reinterpret_cast<const uint8_t*>(body),bodyLength); }
     closeClient();
   }
-
   void sendRoot() {
-    char body[2048];
-    const int length = std::snprintf(
-        body, sizeof(body),
-        "<!doctype html><html lang=\"pl\"><head><meta charset=\"utf-8\">"
-        "<meta name=\"viewport\" content=\"width=device-width,initial-scale=1\">"
-        "<title>VoxOne Recovery</title></head><body><main>"
-        "<h1>VoxOne SECURITY RECOVERY</h1>"
-        "<form method=\"post\" action=\"/prepare\">"
-        "<input type=\"hidden\" name=\"csrf\" value=\"%s\">"
-        "<label>PIN Recovery<input name=\"pin\" type=\"password\" "
-        "inputmode=\"numeric\" pattern=\"[0-9]{4}\" minlength=\"4\" "
-        "maxlength=\"4\" required></label>"
-        "<label>Nowe haslo<input name=\"new_password\" type=\"password\" "
-        "autocomplete=\"new-password\" maxlength=\"64\" required></label>"
-        "<label>Powtorz haslo<input name=\"repeat_password\" type=\"password\" "
-        "autocomplete=\"new-password\" maxlength=\"64\" required></label>"
-        "<button type=\"submit\">Przygotuj zmiane</button></form>"
-        "</main></body></html>",
-        pinSession_.csrfToken());
-    if (length <= 0 || static_cast<size_t>(length) >= sizeof(body)) {
-      sendResponse(500, "Internal Server Error", "text/plain; charset=utf-8",
-                   kInternalBody);
-      return;
-    }
-    char cookie[160];
-    const int cookieLength = std::snprintf(
-        cookie, sizeof(cookie),
-        "Set-Cookie: voxone_recovery=%s; Path=/; HttpOnly; SameSite=Strict\r\n",
-        pinSession_.sessionToken());
-    if (cookieLength <= 0 || static_cast<size_t>(cookieLength) >= sizeof(cookie)) {
-      sendResponse(500, "Internal Server Error", "text/plain; charset=utf-8",
-                   kInternalBody);
-      return;
-    }
-    sendResponse(200, "OK", "text/html; charset=utf-8", body, cookie);
+    char body[2300];
+    const int length=std::snprintf(body,sizeof(body),"<!doctype html><html lang=\"pl\"><head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width,initial-scale=1\"><title>VoxOne Recovery</title><style>:root{color-scheme:dark}body{max-width:520px;margin:40px auto;padding:20px;background:#09111a;color:#edf5fa;font:16px system-ui}section{margin:20px 0;padding:20px;border:1px solid #314456;border-radius:12px;background:#151f2b}label,input,button{display:block;width:100%%;box-sizing:border-box}input,button{margin-top:10px;padding:12px}button{background:#173f4b;color:#edf5fa;border:1px solid #71d8e8;border-radius:8px}</style></head><body><main><h1>VoxOne</h1><p>SECURITY RECOVERY</p><section><h2>Zmiana hasła WWW</h2><form method=\"post\" action=\"/password\"><input type=\"hidden\" name=\"csrf\" value=\"%s\"><label>Nowe hasło<input name=\"new_password\" type=\"password\" autocomplete=\"new-password\" maxlength=\"64\" required></label><button type=\"submit\">Zapisz hasło</button></form></section><section><h2>Ustawienia fabryczne</h2><form method=\"post\" action=\"/factory-reset\"><input type=\"hidden\" name=\"csrf\" value=\"%s\"><button type=\"submit\">Przywróć ustawienia fabryczne</button></form></section></main></body></html>",csrf_,csrf_);
+    if(length<=0||static_cast<size_t>(length)>=sizeof(body)) sendResponse(500,"Internal Server Error","text/plain; charset=utf-8",kInternalBody);
+    else sendResponse(200,"OK","text/html; charset=utf-8",body);
   }
-
-  void sendStatus() {
-    const RecoverySessionSnapshot current = recoverySessionSnapshot();
-    char body[192];
-    const int length = std::snprintf(
-        body, sizeof(body),
-        "{\"mode\":\"security_recovery\",\"state\":\"%s\","
-        "\"diagnostic\":\"%s\",\"persistentWrite\":true}",
-        recoveryStateName(current.state),
-        recoveryDiagnosticName(current.diagnostic));
-    if (length <= 0 || static_cast<size_t>(length) >= sizeof(body)) {
-      sendResponse(500, "Internal Server Error", "text/plain; charset=utf-8",
-                   kInternalBody);
-      return;
-    }
-    sendResponse(200, "OK", "application/json; charset=utf-8", body);
+  void finishOperation(bool success,const char* successBody) {
+    (void)completeRecoverySession(success);
+    sendResponse(success?200:500,success?"OK":"Internal Server Error",success?"text/html; charset=utf-8":"text/plain; charset=utf-8",success?successBody:kInternalBody);
   }
-
-  void handlePrepare(const RecoveryHttpRequest& parsed, uint32_t nowMs) {
-    RecoveryFormData form{};
-    if (!parseRecoveryForm(request_ + parsed.bodyOffset, parsed.bodyLength,
-                           form)) {
-      clearRecoveryFormData(form);
-      sendResponse(400, "Bad Request", "text/plain; charset=utf-8",
-                   kBadRequestBody);
-      return;
-    }
-    const RecoveryPinResult result =
-        pinSession_.submit(pinSession_.sessionToken(), form, nowMs);
-    clearRecoveryFormData(form);
-    switch (result) {
-      case RecoveryPinResult::Accepted: {
-        const RecoveryTransition awaiting = awaitRecoveryConfirmation(nowMs);
-        if (awaiting.to != RecoveryState::AwaitConfirmation) {
-          sendResponse(409, "Conflict", "text/plain; charset=utf-8",
-                       kConflictBody);
-          return;
-        }
-        const hardware::Pin key = hardware::currentHardware().localInput.key;
-        if (!hardware::hasPin(key)) {
-          (void)failRecoverySession(nowMs);
-          sendResponse(500, "Internal Server Error",
-                       "text/plain; charset=utf-8", kInternalBody);
-          return;
-        }
-        pinMode(key, INPUT);
-        confirmation_ = ConfirmationKeyDetector();
-        confirmation_.begin(keyLow(), nowMs);
-        confirmationActive_ = true;
-        confirmationHandled_ = false;
-        sendResponse(202, "Accepted", "text/html; charset=utf-8",
-                     kConfirmationPage);
-        return;
-      }
-      case RecoveryPinResult::InvalidPin:
-        sendResponse(401, "Unauthorized", "text/plain; charset=utf-8",
-                     kInvalidPinBody, "Retry-After: 1\r\n");
-        return;
-      case RecoveryPinResult::RetryLater:
-        sendResponse(429, "Too Many Requests", "text/plain; charset=utf-8",
-                     kRateBody, "Retry-After: 1\r\n");
-        return;
-      case RecoveryPinResult::AttemptsExhausted:
-        sendResponse(403, "Forbidden", "text/plain; charset=utf-8",
-                     kForbiddenBody);
-        return;
-      case RecoveryPinResult::InvalidPassword:
-      case RecoveryPinResult::PasswordMismatch:
-        sendResponse(400, "Bad Request", "text/plain; charset=utf-8",
-                     kInvalidPasswordBody);
-        return;
-      case RecoveryPinResult::InvalidSession:
-      case RecoveryPinResult::InvalidCsrf:
-        sendResponse(403, "Forbidden", "text/plain; charset=utf-8",
-                     kForbiddenBody);
-        return;
-      case RecoveryPinResult::Frozen:
-        sendResponse(409, "Conflict", "text/plain; charset=utf-8",
-                     kConflictBody);
-        return;
-      case RecoveryPinResult::RandomFailure:
-      case RecoveryPinResult::DeriveFailure:
-        (void)failRecoverySession(nowMs);
-        sendResponse(500, "Internal Server Error", "text/plain; charset=utf-8",
-                     kInternalBody);
-        return;
-      case RecoveryPinResult::MalformedForm:
-        sendResponse(400, "Bad Request", "text/plain; charset=utf-8",
-                     kBadRequestBody);
-        return;
+  void handlePassword(const RecoveryHttpRequest& parsed) {
+    char password[security::kMaxAdminPasswordBytes+1U]{};
+    if(!parseForm(request_+parsed.bodyOffset,parsed.bodyLength,csrf_,password,sizeof(password),true) ||
+       !security::securityValidateAdminPassword(password)) { secureZero(password,sizeof(password)); sendResponse(400,"Bad Request","text/plain; charset=utf-8",kBadRequestBody); return; }
+    if(beginRecoveryCommit().to!=RecoveryState::Committing) { secureZero(password,sizeof(password)); sendResponse(500,"Internal Server Error","text/plain; charset=utf-8",kInternalBody); return; }
+    const auto result=security::recoverDeviceSecurityPassword(password); secureZero(password,sizeof(password));
+    finishOperation(result==security::SecurityOperationStatus::Applied,"<!doctype html><html lang=\"pl\"><meta charset=\"utf-8\"><title>VoxOne</title><p>Hasło zapisane. VoxOne uruchamia się ponownie.</p></html>");
+  }
+  void handleFactory(const RecoveryHttpRequest& parsed) {
+    if(!parseForm(request_+parsed.bodyOffset,parsed.bodyLength,csrf_,nullptr,0,false)) { sendResponse(403,"Forbidden","text/plain; charset=utf-8",kForbiddenBody); return; }
+    if(beginRecoveryCommit().to!=RecoveryState::Committing) { sendResponse(500,"Internal Server Error","text/plain; charset=utf-8",kInternalBody); return; }
+    const auto result=factory_reset::performDeviceFactoryReset();
+    finishOperation(result==factory_reset::Result::Applied,"<!doctype html><html lang=\"pl\"><meta charset=\"utf-8\"><title>VoxOne</title><p>Ustawienia fabryczne przywrócone. VoxOne uruchamia FIRST BOOT.</p></html>");
+  }
+  void respond(const RecoveryHttpRequest& parsed) {
+    switch(parsed.decision) {
+      case RecoveryHttpDecision::Root:sendRoot();return;
+      case RecoveryHttpDecision::Password:handlePassword(parsed);return;
+      case RecoveryHttpDecision::FactoryReset:handleFactory(parsed);return;
+      case RecoveryHttpDecision::MethodNotAllowed:sendResponse(405,"Method Not Allowed","text/plain; charset=utf-8",kMethodBody);return;
+      case RecoveryHttpDecision::NotFound:sendResponse(404,"Not Found","text/plain; charset=utf-8",kNotFoundBody);return;
+      case RecoveryHttpDecision::RateLimited:sendResponse(429,"Too Many Requests","text/plain; charset=utf-8",kRateBody);return;
+      case RecoveryHttpDecision::OriginRejected:case RecoveryHttpDecision::HostRejected:case RecoveryHttpDecision::BadRequest:sendResponse(400,"Bad Request","text/plain; charset=utf-8",kBadRequestBody);return;
+      case RecoveryHttpDecision::UnsupportedMediaType:sendResponse(415,"Unsupported Media Type","text/plain; charset=utf-8",kMediaTypeBody);return;
+      case RecoveryHttpDecision::PayloadTooLarge:sendResponse(413,"Payload Too Large","text/plain; charset=utf-8",kPayloadBody);return;
     }
   }
-
-  void respond(const RecoveryHttpRequest& parsed, uint32_t nowMs) {
-    switch (parsed.decision) {
-      case RecoveryHttpDecision::Root:
-        sendRoot();
-        return;
-      case RecoveryHttpDecision::Status:
-        sendStatus();
-        return;
-      case RecoveryHttpDecision::Prepare:
-        handlePrepare(parsed, nowMs);
-        return;
-      case RecoveryHttpDecision::MethodNotAllowed:
-        sendResponse(405, "Method Not Allowed", "text/plain; charset=utf-8",
-                     kMethodBody);
-        return;
-      case RecoveryHttpDecision::NotFound:
-        sendResponse(404, "Not Found", "text/plain; charset=utf-8",
-                     kNotFoundBody);
-        return;
-      case RecoveryHttpDecision::RateLimited:
-        sendResponse(429, "Too Many Requests", "text/plain; charset=utf-8",
-                     kRateBody);
-        return;
-      case RecoveryHttpDecision::Unauthorized:
-        sendResponse(401, "Unauthorized", "text/plain; charset=utf-8",
-                     kUnauthorizedBody);
-        return;
-      case RecoveryHttpDecision::OriginRejected:
-      case RecoveryHttpDecision::HostRejected:
-      case RecoveryHttpDecision::BadRequest:
-        sendResponse(400, "Bad Request", "text/plain; charset=utf-8",
-                     kBadRequestBody);
-        return;
-      case RecoveryHttpDecision::UnsupportedMediaType:
-        sendResponse(415, "Unsupported Media Type",
-                     "text/plain; charset=utf-8", kMediaTypeBody);
-        return;
-      case RecoveryHttpDecision::PayloadTooLarge:
-        sendResponse(413, "Payload Too Large", "text/plain; charset=utf-8",
-                     kPayloadBody);
-        return;
-    }
-  }
-
   void readClient(uint32_t nowMs) {
-    if (clientActive_ &&
-        static_cast<uint32_t>(nowMs - clientStartedMs_) >=
-            kRecoveryHttpClientTimeoutMs) {
-      sendResponse(408, "Request Timeout", "text/plain; charset=utf-8",
-                   kBadRequestBody);
-      return;
-    }
-    while (client_.available()) {
-      if (requestLength_ == sizeof(request_)) {
-        sendResponse(413, "Payload Too Large", "text/plain; charset=utf-8",
-                     kPayloadBody);
-        return;
-      }
-      const int byte = client_.read();
-      if (byte < 0) break;
-      request_[requestLength_++] = static_cast<char>(byte);
-      size_t expectedLength = 0;
-      const RecoveryHttpFraming framing = inspectRecoveryHttpFraming(
-          request_, requestLength_, expectedLength);
-      if (framing == RecoveryHttpFraming::Incomplete) continue;
-      if (framing == RecoveryHttpFraming::TooLarge) {
-        sendResponse(413, "Payload Too Large", "text/plain; charset=utf-8",
-                     kPayloadBody);
-        return;
-      }
-      if (framing == RecoveryHttpFraming::Invalid) {
-        sendResponse(400, "Bad Request", "text/plain; charset=utf-8",
-                     kBadRequestBody);
-        return;
-      }
-      const bool allowed = requestCount_ < kRecoveryHttpMaxRequests;
-      if (requestCount_ < UINT16_MAX) ++requestCount_;
-      RecoveryHttpRequest parsed{};
-      (void)evaluateRecoveryHttpRequest(
-          request_, requestLength_, expectedHost_, pinSession_.sessionToken(),
-          allowed, parsed);
-      respond(parsed, nowMs);
-      return;
+    if(clientActive_&&static_cast<uint32_t>(nowMs-clientStartedMs_)>=kRecoveryHttpClientTimeoutMs) { sendResponse(408,"Request Timeout","text/plain; charset=utf-8",kBadRequestBody); return; }
+    while(client_.available()) {
+      if(requestLength_==sizeof(request_)) { sendResponse(413,"Payload Too Large","text/plain; charset=utf-8",kPayloadBody); return; }
+      const int byte=client_.read(); if(byte<0) break; request_[requestLength_++]=static_cast<char>(byte);
+      size_t expected=0; const auto framing=inspectRecoveryHttpFraming(request_,requestLength_,expected);
+      if(framing==RecoveryHttpFraming::Incomplete) continue;
+      if(framing==RecoveryHttpFraming::TooLarge) { sendResponse(413,"Payload Too Large","text/plain; charset=utf-8",kPayloadBody); return; }
+      if(framing==RecoveryHttpFraming::Invalid) { sendResponse(400,"Bad Request","text/plain; charset=utf-8",kBadRequestBody); return; }
+      const bool allowed=requestCount_<kRecoveryHttpMaxRequests; if(requestCount_<UINT16_MAX) ++requestCount_;
+      RecoveryHttpRequest parsed{}; (void)evaluateRecoveryHttpRequest(request_,requestLength_,expectedHost_,allowed,parsed); respond(parsed); return;
     }
   }
-
-  WiFiServer server_{80, 1};
-  WiFiClient client_;
-  RuntimeRandomSource randomSource_;
-  RecoveryPinSession pinSession_;
-  ConfirmationKeyDetector confirmation_;
-  char ssid_[32]{};
-  char expectedHost_[16]{};
-  char panelAddress_[32]{};
-  char request_[kRecoveryHttpMaxRequestBytes]{};
-  size_t requestLength_ = 0;
-  uint32_t clientStartedMs_ = 0;
-  uint16_t requestCount_ = 0;
-  bool clientActive_ = false;
-  bool confirmationActive_ = false;
-  bool confirmationHandled_ = false;
+  WiFiServer server_{80,1}; WiFiClient client_; char ssid_[32]{}; char expectedHost_[16]{}; char panelAddress_[32]{};
+  char csrf_[kCsrfCharacters+1U]{}; char request_[kRecoveryHttpMaxRequestBytes]{}; size_t requestLength_=0; uint32_t clientStartedMs_=0; uint16_t requestCount_=0; bool clientActive_=false;
 };
 
-RuntimeSessionControl sessionControl;
-RuntimeApPlatform platform;
-RecoveryApController controller(sessionControl, platform);
-
+RuntimeSessionControl sessionControl; RuntimeApPlatform platform; RecoveryApController controller(sessionControl,platform);
 }  // namespace
 
 RecoveryApStartResult beginSecurityRecoveryAp(uint32_t nowMs) {
-  const RecoveryApStartResult result = controller.start(nowMs);
-  if (result == RecoveryApStartResult::Active) {
+  const auto result = controller.start(nowMs);
+  if (result == RecoveryApStartResult::Active)
     ::network.publishSecurityRecoveryAp(platform.ssid(),
                                         platform.panelAddress(), true);
-  }
   return result;
 }
-
-bool serviceSecurityRecoveryAp(uint32_t nowMs) {
-  return controller.service(nowMs);
-}
-
+bool serviceSecurityRecoveryAp(uint32_t nowMs) { return controller.service(nowMs); }
 bool securityRecoveryApOwnsRuntime() { return controller.ownsRuntime(); }
-
 bool securityRecoveryApRunning() { return controller.running(); }
 
-}  // namespace security_recovery
-}  // namespace voxone
+} }

@@ -8,9 +8,6 @@ namespace security_recovery {
 
 enum class RecoveryApStartResult : uint8_t {
   NotRequested,
-  CredentialUnavailable,
-  GateDenied,
-  BaselineRejected,
   WifiFailed,
   HttpFailed,
   Active,
@@ -21,18 +18,14 @@ class RecoveryApSessionControl {
   virtual ~RecoveryApSessionControl() {}
   virtual RecoveryState state() const = 0;
   virtual bool live() const = 0;
-  virtual RecoveryTransition activate(uint32_t nowMs) = 0;
-  virtual RecoveryTransition service(uint32_t nowMs) = 0;
-  virtual RecoveryTransition cancel(uint32_t nowMs) = 0;
-  virtual RecoveryTransition fail(uint32_t nowMs) = 0;
-  virtual RecoveryTransition complete(bool success, uint32_t nowMs) = 0;
+  virtual RecoveryTransition activate() = 0;
+  virtual RecoveryTransition fail() = 0;
+  virtual RecoveryTransition complete(bool success) = 0;
 };
 
 class RecoveryApPlatform {
  public:
   virtual ~RecoveryApPlatform() {}
-  virtual bool credentialConfigured() const = 0;
-  virtual bool securityBaselineEligible() = 0;
   virtual bool startWifi() = 0;
   virtual bool startHttp() = 0;
   virtual bool serviceHttp(uint32_t nowMs) = 0;
@@ -51,8 +44,7 @@ class RecoveryApController {
 
   RecoveryApStartResult start(uint32_t nowMs);
   bool service(uint32_t nowMs);
-  void cancel(uint32_t nowMs);
-  void complete(bool success, uint32_t nowMs);
+  void complete(bool success);
 
   bool ownsRuntime() const { return ownsRuntime_; }
   bool running() const { return running_; }

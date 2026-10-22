@@ -6,12 +6,13 @@
 namespace voxone {
 namespace security_recovery {
 
-// Early-boot diagnostic only. It does not change SECURITY, NVS, networking or
-// OTA state, and normal boot always continues after it returns.
-KeyState detectBootKeyGesture();
+// Samples the active-low KEY once at early boot with only contact debounce.
+// The accepted decision is latched for this boot; release is never required.
+KeyState detectBootKeyAtStartup();
 
-// A stuck-low boot attempt must not later turn into a synthetic click/long
-// event. Only the KEY path is suppressed; encoder A/B remain operational.
+// Used by the one-shot post-factory-reset FIRST BOOT bypass so a still-held KEY
+// cannot become a synthetic runtime click. Encoder A/B remain operational.
+void suppressRuntimeKeyUntilRelease();
 bool runtimeKeyInputReady();
 
 }  // namespace security_recovery

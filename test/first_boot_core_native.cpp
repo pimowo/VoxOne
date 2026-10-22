@@ -113,7 +113,7 @@ int main() {
   assert(securityView.mode == Mode::SecurityRecovery);
   assert(securityView.screen == Screen::SecurityRecovery);
   assert(securityView.apActive &&
-         securityView.apSecurity == ApSecurity::Protected);
+         securityView.apSecurity == ApSecurity::Open);
   assert(!securityView.presentApCredential);
   assert(!securityView.wifiScanAvailable);
   Inputs securityWithoutProfiles = input(0, Connection::RecoveryAp);

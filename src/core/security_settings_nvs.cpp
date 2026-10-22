@@ -1,7 +1,6 @@
 #include "security_settings.h"
 #include "security_runtime.h"
 #include "security_api.h"
-#include "security_recovery_transaction.h"
 
 #include <esp_system.h>
 #include <nvs.h>
@@ -24,11 +23,6 @@ class NvsSecurityStorage : public SecurityStorage {
  public:
   SecurityStorageReadStatus read(uint8_t* output, size_t capacity,
                                  size_t& size) override {
-    if (::voxone::security_recovery::resolveDeviceSecurityRecoveryJournal() ==
-        ::voxone::security_recovery::RecoveryJournalResolution::Locked) {
-      size = 0;
-      return SecurityStorageReadStatus::Error;
-    }
     size = 0;
     nvs_handle_t handle;
     const esp_err_t opened = nvs_open(kNamespace, NVS_READONLY, &handle);
@@ -106,6 +100,17 @@ SecurityService& deviceSecurityService() {
   static NvsSecurityStorage storage;
   static SecurityService service(storage, deviceSecurityRandomSource());
   return service;
+}
+
+SecurityOperationStatus recoverDeviceSecurityPassword(const char* newPassword) {
+  SecurityService& service = deviceSecurityService();
+  const SecurityLoadStatus loaded = service.begin(true);
+  if (loaded != SecurityLoadStatus::Loaded)
+    return SecurityOperationStatus::InvalidState;
+  const SecurityOperationStatus result = service.recoverProtected(newPassword);
+  if (result == SecurityOperationStatus::Applied)
+    deviceSecuritySessionService().invalidateAll();
+  return result;
 }
 
 SecuritySessionService& deviceSecuritySessionService() {

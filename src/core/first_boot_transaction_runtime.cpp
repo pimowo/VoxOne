@@ -3,7 +3,6 @@
 
 #include "ap_wifi_recovery.h"
 #include "config.h"
-#include "security_recovery_transaction.h"
 #include "security_runtime.h"
 #include "wifi_config_atomic.h"
 
@@ -235,11 +234,6 @@ class DeviceBackend : public Backend {
 
   RecordStatus readSecurity(uint8_t* output, size_t capacity,
                             size_t& size) override {
-    if (security_recovery::resolveDeviceSecurityRecoveryJournal() ==
-        security_recovery::RecoveryJournalResolution::Locked) {
-      size = 0;
-      return RecordStatus::Error;
-    }
     return readNvsBlob(kSecurityNamespace, kSecurityKey, output, capacity,
                        size);
   }

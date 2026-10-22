@@ -244,6 +244,35 @@ void testLoginLogoutSessionsAndRateLimit() {
   assert(limited.api.login("abcd", 110).httpStatus == 429);
 }
 
+void testNormalPanelSecurityManagement() {
+  Fixture fixture;
+  assert(fixture.api.setup("open", nullptr).httpStatus == 200);
+
+  assert(fixture.api.manage(nullptr, "open", nullptr, 1).httpStatus == 400);
+  assert(fixture.api.manage(nullptr, "protected", "abc", 2).httpStatus == 422);
+  SecurityApiResult enabled =
+      fixture.api.manage(nullptr, "protected", "abcd", 3);
+  assert(enabled.httpStatus == 200 && enabled.clearSessionCookie);
+  assert(fixture.security.state() == SecurityState::Protected);
+
+  assert(fixture.api.manage(nullptr, "protected", "efgh", 4).httpStatus == 401);
+  SecurityApiResult login = fixture.api.login("abcd", 5);
+  assert(login.httpStatus == 200 && login.setSessionCookie);
+  SecurityApiResult changed =
+      fixture.api.manage(login.sessionToken, "protected", "efgh", 6);
+  assert(changed.httpStatus == 200 && changed.clearSessionCookie);
+  assert(!fixture.api.state(login.sessionToken, 7).authenticated);
+  assert(fixture.api.login("abcd", 8).httpStatus == 401);
+
+  login = fixture.api.login("efgh", 9);
+  assert(login.httpStatus == 200);
+  SecurityApiResult disabled =
+      fixture.api.manage(login.sessionToken, "open", nullptr, 10);
+  assert(disabled.httpStatus == 200 && disabled.clearSessionCookie);
+  assert(fixture.security.state() == SecurityState::Open);
+  assert(!fixture.api.state(login.sessionToken, 11).authenticated);
+}
+
 void testStorageAndRandomFailures() {
   Fixture storageFailure;
   storageFailure.storage.writeError = true;
@@ -282,6 +311,7 @@ void testProductionIntegrationContract() {
   assert(server.find("kSecuritySetupRoute, HTTP_POST") != std::string::npos);
   assert(server.find("kSecurityLoginRoute, HTTP_POST") != std::string::npos);
   assert(server.find("kSecurityLogoutRoute, HTTP_POST") != std::string::npos);
+  assert(server.find("kSecurityManageRoute, HTTP_POST") != std::string::npos);
   assert(server.find("HttpOnly; SameSite=Strict; Max-Age=86400") !=
          std::string::npos);
   assert(server.find("Secure; Max-Age=86400") == std::string::npos);
@@ -298,6 +328,7 @@ int main() {
   testCookieParsing();
   testStateMachineAndSetup();
   testLoginLogoutSessionsAndRateLimit();
+  testNormalPanelSecurityManagement();
   testStorageAndRandomFailures();
   testProductionIntegrationContract();
   return 0;

@@ -54,7 +54,7 @@ void testSecurityRecoveryPublication() {
   assert(snapshot.screen == Screen::SecurityRecovery);
   assert(snapshot.connection == Connection::RecoveryAp);
   assert(snapshot.apActive);
-  assert(snapshot.apSecurity == ApSecurity::Protected);
+  assert(snapshot.apSecurity == ApSecurity::Open);
   assert(!snapshot.presentApCredential);
   assert(std::strcmp(snapshot.product, "VoxOne") == 0);
   assert(std::strcmp(snapshot.title, "SECURITY RECOVERY") == 0);
@@ -109,7 +109,7 @@ void testProductionPathAndSecretBoundary() {
   const std::size_t loop = main.find("void loop()", setup);
   assert(setup != std::string::npos && loop != std::string::npos);
   const std::string setupBody = main.substr(setup, loop - setup);
-  const std::size_t keySample = setupBody.find("detectBootKeyGesture()");
+  const std::size_t keySample = setupBody.find("detectBootKeyAtStartup()");
   const std::size_t apStart = setupBody.find("beginSecurityRecoveryAp(millis())");
   const std::size_t displayStart = setupBody.find("startSecurityRecoveryDisplay()");
   assert(keySample < apStart && apStart < displayStart);
@@ -132,6 +132,12 @@ void testProductionPathAndSecretBoundary() {
          std::string::npos);
   assert(runtime.find("result == RecoveryApStartResult::Active") !=
          std::string::npos);
+  assert(runtime.find("WiFi.softAP(ssid_)") != std::string::npos);
+  assert(runtime.find("credentialConfigured") == std::string::npos);
+  assert(runtime.find("Recovery PIN") == std::string::npos);
+  assert(runtime.find("voxone_recovery=") == std::string::npos);
+  assert(runtime.find("/password") != std::string::npos);
+  assert(runtime.find("/factory-reset") != std::string::npos);
   assert(main.find("display.serviceSecurityRecovery()") != std::string::npos);
 
   const std::string displayInit = functionBody(

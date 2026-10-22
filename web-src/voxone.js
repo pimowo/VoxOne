@@ -65,9 +65,20 @@ window.VoxOneRestartWaiter = Object.freeze({
   const securityLogout = document.getElementById("security-logout");
   const securityPasswordToggles = [...document.querySelectorAll(".security-password-toggle")];
   const securitySaveConfirmation = document.getElementById("security-save-confirmation");
+  const securityManagementForm = document.getElementById("security-management-form");
+  const securityManagementCurrentWrap = document.getElementById("security-management-current-wrap");
+  const securityManagementCurrent = document.getElementById("security-management-current");
+  const securityManagementMode = document.getElementById("security-management-mode");
+  const securityManagementPasswordFields = document.getElementById("security-management-password-fields");
+  const securityManagementPassword = document.getElementById("security-management-password");
+  const securityManagementRepeat = document.getElementById("security-management-repeat");
+  const securityManagementMessage = document.getElementById("security-management-message");
+  const securityManagementSummary = document.getElementById("security-management-summary");
+  const securityManagementSubmit = document.getElementById("security-management-submit");
   let securityRequestGeneration = 0;
   let securityBusy = false;
   let securityConfirmationTimer = 0;
+  let securityManagementNeedsAuthentication = false;
 
   function securityFetch(url, options = {}, timeout = 10000) {
     const controller = new AbortController();
@@ -203,6 +214,7 @@ window.VoxOneRestartWaiter = Object.freeze({
         state.protectionEnforced !== (enforcementMode !== "disabled"))
       throw new Error("inconsistent security enforcement state");
     securityLogout.hidden = true;
+    renderSecurityManagement(state);
     if (state.state === "legacy-unclaimed") {
       if (state.setupAllowed !== true) throw new Error("inconsistent setup state");
       showSecurityView("security-setup-form");
@@ -230,6 +242,103 @@ window.VoxOneRestartWaiter = Object.freeze({
     }
     showSecurityView(state.state === "locked" ? "security-locked" :
       "security-unconfigured");
+  }
+
+  function renderSecurityManagement(state) {
+    if (!securityManagementForm) return;
+    const manageable = state?.state === "open" || state?.state === "protected";
+    securityManagementNeedsAuthentication = state?.state === "protected" &&
+      state.authenticated !== true;
+    securityManagementForm.hidden = !manageable;
+    securityManagementCurrentWrap.hidden = !securityManagementNeedsAuthentication;
+    securityManagementCurrent.disabled = !securityManagementNeedsAuthentication;
+    securityManagementSummary.textContent = state?.state === "protected"
+      ? "Panel jest chroniony hasłem. Możesz zmienić hasło albo wyłączyć ochronę."
+      : state?.state === "open"
+        ? "Panel działa bez hasła. Możesz włączyć ochronę, ustawiając hasło."
+        : "Zarządzanie ochroną wymaga normalnego uruchomienia i autoryzacji.";
+    securityManagementMode.value = "protected";
+    renderSecurityManagementFields();
+  }
+
+  function renderSecurityManagementFields() {
+    const protectedMode = securityManagementMode.value === "protected";
+    securityManagementPasswordFields.hidden = !protectedMode;
+    securityManagementPassword.disabled = !protectedMode;
+    securityManagementRepeat.disabled = !protectedMode;
+    setSecurityMessage(securityManagementMessage, "", false);
+  }
+
+  async function submitSecurityManagement(event) {
+    event.preventDefault();
+    if (securityBusy) return;
+    const mode = securityManagementMode.value;
+    const currentPassword = securityManagementNeedsAuthentication
+      ? securityManagementCurrent.value : "";
+    if (securityManagementNeedsAuthentication &&
+        !securityPasswordInfo(currentPassword).valid) {
+      setSecurityMessage(securityManagementMessage,
+        "Podaj prawidłowe bieżące hasło, aby autoryzować zmianę.");
+      return;
+    }
+    const params = new URLSearchParams();
+    params.set("mode", mode);
+    if (mode === "protected") {
+      const info = securityPasswordInfo(securityManagementPassword.value);
+      if (!info.valid) {
+        setSecurityMessage(securityManagementMessage,
+          info.bytes > 64 ? "Hasło przekracza 64 bajty UTF-8." :
+          "Hasło musi zawierać co najmniej 4 znaki Unicode.");
+        return;
+      }
+      if (securityManagementPassword.value !== securityManagementRepeat.value) {
+        setSecurityMessage(securityManagementMessage, "Wpisane hasła nie są identyczne.");
+        return;
+      }
+      params.set("password", securityManagementPassword.value);
+    }
+    let body = params.toString();
+    let loginBody = securityManagementNeedsAuthentication
+      ? new URLSearchParams({password: currentPassword}).toString() : "";
+    clearPasswordInput(securityManagementCurrent);
+    clearPasswordInput(securityManagementPassword);
+    clearPasswordInput(securityManagementRepeat);
+    securityBusy = true;
+    securityManagementSubmit.disabled = true;
+    try {
+      if (loginBody) {
+        const loginResponse = await securityFetch("/api/security/login", {
+          method: "POST", credentials: "same-origin", cache: "no-store",
+          headers: {"Content-Type": "application/x-www-form-urlencoded"},
+          body: loginBody
+        });
+        loginBody = "";
+        if (!loginResponse.ok) {
+          setSecurityMessage(securityManagementMessage,
+            await securityErrorMessage(loginResponse, "Autoryzacja nie powiodła się."));
+          return;
+        }
+      }
+      const response = await securityFetch("/api/security/manage", {
+        method: "POST", credentials: "same-origin", cache: "no-store",
+        headers: {"Content-Type": "application/x-www-form-urlencoded"}, body
+      });
+      body = "";
+      if (!response.ok) {
+        setSecurityMessage(securityManagementMessage,
+          await securityErrorMessage(response, "Nie udało się zapisać ochrony."));
+        return;
+      }
+      showSecuritySaveConfirmation();
+      await refreshSecurityState();
+    } catch (_) {
+      body = "";
+      loginBody = "";
+      setSecurityMessage(securityManagementMessage, "Brak połączenia z urządzeniem.");
+    } finally {
+      securityBusy = false;
+      securityManagementSubmit.disabled = false;
+    }
   }
 
   async function refreshSecurityState() {
@@ -3075,6 +3184,8 @@ window.VoxOneRestartWaiter = Object.freeze({
   securityLoginPassword.addEventListener("input", () =>
     setSecurityMessage(securityLoginMessage, "", false));
   securityLogout.addEventListener("click", logoutSecuritySession);
+  securityManagementMode.addEventListener("change", renderSecurityManagementFields);
+  securityManagementForm.addEventListener("submit", submitSecurityManagement);
   for (const button of securityPasswordToggles) {
     button.addEventListener("click", () => {
       const input = document.getElementById(button.dataset.passwordTarget);

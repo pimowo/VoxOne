@@ -14,6 +14,7 @@ constexpr char kSecurityStateRoute[] = "/api/security/state";
 constexpr char kSecuritySetupRoute[] = "/api/security/setup";
 constexpr char kSecurityLoginRoute[] = "/api/security/login";
 constexpr char kSecurityLogoutRoute[] = "/api/security/logout";
+constexpr char kSecurityManageRoute[] = "/api/security/manage";
 constexpr char kSecuritySessionCookieName[] = "voxone_session";
 constexpr size_t kSecurityMaxRequestBodyBytes = 256;
 constexpr size_t kSecurityStateJsonSize = 224;
@@ -92,6 +93,8 @@ class SecurityApiService {
   SecurityApiResult setup(const char* mode, const char* password);
   SecurityApiResult login(const char* password, uint32_t nowMs);
   SecurityApiResult logout(const char* sessionToken);
+  SecurityApiResult manage(const char* sessionToken, const char* mode,
+                           const char* password, uint32_t nowMs);
 
  private:
   SecurityService& security_;

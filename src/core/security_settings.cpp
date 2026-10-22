@@ -516,6 +516,27 @@ SecurityOperationStatus SecurityService::changePassword(
   return saveProtected(newPassword);
 }
 
+SecurityOperationStatus SecurityService::recoverProtected(
+    const char* newPassword) {
+  if (settings_.state != SecurityState::Protected &&
+      settings_.state != SecurityState::Open)
+    return SecurityOperationStatus::InvalidState;
+  return saveProtected(newPassword);
+}
+
+SecurityOperationStatus SecurityService::changePasswordAuthorized(
+    const char* newPassword) {
+  if (settings_.state != SecurityState::Protected)
+    return SecurityOperationStatus::InvalidState;
+  return saveProtected(newPassword);
+}
+
+SecurityOperationStatus SecurityService::unprotectAuthorized() {
+  if (settings_.state != SecurityState::Protected)
+    return SecurityOperationStatus::InvalidState;
+  return saveOpen();
+}
+
 SecurityOperationStatus SecurityService::eraseForFactoryReset() {
   if (!storage_.erase()) return SecurityOperationStatus::StorageError;
   settings_ = defaultSettings(SecurityState::Unconfigured);

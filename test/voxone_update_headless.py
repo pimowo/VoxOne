@@ -224,6 +224,25 @@ window.fetch = (url, options = {}) => {
     window.securityServerState.authenticated = false;
     return Promise.resolve(securityResponse(204));
   }
+  if (url === '/api/security/manage') {
+    const request = Object.fromEntries(new URLSearchParams(options.body || ''));
+    window.securityRequests.push({url, method:options.method, request, options});
+    const state = window.securityServerState;
+    if (state.state === 'open' && request.mode === 'protected') {
+      state.state = 'protected';
+      state.loginAllowed = true;
+      state.authenticated = false;
+      return Promise.resolve(securityResponse(200, {ok:true}));
+    }
+    if (state.state === 'protected' && state.authenticated === true &&
+        (request.mode === 'protected' || request.mode === 'open')) {
+      state.state = request.mode;
+      state.loginAllowed = request.mode === 'protected';
+      state.authenticated = false;
+      return Promise.resolve(securityResponse(200, {ok:true}));
+    }
+    return Promise.resolve(securityResponse(401, {error:'authentication_failed'}));
+  }
   if (String(url).startsWith('/api/ready?'))
     return Promise.resolve({ok:true,status:200,json:() => Promise.resolve({
       ready:true, bootId:window.deviceReadinessBootId
@@ -496,6 +515,43 @@ setTimeout(async () => {
     check(!get('security-save-confirmation').hidden &&
       get('security-save-confirmation').textContent === 'Ustawienia ochrony zostały zapisane',
       'confirmed OPEN setup shows exact success message');
+
+    const managementForm = get('security-management-form');
+    get('security-management-password').value = 'nowe';
+    get('security-management-repeat').value = 'nowe';
+    managementForm.dispatchEvent(new Event('submit', {bubbles:true,cancelable:true}));
+    await settleSecurity();
+    check(window.securityServerState.state === 'protected' &&
+      securityRequests.at(-1).url === '/api/security/manage' &&
+      securityRequests.at(-1).request.password === 'nowe',
+      'normal OPEN panel enables password protection');
+    check(!get('security-management-current-wrap').hidden,
+      'observe-only firmware requests current password before protected mutation');
+
+    get('security-management-current').value = 'nowe';
+    get('security-management-password').value = 'inne';
+    get('security-management-repeat').value = 'inne';
+    managementForm.dispatchEvent(new Event('submit', {bubbles:true,cancelable:true}));
+    await settleSecurity();
+    const managementRequests = securityRequests.filter(item =>
+      item.url === '/api/security/login' || item.url === '/api/security/manage');
+    check(managementRequests.at(-2).url === '/api/security/login' &&
+      managementRequests.at(-2).request.password === 'nowe' &&
+      managementRequests.at(-1).url === '/api/security/manage' &&
+      managementRequests.at(-1).request.password === 'inne',
+      'password change authenticates first and uses the protected manage route');
+
+    get('security-management-current').value = 'inne';
+    get('security-management-mode').value = 'open';
+    get('security-management-mode').dispatchEvent(new Event('change', {bubbles:true}));
+    managementForm.dispatchEvent(new Event('submit', {bubbles:true,cancelable:true}));
+    await settleSecurity();
+    check(window.securityServerState.state === 'open' &&
+      securityRequests.at(-1).url === '/api/security/manage' &&
+      securityRequests.at(-1).request.mode === 'open' &&
+      securityRequests.at(-1).request.password === undefined,
+      'authenticated normal panel disables password protection');
+
     window.securityServerState = {
       state:'protected', setupAllowed:false, loginAllowed:true,
       authenticated:false, protectionEnforced:false, enforcementMode:'disabled'

@@ -29,31 +29,17 @@ KeyState BootKeyDetector::update(bool keyLow, uint32_t nowMs) {
       if (!keyLow)
         enter(KeyState::Cancelled, nowMs);
       else if (elapsed(nowMs, timings_.debounceMs))
-        enter(KeyState::Hold, nowMs);
-      break;
-    case KeyState::Hold:
-      if (!keyLow)
-        enter(KeyState::Cancelled, nowMs);
-      else if (elapsed(nowMs, timings_.holdMs))
-        enter(KeyState::AwaitRelease, nowMs);
-      break;
-    case KeyState::AwaitRelease:
-      if (!keyLow)
         enter(KeyState::Accepted, nowMs);
-      else if (elapsed(nowMs, timings_.releaseTimeoutMs))
-        enter(KeyState::StuckLow, nowMs);
       break;
     case KeyState::Accepted:
     case KeyState::Cancelled:
-    case KeyState::StuckLow:
       break;
   }
   return state_;
 }
 
 bool BootKeyDetector::finished() const {
-  return state_ == KeyState::Accepted || state_ == KeyState::Cancelled ||
-         state_ == KeyState::StuckLow;
+  return state_ == KeyState::Accepted || state_ == KeyState::Cancelled;
 }
 
 }  // namespace security_recovery

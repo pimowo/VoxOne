@@ -9,20 +9,15 @@ namespace security_recovery {
 enum class KeyState : uint8_t {
   Idle,
   Debounce,
-  Hold,
-  AwaitRelease,
   Accepted,
   Cancelled,
-  StuckLow,
 };
 
 struct KeyTimings {
   uint32_t debounceMs;
-  uint32_t holdMs;
-  uint32_t releaseTimeoutMs;
 };
 
-constexpr KeyTimings kDefaultKeyTimings = {75U, 3000U, 10000U};
+constexpr KeyTimings kDefaultKeyTimings = {50U};
 
 class BootKeyDetector {
  public:

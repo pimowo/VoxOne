@@ -127,7 +127,8 @@ bool securityHttpFilesystemRecoveryPassthrough(SecurityAccessMethod method,
            std::strcmp(path, "/api/ready") == 0;
   if (method == SecurityAccessMethod::Post)
     return std::strcmp(path, "/api/security/login") == 0 ||
-           std::strcmp(path, "/api/security/logout") == 0;
+           std::strcmp(path, "/api/security/logout") == 0 ||
+           std::strcmp(path, "/api/security/manage") == 0;
   return false;
 }
 

@@ -27,6 +27,7 @@
 #include "core/security_recovery_key_runtime.h"
 #include "core/security_recovery_ap_runtime.h"
 #include "core/security_recovery_session_runtime.h"
+#include "core/factory_reset.h"
 #include "hardware/runtime_hardware_config.h"
 #include "displays/display_backend_selection.h"
 #include <esp_heap_caps.h>
@@ -191,11 +192,17 @@ void setup() {
   Serial.println("##[SERIALCLI]# RX commands disabled; UART0 TX-only build");
 #endif
   voxone::ota::beginBootHealthMonitor();
-  const auto recoveryKeyState =
-      voxone::security_recovery::detectBootKeyGesture();
+  const bool factoryFirstBoot =
+      voxone::factory_reset::consumeDeviceFactoryFirstBootBypass();
+  const auto recoveryKeyState = factoryFirstBoot
+      ? voxone::security_recovery::KeyState::Cancelled
+      : voxone::security_recovery::detectBootKeyAtStartup();
+  if (factoryFirstBoot) {
+    voxone::security_recovery::suppressRuntimeKeyUntilRelease();
+    Serial.println("##[BOOT]# Factory reset FIRST BOOT has priority over KEY");
+  }
   const auto recoveryEvaluation =
-      voxone::security_recovery::beginRecoverySession(
-          recoveryKeyState, millis());
+      voxone::security_recovery::beginRecoverySession(recoveryKeyState);
   if (recoveryKeyState ==
       voxone::security_recovery::KeyState::Accepted) {
     Serial.printf("##[BOOT]# SECURITY recovery request state=%s result=%s "
@@ -204,9 +211,6 @@ void setup() {
                       recoveryEvaluation.state),
                   voxone::security_recovery::recoveryDiagnosticName(
                       recoveryEvaluation.diagnostic));
-  } else if (recoveryKeyState ==
-             voxone::security_recovery::KeyState::StuckLow) {
-    Serial.println("##[WARN]# SECURITY recovery KEY stuck LOW; request ignored");
   }
   const auto restoreRecovery = voxone::config_restore::recoverAtBoot();
   if (restoreRecovery == voxone::config_restore::BootRecoveryStatus::Failed) {
@@ -234,11 +238,6 @@ void setup() {
     Serial.println("##[BOOT]# Incomplete FIRST BOOT transaction rolled back");
   const auto recoveryApResult =
       voxone::security_recovery::beginSecurityRecoveryAp(millis());
-  if (recoveryApResult ==
-      voxone::security_recovery::RecoveryApStartResult::CredentialUnavailable) {
-    Serial.println("##[WARN]# SECURITY Recovery AP disabled: shared AP "
-                   "credential is not configured");
-  }
   if (voxone::security_recovery::securityRecoveryApOwnsRuntime()) {
     Serial.printf("##[BOOT]# SECURITY Recovery AP result=%s exclusive=1\n",
                   voxone::security_recovery::recoveryApStartResultName(
@@ -335,7 +334,6 @@ void loop() {
   network.loop();
   voxone::ota::serviceBootHealth(
       currentBootControlPlaneReady(netserver.started()));
-  voxone::security_recovery::serviceRecoverySession(millis());
   #if VOXONE_HAS_BT && VOXONE_PIN_MAP_COMPLETE
     if (btRuntime.physicalStarted()) {
       btLink.loop();
