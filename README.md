@@ -25,14 +25,16 @@ Firmware zawiera RADIO przez I2S, panel WWW i WebSocket, listę stacji,
 konfigurację runtime obsługiwanych display/input, Config v7, backup/restore
 `.vxcf`, MQTT, lokalny Web Update, Recovery AP i obrazy z rollbackiem OTA.
 L0 integruje również zewnętrzny moduł VoxOneBT. Wspólny `ScrollGroupEngine`
-jest obecnie aktywny tylko w M0; L0 i W0 zachowują własne działające
-schedulery do czasu oddzielnej migracji i HIL.
+jest obecnie aktywny w M0 i L0; W0, S0 i DIN0 zachowują dotychczasowe
+mechanizmy do czasu oddzielnej migracji i HIL.
 
-Produkcyjny enforcement SECURITY pozostaje wyłączony (`observe-only`). Jego
-kandydat i integracja OTA są zabezpieczonym WIP, a nie częścią gotowego
-wydania. Online Update, Spotify Connect, DLNA, DSPmini, Multiroom, natywne HA
-oraz Installer są pracami przyszłymi. Kanoniczny i aktualny zakres otwartych
-prac znajduje się wyłącznie w [docs/TODO.md](docs/TODO.md).
+Standardowe profile W0/M0/L0/S0/DIN0 mają włączony produkcyjny enforcement
+SECURITY: OPEN działa bez hasła, a PROTECTED wymaga ważnej sesji dla
+chronionego HTTP/API i WebSocket. Software gate ma PASS, natomiast końcowy HIL
+produkcyjnej ochrony pozostaje wymagany. Online Update, Spotify Connect, DLNA,
+DSPmini, Multiroom, natywne HA oraz Installer są pracami przyszłymi.
+Kanoniczny i aktualny zakres otwartych prac znajduje się wyłącznie w
+[docs/TODO.md](docs/TODO.md).
 
 ## Build i walidacja
 
@@ -57,8 +59,9 @@ pio run -e l0 -t fullimage
 ```
 
 Samo powodzenie builda nie jest HIL PASS. Układ partycji, przeznaczenie full
-image i zasady instalacji opisuje [docs/FULL_IMAGE.md](docs/FULL_IMAGE.md), a
-bramki wydania [docs/STABLE_CONTRACT.md](docs/STABLE_CONTRACT.md).
+image, FIRST BOOT, WWW, aktualizację, backup i SECURITY Recovery opisuje
+[instrukcja instalacji i odzyskiwania](docs/FULL_IMAGE.md), a bramki wydania
+[docs/STABLE_CONTRACT.md](docs/STABLE_CONTRACT.md).
 
 ## Zasoby WWW i bezpieczeństwo pracy
 

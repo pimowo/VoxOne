@@ -194,19 +194,19 @@ ono dostępne; w przeciwnym razie używa osadzonego formularza emergency.
 
 SECURITY Recovery jest wybierane wyłącznie przy starcie: aktywny LOW na
 profilowym wejściu KEY po 50 ms debounce uruchamia tryb Recovery, a HIGH
-kontynuuje zwykły start. Nie ma przytrzymania 3–10 s, oczekiwania na zwolnienie,
-`StuckLow`, drugiego gestu ani okna czasowego. Przycisk enkodera i zworka do GND
-mają tę samą semantykę tego samego wejścia; pin i wymagany zewnętrzny pull-up
-wynikają z capability profilu (M0 używa GPIO4).
+kontynuuje zwykły start. Stan jest próbkowany jednokrotnie przy starcie.
+Przycisk enkodera i zworka do GND mają tę samą semantykę tego samego wejścia;
+pin i wymagany zewnętrzny pull-up wynikają z capability profilu (M0 używa
+GPIO4).
 
 Recovery uruchamia ekskluzywny, otwarty AP `VoxOne-Recovery-XXXXXX` i panel
 `http://192.168.4.1/`. Nie uruchamia RADIO, Bluetooth ani normalnego API, OTA i
 WebSocket. Dopuszczone są tylko `GET /`, `POST /password` i
 `POST /factory-reset`; pozostałe trasy są odrzucane. Host, Origin, metoda,
 Content-Type, rozmiar i tempo żądań są sprawdzane, a mutacje mają ukryty token
-CSRF. Nie ma hasła AP, PIN-u Recovery, cookie uwierzytelniającego ani sekretu
-na wyświetlaczu. Ekran, jeśli działa, pokazuje jedynie nazwę produktu, tryb,
-SSID i adres panelu, a jego awaria nie blokuje AP.
+CSRF. AP jest otwarty, a panel nie wymaga dodatkowego poświadczenia Recovery.
+Ekran, jeśli działa, pokazuje jedynie nazwę produktu, tryb, SSID i adres
+panelu, a jego awaria nie blokuje AP.
 
 `POST /password` ustawia nowe hasło (4–64 według kontraktu SECURITY), także
 przełączając OPEN → PROTECTED, używa istniejącego hashowanego rekordu i
@@ -253,12 +253,13 @@ layout, normalizują dane w RAM i zapisują v7 kontrolowanie. `lastUserVolume`,
 maximum/startup volume oraz `btEnabled` należą do v7. Runtime hardware ma
 osobny 10-bajtowy rekord z wersją i CRC. SECURITY używa osobnego rekordu NVS.
 
-Backup `.vxcf` schema 1 obejmuje Config v7, runtime hardware, MQTT, timeouty
-UI, `/data/wifi.csv` i `/data/stations.tsv`. Restore najpierw waliduje całość,
-staging i marker transakcji, następnie commit, weryfikację i dopiero wtedy
-restart. Backup nie zawiera aktywnych sesji, transient MUTE, chwilowego źródła
-i playback, pełnego NVS, slotów aplikacji, `otadata`, eFuse ani firmware.
-Rekord SECURITY nie jest częścią `.vxcf`.
+Bieżący backup `.vxcf` schema 2 obejmuje Config v7, runtime hardware, MQTT,
+timeouty UI, ustawienia przewijania, `/data/wifi.csv` i
+`/data/stations.tsv`; restore zachowuje zgodność ze starszym schema 1. Restore
+najpierw waliduje całość, staging i marker transakcji, następnie commit,
+weryfikację i dopiero wtedy restart. Backup nie zawiera aktywnych sesji,
+transient MUTE, chwilowego źródła i playback, pełnego NVS, slotów aplikacji,
+`otadata`, eFuse ani firmware. Rekord SECURITY nie jest częścią `.vxcf`.
 
 ## Kontrakt strefy czasowej — stan i propozycja
 
