@@ -164,11 +164,23 @@ void testProfileLayoutContract() {
 #elif defined(VOXONE_PROFILE_W0) || defined(VOXONE_PROFILE_M0) || \
       defined(VOXONE_PROFILE_S0) || defined(VOXONE_PROFILE_DIN0)
   const std::string apScreen = apScreenSource(display);
+#if defined(VOXONE_PROFILE_M0) || defined(VOXONE_PROFILE_S0) || \
+    defined(VOXONE_PROFILE_DIN0)
+  assert(apScreen.find("setup128x64::title") != std::string::npos);
+  assert(apScreen.find("setup128x64::product") != std::string::npos);
+  assert(apScreen.find("setup128x64::ssid") != std::string::npos);
+  assert(apScreen.find("setup128x64::detailLabel") != std::string::npos);
+  assert(apScreen.find("setup128x64::detailValue") != std::string::npos);
+  assert(apScreen.find("setup128x64::footer") != std::string::npos);
+  assert(apScreen.find("new ScrollWidget(\"*\", setup128x64::ssid") !=
+         std::string::npos);
+#else
   assert(apScreen.find("apNameConf") != std::string::npos);
   assert(apScreen.find("apName2Conf") != std::string::npos);
   assert(apScreen.find("apPassConf") != std::string::npos);
   assert(apScreen.find("apPass2Conf") != std::string::npos);
   assert(apScreen.find("apSettConf") != std::string::npos);
+#endif
 #else
 #error "AP-UI-DISPLAY-BINDING native test requires a VoxOne profile"
 #endif

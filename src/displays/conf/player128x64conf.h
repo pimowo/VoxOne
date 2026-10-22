@@ -14,6 +14,19 @@ constexpr uint16_t maxSsidChars = 21;
 constexpr uint16_t ssidBufferSize = maxSsidChars + 1;
 }
 
+// OLED 128x64 AP/setup coordinates shared by FIRST BOOT, Wi-Fi Recovery and
+// SECURITY Recovery. The SSID uses the existing scrolling widget so a full
+// 32-character AP name remains readable without splitting a word across rows.
+namespace setup128x64 {
+constexpr ScrollConfig title = {{1, 0, 2, WA_CENTER}, 140, 126, 0, 2, 35};
+constexpr WidgetConfig product = {0, 18, 1, WA_CENTER};
+constexpr ScrollConfig ssid = {{0, 26, 1, WA_CENTER}, 33, 128, 1200, 2, 35};
+constexpr WidgetConfig detailLabel = {0, 37, 1, WA_CENTER};
+constexpr WidgetConfig detailValue = {0, 45, 1, WA_CENTER};
+constexpr ScrollConfig footer = {{1, 57, 1, WA_LEFT}, 140, 126, 0, 2, 15};
+constexpr uint16_t visibleCharacters = 21;
+}
+
 // OLED 128x64 PLAYER coordinates shared by SSD1306 and SSD1309.
 namespace player128x64 {
 constexpr ScrollConfig station = {{0, 0, 1, WA_LEFT}, 140, 128, 5000, 2, 35};

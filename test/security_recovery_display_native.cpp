@@ -161,11 +161,23 @@ void testProductionPathAndSecretBoundary() {
       display.substr(securityBranch, securityReturn - securityBranch);
   assert(display.find("securityRecovery ? presentation.product") !=
          std::string::npos);
-  assert(renderer.find("presentation.title") != std::string::npos);
+  assert(display.find("presentation.title") != std::string::npos);
   assert(renderer.find("presentation.apSsid") != std::string::npos);
   assert(renderer.find("presentation.apAddress") != std::string::npos);
-  assert(renderer.find("kOledLineCharacters") != std::string::npos);
-  assert(renderer.find("apPassConf") != std::string::npos);
+#if defined(VOXONE_PROFILE_M0) || defined(VOXONE_PROFILE_S0) || \
+    defined(VOXONE_PROFILE_DIN0)
+  assert(renderer.find("setup128x64::product") != std::string::npos);
+  assert(renderer.find("setup128x64::ssid") != std::string::npos);
+  assert(renderer.find("setup128x64::detailLabel") != std::string::npos);
+  assert(renderer.find("setup128x64::detailValue") != std::string::npos);
+  assert(renderer.find("recoveryAddressLabel->setText(\"IP\")") !=
+         std::string::npos);
+  assert(renderer.find("firstLine") == std::string::npos);
+  assert(renderer.find("secondLine") == std::string::npos);
+  assert(renderer.find("memcpy") == std::string::npos);
+#else
+  assert(renderer.find("apPass2Conf") != std::string::npos);
+#endif
   assert(renderer.find("apPassword") == std::string::npos);
   assert(renderer.find("PIN") == std::string::npos);
   assert(renderer.find("cookie") == std::string::npos);

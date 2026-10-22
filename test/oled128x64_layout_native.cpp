@@ -2,6 +2,7 @@
 #include "../src/displays/fonts/voxone_boot_logo_oled_128x64.h"
 
 #include <cassert>
+#include <cstring>
 
 namespace {
 constexpr uint16_t bottom(const WidgetConfig& widget) {
@@ -40,6 +41,47 @@ int main() {
   static_assert(maxSsidLeft == 1 && maxSsidWidth == 126,
                 "STARTUP SSID must fit within the OLED width");
   static_assert(charHeight == 8, "OLED classic font metrics changed");
+
+  static_assert(setup128x64::title.widget.top == 0 &&
+                    setup128x64::title.widget.textsize == 2 &&
+                    setup128x64::title.widget.align == WA_CENTER &&
+                    setup128x64::title.width == 126,
+                "AP mode title must preserve the FIRST BOOT layout");
+  static_assert(setup128x64::product.top == 18 &&
+                    setup128x64::product.textsize == 1 &&
+                    setup128x64::product.align == WA_CENTER,
+                "AP product row must preserve the FIRST BOOT layout");
+  static_assert(setup128x64::ssid.widget.top == 26 &&
+                    setup128x64::ssid.widget.textsize == 1 &&
+                    setup128x64::ssid.widget.align == WA_CENTER &&
+                    setup128x64::ssid.width == 128 &&
+                    setup128x64::ssid.buffsize == 33,
+                "AP SSID row must fit and preserve the full runtime SSID");
+  static_assert(setup128x64::detailLabel.top == 37 &&
+                    setup128x64::detailValue.top == 45,
+                "AP detail rows must preserve the FIRST BOOT spacing");
+  static_assert(setup128x64::footer.widget.top == 57 &&
+                    setup128x64::footer.width == 126,
+                "AP footer must preserve the FIRST BOOT layout");
+  static_assert(bottom(setup128x64::product) <=
+                    setup128x64::ssid.widget.top,
+                "AP product overlaps SSID");
+  static_assert(bottom(setup128x64::ssid.widget) <=
+                    setup128x64::detailLabel.top,
+                "AP SSID overlaps detail label");
+  static_assert(bottom(setup128x64::detailLabel) <=
+                    setup128x64::detailValue.top,
+                "AP detail label overlaps value");
+  static_assert(bottom(setup128x64::detailValue) <=
+                    setup128x64::footer.widget.top,
+                "AP detail value overlaps footer");
+  static_assert(setup128x64::visibleCharacters * charWidth <= 128,
+                "AP single-line text exceeds OLED width");
+  static_assert(sizeof("VoxOne-Recovery-2FEE00") <=
+                    setup128x64::ssid.buffsize,
+                "Recovery SSID must remain complete in the scroll buffer");
+  assert(std::strlen("192.168.4.1") * charWidth <= 128);
+  assert(std::strlen("http://192.168.4.1/") * charWidth <= 128);
 
   static_assert(bottom(stations128x64::header) <=
                     stations128x64::selected.widget.top,

@@ -1214,10 +1214,20 @@ void Display::_apScreen() {
       #else
       _boot->addWidget(new FillWidget(metaBGConfInv, config.theme.metafill));
       #endif
-    ScrollWidget *bootTitle = (ScrollWidget*) &_boot->addWidget(new ScrollWidget("*", apTitleConf, config.theme.meta, config.theme.metabg));
+    ScrollWidget *bootTitle = (ScrollWidget*) &_boot->addWidget(new ScrollWidget("*",
+#if VOXONE_DISPLAY_PROFILE == VOXONE_DISPLAY_PROFILE_OLED_128X64
+        setup128x64::title,
+#else
+        apTitleConf,
+#endif
+        config.theme.meta, config.theme.metabg));
     bootTitle->setText(
+#if VOXONE_DISPLAY_PROFILE == VOXONE_DISPLAY_PROFILE_OLED_128X64
+        presentationReady ? presentation.title : "VoxOne");
+#else
         securityRecovery ? presentation.product :
         (presentationReady ? presentation.title : "VoxOne"));
+#endif
 
     if (!activeAp) {
       ScrollWidget *bootStatus = (ScrollWidget*) &_boot->addWidget(
@@ -1230,35 +1240,35 @@ void Display::_apScreen() {
     }
     if (securityRecovery) {
       TextWidget* recoveryTitle = (TextWidget*) &_boot->addWidget(
+#if VOXONE_DISPLAY_PROFILE == VOXONE_DISPLAY_PROFILE_OLED_128X64
+          new TextWidget(setup128x64::product, 30, config.theme.title1,
+#else
           new TextWidget(apNameConf, 30, config.theme.title1,
+#endif
                          config.theme.background));
+#if VOXONE_DISPLAY_PROFILE == VOXONE_DISPLAY_PROFILE_OLED_128X64
+      recoveryTitle->setText(presentation.product);
+      ScrollWidget* recoverySsid = (ScrollWidget*) &_boot->addWidget(
+          new ScrollWidget("*", setup128x64::ssid, config.theme.clock,
+                           config.theme.background));
+      recoverySsid->setText(presentation.apSsid);
+      TextWidget* recoveryAddressLabel = (TextWidget*) &_boot->addWidget(
+          new TextWidget(setup128x64::detailLabel, 30, config.theme.title1,
+                         config.theme.background));
+      recoveryAddressLabel->setText("IP");
+#else
       recoveryTitle->setText(presentation.title);
       TextWidget* recoverySsid = (TextWidget*) &_boot->addWidget(
           new TextWidget(apName2Conf, 30, config.theme.clock,
                          config.theme.background));
-#if VOXONE_DISPLAY_PROFILE == VOXONE_DISPLAY_PROFILE_OLED_128X64
-      constexpr size_t kOledLineCharacters = 21;
-      const size_t ssidLength = strlen(presentation.apSsid);
-      if (ssidLength > kOledLineCharacters) {
-        const size_t split = (ssidLength + 1) / 2;
-        char firstLine[17]{};
-        char secondLine[17]{};
-        memcpy(firstLine, presentation.apSsid, split);
-        memcpy(secondLine, presentation.apSsid + split,
-               ssidLength - split);
-        recoverySsid->setText(firstLine);
-        TextWidget* recoverySsidSecond = (TextWidget*) &_boot->addWidget(
-            new TextWidget(apPassConf, 30, config.theme.clock,
-                           config.theme.background));
-        recoverySsidSecond->setText(secondLine);
-      } else {
-        recoverySsid->setText(presentation.apSsid);
-      }
-#else
       recoverySsid->setText(presentation.apSsid);
 #endif
       TextWidget* recoveryAddress = (TextWidget*) &_boot->addWidget(
+#if VOXONE_DISPLAY_PROFILE == VOXONE_DISPLAY_PROFILE_OLED_128X64
+          new TextWidget(setup128x64::detailValue, 30, config.theme.clock,
+#else
           new TextWidget(apPass2Conf, 30, config.theme.clock,
+#endif
                          config.theme.background));
       recoveryAddress->setText(presentation.apAddress);
       _pager->addPage(_boot);
@@ -1313,11 +1323,18 @@ void Display::_apScreen() {
     TextWidget *apname = (TextWidget*) &_boot->addWidget(new TextWidget(
 #if VOXONE_DISPLAY_PROFILE == VOXONE_DISPLAY_PROFILE_ST7796_480X320
       apNameConf,
+#elif VOXONE_DISPLAY_PROFILE == VOXONE_DISPLAY_PROFILE_OLED_128X64
+      setup128x64::product,
 #else
       apNameConf,
 #endif
       30, config.theme.title1, config.theme.background));
     apname->setText("VoxOne");
+#if VOXONE_DISPLAY_PROFILE == VOXONE_DISPLAY_PROFILE_OLED_128X64
+    ScrollWidget *apname2 = (ScrollWidget*) &_boot->addWidget(
+        new ScrollWidget("*", setup128x64::ssid, config.theme.clock,
+                         config.theme.background));
+#else
     TextWidget *apname2 = (TextWidget*) &_boot->addWidget(new TextWidget(
 #if VOXONE_DISPLAY_PROFILE == VOXONE_DISPLAY_PROFILE_ST7796_480X320
       apName2Conf,
@@ -1325,10 +1342,13 @@ void Display::_apScreen() {
       apName2Conf,
 #endif
       30, config.theme.clock, config.theme.background));
+#endif
     apname2->setText(presentation.apSsid);
     TextWidget *appass = (TextWidget*) &_boot->addWidget(new TextWidget(
 #if VOXONE_DISPLAY_PROFILE == VOXONE_DISPLAY_PROFILE_ST7796_480X320
       apPassConf,
+#elif VOXONE_DISPLAY_PROFILE == VOXONE_DISPLAY_PROFILE_OLED_128X64
+      setup128x64::detailLabel,
 #else
       apPassConf,
 #endif
@@ -1338,13 +1358,21 @@ void Display::_apScreen() {
     TextWidget *appass2 = (TextWidget*) &_boot->addWidget(new TextWidget(
 #if VOXONE_DISPLAY_PROFILE == VOXONE_DISPLAY_PROFILE_ST7796_480X320
       apPass2Conf,
+#elif VOXONE_DISPLAY_PROFILE == VOXONE_DISPLAY_PROFILE_OLED_128X64
+      setup128x64::detailValue,
 #else
       apPass2Conf,
 #endif
       30, config.theme.clock, config.theme.background));
     appass2->setText(firstBootSetup ? presentation.apAddress :
         (presentation.presentApCredential ? apPassword : ""));
-    ScrollWidget *bootSett = (ScrollWidget*) &_boot->addWidget(new ScrollWidget("*", apSettConf, config.theme.title2, config.theme.background));
+    ScrollWidget *bootSett = (ScrollWidget*) &_boot->addWidget(new ScrollWidget("*",
+#if VOXONE_DISPLAY_PROFILE == VOXONE_DISPLAY_PROFILE_OLED_128X64
+        setup128x64::footer,
+#else
+        apSettConf,
+#endif
+        config.theme.title2, config.theme.background));
     if (firstBootSetup) bootSett->setText(presentation.statusText);
     else bootSett->setText(presentation.apAddress, "IP %s");
     _pager->addPage(_boot);
