@@ -466,6 +466,16 @@ void testProtectedRecoveryLoginSelection() {
   assert(header.find("/api/security/login") != std::string::npos);
   assert(header.find("window.location.replace('/emergency')") !=
          std::string::npos);
+
+  const size_t manage = server.find(
+      "void handleSecurityManage(AsyncWebServerRequest* request) {");
+  const size_t manageEnd = server.find("static bool deviceApiAuthorized", manage);
+  const size_t reply = server.find("securityApiResultReply(request, result);", manage);
+  const size_t close = server.find("closeUnauthorizedWebSockets();", manage);
+  assert(manage != std::string::npos && manageEnd != std::string::npos);
+  assert(reply != std::string::npos && reply < manageEnd);
+  assert(close != std::string::npos && close < manageEnd);
+  assert(reply < close);
 }
 
 void testBuildSwitchIsMonotonic() {

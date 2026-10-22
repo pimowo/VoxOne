@@ -123,6 +123,7 @@ window.securityStateResponses = [];
 window.securityRequests = [];
 window.securitySetupResponses = [];
 window.securityLoginResponses = [];
+window.securityManageResponses = [];
 window.securityServerState = {
   state:'legacy-unclaimed', setupAllowed:true, loginAllowed:false,
   authenticated:false, protectionEnforced:true, enforcementMode:'test'
@@ -227,19 +228,23 @@ window.fetch = (url, options = {}) => {
   if (url === '/api/security/manage') {
     const request = Object.fromEntries(new URLSearchParams(options.body || ''));
     window.securityRequests.push({url, method:options.method, request, options});
+    const prepared = window.securityManageResponses.shift();
+    if (prepared instanceof Error) return Promise.reject(prepared);
+    if (prepared && (!prepared.ok || prepared._body?.ok !== true))
+      return Promise.resolve(prepared);
     const state = window.securityServerState;
     if (state.state === 'open' && request.mode === 'protected') {
       state.state = 'protected';
       state.loginAllowed = true;
       state.authenticated = false;
-      return Promise.resolve(securityResponse(200, {ok:true}));
+      return Promise.resolve(prepared || securityResponse(200, {ok:true}));
     }
     if (state.state === 'protected' && state.authenticated === true &&
         (request.mode === 'protected' || request.mode === 'open')) {
       state.state = request.mode;
       state.loginAllowed = request.mode === 'protected';
       state.authenticated = false;
-      return Promise.resolve(securityResponse(200, {ok:true}));
+      return Promise.resolve(prepared || securityResponse(200, {ok:true}));
     }
     return Promise.resolve(securityResponse(401, {error:'authentication_failed'}));
   }
@@ -551,6 +556,24 @@ setTimeout(async () => {
       securityRequests.at(-1).request.mode === 'open' &&
       securityRequests.at(-1).request.password === undefined,
       'authenticated normal panel disables password protection');
+    check(!get('security-save-confirmation').hidden &&
+      get('security-management-summary').textContent.includes('bez hasła'),
+      'confirmed PROTECTED to OPEN shows success and current OPEN state');
+
+    get('security-save-confirmation').hidden = true;
+    get('security-management-mode').value = 'protected';
+    get('security-management-mode').dispatchEvent(new Event('change', {bubbles:true}));
+    get('security-management-password').value = 'awaria';
+    get('security-management-repeat').value = 'awaria';
+    window.securityManageResponses.push(
+      securityResponse(500, {error:'storage_error'}));
+    managementForm.dispatchEvent(new Event('submit', {bubbles:true,cancelable:true}));
+    await settleSecurity();
+    check(window.securityServerState.state === 'open' &&
+      get('security-save-confirmation').hidden &&
+      get('security-management-message').textContent ===
+        'Nie udało się zapisać ochrony.',
+      'real management storage failure remains an error and does not change state');
 
     window.securityServerState = {
       state:'protected', setupAllowed:false, loginAllowed:true,

@@ -329,8 +329,20 @@ window.VoxOneRestartWaiter = Object.freeze({
           await securityErrorMessage(response, "Nie udało się zapisać ochrony."));
         return;
       }
+      let confirmation = null;
+      try { confirmation = await response.json(); } catch (_) {}
+      if (confirmation?.ok !== true) {
+        setSecurityMessage(securityManagementMessage,
+          "Urządzenie nie potwierdziło zapisu ustawień ochrony.");
+        return;
+      }
+      const state = await refreshSecurityState();
+      if (state?.state !== mode) {
+        setSecurityMessage(securityManagementMessage,
+          "Urządzenie nie potwierdziło aktualnego stanu ochrony.");
+        return;
+      }
       showSecuritySaveConfirmation();
-      await refreshSecurityState();
     } catch (_) {
       body = "";
       loginBody = "";
@@ -352,9 +364,11 @@ window.VoxOneRestartWaiter = Object.freeze({
       const state = await response.json();
       if (generation !== securityRequestGeneration) return;
       renderSecurityState(state);
+      return state;
     } catch (_) {
       if (generation !== securityRequestGeneration) return;
       showApplication({warning: "Nie udało się odczytać stanu ochrony. Panel pozostaje dostępny, aby zachować możliwość aktualizacji urządzenia."});
+      return null;
     }
   }
 

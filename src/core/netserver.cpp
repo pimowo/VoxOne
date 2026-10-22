@@ -1953,6 +1953,7 @@ void handleSecurityManage(AsyncWebServerRequest* request) {
   SecurityApiService api(deviceSecurityService(), deviceSecuritySessionService(),
                          securityHttpEnforcementMode());
   SecurityApiResult result{};
+  bool closeWebSockets = false;
   {
     SecurityRuntimeLock lock;
     if (!lock.locked()) {
@@ -1962,9 +1963,14 @@ void handleSecurityManage(AsyncWebServerRequest* request) {
     }
     result = api.manage(hasToken ? token : nullptr, postParameter(request, "mode"),
                         postParameter(request, "password"), millis());
+    closeWebSockets = result.error == SecurityApiError::None;
+    // Queue the authoritative HTTP result while the security transition still
+    // owns the runtime lock.  The successful transition has already persisted
+    // the new generation and invalidated sessions; closing their WebSockets
+    // before this response was queued raced the browser's management request.
+    securityApiResultReply(request, result);
   }
-  if (result.error == SecurityApiError::None) closeUnauthorizedWebSockets();
-  securityApiResultReply(request, result);
+  if (closeWebSockets) closeUnauthorizedWebSockets();
   clearSensitive(token, sizeof(token));
 }
 
