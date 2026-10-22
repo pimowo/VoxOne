@@ -139,7 +139,7 @@ $nativeSources=@{
  security_http_adapter_native=@('src/core/security_access_policy.cpp','src/core/security_http_adapter.cpp')
  security_api_native=@('src/core/security_settings.cpp','src/core/security_session.cpp','src/core/security_api.cpp')
  security_runtime_native=@('src/core/security_settings.cpp','src/core/security_runtime.cpp')
- security_recovery_ap_native=@('src/core/security_recovery_ap.cpp','src/core/security_recovery_http.cpp','src/core/security_recovery_session.cpp','src/core/security_recovery_state.cpp','src/core/security_recovery_key.cpp','src/hardware/hardware_descriptor.cpp')
+ security_recovery_ap_native=@('src/core/security_recovery_ap.cpp','src/core/security_recovery_http.cpp','src/core/security_recovery_session.cpp','src/core/security_recovery_state.cpp','src/core/security_recovery_key.cpp','src/core/security_settings.cpp','src/hardware/hardware_descriptor.cpp')
  security_recovery_display_native=@('src/displays/display_backend_selection.cpp','src/hardware/runtime_hardware_config.cpp')
  security_recovery_key_native=@('src/core/security_recovery_key.cpp','src/hardware/hardware_descriptor.cpp','src/hardware/runtime_hardware_config.cpp')
  security_recovery_session_native=@('src/core/security_recovery_session.cpp','src/core/security_recovery_state.cpp','src/core/security_recovery_key.cpp','src/hardware/hardware_descriptor.cpp')
@@ -356,6 +356,7 @@ if(-not $onWindows) {
     (Join-Path $root 'src/core/security_recovery_session.cpp') `
     (Join-Path $root 'src/core/security_recovery_state.cpp') `
     (Join-Path $root 'src/core/security_recovery_key.cpp') `
+    (Join-Path $root 'src/core/security_settings.cpp') `
     (Join-Path $root 'src/hardware/hardware_descriptor.cpp')
   if($LASTEXITCODE -ne 0) { throw 'Sanitized security recovery AP compile failed' }
   & $securityRecoveryApExe

@@ -1,4 +1,5 @@
 #include "security_recovery_http.h"
+#include <cstdio>
 #include <cstring>
 
 namespace voxone { namespace security_recovery { namespace {
@@ -40,6 +41,55 @@ bool originMatches(const char* value, size_t length, const char* host) {
   return length > sizeof(prefix) - 1U && std::memcmp(value, prefix, sizeof(prefix)-1U) == 0 &&
          authorityMatches(value + sizeof(prefix)-1U, length - sizeof(prefix)+1U, host);
 }
+void secureZero(void* memory, size_t size) {
+  volatile uint8_t* bytes = static_cast<volatile uint8_t*>(memory);
+  while (size--) *bytes++ = 0;
+}
+uint8_t hexValue(char value) {
+  if(value>='0'&&value<='9') return static_cast<uint8_t>(value-'0');
+  if(value>='a'&&value<='f') return static_cast<uint8_t>(value-'a'+10);
+  if(value>='A'&&value<='F') return static_cast<uint8_t>(value-'A'+10);
+  return 0xffU;
+}
+bool decodeComponent(const char* input,size_t length,char* output,size_t capacity) {
+  size_t written=0;
+  if(!input||!output||!capacity) return false;
+  for(size_t i=0;i<length;++i) {
+    uint8_t value=static_cast<uint8_t>(input[i]);
+    if(value=='+') value=' ';
+    else if(value=='%') { if(i+2U>=length) return false; const uint8_t hi=hexValue(input[i+1U]),lo=hexValue(input[i+2U]); if(hi==0xffU||lo==0xffU) return false; value=static_cast<uint8_t>((hi<<4U)|lo); i+=2U; }
+    if(!value||written+1U>=capacity) return false;
+    output[written++]=static_cast<char>(value);
+  }
+  output[written]='\0'; return true;
+}
+bool tokenMatches(const char* supplied,const char* expected) {
+  if(!supplied||!expected) return false;
+  uint8_t difference=0;
+  for(size_t i=0;i<=kRecoveryCsrfCharacters;++i) difference|=static_cast<uint8_t>(supplied[i]^expected[i]);
+  return difference==0;
+}
+bool parseForm(const char* body,size_t length,const char* expectedCsrf,
+               char* password,size_t passwordCapacity,bool passwordRequired) {
+  char csrf[kRecoveryCsrfCharacters+1U]{}; uint8_t fields=0; size_t cursor=0;
+  if(password&&passwordCapacity) password[0]='\0';
+  while(body&&cursor<length) {
+    size_t end=cursor; while(end<length&&body[end]!='&') ++end;
+    size_t equals=cursor; while(equals<end&&body[equals]!='=') ++equals;
+    if(equals==cursor||equals==end) { secureZero(csrf,sizeof(csrf)); return false; }
+    char name[24]{}; const bool named=decodeComponent(body+cursor,equals-cursor,name,sizeof(name));
+    bool assigned=false;
+    if(named&&std::strcmp(name,"csrf")==0&&!(fields&1U)) { assigned=decodeComponent(body+equals+1U,end-equals-1U,csrf,sizeof(csrf)); fields|=assigned?1U:0U; }
+    else if(named&&std::strcmp(name,"new_password")==0&&password&&!(fields&2U)) { assigned=decodeComponent(body+equals+1U,end-equals-1U,password,passwordCapacity); fields|=assigned?2U:0U; }
+    secureZero(name,sizeof(name));
+    if(!assigned) { secureZero(csrf,sizeof(csrf)); if(password) secureZero(password,passwordCapacity); return false; }
+    if(end==length) break;
+    cursor=end+1U;
+    if(cursor==length) return false;
+  }
+  const bool valid=fields==(passwordRequired?3U:1U)&&tokenMatches(csrf,expectedCsrf);
+  secureZero(csrf,sizeof(csrf)); if(!valid&&password) secureZero(password,passwordCapacity); return valid;
+}
 struct Headers {
   bool hostFound=false, hostValid=false, originFound=false, originValid=false;
   bool typeFound=false, typeValid=false, lengthFound=false; size_t contentLength=0;
@@ -64,6 +114,22 @@ bool inspectHeaders(const char* begin, const char* end, const char* host, Header
   return cursor == end + 2U;
 }
 }  // namespace
+
+int renderRecoveryRootPage(const char* csrf, char* output, size_t capacity) {
+  if (!csrf || !output || !capacity) return -1;
+  return std::snprintf(output,capacity,"<!doctype html><html lang=\"pl\"><head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width,initial-scale=1\"><title>VoxOne Recovery</title><style>:root{color-scheme:dark}body{max-width:520px;margin:40px auto;padding:20px;background:#09111a;color:#edf5fa;font:16px system-ui}section{margin:20px 0;padding:20px;border:1px solid #314456;border-radius:12px;background:#151f2b}label,input,button{display:block;width:100%%;box-sizing:border-box}input,button{margin-top:10px;padding:12px}button{background:#173f4b;color:#edf5fa;border:1px solid #71d8e8;border-radius:8px}</style></head><body><main><h1>VoxOne</h1><p>SECURITY RECOVERY</p><section><h2>Zmiana hasła WWW</h2><form method=\"post\" action=\"/password\"><input type=\"hidden\" name=\"csrf\" value=\"%s\"><label>Nowe hasło<input name=\"new_password\" type=\"password\" autocomplete=\"new-password\" maxlength=\"64\" required></label><button type=\"submit\">Zapisz hasło</button></form></section><section><h2>Ustawienia fabryczne</h2><form method=\"post\" action=\"/factory-reset\"><input type=\"hidden\" name=\"csrf\" value=\"%s\"><button type=\"submit\">Przywróć ustawienia fabryczne</button></form></section></main></body></html>",csrf,csrf);
+}
+
+bool parseRecoveryPasswordForm(const char* body, size_t length,
+                               const char* expectedCsrf, char* password,
+                               size_t passwordCapacity) {
+  return parseForm(body,length,expectedCsrf,password,passwordCapacity,true);
+}
+
+bool parseRecoveryCsrfForm(const char* body, size_t length,
+                           const char* expectedCsrf) {
+  return parseForm(body,length,expectedCsrf,nullptr,0,false);
+}
 
 RecoveryHttpFraming inspectRecoveryHttpFraming(const char* request, size_t length, size_t& expectedLength) {
   expectedLength=0;

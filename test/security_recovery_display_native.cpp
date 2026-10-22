@@ -100,6 +100,8 @@ void testProductionPathAndSecretBoundary() {
   const std::string main = readFile("src/main.cpp");
   const std::string runtime =
       readFile("src/core/security_recovery_ap_runtime.cpp");
+  const std::string recoveryHttp =
+      readFile("src/core/security_recovery_http.cpp");
   const std::string display = readFile("src/core/display.cpp");
   const std::string key =
       readFile("src/core/security_recovery_key_runtime.cpp");
@@ -136,8 +138,11 @@ void testProductionPathAndSecretBoundary() {
   assert(runtime.find("credentialConfigured") == std::string::npos);
   assert(runtime.find("Recovery PIN") == std::string::npos);
   assert(runtime.find("voxone_recovery=") == std::string::npos);
-  assert(runtime.find("/password") != std::string::npos);
-  assert(runtime.find("/factory-reset") != std::string::npos);
+  assert(runtime.find("Referrer-Policy: same-origin") != std::string::npos);
+  assert(runtime.find("Referrer-Policy: no-referrer") == std::string::npos);
+  assert(runtime.find("renderRecoveryRootPage(") != std::string::npos);
+  assert(recoveryHttp.find("/password") != std::string::npos);
+  assert(recoveryHttp.find("/factory-reset") != std::string::npos);
   assert(main.find("display.serviceSecurityRecovery()") != std::string::npos);
 
   const std::string displayInit = functionBody(

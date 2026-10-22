@@ -24,7 +24,8 @@ constexpr char kPayloadBody[] = "Payload Too Large\n";
 constexpr char kMediaTypeBody[] = "Unsupported Media Type\n";
 constexpr char kInternalBody[] = "Recovery operation failed\n";
 constexpr size_t kCsrfBytes = 24U;
-constexpr size_t kCsrfCharacters = kCsrfBytes * 2U;
+static_assert(kRecoveryCsrfCharacters == kCsrfBytes * 2U,
+              "Recovery CSRF size must match its hexadecimal encoding");
 
 void secureZero(void* memory, size_t size) {
   volatile uint8_t* bytes = static_cast<volatile uint8_t*>(memory);
@@ -35,53 +36,6 @@ void encodeHex(const uint8_t* input, size_t size, char* output) {
   static const char digits[] = "0123456789abcdef";
   for (size_t i=0;i<size;++i) { output[i*2U]=digits[input[i]>>4U]; output[i*2U+1U]=digits[input[i]&0x0fU]; }
   output[size*2U]='\0';
-}
-
-uint8_t hexValue(char value) {
-  if(value>='0'&&value<='9') return static_cast<uint8_t>(value-'0');
-  if(value>='a'&&value<='f') return static_cast<uint8_t>(value-'a'+10);
-  if(value>='A'&&value<='F') return static_cast<uint8_t>(value-'A'+10);
-  return 0xffU;
-}
-
-bool decodeComponent(const char* input,size_t length,char* output,size_t capacity) {
-  size_t written=0;
-  if(!input||!output||!capacity) return false;
-  for(size_t i=0;i<length;++i) {
-    uint8_t value=static_cast<uint8_t>(input[i]);
-    if(value=='+') value=' ';
-    else if(value=='%') { if(i+2U>=length) return false; const uint8_t hi=hexValue(input[i+1U]),lo=hexValue(input[i+2U]); if(hi==0xffU||lo==0xffU) return false; value=static_cast<uint8_t>((hi<<4U)|lo); i+=2U; }
-    if(!value||written+1U>=capacity) return false;
-    output[written++]=static_cast<char>(value);
-  }
-  output[written]='\0'; return true;
-}
-
-bool tokenMatches(const char* supplied,const char* expected) {
-  if(!supplied||!expected) return false;
-  uint8_t difference=0;
-  for(size_t i=0;i<=kCsrfCharacters;++i) difference|=static_cast<uint8_t>(supplied[i]^expected[i]);
-  return difference==0;
-}
-
-bool parseForm(const char* body,size_t length,const char* expectedCsrf,
-               char* password,size_t passwordCapacity,bool passwordRequired) {
-  char csrf[kCsrfCharacters+1U]{}; uint8_t fields=0; size_t cursor=0;
-  if(password&&passwordCapacity) password[0]='\0';
-  while(body&&cursor<length) {
-    size_t end=cursor; while(end<length&&body[end]!='&') ++end;
-    size_t equals=cursor; while(equals<end&&body[equals]!='=') ++equals;
-    if(equals==cursor||equals==end) { secureZero(csrf,sizeof(csrf)); return false; }
-    char name[24]{}; const bool named=decodeComponent(body+cursor,equals-cursor,name,sizeof(name));
-    bool assigned=false;
-    if(named&&std::strcmp(name,"csrf")==0&&!(fields&1U)) { assigned=decodeComponent(body+equals+1U,end-equals-1U,csrf,sizeof(csrf)); fields|=assigned?1U:0U; }
-    else if(named&&std::strcmp(name,"new_password")==0&&password&&!(fields&2U)) { assigned=decodeComponent(body+equals+1U,end-equals-1U,password,passwordCapacity); fields|=assigned?2U:0U; }
-    secureZero(name,sizeof(name));
-    if(!assigned) { secureZero(csrf,sizeof(csrf)); if(password) secureZero(password,passwordCapacity); return false; }
-    if(end==length) break; cursor=end+1U; if(cursor==length) return false;
-  }
-  const bool valid=fields==(passwordRequired?3U:1U)&&tokenMatches(csrf,expectedCsrf);
-  secureZero(csrf,sizeof(csrf)); if(!valid&&password) secureZero(password,passwordCapacity); return valid;
 }
 
 class RuntimeSessionControl : public RecoveryApSessionControl {
@@ -136,13 +90,13 @@ class RuntimeApPlatform : public RecoveryApPlatform {
   void closeClient() { client_.flush(); client_.stop(); clientActive_=false; clearRequest(); }
   void sendResponse(int status,const char* reason,const char* type,const char* body) {
     char header[768]; const size_t bodyLength=std::strlen(body);
-    const int length=std::snprintf(header,sizeof(header),"HTTP/1.1 %d %s\r\nContent-Type: %s\r\nContent-Length: %u\r\nCache-Control: no-store, max-age=0\r\nPragma: no-cache\r\nX-Content-Type-Options: nosniff\r\nContent-Security-Policy: default-src 'none'; style-src 'unsafe-inline'; form-action 'self'; base-uri 'none'; frame-ancestors 'none'\r\nReferrer-Policy: no-referrer\r\nConnection: close\r\n\r\n",status,reason,type,static_cast<unsigned>(bodyLength));
+    const int length=std::snprintf(header,sizeof(header),"HTTP/1.1 %d %s\r\nContent-Type: %s\r\nContent-Length: %u\r\nCache-Control: no-store, max-age=0\r\nPragma: no-cache\r\nX-Content-Type-Options: nosniff\r\nContent-Security-Policy: default-src 'none'; style-src 'unsafe-inline'; form-action 'self'; base-uri 'none'; frame-ancestors 'none'\r\nReferrer-Policy: same-origin\r\nConnection: close\r\n\r\n",status,reason,type,static_cast<unsigned>(bodyLength));
     if(length>0&&static_cast<size_t>(length)<sizeof(header)) { client_.write(reinterpret_cast<const uint8_t*>(header),static_cast<size_t>(length)); client_.write(reinterpret_cast<const uint8_t*>(body),bodyLength); }
     closeClient();
   }
   void sendRoot() {
     char body[2300];
-    const int length=std::snprintf(body,sizeof(body),"<!doctype html><html lang=\"pl\"><head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width,initial-scale=1\"><title>VoxOne Recovery</title><style>:root{color-scheme:dark}body{max-width:520px;margin:40px auto;padding:20px;background:#09111a;color:#edf5fa;font:16px system-ui}section{margin:20px 0;padding:20px;border:1px solid #314456;border-radius:12px;background:#151f2b}label,input,button{display:block;width:100%%;box-sizing:border-box}input,button{margin-top:10px;padding:12px}button{background:#173f4b;color:#edf5fa;border:1px solid #71d8e8;border-radius:8px}</style></head><body><main><h1>VoxOne</h1><p>SECURITY RECOVERY</p><section><h2>Zmiana hasła WWW</h2><form method=\"post\" action=\"/password\"><input type=\"hidden\" name=\"csrf\" value=\"%s\"><label>Nowe hasło<input name=\"new_password\" type=\"password\" autocomplete=\"new-password\" maxlength=\"64\" required></label><button type=\"submit\">Zapisz hasło</button></form></section><section><h2>Ustawienia fabryczne</h2><form method=\"post\" action=\"/factory-reset\"><input type=\"hidden\" name=\"csrf\" value=\"%s\"><button type=\"submit\">Przywróć ustawienia fabryczne</button></form></section></main></body></html>",csrf_,csrf_);
+    const int length=renderRecoveryRootPage(csrf_,body,sizeof(body));
     if(length<=0||static_cast<size_t>(length)>=sizeof(body)) sendResponse(500,"Internal Server Error","text/plain; charset=utf-8",kInternalBody);
     else sendResponse(200,"OK","text/html; charset=utf-8",body);
   }
@@ -152,14 +106,14 @@ class RuntimeApPlatform : public RecoveryApPlatform {
   }
   void handlePassword(const RecoveryHttpRequest& parsed) {
     char password[security::kMaxAdminPasswordBytes+1U]{};
-    if(!parseForm(request_+parsed.bodyOffset,parsed.bodyLength,csrf_,password,sizeof(password),true) ||
+    if(!parseRecoveryPasswordForm(request_+parsed.bodyOffset,parsed.bodyLength,csrf_,password,sizeof(password)) ||
        !security::securityValidateAdminPassword(password)) { secureZero(password,sizeof(password)); sendResponse(400,"Bad Request","text/plain; charset=utf-8",kBadRequestBody); return; }
     if(beginRecoveryCommit().to!=RecoveryState::Committing) { secureZero(password,sizeof(password)); sendResponse(500,"Internal Server Error","text/plain; charset=utf-8",kInternalBody); return; }
     const auto result=security::recoverDeviceSecurityPassword(password); secureZero(password,sizeof(password));
     finishOperation(result==security::SecurityOperationStatus::Applied,"<!doctype html><html lang=\"pl\"><meta charset=\"utf-8\"><title>VoxOne</title><p>Hasło zapisane. VoxOne uruchamia się ponownie.</p></html>");
   }
   void handleFactory(const RecoveryHttpRequest& parsed) {
-    if(!parseForm(request_+parsed.bodyOffset,parsed.bodyLength,csrf_,nullptr,0,false)) { sendResponse(403,"Forbidden","text/plain; charset=utf-8",kForbiddenBody); return; }
+    if(!parseRecoveryCsrfForm(request_+parsed.bodyOffset,parsed.bodyLength,csrf_)) { sendResponse(403,"Forbidden","text/plain; charset=utf-8",kForbiddenBody); return; }
     if(beginRecoveryCommit().to!=RecoveryState::Committing) { sendResponse(500,"Internal Server Error","text/plain; charset=utf-8",kInternalBody); return; }
     const auto result=factory_reset::performDeviceFactoryReset();
     finishOperation(result==factory_reset::Result::Applied,"<!doctype html><html lang=\"pl\"><meta charset=\"utf-8\"><title>VoxOne</title><p>Ustawienia fabryczne przywrócone. VoxOne uruchamia FIRST BOOT.</p></html>");
@@ -191,7 +145,7 @@ class RuntimeApPlatform : public RecoveryApPlatform {
     }
   }
   WiFiServer server_{80,1}; WiFiClient client_; char ssid_[32]{}; char expectedHost_[16]{}; char panelAddress_[32]{};
-  char csrf_[kCsrfCharacters+1U]{}; char request_[kRecoveryHttpMaxRequestBytes]{}; size_t requestLength_=0; uint32_t clientStartedMs_=0; uint16_t requestCount_=0; bool clientActive_=false;
+  char csrf_[kRecoveryCsrfCharacters+1U]{}; char request_[kRecoveryHttpMaxRequestBytes]{}; size_t requestLength_=0; uint32_t clientStartedMs_=0; uint16_t requestCount_=0; bool clientActive_=false;
 };
 
 RuntimeSessionControl sessionControl; RuntimeApPlatform platform; RecoveryApController controller(sessionControl,platform);

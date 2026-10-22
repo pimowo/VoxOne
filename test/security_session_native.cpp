@@ -206,6 +206,33 @@ void testSecurityChangesLogoutAndRestart() {
   assert(!fixture.sessions.validate(token, 16));
 }
 
+void testRecoveryPasswordStateAndSessionInvalidation() {
+  Fixture protectedFixture;
+  char token[kSecuritySessionTokenBufferSize];
+  assert(protectedFixture.sessions.login("abcd", 10, token) ==
+         SecurityLoginStatus::Created);
+  const uint32_t protectedGeneration = protectedFixture.security.generation();
+  assert(protectedFixture.security.recoverProtected("recovery-pass") ==
+         SecurityOperationStatus::Applied);
+  assert(protectedFixture.security.state() == SecurityState::Protected);
+  assert(protectedFixture.security.generation() == protectedGeneration + 1U);
+  assert(!protectedFixture.sessions.validate(token, 11));
+  assert(protectedFixture.sessions.activeSessionCount(11) == 0);
+  assert(protectedFixture.security.verifyPassword("recovery-pass"));
+  assert(!protectedFixture.security.verifyPassword("abcd"));
+
+  Fixture openFixture;
+  assert(openFixture.security.unprotect("abcd") ==
+         SecurityOperationStatus::Applied);
+  assert(openFixture.security.state() == SecurityState::Open);
+  const uint32_t openGeneration = openFixture.security.generation();
+  assert(openFixture.security.recoverProtected("new-protected-pass") ==
+         SecurityOperationStatus::Applied);
+  assert(openFixture.security.state() == SecurityState::Protected);
+  assert(openFixture.security.generation() == openGeneration + 1U);
+  assert(openFixture.security.verifyPassword("new-protected-pass"));
+}
+
 void testLongLivedConnectionBindings() {
   Fixture fixture;
   char first[kSecuritySessionTokenBufferSize];
@@ -330,6 +357,7 @@ int main() {
   testIdleAbsoluteAndMillisWrapTimeouts();
   testRngFailuresAndDuplicateTokens();
   testSecurityChangesLogoutAndRestart();
+  testRecoveryPasswordStateAndSessionInvalidation();
   testLongLivedConnectionBindings();
   testLoginRateLimitAndWrap();
   return 0;
