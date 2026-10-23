@@ -5,15 +5,36 @@ import hashlib
 import re
 import shutil
 import subprocess
+import sys
 from pathlib import Path
 
 from SCons.Script import COMMAND_LINE_TARGETS
 
 
 PROJECT_DIR = Path(env.subst("$PROJECT_DIR"))
+SCRIPTS_DIR = PROJECT_DIR / "scripts"
+if str(SCRIPTS_DIR) not in sys.path:
+    sys.path.insert(0, str(SCRIPTS_DIR))
+
+from full_image_validation import (  # noqa: E402
+    ValidationError,
+    context_from_environment,
+    expected_component_offsets,
+    partition_contract,
+    validate_component_set,
+    validate_full_image,
+    write_firmware_manifest,
+    write_json,
+)
+
+
 VERSION_HEADER = PROJECT_DIR / "src" / "core" / "version.h"
 VERSION_PATTERN = re.compile(
     r'^\s*#define\s+VOXONE_VERSION\s+"(\d+\.\d+\.\d+)"\s*$',
+    re.MULTILINE,
+)
+CHANNEL_PATTERN = re.compile(
+    r'^\s*#define\s+VOXONE_BUILD_CHANNEL\s+"([A-Za-z0-9][A-Za-z0-9._+-]*)"\s*$',
     re.MULTILINE,
 )
 
@@ -28,10 +49,19 @@ def read_product_version():
 
 
 PRODUCT_VERSION = read_product_version()
+VERSION_TEXT = VERSION_HEADER.read_text(encoding="utf-8")
+CHANNEL_MATCH = CHANNEL_PATTERN.search(VERSION_TEXT)
+if not CHANNEL_MATCH:
+    raise RuntimeError("VOXONE_BUILD_CHANNEL is missing from src/core/version.h")
+BUILD_CHANNEL = CHANNEL_MATCH.group(1)
 BUILD_DIR = Path(env.subst("$BUILD_DIR"))
 FIRMWARE_IMAGE = BUILD_DIR / f"{env.subst('$PROGNAME')}.bin"
+FIRMWARE_ELF = BUILD_DIR / f"{env.subst('$PROGNAME')}.elf"
+FIRMWARE_MANIFEST = BUILD_DIR / "firmware.validation.json"
 SPIFFS_IMAGE = BUILD_DIR / "spiffs.bin"
 FULL_IMAGE = BUILD_DIR / f"VoxOne-{PRODUCT_VERSION}-full.bin"
+FULL_IMAGE_MANIFEST = BUILD_DIR / f"VoxOne-{PRODUCT_VERSION}-full.manifest.json"
+BUILD_CONTEXT = context_from_environment(env, PRODUCT_VERSION, BUILD_CHANNEL)
 
 
 def versioned_copy_action(artifact_name):
@@ -46,9 +76,24 @@ def versioned_copy_action(artifact_name):
     return copy_versioned_artifact
 
 
-env.AddPostAction(
-    "$BUILD_DIR/${PROGNAME}.bin", versioned_copy_action("firmware")
-)
+def validate_and_copy_firmware(target, source, env):
+    source_path = Path(str(target[0]))
+    manifest = write_firmware_manifest(
+        FIRMWARE_MANIFEST, source_path, FIRMWARE_ELF, BUILD_CONTEXT
+    )
+    destination = source_path.with_name(
+        f"VoxOne-{PRODUCT_VERSION}-firmware.bin"
+    )
+    shutil.copy2(source_path, destination)
+    print(
+        f"Firmware validation manifest: {FIRMWARE_MANIFEST}, "
+        f"profile={manifest['context']['profile']} "
+        f"security={manifest['context']['security']}"
+    )
+    print(f"Versioned artifact: {destination}")
+
+
+env.AddPostAction("$BUILD_DIR/${PROGNAME}.bin", validate_and_copy_firmware)
 env.AddPostAction(
     "$BUILD_DIR/spiffs.bin", versioned_copy_action("spiffs")
 )
@@ -100,6 +145,41 @@ def build_full_image(target, source, env):
         if not image.is_file():
             raise RuntimeError(f"Required image is missing: {image}")
 
+    partitions_file = PROJECT_DIR / env.GetProjectOption(
+        "board_build.partitions"
+    )
+    partitions = partition_contract(partitions_file)
+    expected_offsets = expected_component_offsets(
+        BUILD_CONTEXT["profile"], partitions
+    )
+    by_offset = {offset: image for offset, image in FLASH_COMPONENTS}
+    if len(by_offset) != len(FLASH_COMPONENTS):
+        raise RuntimeError("Flash component offsets are not unique")
+    if set(by_offset) != set(expected_offsets.values()):
+        raise RuntimeError(
+            "Flash component offsets do not match the VoxOne partition contract"
+        )
+    components = {
+        label: by_offset[offset] for label, offset in expected_offsets.items()
+    }
+    mkspiffs_value = env.subst("$MKFSTOOL")
+    mkspiffs = Path(mkspiffs_value)
+    if not mkspiffs.is_file():
+        mkspiffs = None
+    try:
+        validation = validate_component_set(
+            BUILD_CONTEXT,
+            components,
+            FIRMWARE_ELF,
+            FIRMWARE_MANIFEST,
+            partitions_file,
+            Path(env.subst("$PROJECT_DATA_DIR")),
+            BUILD_DIR,
+            mkspiffs,
+        )
+    except ValidationError as error:
+        raise RuntimeError(f"Full image component validation failed: {error}") from error
+
     command = [
         env.subst("$PYTHONEXE"),
         env.subst("$UPLOADER"),
@@ -118,21 +198,21 @@ def build_full_image(target, source, env):
 
     subprocess.run(command, check=True)
 
-    full_data = output.read_bytes()
-    if len(full_data) != maximum_size:
-        raise RuntimeError(
-            f"Full image size is {len(full_data)}, expected {maximum_size}"
-        )
+    try:
+        full_manifest = validate_full_image(output, validation, components)
+    except ValidationError as error:
+        raise RuntimeError(f"Full image validation failed: {error}") from error
+    if full_manifest["fullImage"]["size"] != maximum_size:
+        raise RuntimeError("Validated full image size differs from board flash size")
+    write_json(FULL_IMAGE_MANIFEST, full_manifest)
 
-    for offset, image in FLASH_COMPONENTS:
+    for label, offset in sorted(
+        expected_offsets.items(), key=lambda item: item[1]
+    ):
+        image = components[label]
         source_data = image.read_bytes()
-        embedded_data = full_data[offset : offset + len(source_data)]
-        if embedded_data != source_data:
-            raise RuntimeError(
-                f"Full image fragment differs at {hex(offset)}: {image}"
-            )
         print(
-            f"Verified {hex(offset)} {image.name}: "
+            f"Verified {label} at {hex(offset)} {image.name}: "
             f"{len(source_data)} bytes, SHA-256 {sha256(source_data)}"
         )
 
@@ -145,8 +225,12 @@ def build_full_image(target, source, env):
         BUILD_DIR / f"VoxOne-{PRODUCT_VERSION}-spiffs.bin",
     )
     print(
-        f"Full flash image: {output}, {len(full_data)} bytes, "
-        f"SHA-256 {sha256(full_data)}"
+        f"Full flash image: {output}, {full_manifest['fullImage']['size']} bytes, "
+        f"SHA-256 {full_manifest['fullImage']['sha256']}"
+    )
+    print(
+        f"Full image manifest: {FULL_IMAGE_MANIFEST}, "
+        f"artifactSetId={full_manifest['artifactSetId']}"
     )
 
 if "fullimage" in COMMAND_LINE_TARGETS:

@@ -28,3 +28,4 @@ except (OSError, subprocess.CalledProcessError):
     pass
 
 env.Append(CPPDEFINES=[("VOXONE_BUILD_SHA", f'\\"{revision}\\"')])
+env["VOXONE_BUILD_SHA_VALUE"] = revision

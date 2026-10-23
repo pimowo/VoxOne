@@ -442,22 +442,43 @@ Invoke-Step 'WWW assets' {
 foreach($target in @('l0','m0','s0','din0','w0')) {
  $envName=$target
  Invoke-Step ($envName.ToUpperInvariant()) {
-  Invoke-Pio "$envName-firmware" @('run','-e',$envName)
+  Invoke-Pio "$envName-fullimage" @('run','-e',$envName,'-t','fullimage')
   $bin=Join-Path $root ".pio/build/$envName/firmware.bin"
   if(-not (Test-Path -LiteralPath $bin)) { throw "Missing $envName firmware.bin" }
   $versionedBin=Join-Path $root ".pio/build/$envName/VoxOne-$productVersion-firmware.bin"
   if(-not (Test-Path -LiteralPath $versionedBin)) { throw "Missing versioned firmware: $versionedBin" }
   if((Get-FileHash -LiteralPath $bin -Algorithm SHA256).Hash -ne (Get-FileHash -LiteralPath $versionedBin -Algorithm SHA256).Hash) { throw "Versioned firmware differs: $versionedBin" }
+  $firmwareManifest=Join-Path $root ".pio/build/$envName/firmware.validation.json"
+  if(-not (Test-Path -LiteralPath $firmwareManifest)) { throw "Missing firmware validation manifest: $firmwareManifest" }
+  $spiffs=Join-Path $root ".pio/build/$envName/spiffs.bin"
+  $versionedSpiffs=Join-Path $root ".pio/build/$envName/VoxOne-$productVersion-spiffs.bin"
+  if(-not (Test-Path -LiteralPath $spiffs) -or -not (Test-Path -LiteralPath $versionedSpiffs)) { throw "Missing $envName SPIFFS artifact" }
+  if((Get-FileHash -LiteralPath $spiffs -Algorithm SHA256).Hash -ne (Get-FileHash -LiteralPath $versionedSpiffs -Algorithm SHA256).Hash) { throw "Versioned SPIFFS differs: $versionedSpiffs" }
+  $full=Join-Path $root ".pio/build/$envName/VoxOne-$productVersion-full.bin"
+  $fullManifest=Join-Path $root ".pio/build/$envName/VoxOne-$productVersion-full.manifest.json"
+  if(-not (Test-Path -LiteralPath $full) -or -not (Test-Path -LiteralPath $fullManifest)) { throw "Missing $envName complete image or manifest" }
+  $expectedFullSize=if($envName -eq 'l0') { 16*1024*1024 } else { 4*1024*1024 }
+  if((Get-Item -LiteralPath $full).Length -ne $expectedFullSize) { throw "$envName complete image size mismatch" }
   $profile=$envName.ToUpperInvariant()
   $firmwareSize=(Get-Item -LiteralPath $bin).Length
   if($firmwareSize -gt $appPartitionSize) { throw "$profile firmware exceeds app partition" }
   $sizes[$profile]=$firmwareSize
+  $sizes["$profile-FULL"]=(Get-Item -LiteralPath $full).Length
   $firmwareMemory[$profile]=[pscustomobject]@{
    Firmware=$firmwareSize
    UsedPercent=100.0*$firmwareSize/$appPartitionSize
    Free=$appPartitionSize-$firmwareSize
   }
  }
+}
+Invoke-Step 'Full image validation regression' {
+ $previousBuildDir=$env:VOXONE_FULL_IMAGE_BUILD_DIR
+ try {
+  $env:VOXONE_FULL_IMAGE_BUILD_DIR=Join-Path $root '.pio/build'
+  & $Python (Join-Path $root 'test/full_image_validation_test.py') 2>&1 | ForEach-Object { Write-Host $_ }
+  if($LASTEXITCODE -ne 0) { throw 'Full image validation regression failed' }
+ }
+ finally { $env:VOXONE_FULL_IMAGE_BUILD_DIR=$previousBuildDir }
 }
 Invoke-Step 'L0 TX-only' {
  Invoke-Pio 'l0-tx-only-firmware' @('run','-e','l0-tx-only')
