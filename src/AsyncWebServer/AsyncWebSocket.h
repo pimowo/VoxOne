@@ -162,6 +162,10 @@ class AsyncWebSocketClient {
     uint32_t _clientId;
     AwsClientStatus _status;
 
+    // ACK/poll callbacks run in the AsyncTCP task while application code may
+    // enqueue broadcasts from another task.  Every access to the two queues
+    // and to _client during queue processing must be serialized.
+    mutable AsyncWebLock _queueLock;
     LinkedList<AsyncWebSocketControl *> _controlQueue;
     LinkedList<AsyncWebSocketMessage *> _messageQueue;
 
@@ -184,7 +188,7 @@ class AsyncWebSocketClient {
 
     //client id increments for the given server
     uint32_t id(){ return _clientId; }
-    AwsClientStatus status(){ return _status; }
+    AwsClientStatus status();
     AsyncClient* client(){ return _client; }
     AsyncWebSocket *server(){ return _server; }
     AwsFrameInfo const &pinfo() const { return _pinfo; }
@@ -207,7 +211,7 @@ class AsyncWebSocketClient {
     //data packets
     void message(AsyncWebSocketMessage *message){ _queueMessage(message); }
     bool queueIsFull();
-    bool queueIsEmpty(){ return _messageQueue.isEmpty(); }
+    bool queueIsEmpty();
 
     size_t printf(const char *format, ...)  __attribute__ ((format (printf, 2, 3)));
 #ifndef ESP32
@@ -229,7 +233,7 @@ class AsyncWebSocketClient {
     void binary(const __FlashStringHelper *data, size_t len);
     void binary(AsyncWebSocketMessageBuffer *buffer); 
 
-    bool canSend() { return _messageQueue.length() < WS_MAX_QUEUED_MESSAGES; }
+    bool canSend();
 
     //system callbacks (do not call)
     void _onAck(size_t len, uint32_t time);

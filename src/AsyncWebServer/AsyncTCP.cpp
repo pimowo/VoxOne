@@ -22,6 +22,7 @@
 #include "Arduino.h"
 
 #include "AsyncTCP.h"
+#include "AsyncTCPLifecycle.h"
 extern "C"{
 #include "lwip/opt.h"
 #include "lwip/tcp.h"
@@ -129,40 +130,44 @@ static inline bool _get_async_event(lwip_event_packet_t ** e){
     return _async_queue && xQueueReceive(_async_queue, e, portMAX_DELAY) == pdPASS;
 }
 
-static bool _remove_events_with_arg(void * arg){
-    lwip_event_packet_t * first_packet = NULL;
-    lwip_event_packet_t * packet = NULL;
-
-    if(!_async_queue){
-        return false;
+static void _free_async_event(lwip_event_packet_t * e){
+    if(e && e->event == LWIP_TCP_RECV && e->recv.pb){
+        pbuf_free(e->recv.pb);
+        e->recv.pb = NULL;
     }
-    //figure out which is the first packet so we can keep the order
-    while(!first_packet){
-        if(xQueueReceive(_async_queue, &first_packet, 0) != pdPASS){
-            return false;
-        }
-        //discard packet if matching
-        if((int)first_packet->arg == (int)arg){
-            free(first_packet);
-            first_packet = NULL;
-        //return first packet to the back of the queue
-        } else if(xQueueSend(_async_queue, &first_packet, portMAX_DELAY) != pdPASS){
-            return false;
-        }
+    free(e);
+}
+
+class AsyncEventQueueView {
+  public:
+    size_t count() const {
+        return _async_queue ? uxQueueMessagesWaiting(_async_queue) : 0;
     }
 
-    while(xQueuePeek(_async_queue, &packet, 0) == pdPASS && packet != first_packet){
-        if(xQueueReceive(_async_queue, &packet, 0) != pdPASS){
-            return false;
+    lwip_event_packet_t * pop() {
+        lwip_event_packet_t * packet = NULL;
+        if(!_async_queue || xQueueReceive(_async_queue, &packet, 0) != pdPASS){
+            return NULL;
         }
-        if((int)packet->arg == (int)arg){
-            free(packet);
-            packet = NULL;
-        } else if(xQueueSend(_async_queue, &packet, portMAX_DELAY) != pdPASS){
-            return false;
+        return packet;
+    }
+
+    void push(lwip_event_packet_t * packet) {
+        if(_async_queue){
+            xQueueSend(_async_queue, &packet, portMAX_DELAY);
         }
     }
-    return true;
+};
+
+static size_t _remove_events_with_arg(void * arg){
+    AsyncEventQueueView queue;
+    return asynctcp_lifecycle::removeQueuedEvents<
+        AsyncEventQueueView, lwip_event_packet_t>(
+        queue, arg,
+        [](lwip_event_packet_t * packet, void * owner) {
+            return packet->arg == owner;
+        },
+        [](lwip_event_packet_t * packet) { _free_async_event(packet); });
 }
 
 static void _handle_async_event(lwip_event_packet_t * e){
@@ -174,6 +179,7 @@ static void _handle_async_event(lwip_event_packet_t * e){
     } else if(e->event == LWIP_TCP_RECV){
         //ets_printf("-R: 0x%08x\n", e->recv.pcb);
         AsyncClient::_s_recv(e->arg, e->recv.pcb, e->recv.pb, e->recv.err);
+        e->recv.pb = NULL;
     } else if(e->event == LWIP_TCP_FIN){
         //ets_printf("-F: 0x%08x\n", e->fin.pcb);
         AsyncClient::_s_fin(e->arg, e->fin.pcb, e->fin.err);
@@ -196,7 +202,7 @@ static void _handle_async_event(lwip_event_packet_t * e){
         //ets_printf("D: 0x%08x %s = %s\n", e->arg, e->dns.name, ipaddr_ntoa(&e->dns.addr));
         AsyncClient::_s_dns_found(e->dns.name, &e->dns.addr, e->arg);
     }
-    free((void*)(e));
+    _free_async_event(e);
 }
 
 static void _async_service_task(void *pvParameters){
@@ -284,6 +290,9 @@ static int8_t _tcp_poll(void * arg, struct tcp_pcb * pcb) {
 
 static int8_t _tcp_recv(void * arg, struct tcp_pcb * pcb, struct pbuf *pb, int8_t err) {
     lwip_event_packet_t * e = (lwip_event_packet_t *)malloc(sizeof(lwip_event_packet_t));
+    if(!e){
+        return ERR_MEM;
+    }
     e->arg = arg;
     if(pb){
         //ets_printf("+R: 0x%08x\n", pcb);
@@ -300,7 +309,7 @@ static int8_t _tcp_recv(void * arg, struct tcp_pcb * pcb, struct pbuf *pb, int8_
         AsyncClient::_s_lwip_fin(e->arg, e->fin.pcb, e->fin.err);
     }
     if (!_send_async_event(&e)) {
-        free((void*)(e));
+        _free_async_event(e);
     }
     return ERR_OK;
 }
@@ -320,12 +329,17 @@ static int8_t _tcp_sent(void * arg, struct tcp_pcb * pcb, uint16_t len) {
 
 static void _tcp_error(void * arg, int8_t err) {
     //ets_printf("+E: 0x%08x\n", arg);
+    AsyncClient::_s_lwip_error(arg);
+    _remove_events_with_arg(arg);
     lwip_event_packet_t * e = (lwip_event_packet_t *)malloc(sizeof(lwip_event_packet_t));
+    if(!e){
+        return;
+    }
     e->event = LWIP_TCP_ERROR;
     e->arg = arg;
     e->error.err = err;
-    if (!_send_async_event(&e)) {
-        free((void*)(e));
+    if (!_prepend_async_event(&e)) {
+        _free_async_event(e);
     }
 }
 
@@ -391,7 +405,7 @@ typedef struct {
 static err_t _tcp_output_api(struct tcpip_api_call_data *api_call_msg){
     tcp_api_call_t * msg = (tcp_api_call_t *)api_call_msg;
     msg->err = ERR_CONN;
-    if(msg->closed_slot == -1 || !_closed_slots[msg->closed_slot]) {
+    if(msg->closed_slot == -1 || asynctcp_lifecycle::closedSlotIsActive(_closed_slots[msg->closed_slot])) {
         msg->err = tcp_output(msg->pcb);
     }
     return msg->err;
@@ -411,7 +425,7 @@ static esp_err_t _tcp_output(tcp_pcb * pcb, int8_t closed_slot) {
 static err_t _tcp_write_api(struct tcpip_api_call_data *api_call_msg){
     tcp_api_call_t * msg = (tcp_api_call_t *)api_call_msg;
     msg->err = ERR_CONN;
-    if(msg->closed_slot == -1 || !_closed_slots[msg->closed_slot]) {
+    if(msg->closed_slot == -1 || asynctcp_lifecycle::closedSlotIsActive(_closed_slots[msg->closed_slot])) {
         msg->err = tcp_write(msg->pcb, msg->write.data, msg->write.size, msg->write.apiflags);
     }
     return msg->err;
@@ -434,7 +448,7 @@ static esp_err_t _tcp_write(tcp_pcb * pcb, int8_t closed_slot, const char* data,
 static err_t _tcp_recved_api(struct tcpip_api_call_data *api_call_msg){
     tcp_api_call_t * msg = (tcp_api_call_t *)api_call_msg;
     msg->err = ERR_CONN;
-    if(msg->closed_slot == -1 || !_closed_slots[msg->closed_slot]) {
+    if(msg->closed_slot == -1 || asynctcp_lifecycle::closedSlotIsActive(_closed_slots[msg->closed_slot])) {
         msg->err = 0;
         tcp_recved(msg->pcb, msg->received);
     }
@@ -456,7 +470,7 @@ static esp_err_t _tcp_recved(tcp_pcb * pcb, int8_t closed_slot, size_t len) {
 static err_t _tcp_close_api(struct tcpip_api_call_data *api_call_msg){
     tcp_api_call_t * msg = (tcp_api_call_t *)api_call_msg;
     msg->err = ERR_CONN;
-    if(msg->closed_slot == -1 || !_closed_slots[msg->closed_slot]) {
+    if(msg->closed_slot == -1 || asynctcp_lifecycle::closedSlotIsActive(_closed_slots[msg->closed_slot])) {
         msg->err = tcp_close(msg->pcb);
     }
     return msg->err;
@@ -476,7 +490,7 @@ static esp_err_t _tcp_close(tcp_pcb * pcb, int8_t closed_slot) {
 static err_t _tcp_abort_api(struct tcpip_api_call_data *api_call_msg){
     tcp_api_call_t * msg = (tcp_api_call_t *)api_call_msg;
     msg->err = ERR_CONN;
-    if(msg->closed_slot == -1 || !_closed_slots[msg->closed_slot]) {
+    if(msg->closed_slot == -1 || asynctcp_lifecycle::closedSlotIsActive(_closed_slots[msg->closed_slot])) {
         tcp_abort(msg->pcb);
     }
     return msg->err;
@@ -575,6 +589,7 @@ AsyncClient::AsyncClient(tcp_pcb* pcb)
 , _pcb_busy(false)
 , _pcb_sent_at(0)
 , _ack_pcb(true)
+, _rx_ack_len(0)
 , _rx_last_packet(0)
 , _rx_since_timeout(0)
 , _ack_timeout(ASYNC_MAX_ACK_TIME)
@@ -746,6 +761,7 @@ bool AsyncClient::connect(const char* host, uint16_t port){
 void AsyncClient::close(bool now){
     if(_pcb){
         _tcp_recved(_pcb, _closed_slot, _rx_ack_len);
+        _rx_ack_len = 0;
     }
     _close();
 }
@@ -842,9 +858,10 @@ int8_t AsyncClient::_close(){
 
 void AsyncClient::_allocate_closed_slot(){
     xSemaphoreTake(_slots_lock, portMAX_DELAY);
-    uint32_t closed_slot_min_index = 0;
+    uint32_t closed_slot_min_index = asynctcp_lifecycle::kInvalidatedClosedSlot;
     for (int i = 0; i < _number_of_closed_slots; ++ i) {
-        if ((_closed_slot == -1 || _closed_slots[i] <= closed_slot_min_index) && _closed_slots[i] != 0) {
+        if (asynctcp_lifecycle::closedSlotIsReusable(_closed_slots[i]) &&
+            (_closed_slot == -1 || _closed_slots[i] <= closed_slot_min_index)) {
             closed_slot_min_index = _closed_slots[i];
             _closed_slot = i;
         }
@@ -856,11 +873,25 @@ void AsyncClient::_allocate_closed_slot(){
 }
 
 void AsyncClient::_free_closed_slot(){
+    xSemaphoreTake(_slots_lock, portMAX_DELAY);
     if (_closed_slot != -1) {
         _closed_slots[_closed_slot] = _closed_index;
         _closed_slot = -1;
         ++ _closed_index;
+        if(_closed_index == asynctcp_lifecycle::kActiveClosedSlot ||
+           _closed_index == asynctcp_lifecycle::kInvalidatedClosedSlot){
+            _closed_index = 1;
+        }
     }
+    xSemaphoreGive(_slots_lock);
+}
+
+void AsyncClient::_invalidate_closed_slot(){
+    xSemaphoreTake(_slots_lock, portMAX_DELAY);
+    if(_closed_slot != -1){
+        asynctcp_lifecycle::invalidateClosedSlot(_closed_slots[_closed_slot]);
+    }
+    xSemaphoreGive(_slots_lock);
 }
 
 /*
@@ -882,19 +913,15 @@ int8_t AsyncClient::_connected(void* pcb, int8_t err){
     return ERR_OK;
 }
 
+// In the lwIP error callback the PCB has already been freed. Invalidate both
+// references before any queued AsyncTCP event can attempt another API call.
+void AsyncClient::_lwip_error() {
+    _invalidate_closed_slot();
+    _pcb = NULL;
+}
+
 void AsyncClient::_error(int8_t err) {
-    if(_pcb){
-        TCP_MUTEX_LOCK();
-        tcp_arg(_pcb, NULL);
-        if(_pcb->state == LISTEN) {
-            tcp_sent(_pcb, NULL);
-            tcp_recv(_pcb, NULL);
-            tcp_err(_pcb, NULL);
-            tcp_poll(_pcb, NULL, 0);
-        }
-        TCP_MUTEX_UNLOCK();
-        _pcb = NULL;
-    }
+    _remove_events_with_arg(this);
     if(_error_cb) {
         _error_cb(_error_cb_arg, this, err);
     }
@@ -919,14 +946,14 @@ int8_t AsyncClient::_lwip_fin(tcp_pcb* pcb, int8_t err) {
     if(tcp_close(_pcb) != ERR_OK) {
         tcp_abort(_pcb);
     }
-    _free_closed_slot();
+    _invalidate_closed_slot();
     _pcb = NULL;
     return ERR_OK;
 }
 
 //In Async Thread
 int8_t AsyncClient::_fin(tcp_pcb* pcb, int8_t err) {
-    _tcp_clear_events(this);
+    _remove_events_with_arg(this);
     if(_discard_cb) {
         _discard_cb(_discard_cb_arg, this);
     }
@@ -1240,6 +1267,12 @@ int8_t AsyncClient::_s_fin(void * arg, struct tcp_pcb * pcb, int8_t err) {
 
 int8_t AsyncClient::_s_lwip_fin(void * arg, struct tcp_pcb * pcb, int8_t err) {
     return reinterpret_cast<AsyncClient*>(arg)->_lwip_fin(pcb, err);
+}
+
+void AsyncClient::_s_lwip_error(void * arg) {
+    if(arg){
+        reinterpret_cast<AsyncClient*>(arg)->_lwip_error();
+    }
 }
 
 int8_t AsyncClient::_s_sent(void * arg, struct tcp_pcb * pcb, uint16_t len) {

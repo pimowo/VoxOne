@@ -153,6 +153,7 @@ class AsyncClient {
     static int8_t _s_recv(void *arg, struct tcp_pcb *tpcb, struct pbuf *pb, int8_t err);
     static int8_t _s_fin(void *arg, struct tcp_pcb *tpcb, int8_t err);
     static int8_t _s_lwip_fin(void *arg, struct tcp_pcb *tpcb, int8_t err);
+    static void _s_lwip_error(void *arg);
     static void _s_error(void *arg, int8_t err);
     static int8_t _s_sent(void *arg, struct tcp_pcb *tpcb, uint16_t len);
     static int8_t _s_connected(void* arg, void* tpcb, int8_t err);
@@ -192,6 +193,7 @@ class AsyncClient {
     uint16_t _connect_port;
 
     int8_t _close();
+    void _invalidate_closed_slot();
     void _free_closed_slot();
     void _allocate_closed_slot();
     int8_t _connected(void* pcb, int8_t err);
@@ -200,6 +202,7 @@ class AsyncClient {
     int8_t _sent(tcp_pcb* pcb, uint16_t len);
     int8_t _fin(tcp_pcb* pcb, int8_t err);
     int8_t _lwip_fin(tcp_pcb* pcb, int8_t err);
+    void _lwip_error();
     void _dns_found(struct ip_addr *ipaddr);
 
   public:
