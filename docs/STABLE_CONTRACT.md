@@ -1,8 +1,7 @@
 # VoxOne 1.0.0 — kontrakt techniczny
 
 Stan dokumentu: baseline `STABLE-DOCS-CONTRACT-1`, zakres sprzętowy
-zaktualizowany w `STABLE-SCOPE-5TARGETS-1` na bazie commita
-`deeb6961814bd8a0477873d6e420a359891b888a`. Dokument opisuje bieżącą
+zamrożony decyzją `VOXONE-RELEASE-PROFILE-SCOPE-FREEZE-1`. Dokument opisuje bieżącą
 implementację i granice pierwszego Stable. Kanoniczna lista otwartych prac
 pozostaje wyłącznie w [TODO.md](TODO.md).
 
@@ -17,18 +16,23 @@ o licencji projektu i o ewentualnej licencji offline powiązanej z ESP. Taki
 mechanizm nie istnieje w bieżącym firmware i nie należy do zakresu Technical
 Stable 1.0.0.
 
-Zatwierdzony zakres Technical Stable 1.0.0 obejmuje obowiązkowo pięć profili:
-`w0`, `m0`, `l0`, `s0` i `din0`. Każdy z nich musi uzyskać osobny fizyczny
-HIL PASS przed wydaniem; sam build ani uruchomienie obrazu S0/DIN0 na sprzęcie
-M0 nie spełnia tej bramki. Zakres Stable obejmuje capability faktycznie
-zadeklarowane przez bieżący profil. Elementy wymienione wyłącznie w roadmapie
-rodziny nie stają się przez tę decyzję wymaganiami ani działającymi funkcjami.
+Zatwierdzony zakres Technical Stable 1.0.0 obejmuje obowiązkowo trzy profile:
+`w0`, `m0` i `l0`. Każdy z nich musi uzyskać osobny fizyczny HIL PASS przed
+wydaniem. Zakres Stable obejmuje capability faktycznie zadeklarowane przez
+bieżący profil. Elementy wymienione wyłącznie w roadmapie rodziny nie stają
+się przez tę decyzję wymaganiami ani działającymi funkcjami.
 
-S0 i DIN0 świadomie używają w rewizji 0 tej samej mapy GPIO co M0. Jest to
-zatwierdzony kontrakt tych historycznych profili, a nie tymczasowy błąd do
-poprawienia przed Stable. Przyszłe dedykowane PCB otrzymają nazwy S1 i DIN1,
-własne definicje pinoutu i capability oraz nie nadpiszą S0/DIN0. Projekt i HIL
-S1/DIN1 są POST-STABLE i nie blokują wydania zatwierdzonych rewizji 0.
+Po Stable 1.0.0 aktywny zakres rozwojowy POST-STABLE obejmuje `s0`, `m0`,
+`din0` i `l0`. S0 i DIN0 świadomie zachowują mapę GPIO M0 jako tymczasowy
+pinout rewizji 0; ich dotychczasowe buildy, wyniki i wymagania HIL pozostają
+ważną historią, ale ich profilowa kwalifikacja nie blokuje RC1 ani Stable
+1.0.0. Przyszłe dedykowane PCB otrzymają nazwy S1 i DIN1, własne definicje
+pinoutu i capability oraz nie nadpiszą S0/DIN0.
+
+Po wydaniu Stable 1.0.0 profil W0 przechodzi do statusu LEGACY. Pozostaje w
+repozytorium i w standardowych buildach; dopuszczone jest utrzymanie poprawek
+krytycznych dla wydanej linii 1.0.0, lecz W0 nie otrzymuje nowych funkcji w
+następnej linii rozwojowej.
 
 Dokładny pinout, pamięć, capability i stan testów opisuje
 [HARDWARE_TARGETS.md](HARDWARE_TARGETS.md).
@@ -283,7 +287,7 @@ publikować `timezone="Europe/Warsaw"` oraz ten offset. Do chwili wdrożenia kod
 nie powinien być używany jako źródło offsetu. Propozycja nie zmienia
 serialized layout ani bieżącego firmware.
 
-## Macierz kwalifikacji pięciu profili
+## Macierz kwalifikacji trzech profili Stable
 
 To jest skondensowany widok bramki wydania, nie druga lista zadań; źródłem
 prawdy pozostaje TODO.
@@ -293,15 +297,27 @@ prawdy pozostaje TODO.
 | W0 | ESP32 bez PSRAM, PCM5102A, ST7789 284×76, EC11/Buttons3/NONE, RADIO/WWW/MQTT/update | Full image/first boot/AP/Wi-Fi/WWW/RADIO/audio/display/input/restart; PBKDF2 bez PSRAM; migracja 0.2.0/0.8.0, OTA/config, MAIN/SPIFFS/recovery/power-loss, Config v7, playlisty i ScrollWidget. OTA rollback wyłącznie po osobnej zgodzie i asekuracji. | Fizyczny W0 PASS; brak otwartych regresji profilu. |
 | M0 | ESP32-S3 4 MiB + 2 MiB PSRAM, PCM5102A, SSD1306/SSD1309 128×64/NONE, EC11/Buttons3/NONE | Aktualny baseline na urządzeniu; UART uzbrojony przed restartem; OTA health/rollback z `/api/ready`, bootId i UART; SECURITY OPEN/PROTECTED; Config v7; RADIO oraz wszystkie wspierane warianty display/input. | Fizyczny M0 PASS; OTA i SECURITY HIL PASS. |
 | L0 | ESP32-S3 16 MiB + PSRAM, PCM5102A, ST7796S, DS3231, VoxOneBT UART/I2S, VU, EC11/Buttons3/NONE | RADIO endurance i kodeki/playlisty; telefon/LG TV, A2DP/AVRCP, metadata/VU/poziomy; SourceManager/TTS, L/R, MQTT/HA, LCD/input, XSMT po przypisaniu GPIO, update/recovery/config i negatywne ścieżki VoxOneBT. | Fizyczny L0 PASS; endurance i pełna macierz BT/audio PASS. |
-| S0 | ESP32-S3 4 MiB + 2 MiB PSRAM; zatwierdzony pinout rewizji 0 współdzielony z M0: PCM5102A `1/2/3`, OLED I2C `7/8`, EC11/Buttons3 `5/6/4`, display/input NONE | Brakuje fizycznego PASS profilu S0 na odpowiednim sprzęcie rewizji 0: first boot, RADIO/audio, oba OLED, wejścia, WWW, config, update/recovery i OTA. MAX98357A, OLED 128×32, bateria, BT i RTC nie są capability bieżącego BIN. | Fizyczny S0 PASS; test obrazu na urządzeniu oznaczonym jako M0 nie jest dowodem kwalifikacji S0. S1 nie blokuje tej bramki. |
-| DIN0 | ESP32-S3 4 MiB + 2 MiB PSRAM; zatwierdzony pinout rewizji 0 współdzielony z M0: PCM5102A `1/2/3`, OLED I2C `7/8`, EC11/Buttons3 `5/6/4`, display/input NONE | Brakuje fizycznego PASS profilu DIN0 na odpowiednim sprzęcie rewizji 0: first boot, RADIO/audio, oba OLED, wejścia, WWW, config, update/recovery i OTA. OLED 128×32 i VoxOneBT nie są capability bieżącego BIN. | Fizyczny DIN0 PASS; test obrazu na urządzeniu oznaczonym jako M0 nie jest dowodem kwalifikacji DIN0. DIN1 nie blokuje tej bramki. |
 
-Każdy z pięciu profili wymaga własnego, udokumentowanego fizycznego HIL PASS.
-Głębokie scenariusze wspólne — walidacja błędnego obrazu, abort, power-loss,
-recovery, rollback i persistence — można wykonać pełną macierzą na
-reprezentatywnym profilu danej klasy MCU, a na pozostałych potwierdzić ścieżkę
-podstawową oraz różnice MCU, pamięci, partycji i capability, chyba że TODO
-wymaga jawnie pełnego przebiegu na każdym profilu.
+Formalna Definition of Stable dla RC1 liczy **13 głównych bramek**: trzy
+profilowe HIL (W0, M0, L0) oraz dziesięć niezmienionych grup wspólnych:
+RADIO endurance; BT telefon/LG TV; SourceManager switching/reconnect; TTS
+restore; firmware i SPIFFS update; recovery; Config v7 persistence; L/R i VU;
+brak otwartych P0/P1; końcowy PASS na zamrożonym release commicie. Częściowy
+test nie zmniejsza licznika bramek.
+
+## Profile POST-STABLE zachowane w repozytorium
+
+Poniższe wiersze zachowują dotychczasowy zakres i wymagania HIL, lecz nie są
+bramkami wydania 1.0.0:
+
+| Profil | Zachowany baseline bieżącego BIN | Brakujący dowód POST-STABLE | Status |
+|---|---|---|---|
+| S0 | ESP32-S3 4 MiB + 2 MiB PSRAM; tymczasowy pinout rewizji 0 współdzielony z M0: PCM5102A `1/2/3`, OLED I2C `7/8`, EC11/Buttons3 `5/6/4`, display/input NONE | Brakuje fizycznego PASS profilu S0 na odpowiednim sprzęcie rewizji 0: first boot, RADIO/audio, oba OLED, wejścia, WWW, config, update/recovery i OTA. MAX98357A, OLED 128×32, bateria, BT i RTC nie są capability bieżącego BIN. | HIL POST-STABLE; test obrazu na M0 nie kwalifikuje S0, ale brak PASS nie blokuje 1.0.0. |
+| DIN0 | ESP32-S3 4 MiB + 2 MiB PSRAM; tymczasowy pinout rewizji 0 współdzielony z M0: PCM5102A `1/2/3`, OLED I2C `7/8`, EC11/Buttons3 `5/6/4`, display/input NONE | Brakuje fizycznego PASS profilu DIN0 na odpowiednim sprzęcie rewizji 0: first boot, RADIO/audio, oba OLED, wejścia, WWW, config, update/recovery i OTA. OLED 128×32 i VoxOneBT nie są capability bieżącego BIN. | HIL POST-STABLE; test obrazu na M0 nie kwalifikuje DIN0, ale brak PASS nie blokuje 1.0.0. |
+
+S0 i DIN0 wymagają docelowo własnego, udokumentowanego fizycznego HIL PASS;
+uruchomienie ich obrazów na M0 nie kwalifikuje profilu. Ten HIL oraz późniejsze
+S1/DIN1 należą jednak do POST-STABLE.
 
 ## Granica POST-STABLE
 

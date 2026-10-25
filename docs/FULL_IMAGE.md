@@ -2,7 +2,8 @@
 
 Ta instrukcja opisuje bieżący, zaimplementowany przepływ dla profili `w0`,
 `m0`, `l0`, `s0` i `din0`. Stable 1.0.0 nie został jeszcze wydany, a kompletna
-kwalifikacja sprzętowa wszystkich profili pozostaje do wykonania. Aktualny
+kwalifikacja wydania dotyczy W0, M0 i L0. S0 i DIN0 pozostają buildowalne i
+zachowują tę samą procedurę instalacji, lecz ich HIL jest POST-STABLE. Aktualny
 stan HIL znajduje się w [HARDWARE_TARGETS.md](HARDWARE_TARGETS.md) i
 [STABLE_CONTRACT.md](STABLE_CONTRACT.md).
 
@@ -223,13 +224,19 @@ pozwala także wybrać `display=NONE` i `input=NONE`.
 |---|---|---|---|---|
 | W0 | ESP32, bez PSRAM; wymagane co najmniej 4 MiB flash | ST7789 284×76 | EC11 / Buttons3 / NONE | PCM5102A, RADIO, WWW, MQTT, Web Update; bez BT, RTC i VU. |
 | M0 | ESP32-S3 Zero, 4 MiB flash, 2 MiB PSRAM | SSD1306 lub SSD1309 128×64 | EC11 / Buttons3 / NONE | PCM5102A, RADIO, WWW, MQTT, Web Update; bez BT, RTC i VU. |
-| S0 | ESP32-S3 Zero, 4 MiB flash, 2 MiB PSRAM | SSD1306 lub SSD1309 128×64 | EC11 / Buttons3 / NONE | Bieżący kontrakt rewizji 0 jak M0; przyszłe wyposażenie rodziny S nie jest dostępne. |
-| DIN0 | ESP32-S3 Zero, 4 MiB flash, 2 MiB PSRAM | SSD1306 lub SSD1309 128×64 | EC11 / Buttons3 / NONE | Bieżący kontrakt rewizji 0 jak M0; przyszłe wyposażenie DIN nie jest dostępne. |
+| S0 | ESP32-S3 Zero, 4 MiB flash, 2 MiB PSRAM | SSD1306 lub SSD1309 128×64 | EC11 / Buttons3 / NONE | Tymczasowy pinout rewizji 0 jak M0; przyszłe wyposażenie rodziny S nie jest dostępne. |
+| DIN0 | ESP32-S3 Zero, 4 MiB flash, 2 MiB PSRAM | SSD1306 lub SSD1309 128×64 | EC11 / Buttons3 / NONE | Tymczasowy pinout rewizji 0 jak M0; przyszłe wyposażenie DIN nie jest dostępne. |
 | L0 | ESP32-S3, build 16 MiB flash i PSRAM OPI | ST7796S 480×320 | EC11 / Buttons3 / NONE | PCM5102A, DS3231, VoxOneBT przez UART/I2S, VU, RADIO, WWW, MQTT i Web Update. |
 
 Audio w bieżących pięciu profilach jest ograniczone do PCM5102A. Pozycja w
 katalogu roadmapy nie oznacza, że dany układ można wybrać w aktualnym
 firmware.
+
+W0, M0 i L0 są profilami kwalifikowanymi do Stable 1.0.0. S0 i DIN0 zachowują
+tymczasowy pinout M0 oraz wymagają własnego HIL w POST-STABLE; przyszłe
+dedykowane PCB będą profilami S1 i DIN1. Po wydaniu 1.0.0 W0 pozostaje
+dostępny do krytycznego utrzymania jako LEGACY, bez nowego rozwoju
+funkcjonalnego i bez usuwania env lub artefaktów builda.
 
 ## Stan weryfikacji
 
@@ -238,9 +245,10 @@ danych Web Update oraz produkcyjna ochrona HTTP/API/WebSocket mają software
 PASS. Podstawowy FIRST BOOT oraz część poprawnych aktualizacji i persistence
 mają fizyczne potwierdzenie na M0.
 
-Przed wydaniem nadal trzeba wykonać końcowy HIL każdego profilu. W szczególności
+Przed wydaniem nadal trzeba wykonać końcowy HIL W0, M0 i L0. W szczególności
 pozostają testy produkcyjnego SECURITY OPEN/PROTECTED i wygasania sesji,
 fizyczny retest zapisu hasła w Recovery, destrukcyjny factory reset, negatywne
 przerwania zapisu/power-loss, pełny restore `.vxcf`, auto-reload WWW oraz
-osobna kwalifikacja W0, M0, L0, S0 i DIN0. Niniejsza instrukcja nie oznacza
+osobna kwalifikacja tych trzech profili. S0 i DIN0 zachowują dotychczasowe
+wyniki i wymagania jako POST-STABLE. Niniejsza instrukcja nie oznacza
 gotowości Stable 1.0.0 ani RC1.
