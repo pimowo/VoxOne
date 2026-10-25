@@ -96,6 +96,8 @@ typedef struct {
 } lwip_event_packet_t;
 
 static xQueueHandle _async_queue;
+static SemaphoreHandle_t _async_queue_lock;
+static SemaphoreHandle_t _async_queue_slots;
 static TaskHandle_t _async_service_task_handle = NULL;
 
 
@@ -113,25 +115,69 @@ static uint32_t _closed_index = []() {
 
 
 static inline bool _init_async_event_queue(){
+    if(!_async_queue_lock){
+        _async_queue_lock = xSemaphoreCreateMutex();
+        if(!_async_queue_lock){
+            return false;
+        }
+    }
     if(!_async_queue){
         _async_queue = xQueueCreate(XQUEUE_SIZE, sizeof(lwip_event_packet_t *));
         if(!_async_queue){
             return false;
         }
     }
+    if(!_async_queue_slots){
+        _async_queue_slots = xSemaphoreCreateCounting(XQUEUE_SIZE, XQUEUE_SIZE);
+        if(!_async_queue_slots){
+            return false;
+        }
+    }
     return true;
 }
 
+static inline void _release_async_queue_slot(){
+    const BaseType_t released = xSemaphoreGive(_async_queue_slots);
+    configASSERT(released == pdPASS);
+    (void)released;
+}
+
+static inline bool _queue_async_event(lwip_event_packet_t ** e,
+                                      bool to_front,
+                                      TickType_t wait_for_slot){
+    if(!_async_queue || !_async_queue_lock || !_async_queue_slots ||
+       xSemaphoreTake(_async_queue_slots, wait_for_slot) != pdPASS){
+        return false;
+    }
+    if(xSemaphoreTake(_async_queue_lock, portMAX_DELAY) != pdPASS){
+        _release_async_queue_slot();
+        return false;
+    }
+    const bool sent = (to_front
+        ? xQueueSendToFront(_async_queue, e, 0)
+        : xQueueSend(_async_queue, e, 0)) == pdPASS;
+    xSemaphoreGive(_async_queue_lock);
+    if(!sent){
+        _release_async_queue_slot();
+    }
+    return sent;
+}
+
 static inline bool _send_async_event(lwip_event_packet_t ** e){
-    return _async_queue && xQueueSend(_async_queue, e, SEND_ASYNC_EVENT_DELAY) == pdPASS;
+    return _queue_async_event(e, false, SEND_ASYNC_EVENT_DELAY);
 }
 
 static inline bool _prepend_async_event(lwip_event_packet_t ** e){
-    return _async_queue && xQueueSendToFront(_async_queue, e, portMAX_DELAY) == pdPASS;
+    return _queue_async_event(e, true, portMAX_DELAY);
 }
 
 static inline bool _get_async_event(lwip_event_packet_t ** e){
-    return _async_queue && xQueueReceive(_async_queue, e, portMAX_DELAY) == pdPASS;
+    if(!_async_queue || !_async_queue_slots ||
+       xQueueReceive(_async_queue, e, portMAX_DELAY) != pdPASS){
+        return false;
+    }
+    _release_async_queue_slot();
+    return true;
 }
 
 static void _free_async_event(lwip_event_packet_t * e){
@@ -158,20 +204,31 @@ class AsyncEventQueueView {
 
     void push(lwip_event_packet_t * packet) {
         if(_async_queue){
-            xQueueSend(_async_queue, &packet, portMAX_DELAY);
+            const BaseType_t sent = xQueueSend(_async_queue, &packet, 0);
+            configASSERT(sent == pdPASS);
+            (void)sent;
         }
     }
 };
 
 static size_t _remove_events_with_arg(void * arg){
+    if(!_async_queue_lock ||
+       xSemaphoreTake(_async_queue_lock, portMAX_DELAY) != pdPASS){
+        return 0;
+    }
     AsyncEventQueueView queue;
-    return asynctcp_lifecycle::removeQueuedEvents<
+    const size_t removed = asynctcp_lifecycle::removeQueuedEvents<
         AsyncEventQueueView, lwip_event_packet_t>(
         queue, arg,
         [](lwip_event_packet_t * packet, void * owner) {
             return packet->arg == owner;
         },
         [](lwip_event_packet_t * packet) { _free_async_event(packet); });
+    xSemaphoreGive(_async_queue_lock);
+    for(size_t i = 0; i < removed; ++i){
+        _release_async_queue_slot();
+    }
+    return removed;
 }
 
 static void _handle_async_event(lwip_event_packet_t * e){
@@ -334,7 +391,6 @@ static int8_t _tcp_sent(void * arg, struct tcp_pcb * pcb, uint16_t len) {
 static void _tcp_error(void * arg, int8_t err) {
     //ets_printf("+E: 0x%08x\n", arg);
     AsyncClient::_s_lwip_error(arg);
-    _remove_events_with_arg(arg);
     lwip_event_packet_t * e = (lwip_event_packet_t *)malloc(sizeof(lwip_event_packet_t));
     if(!e){
         return;

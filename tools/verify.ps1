@@ -172,7 +172,7 @@ Invoke-Step 'Native tests' {
    $compileLog=Join-Path $work ($label+'.compile.log')
    $compileArgs=@('-std=c++11','-O2','-Wall','-Wextra','-Werror','-Wno-unused-parameter')
    if($name -eq 'mqtt_contract_native') { $compileArgs+=@('-I',(Join-Path $root 'test')) }
-   if($name -eq 'ap_ui_www_binding_native' -or $name -eq 'display_scroll_runtime_config_native' -or $name -eq 'first_boot_runtime_snapshot_native' -or $name -eq 'first_boot_transaction_native' -or $name -eq 'websocket_queue_lifecycle_native') { $compileArgs+='-pthread' }
+   if($name -eq 'ap_ui_www_binding_native' -or $name -eq 'asynctcp_lifecycle_native' -or $name -eq 'display_scroll_runtime_config_native' -or $name -eq 'first_boot_runtime_snapshot_native' -or $name -eq 'first_boot_transaction_native' -or $name -eq 'websocket_queue_lifecycle_native') { $compileArgs+='-pthread' }
    if($variant) {
     if($variant -eq 'CLEAN' -or $variant -eq 'DIRTY') { $compileArgs+="-DBUILD_ID_TEST_$variant=1" }
     elseif($variant -eq 'SECURITY-TEST') { $compileArgs+=@('-DVOXONE_PROFILE_M0=1','-DVOXONE_SECURITY_HTTP_ENFORCEMENT_TEST=1') }
@@ -418,6 +418,12 @@ if(-not $onWindows) {
   if($LASTEXITCODE -ne 0) { throw 'Sanitized WebSocket queue lifecycle compile failed' }
   & $websocketQueueExe
   if($LASTEXITCODE -ne 0) { throw 'Sanitized WebSocket queue lifecycle test failed' }
+  $asyncTcpLifecycleExe=Join-Path $work 'asynctcp_lifecycle_sanitized'
+  & $Cxx @sanitizerArgs '-pthread' '-o' $asyncTcpLifecycleExe `
+    (Join-Path $root 'test/asynctcp_lifecycle_native.cpp')
+  if($LASTEXITCODE -ne 0) { throw 'Sanitized AsyncTCP lifecycle compile failed' }
+  & $asyncTcpLifecycleExe
+  if($LASTEXITCODE -ne 0) { throw 'Sanitized AsyncTCP lifecycle test failed' }
   $serialCliInputExe=Join-Path $work 'serialcli_input_sanitized'
   & $Cxx @sanitizerArgs '-o' $serialCliInputExe `
     (Join-Path $root 'test/serialcli_input_native.cpp')

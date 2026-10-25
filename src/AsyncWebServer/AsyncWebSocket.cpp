@@ -271,6 +271,11 @@ class AsyncWebSocketControl {
     uint8_t opcode(){ return _opcode; }
     uint8_t len(){ return _len + 2; }
     size_t send(AsyncClient *client){
+      // The control stays queued until its TCP bytes are acknowledged.  Queue
+      // activity in that window must not enqueue the same frame a second time,
+      // otherwise the surplus ACK bytes are attributed to the next data frame.
+      if(_finished)
+        return 0;
       _finished = true;
       return webSocketSendFrame(client, true, _opcode & 0x0F, _mask, _data, _len);
     }

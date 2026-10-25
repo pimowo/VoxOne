@@ -23,9 +23,10 @@ inline void invalidateClosedSlot(uint32_t &state) {
     }
 }
 
-// Queue must provide count(), pop() and push(Event *). The initial count is a
-// snapshot: events for other clients keep their order, while every event owned
-// by the selected client is released exactly once.
+// Queue must provide count(), pop() and push(Event *). The caller must be the
+// only consumer and must exclude concurrent producers for the whole rotation.
+// Under that contract events for other clients keep their order, while every
+// event owned by the selected client is released exactly once.
 template <typename Queue, typename Event, typename Owner, typename Matches,
           typename Release>
 size_t removeQueuedEvents(Queue &queue, Owner owner, Matches matches,

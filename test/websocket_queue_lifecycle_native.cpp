@@ -223,12 +223,118 @@ void testUnserializedRemovalScheduleHasTwoOwners() {
   assert(destructionAttempts == 2);
 }
 
+class ControlAckInterleavingModel {
+ public:
+  explicit ControlAckInterleavingModel(bool suppressDuplicateControl)
+      : suppressDuplicateControl_(suppressDuplicateControl) {}
+
+  void queueControl() {
+    controlQueued_ = true;
+    runQueue();
+  }
+
+  void queueMessage(size_t wireLength) {
+    messageQueued_ = true;
+    messageWireLength_ = wireLength;
+    runQueue();
+  }
+
+  void acknowledge(size_t length) {
+    if (controlQueued_ && controlSent_) {
+      assert(length >= kControlWireLength);
+      length -= kControlWireLength;
+      controlQueued_ = false;
+    }
+    if (length != 0 && messageQueued_) messageAcked_ += length;
+    if (messageSent_ && messageAcked_ == messageWireLength_) {
+      messageFinished_ = true;
+    }
+    runQueue();
+  }
+
+  size_t controlSends() const { return controlSends_; }
+  size_t messageAcked() const { return messageAcked_; }
+  bool messageFinished() const { return messageFinished_; }
+
+  // Two-byte frame header plus the 13-byte HIL PONG payload.
+  static constexpr size_t kControlWireLength = 15;
+
+ private:
+  void runQueue() {
+    if (controlQueued_) {
+      if (!suppressDuplicateControl_ || !controlSent_) {
+        controlSent_ = true;
+        ++controlSends_;
+      }
+      return;
+    }
+    if (messageQueued_ && !messageSent_) messageSent_ = true;
+  }
+
+  const bool suppressDuplicateControl_;
+  bool controlQueued_ = false;
+  bool controlSent_ = false;
+  bool messageQueued_ = false;
+  bool messageSent_ = false;
+  bool messageFinished_ = false;
+  size_t controlSends_ = 0;
+  size_t messageWireLength_ = 0;
+  size_t messageAcked_ = 0;
+};
+
+void testLegacyDuplicatePongPoisonsFollowingMessageAck() {
+  ControlAckInterleavingModel queue(false);
+  queue.queueControl();
+  queue.queueMessage(42);
+  assert(queue.controlSends() == 2);
+
+  // A single cumulative ACK covers both copies, but the legacy queue removes
+  // only one 15-byte control frame and credits the surplus to the data frame
+  // before that frame has been sent.
+  queue.acknowledge(2 * ControlAckInterleavingModel::kControlWireLength);
+  assert(queue.messageAcked() == ControlAckInterleavingModel::kControlWireLength);
+  queue.acknowledge(42);
+  assert(!queue.messageFinished());
+}
+
+void testControlFrameIsSentOnceBeforeFollowingMessage() {
+  ControlAckInterleavingModel queue(true);
+  queue.queueControl();
+  queue.queueMessage(42);
+  assert(queue.controlSends() == 1);
+
+  queue.acknowledge(ControlAckInterleavingModel::kControlWireLength);
+  assert(queue.messageAcked() == 0);
+  queue.acknowledge(42);
+  assert(queue.messageFinished());
+}
+
+void testProductionControlSendIsIdempotent() {
+  const std::string source =
+      readFile("src/AsyncWebServer/AsyncWebSocket.cpp");
+  const size_t controlClass = source.find("class AsyncWebSocketControl");
+  const size_t send = source.find("size_t send(AsyncClient *client)", controlClass);
+  const size_t nextSection = source.find("Basic Buffered Message", send);
+  assert(controlClass != std::string::npos);
+  assert(send != std::string::npos);
+  assert(nextSection != std::string::npos);
+  const std::string body = source.substr(send, nextSection - send);
+  const size_t guard = body.find("if(_finished)");
+  const size_t markSent = body.find("_finished = true;");
+  const size_t write = body.find("webSocketSendFrame(");
+  assert(guard != std::string::npos);
+  assert(guard < markSent && markSent < write);
+}
+
 }  // namespace
 
 int main() {
   testProductionQueueSynchronizationContract();
   testUnserializedRemovalScheduleHasTwoOwners();
   testAckEnqueueAndDisconnectHaveSingleOwnership();
+  testLegacyDuplicatePongPoisonsFollowingMessageAck();
+  testControlFrameIsSentOnceBeforeFollowingMessage();
+  testProductionControlSendIsIdempotent();
   std::puts("PASS websocket_queue_lifecycle_native");
   return 0;
 }
