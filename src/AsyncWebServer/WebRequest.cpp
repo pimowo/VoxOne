@@ -22,6 +22,9 @@
 #include "RequestConnectionType.h"
 #include "WebResponseImpl.h"
 #include "WebAuthentication.h"
+#if defined(VOXONE_HEAP_TRACE)
+#include "../core/http_heap_trace.h"
+#endif
 
 #ifndef ESP8266
 #define os_strlen strlen
@@ -70,9 +73,28 @@ AsyncWebServerRequest::AsyncWebServerRequest(AsyncWebServer* s, AsyncClient* c)
   , _itemIsFile(false)
   , _tempObject(NULL)
 {
+#if defined(VOXONE_HEAP_TRACE)
+  const IPAddress peer = c->remoteIP();
+  voxone::http_heap_trace::requestCreated(
+      this, c, peer[0], peer[1], peer[2], peer[3], c->remotePort());
+#endif
   c->onError([](void *r, AsyncClient* c, int8_t error){ (void)c; AsyncWebServerRequest *req = (AsyncWebServerRequest*)r; req->_onError(error); }, this);
   c->onAck([](void *r, AsyncClient* c, size_t len, uint32_t time){ (void)c; AsyncWebServerRequest *req = (AsyncWebServerRequest*)r; req->_onAck(len, time); }, this);
-  c->onDisconnect([](void *r, AsyncClient* c){ AsyncWebServerRequest *req = (AsyncWebServerRequest*)r; req->_onDisconnect(); delete c; }, this);
+  c->onDisconnect([](void *r, AsyncClient* c){
+    AsyncWebServerRequest *req = (AsyncWebServerRequest*)r;
+#if defined(VOXONE_HEAP_TRACE)
+    voxone::http_heap_trace::clientPoint(c, "connection_disconnect");
+#endif
+    req->_onDisconnect();
+#if defined(VOXONE_HEAP_TRACE)
+    voxone::http_heap_trace::clientPoint(c, "request_delete_returned");
+    voxone::http_heap_trace::clientPoint(c, "client_delete_before");
+#endif
+    delete c;
+#if defined(VOXONE_HEAP_TRACE)
+    voxone::http_heap_trace::clientReleased(c);
+#endif
+  }, this);
   c->onTimeout([](void *r, AsyncClient* c, uint32_t time){ (void)c; AsyncWebServerRequest *req = (AsyncWebServerRequest*)r; req->_onTimeout(time); }, this);
   c->onData([](void *r, AsyncClient* c, void *buf, size_t len){ (void)c; AsyncWebServerRequest *req = (AsyncWebServerRequest*)r; req->_onData(buf, len); }, this);
   c->onPoll([](void *r, AsyncClient* c){ (void)c; AsyncWebServerRequest *req = ( AsyncWebServerRequest*)r; req->_onPoll(); }, this);
@@ -80,6 +102,9 @@ AsyncWebServerRequest::AsyncWebServerRequest(AsyncWebServer* s, AsyncClient* c)
 }
 
 AsyncWebServerRequest::~AsyncWebServerRequest(){
+#if defined(VOXONE_HEAP_TRACE)
+  voxone::http_heap_trace::requestPoint(this, "request_destructor_begin");
+#endif
   _headers.free();
 
   _params.free();
@@ -88,17 +113,32 @@ AsyncWebServerRequest::~AsyncWebServerRequest(){
   _interestingHeaders.free();
 
   if(_response != NULL){
+#if defined(VOXONE_HEAP_TRACE)
+    voxone::http_heap_trace::requestPoint(this, "response_delete_before");
+#endif
     delete _response;
+#if defined(VOXONE_HEAP_TRACE)
+    voxone::http_heap_trace::requestPoint(this, "response_delete_after");
+#endif
   }
 
   if(_tempObject != NULL){
+#if defined(VOXONE_HEAP_TRACE)
+    voxone::http_heap_trace::requestPoint(this, "temp_object_free_before");
+#endif
     free(_tempObject);
+#if defined(VOXONE_HEAP_TRACE)
+    voxone::http_heap_trace::requestPoint(this, "temp_object_free_after");
+#endif
   }
 
   if(_tempFile){
     _tempFile.close();
   }
   _server->_activeRequests.fetch_sub(1);
+#if defined(VOXONE_HEAP_TRACE)
+  voxone::http_heap_trace::requestReleased(this);
+#endif
 }
 
 void AsyncWebServerRequest::_onData(void *buf, size_t len){
@@ -173,7 +213,15 @@ void AsyncWebServerRequest::_onData(void *buf, size_t len){
     if(_parsedLength == _contentLength){
       _parseState = PARSE_REQ_END;
       //check if authenticated before calling handleRequest and request auth instead
-      if(_handler) _handler->handleRequest(this);
+      if(_handler) {
+#if defined(VOXONE_HEAP_TRACE)
+        voxone::http_heap_trace::requestPoint(this, "handler_begin");
+#endif
+        _handler->handleRequest(this);
+#if defined(VOXONE_HEAP_TRACE)
+        voxone::http_heap_trace::requestPoint(this, "handler_end");
+#endif
+      }
       else send(501);
     }
   }
@@ -205,7 +253,15 @@ void AsyncWebServerRequest::_onAck(size_t len, uint32_t time){
     } else {
       AsyncWebServerResponse* r = _response;
       _response = NULL;
+#if defined(VOXONE_HEAP_TRACE)
+      voxone::http_heap_trace::requestPoint(this, "response_complete", true,
+                                            len, time, 0);
+      voxone::http_heap_trace::requestPoint(this, "response_delete_before");
+#endif
       delete r;
+#if defined(VOXONE_HEAP_TRACE)
+      voxone::http_heap_trace::requestPoint(this, "response_delete_after");
+#endif
     }
   }
 }
@@ -226,9 +282,15 @@ void AsyncWebServerRequest::onDisconnect (ArDisconnectHandler fn){
 
 void AsyncWebServerRequest::_onDisconnect(){
   //os_printf("d\n");
+#if defined(VOXONE_HEAP_TRACE)
+  voxone::http_heap_trace::requestPoint(this, "request_disconnect");
+#endif
   if(_onDisconnectfn) {
       _onDisconnectfn();
     }
+#if defined(VOXONE_HEAP_TRACE)
+  voxone::http_heap_trace::requestPoint(this, "disconnect_handler_done");
+#endif
   _server->_handleDisconnect(this);
 }
 
@@ -285,6 +347,10 @@ bool AsyncWebServerRequest::_parseReqHead(){
     u = u.substring(0, index);
   }
   _url = urlDecode(u);
+#if defined(VOXONE_HEAP_TRACE)
+  voxone::http_heap_trace::requestRouteKnown(this, methodToString(),
+                                             _url.c_str());
+#endif
   _addGetParams(g);
 
   if(!_temp.startsWith("HTTP/1.0"))
@@ -581,7 +647,15 @@ void AsyncWebServerRequest::_parseLine(){
         _parseState = PARSE_REQ_BODY;
       } else {
         _parseState = PARSE_REQ_END;
-        if(_handler) _handler->handleRequest(this);
+        if(_handler) {
+#if defined(VOXONE_HEAP_TRACE)
+          voxone::http_heap_trace::requestPoint(this, "handler_begin");
+#endif
+          _handler->handleRequest(this);
+#if defined(VOXONE_HEAP_TRACE)
+          voxone::http_heap_trace::requestPoint(this, "handler_end");
+#endif
+        }
         else send(501);
       }
     } else _parseReqHeader();
@@ -712,6 +786,10 @@ void AsyncWebServerRequest::addInterestingHeader(const String& name){
 }
 
 void AsyncWebServerRequest::send(AsyncWebServerResponse *response){
+#if defined(VOXONE_HEAP_TRACE)
+  voxone::http_heap_trace::requestPoint(this, "response_prepare", true,
+                                        response ? 1 : 0, 0, 0);
+#endif
   _response = response;
   if(_response == NULL){
     _client->close(true);
@@ -725,7 +803,13 @@ void AsyncWebServerRequest::send(AsyncWebServerResponse *response){
   }
   else {
     _client->setRxTimeout(0);
+#if defined(VOXONE_HEAP_TRACE)
+    voxone::http_heap_trace::requestPoint(this, "response_respond_before");
+#endif
     _response->_respond(this);
+#if defined(VOXONE_HEAP_TRACE)
+    voxone::http_heap_trace::requestPoint(this, "response_respond_after");
+#endif
   }
 }
 

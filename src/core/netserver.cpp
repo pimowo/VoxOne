@@ -70,6 +70,9 @@
 #include "rtcsupport.h"
 #include "security_api.h"
 #include "security_http_adapter.h"
+#if defined(VOXONE_HEAP_TRACE)
+#include "http_heap_trace.h"
+#endif
 #include "websocket_command.h"
 #include "display_scroll_api.h"
 #include "../displays/dspcore.h"
@@ -2015,7 +2018,13 @@ void configApiReply(AsyncWebServerRequest* request, int status,
 }  // namespace
 
 void handleConfigBackup(AsyncWebServerRequest* request) {
+#if defined(VOXONE_HEAP_TRACE)
+  voxone::http_heap_trace::requestPoint(request, "config_backup_enter");
+#endif
   if (!deviceApiAuthorized(request)) return;
+#if defined(VOXONE_HEAP_TRACE)
+  voxone::http_heap_trace::requestPoint(request, "config_backup_authorized");
+#endif
   if (activeConfigBackupRequest && activeConfigBackupRequest != request) {
     configApiReply(request, 409, R"({"error":"backup_busy"})");
     return;
@@ -2032,12 +2041,23 @@ void handleConfigBackup(AsyncWebServerRequest* request) {
     configApiReply(request, 409, R"({"error":"configuration_busy"})");
     return;
   }
+#if defined(VOXONE_HEAP_TRACE)
+  voxone::http_heap_trace::requestPoint(request, "config_backup_lock_acquired");
+#endif
   std::shared_ptr<voxone::config_restore::ProductionBackupStream> stream =
       std::make_shared<voxone::config_restore::ProductionBackupStream>();
+#if defined(VOXONE_HEAP_TRACE)
+  voxone::http_heap_trace::requestPoint(request, "config_backup_stream_alloc");
+#endif
   voxone::config_backup::Status status = voxone::config_backup::Status::StorageReadFailed;
   const bool prepared = stream->begin(status);
   const std::size_t preparedSize = stream->size();
   xSemaphoreGive(configurationMutationMutex);
+#if defined(VOXONE_HEAP_TRACE)
+  voxone::http_heap_trace::requestPoint(request, "config_backup_prepared", true,
+                                        prepared ? 1 : 0, preparedSize,
+                                        static_cast<size_t>(status));
+#endif
   if (!prepared || !preparedSize ||
       preparedSize > voxone::config_backup_web::kMaxUploadBytes) {
     const char* stage = preparedSize > voxone::config_backup_web::kMaxUploadBytes
@@ -2056,6 +2076,11 @@ void handleConfigBackup(AsyncWebServerRequest* request) {
       static_cast<unsigned>(stream->wifiSize()),
       static_cast<unsigned>(stream->stationsSize()),
       static_cast<unsigned long>(stream->checksum()));
+#if defined(VOXONE_HEAP_TRACE)
+  voxone::http_heap_trace::requestPoint(request, "config_backup_ready", true,
+                                        stream->size(), stream->wifiSize(),
+                                        stream->stationsSize());
+#endif
   activeConfigBackupRequest = request;
   request->onDisconnect([request]() {
     if (activeConfigBackupRequest == request) activeConfigBackupRequest = nullptr;
@@ -2066,10 +2091,24 @@ void handleConfigBackup(AsyncWebServerRequest* request) {
       [stream](uint8_t* output, size_t capacity, size_t index) {
         return stream->read(index, output, capacity);
       });
+#if defined(VOXONE_HEAP_TRACE)
+  voxone::http_heap_trace::requestPoint(request,
+                                        "config_backup_response_created", true,
+                                        size, response ? 1 : 0, 0);
+#endif
   response->addHeader("Content-Disposition",
       "attachment; filename=\"VoxOne-" VOXONE_VERSION "-backup.vxcf\"");
   response->addHeader("Cache-Control", voxone::config_backup_web::kCacheControl);
+#if defined(VOXONE_HEAP_TRACE)
+  voxone::http_heap_trace::requestPoint(request,
+                                        "config_backup_before_send", true,
+                                        size, 0, 0);
+#endif
   request->send(response);
+#if defined(VOXONE_HEAP_TRACE)
+  voxone::http_heap_trace::requestPoint(request, "config_backup_after_send",
+                                        true, size, 0, 0);
+#endif
 }
 
 void handleConfigRestoreBody(AsyncWebServerRequest* request, uint8_t* data,

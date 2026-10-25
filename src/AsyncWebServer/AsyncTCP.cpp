@@ -23,6 +23,10 @@
 
 #include "AsyncTCP.h"
 #include "AsyncTCPLifecycle.h"
+#if defined(VOXONE_HEAP_TRACE)
+#include "../core/http_heap_trace.h"
+#endif
+#line 25
 extern "C"{
 #include "lwip/opt.h"
 #include "lwip/tcp.h"
@@ -611,10 +615,19 @@ AsyncClient::AsyncClient(tcp_pcb* pcb)
 }
 
 AsyncClient::~AsyncClient(){
+#if defined(VOXONE_HEAP_TRACE)
+    voxone::http_heap_trace::clientPoint(this, "client_destructor_begin");
+#endif
+#line 599
     if(_pcb) {
         _close();
     }
     _free_closed_slot();
+#if defined(VOXONE_HEAP_TRACE)
+    voxone::http_heap_trace::clientPoint(this,
+                                         "client_destructor_body_end");
+#endif
+#line 603
 }
 
 /*
@@ -921,6 +934,13 @@ void AsyncClient::_lwip_error() {
 }
 
 void AsyncClient::_error(int8_t err) {
+#if defined(VOXONE_HEAP_TRACE)
+    voxone::http_heap_trace::clientPoint(this, "tcp_error_async", true,
+                                         static_cast<size_t>(
+                                             static_cast<uint8_t>(err)),
+                                         0, 0);
+#endif
+#line 886
     _remove_events_with_arg(this);
     if(_error_cb) {
         _error_cb(_error_cb_arg, this, err);
@@ -932,6 +952,15 @@ void AsyncClient::_error(int8_t err) {
 
 //In LwIP Thread
 int8_t AsyncClient::_lwip_fin(tcp_pcb* pcb, int8_t err) {
+#if defined(VOXONE_HEAP_TRACE)
+    // The lwIP callback only records correlation; a full heap walk is deferred
+    // to the AsyncTCP task to avoid extending the TCP/IP core critical path.
+    voxone::http_heap_trace::clientPoint(this, "tcp_fin_lwip", false,
+                                         static_cast<size_t>(
+                                             static_cast<uint8_t>(err)),
+                                         0, 0);
+#endif
+#line 908
     if(!_pcb || pcb != _pcb){
         log_e("0x%08x != 0x%08x", (uint32_t)pcb, (uint32_t)_pcb);
         return ERR_OK;
@@ -953,6 +982,13 @@ int8_t AsyncClient::_lwip_fin(tcp_pcb* pcb, int8_t err) {
 
 //In Async Thread
 int8_t AsyncClient::_fin(tcp_pcb* pcb, int8_t err) {
+#if defined(VOXONE_HEAP_TRACE)
+    voxone::http_heap_trace::clientPoint(this, "tcp_fin_async", true,
+                                         static_cast<size_t>(
+                                             static_cast<uint8_t>(err)),
+                                         0, 0);
+#endif
+#line 929
     _remove_events_with_arg(this);
     if(_discard_cb) {
         _discard_cb(_discard_cb_arg, this);
@@ -961,6 +997,11 @@ int8_t AsyncClient::_fin(tcp_pcb* pcb, int8_t err) {
 }
 
 int8_t AsyncClient::_sent(tcp_pcb* pcb, uint16_t len) {
+#if defined(VOXONE_HEAP_TRACE)
+    voxone::http_heap_trace::clientPoint(this, "tcp_sent_async", true, len,
+                                         0, 0);
+#endif
+#line 937
     _rx_last_packet = millis();
     //log_i("%u", len);
     _pcb_busy = false;
@@ -971,6 +1012,7 @@ int8_t AsyncClient::_sent(tcp_pcb* pcb, uint16_t len) {
 }
 
 int8_t AsyncClient::_recv(tcp_pcb* pcb, pbuf* pb, int8_t err) {
+#line 947
     while(pb != NULL) {
         _rx_last_packet = millis();
         //we should not ack before we assimilate the data
@@ -987,7 +1029,19 @@ int8_t AsyncClient::_recv(tcp_pcb* pcb, pbuf* pb, int8_t err) {
             if(!_ack_pcb) {
                 _rx_ack_len += b->len;
             } else if(_pcb) {
+#if defined(VOXONE_HEAP_TRACE)
+                const size_t received_len = b->len;
+#endif
                 _tcp_recved(_pcb, _closed_slot, b->len);
+#if defined(VOXONE_HEAP_TRACE)
+                // Keep heap walking and UART output out of the interval before
+                // tcp_recved(). HTTP correlation is already stored in the
+                // fixed trace slot; validate immediately after a safe return.
+                voxone::http_heap_trace::clientPoint(
+                    this, "tcp_recved_returned", true, received_len,
+                    static_cast<size_t>(static_cast<uint8_t>(err)), 0);
+#endif
+#line 964
             }
             pbuf_free(b);
         }

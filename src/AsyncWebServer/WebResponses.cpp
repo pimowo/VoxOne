@@ -20,6 +20,9 @@
 */
 #include "ESPAsyncWebServer.h"
 #include "WebResponseImpl.h"
+#if defined(VOXONE_HEAP_TRACE)
+#include "../core/http_heap_trace.h"
+#endif
 #include "cbuf.h"
 
 // Since ESP8266 does not link memchr by default, here's its implementation.
@@ -179,6 +182,10 @@ AsyncBasicResponse::AsyncBasicResponse(int code, const String& contentType, cons
 }
 
 void AsyncBasicResponse::_respond(AsyncWebServerRequest *request){
+#if defined(VOXONE_HEAP_TRACE)
+  voxone::http_heap_trace::requestPoint(request, "basic_response_begin", true,
+                                        _contentLength, 0, 0);
+#endif
   _state = RESPONSE_HEADERS;
   String out = _assembleHead(request->version());
   size_t outLen = out.length();
@@ -210,9 +217,18 @@ void AsyncBasicResponse::_respond(AsyncWebServerRequest *request){
     _contentLength += outLen;
     _state = RESPONSE_CONTENT;
   }
+#if defined(VOXONE_HEAP_TRACE)
+  voxone::http_heap_trace::requestPoint(request, "basic_response_end", true,
+                                        _writtenLength, _contentLength,
+                                        _state);
+#endif
 }
 
 size_t AsyncBasicResponse::_ack(AsyncWebServerRequest *request, size_t len, uint32_t time){
+#if defined(VOXONE_HEAP_TRACE)
+  voxone::http_heap_trace::requestPoint(request, "basic_ack_begin", true, len,
+                                        time, _state);
+#endif
   (void)time;
   _ackedLength += len;
   if(_state == RESPONSE_CONTENT){
@@ -223,6 +239,11 @@ size_t AsyncBasicResponse::_ack(AsyncWebServerRequest *request, size_t len, uint
       _writtenLength += request->client()->write(_content.c_str(), available);
       _content = String();
       _state = RESPONSE_WAIT_ACK;
+#if defined(VOXONE_HEAP_TRACE)
+      voxone::http_heap_trace::requestPoint(request, "basic_ack_end", true,
+                                            available, _writtenLength,
+                                            _state);
+#endif
       return available;
     }
     //send some data, the rest on ack
@@ -230,12 +251,20 @@ size_t AsyncBasicResponse::_ack(AsyncWebServerRequest *request, size_t len, uint
     _content = _content.substring(space);
     _sentLength += space;
     _writtenLength += request->client()->write(out.c_str(), space);
+#if defined(VOXONE_HEAP_TRACE)
+    voxone::http_heap_trace::requestPoint(request, "basic_ack_end", true,
+                                          space, _writtenLength, _state);
+#endif
     return space;
   } else if(_state == RESPONSE_WAIT_ACK){
     if(_ackedLength >= _writtenLength){
       _state = RESPONSE_END;
     }
   }
+#if defined(VOXONE_HEAP_TRACE)
+  voxone::http_heap_trace::requestPoint(request, "basic_ack_end", true, 0,
+                                        _writtenLength, _state);
+#endif
   return 0;
 }
 
@@ -262,6 +291,10 @@ void AsyncAbstractResponse::_respond(AsyncWebServerRequest *request){
 }
 
 size_t AsyncAbstractResponse::_ack(AsyncWebServerRequest *request, size_t len, uint32_t time){
+#if defined(VOXONE_HEAP_TRACE)
+  voxone::http_heap_trace::requestPoint(request, "abstract_ack_begin", true,
+                                        len, time, _state);
+#endif
   (void)time;
   if(!_sourceValid()){
     _state = RESPONSE_FAILED;
@@ -302,6 +335,11 @@ size_t AsyncAbstractResponse::_ack(AsyncWebServerRequest *request, size_t len, u
       // os_printf("_ack malloc %d failed\n", outLen+headLen);
       return 0;
     }
+#if defined(VOXONE_HEAP_TRACE)
+    voxone::http_heap_trace::requestPoint(request, "response_buffer_ready",
+                                          true, outLen, headLen,
+                                          outLen + headLen);
+#endif
 
     if(headLen){
       memcpy(buf, _head.c_str(), _head.length());
@@ -312,9 +350,22 @@ size_t AsyncAbstractResponse::_ack(AsyncWebServerRequest *request, size_t len, u
     if(_chunked){
       // HTTP 1.1 allows leading zeros in chunk length. Or spaces may be added.
       // See RFC2616 sections 2, 3.6.1.
+#if defined(VOXONE_HEAP_TRACE)
+      voxone::http_heap_trace::requestPoint(request, "response_fill_before",
+                                            true, _sentLength, outLen - 8, 1);
+#endif
       readLen = _fillBufferAndProcessTemplates(buf+headLen+6, outLen - 8);
+#if defined(VOXONE_HEAP_TRACE)
+      voxone::http_heap_trace::requestPoint(request, "response_fill_after",
+                                            true, _sentLength, outLen - 8,
+                                            readLen);
+#endif
       if(readLen == RESPONSE_TRY_AGAIN){
           free(buf);
+#if defined(VOXONE_HEAP_TRACE)
+          voxone::http_heap_trace::requestPoint(request,
+                                                "response_buffer_freed");
+#endif
           return 0;
       }
       outLen = sprintf((char*)buf+headLen, "%x", readLen) + headLen;
@@ -325,9 +376,22 @@ size_t AsyncAbstractResponse::_ack(AsyncWebServerRequest *request, size_t len, u
       buf[outLen++] = '\r';
       buf[outLen++] = '\n';
     } else {
+#if defined(VOXONE_HEAP_TRACE)
+      voxone::http_heap_trace::requestPoint(request, "response_fill_before",
+                                            true, _sentLength, outLen, 0);
+#endif
       readLen = _fillBufferAndProcessTemplates(buf+headLen, outLen);
+#if defined(VOXONE_HEAP_TRACE)
+      voxone::http_heap_trace::requestPoint(request, "response_fill_after",
+                                            true, _sentLength, outLen,
+                                            readLen);
+#endif
       if(readLen == RESPONSE_TRY_AGAIN){
           free(buf);
+#if defined(VOXONE_HEAP_TRACE)
+          voxone::http_heap_trace::requestPoint(request,
+                                                "response_buffer_freed");
+#endif
           return 0;
       }
       outLen = readLen + headLen;
@@ -340,6 +404,11 @@ size_t AsyncAbstractResponse::_ack(AsyncWebServerRequest *request, size_t len, u
     if(outLen){
         _writtenLength += request->client()->write((const char*)buf, outLen);
     }
+#if defined(VOXONE_HEAP_TRACE)
+    voxone::http_heap_trace::requestPoint(request, "response_write_after",
+                                          true, outLen, readLen,
+                                          _writtenLength);
+#endif
 
     if(_chunked){
         _sentLength += readLen;
@@ -348,6 +417,10 @@ size_t AsyncAbstractResponse::_ack(AsyncWebServerRequest *request, size_t len, u
     }
 
     free(buf);
+#if defined(VOXONE_HEAP_TRACE)
+    voxone::http_heap_trace::requestPoint(request, "response_buffer_freed",
+                                          true, outLen, readLen, _sentLength);
+#endif
 
     if((_chunked && readLen == 0) || (!_sendContentLength && outLen == 0) || (!_chunked && _sentLength == _contentLength)){
       _state = RESPONSE_WAIT_ACK;
@@ -357,6 +430,11 @@ size_t AsyncAbstractResponse::_ack(AsyncWebServerRequest *request, size_t len, u
   } else if(_state == RESPONSE_WAIT_ACK){
     if(!_sendContentLength || _ackedLength >= _writtenLength){
       _state = RESPONSE_END;
+#if defined(VOXONE_HEAP_TRACE)
+      voxone::http_heap_trace::requestPoint(request, "response_send_end", true,
+                                            _ackedLength, _writtenLength,
+                                            _sentLength);
+#endif
       if(!_chunked && !_sendContentLength)
         request->client()->close(true);
     }

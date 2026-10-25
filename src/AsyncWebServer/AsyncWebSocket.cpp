@@ -20,6 +20,9 @@
 */
 #include "Arduino.h"
 #include "AsyncWebSocket.h"
+#if defined(VOXONE_HEAP_TRACE)
+#include "../core/http_heap_trace.h"
+#endif
 
 #include <libb64/cencode.h>
 
@@ -485,13 +488,22 @@ AsyncWebSocketClient::AsyncWebSocketClient(AsyncWebServerRequest *request, Async
   _client->onError([](void *r, AsyncClient* c, int8_t error){ (void)c; ((AsyncWebSocketClient*)(r))->_onError(error); }, this);
   _client->onAck([](void *r, AsyncClient* c, size_t len, uint32_t time){ (void)c; ((AsyncWebSocketClient*)(r))->_onAck(len, time); }, this);
   _client->onDisconnect([](void *r, AsyncClient* c){
+#if defined(VOXONE_HEAP_TRACE)
+    voxone::http_heap_trace::clientPoint(c, "websocket_disconnect");
+#endif
     ((AsyncWebSocketClient*)(r))->_onDisconnect();
     delete c;
+#if defined(VOXONE_HEAP_TRACE)
+    voxone::http_heap_trace::clientReleased(c);
+#endif
   }, this);
   _client->onTimeout([](void *r, AsyncClient* c, uint32_t time){ (void)c; ((AsyncWebSocketClient*)(r))->_onTimeout(time); }, this);
   _client->onData([](void *r, AsyncClient* c, void *buf, size_t len){ (void)c; ((AsyncWebSocketClient*)(r))->_onData(buf, len); }, this);
   _client->onPoll([](void *r, AsyncClient* c){ (void)c; ((AsyncWebSocketClient*)(r))->_onPoll(); }, this);
   _server->_addClient(this);
+#if defined(VOXONE_HEAP_TRACE)
+  voxone::http_heap_trace::clientPoint(_client, "websocket_connected");
+#endif
   _server->_handleEvent(this, WS_EVT_CONNECT, request, NULL, 0);
   delete request;
 }
