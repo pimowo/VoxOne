@@ -37,6 +37,8 @@ STARTUP_GRACE_SECONDS = 1.0
 STARTUP_GRACE_BYTES = 4096
 FORMATTED_SIZE_MULTIPLIER = 4
 FORMATTED_SIZE_GRACE_BYTES = 1024 * 1024
+PRECAPTURE_QUIET_SECONDS = 0.5
+PRECAPTURE_DRAIN_LIMIT_SECONDS = 20.0
 
 
 def timestamp() -> str:
@@ -116,6 +118,48 @@ def open_uart_rx_only(path: Path) -> int:
     except Exception:
         os.close(fd)
         raise
+
+
+def drain_preexisting_input(
+    fd: int,
+    quiet_seconds: float = PRECAPTURE_QUIET_SECONDS,
+    limit_seconds: float = PRECAPTURE_DRAIN_LIMIT_SECONDS,
+) -> tuple[int, float]:
+    """Discard bytes already queued at open, using the same RX-only fd.
+
+    A capture starts only after one continuous quiet interval.  This keeps
+    stale tty/USB backlog out of the physical throughput accounting without
+    reopening the port or changing its modem-control state.
+    """
+
+    if quiet_seconds <= 0 or limit_seconds <= quiet_seconds:
+        raise LoggerError("invalid pre-capture drain timing")
+    started = time.monotonic()
+    last_byte = started
+    discarded = 0
+    while True:
+        now = time.monotonic()
+        if now - started >= limit_seconds:
+            raise LoggerError(
+                f"pre-capture UART drain did not reach {quiet_seconds:g} s quiet"
+            )
+        quiet_remaining = quiet_seconds - (now - last_byte)
+        if quiet_remaining <= 0:
+            return discarded, now - started
+        limit_remaining = limit_seconds - (now - started)
+        readable, _, _ = select.select(
+            [fd], [], [], min(0.05, quiet_remaining, limit_remaining)
+        )
+        if not readable:
+            continue
+        try:
+            buffered = os.read(fd, READ_SIZE)
+        except BlockingIOError:
+            continue
+        if buffered == b"":
+            raise LoggerError("UART EOF during pre-capture drain")
+        discarded += len(buffered)
+        last_byte = time.monotonic()
 
 
 def read_ready(host: str, timeout: float) -> dict[str, Any]:
@@ -346,6 +390,17 @@ def run(args: argparse.Namespace) -> int:
     )
 
     fd = open_uart_rx_only(stable_port)
+    try:
+        discarded_buffered_bytes, drain_seconds = drain_preexisting_input(fd)
+    except Exception:
+        os.close(fd)
+        raise
+    print(
+        f"ARMED discardedBufferedBytes={discarded_buffered_bytes} "
+        f"drainSeconds={drain_seconds:.3f} "
+        f"quietSeconds={PRECAPTURE_QUIET_SECONDS}",
+        flush=True,
+    )
     boot_ids = []
     if before.get("bootId"):
         boot_ids.append(before["bootId"])
@@ -411,6 +466,12 @@ def run(args: argparse.Namespace) -> int:
         "configuration": "115200 8N1, RX-only fd, flow control off, HUPCL off",
         "dtrRts": "cleared immediately after open and after tcsetattr; transient not excluded",
         "durationRequestedSeconds": args.duration,
+        "preCaptureDrain": {
+            "discardedBufferedBytes": discarded_buffered_bytes,
+            "durationSeconds": round(drain_seconds, 6),
+            "requiredQuietSeconds": PRECAPTURE_QUIET_SECONDS,
+            "sameOpenFileDescriptor": True,
+        },
         "status": capture_status,
         # Compatibility aliases retained for consumers of the first version.
         "bytes": ledger.raw_bytes,

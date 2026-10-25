@@ -272,6 +272,47 @@ class UartRxLoggerTest(unittest.TestCase):
             os.close(slave)
             os.close(master)
 
+    def test_precapture_drain_discards_history_once_and_keeps_live_data(self):
+        master, slave = pty.openpty()
+        try:
+            MODULE.configure_uart(slave)
+            historical = b"historical UART backlog\n"
+            live = b"live capture bytes\n"
+            os.write(master, historical)
+            discarded, elapsed = MODULE.drain_preexisting_input(
+                slave, quiet_seconds=0.01, limit_seconds=1.0
+            )
+            self.assertEqual(discarded, len(historical))
+            self.assertGreaterEqual(elapsed, 0.01)
+
+            os.write(master, live)
+            readable, _, _ = MODULE.select.select([slave], [], [], 1.0)
+            self.assertEqual(readable, [slave])
+            chunk = os.read(slave, 4096)
+            ledger, raw, formatted = self.ledger()
+            self.assertTrue(ledger.record_read(chunk, 1.0, "live"))
+            self.assertEqual(raw.getvalue(), live)
+            self.assertNotIn(historical, raw.getvalue())
+            records = [json.loads(line) for line in formatted.getvalue().splitlines()]
+            self.assertEqual(len(records), 1)
+            self.assertEqual(bytes.fromhex(records[0]["hex"]), live)
+        finally:
+            os.close(slave)
+            os.close(master)
+
+    def test_precapture_drain_fails_when_stream_never_becomes_quiet(self):
+        clock = iter((0.0, 0.0, 0.4, 0.8, 1.0, 1.1))
+        with mock.patch.object(MODULE.time, "monotonic", side_effect=clock), \
+                mock.patch.object(
+                    MODULE.select, "select", return_value=([7], [], [])
+                ), mock.patch.object(MODULE.os, "read", return_value=b"replay"):
+            with self.assertRaisesRegex(
+                MODULE.LoggerError, "did not reach 0.5 s quiet"
+            ):
+                MODULE.drain_preexisting_input(
+                    7, quiet_seconds=0.5, limit_seconds=1.0
+                )
+
     def test_run_closes_pseudoterminal_and_writes_pass_manifest(self):
         master, slave = pty.openpty()
         MODULE.configure_uart(slave)
@@ -294,6 +335,8 @@ class UartRxLoggerTest(unittest.TestCase):
             ), mock.patch.object(
                 MODULE, "open_uart_rx_only", return_value=slave
             ), mock.patch.object(
+                MODULE, "drain_preexisting_input", return_value=(0, 0.5)
+            ), mock.patch.object(
                 MODULE,
                 "read_ready",
                 return_value={"http": None, "ready": False, "bootId": None},
@@ -306,6 +349,15 @@ class UartRxLoggerTest(unittest.TestCase):
             self.assertEqual(manifest["capture"]["readBytes"], 16)
             self.assertEqual(manifest["capture"]["rawBytes"], 16)
             self.assertEqual(manifest["capture"]["rawWriteCalls"], 1)
+            self.assertEqual(
+                manifest["preCaptureDrain"],
+                {
+                    "discardedBufferedBytes": 0,
+                    "durationSeconds": 0.5,
+                    "requiredQuietSeconds": 0.5,
+                    "sameOpenFileDescriptor": True,
+                },
+            )
             self.assertEqual((output / "uart.raw").read_bytes(), b"bounded payload\n")
             self.assertEqual((output / "uart.raw").stat().st_mode & 0o777, 0o600)
         os.close(master)
