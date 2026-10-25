@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 
+import argparse
 import importlib.util
 import io
 import json
@@ -13,6 +14,7 @@ from urllib.parse import parse_qs
 
 
 ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT / "scripts"))
 SPEC = importlib.util.spec_from_file_location(
     "security_enforce_hil", ROOT / "scripts" / "security_enforce_hil.py"
 )
@@ -163,8 +165,8 @@ class SecurityEnforceHilTest(unittest.TestCase):
         )
         output = io.StringIO()
         with redirect_stdout(output), self.assertRaisesRegex(
-            MODULE.HilFailure,
-            r"HTTP 401, error=authentication_failed",
+            MODULE.AuthRequired,
+            r"AUTH_REQUIRED",
         ):
             MODULE.require_login_success(response)
 
@@ -261,6 +263,22 @@ class SecurityEnforceHilTest(unittest.TestCase):
         self.assertEqual(MODULE.remove_input_line_ending("hasło\r\n"), "hasło")
         self.assertEqual(MODULE.remove_input_line_ending(" hasło "), " hasło ")
         self.assertEqual(MODULE.remove_input_line_ending("hasło\n\n"), "hasło\n")
+
+    def test_default_password_source_is_local_store_not_environment(self):
+        args = argparse.Namespace(
+            password_stdin=False,
+            credentials_profile="L0",
+        )
+        with mock.patch.object(
+            MODULE, "www_admin_password", return_value="in-memory-only"
+        ) as loader, mock.patch.dict(
+            MODULE.os.environ,
+            {"VOXONE_HIL_PASSWORD": "must-not-be-used"},
+        ):
+            password = MODULE.password_from_args(args)
+
+        self.assertEqual(password, "in-memory-only")
+        loader.assert_called_once_with("L0")
 
     def test_getindex_snapshot_accepts_current_multiframe_contract(self):
         frames = [

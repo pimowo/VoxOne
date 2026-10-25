@@ -11,7 +11,6 @@ from __future__ import annotations
 
 import argparse
 import base64
-import getpass
 import gzip
 import hashlib
 import http.client
@@ -28,6 +27,8 @@ import time
 import urllib.parse
 from dataclasses import dataclass, field
 from enum import Enum
+
+from hil_credentials import AuthRequired, CredentialsError, www_admin_password
 
 
 WS_PROTOCOL = "voxone.v1"
@@ -299,6 +300,12 @@ def require_login_success(
         f"loginError={diagnostic.error} retryAfterSeconds={retry}",
         flush=True,
     )
+    if diagnostic.status in (401, 403) or diagnostic.error in {
+        "authentication_failed", "invalid_password"
+    }:
+        raise AuthRequired(
+            "AUTH_REQUIRED: stored WWW administrator password was rejected"
+        )
     if diagnostic.status != 200:
         raise HilFailure(
             f"{label}: HTTP {diagnostic.status}, error={diagnostic.error}"
@@ -1130,15 +1137,9 @@ def password_from_args(args: argparse.Namespace) -> str:
     if args.password_stdin:
         password = remove_input_line_ending(sys.stdin.readline())
     else:
-        password = os.environ.pop(args.password_env, "")
-        if not password:
-            if not sys.stdin.isatty():
-                raise HilFailure(
-                    f"set {args.password_env} or use --password-stdin; password is never logged"
-                )
-            password = getpass.getpass("VoxOne administrator password: ")
+        password = www_admin_password(args.credentials_profile)
     if not password:
-        raise HilFailure("administrator password is empty")
+        raise AuthRequired("AUTH_REQUIRED: administrator password is empty")
     return password
 
 
@@ -1165,8 +1166,13 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument("--uart", default=DEFAULT_UART)
     parser.add_argument("--watch-seconds", type=float, default=180.0)
-    parser.add_argument("--password-env", default="VOXONE_HIL_PASSWORD")
     parser.add_argument("--password-stdin", action="store_true")
+    parser.add_argument(
+        "--credentials-profile",
+        choices=("W0", "M0", "L0"),
+        default="M0",
+        help="local WWW credential profile used by verify (default: M0)",
+    )
     parser.add_argument("--confirm-session-lifecycle", action="store_true")
     parser.add_argument(
         "--project-root",
@@ -1221,7 +1227,10 @@ def main() -> int:
                 verify(device, password, args.previous_boot_id)
             finally:
                 password = ""
-    except (HilFailure, OSError, socket.timeout, http.client.HTTPException) as exc:
+    except (
+        HilFailure, CredentialsError, OSError, socket.timeout,
+        http.client.HTTPException,
+    ) as exc:
         print(f"FAIL {exc}", file=sys.stderr)
         return 1
     print("RESULT PASS")

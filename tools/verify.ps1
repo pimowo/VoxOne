@@ -431,7 +431,7 @@ Invoke-Step 'Web Update headless' {
  if($LASTEXITCODE -ne 0) { throw 'Existing Chrome test failed' }
 }
 Invoke-Step 'HIL diagnostics' {
- foreach($testName in @('m0_flash_backup_test.py','security_enforce_hil_test.py','spiffs_usb_recovery_test.py','uart_rx_logger_test.py','www_asset_manifest_test.py')) {
+ foreach($testName in @('hil_credentials_test.py','m0_flash_backup_test.py','security_enforce_hil_test.py','spiffs_usb_recovery_test.py','uart_rx_logger_test.py','www_asset_manifest_test.py')) {
   & $Python (Join-Path $root "test/$testName") 2>&1 | ForEach-Object { Write-Host $_ }
   if($LASTEXITCODE -ne 0) { throw "HIL diagnostic test failed: $testName" }
  }
