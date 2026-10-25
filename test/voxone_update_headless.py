@@ -912,6 +912,19 @@ setTimeout(async () => {
       btTestSocket.sent.some(item => item === 'flipscreen=1'),
       'existing display settings keep their WebSocket commands');
     btTestSocket.onmessage({data:JSON.stringify({flip:1,br:64,stationListTimeout:20})});
+    btTestSocket.onmessage({data:JSON.stringify({canVu:1,vu:1})});
+    check(!get('vu-meter-control').hidden && get('vu-meter-toggle').checked &&
+      get('vu-meter-value').textContent === 'ON',
+      'VU snapshot enables and synchronizes the control');
+    get('vu-meter-toggle').checked = false;
+    get('vu-meter-toggle').dispatchEvent(new Event('change'));
+    check(btTestSocket.sent.some(item => item === 'vumeter=0') &&
+      get('vu-meter-value').textContent.includes('Zapisywanie'),
+      'VU change uses the existing WebSocket command and awaits broadcast');
+    btTestSocket.onmessage({data:JSON.stringify({canVu:1,vu:0})});
+    check(!get('vu-meter-toggle').checked &&
+      get('vu-meter-value').textContent === 'OFF',
+      'VU broadcast acknowledges the shared setting');
     btTestSocket.onmessage({data:JSON.stringify({canFlip:1,canBrightness:0,canVu:0})});
     check(!get('display-settings-card').hidden && get('brightness-control').hidden &&
       !get('brightness-unavailable').hidden,

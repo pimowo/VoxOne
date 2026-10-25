@@ -70,7 +70,8 @@ void BtAudioInput::route(bool bluetoothSelected, bool playbackPlaying,
     return;
   }
   // While RADIO owns I2S0, Audio::setSampleRate() already manages its clock.
-  if (!bluetoothSelected && !bluetoothSelected_ && radioReady_.load()) {
+  if (!bluetoothSelected && radioRate != 0 && !bluetoothSelected_ &&
+      radioReady_.load()) {
     outputRate_ = radioRate;
     return;
   }
@@ -89,8 +90,8 @@ void BtAudioInput::route(bool bluetoothSelected, bool playbackPlaying,
   if (!outputMutex_) {
     if (!bluetoothSelected) {
       bluetoothSelected_ = false;
-      outputRate_ = radioRate;
-      radioReady_.store(true);
+      outputRate_ = target.outputRate;
+      radioReady_.store(target.radioOutput);
     }
     return;
   }

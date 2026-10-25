@@ -337,12 +337,14 @@ bool BtLinkProtocol::handleLine(uint32_t nowMs) {
     state_.playback = BtPlayback::Paused;
     state_.rawVuLeft = 0;
     state_.rawVuRight = 0;
+    state_.rawVuLastMs = 0;
     return true;
   }
   if (strcmp(line_, "STOPPED") == 0) {
     state_.playback = BtPlayback::Stopped;
     state_.rawVuLeft = 0;
     state_.rawVuRight = 0;
+    state_.rawVuLastMs = 0;
     return true;
   }
   if (strcmp(line_, "PONG") == 0) return true;
@@ -478,7 +480,10 @@ bool BtLinkProtocol::handleLine(uint32_t nowMs) {
     leftText[separator - value] = '\0';
     if (!parseUnsigned(leftText, 32768, left) ||
         !parseUnsigned(separator + 1, 32768, right)) return false;
-    if (state_.connected) {
+    // A queued sample from before PAUSED/STOPPED must not become fresh again
+    // when a later PLAYING frame arrives. VoxOneBT sends new VU samples while
+    // A2DP is playing, so accept them only in that state.
+    if (state_.connected && state_.playback == BtPlayback::Playing) {
       state_.rawVuLeft = static_cast<uint16_t>(left);
       state_.rawVuRight = static_cast<uint16_t>(right);
       state_.rawVuLastMs = nowMs;

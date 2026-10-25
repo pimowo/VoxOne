@@ -105,7 +105,10 @@ function Assert-WebAssets {
  Write-Host '  seven gzip assets and manifest match web-src'
 }
 $nativeSources=@{
+ bt_a2dp_transport_contract_native=@('src/core/bt_link_protocol.cpp')
  bt_link_native=@('src/core/bt_link_protocol.cpp')
+ bt_loss_audio_safety_native=@('src/core/bt_link_protocol.cpp')
+ bt_vu_contract_native=@('src/core/bt_link_protocol.cpp')
  bt_firmware_sender_native=@('src/core/bt_firmware_sender.cpp','src/core/bt_link_protocol.cpp')
  bt_firmware_staging_native=@('src/core/bt_firmware_staging.cpp')
  bt_volume_native=@('src/core/bt_link_protocol.cpp')
@@ -130,6 +133,7 @@ $nativeSources=@{
  ota_boot_health_native=@('src/core/ota_boot_health.cpp')
  ota_update_policy_native=@('src/core/ota_update_policy.cpp')
  radio_format_detection_native=@('src/core/radio_format_detection.cpp')
+ radio_fallback_contract_native=@('src/core/bt_link_protocol.cpp')
  radio_url_resolution_native=@('src/core/radio_url_resolution.cpp')
  runtime_display_activation_native=@('src/displays/display_backend_selection.cpp','src/hardware/runtime_hardware_config.cpp')
  runtime_hardware_config_native=@('src/hardware/runtime_hardware_config.cpp')

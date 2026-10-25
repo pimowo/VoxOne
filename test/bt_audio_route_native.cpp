@@ -25,6 +25,10 @@ int main() {
   assert(disconnected.radioOutput && !disconnected.btOutput);
   assert(disconnected.outputRate == 32000);
 
+  const auto noSource = btAudioRouteTarget(false, false, false, 0, 0);
+  assert(!noSource.radioOutput && !noSource.btOutput);
+  assert(noSource.outputRate == 0);
+
   const auto manualRadio = btAudioRouteTarget(false, true, true, 44100, 32000);
   assert(manualRadio.radioOutput && !manualRadio.btOutput);
 
