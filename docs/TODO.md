@@ -24,9 +24,101 @@ P1 `ASYNCWEBSOCKET-QUEUE-HEAP-CORRUPTION-1` jest operacyjnie zamknięty przez
 naprawiony L0 w `app1` i przeszedł `PENDING_VERIFY` -> `VALID`, a celowany HIL
 RADIO STOP -> pojedynczy `start=1` oraz dwa ograniczone cykle klienta WS B
 zachował przez 190,001 s stały `bootId`, READY i heap bez panic/assert/WDT,
-korupcji lub restartu. Bramka „brak otwartych P0/P1” wraca do stanu sprzed
-tego incydentu; pozostaje **11/13 otwartych bramek RC1**. Raport:
+korupcji lub restartu. W chwili tego HIL bramka „brak otwartych P0/P1” wróciła
+do stanu sprzed tego incydentu i pozostawało **11/13 otwartych bramek RC1**. Raport:
 `reports/VOXONE-RC1-L0-BAD-HEAD-OTA-RETRY-1.md`.
+
+Nowy P1 `ASYNCTCP-SELF-DEADLOCK-1`, opisany niżej, ponownie otwiera bramkę
+„brak otwartych P0/P1”; bieżący stan to **12/13 otwartych bramek RC1**.
+
+## Zatwierdzona roadmapa rodzin POST-STABLE
+
+Poniższa roadmapa nie rozszerza Stable 1.0.0: jego obowiązkowymi profilami
+pozostają W0, M0 i L0, S0 oraz DIN0 pozostają POST-STABLE, W0 po wydaniu
+przechodzi do LEGACY, a Definition of Stable, 13 bramek RC1 i ich bieżący
+status pozostają bez zmian. Wzmianka wyżej o aktywnych profilach S0/M0/DIN0/L0
+opisuje zachowane rewizje 0; docelowe rodziny i ich następne profile są
+następujące:
+
+| Rodzina | Docelowy MCU | Charakter |
+|---|---|---|
+| W | klasyczny ESP32 | LEGACY po Stable 1.0.0 |
+| S | ESP32-S3 Zero 4 MB flash / 2 MB PSRAM | mini, kompaktowe, także mobilne |
+| DIN | ESP32-S3 Zero 4 MB flash / 2 MB PSRAM | funkcjonalnie S, wariant instalacyjny |
+| M | ESP32-S3 N16R8 | mniejsze uniwersalne L, także mobilne |
+| L | ESP32-S3 N16R8 | stacjonarne domowe; obecne L bez zmian |
+| XL | ESP32-S3 N16R8 lub opcjonalnie N32R8 | stacjonarne Full, wyłącznie POST-STABLE |
+
+Historyczny M0 pozostaje profilem ESP32-S3 Zero z niezmienionymi GPIO,
+capabilities i wynikami HIL; nie przemianowywać go na S0. Docelowe M z N16R8
+otrzyma własny profil M1. S0 i DIN0 zachowują tymczasowy pinout M0, a przyszłe
+S1 i DIN1 otrzymają własne profile sprzętowe. Przyszłe L1 i XL1 nie zastępują
+historycznego L0.
+
+### Docelowa architektura wyświetlaczy
+
+S i DIN obsługują wyłącznie I²C, natomiast M, L i XL obsługują I²C oraz SPI.
+M i L mają docelowo obsługiwać wszystkie wyświetlacze S/DIN, a XL dziedziczy
+całą obsługę L. Na jednej PCB może być aktywny najwyżej jeden wyświetlacz;
+`display=NONE` pozostaje dozwolone. Preferowany jest runtime wybór kontrolera,
+jeśli pozwalają na to pamięć, magistrale i capabilities konkretnego profilu.
+
+| Wyświetlacz | Docelowe rodziny |
+|---|---|
+| SSD1306 128×32 I²C | S, DIN, M, L, XL |
+| SSD1306 128×64 I²C | S, DIN, M, L, XL |
+| SSD1309 128×64 I²C | S, DIN, M, L, XL |
+| SH1106 128×64 I²C | S, DIN, M, L, XL |
+| CH1116 128×64 I²C | S, DIN, M, L, XL |
+| SSD1322 256×64 SPI | M, L, XL |
+| ST7789 284×76 SPI | M, L, XL; historyczny W0 bez zmian |
+| ST7789V 320×240 SPI | M, L, XL |
+| ST7796S 480×320 SPI | M, L, XL |
+| GC9A01 240×240 SPI | M, L, XL |
+
+Nie dodawać innych modeli do zatwierdzonej macierzy. Historyczny moduł opisany
+jako ST7290/ST7920 pozostaje niezweryfikowany i nie wolno deklarować jego
+obsługi. Zachować zaakceptowane koncepcje PLAYER/STATIONS/VOL, wspólny layout
+OLED 128×64, kompaktowy OLED 128×32, layout SSD1322 z dwoma poziomymi
+segmentowymi paskami VU L/R oraz dopasowane layouty TFT. Nadal obowiązuje
+DISPLAY-UI-STABLE: wspólny Core i model danych są niezależne od prezentacji,
+za którą odpowiadają renderery.
+
+Macierz opisuje wyłącznie docelową zgodność rodziny. Nie jest deklaracją
+istnienia backendu, capability bieżącego BIN ani fizycznego HIL PASS; każdy z
+tych stanów trzeba raportować oddzielnie. Wszystkie nowe backendy wyświetlaczy
+pozostają POST-STABLE.
+
+### Bluetooth, bateria, audio i sieć
+
+VoxOneBT jest opcjonalny we wszystkich nowych rodzinach S, DIN, M, L i XL.
+W0 nie otrzymuje rozbudowy, a plan rodziny nie deklaruje BT jako bieżącej
+capability M0, S0 ani DIN0. Pomiar baterii jest planowany dla S i M, przy czym
+obie rodziny mogą być również stacjonarne i nie mieć akumulatora. DIN
+współdzieli funkcjonalność S, lecz nie wymaga sprzętowego pomiaru baterii.
+
+- [POST-STABLE][HARDWARE] Dla S i M rozstrzygnąć szczegóły pomiaru baterii:
+  ADC, kalibrację, prezentację i zasilanie, z zachowaniem wariantów bez
+  akumulatora; nie dodawać tego wymagania do DIN ani capability rewizji 0.
+
+Docelowe DSPmini i W5500 są przeznaczone wyłącznie dla XL. Nie dodawać ich do
+L0 ani zakresu Stable. Istniejący demonstracyjny transport DSP na L0 pozostaje
+historycznym stanem bieżącej implementacji i nie jest deklaracją docelowego
+DSPmini. Spotify pozostaje przyszłą opcją POST-STABLE, bez bieżącej
+implementacji i bez rozszerzania Stable.
+
+### Otwarta decyzja wspólnej PCB L/XL
+
+- [POST-STABLE][DECISION][HARDWARE] Rozważyć jedną wspólną PCB dla przyszłych
+  L1 i XL1, różniącą się wyposażeniem: L z N16R8 oraz standardowym audio i
+  wyposażeniem domowym; XL z N16R8 albo opcjonalnie N32R8, DSPmini, W5500 i
+  przyszłymi funkcjami Full. Przed decyzją sprawdzić GPIO, SPI/I²C/I²S,
+  zasilanie, routing audio, złącza, kompatybilność modułów N16R8/N32R8 oraz
+  możliwość oddzielnego HIL. N32R8 w XL pozostaje opcją do rozstrzygnięcia po
+  analizie Flash, RAM, OTA i Spotify, a nie zatwierdzonym wymaganiem.
+- [POST-STABLE] Po zatwierdzeniu roadmapy zsynchronizować z nią
+  `docs/HARDWARE_TARGETS.md`, bez zmiany historycznych profili, GPIO,
+  capabilities i wyników HIL.
 
 ## Stable hardening
 
@@ -48,8 +140,9 @@ tego incydentu; pozostaje **11/13 otwartych bramek RC1**. Raport:
 
 ### Source Manager i TTS restore
 
-- [STABLE][L0 ASUS A2DP HIL PARTIAL] Dokończyć fizyczną macierz RADIO ↔ BT. Na aktualnym kandydacie PASS mają: automatyczny wybór BT po connect edge, disconnect z powrotem do RADIO PLAY, reconnect do BT/STOP oraz ręczne pierwszeństwo RADIO przy BT connected+playing. Nadal wymagają HIL: RADIO STOP intent, offline i utrata runtime/heartbeat VoxOneBT, ponowne pojawienie się modułu oraz fizyczny routing/cisza.
-- [STABLE][SOFTWARE PASS][L0 RADIO PLAY FALLBACK HIL PASS][RADIO STOP HIL PENDING] Fizycznie potwierdzić pozostałą połowę kontraktu normalnego fallbacku: RADIO STOP intent pozostaje RADIO STOP. ASUS A2DP HIL potwierdził, że przy zastanym RADIO PLAY intent disconnect przywraca `Italo4you` RADIO/PLAY. `VOXONE-STABLE-RADIO-FALLBACK-CONTRACT-1` potwierdził programowo obie ścieżki, brak dodatkowych komend przy powtarzanych zdarzeniach oraz blokadę opóźnionego RESUME po późniejszym STOP.
+- [STABLE][L0 ASUS A2DP HIL PARTIAL] Dokończyć fizyczną macierz RADIO ↔ BT. Na aktualnym kandydacie PASS mają: automatyczny wybór BT po connect edge, disconnect z powrotem do RADIO PLAY i RADIO STOP, reconnect do BT/STOP oraz ręczne pierwszeństwo RADIO przy BT connected+playing. Nadal wymagają HIL: offline i utrata runtime/heartbeat VoxOneBT, ponowne pojawienie się modułu oraz fizyczny routing/cisza.
+- [STABLE][SOFTWARE PASS][L0 RADIO PLAY+STOP FALLBACK HIL PASS] Obie połowy kontraktu normalnego fallbacku mają logiczny HIL PASS na L0: RADIO PLAY intent wraca do RADIO PLAY, a RADIO STOP intent pozostaje RADIO STOP. ASUS A2DP HIL potwierdził wcześniej, że przy zastanym RADIO PLAY intent disconnect przywraca `Italo4you` RADIO/PLAY. `VOXONE-STABLE-RADIO-FALLBACK-CONTRACT-1` potwierdził programowo obie ścieżki, brak dodatkowych komend przy powtarzanych zdarzeniach oraz blokadę opóźnionego RESUME po późniejszym STOP.
+  - `VOXONE-RC1-L0-RADIO-STOP-FALLBACK-HIL-1` 2026-10-26 ma logiczny HIL PASS na L0 `0.8.0-dev`/`afbb6d2-dirty`, `app1 VALID`. Przy początkowym RADIO/STOP wykonano dokładnie jedno połączenie przygotowanego źródła ASUS A2DP: SourceManager przeszedł do BT/STOP. Po dokładnie jednym rozłączeniu wrócił do RADIO/STOP; przez 15 s i 24 ramki WS nie wystąpił PLAY. Volume 20 i MUTE OFF pozostały bez zmian, `bootId=936dd6c8` był stały, a 90 s UART miało PASS bez panic/assert/watchdog/restartu/korupcji. Końcowo zachowano początkowy RADIO/STOP i rozłączony BT. Wynik nie kwalifikuje fizycznego routingu/ciszy, analogowego audio, XSMT, LCD ani VU oraz nie zamyka scenariuszy utraty heartbeat/runtime i ponownego pojawienia się VoxOneBT. Sam ten wynik nie zmieniał ówczesnego licznika 11/13 otwartych bramek RC1; bieżący licznik po otwarciu nowego P1 wynosi 12/13 zgodnie z podsumowaniem na początku dokumentu.
 - [STABLE][SOFTWARE PASS][HIL PENDING] Fizycznie potwierdzić na L0 logical XSMT, MUTE, ciszę i routing I2S0 przy A2DP STOP/disconnect, zaniku UART/heartbeat VoxOneBT, reconnect oraz fallbacku RADIO PLAY/STOP. `VOXONE-STABLE-BT-LOSS-AUDIO-SAFETY-1` potwierdził programowo czyszczenie sesji i VU, wyłączenie BT route, brak komend transportowych/autoplay, zachowanie MUTE i jednorazowej blokady TTS oraz bezpieczny `STOP/no-source`; brak RADIO jest reprezentowany przez `radioRate=0` i wyłącza oba wyjścia zamiast oznaczać RADIO jako gotowe.
 
 ### Kanały L/R i VU
@@ -102,7 +195,8 @@ tego incydentu; pozostaje **11/13 otwartych bramek RC1**. Raport:
 - [STABLE] Na W0 sprawdzić ukrycie suwaka jasności, restart z WWW, powrót Wi-Fi bez utraty stacji/config oraz osobno ekran aktualizacji bez regresji ScrollWidget/HOLD.
 - [STABLE][L0 READ-ONLY HIL PASS][L0 INTERACTIVE/W0 HIL PENDING] Fizycznie zweryfikować aktualne WWW na L0 i W0 (gdy bezpieczna aktualizacja W0 będzie możliwa): MUTE, selector RADIO/BT, oznaczenie BT offline, manual source priority, reconnect/resnapshot, favicon bez 404 oraz build identity w SYSTEM i AKTUALIZACJA. Na L0 z buildem `739e4a2` zdalny odczyt potwierdził działające WWW, zgodne assety i favicon bez 404, zgodną identyfikację wersji/builda/profilu przez `/variables.js` i WS oraz poprawny zastany snapshot RADIO/BT, MUTE i volume; bez fizycznej obecności nie wykonywano przełączeń, reconnectu ani oceny widoku i zachowania kontrolek, więc interaktywny HIL L0 pozostaje otwarty.
 - [HARDWARE] Przypisać GPIO XSMT PCM5102A na L0 i fizycznie sprawdzić LOW przy PAUZA/STOP, HIGH przy PLAY, ciszę podczas przejść i Web Update oraz czerwoną ramkę VOL bez zmiany semantyki MUTE.
-- [STABLE][L0 MQTT COMMAND HIL PASS][HA/STATE PARITY HIL PENDING] Fizycznie dokończyć MQTT/Home Assistant na L0; MQTT pozostaje wspierane w pierwszym stable. Po świadomej konfiguracji użytkownika bieżący L0 raportuje `enabled=true`, broker `192.168.1.14:1883`, zapisane poświadczenie i `effectiveRoot=voxone-8CBD1C` po nowym rozruchu. Uwierzytelniony CONNECT do brokera przeszedł, a trzy jednokrotne publikacje URL na `voxone-8CBD1C/command` zostały faktycznie skonsumowane przez L0 i spowodowały trzy odrębne pobrania temporary MP3 z ASUS; dowodzi to aktywnego klienta i subskrypcji command bez odczytu hasła. Nadal PENDING są publikowane topic/status/volume/playlist, ich retained/state parity oraz rzeczywiste porównanie z Home Assistant. Raport: `reports/VOXONE-RC1-L0-TTS-RESTORE-HIL-2.md`.
+- [STABLE][L0 MQTT COMMAND+RETAINED STATE PARITY HIL PASS][HA/ACTIVE UPDATE HIL PENDING] Fizycznie dokończyć MQTT/Home Assistant na L0; MQTT pozostaje wspierane w pierwszym stable. Po świadomej konfiguracji użytkownika bieżący L0 raportuje `enabled=true`, broker `192.168.1.14:1883`, zapisane poświadczenie i `effectiveRoot=voxone-8CBD1C` po nowym rozruchu. Uwierzytelniony CONNECT do brokera przeszedł, a trzy jednokrotne publikacje URL na `voxone-8CBD1C/command` zostały faktycznie skonsumowane przez L0 i spowodowały trzy odrębne pobrania temporary MP3 z ASUS; dowodzi to aktywnego klienta i subskrypcji command bez odczytu hasła. Raport: `reports/VOXONE-RC1-L0-TTS-RESTORE-HIL-2.md`.
+  - `VOXONE-RC1-L0-MQTT-STATE-PARITY-1` 2026-10-26 ma PASS ograniczonego pasywnego zakresu na L0 `0.8.0-dev`/`afbb6d2-dirty`, `app1 VALID`, READY i stałym `bootId=936dd6c8`. Uwierzytelniony klient HIL, korzystający z istniejącego bezpiecznego magazynu bez ujawnienia poświadczeń, zasubskrybował wyłącznie `voxone-8CBD1C/#` i niczego nie publikował. Broker dostarczył po 41 ms trzy wiadomości QoS 0 z flagą retained: `status` jako JSON `{status:0, station:3, name:"Italo4you", title:"[gotowe]", on:1}`, `volume` jako liczbę `51` w kompatybilnej skali 0–254 oraz `playlist` jako URL `http://192.168.1.56/data/stations.tsv`. REST/WS równocześnie potwierdziły RADIO/STOP, stację 3 `Italo4you`, metadata `[gotowe]`, volume 20%, MUTE OFF i `dspon=1`; 20% mapuje się dokładnie na 51/254, `status=0` oznacza STOP, a niezależne `on=1` odpowiada `config.store.dspon`. Retained URL zwrócił HTTP 200, 1691 B i 20 niepustych wierszy, SHA-256 `f060dabd870849f6dc35423f1c7228fb2846b6b3fc9a3d1439f7c5c7ccc57920`. Home Assistant odpowiada HTTP 200 na istniejącym porcie 8123, lecz bez zatwierdzonego tokenu w magazynie HIL nie odczytywano jego encji. Nadal PENDING są rzeczywiste porównanie stanu HA oraz aktywna weryfikacja publikacji i retained po zmianie PLAY/STOP, stacji/metadata, volume, reconnect brokera i ponownym rozruchu; pasywny retained payload nie zawiera czasu publikacji, więc jego dokładnego wieku nie ustalono bez wymuszania zmiany.
 - [STABLE][DOCUMENTATION PASS][HIL PENDING] Baseline `STABLE-DOCS-CONTRACT-1` opisuje aktywne profile, API, MQTT/HA, Source Manager, VoxOneBT, TTS, update/recovery, OTA, Config v7 i granicę Technical Stable/Commercial Release. `VOXONE-RELEASE-PROFILE-SCOPE-FREEZE-1` zastępuje wcześniejszy `STABLE-SCOPE-5TARGETS-1`: W0, M0 i L0 są trzema obowiązkowymi profilami release, S0/DIN0 przechodzą do POST-STABLE, a W0 po wydaniu do LEGACY. Uzupełnić końcowe wyniki HIL W0/M0/L0; nie traktować katalogu roadmapy sprzętu jako capability bieżącego BIN.
 
 ### Definition of Stable
@@ -111,6 +205,11 @@ tego incydentu; pozostaje **11/13 otwartych bramek RC1**. Raport:
 
 ## Znane błędy i pomiary
 
+- [BUG][P1][STABLE][L0 NETWORK HIL FAIL][SOFTWARE PASS][HIL PENDING] `ASYNCTCP-SELF-DEADLOCK-1` / `NETSERVER-BACKPRESSURE-1`: aktywny test MQTT przeciążył WebSocket nieograniczonym harnessem, który produkował pełne zestawy odpowiedzi szybciej, niż je odbierał. UART zarejestrował 71 odrzuceń `netserver queue full`, następnie `WS client #9 lagging; disconnecting` oraz pełną utratę HTTP/WS/ping/ARP. Związek poniższych luk z terminalną awarią pozostaje najbardziej prawdopodobnym wyjaśnieniem, ale bez dumpu tasków i końcowego odczytu urządzenia nie jest absolutnie potwierdzony; nie wykonano resetu ani końcowego odczytu `bootId`.
+  - **AsyncTCP SOFTWARE PASS:** potwierdzona luka konstrukcyjna pozwalała jedynemu konsumentowi `async_tcp`, podczas zamykania lagging klienta, wykonać `_tcp_clear_events()` i bezterminowo czekać na slot własnej pełnej kolejki 32/32. Poprawka usuwa oczekujące zdarzenia klienta bezpośrednio i synchronicznie wyłącznie w tym tasku, zachowując asynchroniczny CLEAR dla innych tasków. Regresja 32/32 nadal ma PASS dla kolejności innych klientów, jednokrotnego zwalniania eventów i `pbuf`, bilansu semafora oraz dalszego przetwarzania.
+  - **NetServer SOFTWARE PASS:** `requestOnChange()` nie czeka już 300 ms, lecz wykonuje wyłącznie próbę `xQueueSend(..., 0)`. Zdarzenia klienta są koalescowane według typu, a GETINDEX ma najwyżej jeden pending na klienta i stanowo wysyła osiem istniejących ramek snapshotu po jednej na iterację, bez dodawania siedmiu zdarzeń do własnej kolejki; po zakończeniu można wykonać kolejny snapshot. Disconnect usuwa pending, a przeciążenie klienta anuluje niekompletny snapshot i planuje jawne zamknięcie WS 1013 poza callbackiem. Odrzucone broadcasty są koalescowane w masce retry, dzięki czemu aktualny status MQTT jest publikowany po zwolnieniu kolejki; volume zachowuje istniejący osobny pending. Diagnostyka odrzuceń jest agregowana poza callbackiem maksymalnie raz na sekundę, a pojemność kolejki pozostaje 20. Regresje pełnej kolejki, samododawania konsumenta, 100 powtórzeń GETINDEX, dwóch klientów, disconnect/reconnect, jawnego odrzucenia częściowego snapshotu, MQTT status/volume i braku permanentnego pending mają PASS. Pełne `tools/verify.ps1` ma 146/146 native PASS, ASan/UBSan PASS oraz buildy L0/M0/S0/DIN0/W0 PASS.
+  - **Harness PROPOSAL ONLY:** dokładny wadliwy klient był jednorazowym skryptem Python uruchomionym inline i nie został zachowany jako plik repozytorium ani katalogu HIL; istnieją wyłącznie logi UART i manifest. Nie utworzono przypadkowego duplikatu. Przy przyszłym HIL przygotować jawnie wersjonowany skrypt z limitem jednego połączenia, dokładnie jednego zestawu `getindex`/`getsystem`/`getwebstatus`, odbiorem wszystkich dziesięciu oczekiwanych ramek w jednym ograniczonym oknie, limitami czasu i liczby ramek oraz FAIL/BLOCKED przy timeout, WS 1013, niekompletnym snapshotcie lub przeciążeniu; zawsze wykonać bounded close 1000 i nigdy automatyczny reset/recovery.
+  - **P1/HIL PENDING:** na osobno zatwierdzonym obrazie wykonać jedno kontrolowane i ograniczone odtworzenie lagging/close oraz snapshotów przy obserwacji HTTP/WS/ping/ARP, stałego `bootId`, READY, publikacji MQTT, braku panic/assert/watchdog i przywrócenia stanu runtime. Testy software nie zamykają P1; licznik RC1 pozostaje 12/13.
 - [BUG][P1][SOFTWARE FIXED][M0 HIL PASS][W0/L0 HIL PENDING][S0/DIN0 POST-STABLE HIL PENDING] `BALANCE-ENDPOINT-1`: na fizycznym M0 zakres −15…+15 działał, lecz przy −16 albo +16 oba kanały ponownie grały jak dla środka. `Audio::Gain()` zwężał wyliczone tłumienie do `uint8_t` przed ograniczeniem; dla potwierdzonego w logu `m_vol=254` i `|balance|=16` wartość 256 zawijała się do 0. Poprawka używa szerokiej arytmetyki całkowitej, ogranicza tłumienie do `m_vol` przed zwężeniem i zapewnia pełne wyciszenie właściwego kanału przy ±16 bez zmiany charakterystyki 1…15. Obie historyczne pisownie WebSocket `balance`/`ballance` korzystają ze wspólnego ścisłego parsera −16…+16. Pełna macierz współczynników, PCM, Config v7, VXCF, native, ASan/UBSan i pięć buildów mają PASS. Użytkownik potwierdził odsłuchowo na M0 całą sekwencję −16, −15, 0, +15 i +16: przy −16 lewy, a przy +16 prawy kanał był całkowicie wyciszony; jest to ocena odsłuchowa, nie automatyczny pomiar kanałów. W0/L0 pozostają HIL PENDING przed Stable; S0/DIN0 zachowują ten sam wymóg w POST-STABLE. Nie łączyć retestu z CORE scrolling.
 - [BUG][SOFTWARE PASS][M0 SSD1309 BASIC+SETTINGS HIL PARTIAL PASS][L0 API/WWW+VXSC HIL PASS][L0 VISUAL/AUDIO HIL PENDING][OTHER PROFILES HIL PENDING] `DISPLAY-SCROLL-CORE-HIL-1`: profile M0 i L0 mają `VOXONE_PLAYER_SCROLL_CORE_ENABLED=1`; W0/S0/DIN0 oraz domyślna wartość kodu pozostają `0`. Fizyczny L0/ESP32-S3 N16R8/ST7796S 480×320 działa z checkpointem `voxone-scroll-l0-core-enable-1` (`9ce9864`) w `app0`; po skonfigurowaniu Wi-Fi przez Setup AP został jednoznacznie rozpoznany przez API/WS jako profil L0, wersja `0.8.0-dev`, build `9ce9864`, a SPIFFS, WWW i normalny tryb STA działają. `scrollCoreActive=true`. Macierz na fizycznym L0 potwierdziła ON/OFF, prędkości 1/2/4 px na 50 ms, pauzy 0/1/2/3/4/5 s, atomowy odczyt/zapis oraz aktywne opublikowanie ustawień do runtime; offset pikselowy nie jest eksportowany przez diagnostykę i wymaga oceny obrazu. Rekord VXSC v1 z poprawnym CRC przetrwał kontrolowany restart, a po usunięciu rekordu przy zachowaniu reszty VXCF schema 2 renderer prawidłowo wrócił do ON, Normalnie i domyślnej pauzy 2500 ms; stacje pozostały bez zmian. Dziesięciominutowa obserwacja (21 próbek, 601 s) nie wykazała restartu, zmiany `bootId`, utraty HTTP/WS ani degradacji PSRAM; free heap pozostawał w zakresie 162048–163712 B. Historyczne sześć `RTC_SW_CPU_RST` wystąpiło w klastrze bezpośrednio po programowaniu USB; log rozdziela narzędziowe `USB_UART_CHIP_RESET`/POWERON od tych resetów i nie zawiera panic/watchdog/assert, ale nie dowodzi przyczyny firmware ani narzędziowej, więc incydent pozostaje odnotowany. Dwa późniejsze kontrolowane restarty dały pojedynczy oczekiwany `RTC_SW_CPU_RST` bez nawrotu serii. Na L0 nadal PENDING pozostaje ocena ruchu, pauz i kolejności stacja → wykonawca → utwór na ST7796S, UTF-8/polskich znaków, clippingu, migotania i artefaktów oraz prezentacji i odsłuchu RADIO/BT przez użytkownika. Fizyczny M0/SSD1309 128×64 z buildem `5fe59ca` potwierdził wspólny CORE: sekwencję stacja → wykonawca → utwór, najwyżej jeden przewijany wiersz, pauzę przed ruchem, płynność bez migotania, zmianę stacji podczas ruchu, PLAYER → VOL → PLAYER, reset cyklu po automatycznej zmianie wykonawcy/utworu oraz brak słyszalnych zakłóceń audio. Są to obserwacje użytkownika. Osobno UART potwierdza build/profil, zdarzenia zmian stacji i metadanych, PLAY/STOP/VOL, ciągłe granie po uruchomieniu RADIO oraz brak panic/watchdog/assert/heap corruption, ale nie dowodzi jakości obrazu ani odsłuchu. Użytkownik zaakceptował wygląd sekcji Ustawienia → Wyświetlacz na fizycznym M0 i potwierdził działanie przewijania TAK/NIE, wszystkich trzech prędkości, regulacji pauzy, współpracę WWW z aktywnym CORE oraz natychmiastowe zastosowanie ustawień. Nie ma jednak osobnego, jednoznacznie zapisanego wyniku dla każdego czasu 0/1/2/3/4/5 s, dlatego szczegółowa macierz pauz pozostaje częściowo PENDING. Nadal fizycznie sprawdzić trwałość po restarcie i reload UserSettings w NVS, restore VXCF schema 2 dla obecnego i nieobecnego VXSC oraz pozostałe profile/wyświetlacze; nie zamykać tych testów software baseline'em. Kontrolki `WWW-DISPLAY-SCROLL-1` mają SOFTWARE PASS dla odczytu, atomowego zapisu, capability, CORE=0/1 i błędów, a checkpoint `voxone-www-display-scroll-1` jest zapisany.
   - W zakresie wydania fizyczne braki dotyczą W0/M0/L0 zgodnie z ich capability; odpowiednie warianty S0/DIN0 pozostają POST-STABLE, bez utraty powyższych wyników historycznych.
@@ -189,7 +288,7 @@ Obecna sekcja AUDIO jest zaakceptowana i nie wymaga zmian w kategorii A.
 
 ### C. POST-STABLE
 
-- [POST-STABLE] Pozostawić obecną sekcję AUDIO bez zmian dla profili bez DSPmini. Na odpowiednio wyposażonych wariantach Lx funkcjonalność DSPmini ma docelowo rozszerzyć albo zastąpić odpowiednią część AUDIO zgodnie z capabilities, bez dublowania globalnej głośności. DSPmini, jego sprzęt, backend, persistence i integracja WWW/LCD pozostają POST-STABLE i nie należą do bieżącego pakietu implementacyjnego.
+- [POST-STABLE] Pozostawić obecną sekcję AUDIO bez zmian dla profili bez DSPmini. Na odpowiednio wyposażonych wariantach XL funkcjonalność DSPmini ma docelowo rozszerzyć albo zastąpić odpowiednią część AUDIO zgodnie z capabilities, bez dublowania globalnej głośności. Historyczny demonstracyjny transport DSP na L0 pozostaje bez zmian. DSPmini, jego sprzęt, backend, persistence i integracja WWW/LCD pozostają POST-STABLE i nie należą do bieżącego pakietu implementacyjnego.
 
 ## WWW, API i WebSocket
 
@@ -240,7 +339,7 @@ Obecna sekcja AUDIO jest zaakceptowana i nie wymaga zmian w kategorii A.
 ## DSPmini
 
 - [POST-STABLE] AUTOEQ-1 — zaprojektować pomiar i automatyczne wyznaczanie bezpiecznej korekcji dla DSPmini, z kalibracją mikrofonu, limitami filtrów, podglądem wyniku oraz możliwością porównania, odrzucenia i ręcznej korekty; etap nie blokuje Stable 1.0.0.
-- [HARDWARE] Docelowy DSPmini wyłącznie dla rodziny L to moduł klasy ADAU1401/ADAU1701/ADAU1702. Ustalić schemat, cztery wyjścia i workflow inicjalizacji/programowania z ESP bez drogiego USBi.
+- [POST-STABLE][HARDWARE] Docelowy DSPmini wyłącznie dla rodziny XL to moduł klasy ADAU1401/ADAU1701/ADAU1702. Ustalić schemat, cztery wyjścia i workflow inicjalizacji/programowania z ESP bez drogiego USBi; nie rozszerzać o niego L0 ani Stable.
 - [POST-STABLE] Dodać live tuning/runtime parameters, storage presetów, PEQ, crossover, subwoofer, 2.0/2.1/2.2, role/mute wyjść, delay, Auto Loudness, protection, balance/fader i trwałość presetów.
 - [POST-STABLE] Zintegrować DSPmini z WWW i LCD. W profilu DSP rozbudowane ustawienia mają należeć do AUDIO i nie mogą dublować globalnej głośności.
 - [DECISION] Po przygotowaniu integracji sprzętowej zdecydować, które elementy obecnej zakładki/demo DSP i `DSP_CUSTOM` zachować, zastąpić lub usunąć.
@@ -262,7 +361,7 @@ Obecna sekcja AUDIO jest zaakceptowana i nie wymaga zmian w kategorii A.
 ## Network
 
 - [POST-STABLE] Zachować maksymalnie pięć profili Wi-Fi, priority/last-known-good, tryb NORMAL bez wymuszonego AP, oczekiwanie RADIO na sieć, możliwość działania BT offline oraz jednoznaczne CONFIG/AP/recovery behavior.
-- [HARDWARE] Dodać W5500 wyłącznie dla rodziny L, na odpowiednim PCB i dedykowanej magistrali SPI; tryby AUTO/LAN/Wi-Fi, LAN preferred, Wi-Fi fallback i DHCP, a później opcjonalny static IP.
+- [POST-STABLE][HARDWARE] Dodać W5500 wyłącznie dla rodziny XL, na odpowiednim PCB i dedykowanej magistrali SPI; tryby AUTO/LAN/Wi-Fi, LAN preferred, Wi-Fi fallback i DHCP, a później opcjonalny static IP. Nie dodawać W5500 do L0 ani Stable.
 - [POST-STABLE] Wydzielić abstrakcję sieciową bez twardego założenia `WiFiClient`; RADIO i DLNA mają działać przez LAN lub Wi-Fi.
 - [POST-STABLE] W WWW pokazywać aktywny interfejs/link/IP, a na LCD dla Ethernet używać małej ikony RJ45 zamiast słupków RSSI bez przesuwania stałego obszaru systemowego.
 
@@ -290,10 +389,10 @@ VoxOneBT jest osobnym projektem/repo i posiada własną rodzinę sprzętową Vx.
 - [POST-STABLE] Przy zmianie runtime display z aktywnego backendu na `NONE` wygasić fizyczny ekran przed kontrolowanym restartem, aby soft-reset nie pozostawiał ostatniej ramki; cold boot i runtime `NONE` już spełniają kontrakt opcjonalnego display.
 - [DECISION] Ustalić, czy rzeczywista zmiana `userVolume` z WWW, HA lub BT wywołana przez użytkownika otwiera ekran VOL; snapshot, restore i synchronizacja nie mogą go otwierać przypadkowo.
 - [DECISION] Ustalić, czy ekran VOL dostaje pasek 0–100; przy MUTE pasek ma pokazywać zapamiętane `userVolume`, ponieważ MUTE nie oznacza volume 0.
-- [POST-STABLE][HARDWARE] Zaprojektować osobne docelowe PCB L1/M1/S1/DIN1; każda rewizja wymaga własnego pinoutu, capabilities i definicji sprzętowej bez nadpisywania profili rewizji 0 ani współdzielonego BoardProfile. S1 i DIN1 będą pierwszymi dedykowanymi PCB rodzin S i DIN z docelowym GPIO; projekt i HIL S0/DIN0 oraz S1/DIN1 nie blokują Stable 1.0.0. Potwierdzić GPIO i capabilities każdej płytki.
+- [POST-STABLE][HARDWARE] Zaprojektować docelowe profile i PCB M1/S1/DIN1 oraz profile L1/XL1 po rozstrzygnięciu, czy użyją wspólnej PCB; każda rewizja wymaga własnego pinoutu, capabilities i definicji sprzętowej bez nadpisywania profili rewizji 0 ani współdzielonego BoardProfile. M1 użyje ESP32-S3 N16R8; S1 i DIN1 będą pierwszymi dedykowanymi PCB rodzin S i DIN z docelowym GPIO. Projekt i HIL S0/DIN0 oraz M1/S1/DIN1/L1/XL1 nie blokują Stable 1.0.0. Potwierdzić GPIO i capabilities każdego profilu.
 - [POST-STABLE][HARDWARE] Dla S1 przyjąć jako docelowy podstawowy wyświetlacz `SSD1306_128X32` przez I²C i przygotować osobny layout `OLED_128X32`, pinout, capabilities oraz HIL; nie deklarować tego backendu jako działającego w bieżącym S0.
 - [POST-STABLE][HARDWARE] Dla DIN1 przyjąć bezpieczne defaulty `display=NONE` i `input=NONE`; opcjonalne wyposażenie ma obejmować wyświetlacz I²C oraz EC11 albo 3×SW dopiero po zdefiniowaniu pinoutu, capabilities i fizycznym HIL. Nie zmieniać tymczasowych definicji GPIO ani build defaults S0/DIN0.
-- [POST-STABLE][DECISION][HARDWARE] Zdefiniować rodzinę XL i macierz magistral dla docelowych M/L/XL: które wyświetlacze i moduły korzystają z I²C, które z SPI, jak rozdzielić magistrale i CS oraz jakie są budżety GPIO, zasilania, Flash, PSRAM i HIL. Sama pozycja w katalogu sprzętu nie jest capability firmware.
+- [POST-STABLE][DECISION][HARDWARE] Domknąć opisaną w roadmapie decyzję o wspólnej PCB L1/XL1 oraz szczegółowy przydział magistral, CS, GPIO, zasilania, Flash i PSRAM. Zatwierdzona macierz zgodności wyświetlaczy nie jest capability firmware i nie zastępuje osobnego backendu ani HIL.
 - [POST-STABLE] Aktualizację VoxOneBT przez MAIN dopuścić tylko przy obecnym module, capability BT firmware update i wystarczającym PSRAM/staging. Na przyszłym Wx z modułem BT aktualizację modułu prowadzić bezpośrednio przez USB, bez stagingu na MAIN.
 
 ### Architecture baseline
@@ -329,7 +428,7 @@ Nazwy wariantów display: `STEROWNIK_ROZDZIELCZOŚĆ`, np. `SSD1306_128X32`, `SS
 - P4 — integracja VoxOneBT
 - P5 — DLNA / AUX
 - P6 — native HA
-- P7 — L1/M1/S1/DIN1/XL + capabilities
+- P7 — L1/XL1/M1/S1/DIN1 + capabilities
 - P8 — DSPmini
 - P9 — Installer + pełna konfiguracja LCD
 - P10 — W5500 / dalsze rozszerzenia
