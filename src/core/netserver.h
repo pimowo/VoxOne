@@ -255,6 +255,7 @@ class NetServer {
     void chunkedHtmlPage(const String& contentType, AsyncWebServerRequest *request, const char * path);
     void onWsMessage(void *arg, const uint8_t *data, size_t len,
                      uint32_t clientId);
+    void cancelClientRequests(uint32_t clientId);
     void resetQueue();
   private:
     bool _started = false;
@@ -266,8 +267,14 @@ class NetServer {
     uint32_t playerBufMax;
     volatile bool _volumeUpdatePending = false;
     uint32_t _lastVolumeUpdate = 0;
+    uint32_t _lastQueueOverloadReport = 0;
+    bool _snapshotActive = false;
+    uint32_t _snapshotClientId = 0;
+    uint8_t _snapshotIndex = 0;
     static size_t chunkedHtmlPageCallback(uint8_t* buffer, size_t maxLen, size_t index);
     void processQueue();
+    void processDeferredRequest();
+    void processOverloadRejection();
     void processVolumeUpdate();
 };
 

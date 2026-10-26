@@ -55,6 +55,7 @@
 #include "station_directory_format.h"
 #include "station_directory_routes.h"
 #include "netserver.h"
+#include "netserver_backpressure.h"
 #include "player.h"
 #include "serialcli.h"
 #include "display.h"
@@ -86,8 +87,7 @@
 #define MIN_MALLOC 24112
 #endif
 #ifndef NSQ_SEND_DELAY
-  //#define NSQ_SEND_DELAY       portMAX_DELAY
-  #define NSQ_SEND_DELAY       pdMS_TO_TICKS(300)
+  #define NSQ_SEND_DELAY       0
 #endif
 #ifndef NS_QUEUE_TICKS
   //#define NS_QUEUE_TICKS pdMS_TO_TICKS(2)
@@ -115,6 +115,26 @@ static bool updateNetworkShutdownStarted = false;  // MAIN-loop owner.
 
 namespace {
 constexpr UBaseType_t kScrollSettingsCommandQueueLength = 4;
+constexpr UBaseType_t kNetserverQueueLength = 20;
+constexpr size_t kTrackedClientRequests = kNetserverQueueLength;
+constexpr size_t kTrackedWebSocketClients = 8;
+constexpr requestType_e kIndexSnapshotRequests[] = {
+    TITLE, VOLUME, EQUALIZER, BALANCE, BITRATE, MODE, STATIONNAME, ITEM};
+constexpr size_t kIndexSnapshotRequestCount =
+    sizeof(kIndexSnapshotRequests) / sizeof(kIndexSnapshotRequests[0]);
+constexpr uint32_t kQueueOverloadReportIntervalMs = 1000;
+static_assert(WEBSTATUS < 32, "deferred request mask requires 5-bit request IDs");
+
+portMUX_TYPE netserverBackpressureMux = portMUX_INITIALIZER_UNLOCKED;
+voxone::netserver_backpressure::ClientIdSet<kTrackedWebSocketClients>
+    pendingSnapshotClients;
+voxone::netserver_backpressure::ClientIdSet<kTrackedWebSocketClients>
+    overloadRejectedClients;
+voxone::netserver_backpressure::ClientRequestSet<kTrackedClientRequests>
+    pendingClientRequests;
+std::atomic<uint32_t> deferredBroadcastRequests{0};
+std::atomic<uint32_t> droppedNetserverRequests{0};
+std::atomic<uint8_t> lastDroppedNetserverRequest{0};
 
 struct QueuedScrollSettingsCommand {
   uint32_t clientId;
@@ -125,6 +145,78 @@ struct QueuedScrollSettingsCommand {
 
 QueueHandle_t scrollSettingsCommandQueue = nullptr;
 SemaphoreHandle_t configurationMutationMutex = nullptr;
+
+voxone::netserver_backpressure::InsertResult reserveSnapshot(
+    uint32_t clientId) {
+  portENTER_CRITICAL(&netserverBackpressureMux);
+  const auto result = pendingSnapshotClients.insert(clientId);
+  portEXIT_CRITICAL(&netserverBackpressureMux);
+  return result;
+}
+
+bool snapshotPending(uint32_t clientId) {
+  portENTER_CRITICAL(&netserverBackpressureMux);
+  const bool pending = pendingSnapshotClients.contains(clientId);
+  portEXIT_CRITICAL(&netserverBackpressureMux);
+  return pending;
+}
+
+void releaseSnapshot(uint32_t clientId) {
+  portENTER_CRITICAL(&netserverBackpressureMux);
+  pendingSnapshotClients.erase(clientId);
+  portEXIT_CRITICAL(&netserverBackpressureMux);
+}
+
+voxone::netserver_backpressure::InsertResult reserveClientRequest(
+    uint32_t clientId, requestType_e request) {
+  portENTER_CRITICAL(&netserverBackpressureMux);
+  const auto result = pendingClientRequests.insert(
+      clientId, static_cast<uint8_t>(request));
+  portEXIT_CRITICAL(&netserverBackpressureMux);
+  return result;
+}
+
+void releaseClientRequest(uint32_t clientId, requestType_e request) {
+  portENTER_CRITICAL(&netserverBackpressureMux);
+  pendingClientRequests.erase(clientId, static_cast<uint8_t>(request));
+  portEXIT_CRITICAL(&netserverBackpressureMux);
+}
+
+void scheduleOverloadRejection(uint32_t clientId) {
+  if (clientId == 0) return;
+  portENTER_CRITICAL(&netserverBackpressureMux);
+  pendingSnapshotClients.erase(clientId);
+  pendingClientRequests.eraseClient(clientId);
+  overloadRejectedClients.insert(clientId);
+  portEXIT_CRITICAL(&netserverBackpressureMux);
+}
+
+bool takeOverloadRejection(uint32_t& clientId) {
+  portENTER_CRITICAL(&netserverBackpressureMux);
+  const bool available = overloadRejectedClients.takeFirst(clientId);
+  portEXIT_CRITICAL(&netserverBackpressureMux);
+  return available;
+}
+
+void recordQueueDrop(requestType_e request) {
+  lastDroppedNetserverRequest.store(static_cast<uint8_t>(request));
+  droppedNetserverRequests.fetch_add(1);
+}
+
+void deferBroadcastRequest(requestType_e request) {
+  deferredBroadcastRequests.fetch_or(1UL << static_cast<uint8_t>(request));
+}
+
+void clearBackpressureState() {
+  portENTER_CRITICAL(&netserverBackpressureMux);
+  pendingSnapshotClients.clear();
+  overloadRejectedClients.clear();
+  pendingClientRequests.clear();
+  portEXIT_CRITICAL(&netserverBackpressureMux);
+  deferredBroadcastRequests.store(0);
+  droppedNetserverRequests.store(0);
+  lastDroppedNetserverRequest.store(0);
+}
 }  // namespace
 
 static bool parseToneValue(const char* value, int8_t& bass, int8_t& middle, int8_t& trebble) {
@@ -925,7 +1017,12 @@ bool NetServer::begin(bool quiet) {
   playerBufMax = psramInit()?300000:1600 * config.store.abuff;
   _volumeUpdatePending = false;
   _lastVolumeUpdate = millis() - NS_VOLUME_INTERVAL_MS;
-  nsQueue = xQueueCreate(20, sizeof(nsRequestParams_t));
+  _lastQueueOverloadReport = millis() - kQueueOverloadReportIntervalMs;
+  _snapshotActive = false;
+  _snapshotClientId = 0;
+  _snapshotIndex = 0;
+  clearBackpressureState();
+  nsQueue = xQueueCreate(kNetserverQueueLength, sizeof(nsRequestParams_t));
   if (!nsQueue) {
     Serial.println("##[ERROR]# netserver queue unavailable");
     return false;
@@ -3031,21 +3128,38 @@ void handleStationsMutation(AsyncWebServerRequest *request) {
 
 void NetServer::processQueue(){
   if(nsQueue==NULL) return;
-  nsRequestParams_t request;
-  if(xQueueReceive(nsQueue, &request, NS_QUEUE_TICKS)){
+  nsRequestParams_t request{};
+  bool snapshotFrame = false;
+  if (_snapshotActive && !snapshotPending(_snapshotClientId)) {
+    _snapshotActive = false;
+    _snapshotClientId = 0;
+    _snapshotIndex = 0;
+  }
+  if (_snapshotActive) {
+    request.type = kIndexSnapshotRequests[_snapshotIndex];
+    request.clientId = _snapshotClientId;
+    snapshotFrame = true;
+  } else if (!xQueueReceive(nsQueue, &request, NS_QUEUE_TICKS)) {
+    return;
+  }
+
+  if (!snapshotFrame && request.clientId != 0 && request.type != GETINDEX)
+    releaseClientRequest(request.clientId, request.type);
+  if (request.clientId != 0 && !websocket.hasClient(request.clientId)) {
+    if (request.type == GETINDEX) releaseSnapshot(request.clientId);
+    return;
+  }
+
+  {
     uint32_t clientId = request.clientId;
     wsBuf[0]='\0';
     switch (request.type) {
       case GETINDEX:      {
-          requestOnChange(STATION, clientId); 
-          requestOnChange(TITLE, clientId); 
-          requestOnChange(VOLUME, clientId); 
-          requestOnChange(EQUALIZER, clientId); 
-          requestOnChange(BALANCE, clientId); 
-          requestOnChange(BITRATE, clientId); 
-          requestOnChange(MODE, clientId); 
-          return; 
-          break;
+          if (!snapshotPending(clientId)) return;
+          _snapshotActive = true;
+          _snapshotClientId = clientId;
+          _snapshotIndex = 0;
+          return;
         }
       case GETSYSTEM: {
         uint8_t mac[6]{};
@@ -3173,11 +3287,12 @@ void NetServer::processQueue(){
       case WEBSTATUS:     formatWebStatus(wsBuf, sizeof(wsBuf)); break;
       default:          break;
     }
-    if (strlen(wsBuf) > 0) {
+    bool delivered = strlen(wsBuf) > 0;
+    if (delivered) {
       if (clientId == 0) {
         securityWebSocketTextAll(wsBuf);
       } else {
-        securityWebSocketText(clientId, wsBuf);
+        delivered = securityWebSocketText(clientId, wsBuf);
       }
       if (clientId == 0 && (request.type == STATION || request.type == ITEM || request.type == TITLE || request.type == MODE)) mqttPublishStatus();
       if (clientId == 0 && request.type == VOLUME) mqttPublishVolume();
@@ -3193,7 +3308,50 @@ void NetServer::processQueue(){
         if (wsBuf[0]) securityWebSocketTextAll(wsBuf);
       }
     }
+    if (snapshotFrame) {
+      if (!delivered) {
+        releaseSnapshot(clientId);
+        scheduleOverloadRejection(clientId);
+        _snapshotActive = false;
+        _snapshotClientId = 0;
+        _snapshotIndex = 0;
+      } else if (++_snapshotIndex >= kIndexSnapshotRequestCount) {
+        releaseSnapshot(clientId);
+        _snapshotActive = false;
+        _snapshotClientId = 0;
+        _snapshotIndex = 0;
+      }
+    }
   }
+}
+
+void NetServer::processDeferredRequest() {
+  uint32_t pending = deferredBroadcastRequests.load();
+  for (uint8_t requestId = 0; pending && requestId < 32; ++requestId) {
+    const uint32_t bit = 1UL << requestId;
+    if ((pending & bit) == 0) continue;
+    const uint32_t claimed = deferredBroadcastRequests.fetch_and(~bit);
+    if ((claimed & bit) != 0)
+      requestOnChange(static_cast<requestType_e>(requestId), 0);
+    return;
+  }
+}
+
+void NetServer::processOverloadRejection() {
+  const uint32_t now = millis();
+  if (droppedNetserverRequests.load() != 0 &&
+      static_cast<uint32_t>(now - _lastQueueOverloadReport) >=
+          kQueueOverloadReportIntervalMs) {
+    const uint32_t dropped = droppedNetserverRequests.exchange(0);
+    _lastQueueOverloadReport = now;
+    serialCli.printf(
+        "##ERROR#:\tnetserver queue overload: %lu request(s), last %u\n",
+        static_cast<unsigned long>(dropped),
+        static_cast<unsigned>(lastDroppedNetserverRequest.load()));
+  }
+  uint32_t clientId = 0;
+  if (takeOverloadRejection(clientId))
+    websocket.close(clientId, 1013, "Server busy; reconnect");
 }
 
 void NetServer::processVolumeUpdate(){
@@ -3240,6 +3398,8 @@ void NetServer::loop() {
   portEXIT_CRITICAL(&netserverLoopMux);
   closeUnauthorizedWebSockets();
   processQueue();
+  processDeferredRequest();
+  processOverloadRejection();
 #if defined(VOXONE_PROFILE_L0)
   voxone::dsp::processDspTransportQueue();
 #endif
@@ -3495,16 +3655,64 @@ void NetServer::requestOnChange(requestType_e request, uint32_t clientId) {
     portEXIT_CRITICAL(&netserverVolumeMux);
     return;
   }
+
+  bool snapshotReserved = false;
+  bool clientRequestReserved = false;
+  if (request == GETINDEX) {
+    const auto reservation = reserveSnapshot(clientId);
+    if (reservation ==
+        voxone::netserver_backpressure::InsertResult::Existing)
+      return;
+    if (reservation == voxone::netserver_backpressure::InsertResult::Full) {
+      recordQueueDrop(request);
+      if (clientId == 0)
+        deferBroadcastRequest(request);
+      else
+        scheduleOverloadRejection(clientId);
+      return;
+    }
+    snapshotReserved = true;
+  } else if (clientId != 0) {
+    const auto reservation = reserveClientRequest(clientId, request);
+    if (reservation ==
+        voxone::netserver_backpressure::InsertResult::Existing)
+      return;
+    if (reservation == voxone::netserver_backpressure::InsertResult::Full) {
+      recordQueueDrop(request);
+      scheduleOverloadRejection(clientId);
+      return;
+    }
+    clientRequestReserved = true;
+  }
+
   nsRequestParams_t nsrequest;
   nsrequest.type = request;
   nsrequest.clientId = clientId;
   if(xQueueSend(nsQueue, &nsrequest, NSQ_SEND_DELAY) != pdPASS){
-    serialCli.printf("##ERROR#:\tnetserver queue full for request %u\n", static_cast<unsigned>(request));
+    if (snapshotReserved) releaseSnapshot(clientId);
+    if (clientRequestReserved) releaseClientRequest(clientId, request);
+    recordQueueDrop(request);
+    if (clientId == 0)
+      deferBroadcastRequest(request);
+    else
+      scheduleOverloadRejection(clientId);
   }
+}
+
+void NetServer::cancelClientRequests(uint32_t clientId) {
+  portENTER_CRITICAL(&netserverBackpressureMux);
+  pendingSnapshotClients.erase(clientId);
+  pendingClientRequests.eraseClient(clientId);
+  overloadRejectedClients.erase(clientId);
+  portEXIT_CRITICAL(&netserverBackpressureMux);
 }
 
 void NetServer::resetQueue(){
   if(nsQueue!=NULL) xQueueReset(nsQueue);
+  _snapshotActive = false;
+  _snapshotClientId = 0;
+  _snapshotIndex = 0;
+  clearBackpressureState();
 }
 
 void handleWebUpdateUpload(AsyncWebServerRequest *request, const String& filename,
@@ -3740,6 +3948,7 @@ void onWsEvent(AsyncWebSocket *server, AsyncWebSocketClient *client, AwsEventTyp
     }
     case WS_EVT_DISCONNECT:
       if (config.store.audioinfo) Serial.printf("[WEBSOCKET] client #%lu disconnected\n", client->id());
+      netserver.cancelClientRequests(client->id());
       if (auto* binding = webSocketBinding(client)) {
         voxone::security::SecuritySessionService::clearBinding(*binding);
         std::free(binding);

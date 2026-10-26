@@ -652,6 +652,51 @@ void testFullQueueCleanupUnblocksPrependForClearErrorAndFin() {
   assertFullQueueCleanupUnblocksProducer(EventType::Fin);
 }
 
+void testAsyncConsumerClearOnFullQueueDoesNotSelfDeadlock() {
+  constexpr size_t kCapacity = 32;
+  constexpr uint8_t kClosingEvents = 4;
+  SerializedBoundedQueue queue(kCapacity);
+  Pcb* closingPcb = new Pcb;
+  Client closing(closingPcb);
+  Pcb* survivorPcb = new Pcb;
+  Client survivor(survivorPcb);
+  uint8_t survivorMarker = 1;
+
+  for (uint8_t index = 0; index < kCapacity; ++index) {
+    if (index == 4 || index == 11 || index == 19 || index == 27) {
+      queue.send(new Event(EventType::Rx, &closing, closingPcb,
+                           new Pbuf(1436), index));
+    } else {
+      queue.send(new Event(EventType::Rx, &survivor, survivorPcb,
+                           new Pbuf(1436), survivorMarker++));
+    }
+  }
+  assert(queue.size() == kCapacity && queue.availableSlots() == 0);
+
+  // A prepended CLEAR would now wait forever because this same thread is the
+  // sole consumer. The production async-task branch removes directly instead.
+  assert(queue.remove(&closing) == kClosingEvents);
+  assert(queue.size() == kCapacity - kClosingEvents);
+  assert(queue.availableSlots() == kClosingEvents);
+
+  for (uint8_t index = 0; index < kClosingEvents; ++index) {
+    queue.send(new Event(EventType::Rx, &survivor, survivorPcb,
+                         new Pbuf(1436), survivorMarker++));
+  }
+  assert(queue.size() == kCapacity && queue.availableSlots() == 0);
+
+  for (uint8_t marker = 1; marker <= kCapacity; ++marker) {
+    Event* event = queue.receive();
+    assert(event->type == EventType::Rx && event->owner == &survivor);
+    assert(event->pbuf != nullptr && event->pbuf->len == 1436);
+    assert(event->marker == marker);
+    releaseEvent(event);
+  }
+  assert(queue.size() == 0 && queue.availableSlots() == kCapacity);
+  delete closingPcb;
+  delete survivorPcb;
+}
+
 void assertConsumerCleanupCompletesWithWaitingProducer(EventType controlType) {
   constexpr size_t kCapacity = 32;
   SerializedBoundedQueue queue(kCapacity);
@@ -844,6 +889,25 @@ void testProductionIntegrationContract() {
   const std::string getEvent = source.substr(getBegin, freeBegin - getBegin);
   assert(getEvent.find("_release_async_queue_slot()") !=
          std::string::npos);
+
+  const size_t clearBegin = source.find("static int8_t _tcp_clear_events");
+  const size_t connectedBegin = source.find("static int8_t _tcp_connected",
+                                             clearBegin);
+  assert(clearBegin != std::string::npos);
+  assert(connectedBegin != std::string::npos);
+  const std::string clearEvents = source.substr(
+      clearBegin, connectedBegin - clearBegin);
+  const size_t sameTask = clearEvents.find(
+      "xTaskGetCurrentTaskHandle() == _async_service_task_handle");
+  const size_t directRemoval = clearEvents.find(
+      "_remove_events_with_arg(arg)", sameTask);
+  const size_t asyncAllocation = clearEvents.find(
+      "malloc(sizeof(lwip_event_packet_t))", directRemoval);
+  const size_t asyncPrepend = clearEvents.find(
+      "_prepend_async_event(&e)", asyncAllocation);
+  assert(sameTask != std::string::npos);
+  assert(directRemoval < asyncAllocation);
+  assert(asyncAllocation < asyncPrepend);
 }
 
 }  // namespace
@@ -859,6 +923,7 @@ int main() {
   testLegacyProducerPreemptionReproducesThreeMssBlockRotation();
   testSerializedProducerRunsAfterPurge();
   testFullQueueCleanupUnblocksPrependForClearErrorAndFin();
+  testAsyncConsumerClearOnFullQueueDoesNotSelfDeadlock();
   testClearErrorAndFinConsumerCleanupWithWaitingProducer();
   testParallelProducerConsumerPreservesAllRxData();
   testDisconnectCleanupAndReconnectUseDistinctOwnership();

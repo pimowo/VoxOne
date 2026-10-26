@@ -315,6 +315,11 @@ static bool _start_async_task(){
  * */
 
 static int8_t _tcp_clear_events(void * arg) {
+    if(_async_service_task_handle &&
+       xTaskGetCurrentTaskHandle() == _async_service_task_handle){
+        _remove_events_with_arg(arg);
+        return ERR_OK;
+    }
     lwip_event_packet_t * e = (lwip_event_packet_t *)malloc(sizeof(lwip_event_packet_t));
     e->event = LWIP_TCP_CLEAR;
     e->arg = arg;

@@ -424,6 +424,12 @@ if(-not $onWindows) {
   if($LASTEXITCODE -ne 0) { throw 'Sanitized AsyncTCP lifecycle compile failed' }
   & $asyncTcpLifecycleExe
   if($LASTEXITCODE -ne 0) { throw 'Sanitized AsyncTCP lifecycle test failed' }
+  $netserverBackpressureExe=Join-Path $work 'netserver_backpressure_sanitized'
+  & $Cxx @sanitizerArgs '-o' $netserverBackpressureExe `
+    (Join-Path $root 'test/netserver_backpressure_native.cpp')
+  if($LASTEXITCODE -ne 0) { throw 'Sanitized NetServer backpressure compile failed' }
+  & $netserverBackpressureExe
+  if($LASTEXITCODE -ne 0) { throw 'Sanitized NetServer backpressure test failed' }
   $serialCliInputExe=Join-Path $work 'serialcli_input_sanitized'
   & $Cxx @sanitizerArgs '-o' $serialCliInputExe `
     (Join-Path $root 'test/serialcli_input_native.cpp')
