@@ -1062,7 +1062,7 @@ uint8_t PlayListWidget::_fillPlMenu(int from, uint8_t count) {
       String stationName = firstTab >= 0 && secondTab > firstTab
                                ? stationLine.substring(firstTab + 1, secondTab)
                                : String();
-      if(config.store.numplaylist && stationName.length()>0) stationName = String(from+c)+" "+stationName;
+      if(config.runtimeSnapshot().numPlaylist && stationName.length()>0) stationName = String(from+c)+" "+stationName;
       _printPLitem(c, stationName.c_str());
       c++;
       if (c >= count) break;

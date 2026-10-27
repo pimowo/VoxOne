@@ -17,8 +17,9 @@ void capturePlayerDisplayView(PlayerDisplayView& out, int rssi) {
 #if VOXONE_HAS_BT && VOXONE_PIN_MAP_COMPLETE
   btConnected = bluetoothPhysicallyConnected();
 #endif
+  const MuteOutputSnapshot output = player.outputSnapshot();
   makePlayerDisplayView(out, source, config.station.name, config.station.title,
                         config.station.metadataMode == STATION_META_SWAP,
-                        config.userVolume, player.isMuted(), btConnected, rssi,
+                        output.userVolume, output.muted, btConnected, rssi,
                         config.station.bitrate, config.configFmt);
 }

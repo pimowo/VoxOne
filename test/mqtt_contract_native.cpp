@@ -76,6 +76,12 @@ struct StationMock {
 };
 
 struct ConfigMock {
+  struct RuntimeSnapshot {
+    uint8_t smartStart;
+    uint8_t dspOn;
+    uint16_t lastStation;
+  };
+
   ConfigStoreMock store;
   StationMock station;
   uint8_t userVolume = 50;
@@ -86,6 +92,9 @@ struct ConfigMock {
   uint8_t savedSmartstart = 0;
 
   uint16_t lastStation() const { return stationId; }
+  RuntimeSnapshot runtimeSnapshot() const {
+    return {store.smartstart, store.dspon, stationId};
+  }
   uint16_t playlistLength() const { return 12; }
   const char* ipToStr(const IPAddress&) const { return "192.168.1.42"; }
   void escapeQuotes(const char* input, char* output, size_t capacity) const {
@@ -114,10 +123,19 @@ struct playerRequestParams_t {
   int payload;
 };
 
+struct MuteOutputSnapshot {
+  uint8_t userVolume;
+  bool muted;
+  bool silent;
+};
+
 struct PlayerMock {
   plStatus_e currentStatus = STOPPED;
   std::vector<playerRequestParams_t> commands;
   plStatus_e status() const { return currentStatus; }
+  MuteOutputSnapshot outputSnapshot() const {
+    return {config.userVolume, false, config.userVolume == 0};
+  }
   void stepUserVol(int) {}
   void setUserVol(uint8_t) {}
   void sendCommand(playerRequestParams_t request) { commands.push_back(request); }

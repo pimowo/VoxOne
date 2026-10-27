@@ -145,7 +145,9 @@ bool TimeKeeper::loop1(){ // core1 (player)
 
 
   static uint32_t lastTimeTime = 0;
-  const uint32_t ntpInterval = static_cast<uint32_t>(constrain(config.store.timeSyncInterval, 1, 10080)) * 60000UL;
+  const auto runtime = config.runtimeSnapshot();
+  const uint32_t ntpInterval = static_cast<uint32_t>(constrain(
+      runtime.timeSyncInterval, 1, 10080)) * 60000UL;
   if (currentTime - lastTimeTime >= ntpInterval) {
     lastTimeTime = currentTime;
     forceTimeSync = true;
@@ -212,10 +214,11 @@ void TimeKeeper::_upClock(){
 
 void TimeKeeper::_upScreensaver(){
   if(!display.ready()) return;
-  if(config.store.screensaverEnabled && uiState.mode()==PLAYER && !player.isRunning()){
+  const auto runtime = config.runtimeSnapshot();
+  if(runtime.screensaverEnabled && uiState.mode()==PLAYER && !player.isRunning()){
     config.screensaverTicks++;
-    if(config.screensaverTicks > config.store.screensaverTimeout+SCREENSAVERSTARTUPDELAY){
-      if(config.store.screensaverBlank){
+    if(config.screensaverTicks > runtime.screensaverTimeout+SCREENSAVERSTARTUPDELAY){
+      if(runtime.screensaverBlank){
         transitionUiMode(SCREENBLANK);
       }else{
         transitionUiMode(SCREENSAVER);
@@ -223,10 +226,10 @@ void TimeKeeper::_upScreensaver(){
       config.screensaverTicks=SCREENSAVERSTARTUPDELAY;
     }
   }
-  if(config.store.screensaverPlayingEnabled && uiState.mode()==PLAYER && player.isRunning()){
+  if(runtime.screensaverPlayingEnabled && uiState.mode()==PLAYER && player.isRunning()){
     config.screensaverPlayingTicks++;
-    if(config.screensaverPlayingTicks > config.store.screensaverPlayingTimeout*60+SCREENSAVERSTARTUPDELAY){
-      if(config.store.screensaverPlayingBlank){
+    if(config.screensaverPlayingTicks > runtime.screensaverPlayingTimeout*60+SCREENSAVERSTARTUPDELAY){
+      if(runtime.screensaverPlayingBlank){
         transitionUiMode(SCREENBLANK);
       }else{
         transitionUiMode(SCREENSAVER);
@@ -270,7 +273,9 @@ void TimeKeeper::timeTask(){
     mktime(&network.timeinfo);
     display.putRequest(CLOCK, 1);
     #if RTCSUPPORTED
-      const uint32_t rtcInterval = static_cast<uint32_t>(constrain(config.store.timeSyncIntervalRTC, 1, 1000)) * 3600000UL;
+      const uint32_t rtcInterval = static_cast<uint32_t>(constrain(
+          config.runtimeSnapshot().timeSyncIntervalRtc, 1, 1000)) *
+          3600000UL;
       if (config.isRTCFound() && (forceRtcSync || lastRtcSyncAt == 0 || millis() - lastRtcSyncAt >= rtcInterval)) {
         rtc.setTime(&network.timeinfo);
         lastRtcSyncAt = millis();

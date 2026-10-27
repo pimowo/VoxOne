@@ -30,13 +30,15 @@ Player::Player(): Audio(true, I2S_DAC_CHANNEL_BOTH_EN) {}
 
 
 void Player::init() {
+  const auto runtime = config.runtimeSnapshot();
   Serial.print("##[BOOT]#\tplayer.init\t");
   playerQueue=NULL;
   _hasError=false;
-  _pendingVolume = config.store.volume;
+  _pendingVolume = runtime.volume;
   _pendingMode = 0;
   _volumePending = false;
   _maximumPending = false;
+  _mute.setUserVolume(runtime.userVolume);
   _radioReconnect.reset();
   _pendingStationRefresh.reset();
   playerQueue = xQueueCreate( 5, sizeof( playerRequestParams_t ) );
@@ -47,8 +49,8 @@ void Player::init() {
   #if I2S_DOUT!=255 && !I2S_INTERNAL
     setPinout(I2S_BCLK, I2S_LRC, I2S_DOUT);
   #endif
-  setBalance(config.store.balance);
-  setTone(config.store.bass, config.store.middle, config.store.trebble);
+  setBalance(runtime.balance);
+  setTone(runtime.bass, runtime.middle, runtime.treble);
   setVolume(0);
   _status = STOPPED;
   _volTimer=config.volumeBootDirty;
@@ -57,7 +59,7 @@ void Player::init() {
   #if PLAYER_FORCE_MONO
     forceMono(true);
   #endif
-  _loadVol(config.store.volume);
+  _loadVol(runtime.volume);
   setConnectionTimeout(CONNECTION_TIMEOUT, CONNECTION_TIMEOUT_SSL);
   Serial.println("done");
 }
@@ -166,7 +168,7 @@ bool Player::_refreshStation(uint16_t stationId, bool* identityChanged) {
   const StationRefreshChanges changes = stationRefreshChanges(
       previousOvol, previousMode, config.station.ovol,
       config.station.metadataMode);
-  if (changes.volume) setVol(config.store.volume);
+  if (changes.volume) setVol(config.runtimeSnapshot().volume);
   display.putRequest(NEWSTATION);
   netserver.requestOnChange(STATION, 0);
   if (changes.metadataMode) {
@@ -237,7 +239,7 @@ void Player::_applyStop(int payload, bool consumeUserCommand) {
 }
 
 void resetPlayer(){
-  if(!config.store.watchdog) return;
+  if(!config.runtimeSnapshot().watchdog) return;
   player.resetQueue();
   player.sendCommand({PR_STOP, 0});
   player.loop();
@@ -273,14 +275,20 @@ void Player::loop() {
   }
   portEXIT_CRITICAL(&playerVolumeMux);
   if(volumePending){
+    const auto runtime = config.runtimeSnapshot();
     if (pendingMode == 1) {
-      const VolumeState state = volumeStateFromUser(pendingVolume, config.store.maximumVolume);
+      const VolumeState state = volumeStateFromUser(
+          pendingVolume, runtime.maximumVolume);
       config.setVolumeState(state.raw, state.user);
     } else if (pendingMode == 0) {
-      const VolumeState state = volumeStateFromRaw(pendingVolume, config.store.maximumVolume);
+      const VolumeState state = volumeStateFromRaw(
+          pendingVolume, runtime.maximumVolume);
       config.setVolumeState(state.raw, state.user);
-    } else if (pendingMode == 2) config.setVolumeState(config.store.volume, config.userVolume);
-    Audio::setVolume(_mute.outputVolume(volToI2S(config.store.volume)));
+    } else if (pendingMode == 2) {
+      config.setVolumeState(runtime.volume, pendingVolume);
+    }
+    Audio::setVolume(_mute.outputVolume(
+        volToI2S(config.runtimeSnapshot().volume)));
   }
   playerRequestParams_t requestP;
   if(xQueueReceive(playerQueue, &requestP, isRunning()?PL_QUEUE_TICKS:PL_QUEUE_TICKS_ST)){
@@ -352,7 +360,8 @@ void Player::loop() {
       }
       case PR_VOL: {
         const uint8_t requested = static_cast<uint8_t>(constrain(requestP.payload, 0, 254));
-        const VolumeState state = volumeStateFromRaw(requested, config.store.maximumVolume);
+        const VolumeState state = volumeStateFromRaw(
+            requested, config.runtimeSnapshot().maximumVolume);
         config.setVolumeState(state.raw, state.user);
         Audio::setVolume(_mute.outputVolume(volToI2S(state.raw)));
         _volTicks = millis();
@@ -360,7 +369,7 @@ void Player::loop() {
         break;
       }
       case PR_VUTONUS: {
-        if(config.vuThreshold>10) config.vuThreshold -=10;
+        config.reduceVuThreshold(10);
         break;
       }
       case PR_BURL: {
@@ -418,7 +427,7 @@ void Player::_play(uint16_t stationId, bool sourceResume) {
   remoteStationName = false;
   
   if(!config.prepareForPlaying(stationId, sourceResume)) return;
-  _loadVol(config.store.volume);
+  _loadVol(config.runtimeSnapshot().volume);
   
   bool isConnected = false;
   connproc = false;
@@ -574,7 +583,7 @@ void Player::stepVol(bool up) {
 
 uint8_t Player::volToI2S(uint8_t volume) {
   int vol = map(volume, 0, 254 - config.station.ovol * 3 , 0, 254);
-  return volumeClampOutput(vol, config.store.maximumVolume);
+  return volumeClampOutput(vol, config.runtimeSnapshot().maximumVolume);
 }
 
 void Player::_loadVol(uint8_t volume) {
@@ -583,20 +592,32 @@ void Player::_loadVol(uint8_t volume) {
 
 void Player::setMuted(bool muted) {
   if (systemUpdateAudioBlocked()) return;
-  if (_mute.active() == muted) return;
-  _mute.set(muted);
-  portENTER_CRITICAL(&playerVolumeMux);
-  if (!_volumePending) {
-    _pendingMode = 3; // Refresh output gain without changing saved USER volume.
-    _volumePending = true;
+  bool changed = false;
+  {
+    Config::WriteLock configLock(config._persistMutex);
+    portENTER_CRITICAL(&playerVolumeMux);
+    if (_mute.active() != muted) {
+      _mute.set(muted);
+      if (!_volumePending) {
+        _pendingMode = 3; // Refresh output gain without changing saved USER volume.
+        _volumePending = true;
+      }
+      changed = true;
+    }
+    portEXIT_CRITICAL(&playerVolumeMux);
   }
-  portEXIT_CRITICAL(&playerVolumeMux);
+  if (!changed) return;
   display.putRequest(DRAWVOL);
   netserver.requestOnChange(VOLUME, 0);
 }
 
 bool Player::outputSilent() const {
-  return _mute.outputSilent(config.userVolume);
+  return _mute.outputSilent();
+}
+
+PlayerRuntimeVolumeSnapshot Player::runtimeVolumeSnapshot() const {
+  Config::WriteLock configLock(config._persistMutex);
+  return {config._runtime.read(), _mute.outputSnapshot()};
 }
 
 void Player::setVol(uint8_t volume) {
@@ -615,32 +636,38 @@ void Player::setUserVol(uint8_t user) {
   if (user > 100) user = 100;
   _volTicks = millis();
   _volTimer = true;
+  Config::WriteLock configLock(config._persistMutex);
   portENTER_CRITICAL(&playerVolumeMux);
   config.userVolume = user;
   config.store.lastUserVolume = user;
+  _mute.setUserVolume(user);
   _pendingVolume = user;
   _pendingMode = 1;
   _volumePending = true;
   portEXIT_CRITICAL(&playerVolumeMux);
+  config._publishRuntimeLocked();
 }
 
 void Player::stepUserVol(int8_t direction) {
   if (systemUpdateAudioBlocked()) return;
+  Config::WriteLock configLock(config._persistMutex);
   portENTER_CRITICAL(&playerVolumeMux);
-  const uint8_t user = _mute.stepUserVolume(config.userVolume, direction);
+  const uint8_t user = _mute.stepUserVolume(
+      _mute.outputSnapshot().userVolume, direction);
   config.userVolume = user;
   config.store.lastUserVolume = user;
   _pendingVolume = user;
   _pendingMode = 1;
   _volumePending = true;
   portEXIT_CRITICAL(&playerVolumeMux);
+  config._publishRuntimeLocked();
   _volTicks = millis();
   _volTimer = true;
 }
 
 void Player::applyCurrentVolume() {
   portENTER_CRITICAL(&playerVolumeMux);
-  _pendingVolume = config.userVolume;
+  _pendingVolume = _mute.outputSnapshot().userVolume;
   _pendingMode = 2;
   _volumePending = true;
   portEXIT_CRITICAL(&playerVolumeMux);
@@ -655,7 +682,7 @@ uint8_t Player::pendingRawAtMax(uint8_t maximum) {
   mode = _pendingMode;
   pending = _volumePending;
   portEXIT_CRITICAL(&playerVolumeMux);
-  if (!pending || mode == 2) return config.store.volume;
+  if (!pending || mode == 2) return config.runtimeSnapshot().volume;
   if (mode == 1) return volumeUserToRaw(value, maximum);
   const uint8_t ceiling = volumeRawMaximum(maximum);
   return value > ceiling ? ceiling : value;

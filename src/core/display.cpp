@@ -145,7 +145,10 @@ PlayerScrollWidgetBinding playerScrollBinding(ScrollWidget* widget) {
 }  // namespace
 
 constexpr uint16_t kDisplayVolumeMax = 100;
-static uint8_t displayedVolume() { return config.userVolume; }
+static const char* runtimeEqPresetLabel() {
+  const auto runtime = config.runtimeSnapshot();
+  return eqPresetLabel(runtime.bass, runtime.middle, runtime.treble);
+}
 
 DspCore dsp;
 
@@ -1002,7 +1005,7 @@ void Display::_buildPager(){
   _st7796Source->setLabel("WEB");
   _st7796Eq = new St7796LabelFrameWidget(st7796EqFrameConf, config.theme.meta,
                                        config.theme.background, true);
-  _st7796Eq->setLabel(eqPresetLabel(config.store.bass, config.store.middle, config.store.trebble));
+  _st7796Eq->setLabel(runtimeEqPresetLabel());
   _st7796Mode = new St7796LabelFrameWidget(st7796ModeFrameConf, config.theme.meta,
                                          config.theme.background, true);
   _st7796Mode->setLabel(displayDlnaModeLabel(DisplayDlnaMode::Unavailable));
@@ -1510,7 +1513,7 @@ void Display::_renderMode(displayMode_e newmode) {
 #if VOXONE_DISPLAY_PROFILE == VOXONE_DISPLAY_PROFILE_ST7796_480X320
     _updatePlaybackStatus();
 #endif
-    config.setDspOn(config.store.dspon, false);
+    config.setDspOn(config.runtimeSnapshot().dspOn, false);
   }
   if (newmode == SCREENSAVER || newmode == SCREENBLANK) {
     config.isScreensaver = true;
@@ -1537,8 +1540,9 @@ void Display::_renderMode(displayMode_e newmode) {
     if (view.muted) _nums->setText("MUTE");
     else _nums->setText(view.userVolume, numtxtFmt);
 #else
-    if (player.isMuted()) _nums->setText("MUTE");
-    else _nums->setText(displayedVolume(), numtxtFmt);
+    const MuteOutputSnapshot output = player.outputSnapshot();
+    if (output.muted) _nums->setText("MUTE");
+    else _nums->setText(output.userVolume, numtxtFmt);
 #endif
   }
   if (newmode == LOST)      _showDialog(LANG::const_DlgLost);
@@ -1658,8 +1662,10 @@ void Display::queueModeRender(displayMode_e mode) {
 }
 
 void Display::_setVuVisibility(bool sourceVisible) {
+  const auto runtime = config.runtimeSnapshot();
+  const MuteOutputSnapshot output = player.outputSnapshot();
   const bool lockVu = !displayVuUnlocked(
-      config.store.vumeter, sourceVisible, config.userVolume);
+      runtime.vuMeter, sourceVisible, output.userVolume);
   if(_vuwidget && _vuwidget->locked() != lockVu) _vuwidget->lock(lockVu);
 }
 
@@ -1813,7 +1819,7 @@ void Display::loop() {
     capturePlayerDisplayView(view, WiFi.RSSI());
     if (_st7796Volume) _st7796Volume->setDacMuted(dacMute.logicalMuted());
     if (_st7796Eq)
-      _st7796Eq->setLabel(eqPresetLabel(config.store.bass, config.store.middle, config.store.trebble));
+      _st7796Eq->setLabel(runtimeEqPresetLabel());
     if (_st7796Source) _st7796Source->setLabel(displaySourceLabel(view.source));
 #if VOXONE_HAS_BT && VOXONE_PIN_MAP_COMPLETE
     if (_st7796BluetoothIcon) _st7796BluetoothIcon->setConnected(view.btConnected);
@@ -2055,8 +2061,8 @@ void Display::_title() {
 void Display::_time(bool redraw) {
   
 #if LIGHT_SENSOR!=255
-  if(config.store.dspon) {
-    config.store.brightness = AUTOBACKLIGHT(analogRead(LIGHT_SENSOR));
+  if(config.runtimeSnapshot().dspOn) {
+    config.setRuntimeBrightness(AUTOBACKLIGHT(analogRead(LIGHT_SENSOR)));
     config.setBrightness();
   }
 #endif
@@ -2075,8 +2081,9 @@ void Display::_time(bool redraw) {
 }
 
 void Display::_volume() {
+  const MuteOutputSnapshot output = player.outputSnapshot();
   _setVuVisibility(activeSourceVuVisible());
-  if(_volbar) _volbar->setValue(displayedVolume());
+  if(_volbar) _volbar->setValue(output.userVolume);
 #if VOXONE_DISPLAY_PROFILE == VOXONE_DISPLAY_PROFILE_ST7796_480X320
   if(_st7796Volume) {
     PlayerDisplayView view{};
@@ -2085,7 +2092,7 @@ void Display::_volume() {
   }
 #else
   #ifndef HIDE_VOL
-    if(_voltxt) _voltxt->setText(displayedVolume(), voltxtFmt);
+    if(_voltxt) _voltxt->setText(output.userVolume, voltxtFmt);
   #endif
 #endif
   if(_renderedMode==VOL) {
@@ -2095,8 +2102,8 @@ void Display::_volume() {
     if (view.muted) _nums->setText("MUTE");
     else _nums->setText(view.userVolume, numtxtFmt);
 #else
-    if (player.isMuted()) _nums->setText("MUTE");
-    else _nums->setText(displayedVolume(), numtxtFmt);
+    if (output.muted) _nums->setText("MUTE");
+    else _nums->setText(output.userVolume, numtxtFmt);
 #endif
   }
 }

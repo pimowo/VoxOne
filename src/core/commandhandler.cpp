@@ -153,7 +153,7 @@ bool CommandHandler::exec(const char *command, const char *value, uint32_t cid) 
     return true;
   }
   if (strEquals(command, "dspon"))     { config.setDspOn(atoi(value)!=0); return true; }
-  if (strEquals(command, "dim"))       { int d=atoi(value); config.store.brightness = (uint8_t)(d < 0 ? 0 : (d > 100 ? 100 : d)); config.setBrightness(true); return true; }
+  if (strEquals(command, "dim"))       { int d=atoi(value); config.setRuntimeBrightness((uint8_t)(d < 0 ? 0 : (d > 100 ? 100 : d))); config.setBrightness(true); return true; }
   if (strEquals(command, "clearspiffs")){ config.spiffsCleanup(); return true; }
   /*********************************************/
   /****************** WEBSOCKET ****************/
@@ -184,7 +184,7 @@ bool CommandHandler::exec(const char *command, const char *value, uint32_t cid) 
     netserver.requestOnChange(GETSCREEN, 0);
     return true;
   }
-  if (strEquals(command, "brightness"))   { config.store.brightness = static_cast<uint8_t>(atoi(value)); config.setBrightness(true); return true; }
+  if (strEquals(command, "brightness"))   { config.setRuntimeBrightness(static_cast<uint8_t>(atoi(value))); config.setBrightness(true); return true; }
   if (strEquals(command, "screenon"))     { config.setDspOn(static_cast<bool>(atoi(value))); return true; }
   if (strEquals(command, "contrast"))     { config.saveValue(&config.store.contrast, static_cast<uint8_t>(atoi(value))); display.setContrast(); return true; }
   if (strEquals(command, "screensaverenabled")){ config.enableScreensaver(static_cast<bool>(atoi(value))); return true; }

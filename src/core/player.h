@@ -2,6 +2,7 @@
 #define player_h
 
 #include "mute_state.h"
+#include "config_runtime_snapshot.h"
 #include "radio_reconnect_policy.h"
 #include "radio_source_policy.h"
 #include "temporary_audio_state.h"
@@ -46,6 +47,13 @@ struct playerRequestParams_t
 
 enum plStatus_e : uint8_t{ PLAYING = 1, STOPPED = 2 };
 
+struct PlayerRuntimeVolumeSnapshot {
+  voxone::config_runtime::Snapshot config;
+  MuteOutputSnapshot output;
+};
+
+class Config;
+
 class Player: public Audio {
   private:
     uint32_t    _volTicks;   /* delayed volume save  */
@@ -78,6 +86,13 @@ class Player: public Audio {
     void restoreTemporaryBase();
     void scheduleRadioReconnect();
     void serviceRadioReconnect();
+    // Config calls this only while holding playerVolumeMux with its
+    // config.userVolume update, so the audio snapshot changes atomically with
+    // the runtime volume state.
+    void _syncOutputSilence(uint8_t userVolume) {
+      _mute.setUserVolume(userVolume);
+    }
+    friend class Config;
   public:
     bool lockOutput = true;
     volatile bool connproc = true;
@@ -113,6 +128,8 @@ class Player: public Audio {
     void setVol(uint8_t volume);
     void setUserVol(uint8_t user);
     void stepUserVol(int8_t direction);
+    MuteOutputSnapshot outputSnapshot() const { return _mute.outputSnapshot(); }
+    PlayerRuntimeVolumeSnapshot runtimeVolumeSnapshot() const;
     bool isMuted() const { return _mute.active(); }
     bool outputSilent() const;
     void setMuted(bool muted);
@@ -127,6 +144,7 @@ class Player: public Audio {
 };
 
 extern Player player;
+extern portMUX_TYPE playerVolumeMux;
 
 extern __attribute__((weak)) void player_on_start_play();
 extern __attribute__((weak)) void player_on_stop_play();

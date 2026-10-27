@@ -1035,7 +1035,7 @@ bool NetServer::begin(bool quiet) {
     return false;
   }
   if(!quiet) Serial.print("##[BOOT]#\tnetserver.begin\t");
-  playerBufMax = psramInit()?300000:1600 * config.store.abuff;
+  playerBufMax = psramInit()?300000:1600 * config.runtimeSnapshot().audioBuffer;
   _volumeUpdatePending = false;
   _lastVolumeUpdate = millis() - NS_VOLUME_INTERVAL_MS;
   _lastQueueOverloadReport = millis() - kQueueOverloadReportIntervalMs;
@@ -1291,10 +1291,12 @@ static bool appendWebStatusText(char* output, size_t capacity, size_t& used,
   return appendWebStatusLiteral(output, capacity, used, "\"");
 }
 
-static bool formatNetworkInfo(char* output, size_t capacity, size_t& used) {
+static bool formatNetworkInfo(
+    char* output, size_t capacity, size_t& used,
+    const voxone::config_runtime::Snapshot& runtime) {
   const String activeSsid = network.status == CONNECTED ? WiFi.SSID() : String();
   if (!appendWebStatusLiteral(output, capacity, used, "{\"hostname\":\"") ||
-      !appendJsonEscaped(output, capacity, used, config.store.mdnsname, true) ||
+      !appendJsonEscaped(output, capacity, used, runtime.mdnsName, true) ||
       !appendWebStatusLiteral(output, capacity, used, "\",\"activeSsid\":\"") ||
       !appendJsonEscaped(output, capacity, used, activeSsid.c_str(), true) ||
       !appendWebStatusLiteral(output, capacity, used, "\",\"profiles\":[")) return false;
@@ -1316,6 +1318,7 @@ static bool formatNetworkInfo(char* output, size_t capacity, size_t& used) {
 }
 
 static void formatWebStatus(char* output, size_t capacity) {
+  const MuteOutputSnapshot volume = player.outputSnapshot();
   char radioMetadata[BUFLEN + 1]{};
   stationMetaDisplay(config.station.title,
                      config.station.metadataMode == STATION_META_SWAP,
@@ -1388,7 +1391,7 @@ static void formatWebStatus(char* output, size_t capacity) {
       status.bitrate, static_cast<unsigned long>(status.sampleRate),
       btPhoneConnected ? "true" : "false",
       voxone::hardware::hardwareCapabilities().supportsVoxOneBt ? ",\"bt\"" : "",
-      config.userVolume, player.isMuted() ? "true" : "false");
+      volume.userVolume, volume.muted ? "true" : "false");
   if (tail < 0 || static_cast<size_t>(tail) >= capacity - used) output[0] = '\0';
 }
 
@@ -1694,11 +1697,12 @@ void clearSensitive(char* value, size_t size) {
 }
 
 voxone::security::SecurityRequestContext securityRequestContext(
-    AsyncWebServerRequest* request, const String& localAddress) {
+    AsyncWebServerRequest* request, const String& localAddress,
+    const char* deviceHostname) {
   return {request->host().c_str(),
           request->hasHeader("Origin") ? request->header("Origin").c_str()
                                        : nullptr,
-          localAddress.c_str(), config.store.mdnsname,
+          localAddress.c_str(), deviceHostname,
           request->contentType().c_str(), request->contentLength()};
 }
 
@@ -1856,8 +1860,9 @@ voxone::security::SecurityHttpDecision authorizeHttpRequest(
     return {SecurityAccessStatus::Locked, 503, false, websocketRequest};
 
   const String localAddress = request->client()->localIP().toString();
+  const auto configRuntime = config.runtimeSnapshot();
   const SecurityRequestContext context =
-      securityRequestContext(request, localAddress);
+      securityRequestContext(request, localAddress, configRuntime.mdnsName);
   if (!securityHttpPathRepresentationAllowed(request->url().c_str(),
                                              request->url().length())) {
     return {SecurityAccessStatus::UnknownRoute, 404, false, false};
@@ -1947,9 +1952,10 @@ void securityApiResultReply(
 void handleSecurityState(AsyncWebServerRequest* request) {
   using namespace voxone::security;
   const String localAddress = request->client()->localIP().toString();
+  const auto configRuntime = config.runtimeSnapshot();
   const SecurityRequestStatus validation =
       validateSecurityReadRequest(securityRequestContext(request,
-                                                          localAddress));
+          localAddress, configRuntime.mdnsName));
   if (validation != SecurityRequestStatus::Allowed) {
     securityRequestRejected(request, validation);
     return;
@@ -1982,9 +1988,10 @@ void handleSecurityState(AsyncWebServerRequest* request) {
 void handleSecuritySetup(AsyncWebServerRequest* request) {
   using namespace voxone::security;
   const String localAddress = request->client()->localIP().toString();
+  const auto configRuntime = config.runtimeSnapshot();
   const SecurityRequestStatus validation =
       validateSecurityFormRequest(securityRequestContext(request,
-                                                          localAddress));
+          localAddress, configRuntime.mdnsName));
   if (validation != SecurityRequestStatus::Allowed) {
     securityRequestRejected(request, validation);
     return;
@@ -2008,9 +2015,10 @@ void handleSecuritySetup(AsyncWebServerRequest* request) {
 void handleSecurityLogin(AsyncWebServerRequest* request) {
   using namespace voxone::security;
   const String localAddress = request->client()->localIP().toString();
+  const auto configRuntime = config.runtimeSnapshot();
   const SecurityRequestStatus validation =
       validateSecurityFormRequest(securityRequestContext(request,
-                                                          localAddress));
+          localAddress, configRuntime.mdnsName));
   if (validation != SecurityRequestStatus::Allowed) {
     securityRequestRejected(request, validation);
     return;
@@ -2033,9 +2041,10 @@ void handleSecurityLogin(AsyncWebServerRequest* request) {
 void handleSecurityLogout(AsyncWebServerRequest* request) {
   using namespace voxone::security;
   const String localAddress = request->client()->localIP().toString();
+  const auto configRuntime = config.runtimeSnapshot();
   const SecurityRequestStatus validation =
       validateSecurityActionRequest(securityRequestContext(request,
-                                                            localAddress));
+          localAddress, configRuntime.mdnsName));
   if (validation != SecurityRequestStatus::Allowed) {
     securityRequestRejected(request, validation);
     return;
@@ -2063,8 +2072,10 @@ void handleSecurityLogout(AsyncWebServerRequest* request) {
 void handleSecurityManage(AsyncWebServerRequest* request) {
   using namespace voxone::security;
   const String localAddress = request->client()->localIP().toString();
+  const auto configRuntime = config.runtimeSnapshot();
   const SecurityRequestStatus validation =
-      validateSecurityFormRequest(securityRequestContext(request, localAddress));
+      validateSecurityFormRequest(securityRequestContext(
+          request, localAddress, configRuntime.mdnsName));
   if (validation != SecurityRequestStatus::Allowed) {
     securityRequestRejected(request, validation);
     return;
@@ -2456,6 +2467,7 @@ void handleTimeStatus(AsyncWebServerRequest* request) {
     if (rtcTime[0]) snprintf(rtcJson, sizeof(rtcJson), "\"%s\"", rtcTime);
   }
 #endif
+  const auto runtime = config.runtimeSnapshot();
   char body[256];
   const int length = snprintf(body, sizeof(body),
       "{\"rtcSupported\":%s,\"rtcFound\":%s,\"systemTime\":%s,\"rtcTime\":%s,"
@@ -2467,7 +2479,7 @@ void handleTimeStatus(AsyncWebServerRequest* request) {
       "false",
 #endif
       systemJson, rtcJson,
-      config.store.timeSyncInterval, config.store.timeSyncIntervalRTC,
+      runtime.timeSyncInterval, runtime.timeSyncIntervalRtc,
       static_cast<unsigned long>(timekeeper.successfulSyncCount));
   if (length < 0 || static_cast<size_t>(length) >= sizeof(body)) {
     mqttApiError(request, 500, "time_status_failed");
@@ -3173,6 +3185,7 @@ void NetServer::processQueue(){
 
   {
     uint32_t clientId = request.clientId;
+    const auto runtime = config.runtimeSnapshot();
     wsBuf[0]='\0';
     switch (request.type) {
       case GETINDEX:      {
@@ -3236,9 +3249,10 @@ void NetServer::processQueue(){
             static_cast<unsigned long long>(esp_timer_get_time() / 1000000LL);
         const int prefixLength = snprintf(wsBuf, sizeof(wsBuf),
             "{\"sst\":%d,\"vu\":%d,\"canVu\":%d,\"softr\":%d,\"vut\":%d,\"mdns\":\"%s\",\"ipaddr\":\"%s\",\"abuff\":%d,\"systemInfo\":{\"version\":\"%s\",\"channel\":\"%s\",\"build\":\"%s\",\"profile\":\"%s\",\"mac\":\"%s\",\"rssi\":%d,\"uptimeSeconds\":%llu,\"freeHeap\":%lu,\"minimumFreeHeap\":%lu,\"psramTotal\":%lu,\"psramFree\":%lu,\"btFirmwareUpdateSupported\":%s,\"capabilities\":\"%s\"},\"networkInfo\":",
-            config.store.smartstart != 2, config.store.vumeter,
-            boardCapabilities.supportsVu, config.store.softapdelay,
-            config.vuThreshold, config.store.mdnsname, ipText, config.store.abuff,
+            runtime.smartStart != 2, runtime.vuMeter,
+            boardCapabilities.supportsVu, runtime.softApDelay,
+            config.vuThresholdSnapshot(), runtime.mdnsName, ipText,
+            runtime.audioBuffer,
             VOXONE_VERSION, VOXONE_BUILD_CHANNEL, VOXONE_BUILD_SHA,
             VOXONE_BUILD_PROFILE, macText, wifiRssi,
             uptimeSeconds, static_cast<unsigned long>(freeHeap),
@@ -3252,7 +3266,7 @@ void NetServer::processQueue(){
           break;
         }
         size_t used = static_cast<size_t>(prefixLength);
-        if (!formatNetworkInfo(wsBuf, sizeof(wsBuf), used) ||
+        if (!formatNetworkInfo(wsBuf, sizeof(wsBuf), used, runtime) ||
             !appendWebStatusLiteral(wsBuf, sizeof(wsBuf), used, "}")) wsBuf[0] = '\0';
         break;
       }
@@ -3260,19 +3274,19 @@ void NetServer::processQueue(){
         const auto scroll =
             voxone::display_scroll::currentScrollSettingsWebView();
         snprintf (wsBuf, sizeof(wsBuf), "{\"flip\":%d,\"canFlip\":%d,\"canBrightness\":%d,\"br\":%d,\"nump\":%d,\"dspon\":%d,\"con\":%d,\"scre\":%d,\"scrt\":%d,\"scrb\":%d,\"scrpe\":%d,\"scrpt\":%d,\"scrpb\":%d,\"stationListTimeout\":%u,\"btTransportTimeout\":%u,\"canBtTransport\":%d,\"canScrollSettings\":%s,\"scrollEnabled\":%s,\"scrollSpeed\":\"%s\",\"scrollPauseMs\":%u,\"scrollSettingsSource\":\"%s\",\"scrollCoreActive\":%s}",
-                                  config.store.flipscreen,
+                                  runtime.flipScreen,
                                   voxone::hardware::hardwareCapabilities().hasLocalDisplay(),
                                   BRIGHTNESS_PIN != 255,
-                                  config.store.brightness,
-                                  config.store.numplaylist,
-                                  config.store.dspon, 
-                                  config.store.contrast,
-                                  config.store.screensaverEnabled,
-                                  config.store.screensaverTimeout,
-                                  config.store.screensaverBlank,
-                                  config.store.screensaverPlayingEnabled,
-                                  config.store.screensaverPlayingTimeout,
-                                  config.store.screensaverPlayingBlank,
+                                  runtime.brightness,
+                                  runtime.numPlaylist,
+                                  runtime.dspOn,
+                                  runtime.contrast,
+                                  runtime.screensaverEnabled,
+                                  runtime.screensaverTimeout,
+                                  runtime.screensaverBlank,
+                                  runtime.screensaverPlayingEnabled,
+                                  runtime.screensaverPlayingTimeout,
+                                  runtime.screensaverPlayingBlank,
                                   uiTimeoutConfig().stationListSeconds,
                                   uiTimeoutConfig().btTransportSeconds,
                                   VOXONE_HAS_BT &&
@@ -3290,7 +3304,7 @@ void NetServer::processQueue(){
       }
       case STATION:       requestOnChange(STATIONNAME, clientId); requestOnChange(ITEM, clientId); break;
       case STATIONNAME:   formatWsTextPayload(wsBuf, sizeof(wsBuf), "nameset", config.station.name); break;
-      case ITEM:          sprintf (wsBuf, "{\"current\": %d}", config.lastStation()); break;
+      case ITEM:          sprintf (wsBuf, "{\"current\": %d}", runtime.lastStation); break;
       case TITLE: {
         char interpreted[BUFLEN + 1];
         stationMetaDisplay(config.station.title, config.station.metadataMode == STATION_META_SWAP,
@@ -3299,12 +3313,18 @@ void NetServer::processQueue(){
         serialCli.printf("##CLI.META#: %s\n> ", interpreted);
         break;
       }
-      case VOLUME:        sprintf (wsBuf, "{\"payload\":[{\"id\":\"volume\",\"value\":%d},{\"id\":\"volume100\",\"value\":%d},{\"id\":\"muted\",\"value\":%d},{\"id\":\"maximumVolume\",\"value\":%d},{\"id\":\"startupMode\",\"value\":%d},{\"id\":\"startupFixedVolume\",\"value\":%d}]}", config.store.volume, config.userVolume, player.isMuted(), config.store.maximumVolume, config.store.startupMode, config.store.startupFixedVolume); serialCli.printf("##CLI.VOL#: %d\n", config.store.volume); break;
-      case NRSSI:         rssi = WiFi.RSSI(); sprintf (wsBuf, "{\"payload\":[{\"id\":\"rssi\", \"value\": %d}, {\"id\":\"heap\", \"value\": %d}]}", rssi, (player.isRunning() && config.store.audioinfo)?(int)(100*player.inBufferFilled()/playerBufMax):0); /*rssi = 255;*/ break;
+      case VOLUME: {
+        const PlayerRuntimeVolumeSnapshot volume =
+            player.runtimeVolumeSnapshot();
+        sprintf (wsBuf, "{\"payload\":[{\"id\":\"volume\",\"value\":%d},{\"id\":\"volume100\",\"value\":%d},{\"id\":\"muted\",\"value\":%d},{\"id\":\"maximumVolume\",\"value\":%d},{\"id\":\"startupMode\",\"value\":%d},{\"id\":\"startupFixedVolume\",\"value\":%d}]}", volume.config.volume, volume.output.userVolume, volume.output.muted, volume.config.maximumVolume, volume.config.startupMode, volume.config.startupFixedVolume);
+        serialCli.printf("##CLI.VOL#: %d\n", volume.config.volume);
+        break;
+      }
+      case NRSSI:         rssi = WiFi.RSSI(); sprintf (wsBuf, "{\"payload\":[{\"id\":\"rssi\", \"value\": %d}, {\"id\":\"heap\", \"value\": %d}]}", rssi, (player.isRunning() && runtime.audioInfo)?(int)(100*player.inBufferFilled()/playerBufMax):0); /*rssi = 255;*/ break;
       case BITRATE:       sprintf (wsBuf, "{\"payload\":[{\"id\":\"bitrate\", \"value\": %d}, {\"id\":\"fmt\", \"value\": \"%s\"}]}", config.station.bitrate, getFormat(config.configFmt)); break;
       case MODE:          sprintf (wsBuf, "{\"payload\":[{\"id\":\"playerwrap\", \"value\": \"%s\"}]}", player.status() == PLAYING ? "playing" : "stopped"); serialCli.info(); break;
-      case EQUALIZER:     sprintf (wsBuf, "{\"payload\":[{\"id\":\"bass\", \"value\": %d}, {\"id\": \"middle\", \"value\": %d}, {\"id\": \"trebble\", \"value\": %d}]}", config.store.bass, config.store.middle, config.store.trebble); break;
-      case BALANCE:       sprintf (wsBuf, "{\"payload\":[{\"id\": \"balance\", \"value\": %d}]}", config.store.balance); break;
+      case EQUALIZER:     sprintf (wsBuf, "{\"payload\":[{\"id\":\"bass\", \"value\": %d}, {\"id\": \"middle\", \"value\": %d}, {\"id\": \"trebble\", \"value\": %d}]}", runtime.bass, runtime.middle, runtime.treble); break;
+      case BALANCE:       sprintf (wsBuf, "{\"payload\":[{\"id\": \"balance\", \"value\": %d}]}", runtime.balance); break;
       case WEBSTATUS:     formatWebStatus(wsBuf, sizeof(wsBuf)); break;
       default:          break;
     }
@@ -3394,9 +3414,10 @@ void NetServer::processVolumeUpdate(){
   if(!pending) return;
 
   _lastVolumeUpdate = now;
-  sprintf(wsBuf, "{\"payload\":[{\"id\":\"volume\",\"value\":%d},{\"id\":\"volume100\",\"value\":%d},{\"id\":\"muted\",\"value\":%d},{\"id\":\"maximumVolume\",\"value\":%d},{\"id\":\"startupMode\",\"value\":%d},{\"id\":\"startupFixedVolume\",\"value\":%d}]}", config.store.volume, config.userVolume, player.isMuted(), config.store.maximumVolume, config.store.startupMode, config.store.startupFixedVolume);
+  const PlayerRuntimeVolumeSnapshot volume = player.runtimeVolumeSnapshot();
+  sprintf(wsBuf, "{\"payload\":[{\"id\":\"volume\",\"value\":%d},{\"id\":\"volume100\",\"value\":%d},{\"id\":\"muted\",\"value\":%d},{\"id\":\"maximumVolume\",\"value\":%d},{\"id\":\"startupMode\",\"value\":%d},{\"id\":\"startupFixedVolume\",\"value\":%d}]}", volume.config.volume, volume.output.userVolume, volume.output.muted, volume.config.maximumVolume, volume.config.startupMode, volume.config.startupFixedVolume);
   if(hasWebClients) securityWebSocketTextAll(wsBuf);
-  serialCli.printf("##CLI.VOL#: %d\n", config.store.volume);
+  serialCli.printf("##CLI.VOL#: %d\n", volume.config.volume);
   mqttPublishVolume();
 }
 
@@ -3649,17 +3670,20 @@ void NetServer::onWsMessage(void *arg, const uint8_t *data, size_t len,
     }
     if (strcmp(_wscmd, "trebble") == 0) {
       int8_t valb = atoi(_wsval);
-      config.setTone(config.store.bass, config.store.middle, valb);
+      const auto runtime = config.runtimeSnapshot();
+      config.setTone(runtime.bass, runtime.middle, valb);
       return;
     }
     if (strcmp(_wscmd, "middle") == 0) {
       int8_t valb = atoi(_wsval);
-      config.setTone(config.store.bass, valb, config.store.trebble);
+      const auto runtime = config.runtimeSnapshot();
+      config.setTone(runtime.bass, valb, runtime.treble);
       return;
     }
     if (strcmp(_wscmd, "bass") == 0) {
       int8_t valb = atoi(_wsval);
-      config.setTone(valb, config.store.middle, config.store.trebble);
+      const auto runtime = config.runtimeSnapshot();
+      config.setTone(valb, runtime.middle, runtime.treble);
       return;
     }
     if(cmd.exec(_wscmd, _wsval, clientId)){
@@ -3957,7 +3981,7 @@ void onWsEvent(AsyncWebSocket *server, AsyncWebSocketClient *client, AwsEventTyp
         if (request) request->_tempObject = nullptr;
       }
       webSocketSessions.fetch_add(1);
-      if (config.store.audioinfo) Serial.printf("[WEBSOCKET] client #%lu connected from %s\n", client->id(), config.ipToStr(client->remoteIP()));
+      if (config.runtimeSnapshot().audioInfo) Serial.printf("[WEBSOCKET] client #%lu connected from %s\n", client->id(), config.ipToStr(client->remoteIP()));
       if (updateNetworkQuiescing.load()) {
         client->close(1001, "VoxOne restarting");
       } else if (webSocketClientAuthorization(
@@ -3968,7 +3992,7 @@ void onWsEvent(AsyncWebSocket *server, AsyncWebSocketClient *client, AwsEventTyp
       break;
     }
     case WS_EVT_DISCONNECT:
-      if (config.store.audioinfo) Serial.printf("[WEBSOCKET] client #%lu disconnected\n", client->id());
+      if (config.runtimeSnapshot().audioInfo) Serial.printf("[WEBSOCKET] client #%lu disconnected\n", client->id());
       netserver.cancelClientRequests(client->id());
       if (auto* binding = webSocketBinding(client)) {
         voxone::security::SecuritySessionService::clearBinding(*binding);

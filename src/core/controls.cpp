@@ -111,7 +111,7 @@ void initControls() {
     encoder.begin();
     encoder.setup(readEncoderISR);
     encoder.setBoundaries(0, 254, true);
-    encoder.setAcceleration(config.store.encacc);
+    encoder.setAcceleration(config.runtimeSnapshot().encoderAcceleration);
     configureOkButton(localInputButtons[2], hardware.localInput.key);
   }
 #endif
@@ -313,7 +313,7 @@ void onBtnClick(int id) {
           }
         } else {
           if (uiState.mode() == PLAYER) {
-            if(config.store.skipPlaylistUpDown){
+            if(config.runtimeSnapshot().skipPlaylistUpDown){
               if (id == EVT_BTNUP) {
                 player.prev();
               } else {
@@ -370,6 +370,6 @@ void onBtnDoubleClick(int id) {
 void setEncAcceleration(uint16_t acc){
   config.saveValue(&config.store.encacc, acc);
 #if ENC_BTNL!=255
-  encoder.setAcceleration(config.store.encacc);
+  encoder.setAcceleration(acc);
 #endif
 }

@@ -120,6 +120,7 @@ void SerialCli::commandError(uint8_t clientId) {
 }
 
 void SerialCli::info() {
+  const auto runtime = config.runtimeSnapshot();
   printf("##CLI.INFO#\n");
   strftime(config.tmpBuf, sizeof(config.tmpBuf), "%Y-%m-%dT%H:%M:%S%z", &network.timeinfo);
   printf("##SYS.DATE#: %s\n", config.tmpBuf);
@@ -130,7 +131,7 @@ void SerialCli::info() {
                        interpreted, sizeof(interpreted));
     printf("##CLI.META#: %s\n", interpreted);
   }
-  printf("##CLI.VOL#: %d\n", config.store.volume);
+  printf("##CLI.VOL#: %d\n", runtime.volume);
   if (player.status() == PLAYING) {
     printf("##CLI.PLAYING#\n");
   } else {
@@ -252,7 +253,8 @@ void SerialCli::on_input(const char* str, uint8_t clientId) {
       return;
     }
     if (strcmp(str, "cli.vol") == 0 || strcmp(str, "vol") == 0) {
-      printf(clientId, "##CLI.VOL#: %d\n> ", config.store.volume);
+      printf(clientId, "##CLI.VOL#: %d\n> ",
+             config.runtimeSnapshot().volume);
       return;
     }
     if (strcmp(str, "cli.vol-") == 0 || strcmp(str, "vol-") == 0) {
@@ -277,7 +279,8 @@ void SerialCli::on_input(const char* str, uint8_t clientId) {
       return;
     }
     if (strcmp(str, "cli.audioinfo") == 0 || strcmp(str, "audioinfo") == 0) {
-      printf(clientId, "##CLI.AUDIOINFO#: %d\n> ", config.store.audioinfo > 0);
+      printf(clientId, "##CLI.AUDIOINFO#: %d\n> ",
+             config.runtimeSnapshot().audioInfo);
       return;
     }
     int ainfo;
@@ -285,11 +288,13 @@ void SerialCli::on_input(const char* str, uint8_t clientId) {
         voxone::serialcli::matchInt(str, "cli.audioinfo(\"%d\")%n", ainfo) ||
         voxone::serialcli::matchInt(str, "audioinfo %d%n", ainfo)) {
       config.saveValue(&config.store.audioinfo, ainfo > 0);
-      printf(clientId, "new audioinfo value is: %d\n> ", config.store.audioinfo);
+      printf(clientId, "new audioinfo value is: %d\n> ",
+             config.runtimeSnapshot().audioInfo);
       return;
     }
     if (strcmp(str, "cli.smartstart") == 0 || strcmp(str, "smartstart") == 0) {
-      printf(clientId, "##CLI.SMARTSTART#: %d\n> ", config.store.smartstart);
+      printf(clientId, "##CLI.SMARTSTART#: %d\n> ",
+             config.runtimeSnapshot().smartStart);
       return;
     }
     int sstart;
@@ -297,7 +302,8 @@ void SerialCli::on_input(const char* str, uint8_t clientId) {
         voxone::serialcli::matchInt(str, "cli.smartstart(\"%d\")%n", sstart) ||
         voxone::serialcli::matchInt(str, "smartstart %d%n", sstart)) {
       config.saveValue(&config.store.smartstart, static_cast<uint8_t>(sstart));
-      printf(clientId, "new smartstart value is: %d\n> ", config.store.smartstart);
+      printf(clientId, "new smartstart value is: %d\n> ",
+             config.runtimeSnapshot().smartStart);
       return;
     }
     if (strcmp(str, "cli.list") == 0 || strcmp(str, "list") == 0) {
@@ -314,6 +320,7 @@ void SerialCli::on_input(const char* str, uint8_t clientId) {
       return;
     }
     if (strcmp(str, "cli.info") == 0 || strcmp(str, "info") == 0) {
+      const auto runtime = config.runtimeSnapshot();
       printf(clientId, "##CLI.INFO#\n");
       strftime(config.tmpBuf, sizeof(config.tmpBuf), "%Y-%m-%dT%H:%M:%S%z", &network.timeinfo);
       printf(clientId, "##SYS.DATE#: %s\n", config.tmpBuf);
@@ -324,7 +331,7 @@ void SerialCli::on_input(const char* str, uint8_t clientId) {
                            interpreted, sizeof(interpreted));
         printf(clientId, "##CLI.META#: %s\n", interpreted);
       }
-      printf(clientId, "##CLI.VOL#: %d\n", config.store.volume);
+      printf(clientId, "##CLI.VOL#: %d\n", runtime.volume);
       if (player.status() == PLAYING) {
         printf(clientId, "##CLI.PLAYING#\n");
       } else {
@@ -344,7 +351,9 @@ void SerialCli::on_input(const char* str, uint8_t clientId) {
       return;
     }
     if (strcmp(str, "sys.tzo") == 0 || strcmp(str, "tzo") == 0) {
-      printf(clientId, "##SYS.TZO#: %d:%d\n> ", config.store.tzHour, config.store.tzMin);
+      const auto runtime = config.runtimeSnapshot();
+      printf(clientId, "##SYS.TZO#: %d:%d\n> ",
+             runtime.timezoneHour, runtime.timezoneMinute);
       return;
     }
     //int16_t tzh, tzm;
@@ -358,10 +367,13 @@ void SerialCli::on_input(const char* str, uint8_t clientId) {
       if (tzm < 0) tzm = 0;
       if (tzm > 59) tzm = 59;
       config.setTimezone((int8_t)tzh, (int8_t)tzm);
+      const auto runtime = config.runtimeSnapshot();
       if(tzh<0){
-        printf(clientId, "new timezone offset: %03d:%02d\n", config.store.tzHour, config.store.tzMin);
+        printf(clientId, "new timezone offset: %03d:%02d\n",
+               runtime.timezoneHour, runtime.timezoneMinute);
       }else{
-        printf(clientId, "new timezone offset: %02d:%02d\n", config.store.tzHour, config.store.tzMin);
+        printf(clientId, "new timezone offset: %02d:%02d\n",
+               runtime.timezoneHour, runtime.timezoneMinute);
       }
       network.requestTimeSync(true);
       return;
@@ -372,10 +384,13 @@ void SerialCli::on_input(const char* str, uint8_t clientId) {
       if (tzh < -12) tzh = -12;
       if (tzh > 14) tzh = 14;
       config.setTimezone((int8_t)tzh, 0);
+      const auto runtime = config.runtimeSnapshot();
       if(tzh<0){
-        printf(clientId, "new timezone offset: %03d:%02d\n", config.store.tzHour, config.store.tzMin);
+        printf(clientId, "new timezone offset: %03d:%02d\n",
+               runtime.timezoneHour, runtime.timezoneMinute);
       }else{
-        printf(clientId, "new timezone offset: %02d:%02d\n", config.store.tzHour, config.store.tzMin);
+        printf(clientId, "new timezone offset: %02d:%02d\n",
+               runtime.timezoneHour, runtime.timezoneMinute);
       }
       network.requestTimeSync(true);
       return;
@@ -391,7 +406,7 @@ void SerialCli::on_input(const char* str, uint8_t clientId) {
         voxone::serialcli::matchInt(str, "dim %d%n", tzh)) {
       if (tzh < 0) tzh = 0;
       if (tzh > 100) tzh = 100;
-      config.store.brightness = (uint8_t)tzh;
+      config.setRuntimeBrightness((uint8_t)tzh);
       config.setBrightness(true);
       return;
     }
@@ -471,13 +486,14 @@ void SerialCli::on_input(const char* str, uint8_t clientId) {
     return;
   }
   if (strcmp(str, "wifi.station") == 0 || strcmp(str, "station") == 0 || strcmp(str, "ssid") == 0) {
+    const uint8_t lastSsid = config.runtimeSnapshot().lastSsid;
     printf(clientId, "#WIFI.STATION#\n");
     File file = SPIFFS.open(SSIDS_PATH, "r");
     if (file && !file.isDirectory()) {
       uint8_t c = 1;
       while (file.available()) {
         if (config.parseSsid(file.readStringUntil('\n').c_str(), config.tmpBuf, config.tmpBuf2)) {
-          if(c==config.store.lastSSID)
+          if(c==lastSsid)
             printf(clientId, "%d: %s, password %s\n", c, config.tmpBuf,
                    config.tmpBuf2[0] ? "set" : "empty");
           c++;

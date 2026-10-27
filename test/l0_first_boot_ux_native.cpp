@@ -21,7 +21,8 @@ int main() {
   const std::string page = readFile("src/core/netserver.h");
   const std::string display = readFile("src/core/display.cpp");
 
-  assert(driver.find("config.store.flipscreen?1:3") != std::string::npos);
+  assert(driver.find("config.runtimeSnapshot().flipScreen?1:3") !=
+         std::string::npos);
   assert(network.find("firstBootSetup ? WiFi.softAP(apSsid)") !=
          std::string::npos);
   assert(network.find("WiFi.softAP(apSsid, apPassword)") !=

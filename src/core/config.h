@@ -6,6 +6,7 @@
 #include <SPIFFS.h>
 #include <EEPROM.h>
 #include "config_persistence.h"
+#include "config_runtime_snapshot.h"
 #include "www_asset_integrity.h"
 #include "wifi_config_parser.h"
 #include <freertos/semphr.h>
@@ -155,7 +156,6 @@ class Config {
     bool     currentWwwReady;
     voxone::www_integrity::Report wwwAssetIntegrity;
     bool     radioPlaylistReady;
-    uint16_t vuThreshold;
     uint16_t screensaverTicks;
     uint16_t screensaverPlayingTicks;
     bool     isScreensaver;
@@ -172,6 +172,12 @@ class Config {
     voxone::config_format::ConfigStorageMode storageMode() const { return _storage.mode(); }
     voxone::config_format::ConfigRecordStatus startupStatus() const { return _startupStatus; }
     bool storedBtEnabled() const { return _storage.storedBtEnabled(); }
+    voxone::config_runtime::Snapshot runtimeSnapshot() const { return _runtime.read(); }
+    bool audioVuMeterEnabled() const { return _runtime.audioVuMeterEnabled(); }
+    void resetVuThreshold() { _vuThreshold.reset(); }
+    void observeVuLevel(uint16_t value) { _vuThreshold.observe(value); }
+    void reduceVuThreshold(uint16_t value) { _vuThreshold.reduce(value); }
+    uint16_t vuThresholdSnapshot() const { return _vuThreshold.read(); }
     void loadTheme();
     uint8_t setVolume(uint8_t val);
     uint8_t setVolumeState(uint8_t raw, uint8_t user);
@@ -201,20 +207,18 @@ class Config {
     void indexPlaylist();
     uint16_t playlistLength();
     uint16_t lastStation(){
-      return store.lastStation;
+      return runtimeSnapshot().lastStation;
     }
-    void lastStation(uint16_t newstation){
-      const bool clearMarker = newstation != 0 &&
-                               store._reserved == VOXONE_NO_STATION_MARKER;
-      if (clearMarker)
-        saveValue(&store._reserved, static_cast<uint16_t>(0), false);
-      saveValue(&store.lastStation, newstation, true, clearMarker);
+    bool intentionalNoStation() const {
+      return runtimeSnapshot().intentionalNoStation;
     }
+    void lastStation(uint16_t newstation);
     char * stationByNum(uint16_t num);
     void setTimezone(int8_t tzh, int8_t tzm);
     void setTimezoneOffset(uint16_t tzo);
     uint16_t getTimezoneOffset();
     void setBrightness(bool dosave=false);
+    void setRuntimeBrightness(uint8_t value);
     void setDspOn(bool dspon, bool saveval = true);
     void sleepForAfter(uint16_t sleepfor, uint16_t sleepafter=0);
     void bootInfo();
@@ -239,11 +243,13 @@ class Config {
     void saveValue(T *field, const T &value, bool commit=true, bool force=false){
       WriteLock lock(_persistMutex);
       _storage.update(*field, value, force);
+      _publishRuntimeLocked();
       if (commit && _storage.dirty() && !_startupReadOnly) persistV7();
     }
     void saveValue(char *field, const char *value, size_t N, bool commit=true, bool force=false) {
       WriteLock lock(_persistMutex);
       _storage.update(field, value, N, force);
+      _publishRuntimeLocked();
       if (commit && _storage.dirty() && !_startupReadOnly) persistV7();
     }
     uint32_t getChipId(){
@@ -254,6 +260,7 @@ class Config {
       return chipId;
     }
   private:
+    friend class Player;
     voxone::config_format::ConfigRecordStatus _startupStatus =
         voxone::config_format::ConfigRecordStatus::INVALID_ARGUMENT;
     class WriteLock {
@@ -268,6 +275,8 @@ class Config {
       SemaphoreHandle_t mutex_;
     };
     SemaphoreHandle_t _persistMutex = nullptr;
+    voxone::config_runtime::SnapshotStore _runtime;
+    voxone::config_runtime::VuThresholdRuntime _vuThreshold;
     voxone::config_format::ConfigPersistence _storage;
     bool _startupReadOnly = false;
     bool _rtcFound;
@@ -278,6 +287,7 @@ class Config {
     void _makeDefaultMdnsName(char *buffer, size_t size);
     void _normalizeProductConfig();
     void _normalizeAudioConfig();
+    void _publishRuntimeLocked();
     void _initHW();
 };
 

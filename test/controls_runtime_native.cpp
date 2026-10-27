@@ -66,8 +66,9 @@ int main() {
          std::string::npos);
   assert(display.find("constexpr uint16_t kDisplayVolumeMax = 100;") !=
          std::string::npos);
-  assert(display.find("static uint8_t displayedVolume() { return config.userVolume; }") !=
+  assert(display.find("const MuteOutputSnapshot output = player.outputSnapshot()") !=
          std::string::npos);
+  assertMissing(display, "config.userVolume");
   assertMissing(display, "kDisplayVolumeMax = 254");
   assertMissing(display, "displayedVolume() { return config.store.volume; }");
 

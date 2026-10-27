@@ -110,6 +110,7 @@ void onMqttConnect(bool sessionPresent) {
 
 void mqttPublishStatus() {
   if (!runtimeEnabled || !mqttClient.connected()) return;
+  const auto runtime = config.runtimeSnapshot();
   zeroBuffer();
   if (!makeTopic("status")) return;
   char name[BUFLEN / 2];
@@ -120,7 +121,8 @@ void mqttPublishStatus() {
   config.escapeQuotes(config.station.name, name, sizeof(name) - 10);
   config.escapeQuotes(interpreted, title, sizeof(title) - 10);
   sprintf(status, "{\"status\": %d, \"station\": %d, \"name\": \"%s\", \"title\": \"%s\", \"on\": %d}",
-      player.status() == PLAYING ? 1 : 0, config.lastStation(), name, title, config.store.dspon);
+      player.status() == PLAYING ? 1 : 0, runtime.lastStation, name, title,
+      runtime.dspOn);
   mqttClient.publish(topic, 0, true, status);
 }
 
@@ -139,7 +141,8 @@ void mqttPublishVolume() {
   zeroBuffer();
   if (!makeTopic("volume")) return;
   char volume[4];
-  snprintf(volume, sizeof(volume), "%u", static_cast<unsigned>(mqttUserToWire(config.userVolume)));
+  snprintf(volume, sizeof(volume), "%u", static_cast<unsigned>(
+      mqttUserToWire(player.outputSnapshot().userVolume)));
   mqttClient.publish(topic, 0, true, volume);
 }
 
@@ -160,7 +163,7 @@ void onMqttMessage(char* receivedTopic, char* payload, AsyncMqttClientMessagePro
     if (strcmp(buf, "volp") == 0) { player.stepUserVol(1); return; }
     if (cmd.exec(buf, "")) return;
     if (strcmp(buf, "turnoff") == 0) {
-      uint8_t smartstart = config.store.smartstart;
+      const uint8_t smartstart = config.runtimeSnapshot().smartStart;
       config.setDspOn(0);
       player.sendCommand({PR_STOP, 0});
       delay(100);
@@ -169,7 +172,9 @@ void onMqttMessage(char* receivedTopic, char* payload, AsyncMqttClientMessagePro
     }
     if (strcmp(buf, "turnon") == 0) {
       config.setDspOn(1);
-      if (config.store.smartstart == 1) player.sendCommand({PR_PLAY, config.lastStation()});
+      const auto runtime = config.runtimeSnapshot();
+      if (runtime.smartStart == 1)
+        player.sendCommand({PR_PLAY, runtime.lastStation});
       return;
     }
     int wire;

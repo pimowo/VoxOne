@@ -150,8 +150,9 @@ void startSecurityRecoveryDisplay() {
 
 #if USE_OTA
 void setupOTA(){
-  if(strlen(config.store.mdnsname)>0)
-    ArduinoOTA.setHostname(config.store.mdnsname);
+  const auto runtime = config.runtimeSnapshot();
+  if(strlen(runtime.mdnsName)>0)
+    ArduinoOTA.setHostname(runtime.mdnsName);
 #ifdef OTA_PASS
   ArduinoOTA.setPassword(OTA_PASS);
 #endif
@@ -280,8 +281,9 @@ void setup() {
   (void)voxone::display_scroll::initializeScrollSettingsRuntimePersistent();
   btRuntime.start();
 #if defined(VOXONE_PROFILE_L0)
-  voxone::dsp::initDspRuntime({config.store.bass, config.store.middle,
-                              config.store.trebble});
+  const auto dspConfig = config.runtimeSnapshot();
+  voxone::dsp::initDspRuntime(
+      {dspConfig.bass, dspConfig.middle, dspConfig.treble});
 #endif
   display.init();
   player.init();

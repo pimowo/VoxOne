@@ -274,7 +274,9 @@ void MyNetwork::WiFiLostConnection(WiFiEvent_t event, WiFiEventInfo_t info){
   }
   if(!network.beginReconnect){
     const bool temporaryRecovery = player.interruptTemporaryForNetwork();
-    Serial.printf("Lost connection, reconnecting to %s...\n", config.ssids[config.store.lastSSID-1].ssid);
+    const uint8_t lastSsid = config.runtimeSnapshot().lastSsid;
+    Serial.printf("Lost connection, reconnecting to %s...\n",
+                  config.ssids[lastSsid-1].ssid);
 #if VOXONE_HAS_BT && VOXONE_PIN_MAP_COMPLETE
     const bool radioSelected = !bluetoothSourceSelected();
 #else
@@ -386,7 +388,8 @@ void MyNetwork::loop() {
 
 bool MyNetwork::wifiBegin(bool silent){
   voxone::wifi::StartupRetryPolicy retry;
-  retry.begin(config.ssidsCount, config.store.lastSSID, millis());
+  const auto runtime = config.runtimeSnapshot();
+  retry.begin(config.ssidsCount, runtime.lastSsid, millis());
   while (retry.hasRemaining()) {
     while (!retry.due(millis())) delay(10);
     const auto current = retry.start(millis());
@@ -401,7 +404,7 @@ bool MyNetwork::wifiBegin(bool silent){
     presentationState.beginStaAttempt();
     activateStaAttempt(ls, current.ordinal, current.generation);
     const bool modeReady = WiFi.mode(WIFI_STA);
-    if(strlen(config.store.mdnsname)>0) WiFi.setHostname(config.store.mdnsname);
+    if(strlen(runtime.mdnsName)>0) WiFi.setHostname(runtime.mdnsName);
     const wl_status_t beginStatus = modeReady
         ? WiFi.begin(config.ssids[ls].ssid, config.ssids[ls].password)
         : WL_CONNECT_FAILED;
@@ -542,8 +545,9 @@ void MyNetwork::begin() {
   status = CONNECTED;
   staReconnectEnabled = true;
   runtimeCallbacksEnabled = true;
-  if(strlen(config.store.mdnsname)>0)
-    MDNS.begin(config.store.mdnsname);
+  const auto runtime = config.runtimeSnapshot();
+  if(strlen(runtime.mdnsName)>0)
+    MDNS.begin(runtime.mdnsName);
   mqttInit();
   
   Serial.println("##[BOOT]#\tdone");
@@ -597,11 +601,12 @@ void MyNetwork::raiseSoftAP() {
 
   const bool firstBootSetup =
       voxone::first_boot::shouldStartOpenSetupAp(config.ssidsCount);
+  const auto runtime = config.runtimeSnapshot();
   // Only the clean first boot keeps STA enabled for passive provisioning
   // scans. A later recovery AP preserves the existing protected behavior.
   const bool modeReady = WiFi.mode(firstBootSetup ? WIFI_AP_STA : WIFI_AP);
-  if (modeReady && strlen(config.store.mdnsname) > 0)
-    WiFi.softAPsetHostname(config.store.mdnsname);
+  if (modeReady && strlen(runtime.mdnsName) > 0)
+    WiFi.softAPsetHostname(runtime.mdnsName);
   const bool apReady = modeReady &&
       (firstBootSetup ? WiFi.softAP(apSsid) :
                         WiFi.softAP(apSsid, apPassword));
@@ -638,6 +643,7 @@ void MyNetwork::raiseSoftAP() {
     BOOTLOG("and go to http://%s/ to configure", apIp.c_str());
   }
   BOOTLOG("************************************************");
-  if (apReady && config.store.softapdelay > 0)
-    timekeeper.waitAndDo(static_cast<uint32_t>(config.store.softapdelay) * 60UL, rebootTime, DelayedActionSlot::REBOOT);
+  if (apReady && runtime.softApDelay > 0)
+    timekeeper.waitAndDo(static_cast<uint32_t>(runtime.softApDelay) * 60UL,
+                         rebootTime, DelayedActionSlot::REBOOT);
 }

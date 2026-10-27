@@ -9,7 +9,7 @@
 
 void audio_info(const char *info) {
   if(player.lockOutput) return;
-  if(config.store.audioinfo) serialCli.printf("##AUDIO.INFO#: %s\n", info);
+  if(config.runtimeSnapshot().audioInfo) serialCli.printf("##AUDIO.INFO#: %s\n", info);
   BitrateFormat detectedFormat = BF_UNKNOWN;
   if (strstr(info, "format is aac")  != NULL) detectedFormat = BF_AAC;
   if (strstr(info, "format is flac") != NULL) detectedFormat = BF_FLAC;
@@ -36,7 +36,7 @@ void audio_info(const char *info) {
 
 void audio_bitrate(const char *info)
 {
-  if(config.store.audioinfo) serialCli.printf("%s %s\n", "##AUDIO.BITRATE#:", info);
+  if(config.runtimeSnapshot().audioInfo) serialCli.printf("%s %s\n", "##AUDIO.BITRATE#:", info);
   config.station.bitrate = atoi(info) / 1000;
   display.putRequest(DBITRATE);
   netserver.requestOnChange(BITRATE, 0);

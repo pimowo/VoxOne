@@ -32,9 +32,9 @@ void DspCore::initDisplay() {
 
 void DspCore::clearDsp(bool black){ fillScreen(black?0:config.theme.background); }
 void DspCore::flip(){
-  setRotation(config.store.flipscreen?3:1);
+  setRotation(config.runtimeSnapshot().flipScreen?3:1);
 }
-void DspCore::invert(){ invertDisplay(config.store.invertdisplay); }
+void DspCore::invert(){ invertDisplay(config.runtimeSnapshot().invertDisplay); }
 void DspCore::sleep(void){ enableSleep(true); delay(150); enableDisplay(false); delay(150); }
 void DspCore::wake(void){ enableDisplay(true); delay(150); enableSleep(false); delay(150); }
 

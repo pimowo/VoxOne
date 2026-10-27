@@ -72,9 +72,10 @@ size_t AudioBuffer::init() {
     if(m_buffer == NULL) {
         // PSRAM not found, not configured or not enough available
         m_f_psram = false;
-        m_buffSize = m_buffSizeRAM * config.store.abuff;
+        const uint16_t audioBuffer = config.runtimeSnapshot().audioBuffer;
+        m_buffSize = m_buffSizeRAM * audioBuffer;
         m_buffer = (uint8_t*) calloc(m_buffSize, sizeof(uint8_t));
-        m_buffSize = m_buffSizeRAM * config.store.abuff - m_resBuffSizeRAM;
+        m_buffSize = m_buffSizeRAM * audioBuffer - m_resBuffSizeRAM;
     }
     if(!m_buffer)
         return 0;
@@ -535,7 +536,7 @@ bool Audio::connectToHost(const char* host, const char* user, const char* pwd,
     uint32_t t = millis();
     const uint16_t connectTimeout = m_f_ssl ? m_timeout_ms_ssl : m_timeout_ms;
     if(m_f_Log) AUDIO_INFO("connect to %s on port %d path %s", hostwoext, port, extension);
-    if(!config.store.watchdog){
+    if(!config.runtimeSnapshot().watchdog){
       res = _client->connect(hostwoext, port, connectTimeout);
     }else{
       res = false;
@@ -2351,7 +2352,7 @@ bool Audio::playChunk() {
  * Shamelessly borrowed from @schreibfaul1 https://github.com/schreibfaul1/ESP32-audioI2S/blob/1296374fc513a6d6bfaa3b1ca08f6ba938b18d99/src/Audio.cpp#L5030
  */
 void Audio::_computeVUlevel(int16_t sample[2]) {
-  if(!config.store.vumeter) return;
+  if(!config.audioVuMeterEnabled()) return;
   static uint8_t sampleArray[2][4][8] = {0};
   static uint8_t cnt0 = 0, cnt1 = 0, cnt2 = 0, cnt3 = 0, cnt4 = 0;
   static bool    f_vu = false;
@@ -2408,17 +2409,18 @@ void Audio::_computeVUlevel(int16_t sample[2]) {
   if(f_vu) {
     f_vu = false;
     vuLeft = avg(sampleArray[LEFTCHANNEL][3]);
-    if(vuLeft>config.vuThreshold)  config.vuThreshold = vuLeft;
+    config.observeVuLevel(vuLeft);
     vuRight = avg(sampleArray[RIGHTCHANNEL][3]);
-    if(vuRight>config.vuThreshold) config.vuThreshold = vuRight;
+    config.observeVuLevel(vuRight);
   }
   cnt1++;
 }
 
 uint16_t Audio::get_VUlevel(uint16_t dimension){
-  if(!config.store.vumeter || config.vuThreshold==0) return 0;
-  uint8_t L = map(vuLeft, config.vuThreshold, 0, 0, dimension);
-  uint8_t R = map(vuRight, config.vuThreshold, 0, 0, dimension);
+  const uint16_t threshold = config.vuThresholdSnapshot();
+  if(!config.audioVuMeterEnabled() || threshold==0) return 0;
+  uint8_t L = map(vuLeft, threshold, 0, 0, dimension);
+  uint8_t R = map(vuRight, threshold, 0, 0, dimension);
   return (L << 8) | R;
 }
 //---------------------------------------------------------------------------------------------------------------------

@@ -228,6 +228,7 @@ void Config::init() {
   store.lastUserVolume = bootVolume.user;
   // Read-only startup must not schedule a delayed legacy volume write either.
   volumeBootDirty = false;
+  _vuThreshold.reset();
   _normalizeProductConfig();
   _normalizeAudioConfig();
   // A valid v7 boot does not rewrite the record. Legacy/default records get
@@ -237,6 +238,7 @@ void Config::init() {
   if (startupWrite != voxone::config_format::ConfigWriteStatus::OK &&
       _storage.mode() != voxone::config_format::ConfigStorageMode::FUTURE_READ_ONLY)
     Serial.printf("[CONFIG] persistence: %s\n", voxone::config_format::configWriteMessage(startupWrite));
+  _publishRuntimeLocked();
   BOOTLOG("CONFIG_VERSION\t%d", store.version);
   _initHW();
   // Never format shared data automatically while a MAIN image may still be
@@ -297,7 +299,7 @@ char * Config::ipToStr(IPAddress ip){
 }
 bool Config::prepareForPlaying(uint16_t stationId, bool sourceResume){
   setDspOn(1);
-  vuThreshold = 0;
+  resetVuThreshold();
   screensaverTicks=SCREENSAVERSTARTUPDELAY;
   screensaverPlayingTicks=SCREENSAVERSTARTUPDELAY;
   display.putRequest(PSTOP);
@@ -314,12 +316,13 @@ bool Config::prepareForPlaying(uint16_t stationId, bool sourceResume){
   netserver.requestOnChange(MODE, 0);
   netserver.loop();
   netserver.loop();
-  if(radioPlayPreparationUpdatesSmartStart(sourceResume, store.smartstart))
+  if(radioPlayPreparationUpdatesSmartStart(
+         sourceResume, runtimeSnapshot().smartStart))
     setSmartStart(0);
   return true;
 }
 void Config::configPostPlaying(){
-  if(store.smartstart!=2) setSmartStart(1);
+  if(runtimeSnapshot().smartStart!=2) setSmartStart(1);
   netserver.requestOnChange(MODE, 0);
   //transitionUiMode(PLAYER);
   display.putRequest(PSTART);
@@ -329,12 +332,13 @@ void Config::initRadioPlaylist(){
   if (voxone::radioPlaylistShouldInitialize(spiffsMounted, radioPlaylistReady))
     initPlaylist();
   uint16_t cs = playlistLength();
-  _lastStation = store.lastStation;
+  const auto runtime = runtimeSnapshot();
+  _lastStation = runtime.lastStation;
   if (cs==0) _lastStation=0;
   else if (_lastStation>cs) _lastStation=1;
   log_i("%d" ,_lastStation);
   if (_lastStation == 0 && cs > 0 &&
-      store._reserved!=VOXONE_NO_STATION_MARKER) {
+      !runtime.intentionalNoStation) {
     _lastStation = 1;
   }
   lastStation(_lastStation);
@@ -569,7 +573,12 @@ bool Config::setDefaults() {
       [this](config_t&) { _applyDefaults(); });
   if (result != voxone::config_format::ConfigWriteStatus::BLOCKED) {
     btRuntime.setEnabled(supportsBt);
+    portENTER_CRITICAL(&playerVolumeMux);
     userVolume = store.lastUserVolume;
+    player._syncOutputSilence(userVolume);
+    portEXIT_CRITICAL(&playerVolumeMux);
+    _vuThreshold.reset();
+    _publishRuntimeLocked();
   }
   if (result != voxone::config_format::ConfigWriteStatus::OK)
     Serial.printf("[CONFIG] factory reset: %s\n", voxone::config_format::configWriteMessage(result));
@@ -578,8 +587,11 @@ bool Config::setDefaults() {
 
 void Config::setTimezone(int8_t tzh, int8_t tzm) {
   // Preserve legacy timezone storage without affecting the fixed Warsaw TZ.
-  saveValue(&store.tzHour, tzh, false);
-  saveValue(&store.tzMin, tzm);
+  WriteLock lock(_persistMutex);
+  _storage.update(store.tzHour, tzh);
+  _storage.update(store.tzMin, tzm);
+  _publishRuntimeLocked();
+  if (_storage.dirty() && !_startupReadOnly) persistV7();
 }
 
 void Config::setTimezoneOffset(uint16_t tzo) {
@@ -597,15 +609,20 @@ void Config::saveVolume(){
 }
 
 uint8_t Config::setVolume(uint8_t val) {
-  const VolumeState state = volumeStateFromRaw(val, store.maximumVolume);
+  const VolumeState state = volumeStateFromRaw(
+      val, runtimeSnapshot().maximumVolume);
   return setVolumeState(state.raw, state.user);
 }
 
 uint8_t Config::setVolumeState(uint8_t raw, uint8_t user) {
   WriteLock lock(_persistMutex);
+  portENTER_CRITICAL(&playerVolumeMux);
   store.volume = raw;
   userVolume = user;
   store.lastUserVolume = user;
+  player._syncOutputSilence(user);
+  portEXIT_CRITICAL(&playerVolumeMux);
+  _publishRuntimeLocked();
   display.putRequest(DRAWVOL);
   netserver.requestOnChange(VOLUME, 0);
   return store.volume;
@@ -615,7 +632,9 @@ void Config::setMaximumVolume(uint8_t maximum) {
   WriteLock lock(_persistMutex);
   if (maximum < 1 || maximum > 100 || maximum == store.maximumVolume) return;
   const uint8_t oldMaximum = store.maximumVolume;
+  portENTER_CRITICAL(&playerVolumeMux);
   const uint8_t oldUser = userVolume;
+  portEXIT_CRITICAL(&playerVolumeMux);
   const uint8_t oldRaw = player.pendingRawAtMax(oldMaximum);
   const uint8_t oldOutput = player.volToI2S(oldRaw);
   store.maximumVolume = maximum;
@@ -650,9 +669,10 @@ bool Config::setTone(int8_t bass, int8_t middle, int8_t trebble) {
   bool persisted = true;
   if (store.bass != bass || store.middle != middle || store.trebble != trebble ||
       _storage.dirty() || _storage.mode() != voxone::config_format::ConfigStorageMode::V7) {
-    saveValue(&store.bass, bass, false);
-    saveValue(&store.middle, middle, false);
-    saveValue(&store.trebble, trebble, false);
+    _storage.update(store.bass, bass);
+    _storage.update(store.middle, middle);
+    _storage.update(store.trebble, trebble);
+    _publishRuntimeLocked();
     persisted = persistV7();
   }
   player.setTone(store.bass, store.middle, store.trebble);
@@ -669,14 +689,26 @@ void Config::setSmartStart(uint8_t ss) {
 }
 
 void Config::setBalance(int8_t balance) {
-  saveValue(&store.balance, clampBalance(balance));
-  player.setBalance(store.balance);
+  balance = clampBalance(balance);
+  saveValue(&store.balance, balance);
+  player.setBalance(balance);
   netserver.requestOnChange(BALANCE, 0);
 }
 
 uint8_t Config::setLastStation(uint16_t val) {
   lastStation(val);
-  return store.lastStation;
+  return static_cast<uint8_t>(runtimeSnapshot().lastStation);
+}
+
+void Config::lastStation(uint16_t newstation) {
+  WriteLock lock(_persistMutex);
+  const bool clearMarker = newstation != 0 &&
+                           store._reserved == VOXONE_NO_STATION_MARKER;
+  if (clearMarker)
+    _storage.update(store._reserved, static_cast<uint16_t>(0));
+  _storage.update(store.lastStation, newstation, clearMarker);
+  _publishRuntimeLocked();
+  if (_storage.dirty() && !_startupReadOnly) persistV7();
 }
 
 bool Config::setLastStationChecked(uint16_t val, bool intentionalZero) {
@@ -689,11 +721,13 @@ bool Config::setLastStationChecked(uint16_t val, bool intentionalZero) {
   const uint16_t previousMarker = store._reserved;
   store.lastStation = val;
   store._reserved = marker;
+  _publishRuntimeLocked();
   // Playlist recovery can call this from init(); preserve EEPROM during load.
   if (_startupReadOnly) return true;
   if (persistV7()) return true;
   store.lastStation = previous;
   store._reserved = previousMarker;
+  _publishRuntimeLocked();
   // Keep the previous RAM selection on failure. Never attempt a legacy
   // rollback write or claim the failed commit was undone in flash.
   return false;
@@ -701,16 +735,16 @@ bool Config::setLastStationChecked(uint16_t val, bool intentionalZero) {
 
 uint8_t Config::setCountStation(uint16_t val) {
   saveValue(&store.countStation, val);
-  return store.countStation;
+  return static_cast<uint8_t>(runtimeSnapshot().countStation);
 }
 
 uint8_t Config::setLastSSID(uint8_t val) {
   saveValue(&store.lastSSID, val);
-  return store.lastSSID;
+  return runtimeSnapshot().lastSsid;
 }
 
 void Config::setTitle(const char* title) {
-  vuThreshold = 0;
+  resetVuThreshold();
   memset(config.station.title, 0, BUFLEN);
   strlcpy(config.station.title, title, BUFLEN);
   u8fix(config.station.title);
@@ -757,7 +791,7 @@ bool Config::loadStation(uint16_t ls) {
   if (!guard) return false;
   station.id = 0;
   station.metadataMode = STATION_META_NORMAL;
-  if (ls == 0 && store._reserved == VOXONE_NO_STATION_MARKER) {
+  if (ls == 0 && intentionalNoStation()) {
     station.name[0] = '\0';
     station.url[0] = '\0';
     station.ovol = 0;
@@ -921,10 +955,17 @@ bool Config::saveWifiCredentials(const char* ssid, const char* password) {
 }
 
 void Config::setTimeConf(){
-  if(strlen(store.sntp1)>0 && strlen(store.sntp2)>0){
-    configTzTime(WARSAW_TZ, store.sntp1, store.sntp2);
-  }else if(strlen(store.sntp1)>0){
-    configTzTime(WARSAW_TZ, store.sntp1);
+  char primary[sizeof(store.sntp1)]{};
+  char secondary[sizeof(store.sntp2)]{};
+  {
+    WriteLock lock(_persistMutex);
+    strlcpy(primary, store.sntp1, sizeof(primary));
+    strlcpy(secondary, store.sntp2, sizeof(secondary));
+  }
+  if(strlen(primary)>0 && strlen(secondary)>0){
+    configTzTime(WARSAW_TZ, primary, secondary);
+  }else if(strlen(primary)>0){
+    configTzTime(WARSAW_TZ, primary);
   }
   timekeeper.watchNtp();
 }
@@ -973,25 +1014,86 @@ bool Config::initNetwork() {
 void Config::setBrightness(bool dosave){
 #if BRIGHTNESS_PIN!=255
   if (!localDisplayInstalled()) return;
-  if(!store.dspon && dosave) {
-    display.wakeup();
+  bool wake = false;
+  uint8_t brightness = 0;
+  {
+    WriteLock lock(_persistMutex);
+    wake = !store.dspon && dosave;
+    brightness = store.brightness;
+    if(!store.dspon) store.dspon = true;
+    if(dosave){
+      _storage.update(store.brightness, store.brightness, true);
+      _storage.update(store.dspon, store.dspon, true);
+    }
+    _publishRuntimeLocked();
+    if (dosave && !_startupReadOnly) persistV7();
   }
-  analogWrite(BRIGHTNESS_PIN, map(store.brightness, 0, 100, 0, 255));
-  if(!store.dspon) store.dspon = true;
-  if(dosave){
-    saveValue(&store.brightness, store.brightness, false, true);
-    saveValue(&store.dspon, store.dspon, true, true);
-  }
+  if(wake) display.wakeup();
+  analogWrite(BRIGHTNESS_PIN, map(brightness, 0, 100, 0, 255));
 #endif
 #if BRIGHTNESS_PIN != 255
   if (dosave) netserver.requestOnChange(GETSCREEN, 0);
 #endif
 }
 
+void Config::setRuntimeBrightness(uint8_t value) {
+  WriteLock lock(_persistMutex);
+  store.brightness = value;
+  _publishRuntimeLocked();
+}
+
+void Config::_publishRuntimeLocked() {
+  voxone::config_runtime::Snapshot runtime{};
+  runtime.volume = store.volume;
+  runtime.userVolume = userVolume;
+  runtime.lastUserVolume = store.lastUserVolume;
+  runtime.maximumVolume = store.maximumVolume;
+  runtime.startupMode = store.startupMode;
+  runtime.startupFixedVolume = store.startupFixedVolume;
+  runtime.balance = store.balance;
+  runtime.bass = store.bass;
+  runtime.middle = store.middle;
+  runtime.treble = store.trebble;
+  runtime.lastStation = store.lastStation;
+  runtime.countStation = store.countStation;
+  runtime.lastSsid = store.lastSSID;
+  runtime.intentionalNoStation =
+      store._reserved == VOXONE_NO_STATION_MARKER;
+  runtime.audioInfo = store.audioinfo;
+  runtime.smartStart = store.smartstart;
+  runtime.vuMeter = store.vumeter;
+  runtime.softApDelay = store.softapdelay;
+  runtime.flipScreen = store.flipscreen;
+  runtime.invertDisplay = store.invertdisplay;
+  runtime.numPlaylist = store.numplaylist;
+  runtime.dspOn = store.dspon;
+  runtime.brightness = store.brightness;
+  runtime.contrast = store.contrast;
+  runtime.screensaverEnabled = store.screensaverEnabled;
+  runtime.screensaverTimeout = store.screensaverTimeout;
+  runtime.screensaverBlank = store.screensaverBlank;
+  runtime.screensaverPlayingEnabled = store.screensaverPlayingEnabled;
+  runtime.screensaverPlayingTimeout = store.screensaverPlayingTimeout;
+  runtime.screensaverPlayingBlank = store.screensaverPlayingBlank;
+  runtime.skipPlaylistUpDown = store.skipPlaylistUpDown;
+  runtime.audioBuffer = store.abuff;
+  runtime.watchdog = store.watchdog;
+  runtime.timeSyncInterval = store.timeSyncInterval;
+  runtime.timeSyncIntervalRtc = store.timeSyncIntervalRTC;
+  runtime.timezoneHour = store.tzHour;
+  runtime.timezoneMinute = store.tzMin;
+  runtime.encoderAcceleration = store.encacc;
+  runtime.volumeSteps = store.volsteps;
+  strlcpy(runtime.mdnsName, store.mdnsname, sizeof(runtime.mdnsName));
+  _runtime.publish(runtime);
+}
+
 void Config::setDspOn(bool dspon, bool saveval){
   if(saveval){
-    store.dspon = dspon;
-    saveValue(&store.dspon, store.dspon, true, true);
+    WriteLock lock(_persistMutex);
+    _storage.update(store.dspon, dspon, true);
+    _publishRuntimeLocked();
+    if (!_startupReadOnly) persistV7();
   }
   if (!localDisplayInstalled()) return;
   if(!dspon){
@@ -1002,7 +1104,8 @@ void Config::setDspOn(bool dspon, bool saveval){
   }else{
     display.wakeup();
 #if BRIGHTNESS_PIN!=255
-  analogWrite(BRIGHTNESS_PIN, map(store.brightness, 0, 100, 0, 255));
+    analogWrite(BRIGHTNESS_PIN, map(
+        runtimeSnapshot().brightness, 0, 100, 0, 255));
 #endif
   }
 }

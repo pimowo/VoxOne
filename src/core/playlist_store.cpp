@@ -501,7 +501,7 @@ PlaylistWriteError PlaylistStore::commit(const std::vector<PlaylistRow>& rows,
   phaseStartedUs = timestamp();
   const uint16_t previousCurrent = config.lastStation();
   const bool previousZeroIntentional =
-      config.store._reserved == VOXONE_NO_STATION_MARKER;
+      config.intentionalNoStation();
   if (!config.setLastStationChecked(current)) {
     rollbackPlaylist();
     timing.persistUs = timestamp() - phaseStartedUs;

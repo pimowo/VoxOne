@@ -192,10 +192,11 @@ void sourceManagerLoop() {
   BtVolumeSessionEvent volumeEvent;
   while (btLink.takeVolumeSessionEvent(volumeEvent)) {
     if (!sessionCapable || update.btDisconnected) continue;
-    uint8_t peerUser = config.userVolume;
+    const uint8_t currentUser = player.outputSnapshot().userVolume;
+    uint8_t peerUser = currentUser;
     portENTER_CRITICAL(&sourceMux);
     const BtVolumeDecision decision = volumeSessionGate.receive(
-        volumeEvent, config.userVolume, active == ActiveSource::Bluetooth,
+        volumeEvent, currentUser, active == ActiveSource::Bluetooth,
         peerUser);
     portEXIT_CRITICAL(&sourceMux);
     if (decision == BtVolumeDecision::PeerVolumeAccepted)
@@ -302,10 +303,11 @@ bool sourceManagerStepBluetoothVolume(int8_t delta) {
   const bool available = sourceState.canControlBluetooth();
   portEXIT_CRITICAL(&sourceMux);
   if (!available || delta == 0) return false;
-  int next = static_cast<int>(config.userVolume) + delta;
+  const uint8_t currentUser = player.outputSnapshot().userVolume;
+  int next = static_cast<int>(currentUser) + delta;
   if (next < 0) next = 0;
   if (next > 100) next = 100;
-  if (next == config.userVolume) return false;
+  if (next == currentUser) return false;
   return sourceManagerSetBluetoothVolume(static_cast<uint8_t>(next));
 }
 
@@ -315,7 +317,7 @@ bool sourceManagerSetBluetoothVolume(uint8_t user) {
   portENTER_CRITICAL(&sourceMux);
   const bool available = sourceState.canControlBluetooth();
   portEXIT_CRITICAL(&sourceMux);
-  if (!available || user == config.userVolume) return false;
+  if (!available || user == player.outputSnapshot().userVolume) return false;
   if (!sendBluetoothUserVolume(user)) return false;
   player.setUserVol(user);
   return true;

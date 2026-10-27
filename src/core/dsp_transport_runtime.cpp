@@ -8,6 +8,7 @@
 #include "config.h"
 #include "netserver.h"
 #include "network.h"
+#include "player.h"
 
 #include <Arduino.h>
 #include <cstdlib>
@@ -50,7 +51,8 @@ uint32_t lastRevision() {
 }
 
 ToneSnapshot currentTone() {
-  return {config.store.bass, config.store.middle, config.store.trebble};
+  const auto runtime = config.runtimeSnapshot();
+  return {runtime.bass, runtime.middle, runtime.treble};
 }
 
 void sendError(uint32_t clientId, uint32_t requestId, uint16_t code) {
@@ -281,16 +283,17 @@ void handleDspState(AsyncWebServerRequest* request) {
   }
   char* json = static_cast<char*>(std::malloc(kStateJsonCapacity));
   if (!json) { jsonFailure(request, 503); return; }
+  const PlayerRuntimeVolumeSnapshot volume = player.runtimeVolumeSnapshot();
   if (xSemaphoreTake(serviceMutex, pdMS_TO_TICKS(25)) != pdTRUE) {
     std::free(json);
     jsonFailure(request, 503);
     return;
   }
   DspSharedAudioView shared{};
-  shared.volume = config.userVolume;
-  shared.maximumVolume = config.store.maximumVolume;
-  shared.startupMode = config.store.startupMode;
-  shared.startupFixedVolume = config.store.startupFixedVolume;
+  shared.volume = volume.output.userVolume;
+  shared.maximumVolume = volume.config.maximumVolume;
+  shared.startupMode = volume.config.startupMode;
+  shared.startupFixedVolume = volume.config.startupFixedVolume;
   if (!lockDspToneMutation()) {
     xSemaphoreGive(serviceMutex);
     std::free(json);
@@ -299,7 +302,7 @@ void handleDspState(AsyncWebServerRequest* request) {
   }
   shared.tone = currentTone();
   unlockDspToneMutation();
-  shared.balance = config.store.balance;
+  shared.balance = volume.config.balance;
   const size_t length = formatDspStateJson(
       json, kStateJsonCapacity, activeDspService(), shared);
   xSemaphoreGive(serviceMutex);
