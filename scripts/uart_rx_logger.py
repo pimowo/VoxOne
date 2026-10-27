@@ -364,6 +364,7 @@ def run(args: argparse.Namespace) -> int:
     stable_port, target = validate_stable_port(args.port)
     if args.duration <= 0:
         raise LoggerError("--duration must be greater than zero")
+    continuous_capture = bool(getattr(args, "continuous_capture", False))
     if not args.acknowledge_open_line_risk:
         raise LoggerError(
             "refusing to open tty without --acknowledge-open-line-risk; "
@@ -390,15 +391,22 @@ def run(args: argparse.Namespace) -> int:
     )
 
     fd = open_uart_rx_only(stable_port)
-    try:
-        discarded_buffered_bytes, drain_seconds = drain_preexisting_input(fd)
-    except Exception:
-        os.close(fd)
-        raise
+    if continuous_capture:
+        discarded_buffered_bytes = 0
+        drain_seconds = 0.0
+    else:
+        try:
+            discarded_buffered_bytes, drain_seconds = drain_preexisting_input(fd)
+        except Exception:
+            os.close(fd)
+            raise
+    capture_started_at = timestamp()
     print(
-        f"ARMED discardedBufferedBytes={discarded_buffered_bytes} "
+        f"ARMED at={capture_started_at} "
+        f"captureMode={'continuous' if continuous_capture else 'quiet-gated'} "
+        f"discardedBufferedBytes={discarded_buffered_bytes} "
         f"drainSeconds={drain_seconds:.3f} "
-        f"quietSeconds={PRECAPTURE_QUIET_SECONDS}",
+        f"quietSeconds={0 if continuous_capture else PRECAPTURE_QUIET_SECONDS}",
         flush=True,
     )
     boot_ids = []
@@ -425,14 +433,35 @@ def run(args: argparse.Namespace) -> int:
                 raw, chunks, capture_started, raw_limit, formatted_limit
             )
             while not interrupted and time.monotonic() < deadline:
-                readable, _, _ = select.select(
-                    [fd], [], [], SELECT_TIMEOUT_SECONDS
-                )
+                try:
+                    readable, _, _ = select.select(
+                        [fd], [], [], SELECT_TIMEOUT_SECONDS
+                    )
+                except OSError as error:
+                    ledger.invalidate(
+                        "uart_port_error",
+                        {
+                            "stage": "select",
+                            "errno": error.errno,
+                            "message": str(error),
+                        },
+                    )
+                    break
                 if readable:
                     try:
                         chunk = os.read(fd, READ_SIZE)
                     except BlockingIOError:
                         ledger.record_would_block()
+                    except OSError as error:
+                        ledger.invalidate(
+                            "uart_port_error",
+                            {
+                                "stage": "read",
+                                "errno": error.errno,
+                                "message": str(error),
+                            },
+                        )
+                        break
                     else:
                         now = time.monotonic()
                         if not ledger.record_read(chunk, now, timestamp()):
@@ -455,6 +484,8 @@ def run(args: argparse.Namespace) -> int:
         boot_ids.append(after["bootId"])
     if ledger is None:
         raise LoggerError("capture files were not initialized")
+    if ledger.raw_bytes == 0 and ledger.invalid_reason is None:
+        ledger.invalidate("no_uart_data", {"durationSeconds": args.duration})
     capture_status = "INVALID" if ledger.invalid_reason else "PASS"
     if interrupted and capture_status == "PASS":
         capture_status = "INTERRUPTED"
@@ -466,13 +497,25 @@ def run(args: argparse.Namespace) -> int:
         "configuration": "115200 8N1, RX-only fd, flow control off, HUPCL off",
         "dtrRts": "cleared immediately after open and after tcsetattr; transient not excluded",
         "durationRequestedSeconds": args.duration,
+        "captureMode": "continuous" if continuous_capture else "quiet-gated",
+        "captureStartedAt": capture_started_at,
+        "statusScope": "capture-integrity-only",
         "preCaptureDrain": {
+            "enabled": not continuous_capture,
             "discardedBufferedBytes": discarded_buffered_bytes,
             "durationSeconds": round(drain_seconds, 6),
-            "requiredQuietSeconds": PRECAPTURE_QUIET_SECONDS,
+            "requiredQuietSeconds": (
+                None if continuous_capture else PRECAPTURE_QUIET_SECONDS
+            ),
             "sameOpenFileDescriptor": True,
         },
         "status": capture_status,
+        "uartDataObserved": ledger.raw_bytes > 0,
+        "bootEvidence": {
+            "captureStartIsBootEvidence": False,
+            "uartBootEvidenceEvaluated": False,
+            "note": "capture start alone does not prove an ESP32 boot",
+        },
         # Compatibility aliases retained for consumers of the first version.
         "bytes": ledger.raw_bytes,
         "chunks": ledger.raw_write_calls,
@@ -506,6 +549,14 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--duration", required=True, type=float)
     parser.add_argument("--http-interval", type=float, default=5.0)
     parser.add_argument("--http-timeout", type=float, default=2.0)
+    parser.add_argument(
+        "--continuous-capture",
+        action="store_true",
+        help=(
+            "capture immediately without waiting for UART quiet; intended for "
+            "passive monitoring of continuously logging devices"
+        ),
+    )
     parser.add_argument("--acknowledge-open-line-risk", action="store_true")
     return parser.parse_args()
 

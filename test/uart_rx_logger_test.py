@@ -8,6 +8,8 @@ from pathlib import Path
 import pty
 import tempfile
 import termios
+import threading
+import time
 from types import SimpleNamespace
 import unittest
 from unittest import mock
@@ -341,10 +343,14 @@ class UartRxLoggerTest(unittest.TestCase):
                 "read_ready",
                 return_value={"http": None, "ready": False, "bootId": None},
             ):
+                started = time.monotonic()
                 self.assertEqual(MODULE.run(args), 0)
+                elapsed = time.monotonic() - started
             with self.assertRaises(OSError):
                 os.fstat(slave)
             manifest = json.loads((output / "manifest.json").read_text())
+            self.assertLess(elapsed, 1.0)
+            self.assertEqual(manifest["durationRequestedSeconds"], 0.02)
             self.assertEqual(manifest["status"], "PASS")
             self.assertEqual(manifest["capture"]["readBytes"], 16)
             self.assertEqual(manifest["capture"]["rawBytes"], 16)
@@ -352,14 +358,231 @@ class UartRxLoggerTest(unittest.TestCase):
             self.assertEqual(
                 manifest["preCaptureDrain"],
                 {
+                    "enabled": True,
                     "discardedBufferedBytes": 0,
                     "durationSeconds": 0.5,
                     "requiredQuietSeconds": 0.5,
                     "sameOpenFileDescriptor": True,
                 },
             )
+            self.assertEqual(manifest["captureMode"], "quiet-gated")
+            self.assertTrue(manifest["uartDataObserved"])
+            self.assertFalse(manifest["bootEvidence"]["captureStartIsBootEvidence"])
             self.assertEqual((output / "uart.raw").read_bytes(), b"bounded payload\n")
             self.assertEqual((output / "uart.raw").stat().st_mode & 0o777, 0o600)
+        os.close(master)
+
+    def test_continuous_capture_records_stream_without_waiting_for_quiet(self):
+        master, slave = pty.openpty()
+        MODULE.configure_uart(slave)
+        stop = threading.Event()
+
+        def produce():
+            while not stop.is_set():
+                try:
+                    os.write(master, b"continuous UART\n")
+                except OSError:
+                    return
+                time.sleep(0.002)
+
+        writer = threading.Thread(target=produce)
+        writer.start()
+        try:
+            with tempfile.TemporaryDirectory() as temporary:
+                output = Path(temporary) / "continuous"
+                args = SimpleNamespace(
+                    port="/dev/serial/by-id/mock-uart",
+                    output_dir=str(output),
+                    host="offline.invalid",
+                    duration=0.06,
+                    http_interval=10.0,
+                    http_timeout=0.01,
+                    continuous_capture=True,
+                    acknowledge_open_line_risk=True,
+                )
+                with mock.patch.object(
+                    MODULE,
+                    "validate_stable_port",
+                    return_value=(Path(args.port), Path("/dev/pts/mock")),
+                ), mock.patch.object(
+                    MODULE, "open_uart_rx_only", return_value=slave
+                ), mock.patch.object(
+                    MODULE, "drain_preexisting_input"
+                ) as drain, mock.patch.object(
+                    MODULE,
+                    "read_ready",
+                    return_value={"http": None, "ready": False, "bootId": None},
+                ):
+                    self.assertEqual(MODULE.run(args), 0)
+                drain.assert_not_called()
+                manifest = json.loads((output / "manifest.json").read_text())
+                raw = (output / "uart.raw").read_bytes()
+                records = [
+                    json.loads(line)
+                    for line in (output / "uart-chunks.jsonl").read_text().splitlines()
+                ]
+                reconstructed = b"".join(
+                    bytes.fromhex(record["hex"]) for record in records
+                )
+                self.assertEqual(manifest["status"], "PASS")
+                self.assertEqual(manifest["captureMode"], "continuous")
+                self.assertEqual(manifest["port"], args.port)
+                self.assertEqual(manifest["target"], "/dev/pts/mock")
+                self.assertTrue(manifest["captureStartedAt"])
+                self.assertTrue(manifest["uartDataObserved"])
+                self.assertGreater(len(raw), 0)
+                self.assertEqual(reconstructed, raw)
+                self.assertEqual(manifest["capture"]["rawBytes"], len(raw))
+                self.assertEqual(
+                    manifest["preCaptureDrain"],
+                    {
+                        "enabled": False,
+                        "discardedBufferedBytes": 0,
+                        "durationSeconds": 0.0,
+                        "requiredQuietSeconds": None,
+                        "sameOpenFileDescriptor": True,
+                    },
+                )
+                self.assertFalse(
+                    manifest["bootEvidence"]["captureStartIsBootEvidence"]
+                )
+        finally:
+            stop.set()
+            writer.join(timeout=1.0)
+            os.close(master)
+
+    def test_continuous_capture_keeps_delayed_fragmented_data(self):
+        master, slave = pty.openpty()
+        MODULE.configure_uart(slave)
+
+        def produce():
+            time.sleep(0.02)
+            os.write(master, b"first-")
+            time.sleep(0.01)
+            os.write(master, b"second")
+
+        writer = threading.Thread(target=produce)
+        writer.start()
+        try:
+            with tempfile.TemporaryDirectory() as temporary:
+                output = Path(temporary) / "delayed"
+                args = SimpleNamespace(
+                    port="/dev/serial/by-id/mock-uart",
+                    output_dir=str(output),
+                    host="offline.invalid",
+                    duration=0.08,
+                    http_interval=10.0,
+                    http_timeout=0.01,
+                    continuous_capture=True,
+                    acknowledge_open_line_risk=True,
+                )
+                with mock.patch.object(
+                    MODULE,
+                    "validate_stable_port",
+                    return_value=(Path(args.port), Path("/dev/pts/mock")),
+                ), mock.patch.object(
+                    MODULE, "open_uart_rx_only", return_value=slave
+                ), mock.patch.object(
+                    MODULE,
+                    "read_ready",
+                    return_value={"http": None, "ready": False, "bootId": None},
+                ):
+                    self.assertEqual(MODULE.run(args), 0)
+                self.assertEqual(
+                    (output / "uart.raw").read_bytes(), b"first-second"
+                )
+                manifest = json.loads((output / "manifest.json").read_text())
+                self.assertEqual(manifest["capture"]["readBytes"], 12)
+                self.assertEqual(manifest["capture"]["rawBytes"], 12)
+        finally:
+            writer.join(timeout=1.0)
+            os.close(master)
+
+    def test_disconnect_preserves_written_bytes_and_marks_capture_invalid(self):
+        master, slave = pty.openpty()
+        MODULE.configure_uart(slave)
+        payload = b"before disconnect\n"
+
+        def produce_and_disconnect():
+            time.sleep(0.01)
+            os.write(master, payload)
+            time.sleep(0.01)
+            os.close(master)
+
+        writer = threading.Thread(target=produce_and_disconnect)
+        writer.start()
+        with tempfile.TemporaryDirectory() as temporary:
+            output = Path(temporary) / "disconnect"
+            args = SimpleNamespace(
+                port="/dev/serial/by-id/mock-uart",
+                output_dir=str(output),
+                host="offline.invalid",
+                duration=0.2,
+                http_interval=10.0,
+                http_timeout=0.01,
+                continuous_capture=True,
+                acknowledge_open_line_risk=True,
+            )
+            with mock.patch.object(
+                MODULE,
+                "validate_stable_port",
+                return_value=(Path(args.port), Path("/dev/pts/mock")),
+            ), mock.patch.object(
+                MODULE, "open_uart_rx_only", return_value=slave
+            ), mock.patch.object(
+                MODULE,
+                "read_ready",
+                return_value={"http": None, "ready": False, "bootId": None},
+            ):
+                self.assertEqual(MODULE.run(args), 3)
+            writer.join(timeout=1.0)
+            manifest = json.loads((output / "manifest.json").read_text())
+            raw = (output / "uart.raw").read_bytes()
+            reconstructed = b"".join(
+                bytes.fromhex(json.loads(line)["hex"])
+                for line in (output / "uart-chunks.jsonl").read_text().splitlines()
+            )
+            self.assertEqual(manifest["status"], "INVALID")
+            self.assertIn(
+                manifest["capture"]["invalidReason"],
+                ("uart_eof", "uart_port_error"),
+            )
+            self.assertEqual(raw, payload)
+            self.assertEqual(reconstructed, raw)
+            self.assertEqual(manifest["capture"]["rawBytes"], len(raw))
+
+    def test_no_received_bytes_cannot_be_reported_as_pass(self):
+        master, slave = pty.openpty()
+        MODULE.configure_uart(slave)
+        with tempfile.TemporaryDirectory() as temporary:
+            output = Path(temporary) / "silent"
+            args = SimpleNamespace(
+                port="/dev/serial/by-id/mock-uart",
+                output_dir=str(output),
+                host="offline.invalid",
+                duration=0.02,
+                http_interval=10.0,
+                http_timeout=0.01,
+                continuous_capture=True,
+                acknowledge_open_line_risk=True,
+            )
+            with mock.patch.object(
+                MODULE,
+                "validate_stable_port",
+                return_value=(Path(args.port), Path("/dev/pts/mock")),
+            ), mock.patch.object(
+                MODULE, "open_uart_rx_only", return_value=slave
+            ), mock.patch.object(
+                MODULE,
+                "read_ready",
+                return_value={"http": None, "ready": False, "bootId": None},
+            ):
+                self.assertEqual(MODULE.run(args), 3)
+            manifest = json.loads((output / "manifest.json").read_text())
+            self.assertEqual(manifest["status"], "INVALID")
+            self.assertFalse(manifest["uartDataObserved"])
+            self.assertEqual(manifest["capture"]["invalidReason"], "no_uart_data")
+            self.assertEqual((output / "uart.raw").read_bytes(), b"")
         os.close(master)
 
     def test_source_has_no_serial_write_or_automatic_reopen(self):
