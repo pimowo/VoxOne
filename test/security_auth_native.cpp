@@ -267,6 +267,71 @@ void testAtomicWriteFailures() {
   assert(restarted.generation() == generation);
 }
 
+void testRecoveryPasswordFailClosedAndAtomic() {
+  FakeStorage storage;
+  DeterministicRandom random;
+  SecurityService service(storage, random);
+  assert(service.begin(true) == SecurityLoadStatus::LegacyUnclaimed);
+  assert(service.chooseProtected("pierwsze-haslo") ==
+         SecurityOperationStatus::Applied);
+
+  uint8_t committed[kSecurityRecordSize];
+  std::memcpy(committed, storage.bytes, sizeof(committed));
+  const uint32_t generation = service.generation();
+  const unsigned committedWrites = storage.writes;
+
+  assert(service.recoverProtected("trz") ==
+         SecurityOperationStatus::InvalidPassword);
+  assert(storage.writes == committedWrites);
+  assert(service.generation() == generation);
+  assert(std::memcmp(committed, storage.bytes, sizeof(committed)) == 0);
+
+  random.fail = true;
+  assert(service.recoverProtected("drugie-bezpieczne") ==
+         SecurityOperationStatus::RandomError);
+  assert(storage.writes == committedWrites);
+  assert(service.generation() == generation);
+  assert(service.verifyPassword("pierwsze-haslo"));
+  random.fail = false;
+
+  storage.writeError = true;
+  assert(service.recoverProtected("drugie-bezpieczne") ==
+         SecurityOperationStatus::StorageError);
+  assert(storage.writes == committedWrites + 1U);
+  assert(service.state() == SecurityState::Protected);
+  assert(service.generation() == generation);
+  assert(service.verifyPassword("pierwsze-haslo"));
+  assert(!service.verifyPassword("drugie-bezpieczne"));
+  assert(std::memcmp(committed, storage.bytes, sizeof(committed)) == 0);
+
+  SecurityService restarted(storage, random);
+  assert(restarted.begin(true) == SecurityLoadStatus::Loaded);
+  assert(restarted.generation() == generation);
+  assert(restarted.verifyPassword("pierwsze-haslo"));
+  assert(!restarted.verifyPassword("drugie-bezpieczne"));
+
+  storage.writeError = false;
+  assert(service.recoverProtected("drugie-bezpieczne") ==
+         SecurityOperationStatus::Applied);
+  assert(service.generation() == generation + 1U);
+  assert(!service.verifyPassword("pierwsze-haslo"));
+  assert(service.verifyPassword("drugie-bezpieczne"));
+
+  FakeStorage unconfiguredStorage;
+  SecurityService unconfigured(unconfiguredStorage, random);
+  assert(unconfigured.begin(false) == SecurityLoadStatus::Unconfigured);
+  assert(unconfigured.recoverProtected("drugie-bezpieczne") ==
+         SecurityOperationStatus::InvalidState);
+  assert(unconfiguredStorage.writes == 0);
+
+  FakeStorage legacyStorage;
+  SecurityService legacy(legacyStorage, random);
+  assert(legacy.begin(true) == SecurityLoadStatus::LegacyUnclaimed);
+  assert(legacy.recoverProtected("drugie-bezpieczne") ==
+         SecurityOperationStatus::InvalidState);
+  assert(legacyStorage.writes == 0);
+}
+
 void testRandomAndEraseFailures() {
   FakeStorage storage;
   DeterministicRandom random;
@@ -352,6 +417,7 @@ int main() {
   testCorruptAndInvalidStorage();
   testPasswordChangesAndModeSwitches();
   testAtomicWriteFailures();
+  testRecoveryPasswordFailClosedAndAtomic();
   testRandomAndEraseFailures();
   testUtf8AndPasswordBounds();
   return 0;

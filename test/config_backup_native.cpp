@@ -503,6 +503,48 @@ int main() {
   assert(parse(invalidString.data(), invalidString.size(), hardwareCapabilities(), unchanged) ==
          Status::InvalidConfig);
 
+  // Exercise every semantic Config v7 limit accepted by restore. Each input
+  // has a valid record CRC and backup CRC, so rejection cannot be attributed
+  // to generic corruption checks.
+  const auto rejectConfig = [&](const config_v7_t& candidate) {
+    std::vector<uint8_t> invalid = bytes;
+    replaceConfig(invalid, candidate);
+    assert(parse(invalid.data(), invalid.size(), hardwareCapabilities(),
+                 unchanged) == Status::InvalidConfig);
+  };
+  badConfig = source.config; badConfig.fields.volume = 255;
+  rejectConfig(badConfig);
+  for (int8_t balance : {int8_t(-17), int8_t(17)}) {
+    badConfig = source.config; badConfig.fields.balance = balance;
+    rejectConfig(badConfig);
+  }
+  for (int8_t tone : {int8_t(-7), int8_t(7)}) {
+    badConfig = source.config; badConfig.fields.trebble = tone;
+    rejectConfig(badConfig);
+    badConfig = source.config; badConfig.fields.middle = tone;
+    rejectConfig(badConfig);
+    badConfig = source.config; badConfig.fields.bass = tone;
+    rejectConfig(badConfig);
+  }
+  badConfig = source.config; badConfig.fields.lastSSID = 6;
+  rejectConfig(badConfig);
+  badConfig = source.config; badConfig.fields.smartstart = 3;
+  rejectConfig(badConfig);
+  badConfig = source.config; badConfig.fields.brightness = 101;
+  rejectConfig(badConfig);
+  badConfig = source.config; badConfig.fields.maximumVolume = 101;
+  rejectConfig(badConfig);
+  badConfig = source.config; badConfig.fields.startupFixedVolume = 101;
+  rejectConfig(badConfig);
+  badConfig = source.config; badConfig.fields.lastUserVolume = 101;
+  rejectConfig(badConfig);
+  badConfig = source.config;
+  std::memset(badConfig.fields.sntp2, 'x', sizeof(badConfig.fields.sntp2));
+  rejectConfig(badConfig);
+  badConfig = source.config;
+  std::memset(badConfig.fields.mdnsname, 'x', sizeof(badConfig.fields.mdnsname));
+  rejectConfig(badConfig);
+
   std::vector<uint8_t> unsupported = bytes;
   RuntimeHardwareConfig unsupportedSelection = unsupportedHardware();
   assert(serializeRuntimeHardwareConfig(

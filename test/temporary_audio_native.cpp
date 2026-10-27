@@ -42,6 +42,35 @@ void auditTransport() {
       ++pos;
     }
   }
+
+  // Exercise the production termination contract as well as the state model.
+  // Decoder callbacks are synchronous inside Audio::loop(), so the callback
+  // token belongs to exactly that invocation. A backend timeout is also safe
+  // when it only stops the decoder: Player observes !isRunning() and finishes
+  // the same temporary generation without requiring a callback.
+  const auto handlers = readFile("src/core/audiohandlers.h");
+  assert(handlers.find("void audio_error(const char *info) {") !=
+         std::string::npos);
+  assert(handlers.find("player.setError(info);") != std::string::npos);
+  assert(handlers.find("if (player.temporaryEof()) return;") !=
+         std::string::npos);
+  assert(handlers.find("player.temporaryEof();") != std::string::npos);
+  assert(player.find("_temporary.signal(_callbackToken);") !=
+         std::string::npos);
+  assert(player.find("_callbackToken = _temporary.token();") !=
+         std::string::npos);
+  assert(player.find("if (!_temporary.terminal()) Audio::loop();") !=
+         std::string::npos);
+  assert(player.find(
+      "if (_temporary.terminal() || !isRunning()) finishTemporary();") !=
+      std::string::npos);
+  assert(player.find("const bool connected = connecttohost(url);") !=
+         std::string::npos);
+  assert(player.find("_temporary.signal(token);") != std::string::npos);
+  assert(player.find("xQueueOverwrite(_temporaryUrls, request);") !=
+         std::string::npos);
+  assert(player.find("if (temporaryActive()) finishTemporary();") !=
+         std::string::npos);
 }
 
 struct Scenario {
@@ -77,6 +106,11 @@ struct Scenario {
   void end(uint32_t token) {
     temporary.signal(token);
     assert(temporary.terminal());
+    assert(temporary.finish(token));
+    restore();
+  }
+  void backendStopped(uint32_t token) {
+    assert(!temporary.terminal());
     assert(temporary.finish(token));
     restore();
   }
@@ -190,9 +224,9 @@ int main() {
   noChange.reason = SourceChangeReason::BtDisconnect;
   assert(!temporaryBtLossRequiresRadioStop(noChange, false));
 
-  // EOF, decoder/stream error, connect failure and timeout share the terminal
-  // signal. Duplicate notifications and an old token cannot finish a new URL.
-  for (int terminalPath = 0; terminalPath < 4; ++terminalPath) {
+  // EOF, decoder/stream error and connect failure signal the callback token.
+  // Duplicate notifications and an old token cannot finish a replacement.
+  for (int terminalPath = 0; terminalPath < 3; ++terminalPath) {
     Scenario s;
     s.radio(true);
     const auto first = s.temporary.begin();
@@ -210,6 +244,21 @@ int main() {
     assert(!s.temporary.signal(second));
     s.end(third);
     assert(s.resumes == 2);
+  }
+
+  // A transport/header timeout may stop the backend without emitting an
+  // error callback. Player's !isRunning() fallback still completes exactly
+  // once, and a late callback for that generation is harmless.
+  {
+    Scenario timeout;
+    timeout.radio(true);
+    const auto token = timeout.temporary.begin();
+    timeout.backendStopped(token);
+    assert(timeout.resumes == 1 && !timeout.temporary.busy());
+    assert(!timeout.temporary.signal(token));
+    assert(!timeout.temporary.finish(token));
+    timeout.restore();
+    assert(timeout.resumes == 1);
   }
 
   // Manual selection during TTS wins over the source at announcement start.

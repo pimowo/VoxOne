@@ -67,6 +67,87 @@ config_v7_t stored(FakeEeprom& backend) {
   backend.assertOutsideUntouched();
   return value;
 }
+void serializeRuntime(const config_v6_t& runtime, bool btEnabled,
+                      uint8_t (&bytes)[kConfigV7SerializedSize]) {
+  config_v7_t value{};
+  value.fields = runtime;
+  value.fields.config_set = kConfigV7Magic;
+  value.fields.version = kConfigV7;
+  value.btEnabled = btEnabled ? 1 : 0;
+  value.crc32 = calculateConfigV7Crc(value);
+  assert(serializeConfigV7(value, bytes, sizeof(bytes)));
+}
+config_v6_t completeFixture() {
+  config_v6_t value{};
+  defaults(value);
+  value.volume = 137;
+  value.balance = -11;
+  value.trebble = 6;
+  value.middle = -4;
+  value.bass = 3;
+  value.lastStation = 234;
+  value.countStation = 233;
+  value.lastSSID = 5;
+  value.audioinfo = true;
+  value.smartstart = 1;
+  value.tzHour = -7;
+  value.tzMin = 45;
+  value.timezoneOffset = 321;
+  value.vumeter = true;
+  value.softapdelay = 17;
+  value.flipscreen = true;
+  value.invertdisplay = true;
+  value.numplaylist = true;
+  value.reservedInput0 = true;
+  value.reservedInput1 = true;
+  value.dspon = false;
+  value.brightness = 88;
+  value.contrast = 47;
+  std::memset(value.sntp1, 0, sizeof(value.sntp1));
+  std::memset(value.sntp2, 0, sizeof(value.sntp2));
+  std::memset(value.mdnsname, 0, sizeof(value.mdnsname));
+  std::strcpy(value.sntp1, "config-v7-primary.test");
+  std::strcpy(value.sntp2, "config-v7-secondary.test");
+  std::strcpy(value.mdnsname, "VoxOne-persist-test");
+  for (std::size_t i = 0; i < sizeof(value.reservedWeather); ++i)
+    value.reservedWeather[i] = static_cast<uint8_t>(i * 3u + 1u);
+  value._reserved = 0x1234;
+  value.reservedSdStation = 0x4567;
+  value.reservedSdFlags = true;
+  value.volsteps = 9;
+  value.encacc = 777;
+  value.reservedPlayMode = 4;
+  value.irtlp = 29;
+  value.btnpullup = false;
+  value.btnlongpress = 901;
+  value.btnclickticks = 345;
+  value.btnpressticks = 678;
+  value.encpullup = true;
+  value.enchalf = true;
+  value.enc2pullup = true;
+  value.enc2half = true;
+  value.forcemono = true;
+  value.i2sinternal = true;
+  value.rotate90 = true;
+  value.screensaverEnabled = true;
+  value.screensaverTimeout = 81;
+  value.screensaverBlank = true;
+  value.screensaverPlayingEnabled = true;
+  value.screensaverPlayingTimeout = 37;
+  value.screensaverPlayingBlank = true;
+  value.skipPlaylistUpDown = true;
+  value.abuff = 19;
+  value.reservedTelnet = true;
+  value.watchdog = true;
+  value.timeSyncInterval = 91;
+  value.timeSyncIntervalRTC = 13;
+  value.reservedWeatherSyncInterval = 22;
+  value.maximumVolume = 73;
+  value.startupMode = 1;
+  value.startupFixedVolume = 44;
+  value.lastUserVolume = 61;
+  return value;
+}
 void legacy(FakeEeprom& backend, uint8_t version) {
   uint8_t* area = backend.durable + 500;
   std::memset(area, 0, version == 5 ? 250 : 254);
@@ -143,6 +224,44 @@ int main() {
   assert(reloadedExisting.volume == volumeUserToRaw(64));
   assert(reloadedExisting.lastUserVolume == 64);
   assert(existing.writes == writesBeforeReload);
+
+  // Full Config v7 persistence across ordinary restart and MAIN-only firmware
+  // replacement. Both boots see the same NVS record, preserve every serialized
+  // field, and do not consume another flash write for an already-valid record.
+  FakeEeprom completeBackend;
+  config_v6_t completeRuntime = completeFixture();
+  ConfigPersistence completeState;
+  completeState.begin(S::DEFAULTS_REQUIRED, true);
+  assert(completeState.persist(completeRuntime, completeBackend) == W::OK);
+  uint8_t expectedComplete[kConfigV7SerializedSize]{};
+  serializeRuntime(completeRuntime, true, expectedComplete);
+  assert(std::memcmp(completeBackend.durable + 500, expectedComplete,
+                     sizeof(expectedComplete)) == 0);
+  uint8_t durableBeforeBoot[sizeof(completeBackend.durable)];
+  std::memcpy(durableBeforeBoot, completeBackend.durable,
+              sizeof(durableBeforeBoot));
+  const unsigned completeWrites = completeBackend.writes;
+  const unsigned completeCommits = completeBackend.commits;
+  for (unsigned boot = 0; boot < 2; ++boot) {
+    config_v6_t afterBoot{};
+    ConfigPersistence afterBootState;
+    const auto result = startup(
+        completeBackend, afterBoot, afterBootState, true);
+    assert(result.status == S::LOADED_V7);
+    assert(result.storedBtEnabled && result.btEnabled);
+    uint8_t actualComplete[kConfigV7SerializedSize]{};
+    serializeRuntime(afterBoot, afterBootState.storedBtEnabled(), actualComplete);
+    assert(std::memcmp(expectedComplete, actualComplete,
+                       sizeof(expectedComplete)) == 0);
+    assert(completeBackend.writes == completeWrites);
+    assert(completeBackend.commits == completeCommits);
+    assert(std::memcmp(durableBeforeBoot, completeBackend.durable,
+                       sizeof(durableBeforeBoot)) == 0);
+    // An unchanged setting is not dirty and cannot cause an NVS commit.
+    afterBootState.update(afterBoot.brightness, afterBoot.brightness);
+    assert(!afterBootState.dirty());
+    assert(completeBackend.commits == completeCommits);
+  }
 
   for (uint8_t version : {5, 6}) {
     FakeEeprom old;

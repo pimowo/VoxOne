@@ -172,7 +172,7 @@ Invoke-Step 'Native tests' {
    $compileLog=Join-Path $work ($label+'.compile.log')
    $compileArgs=@('-std=c++11','-O2','-Wall','-Wextra','-Werror','-Wno-unused-parameter')
    if($name -eq 'mqtt_contract_native') { $compileArgs+=@('-I',(Join-Path $root 'test')) }
-   if($name -eq 'ap_ui_www_binding_native' -or $name -eq 'asynctcp_lifecycle_native' -or $name -eq 'display_scroll_runtime_config_native' -or $name -eq 'first_boot_runtime_snapshot_native' -or $name -eq 'first_boot_transaction_native' -or $name -eq 'websocket_queue_lifecycle_native') { $compileArgs+='-pthread' }
+   if($name -eq 'ap_ui_www_binding_native' -or $name -eq 'asynctcp_lifecycle_native' -or $name -eq 'asyncweb_lock_native' -or $name -eq 'bt_audio_mute_crosscore_native' -or $name -eq 'config_runtime_snapshot_native' -or $name -eq 'display_scroll_runtime_config_native' -or $name -eq 'first_boot_runtime_snapshot_native' -or $name -eq 'first_boot_transaction_native' -or $name -eq 'websocket_client_lifetime_native' -or $name -eq 'websocket_queue_lifecycle_native') { $compileArgs+='-pthread' }
    if($variant) {
     if($variant -eq 'CLEAN' -or $variant -eq 'DIRTY') { $compileArgs+="-DBUILD_ID_TEST_$variant=1" }
     elseif($variant -eq 'SECURITY-TEST') { $compileArgs+=@('-DVOXONE_PROFILE_M0=1','-DVOXONE_SECURITY_HTTP_ENFORCEMENT_TEST=1') }
@@ -199,6 +199,18 @@ Invoke-Step 'Native tests' {
 if(-not $onWindows) {
  Invoke-Step 'Native sanitizers' {
   $sanitizerArgs=@('-std=c++11','-O1','-g','-fsanitize=address,undefined','-fno-omit-frame-pointer','-Wall','-Wextra','-Werror','-Wno-unused-parameter')
+ $btAudioMuteExe=Join-Path $work 'bt_audio_mute_crosscore_sanitized'
+  & $Cxx @sanitizerArgs '-pthread' '-o' $btAudioMuteExe `
+    (Join-Path $root 'test/bt_audio_mute_crosscore_native.cpp')
+  if($LASTEXITCODE -ne 0) { throw 'Sanitized BT audio mute cross-core compile failed' }
+  & $btAudioMuteExe
+  if($LASTEXITCODE -ne 0) { throw 'Sanitized BT audio mute cross-core test failed' }
+  $configRuntimeExe=Join-Path $work 'config_runtime_snapshot_sanitized'
+  & $Cxx @sanitizerArgs '-pthread' '-o' $configRuntimeExe `
+    (Join-Path $root 'test/config_runtime_snapshot_native.cpp')
+  if($LASTEXITCODE -ne 0) { throw 'Sanitized Config runtime snapshot compile failed' }
+  & $configRuntimeExe
+  if($LASTEXITCODE -ne 0) { throw 'Sanitized Config runtime snapshot test failed' }
   $bootBrandingExe=Join-Path $work 'display_boot_branding_sanitized'
   & $Cxx @sanitizerArgs '-o' $bootBrandingExe `
     (Join-Path $root 'test/display_boot_branding_native.cpp')
@@ -418,6 +430,24 @@ if(-not $onWindows) {
   if($LASTEXITCODE -ne 0) { throw 'Sanitized WebSocket queue lifecycle compile failed' }
   & $websocketQueueExe
   if($LASTEXITCODE -ne 0) { throw 'Sanitized WebSocket queue lifecycle test failed' }
+  $websocketClientLifetimeExe=Join-Path $work 'websocket_client_lifetime_sanitized'
+  & $Cxx @sanitizerArgs '-pthread' '-o' $websocketClientLifetimeExe `
+    (Join-Path $root 'test/websocket_client_lifetime_native.cpp')
+  if($LASTEXITCODE -ne 0) { throw 'Sanitized WebSocket client lifetime compile failed' }
+  & $websocketClientLifetimeExe
+  if($LASTEXITCODE -ne 0) { throw 'Sanitized WebSocket client lifetime test failed' }
+  $asyncWebLockExe=Join-Path $work 'asyncweb_lock_sanitized'
+  & $Cxx @sanitizerArgs '-pthread' '-o' $asyncWebLockExe `
+    (Join-Path $root 'test/asyncweb_lock_native.cpp')
+  if($LASTEXITCODE -ne 0) { throw 'Sanitized AsyncWeb lock compile failed' }
+  & $asyncWebLockExe
+  if($LASTEXITCODE -ne 0) { throw 'Sanitized AsyncWeb lock test failed' }
+  $asyncTcpOomExe=Join-Path $work 'asynctcp_event_oom_sanitized'
+  & $Cxx @sanitizerArgs '-o' $asyncTcpOomExe `
+    (Join-Path $root 'test/asynctcp_event_oom_native.cpp')
+  if($LASTEXITCODE -ne 0) { throw 'Sanitized AsyncTCP event OOM compile failed' }
+  & $asyncTcpOomExe
+  if($LASTEXITCODE -ne 0) { throw 'Sanitized AsyncTCP event OOM test failed' }
   $asyncTcpLifecycleExe=Join-Path $work 'asynctcp_lifecycle_sanitized'
   & $Cxx @sanitizerArgs '-pthread' '-o' $asyncTcpLifecycleExe `
     (Join-Path $root 'test/asynctcp_lifecycle_native.cpp')

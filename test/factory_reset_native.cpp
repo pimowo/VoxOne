@@ -144,6 +144,8 @@ void testProductionResetInventoryAndPreservationBoundary() {
                            "/data/stations.upload"})
     assert(runtime.find(path) != std::string::npos);
   assert(runtime.find("/www/assets.vxwm") != std::string::npos);
+  assert(runtime.find("SPIFFS.begin(false)") != std::string::npos);
+  assert(runtime.find("SPIFFS.begin(true)") == std::string::npos);
   assert(runtime.find("SPIFFS.format") == std::string::npos);
   assert(runtime.find("nvs_flash_erase") == std::string::npos);
   assert(runtime.find("esp_ota_") == std::string::npos);
