@@ -19,6 +19,7 @@ bool validRuntimeDisplay(RuntimeDisplay value) {
     case RuntimeDisplay::Ssd1309_128x64:
     case RuntimeDisplay::St7789_284x76:
     case RuntimeDisplay::St7796s_480x320:
+    case RuntimeDisplay::Ssd1306_128x32:
       return true;
   }
   return false;
@@ -52,6 +53,7 @@ RuntimeDisplay runtimeDisplayFromKind(DisplayKind kind) {
     case DisplayKind::Ssd1309_128x64: return RuntimeDisplay::Ssd1309_128x64;
     case DisplayKind::St7789_284x76: return RuntimeDisplay::St7789_284x76;
     case DisplayKind::St7796_480x320: return RuntimeDisplay::St7796s_480x320;
+    case DisplayKind::Ssd1306_128x32: return RuntimeDisplay::Ssd1306_128x32;
   }
   return RuntimeDisplay::None;
 }
@@ -133,6 +135,8 @@ bool runtimeDisplayKind(RuntimeDisplay selection, DisplayKind& output) {
       output = DisplayKind::St7789_284x76; return true;
     case RuntimeDisplay::St7796s_480x320:
       output = DisplayKind::St7796_480x320; return true;
+    case RuntimeDisplay::Ssd1306_128x32:
+      output = DisplayKind::Ssd1306_128x32; return true;
   }
   return false;
 }

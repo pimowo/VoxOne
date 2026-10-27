@@ -16,7 +16,15 @@ constexpr bool hasPin(Pin value) { return value != kNoPin; }
 
 enum class BoardId { BoardW0, BoardM0, BoardS0, BoardDIN0, BoardL0 };
 enum class McuFamily { Esp32, Esp32S3 };
-enum class DisplayKind { None, Ssd1306_128x64, Ssd1309_128x64, St7789_284x76, St7796_480x320 };
+enum class DisplayKind {
+  None,
+  Ssd1306_128x64,
+  Ssd1309_128x64,
+  St7789_284x76,
+  St7796_480x320,
+  // Appended to preserve the persisted numeric values of existing variants.
+  Ssd1306_128x32
+};
 enum class AudioOutputKind { None, Pcm5102a, Max98357, DspMini };
 enum class LocalInputKind { None, Ec11, Buttons3 };
 enum class BusKind { None, Spi, I2c };

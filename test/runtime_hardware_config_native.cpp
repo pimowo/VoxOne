@@ -41,7 +41,8 @@ class FakeStorage : public RuntimeHardwareStorage {
 RuntimeDisplay unsupportedDisplay(const HardwareCapabilities& capabilities) {
   const RuntimeDisplay candidates[] = {
       RuntimeDisplay::Ssd1306_128x64, RuntimeDisplay::Ssd1309_128x64,
-      RuntimeDisplay::St7789_284x76, RuntimeDisplay::St7796s_480x320};
+      RuntimeDisplay::St7789_284x76, RuntimeDisplay::St7796s_480x320,
+      RuntimeDisplay::Ssd1306_128x32};
   for (RuntimeDisplay candidate : candidates) {
     DisplayKind kind = DisplayKind::None;
     assert(runtimeDisplayKind(candidate, kind));
@@ -64,12 +65,19 @@ int main() {
   const HardwareCapabilities& capabilities = hardwareCapabilities();
   const RuntimeHardwareConfig defaults = defaultRuntimeHardwareConfig();
   assert(defaults.version == kRuntimeHardwareConfigVersion);
+#if defined(VOXONE_PROFILE_S0)
+  assert(defaults.audio == RuntimeAudioOutput::Max98357);
+#else
   assert(defaults.audio == RuntimeAudioOutput::Pcm5102a);
+#endif
   assert(validateRuntimeHardwareConfig(defaults, capabilities) ==
          RuntimeHardwareValidation::Valid);
 
 #if defined(VOXONE_PROFILE_W0)
   assert(defaults.display == RuntimeDisplay::St7789_284x76);
+  assert(defaults.input == RuntimeInput::Ec11);
+#elif defined(VOXONE_PROFILE_S0)
+  assert(defaults.display == RuntimeDisplay::Ssd1306_128x32);
   assert(defaults.input == RuntimeInput::Ec11);
 #elif defined(VOXONE_RUNTIME_OLED_128X64_BACKENDS)
   assert(defaults.display == RuntimeDisplay::Ssd1306_128x64);
@@ -90,7 +98,7 @@ int main() {
       defaultRuntimeHardwareConfig(noDisplay);
   assert(noDisplayDefaults.display == RuntimeDisplay::None);
   assert(noDisplayDefaults.input == RuntimeInput::None);
-  assert(noDisplayDefaults.audio == RuntimeAudioOutput::Pcm5102a);
+  assert(noDisplayDefaults.audio == defaults.audio);
   assert(validateRuntimeHardwareConfig(noDisplayDefaults,
                                        noDisplay.capabilities) ==
          RuntimeHardwareValidation::Valid);
@@ -108,10 +116,14 @@ int main() {
          ProfileId::Oled128x64);
   assert(runtimeDisplayProfile(RuntimeDisplay::Ssd1309_128x64) ==
          ProfileId::Oled128x64);
+  assert(runtimeDisplayProfile(RuntimeDisplay::Ssd1306_128x32) ==
+         ProfileId::Oled128x32);
   assert(runtimeDisplayController(RuntimeDisplay::Ssd1306_128x64) ==
          ControllerId::Ssd1306);
   assert(runtimeDisplayController(RuntimeDisplay::Ssd1309_128x64) ==
          ControllerId::Ssd1309);
+  assert(runtimeDisplayController(RuntimeDisplay::Ssd1306_128x32) ==
+         ControllerId::Ssd1306);
   assert(runtimeDisplayProfile(RuntimeDisplay::St7789_284x76) ==
          ProfileId::St7789_284x76);
   assert(runtimeDisplayProfile(RuntimeDisplay::St7796s_480x320) ==
@@ -129,7 +141,12 @@ int main() {
   candidate.audio = RuntimeAudioOutput::DspMini;
   assert(validateRuntimeHardwareConfig(candidate, capabilities) ==
          RuntimeHardwareValidation::Unsupported);
-  candidate.audio = RuntimeAudioOutput::Max98357;
+  candidate.audio =
+#if defined(VOXONE_PROFILE_S0)
+      RuntimeAudioOutput::Pcm5102a;
+#else
+      RuntimeAudioOutput::Max98357;
+#endif
   assert(validateRuntimeHardwareConfig(candidate, capabilities) ==
          RuntimeHardwareValidation::Unsupported);
   candidate = defaults;
@@ -239,14 +256,23 @@ int main() {
 
 #if defined(VOXONE_RUNTIME_OLED_128X64_BACKENDS)
   RuntimeHardwareConfig boardSupportedAlternative = defaults;
+#if defined(VOXONE_PROFILE_S0)
+  boardSupportedAlternative.display = RuntimeDisplay::Ssd1306_128x64;
+#else
   boardSupportedAlternative.display = RuntimeDisplay::Ssd1309_128x64;
+#endif
   putRecord(storage, boardSupportedAlternative);
   loaded = loadRuntimeHardwareConfig(storage, hardware);
   assert(loaded.status == RuntimeHardwareLoadStatus::Loaded);
   assert(loaded.config == boardSupportedAlternative);
   // HardwareDescriptor continues to describe the build default. The display
   // activation layer consumes loaded.config separately.
-  assert(currentHardware().displayKind == DisplayKind::Ssd1306_128x64);
+  assert(currentHardware().displayKind ==
+#if defined(VOXONE_PROFILE_S0)
+         DisplayKind::Ssd1306_128x32);
+#else
+         DisplayKind::Ssd1306_128x64);
+#endif
 #endif
 
   storage.readError = true;

@@ -13,6 +13,8 @@ int main() {
   assert(hardware.localInput.key==32);
 #elif defined(VOXONE_PROFILE_L0)
   assert(hardware.localInput.key==39);
+#elif defined(VOXONE_PROFILE_S0)
+  assert(hardware.localInput.key==7);
 #else
   assert(hardware.localInput.key==4);
 #endif

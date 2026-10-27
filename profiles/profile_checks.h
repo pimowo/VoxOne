@@ -6,6 +6,7 @@ namespace profile_checks {
 
 constexpr bool displayMatchesLegacy(Display display, int dspModel) {
   return (display == Display::None && dspModel == DSP_DUMMY) ||
+         (display == Display::Ssd1306_128x32 && dspModel == DSP_SSD1306) ||
          (display == Display::Ssd1306_128x64 && dspModel == DSP_SSD1306) ||
          (display == Display::Ssd1309_128x64 && dspModel == DSP_SSD1305I2C) ||
          (display == Display::St7789_284x76 && dspModel == DSP_ST7789_76) ||
@@ -34,8 +35,8 @@ static_assert(bool(VOXONE_HAS_DISPLAY) == (DSP_MODEL != DSP_DUMMY),
 #if defined(VOXONE_RUNTIME_OLED_128X64_BACKENDS)
 static_assert(DSP_MODEL == DSP_SSD1306,
               "Runtime OLED builds use SSD1306 only as the legacy OLED compile gate");
-static_assert(VOXONE_DISPLAY_PROFILE == VOXONE_DISPLAY_PROFILE_OLED_128X64,
-              "Runtime OLED backends require the shared OLED 128x64 profile");
+static_assert(VOXONE_DISPLAY_PROFILE_IS_SMALL_OLED,
+              "Runtime OLED backends require an OLED layout profile");
 #else
 static_assert(displayMatchesLegacy(VOXONE_PROFILE_DISPLAY, DSP_MODEL),
               "Selected display backend does not match legacy DSP_MODEL");
@@ -49,6 +50,7 @@ static_assert(!VOXONE_PIN_MAP_COMPLETE ||
 
 static_assert(!VOXONE_PIN_MAP_COMPLETE ||
               (VOXONE_PROFILE_DISPLAY != Display::Ssd1306_128x64 &&
+               VOXONE_PROFILE_DISPLAY != Display::Ssd1306_128x32 &&
                VOXONE_PROFILE_DISPLAY != Display::Ssd1309_128x64) ||
               (I2C_SDA != 255 && I2C_SDA != -1 &&
                I2C_SCL != 255 && I2C_SCL != -1),
@@ -73,9 +75,10 @@ static_assert(!VOXONE_HAS_TDA7719 ||
               "TDA7719 profile requires the PCM5102A audio path");
 
 static_assert(!VOXONE_PIN_MAP_COMPLETE ||
-              VOXONE_PROFILE_AUDIO != AudioOutput::Pcm5102a ||
+              (VOXONE_PROFILE_AUDIO != AudioOutput::Pcm5102a &&
+               VOXONE_PROFILE_AUDIO != AudioOutput::Max98357) ||
               (I2S_DOUT != 255 && I2S_BCLK != 255 && I2S_LRC != 255),
-              "Complete PCM5102A profile requires I2S_DOUT, I2S_BCLK and I2S_LRC pins");
+              "Complete serial I2S output requires DOUT, BCLK and LRC pins");
 
 #if defined(CONFIG_IDF_TARGET_ESP32S3)
 static_assert(VOXONE_PROFILE_MCU == Mcu::Esp32S3,

@@ -11,7 +11,7 @@ namespace {
 constexpr RuntimeDisplay kDisplays[] = {
     RuntimeDisplay::None, RuntimeDisplay::Ssd1306_128x64,
     RuntimeDisplay::Ssd1309_128x64, RuntimeDisplay::St7789_284x76,
-    RuntimeDisplay::St7796s_480x320};
+    RuntimeDisplay::St7796s_480x320, RuntimeDisplay::Ssd1306_128x32};
 constexpr RuntimeInput kInputs[] = {
     RuntimeInput::None, RuntimeInput::Ec11, RuntimeInput::Buttons3};
 constexpr RuntimeAudioOutput kAudioOutputs[] = {
@@ -177,6 +177,7 @@ const char* runtimeDisplayWebLabel(RuntimeDisplay display) {
     case RuntimeDisplay::Ssd1309_128x64: return "SSD1309_128X64";
     case RuntimeDisplay::St7789_284x76: return "ST7789_284X76";
     case RuntimeDisplay::St7796s_480x320: return "ST7796S_480X320";
+    case RuntimeDisplay::Ssd1306_128x32: return "SSD1306_128X32";
   }
   return nullptr;
 }
@@ -243,10 +244,10 @@ class JsonWriter {
 
 bool appendOptions(JsonWriter& writer, const HardwareDescriptor& hardware,
                    bool displays) {
-  RuntimeHardwareWebOption options[5];
+  RuntimeHardwareWebOption options[6];
   const size_t count = displays
-      ? supportedRuntimeDisplayOptions(hardware.capabilities, options, 5)
-      : supportedRuntimeInputOptions(hardware.capabilities, options, 5);
+      ? supportedRuntimeDisplayOptions(hardware.capabilities, options, 6)
+      : supportedRuntimeInputOptions(hardware.capabilities, options, 6);
   for (size_t index = 0; index < count; ++index) {
     if (index && !writer.append(",")) return false;
     HardwareRoadmapStatus status = HardwareRoadmapStatus::Untested;
@@ -330,6 +331,7 @@ const char* runtimeDisplayWebValue(RuntimeDisplay display) {
     case RuntimeDisplay::Ssd1309_128x64: return "ssd1309_128x64";
     case RuntimeDisplay::St7789_284x76: return "st7789_284x76";
     case RuntimeDisplay::St7796s_480x320: return "st7796s_480x320";
+    case RuntimeDisplay::Ssd1306_128x32: return "ssd1306_128x32";
   }
   return nullptr;
 }

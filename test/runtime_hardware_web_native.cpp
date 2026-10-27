@@ -66,14 +66,18 @@ int main() {
   const HardwareCapabilities& capabilities = hardwareCapabilities();
   const RuntimeHardwareConfig current = defaultRuntimeHardwareConfig();
 
-  RuntimeHardwareWebOption displays[5]{};
+  RuntimeHardwareWebOption displays[6]{};
   const size_t displayCount =
-      supportedRuntimeDisplayOptions(capabilities, displays, 5);
+      supportedRuntimeDisplayOptions(capabilities, displays, 6);
   assert(displayCount == 2 || displayCount == 3);
   assert(std::strcmp(displays[0].value, "none") == 0);
   assert(std::strcmp(displays[0].label, "Brak") == 0);
-#if defined(VOXONE_PROFILE_M0) || defined(VOXONE_PROFILE_S0) || \
-    defined(VOXONE_PROFILE_DIN0)
+#if defined(VOXONE_PROFILE_S0)
+  assert(displayCount == 3);
+  assert(hasOption(displays, displayCount, "ssd1306_128x32"));
+  assert(hasOption(displays, displayCount, "ssd1306_128x64"));
+  assert(!hasOption(displays, displayCount, "ssd1309_128x64"));
+#elif defined(VOXONE_PROFILE_M0) || defined(VOXONE_PROFILE_DIN0)
   assert(displayCount == 3);
   assert(hasOption(displays, displayCount, "ssd1306_128x64"));
   assert(hasOption(displays, displayCount, "ssd1309_128x64"));
@@ -100,10 +104,16 @@ int main() {
   const size_t audioOutputCount =
       supportedRuntimeAudioOutputOptions(capabilities, audioOutputs, 4);
   assert(audioOutputCount == 1);
+#if defined(VOXONE_PROFILE_S0)
+  assert(std::strcmp(audioOutputs[0].value, "max98357a") == 0);
+  assert(std::strcmp(audioOutputs[0].label, "MAX98357A") == 0);
+  assert(!hasOption(audioOutputs, audioOutputCount, "pcm5102a"));
+#else
   assert(std::strcmp(audioOutputs[0].value, "pcm5102a") == 0);
   assert(std::strcmp(audioOutputs[0].label, "PCM5102A") == 0);
-  assert(!hasOption(audioOutputs, audioOutputCount, "none"));
   assert(!hasOption(audioOutputs, audioOutputCount, "max98357a"));
+#endif
+  assert(!hasOption(audioOutputs, audioOutputCount, "none"));
   assert(!hasOption(audioOutputs, audioOutputCount, "dspmini"));
 
   assert(std::strcmp(hardwareRoadmapStatusValue(
@@ -140,14 +150,21 @@ int main() {
   assert(noneDisplay->status == HardwareRoadmapStatus::Supported);
   const HardwareRoadmapItem* plannedDisplay = findRoadmapItem(
       displayRoadmap, displayRoadmapCount,
-#if defined(VOXONE_PROFILE_S0) || defined(VOXONE_PROFILE_DIN0)
+#if defined(VOXONE_PROFILE_DIN0)
+      "ssd1306_128x32"
+#elif defined(VOXONE_PROFILE_S0)
       "ssd1306_128x32"
 #else
       "ch1116_128x64"
 #endif
   );
+#if defined(VOXONE_PROFILE_S0)
+  assert(plannedDisplay && plannedDisplay->selectable);
+  assert(plannedDisplay->status == HardwareRoadmapStatus::Untested);
+#else
   assert(plannedDisplay && !plannedDisplay->selectable);
   assert(plannedDisplay->status == HardwareRoadmapStatus::Planned);
+#endif
   const HardwareRoadmapItem* currentDisplay = findRoadmapItem(
       displayRoadmap, displayRoadmapCount,
       runtimeDisplayWebValue(current.display));
@@ -178,7 +195,7 @@ int main() {
   const char* const expectedAudio[] = {"pcm5102a", "max98357a"};
   const char* const expectedModules[] = {"voxonebt", "ds3231", "battery"};
 #elif defined(VOXONE_PROFILE_S0)
-  const char* const expectedAudio[] = {"pcm5102a", "max98357a"};
+  const char* const expectedAudio[] = {"max98357a"};
   const char* const expectedModules[] = {"voxonebt", "ds3231", "battery"};
 #elif defined(VOXONE_PROFILE_DIN0)
   const char* const expectedAudio[] = {"pcm5102a"};
@@ -201,8 +218,8 @@ int main() {
 #endif
 #if defined(VOXONE_PROFILE_S0)
   assert(findRoadmapItem(audioRoadmap, audioRoadmapCount,
-                         "pcm5102a")->current);
-  assert(std::strcmp(audioRoadmap[0].note, "Bieżący prototyp") == 0);
+                         "max98357a")->current);
+  assert(audioRoadmap[0].status == HardwareRoadmapStatus::Untested);
 #endif
   assert(current == beforeInformationalRoadmaps);
 
@@ -238,10 +255,17 @@ int main() {
 
   assert(makeRuntimeHardwareWebCandidate(
              current, capabilities, "none", "none", "pcm5102a",
-             candidate) == RuntimeHardwareValidation::Valid);
+             candidate) ==
+#if defined(VOXONE_PROFILE_S0)
+         RuntimeHardwareValidation::Unsupported);
+#else
+         RuntimeHardwareValidation::Valid);
+#endif
+#if !defined(VOXONE_PROFILE_S0)
   assert(candidate.display == RuntimeDisplay::None);
   assert(candidate.input == RuntimeInput::None);
   assert(candidate.audio == RuntimeAudioOutput::Pcm5102a);
+#endif
   assert(makeRuntimeHardwareWebCandidate(
              current, capabilities, runtimeDisplayWebValue(current.display),
              "ec11", "none", candidate) ==
@@ -253,7 +277,11 @@ int main() {
   assert(makeRuntimeHardwareWebCandidate(
              current, capabilities, runtimeDisplayWebValue(current.display),
              "ec11", "max98357a", candidate) ==
+#if defined(VOXONE_PROFILE_S0)
+         RuntimeHardwareValidation::Valid);
+#else
          RuntimeHardwareValidation::Unsupported);
+#endif
   assert(makeRuntimeHardwareWebCandidate(
              current, capabilities, runtimeDisplayWebValue(current.display),
              "ec11", "dspmini", candidate) ==
@@ -268,10 +296,19 @@ int main() {
   assert(makeRuntimeHardwareWebCandidate(current, capabilities, "bad", "ec11",
                                          candidate) ==
          RuntimeHardwareValidation::Invalid);
-  assert(makeRuntimeHardwareWebCandidate(current, capabilities,
-                                         plannedDisplay->value, "ec11",
-                                         candidate) ==
+  assert(makeRuntimeHardwareWebCandidate(
+             current, capabilities,
+#if defined(VOXONE_PROFILE_S0)
+             "ch1116_128x64",
+#else
+             plannedDisplay->value,
+#endif
+             "ec11", candidate) ==
+#if defined(VOXONE_PROFILE_DIN0)
+         RuntimeHardwareValidation::Unsupported);
+#else
          RuntimeHardwareValidation::Invalid);
+#endif
   assert(makeRuntimeHardwareWebCandidate(current, capabilities,
                                          runtimeDisplayWebValue(current.display),
                                          "bad", candidate) ==
@@ -288,7 +325,8 @@ int main() {
          RuntimeHardwareValidation::Unsupported);
 
   const char* unsupportedDisplay = nullptr;
-  for (const char* value : {"ssd1306_128x64", "ssd1309_128x64",
+  for (const char* value : {"ssd1306_128x32", "ssd1306_128x64",
+                            "ssd1309_128x64",
                             "st7789_284x76", "st7796s_480x320"}) {
     RuntimeDisplay parsed = RuntimeDisplay::None;
     assert(parseRuntimeDisplayWebValue(value, parsed));
@@ -364,7 +402,9 @@ int main() {
   assert(contains(saved, "\"restartRequired\":true"));
   assert(contains(saved, "\"display\":\"none\""));
   assert(contains(saved, "\"input\":\"none\""));
-  assert(contains(saved, "\"audio\":\"pcm5102a\""));
+  assert(contains(saved, std::string("\"audio\":\"") +
+                             runtimeAudioOutputWebValue(requested.audio) +
+                             "\""));
   assert(formatRuntimeHardwareWebSaveJson(savedJson, sizeof(savedJson),
                                           requested, false));
   assert(contains(savedJson, "\"changed\":false"));

@@ -27,14 +27,20 @@ int main() {
   assert(caps.supportsVoxOneBt == bool(VOXONE_HAS_BT));
   assert(caps.supportsVoxOneBt ==
          (hasPin(d.btUart.rx) && hasPin(d.btUart.tx)));
+#if defined(VOXONE_PROFILE_S0)
+  assert(!caps.supportsAudioOutput(AudioOutputKind::Pcm5102a));
+  assert(caps.supportsAudioOutput(AudioOutputKind::Max98357));
+  assert(d.audioOutputKind == AudioOutputKind::Max98357);
+#else
   assert(caps.supportsAudioOutput(AudioOutputKind::Pcm5102a));
   assert(!caps.supportsAudioOutput(AudioOutputKind::Max98357));
+  assert(d.audioOutputKind == AudioOutputKind::Pcm5102a);
+#endif
   assert(!caps.supportsAudioOutput(AudioOutputKind::DspMini));
   assert(!caps.supportsDsp && !caps.supportsAux && !caps.supportsSpdif);
   assert(!caps.supportsTda7719);
   assert(caps.supportsBtAudioRx == bool(VOXONE_BT_I2S_RX_ENABLED));
   assert(caps.supportsDacHardwareMute == hasPin(d.dacXsmt));
-  assert(d.audioOutputKind == AudioOutputKind::Pcm5102a);
   assert(d.audioOut.bclk == fromLegacyPin(I2S_BCLK));
   assert(d.audioOut.ws == fromLegacyPin(I2S_LRC));
   assert(d.audioOut.dout == fromLegacyPin(I2S_DOUT));
@@ -47,7 +53,8 @@ int main() {
   assert(activeController() == controllerFor(d.displayKind));
   const Descriptor layout = activeDescriptor();
   assert(d.display.bus ==
-         ((d.displayKind == DisplayKind::Ssd1306_128x64 ||
+         ((d.displayKind == DisplayKind::Ssd1306_128x32 ||
+           d.displayKind == DisplayKind::Ssd1306_128x64 ||
            d.displayKind == DisplayKind::Ssd1309_128x64) ? BusKind::I2c :
           (caps.hasLocalDisplay() ? BusKind::Spi : BusKind::None)));
   assert(d.localInput.a == fromLegacyPin(ENC_BTNL));
@@ -194,21 +201,24 @@ int main() {
   assert(d.board.family == 'S' && d.board.revision == 0);
   assert(d.board.flashBytes == 4u * 1024u * 1024u);
   assert(d.board.psramBytes == 2u * 1024u * 1024u);
-  assert(VOXONE_PROFILE_DISPLAY == Display::Ssd1306_128x64);
-  assert(d.displayKind == DisplayKind::Ssd1306_128x64);
+  assert(VOXONE_PROFILE_DISPLAY == Display::Ssd1306_128x32);
+  assert(d.displayKind == DisplayKind::Ssd1306_128x32);
   assert(activeController() == ControllerId::Ssd1306);
-  assert(activeProfile() == ProfileId::Oled128x64);
-  assert(layout.width == 128 && layout.height == 64 && layout.monochrome);
+  assert(activeProfile() == ProfileId::Oled128x32);
+  assert(layout.width == 128 && layout.height == 32 && layout.monochrome);
   assert(d.display.bus == BusKind::I2c);
   assert(caps.supportedDisplays ==
-         (displaySupport(DisplayKind::Ssd1306_128x64) |
-          displaySupport(DisplayKind::Ssd1309_128x64)));
+         (displaySupport(DisplayKind::Ssd1306_128x32) |
+          displaySupport(DisplayKind::Ssd1306_128x64)));
+  assert(caps.supportsDisplay(DisplayKind::Ssd1306_128x32));
   assert(caps.supportsDisplay(DisplayKind::Ssd1306_128x64));
-  assert(caps.supportsDisplay(DisplayKind::Ssd1309_128x64));
-  assert(d.i2c.sda == 7 && d.i2c.scl == 8);
+  assert(!caps.supportsDisplay(DisplayKind::Ssd1309_128x64));
+  assert(d.i2c.sda == 1 && d.i2c.scl == 2);
+  assert(I2CFREQ_HZ == 400000UL);
   assert(d.display.cs == kNoPin && d.display.dc == kNoPin);
-  assert(d.audioOut.bclk == 1 && d.audioOut.ws == 3 && d.audioOut.dout == 2);
-  assert(d.localInput.a == 5 && d.localInput.b == 6 && d.localInput.key == 4);
+  assert(d.audioOutputKind == AudioOutputKind::Max98357);
+  assert(d.audioOut.bclk == 5 && d.audioOut.ws == 4 && d.audioOut.dout == 6);
+  assert(d.localInput.a == 9 && d.localInput.b == 8 && d.localInput.key == 7);
   assert(!bool(ENC_INTERNALPULLUP));
   assert(!bool(ENC_BUTTON_INTERNALPULLUP));
   assert(!caps.supportsRtc);
@@ -286,7 +296,8 @@ int main() {
   assert(!validateDescriptor(bad));
   bad = d;
   bad.i2c.sda = kNoPin;
-  if (d.displayKind == DisplayKind::Ssd1306_128x64 ||
+  if (d.displayKind == DisplayKind::Ssd1306_128x32 ||
+      d.displayKind == DisplayKind::Ssd1306_128x64 ||
       d.displayKind == DisplayKind::Ssd1309_128x64 ||
       d.capabilities.supportsRtc)
     assert(!validateDescriptor(bad));

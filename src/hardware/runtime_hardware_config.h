@@ -19,7 +19,9 @@ enum class RuntimeDisplay : uint8_t {
   Ssd1306_128x64 = 1,
   Ssd1309_128x64 = 2,
   St7789_284x76 = 3,
-  St7796s_480x320 = 4
+  St7796s_480x320 = 4,
+  // Appended so existing Config v7 hardware records retain their meaning.
+  Ssd1306_128x32 = 5
 };
 
 enum class RuntimeInput : uint8_t {
@@ -142,7 +144,7 @@ RuntimeHardwareSaveStatus saveRuntimeHardwareConfig(
     const RuntimeHardwareConfig& requested,
     const HardwareCapabilities& capabilities);
 
-// Device API. M0/S0/DIN0 activate the selected SSD1306/SSD1309 display backend.
+// Device API. M0/S0/DIN0 activate a selected compiled OLED backend/layout.
 // Every current board activates the selected local input backend at startup.
 // Audio and display drivers on other boards remain build-time choices.
 const RuntimeHardwareConfig& runtimeHardwareConfig();

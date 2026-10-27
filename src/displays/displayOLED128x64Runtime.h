@@ -16,13 +16,17 @@ class RuntimeOled128x64Display : public Adafruit_GFX {
  public:
   RuntimeOled128x64Display();
 
-  bool begin(voxone::display_profile::ControllerId controller);
+  bool begin(voxone::display_profile::ControllerId controller,
+             voxone::display_profile::ProfileId profile);
   void display();
   void sleep();
   void wake();
   bool ready() const { return ready_; }
   voxone::display_profile::ControllerId activeController() const {
     return activeController_;
+  }
+  voxone::display_profile::ProfileId activeProfile() const {
+    return activeProfile_;
   }
 
   void drawPixel(int16_t x, int16_t y, uint16_t color) override;
@@ -48,14 +52,18 @@ class RuntimeOled128x64Display : public Adafruit_GFX {
  private:
   Adafruit_GFX* active();
   const Adafruit_GFX* active() const;
+  Adafruit_SSD1306* activeSsd1306();
 
   TwoWire wire_;
-  Adafruit_SSD1306 ssd1306_;
+  Adafruit_SSD1306 ssd1306_128x32_;
+  Adafruit_SSD1306 ssd1306_128x64_;
   // The existing, physically verified SSD1309 path uses Adafruit's
   // SSD1305-compatible controller implementation.
   Adafruit_SSD1305 ssd1309_;
   voxone::display_profile::ControllerId activeController_ =
       voxone::display_profile::ControllerId::None;
+  voxone::display_profile::ProfileId activeProfile_ =
+      voxone::display_profile::ProfileId::None;
   bool ready_ = false;
 };
 

@@ -1,15 +1,15 @@
 #ifndef VOXONE_PROFILE_S0_H
 #define VOXONE_PROFILE_S0_H
 
-// Current ESP32-S3 Zero test hardware; future PCB capabilities are not enabled.
+// Current user-wired ESP32-S3 Zero prototype. S1 remains a separate future PCB.
 #define VOXONE_PROFILE_NAME "S0"
 #define VOXONE_PROFILE_MCU voxone::Mcu::Esp32S3
 #define VOXONE_RUNTIME_OLED_128X64_BACKENDS 1
-#define VOXONE_PROFILE_DISPLAY voxone::Display::Ssd1306_128x64
+#define VOXONE_PROFILE_DISPLAY voxone::Display::Ssd1306_128x32
 #define VOXONE_DISPLAY_CONTROLLER VOXONE_DISPLAY_CONTROLLER_SSD1306
 #define DSP_MODEL DSP_SSD1306
-#define VOXONE_DISPLAY_PROFILE VOXONE_DISPLAY_PROFILE_OLED_128X64
-#define VOXONE_PROFILE_AUDIO voxone::AudioOutput::Pcm5102a
+#define VOXONE_DISPLAY_PROFILE VOXONE_DISPLAY_PROFILE_OLED_128X32
+#define VOXONE_PROFILE_AUDIO voxone::AudioOutput::Max98357
 
 #define VOXONE_HAS_DISPLAY 1
 #define VOXONE_HAS_ENCODER 1
@@ -21,19 +21,21 @@
 #define VOXONE_HAS_LOCAL_UI 1
 #define VOXONE_PIN_MAP_COMPLETE 1
 
-#define I2S_BCLK 1
-#define I2S_DOUT 2
-#define I2S_LRC 3
+#define I2S_BCLK 5
+#define I2S_DOUT 6
+#define I2S_LRC 4
 
-#define ENC_BTNB 4
-#define ENC_BTNR 6
-#define ENC_BTNL 5
+#define ENC_BTNB 7
+#define ENC_BTNR 8
+#define ENC_BTNL 9
 #define ENC_INTERNALPULLUP false
 #define ENC_BUTTON_INTERNALPULLUP false
 
-#define I2C_SDA 7
-#define I2C_SCL 8
+#define I2C_SDA 1
+#define I2C_SCL 2
 #define I2C_RST -1
 #define SCREEN_ADDRESS 0x3C
+// The external I2C module must provide SDA/SCL pull-ups.
+#define I2CFREQ_HZ 400000UL
 
 #endif

@@ -26,6 +26,9 @@ int main() {
   static_assert(profileFor(DisplayKind::Ssd1309_128x64) ==
                     ProfileId::Oled128x64,
                 "SSD1309 uses the shared OLED layout");
+  static_assert(profileFor(DisplayKind::Ssd1306_128x32) ==
+                    ProfileId::Oled128x32,
+                "SSD1306 128x32 uses the compact OLED layout");
   static_assert(profileFor(DisplayKind::St7789_284x76) ==
                     ProfileId::St7789_284x76,
                 "ST7789 284x76 uses its own layout");
@@ -38,14 +41,19 @@ int main() {
   static_assert(controllerFor(DisplayKind::Ssd1309_128x64) ==
                     ControllerId::Ssd1309,
                 "SSD1309 controller remains distinct");
+  static_assert(controllerFor(DisplayKind::Ssd1306_128x32) ==
+                    ControllerId::Ssd1306,
+                "Both SSD1306 sizes use the SSD1306 controller");
 
   const Descriptor none = descriptor(ProfileId::None);
   const Descriptor oled = descriptor(ProfileId::Oled128x64);
+  const Descriptor oled32 = descriptor(ProfileId::Oled128x32);
   const Descriptor st7789 = descriptor(ProfileId::St7789_284x76);
   const Descriptor st7796 = descriptor(ProfileId::St7796_480x320);
   assert(none.width == 0 && none.height == 0 && !none.monochrome);
   assert(controllerFor(DisplayKind::None) == ControllerId::None);
   assert(oled.width == 128 && oled.height == 64 && oled.monochrome);
+  assert(oled32.width == 128 && oled32.height == 32 && oled32.monochrome);
   assert(st7789.width == 284 && st7789.height == 76 && !st7789.monochrome);
   assert(st7796.width == 480 && st7796.height == 320 && !st7796.monochrome);
 
@@ -61,7 +69,7 @@ int main() {
     assert(source->find("VOXONE_PROFILE_DIN0") == std::string::npos);
     assert(source->find("VOXONE_PROFILE_W0") == std::string::npos);
   }
-  assert(display.find("VOXONE_DISPLAY_PROFILE_OLED_128X64") !=
+  assert(display.find("VOXONE_DISPLAY_PROFILE_IS_SMALL_OLED") !=
          std::string::npos);
   assert(display.find("VOXONE_DISPLAY_PROFILE_ST7789_284X76") !=
          std::string::npos);

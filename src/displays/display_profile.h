@@ -12,6 +12,11 @@
 #define VOXONE_DISPLAY_PROFILE_OLED_128X64 1
 #define VOXONE_DISPLAY_PROFILE_ST7789_284X76 2
 #define VOXONE_DISPLAY_PROFILE_ST7796_480X320 3
+#define VOXONE_DISPLAY_PROFILE_OLED_128X32 4
+
+#define VOXONE_DISPLAY_PROFILE_IS_SMALL_OLED \
+  (VOXONE_DISPLAY_PROFILE == VOXONE_DISPLAY_PROFILE_OLED_128X64 || \
+   VOXONE_DISPLAY_PROFILE == VOXONE_DISPLAY_PROFILE_OLED_128X32)
 
 #define VOXONE_DISPLAY_CONTROLLER_NONE 0
 #define VOXONE_DISPLAY_CONTROLLER_SSD1306 1
@@ -30,7 +35,8 @@ enum class ProfileId : uint8_t {
   None = VOXONE_DISPLAY_PROFILE_NONE,
   Oled128x64 = VOXONE_DISPLAY_PROFILE_OLED_128X64,
   St7789_284x76 = VOXONE_DISPLAY_PROFILE_ST7789_284X76,
-  St7796_480x320 = VOXONE_DISPLAY_PROFILE_ST7796_480X320
+  St7796_480x320 = VOXONE_DISPLAY_PROFILE_ST7796_480X320,
+  Oled128x32 = VOXONE_DISPLAY_PROFILE_OLED_128X32
 };
 
 enum class ControllerId : uint8_t {
@@ -50,6 +56,7 @@ struct Descriptor {
 
 constexpr ProfileId profileFor(hardware::DisplayKind kind) {
   return kind == hardware::DisplayKind::None ? ProfileId::None :
+      kind == hardware::DisplayKind::Ssd1306_128x32 ? ProfileId::Oled128x32 :
       (kind == hardware::DisplayKind::Ssd1306_128x64 ||
        kind == hardware::DisplayKind::Ssd1309_128x64) ? ProfileId::Oled128x64 :
       kind == hardware::DisplayKind::St7789_284x76 ? ProfileId::St7789_284x76 :
@@ -58,7 +65,8 @@ constexpr ProfileId profileFor(hardware::DisplayKind kind) {
 
 constexpr ControllerId controllerFor(hardware::DisplayKind kind) {
   return kind == hardware::DisplayKind::None ? ControllerId::None :
-      kind == hardware::DisplayKind::Ssd1306_128x64 ? ControllerId::Ssd1306 :
+      (kind == hardware::DisplayKind::Ssd1306_128x32 ||
+       kind == hardware::DisplayKind::Ssd1306_128x64) ? ControllerId::Ssd1306 :
       kind == hardware::DisplayKind::Ssd1309_128x64 ? ControllerId::Ssd1309 :
       kind == hardware::DisplayKind::St7789_284x76 ? ControllerId::St7789 :
       ControllerId::St7796;
@@ -66,6 +74,7 @@ constexpr ControllerId controllerFor(hardware::DisplayKind kind) {
 
 constexpr Descriptor descriptor(ProfileId id) {
   return id == ProfileId::None ? Descriptor{id, 0, 0, false} :
+      id == ProfileId::Oled128x32 ? Descriptor{id, 128, 32, true} :
       id == ProfileId::Oled128x64 ? Descriptor{id, 128, 64, true} :
       id == ProfileId::St7789_284x76 ? Descriptor{id, 284, 76, false} :
       Descriptor{id, 480, 320, false};
@@ -77,6 +86,9 @@ static_assert(profileFor(hardware::DisplayKind::Ssd1306_128x64) ==
 static_assert(profileFor(hardware::DisplayKind::Ssd1309_128x64) ==
                   ProfileId::Oled128x64,
               "SSD1309 must use the shared OLED 128x64 layout");
+static_assert(profileFor(hardware::DisplayKind::Ssd1306_128x32) ==
+                  ProfileId::Oled128x32,
+              "SSD1306 128x32 must use the compact OLED layout");
 static_assert(controllerFor(hardware::DisplayKind::Ssd1306_128x64) !=
                   controllerFor(hardware::DisplayKind::Ssd1309_128x64),
               "OLED controllers remain distinct physical backends");

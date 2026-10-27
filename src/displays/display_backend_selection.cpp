@@ -42,6 +42,7 @@ const char* runtimeDisplayName(hardware::RuntimeDisplay display) {
     case hardware::RuntimeDisplay::Ssd1309_128x64: return "SSD1309_128X64";
     case hardware::RuntimeDisplay::St7789_284x76: return "ST7789_284X76";
     case hardware::RuntimeDisplay::St7796s_480x320: return "ST7796S_480X320";
+    case hardware::RuntimeDisplay::Ssd1306_128x32: return "SSD1306_128X32";
   }
   return "UNKNOWN";
 }
@@ -63,6 +64,7 @@ const char* profileName(display_profile::ProfileId profile) {
     case display_profile::ProfileId::Oled128x64: return "OLED_128X64";
     case display_profile::ProfileId::St7789_284x76: return "ST7789_284X76";
     case display_profile::ProfileId::St7796_480x320: return "ST7796_480X320";
+    case display_profile::ProfileId::Oled128x32: return "OLED_128X32";
   }
   return "UNKNOWN";
 }

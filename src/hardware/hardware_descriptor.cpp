@@ -45,7 +45,7 @@ constexpr HardwareCapabilities kCapabilities = {
 #elif defined(VOXONE_PROFILE_S0)
 constexpr BoardId kBoardId = BoardId::BoardS0;
 constexpr char kBoardFamily = 'S';
-constexpr DisplayKind kDisplayKind = DisplayKind::Ssd1306_128x64;
+constexpr DisplayKind kDisplayKind = DisplayKind::Ssd1306_128x32;
 constexpr SpiBusPins kSpi = {kNoPin, kNoPin, kNoPin};
 constexpr I2cBusPins kI2c = {fromLegacyPin(I2C_SDA), fromLegacyPin(I2C_SCL)};
 constexpr UartPins kBtUart = {kNoPin, kNoPin};
@@ -54,9 +54,9 @@ constexpr Pin kDacXsmt = kNoPin;
 constexpr uint32_t kFlashBytes = 4u * 1024u * 1024u;
 constexpr uint32_t kPsramBytes = 2u * 1024u * 1024u;
 constexpr HardwareCapabilities kCapabilities = {
-  displaySupport(DisplayKind::Ssd1306_128x64) |
-      displaySupport(DisplayKind::Ssd1309_128x64),
-  audioOutputSupport(AudioOutputKind::Pcm5102a),
+  displaySupport(DisplayKind::Ssd1306_128x32) |
+      displaySupport(DisplayKind::Ssd1306_128x64),
+  audioOutputSupport(AudioOutputKind::Max98357),
   inputSupport(LocalInputKind::Ec11) | inputSupport(LocalInputKind::Buttons3),
   true, false, false, false, false, false, true, false,
   false, false, false, false
@@ -125,7 +125,8 @@ constexpr HardwareDescriptor kCurrent = {
    ENC_HALFQUARD == 255 ? 1 : (ENC_HALFQUARD ? 2 : 4)},
   {fromLegacyPin(TFT_CS), fromLegacyPin(TFT_DC),
    fromLegacyPin(TFT_RST), kBacklight,
-   (kDisplayKind == DisplayKind::Ssd1306_128x64 ||
+   (kDisplayKind == DisplayKind::Ssd1306_128x32 ||
+    kDisplayKind == DisplayKind::Ssd1306_128x64 ||
     kDisplayKind == DisplayKind::Ssd1309_128x64) ? BusKind::I2c :
      (kCapabilities.hasLocalDisplay() ? BusKind::Spi : BusKind::None)},
   kDacXsmt,
@@ -205,6 +206,9 @@ bool hasPinConflicts(const HardwareDescriptor& d) {
 
 bool validateDescriptor(const HardwareDescriptor& d) {
   const bool display = d.displayKind != DisplayKind::None;
+  const bool serialI2sOutput =
+      d.capabilities.supportsAudioOutput(AudioOutputKind::Pcm5102a) ||
+      d.capabilities.supportsAudioOutput(AudioOutputKind::Max98357);
   if ((display && !d.capabilities.supportsDisplay(d.displayKind)) ||
       (!display && d.capabilities.hasLocalDisplay()) ||
       !d.capabilities.supportsAudioOutput(d.audioOutputKind) ||
@@ -212,7 +216,7 @@ bool validateDescriptor(const HardwareDescriptor& d) {
        (!hasPin(d.i2c.sda) || !hasPin(d.i2c.scl))) ||
       d.capabilities.supportsVoxOneBt !=
         (hasPin(d.btUart.rx) && hasPin(d.btUart.tx)) ||
-      d.capabilities.supportsAudioOutput(AudioOutputKind::Pcm5102a) !=
+      serialI2sOutput !=
         (hasPin(d.audioOut.bclk) && hasPin(d.audioOut.ws) &&
          hasPin(d.audioOut.dout)) ||
       d.capabilities.supportsDacHardwareMute != hasPin(d.dacXsmt) ||
@@ -221,7 +225,8 @@ bool validateDescriptor(const HardwareDescriptor& d) {
        (!d.capabilities.hasLocalDisplay() ||
         !d.capabilities.hasLocalInput())))
     return false;
-  if (d.displayKind == DisplayKind::Ssd1306_128x64 ||
+  if (d.displayKind == DisplayKind::Ssd1306_128x32 ||
+      d.displayKind == DisplayKind::Ssd1306_128x64 ||
       d.displayKind == DisplayKind::Ssd1309_128x64) {
     if (d.display.bus != BusKind::I2c ||
         !hasPin(d.i2c.sda) || !hasPin(d.i2c.scl)) return false;

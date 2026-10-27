@@ -19,29 +19,40 @@ using voxone::display_profile::ControllerId;
 RuntimeOled128x64Display::RuntimeOled128x64Display()
     : Adafruit_GFX(128, 64),
       wire_(0),
-      ssd1306_(128, 64, &wire_, I2C_RST, I2CFREQ_HZ),
+      ssd1306_128x32_(128, 32, &wire_, I2C_RST, I2CFREQ_HZ),
+      ssd1306_128x64_(128, 64, &wire_, I2C_RST, I2CFREQ_HZ),
       ssd1309_(128, 64, &wire_, I2C_RST) {}
 
 Adafruit_GFX* RuntimeOled128x64Display::active() {
-  if (activeController_ == ControllerId::Ssd1306) return &ssd1306_;
+  if (activeController_ == ControllerId::Ssd1306) return activeSsd1306();
   if (activeController_ == ControllerId::Ssd1309) return &ssd1309_;
   return nullptr;
 }
 
 const Adafruit_GFX* RuntimeOled128x64Display::active() const {
-  if (activeController_ == ControllerId::Ssd1306) return &ssd1306_;
+  if (activeController_ == ControllerId::Ssd1306)
+    return activeProfile_ == voxone::display_profile::ProfileId::Oled128x32
+               ? static_cast<const Adafruit_GFX*>(&ssd1306_128x32_)
+               : static_cast<const Adafruit_GFX*>(&ssd1306_128x64_);
   if (activeController_ == ControllerId::Ssd1309) return &ssd1309_;
   return nullptr;
 }
 
-bool RuntimeOled128x64Display::begin(ControllerId controller) {
+Adafruit_SSD1306* RuntimeOled128x64Display::activeSsd1306() {
+  return activeProfile_ == voxone::display_profile::ProfileId::Oled128x32
+             ? &ssd1306_128x32_ : &ssd1306_128x64_;
+}
+
+bool RuntimeOled128x64Display::begin(
+    ControllerId controller, voxone::display_profile::ProfileId profile) {
   activeController_ = controller;
+  activeProfile_ = profile;
   ready_ = false;
   wire_.begin(I2C_SDA, I2C_SCL);
   switch (activeController_) {
     case ControllerId::Ssd1306:
-      ready_ = ssd1306_.begin(SSD1306_SWITCHCAPVCC, SCREEN_ADDRESS, true,
-                              false);
+      ready_ = activeSsd1306()->begin(SSD1306_SWITCHCAPVCC, SCREEN_ADDRESS,
+                                     true, false);
       break;
     case ControllerId::Ssd1309:
       ready_ = ssd1309_.begin(SCREEN_ADDRESS);
@@ -54,14 +65,14 @@ bool RuntimeOled128x64Display::begin(ControllerId controller) {
 
 void RuntimeOled128x64Display::display() {
   if (!ready_) return;
-  if (activeController_ == ControllerId::Ssd1306) ssd1306_.display();
+  if (activeController_ == ControllerId::Ssd1306) activeSsd1306()->display();
   else if (activeController_ == ControllerId::Ssd1309) ssd1309_.display();
 }
 
 void RuntimeOled128x64Display::sleep() {
   if (!ready_) return;
   if (activeController_ == ControllerId::Ssd1306)
-    ssd1306_.ssd1306_command(SSD1306_DISPLAYOFF);
+    activeSsd1306()->ssd1306_command(SSD1306_DISPLAYOFF);
   else if (activeController_ == ControllerId::Ssd1309)
     ssd1309_.sleep();
 }
@@ -69,7 +80,7 @@ void RuntimeOled128x64Display::sleep() {
 void RuntimeOled128x64Display::wake() {
   if (!ready_) return;
   if (activeController_ == ControllerId::Ssd1306)
-    ssd1306_.ssd1306_command(SSD1306_DISPLAYON);
+    activeSsd1306()->ssd1306_command(SSD1306_DISPLAYON);
   else if (activeController_ == ControllerId::Ssd1309)
     ssd1309_.wake();
 }
@@ -110,6 +121,14 @@ void RuntimeOled128x64Display::endWrite() {
 void RuntimeOled128x64Display::setRotation(uint8_t rotation) {
   Adafruit_GFX::setRotation(rotation);
   if (Adafruit_GFX* backend = active()) backend->setRotation(rotation);
+  const auto geometry = voxone::display_profile::descriptor(activeProfile_);
+  if ((rotation & 1u) == 0) {
+    _width = static_cast<int16_t>(geometry.width);
+    _height = static_cast<int16_t>(geometry.height);
+  } else {
+    _width = static_cast<int16_t>(geometry.height);
+    _height = static_cast<int16_t>(geometry.width);
+  }
 }
 
 void RuntimeOled128x64Display::invertDisplay(bool inverted) {
@@ -142,7 +161,7 @@ void DspCore::initDisplay() {
       voxone::hardware::runtimeHardwareConfig(),
       voxone::hardware::currentHardware(),
       voxone::display_backend::compiledBackends());
-  if (!begin(selection.controller))
+  if (!begin(selection.controller, selection.profile))
     Serial.println(F("Runtime OLED backend initialization failed; display disabled"));
 #include "tools/oledcolorfix.h"
   cp437(true);

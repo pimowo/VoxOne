@@ -77,13 +77,24 @@ int main() {
   assert(compiled.runtimeSelection);
   assert(compiled.contains(ControllerId::Ssd1306));
   assert(compiled.contains(ControllerId::Ssd1309));
+#if defined(VOXONE_PROFILE_S0)
+  assert(selected.profile == ProfileId::Oled128x32);
+#else
   assert(selected.profile == ProfileId::Oled128x64);
+#endif
 
   RuntimeHardwareConfig stored = defaults;
+#if defined(VOXONE_PROFILE_S0)
+  assert(defaults.display == RuntimeDisplay::Ssd1306_128x32);
+  assert(selected.controller == ControllerId::Ssd1306);
+  stored.display = RuntimeDisplay::Ssd1306_128x64;
+  assert(select(stored, hardware, compiled).controller == ControllerId::Ssd1306);
+#else
   assert(defaults.display == RuntimeDisplay::Ssd1306_128x64);
   assert(selected.controller == ControllerId::Ssd1306);
   stored.display = RuntimeDisplay::Ssd1309_128x64;
   assert(select(stored, hardware, compiled).controller == ControllerId::Ssd1309);
+#endif
   selected = select(stored, hardware, compiled);
   assert(!selected.usedBuildDefault);
   assert(selected.profile == ProfileId::Oled128x64);
@@ -106,7 +117,7 @@ int main() {
       readFile("src/displays/widgets/widgets.h");
   const std::string m0Profile = readFile("profiles/m0.h");
   assert(facade.find("switch (activeController_)") != std::string::npos);
-  assert(facade.find("ssd1306_.begin") != std::string::npos);
+  assert(facade.find("activeSsd1306()->begin") != std::string::npos);
   assert(facade.find("ssd1309_.begin") != std::string::npos);
   assert(facade.find("tools/oledcolorfix.h") != std::string::npos);
   assert(widgets.find("_scrolldelay = millis();") != std::string::npos);

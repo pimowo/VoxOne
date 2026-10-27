@@ -118,7 +118,7 @@ class St7796BluetoothWidget;
 class St7796LabelFrameWidget;
 class St7796PlaybackIconWidget;
 #endif
-#if (VOXONE_DISPLAY_PROFILE == VOXONE_DISPLAY_PROFILE_OLED_128X64)
+#if VOXONE_DISPLAY_PROFILE_IS_SMALL_OLED
 class Oled128x64UpdateProgressWidget;
 #endif
 #if VOXONE_DISPLAY_PROFILE == VOXONE_DISPLAY_PROFILE_ST7789_284X76
@@ -181,13 +181,13 @@ class Display {
     TextWidget *_st7796UpdateActivity = nullptr;
     St7796UpdateProgressWidget *_st7796UpdateBar = nullptr;
 #endif
-#if (VOXONE_DISPLAY_PROFILE == VOXONE_DISPLAY_PROFILE_OLED_128X64)
+#if VOXONE_DISPLAY_PROFILE_IS_SMALL_OLED
     Page *_oled128x64UpdatePage = nullptr;
     TextWidget *_oled128x64UpdateTarget = nullptr, *_oled128x64UpdatePercent = nullptr;
     TextWidget *_oled128x64UpdateActivity = nullptr;
     Oled128x64UpdateProgressWidget *_oled128x64UpdateBar = nullptr;
 #endif
-#if VOXONE_DISPLAY_PROFILE == VOXONE_DISPLAY_PROFILE_ST7789_284X76 || VOXONE_DISPLAY_PROFILE == VOXONE_DISPLAY_PROFILE_ST7796_480X320 || (VOXONE_DISPLAY_PROFILE == VOXONE_DISPLAY_PROFILE_OLED_128X64)
+#if VOXONE_DISPLAY_PROFILE == VOXONE_DISPLAY_PROFILE_ST7789_284X76 || VOXONE_DISPLAY_PROFILE == VOXONE_DISPLAY_PROFILE_ST7796_480X320 || VOXONE_DISPLAY_PROFILE_IS_SMALL_OLED
     TextWidget *_plheader, *_plcounter, *_plplaying;
 #endif
 #if VOXONE_DISPLAY_PROFILE == VOXONE_DISPLAY_PROFILE_ST7789_284X76
