@@ -39,6 +39,10 @@ constexpr const char* backendName(Backend backend) {
          backend == Backend::Buttons3 ? "buttons3" : "none";
 }
 
+constexpr int8_t normalizeEc11Delta(int8_t delta, bool reverseDirection) {
+  return reverseDirection ? static_cast<int8_t>(-delta) : delta;
+}
+
 }  // namespace input
 }  // namespace voxone
 

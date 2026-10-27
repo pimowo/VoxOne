@@ -21,17 +21,13 @@ constexpr ScrollConfig footer = {{0, 24, 1, WA_CENTER}, 140, 128, 0, 2, 15};
 
 namespace player128x32 {
 constexpr ScrollConfig station = {{0, voxone::oled128x32::kPlayerStation.top,
-                                    1, WA_LEFT}, 140,
+                                    2, WA_LEFT}, 140,
                                    voxone::oled128x32::kPlayerStation.width,
                                    5000, 2, 35};
 constexpr ScrollConfig artist = {{0, voxone::oled128x32::kPlayerArtist.top,
                                    1, WA_LEFT}, 140,
                                   voxone::oled128x32::kPlayerArtist.width,
                                   5000, 2, 35};
-constexpr ScrollConfig title = {{0, voxone::oled128x32::kPlayerTitle.top,
-                                  1, WA_LEFT}, 140,
-                                 voxone::oled128x32::kPlayerTitle.width,
-                                 5000, 2, 35};
 constexpr WidgetConfig volumeLabel = {
     0, voxone::oled128x32::kVolumeLabel.top, 1, WA_CENTER};
 constexpr WidgetConfig volumeNumber = {

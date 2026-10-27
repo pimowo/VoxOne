@@ -30,6 +30,7 @@
 #if VOXONE_DISPLAY_PROFILE_IS_SMALL_OLED
 #include "../displays/conf/player128x64conf.h"
 #include "../displays/conf/player128x32conf.h"
+#include "../displays/oled128x32_player.h"
 #endif
 #if VOXONE_DISPLAY_PROFILE == VOXONE_DISPLAY_PROFILE_ST7789_284X76
 #include "st7789_284x76_layout.h"
@@ -163,6 +164,8 @@ class Oled128x32PlayerStatusWidget : public Widget {
                  WHITE, BLACK);
   }
 
+  void setWifiRssi(int rssi) { rssi_ = rssi; }
+
   void loop() override {
     if (!_active || static_cast<uint32_t>(millis() - lastCheck_) < 100) return;
     lastCheck_ = millis();
@@ -172,50 +175,93 @@ class Oled128x32PlayerStatusWidget : public Widget {
  private:
   bool drawn_ = false;
   uint32_t lastCheck_ = 0;
-  DisplaySourceKind source_ = DisplaySourceKind::Radio;
   DisplayPlaybackState playback_ = DisplayPlaybackState::None;
   uint8_t volume_ = 255;
   bool muted_ = false;
+  bool wifiConnected_ = false;
+  uint8_t wifiBars_ = 255;
+  int rssi_ = -127;
 
   void _draw() override { if (_active) render(true); }
 
   void render(bool force) {
+    const bool wifiConnected = network.status == CONNECTED;
+    if (!wifiConnected) rssi_ = -127;
     PlayerDisplayView view{};
-    capturePlayerDisplayView(view, WiFi.RSSI());
-    if (!force && drawn_ && source_ == view.source &&
-        playback_ == view.playback && volume_ == view.userVolume &&
-        muted_ == view.muted) return;
+    capturePlayerDisplayView(view, rssi_);
+    const uint8_t wifiBars = voxone::oled128x32::wifiBars(
+        wifiConnected, rssi_);
+    if (!force && drawn_ && playback_ == view.playback &&
+        volume_ == view.userVolume && muted_ == view.muted &&
+        wifiConnected_ == wifiConnected && wifiBars_ == wifiBars) return;
 
     dsp.fillRect(0, voxone::oled128x32::kPlayerStatus.top,
                  voxone::oled128x32::kPlayerStatus.width,
                  voxone::oled128x32::kPlayerStatus.height, BLACK);
+
+    if (voxone::oled128x32::playbackIcon(
+            view.playback == DisplayPlaybackState::Playing) ==
+        voxone::oled128x32::PlaybackIcon::Play) {
+      dsp.fillTriangle(voxone::oled128x32::kPlayerPlayLeft,
+                       voxone::oled128x32::kPlayerPlayTop,
+                       voxone::oled128x32::kPlayerPlayLeft,
+                       voxone::oled128x32::kPlayerPlayBottom,
+                       voxone::oled128x32::kPlayerPlayRight,
+                       voxone::oled128x32::kPlayerPlayTipY, WHITE);
+    } else {
+      const auto stop = voxone::oled128x32::kPlayerStop;
+      dsp.fillRect(stop.left, stop.top, stop.width, stop.height, WHITE);
+    }
+
+    char level[5];
+    voxone::oled128x32::formatVolume(level, sizeof(level), view.userVolume,
+                                     view.muted);
+    const uint8_t shownVolume = voxone::oled128x32::displayVolume(
+        view.userVolume);
+    const uint16_t volumeLeft = voxone::oled128x32::playerVolumeContentLeft(
+        shownVolume, view.muted);
+    const uint16_t top = voxone::oled128x32::kPlayerStatus.top;
+    dsp.fillRect(volumeLeft, top + 2, 2, 4, WHITE);
+    dsp.fillTriangle(volumeLeft + 1, top + 2, volumeLeft + 6, top,
+                     volumeLeft + 6, top + 7, WHITE);
+    dsp.fillTriangle(volumeLeft + 1, top + 2, volumeLeft + 1, top + 5,
+                     volumeLeft + 6, top + 7, WHITE);
+    if (view.muted) {
+      dsp.drawLine(volumeLeft + 4, top + 1, volumeLeft + 6, top + 6, BLACK);
+      dsp.drawLine(volumeLeft + 6, top + 1, volumeLeft + 4, top + 6, BLACK);
+    }
     dsp.setFont();
     dsp.setTextColor(WHITE, BLACK);
     dsp.setTextSize(1);
-    dsp.setCursor(0, voxone::oled128x32::kPlayerStatus.top);
-    switch (view.playback) {
-      case DisplayPlaybackState::Playing: dsp.print('>'); break;
-      case DisplayPlaybackState::Paused: dsp.print("||"); break;
-      case DisplayPlaybackState::Stopped: dsp.print("[]"); break;
-      case DisplayPlaybackState::None: dsp.print('-'); break;
-    }
-    dsp.setCursor(18, voxone::oled128x32::kPlayerStatus.top);
-    dsp.print(displaySourceLabel(view.source));
-    char level[6];
-    if (view.muted) strlcpy(level, "MUTE", sizeof(level));
-    else snprintf(level, sizeof(level), "V%u",
-                  static_cast<unsigned>(view.userVolume));
-    dsp.setCursor(128 - strlen(level) * 6,
-                  voxone::oled128x32::kPlayerStatus.top);
+    dsp.setCursor(volumeLeft + voxone::oled128x32::kPlayerSpeakerWidth +
+                      voxone::oled128x32::kPlayerVolumeGap,
+                  top);
     dsp.print(level);
 
+    if (wifiConnected) {
+      for (uint8_t i = 0; i < wifiBars; ++i) {
+        const auto bar = voxone::oled128x32::playerWifiBar(i);
+        dsp.fillRect(bar.left, bar.top, bar.width, bar.height, WHITE);
+      }
+    } else {
+      const auto disconnected =
+          voxone::oled128x32::kPlayerWifiDisconnected;
+      const uint16_t right = disconnected.left + disconnected.width - 1;
+      const uint16_t bottom = disconnected.top + disconnected.height - 1;
+      dsp.drawLine(disconnected.left, disconnected.top, right, bottom, WHITE);
+      dsp.drawLine(right, disconnected.top, disconnected.left, bottom, WHITE);
+    }
+
     drawn_ = true;
-    source_ = view.source;
     playback_ = view.playback;
     volume_ = view.userVolume;
     muted_ = view.muted;
+    wifiConnected_ = wifiConnected;
+    wifiBars_ = wifiBars;
   }
 };
+
+static Oled128x32PlayerStatusWidget* oled128x32PlayerStatus = nullptr;
 
 // 8x8 monochrome speaker: small body, widening cone, two wave pixels.
 static const uint8_t oled128x64SpeakerBitmap[] PROGMEM = {
@@ -1038,9 +1084,8 @@ void Display::_buildPager(){
 #endif
   #ifndef HIDE_TITLE2
 #if VOXONE_DISPLAY_PROFILE_IS_SMALL_OLED
-    _title2 = new ScrollWidget("*", oled128x32Active() ? player128x32::title
-                                                        : player128x64::title,
-                               WHITE, BLACK);
+    if (!oled128x32Active())
+      _title2 = new ScrollWidget("*", player128x64::title, WHITE, BLACK);
 #else
     _title2 = new ScrollWidget("*", title2Conf, config.theme.title2, config.theme.background);
 #endif
@@ -1149,9 +1194,10 @@ void Display::_buildPager(){
   pages[PG_PLAYER]->addWidget(new FillWidget(st7796LowerDividerConf, config.theme.div));
 #endif
 #if VOXONE_DISPLAY_PROFILE_IS_SMALL_OLED
-  if (oled128x32Active())
-    pages[PG_PLAYER]->addWidget(new Oled128x32PlayerStatusWidget());
-  else {
+  if (oled128x32Active()) {
+    oled128x32PlayerStatus = new Oled128x32PlayerStatusWidget();
+    pages[PG_PLAYER]->addWidget(oled128x32PlayerStatus);
+  } else {
     pages[PG_PLAYER]->addWidget(new Oled128x64PlayerStatusWidget());
     if (_rssi) pages[PG_PLAYER]->addWidget(_rssi);
   }
@@ -2045,7 +2091,13 @@ void Display::loop() {
           }
           break;
         }
-        case DSPRSSI: if(_rssi){ _setRSSI(request.payload); } break;
+        case DSPRSSI:
+          if(_rssi) _setRSSI(request.payload);
+#if VOXONE_DISPLAY_PROFILE_IS_SMALL_OLED
+          if(oled128x32PlayerStatus)
+            oled128x32PlayerStatus->setWifiRssi(request.payload);
+#endif
+          break;
         case PSTART:
           _layoutChange(activeSourceVuVisible());
 #if VOXONE_DISPLAY_PROFILE_IS_SMALL_OLED

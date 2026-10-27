@@ -30,6 +30,8 @@
 #define ENC_BTNL 9
 #define ENC_INTERNALPULLUP false
 #define ENC_BUTTON_INTERNALPULLUP false
+// The wired A/B phase on the S3 Zero reports physical CW as a negative delta.
+#define VOXONE_EC11_REVERSE_DIRECTION 1
 
 #define I2C_SDA 1
 #define I2C_SCL 2

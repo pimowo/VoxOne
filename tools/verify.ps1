@@ -165,7 +165,7 @@ Invoke-Step 'Native tests' {
   $name=$test.BaseName
   $sources=@($test.FullName)
   if($nativeSources.ContainsKey($name)) { $sources+=@($nativeSources[$name] | ForEach-Object { Join-Path $root $_ }) }
-  $variants=if($name -eq 'security_http_adapter_native') { @('','L0','M0','S0','DIN0','W0','SECURITY-TEST') } elseif($name -eq 'ap_ui_display_binding_native' -or $name -eq 'ap_ui_www_binding_native' -or $name -eq 'config_backup_native' -or $name -eq 'first_boot_core_native' -or $name -eq 'first_boot_runtime_snapshot_native' -or $name -eq 'first_boot_spiffs_transaction_native' -or $name -eq 'first_boot_transaction_native' -or $name -eq 'hardware_descriptor_native' -or $name -eq 'runtime_hardware_config_native' -or $name -eq 'runtime_hardware_web_native' -or $name -eq 'runtime_display_activation_native' -or $name -eq 'security_recovery_ap_native' -or $name -eq 'security_recovery_display_native' -or $name -eq 'security_recovery_key_native' -or $name -eq 'security_recovery_session_native' -or $name -eq 'security_recovery_state_native') { @('L0','M0','S0','DIN0','W0') } elseif($name -eq 'build_identity_native') { @('','L0','M0','S0','DIN0','W0','CLEAN','DIRTY') } else { @('') }
+  $variants=if($name -eq 'security_http_adapter_native') { @('','L0','M0','S0','DIN0','W0','SECURITY-TEST') } elseif($name -eq 'ap_ui_display_binding_native' -or $name -eq 'ap_ui_www_binding_native' -or $name -eq 'config_backup_native' -or $name -eq 'ec11_direction_native' -or $name -eq 'first_boot_core_native' -or $name -eq 'first_boot_runtime_snapshot_native' -or $name -eq 'first_boot_spiffs_transaction_native' -or $name -eq 'first_boot_transaction_native' -or $name -eq 'hardware_descriptor_native' -or $name -eq 'runtime_hardware_config_native' -or $name -eq 'runtime_hardware_web_native' -or $name -eq 'runtime_display_activation_native' -or $name -eq 'security_recovery_ap_native' -or $name -eq 'security_recovery_display_native' -or $name -eq 'security_recovery_key_native' -or $name -eq 'security_recovery_session_native' -or $name -eq 'security_recovery_state_native') { @('L0','M0','S0','DIN0','W0') } elseif($name -eq 'build_identity_native') { @('','L0','M0','S0','DIN0','W0','CLEAN','DIRTY') } else { @('') }
   foreach($variant in $variants) {
    $label=if($variant) { "$name-$variant" } else { $name }
    $exe=Join-Path $work ($label+$(if($onWindows) { '.exe' } else { '' }))
@@ -223,6 +223,18 @@ if(-not $onWindows) {
   if($LASTEXITCODE -ne 0) { throw 'Sanitized display boot branding compile failed' }
   & $bootBrandingExe
   if($LASTEXITCODE -ne 0) { throw 'Sanitized display boot branding test failed' }
+  $oled128x32Exe=Join-Path $work 'oled128x32_layout_sanitized'
+  & $Cxx @sanitizerArgs '-o' $oled128x32Exe `
+    (Join-Path $root 'test/oled128x32_layout_native.cpp')
+  if($LASTEXITCODE -ne 0) { throw 'Sanitized OLED 128x32 layout compile failed' }
+  & $oled128x32Exe
+  if($LASTEXITCODE -ne 0) { throw 'Sanitized OLED 128x32 layout test failed' }
+  $ec11DirectionExe=Join-Path $work 'ec11_direction_s0_sanitized'
+  & $Cxx @sanitizerArgs '-DVOXONE_PROFILE_S0=1' '-o' $ec11DirectionExe `
+    (Join-Path $root 'test/ec11_direction_native.cpp')
+  if($LASTEXITCODE -ne 0) { throw 'Sanitized S0 EC11 direction compile failed' }
+  & $ec11DirectionExe
+  if($LASTEXITCODE -ne 0) { throw 'Sanitized S0 EC11 direction test failed' }
   $backupExe=Join-Path $work 'config_backup_sanitized'
   $backupSources=@(
    (Join-Path $root 'test/config_backup_native.cpp'),

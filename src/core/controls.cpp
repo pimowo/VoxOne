@@ -184,7 +184,9 @@ void loopControls() {
 }
 #if ENC_BTNL!=255
 void encoder1Loop() {
-  int8_t encoderDelta = encoder.encoderChanged();
+  const int8_t encoderDelta = voxone::input::normalizeEc11Delta(
+      static_cast<int8_t>(encoder.encoderChanged()),
+      VOXONE_EC11_REVERSE_DIRECTION != 0);
   if (encoderDelta!=0)
   {
     dispatchUiInput(uiInputEvent(encoderDelta > 0

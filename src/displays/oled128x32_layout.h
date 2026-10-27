@@ -23,18 +23,80 @@ constexpr bool fits(Bounds bounds) {
       bounds.height <= kHeight - bounds.top;
 }
 
-constexpr Bounds kPlayerStation = {0, 0, 128, 8};
-constexpr Bounds kPlayerArtist = {0, 8, 128, 8};
-constexpr Bounds kPlayerTitle = {0, 16, 128, 8};
+constexpr bool contains(Bounds outer, Bounds inner) {
+  return inner.left >= outer.left && inner.top >= outer.top &&
+      inner.left + inner.width <= outer.left + outer.width &&
+      inner.top + inner.height <= outer.top + outer.height;
+}
+
+constexpr Bounds kPlayerStation = {0, 0, 128, 16};
+constexpr Bounds kPlayerArtist = {0, 16, 128, 8};
 constexpr Bounds kPlayerStatus = {0, 24, 128, 8};
+constexpr Bounds kPlayerPlayback = {0, 24, 12, 8};
+constexpr Bounds kPlayerVolume = {20, 24, 88, 8};
+constexpr Bounds kPlayerWifi = {108, 24, 20, 8};
+
+constexpr Bounds kPlayerPlay = {1, 24, 8, 8};
+constexpr uint16_t kPlayerPlayLeft = 1;
+constexpr uint16_t kPlayerPlayTop = 24;
+constexpr uint16_t kPlayerPlayRight = 8;
+constexpr uint16_t kPlayerPlayBottom = 31;
+constexpr uint16_t kPlayerPlayTipY = 27;
+constexpr Bounds kPlayerStop = {1, 25, 7, 6};
+constexpr Bounds kPlayerWifiDisconnected = {114, 24, 8, 8};
+
+constexpr uint8_t kPlayerSpeakerWidth = 7;
+constexpr uint8_t kPlayerVolumeGap = 3;
+constexpr uint8_t kPlayerGlyphWidth = 6;
+
+constexpr uint8_t playerWifiBarHeight(uint8_t index) {
+  return static_cast<uint8_t>((index + 1) * 2);
+}
+
+constexpr Bounds playerWifiBar(uint8_t index) {
+  return Bounds{static_cast<uint16_t>(kPlayerWifi.left + 1 + index * 4),
+                static_cast<uint16_t>(kHeight - playerWifiBarHeight(index)),
+                3, playerWifiBarHeight(index)};
+}
+
+constexpr uint16_t playerVolumeTextWidth(uint8_t volume, bool muted) {
+  return muted ? 4 * kPlayerGlyphWidth
+               : (volume >= 100 ? 3 : volume >= 10 ? 2 : 1) *
+                     kPlayerGlyphWidth;
+}
+
+constexpr uint16_t playerVolumeContentWidth(uint8_t volume, bool muted) {
+  return kPlayerSpeakerWidth + kPlayerVolumeGap +
+         playerVolumeTextWidth(volume, muted);
+}
+
+constexpr uint16_t playerVolumeContentLeft(uint8_t volume, bool muted) {
+  return static_cast<uint16_t>(
+      kPlayerVolume.left +
+      (kPlayerVolume.width - playerVolumeContentWidth(volume, muted)) / 2);
+}
 
 constexpr Bounds kVolumeLabel = {0, 0, 128, 8};
 constexpr Bounds kVolumeValue = {0, 8, 128, 16};
 constexpr Bounds kVolumeFooter = {0, 24, 128, 8};
 
 static_assert(fits(kPlayerStation) && fits(kPlayerArtist) &&
-                  fits(kPlayerTitle) && fits(kPlayerStatus),
+                  fits(kPlayerStatus),
               "OLED 128x32 PLAYER layout must fit the physical panel");
+static_assert(contains(kPlayerStatus, kPlayerPlayback) &&
+                  contains(kPlayerStatus, kPlayerVolume) &&
+                  contains(kPlayerStatus, kPlayerWifi),
+              "OLED 128x32 PLAYER status slots must fit the bottom row");
+static_assert(contains(kPlayerPlayback, kPlayerPlay) &&
+                  contains(kPlayerPlayback, kPlayerStop),
+              "OLED 128x32 playback icons must fit their slot");
+static_assert(playerVolumeContentWidth(100, false) <= kPlayerVolume.width &&
+                  playerVolumeContentWidth(100, true) <= kPlayerVolume.width,
+              "OLED 128x32 volume content must fit its slot");
+static_assert(contains(kPlayerWifi, playerWifiBar(0)) &&
+                  contains(kPlayerWifi, playerWifiBar(3)) &&
+                  contains(kPlayerWifi, kPlayerWifiDisconnected),
+              "OLED 128x32 Wi-Fi icons must fit their slot");
 static_assert(fits(kVolumeLabel) && fits(kVolumeValue) &&
                   fits(kVolumeFooter),
               "OLED 128x32 VOL layout must fit the physical panel");
