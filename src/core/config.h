@@ -7,6 +7,7 @@
 #include <EEPROM.h>
 #include "config_persistence.h"
 #include "config_runtime_snapshot.h"
+#include "sntp_server_lifetime.h"
 #include "www_asset_integrity.h"
 #include "wifi_config_parser.h"
 #include <freertos/semphr.h>
@@ -275,6 +276,7 @@ class Config {
       SemaphoreHandle_t mutex_;
     };
     SemaphoreHandle_t _persistMutex = nullptr;
+    voxone::sntp::ServerNames _sntpServers;
     voxone::config_runtime::SnapshotStore _runtime;
     voxone::config_runtime::VuThresholdRuntime _vuThreshold;
     voxone::config_format::ConfigPersistence _storage;

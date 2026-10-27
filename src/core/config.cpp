@@ -30,6 +30,7 @@
 #include "../displays/tools/l10n.h"
 #include <algorithm>
 #include <cstddef>
+#include <esp_sntp.h>
 #if defined(VOXONE_RUNTIME_OLED_128X64_BACKENDS)
 #include <esp_system.h>
 #endif
@@ -955,19 +956,24 @@ bool Config::saveWifiCredentials(const char* ssid, const char* password) {
 }
 
 void Config::setTimeConf(){
-  char primary[sizeof(store.sntp1)]{};
-  char secondary[sizeof(store.sntp2)]{};
-  {
-    WriteLock lock(_persistMutex);
-    strlcpy(primary, store.sntp1, sizeof(primary));
-    strlcpy(secondary, store.sntp2, sizeof(secondary));
-  }
-  if(strlen(primary)>0 && strlen(secondary)>0){
-    configTzTime(WARSAW_TZ, primary, secondary);
-  }else if(strlen(primary)>0){
-    configTzTime(WARSAW_TZ, primary);
-  }
+  static_assert(sizeof(store.sntp1) == voxone::sntp::ServerNames::kCapacity,
+                "SNTP storage capacity changed");
+  static_assert(sizeof(store.sntp2) == voxone::sntp::ServerNames::kCapacity,
+                "SNTP storage capacity changed");
+  WriteLock lock(_persistMutex);
   timekeeper.watchNtp();
+  _sntpServers.replace(
+      store.sntp1, store.sntp2,
+      []() {
+        if (sntp_enabled()) sntp_stop();
+      },
+      [](const char* primary, const char* secondary) {
+        if (primary[0] && secondary[0]) {
+          configTzTime(WARSAW_TZ, primary, secondary);
+        } else if (primary[0]) {
+          configTzTime(WARSAW_TZ, primary);
+        }
+      });
 }
 
 bool Config::initNetwork() {
