@@ -649,6 +649,7 @@ void AsyncWebSocketClient::_queueControl(AsyncWebSocketControl *controlMessage){
 }
 
 void AsyncWebSocketClient::close(uint16_t code, const char * message){
+  AsyncWebLockGuard guard(_queueLock);
   if(_status != WS_CONNECTED)
     return;
   if(code){
@@ -674,6 +675,7 @@ void AsyncWebSocketClient::close(uint16_t code, const char * message){
 }
 
 void AsyncWebSocketClient::ping(uint8_t *data, size_t len){
+  AsyncWebLockGuard guard(_queueLock);
   if(_status == WS_CONNECTED)
     _queueControl(new AsyncWebSocketControl(WS_PING, data, len));
 }
@@ -701,7 +703,10 @@ void AsyncWebSocketClient::_onDisconnect(){
 }
 
 void AsyncWebSocketClient::_onData(void *pbuf, size_t plen){
-  _lastMessageTime = millis();
+  {
+    AsyncWebLockGuard guard(_queueLock);
+    _lastMessageTime = millis();
+  }
   uint8_t *data = (uint8_t*)pbuf;
   while(plen > 0){
     if(!_pstate){
@@ -762,13 +767,25 @@ void AsyncWebSocketClient::_onData(void *pbuf, size_t plen){
           close(1002, "Invalid close frame");
           return;
         }
-        if(_status == WS_DISCONNECTING){
-          _status = WS_DISCONNECTED;
-          _client->close(true);
-        } else {
-          _status = WS_DISCONNECTING;
-          _client->ackLater();
-          _queueControl(new AsyncWebSocketControl(WS_DISCONNECT, data, datalen));
+        AsyncClient *clientToClose = NULL;
+        {
+          AsyncWebLockGuard guard(_queueLock);
+          if(_status == WS_DISCONNECTING){
+            _status = WS_DISCONNECTED;
+            clientToClose = _client;
+          } else if(_status == WS_CONNECTED) {
+            _status = WS_DISCONNECTING;
+            if(_client)
+              _client->ackLater();
+            _queueControl(new AsyncWebSocketControl(WS_DISCONNECT, data, datalen));
+          }
+        }
+        // AsyncClient::close() invokes _onDisconnect() synchronously; that
+        // callback removes and deletes this WebSocket client.  The queue lock
+        // must be gone and this method must not touch members afterwards.
+        if(clientToClose){
+          clientToClose->close(true);
+          return;
         }
       } else if(_pinfo.opcode == WS_PING){
         _queueControl(new AsyncWebSocketControl(WS_PONG, data, datalen));
@@ -1002,8 +1019,7 @@ size_t AsyncWebSocket::count() const {
   });
 }
 
-AsyncWebSocketClient * AsyncWebSocket::client(uint32_t id){
-  AsyncWebLockGuard guard(_clientsLock);
+AsyncWebSocketClient * AsyncWebSocket::_clientLocked(uint32_t id) const {
   for(const auto &c: _clients){
     if(c->id() == id && c->status() == WS_CONNECTED){
       return c;
@@ -1012,9 +1028,14 @@ AsyncWebSocketClient * AsyncWebSocket::client(uint32_t id){
   return nullptr;
 }
 
+bool AsyncWebSocket::hasClient(uint32_t id) const {
+  AsyncWebLockGuard guard(_clientsLock);
+  return _clientLocked(id) != nullptr;
+}
 
 void AsyncWebSocket::close(uint32_t id, uint16_t code, const char * message){
-  AsyncWebSocketClient * c = client(id);
+  AsyncWebLockGuard guard(_clientsLock);
+  AsyncWebSocketClient * c = _clientLocked(id);
   if(c)
     c->close(code, message);
 }
@@ -1029,8 +1050,17 @@ void AsyncWebSocket::closeAll(uint16_t code, const char * message){
 
 void AsyncWebSocket::cleanupClients(uint16_t maxClients)
 {
-  if (count() > maxClients){
-    _clients.front()->close();
+  AsyncWebLockGuard guard(_clientsLock);
+  const size_t connected = _clients.count_if([](AsyncWebSocketClient * c){
+    return c->status() == WS_CONNECTED;
+  });
+  if (connected > maxClients){
+    for(const auto& c: _clients){
+      if(c->status() == WS_CONNECTED){
+        c->close();
+        break;
+      }
+    }
   }
 }
 
@@ -1042,7 +1072,8 @@ void AsyncWebSocket::forEachClient(
 }
 
 void AsyncWebSocket::ping(uint32_t id, uint8_t *data, size_t len){
-  AsyncWebSocketClient * c = client(id);
+  AsyncWebLockGuard guard(_clientsLock);
+  AsyncWebSocketClient * c = _clientLocked(id);
   if(c)
     c->ping(data, len);
 }
@@ -1056,7 +1087,8 @@ void AsyncWebSocket::pingAll(uint8_t *data, size_t len){
 }
 
 void AsyncWebSocket::text(uint32_t id, const char * message, size_t len){
-  AsyncWebSocketClient * c = client(id);
+  AsyncWebLockGuard guard(_clientsLock);
+  AsyncWebSocketClient * c = _clientLocked(id);
   if(c)
     c->text(message, len);
 }
@@ -1081,7 +1113,8 @@ void AsyncWebSocket::textAll(const char * message, size_t len){
 }
 
 void AsyncWebSocket::binary(uint32_t id, const char * message, size_t len){
-  AsyncWebSocketClient * c = client(id);
+  AsyncWebLockGuard guard(_clientsLock);
+  AsyncWebSocketClient * c = _clientLocked(id);
   if(c)
     c->binary(message, len);
 }
@@ -1105,9 +1138,15 @@ void AsyncWebSocket::binaryAll(AsyncWebSocketMessageBuffer * buffer)
 }
 
 void AsyncWebSocket::message(uint32_t id, AsyncWebSocketMessage *message){
-  AsyncWebSocketClient * c = client(id);
-  if(c)
-    c->message(message);
+  {
+    AsyncWebLockGuard guard(_clientsLock);
+    AsyncWebSocketClient * c = _clientLocked(id);
+    if(c){
+      c->message(message);
+      return;
+    }
+  }
+  delete message;
 }
 
 void AsyncWebSocket::messageAll(AsyncWebSocketMultiMessage *message){
@@ -1120,7 +1159,8 @@ void AsyncWebSocket::messageAll(AsyncWebSocketMultiMessage *message){
 }
 
 size_t AsyncWebSocket::printf(uint32_t id, const char *format, ...){
-  AsyncWebSocketClient * c = client(id);
+  AsyncWebLockGuard guard(_clientsLock);
+  AsyncWebSocketClient * c = _clientLocked(id);
   if(c){
     va_list arg;
     va_start(arg, format);
@@ -1157,7 +1197,8 @@ size_t AsyncWebSocket::printfAll(const char *format, ...) {
 
 #ifndef ESP32
 size_t AsyncWebSocket::printf_P(uint32_t id, PGM_P formatP, ...){
-  AsyncWebSocketClient * c = client(id);
+  AsyncWebLockGuard guard(_clientsLock);
+  AsyncWebSocketClient * c = _clientLocked(id);
   if(c != NULL){
     va_list arg;
     va_start(arg, formatP);
@@ -1206,7 +1247,8 @@ void AsyncWebSocket::text(uint32_t id, const String &message){
   text(id, message.c_str(), message.length());
 }
 void AsyncWebSocket::text(uint32_t id, const __FlashStringHelper *message){
-  AsyncWebSocketClient * c = client(id);
+  AsyncWebLockGuard guard(_clientsLock);
+  AsyncWebSocketClient * c = _clientLocked(id);
   if(c != NULL)
     c->text(message);
 }
@@ -1242,7 +1284,8 @@ void AsyncWebSocket::binary(uint32_t id, const String &message){
   binary(id, message.c_str(), message.length());
 }
 void AsyncWebSocket::binary(uint32_t id, const __FlashStringHelper *message, size_t len){
-  AsyncWebSocketClient * c = client(id);
+  AsyncWebLockGuard guard(_clientsLock);
+  AsyncWebSocketClient * c = _clientLocked(id);
   if(c != NULL)
     c-> binary(message, len);
 }
@@ -1365,10 +1408,6 @@ void AsyncWebSocket::_cleanBuffers()
         _buffers.remove(c);
     }
   }*/
-}
-
-AsyncWebSocket::AsyncWebSocketClientLinkedList AsyncWebSocket::getClients() const {
-  return _clients;
 }
 
 /*

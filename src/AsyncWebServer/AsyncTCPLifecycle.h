@@ -23,6 +23,47 @@ inline void invalidateClosedSlot(uint32_t &state) {
     }
 }
 
+template <typename Event, size_t Capacity>
+class FixedEventPool {
+  public:
+    Event * acquire() {
+        for(size_t i = 0; i < Capacity; ++i){
+            if(!_used[i]){
+                _used[i] = true;
+                return &_events[i];
+            }
+        }
+        return NULL;
+    }
+
+    bool release(Event * event) {
+        for(size_t i = 0; i < Capacity; ++i){
+            if(event == &_events[i]){
+                if(!_used[i]){
+                    return false;
+                }
+                _used[i] = false;
+                return true;
+            }
+        }
+        return false;
+    }
+
+    size_t available() const {
+        size_t count = 0;
+        for(size_t i = 0; i < Capacity; ++i){
+            if(!_used[i]){
+                ++count;
+            }
+        }
+        return count;
+    }
+
+  private:
+    Event _events[Capacity];
+    bool _used[Capacity] = {};
+};
+
 // Queue must provide count(), pop() and push(Event *). The caller must be the
 // only consumer and must exclude concurrent producers for the whole rotation.
 // Under that contract events for other clients keep their order, while every

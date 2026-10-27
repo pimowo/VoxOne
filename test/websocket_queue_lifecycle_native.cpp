@@ -5,6 +5,7 @@
 #include <cstdio>
 #include <deque>
 #include <fstream>
+#include <functional>
 #include <iterator>
 #include <mutex>
 #include <string>
@@ -159,6 +160,102 @@ class SerializedQueueModel {
   std::recursive_mutex mutex_;
   std::deque<Message*> queue_;
 };
+
+struct FakeAsyncClient {
+  void close(bool force) {
+    ++closeCalls;
+    lastForce = force;
+    if (onClose) onClose();
+  }
+
+  std::function<void()> onClose;
+  size_t closeCalls = 0;
+  bool lastForce = false;
+};
+
+class LaggingCloseModel {
+ public:
+  explicit LaggingCloseModel(LifetimeCounters& counters)
+      : counters_(counters) {
+    client_.onClose = [this] { disconnect(); };
+  }
+
+  void enqueue() {
+    std::lock_guard<std::mutex> lock(mutex_);
+    Message* message = new Message(counters_);
+    if (lagging_ || queue_.size() >= kHighWater) {
+      if (!lagging_) {
+        lagging_ = true;
+        ++laggingReports_;
+      }
+      delete message;
+      return;
+    }
+    queue_.push_back(message);
+  }
+
+  void poll() {
+    FakeAsyncClient* clientToClose = nullptr;
+    {
+      std::lock_guard<std::mutex> lock(mutex_);
+      if (connected_ && lagging_) clientToClose = &client_;
+    }
+    if (clientToClose) clientToClose->close(true);
+  }
+
+  bool lagging() const { return lagging_; }
+  size_t queued() const { return queue_.size(); }
+  size_t laggingReports() const { return laggingReports_; }
+  size_t closeCalls() const { return client_.closeCalls; }
+  bool forcedClose() const { return client_.lastForce; }
+
+  static constexpr size_t kHighWater = 32;
+
+ private:
+  void disconnect() {
+    std::lock_guard<std::mutex> lock(mutex_);
+    connected_ = false;
+    while (!queue_.empty()) {
+      delete queue_.front();
+      queue_.pop_front();
+    }
+  }
+
+  LifetimeCounters& counters_;
+  mutable std::mutex mutex_;
+  std::deque<Message*> queue_;
+  FakeAsyncClient client_;
+  bool connected_ = true;
+  bool lagging_ = false;
+  size_t laggingReports_ = 0;
+};
+
+void testLaggingClientIsClosedOnceAndMessagesAreReleased() {
+  LifetimeCounters counters;
+  LaggingCloseModel client(counters);
+
+  for (size_t index = 0; index < LaggingCloseModel::kHighWater; ++index)
+    client.enqueue();
+  assert(!client.lagging());
+  assert(client.queued() == LaggingCloseModel::kHighWater);
+
+  client.enqueue();
+  client.enqueue();
+  assert(client.lagging());
+  assert(client.laggingReports() == 1);
+  assert(client.queued() == LaggingCloseModel::kHighWater);
+  assert(counters.created.load() == LaggingCloseModel::kHighWater + 2);
+  assert(counters.destroyed.load() == 2);
+
+  client.poll();
+  assert(client.closeCalls() == 1);
+  assert(client.forcedClose());
+  assert(client.queued() == 0);
+  assert(counters.destroyed.load() == counters.created.load());
+
+  client.poll();
+  assert(client.closeCalls() == 1);
+}
 
 class StartGate {
  public:
@@ -326,15 +423,34 @@ void testProductionControlSendIsIdempotent() {
   assert(guard < markSent && markSent < write);
 }
 
+void testProductionLaggingCloseIsTcpOnly() {
+  const std::string source =
+      readFile("src/AsyncWebServer/AsyncWebSocket.cpp");
+  const std::string enqueue = functionBody(
+      source, "void AsyncWebSocketClient::_queueMessage(");
+  const std::string poll = functionBody(
+      source, "void AsyncWebSocketClient::_onPoll(");
+
+  assert(enqueue.find("_messageQueue.length() >= highWater") !=
+         std::string::npos);
+  assert(enqueue.find("_lagging = true") != std::string::npos);
+  assert(enqueue.find("delete dataMessage") != std::string::npos);
+  assert(poll.find("if(_lagging)") != std::string::npos);
+  assert(poll.find("clientToClose->close(true)") != std::string::npos);
+  assert(poll.find("1013") == std::string::npos);
+}
+
 }  // namespace
 
 int main() {
   testProductionQueueSynchronizationContract();
   testUnserializedRemovalScheduleHasTwoOwners();
   testAckEnqueueAndDisconnectHaveSingleOwnership();
+  testLaggingClientIsClosedOnceAndMessagesAreReleased();
   testLegacyDuplicatePongPoisonsFollowingMessageAck();
   testControlFrameIsSentOnceBeforeFollowingMessage();
   testProductionControlSendIsIdempotent();
+  testProductionLaggingCloseIsTcpOnly();
   std::puts("PASS websocket_queue_lifecycle_native");
   return 0;
 }

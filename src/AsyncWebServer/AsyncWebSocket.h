@@ -262,6 +262,9 @@ class AsyncWebSocket: public AsyncWebHandler {
     bool _allowNoSubprotocol;
     AsyncWebLock _lock;
 
+    // The returned pointer is valid only while the caller holds _clientsLock.
+    AsyncWebSocketClient * _clientLocked(uint32_t id) const;
+
   public:
     AsyncWebSocket(const String& url);
     ~AsyncWebSocket();
@@ -280,12 +283,12 @@ class AsyncWebSocket: public AsyncWebHandler {
     bool hasQueuedMessages();
 
     size_t count() const;
-    AsyncWebSocketClient * client(uint32_t id);
-    bool hasClient(uint32_t id){ return client(id) != NULL; }
+    bool hasClient(uint32_t id) const;
 
     void close(uint32_t id, uint16_t code=0, const char * message=NULL);
     void closeAll(uint16_t code=0, const char * message=NULL);
     void cleanupClients(uint16_t maxClients = DEFAULT_MAX_WS_CLIENTS);
+    // Runs under _clientsLock; the callback must not retain the client pointer.
     void forEachClient(
         const std::function<void(AsyncWebSocketClient*)>& handler);
 
@@ -351,8 +354,6 @@ class AsyncWebSocket: public AsyncWebHandler {
     AsyncWebSocketMessageBuffer * makeBuffer(uint8_t * data, size_t size); 
     LinkedList<AsyncWebSocketMessageBuffer *> _buffers;
     void _cleanBuffers(); 
-
-    AsyncWebSocketClientLinkedList getClients() const;
 };
 
 //WebServer response to authenticate the socket and detach the tcp client from the web server request

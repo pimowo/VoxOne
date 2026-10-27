@@ -60,6 +60,7 @@ typedef enum {
 
 typedef struct {
         lwip_event_t event;
+        bool fallback;
         void *arg;
         union {
                 struct {
@@ -99,6 +100,11 @@ static xQueueHandle _async_queue;
 static SemaphoreHandle_t _async_queue_lock;
 static SemaphoreHandle_t _async_queue_slots;
 static TaskHandle_t _async_service_task_handle = NULL;
+
+static const size_t _async_event_fallback_count = XQUEUE_SIZE + 2;
+static asynctcp_lifecycle::FixedEventPool<
+    lwip_event_packet_t, _async_event_fallback_count> _async_event_fallback;
+static portMUX_TYPE _async_event_fallback_lock = portMUX_INITIALIZER_UNLOCKED;
 
 
 SemaphoreHandle_t _slots_lock;
@@ -180,12 +186,41 @@ static inline bool _get_async_event(lwip_event_packet_t ** e){
     return true;
 }
 
+static lwip_event_packet_t * _allocate_async_event(){
+    lwip_event_packet_t * event =
+        (lwip_event_packet_t *)malloc(sizeof(lwip_event_packet_t));
+    if(event){
+        event->fallback = false;
+        return event;
+    }
+    portENTER_CRITICAL(&_async_event_fallback_lock);
+    event = _async_event_fallback.acquire();
+    portEXIT_CRITICAL(&_async_event_fallback_lock);
+    if(event){
+        event->fallback = true;
+    }
+    return event;
+}
+
+static void _release_fallback_event(lwip_event_packet_t * event){
+    portENTER_CRITICAL(&_async_event_fallback_lock);
+    const bool released = _async_event_fallback.release(event);
+    portEXIT_CRITICAL(&_async_event_fallback_lock);
+    configASSERT(released);
+}
+
 static void _free_async_event(lwip_event_packet_t * e){
     if(e && e->event == LWIP_TCP_RECV && e->recv.pb){
         pbuf_free(e->recv.pb);
         e->recv.pb = NULL;
     }
-    free(e);
+    if(e){
+        if(e->fallback){
+            _release_fallback_event(e);
+        } else {
+            free(e);
+        }
+    }
 }
 
 class AsyncEventQueueView {
@@ -321,35 +356,75 @@ static int8_t _tcp_clear_events(void * arg) {
         return ERR_OK;
     }
     lwip_event_packet_t * e = (lwip_event_packet_t *)malloc(sizeof(lwip_event_packet_t));
+    if(!e){
+        _remove_events_with_arg(arg);
+        return ERR_OK;
+    }
+    e->fallback = false;
     e->event = LWIP_TCP_CLEAR;
     e->arg = arg;
     if (!_prepend_async_event(&e)) {
-        free((void*)(e));
+        _free_async_event(e);
+        _remove_events_with_arg(arg);
     }
     return ERR_OK;
 }
 
+static int8_t _abort_lwip_connection(tcp_pcb * pcb){
+    if(pcb){
+        tcp_abort(pcb);
+    }
+    return ERR_ABRT;
+}
+
+static int8_t _discard_accepted_client(AsyncClient * client){
+    tcp_pcb * pcb = client ? client->pcb() : NULL;
+    if(pcb){
+        tcp_arg(pcb, NULL);
+        tcp_sent(pcb, NULL);
+        tcp_recv(pcb, NULL);
+        tcp_err(pcb, NULL);
+        tcp_poll(pcb, NULL, 0);
+    }
+    if(client){
+        AsyncClient::_s_lwip_error(client);
+    }
+    if(pcb){
+        tcp_abort(pcb);
+    }
+    delete client;
+    return ERR_ABRT;
+}
+
 static int8_t _tcp_connected(void * arg, tcp_pcb * pcb, int8_t err) {
     //ets_printf("+C: 0x%08x\n", pcb);
-    lwip_event_packet_t * e = (lwip_event_packet_t *)malloc(sizeof(lwip_event_packet_t));
+    lwip_event_packet_t * e = _allocate_async_event();
+    if(!e){
+        return _abort_lwip_connection(pcb);
+    }
     e->event = LWIP_TCP_CONNECTED;
     e->arg = arg;
     e->connected.pcb = pcb;
     e->connected.err = err;
     if (!_prepend_async_event(&e)) {
-        free((void*)(e));
+        _free_async_event(e);
+        return _abort_lwip_connection(pcb);
     }
     return ERR_OK;
 }
 
 static int8_t _tcp_poll(void * arg, struct tcp_pcb * pcb) {
     //ets_printf("+P: 0x%08x\n", pcb);
-    lwip_event_packet_t * e = (lwip_event_packet_t *)malloc(sizeof(lwip_event_packet_t));
+    lwip_event_packet_t * e = _allocate_async_event();
+    if(!e){
+        return _abort_lwip_connection(pcb);
+    }
     e->event = LWIP_TCP_POLL;
     e->arg = arg;
     e->poll.pcb = pcb;
     if (!_send_async_event(&e)) {
-        free((void*)(e));
+        _free_async_event(e);
+        return _abort_lwip_connection(pcb);
     }
     return ERR_OK;
 }
@@ -359,6 +434,7 @@ static int8_t _tcp_recv(void * arg, struct tcp_pcb * pcb, struct pbuf *pb, int8_
     if(!e){
         return ERR_MEM;
     }
+    e->fallback = false;
     e->arg = arg;
     if(pb){
         //ets_printf("+R: 0x%08x\n", pcb);
@@ -382,13 +458,17 @@ static int8_t _tcp_recv(void * arg, struct tcp_pcb * pcb, struct pbuf *pb, int8_
 
 static int8_t _tcp_sent(void * arg, struct tcp_pcb * pcb, uint16_t len) {
     //ets_printf("+S: 0x%08x\n", pcb);
-    lwip_event_packet_t * e = (lwip_event_packet_t *)malloc(sizeof(lwip_event_packet_t));
+    lwip_event_packet_t * e = _allocate_async_event();
+    if(!e){
+        return _abort_lwip_connection(pcb);
+    }
     e->event = LWIP_TCP_SENT;
     e->arg = arg;
     e->sent.pcb = pcb;
     e->sent.len = len;
     if (!_send_async_event(&e)) {
-        free((void*)(e));
+        _free_async_event(e);
+        return _abort_lwip_connection(pcb);
     }
     return ERR_OK;
 }
@@ -396,7 +476,7 @@ static int8_t _tcp_sent(void * arg, struct tcp_pcb * pcb, uint16_t len) {
 static void _tcp_error(void * arg, int8_t err) {
     //ets_printf("+E: 0x%08x\n", arg);
     AsyncClient::_s_lwip_error(arg);
-    lwip_event_packet_t * e = (lwip_event_packet_t *)malloc(sizeof(lwip_event_packet_t));
+    lwip_event_packet_t * e = _allocate_async_event();
     if(!e){
         return;
     }
@@ -409,7 +489,10 @@ static void _tcp_error(void * arg, int8_t err) {
 }
 
 static void _tcp_dns_found(const char * name, struct ip_addr * ipaddr, void * arg) {
-    lwip_event_packet_t * e = (lwip_event_packet_t *)malloc(sizeof(lwip_event_packet_t));
+    lwip_event_packet_t * e = _allocate_async_event();
+    if(!e){
+        return;
+    }
     //ets_printf("+DNS: name=%s ipaddr=0x%08x arg=%x\n", name, ipaddr, arg);
     e->event = LWIP_TCP_DNS;
     e->arg = arg;
@@ -419,19 +502,23 @@ static void _tcp_dns_found(const char * name, struct ip_addr * ipaddr, void * ar
     } else {
         memset(&e->dns.addr, 0, sizeof(e->dns.addr));
     }
-    if (!_send_async_event(&e)) {
-        free((void*)(e));
+    if (!_prepend_async_event(&e)) {
+        _free_async_event(e);
     }
 }
 
 //Used to switch out from LwIP thread
 static int8_t _tcp_accept(void * arg, AsyncClient * client) {
-    lwip_event_packet_t * e = (lwip_event_packet_t *)malloc(sizeof(lwip_event_packet_t));
+    lwip_event_packet_t * e = _allocate_async_event();
+    if(!e){
+        return _discard_accepted_client(client);
+    }
     e->event = LWIP_TCP_ACCEPT;
     e->arg = arg;
     e->accept.client = client;
     if (!_prepend_async_event(&e)) {
-        free((void*)(e));
+        _free_async_event(e);
+        return _discard_accepted_client(client);
     }
     return ERR_OK;
 }

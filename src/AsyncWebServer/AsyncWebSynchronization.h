@@ -7,22 +7,18 @@
 
 #ifdef ESP32
 
-#if ESP_ARDUINO_VERSION >= ESP_ARDUINO_VERSION_VAL(3, 1, 0)
-  #define pxCurrentTCB pxCurrentTCBs
-#endif
-
-// This is the ESP32 version of the Sync Lock, using the FreeRTOS Semaphore
+// This is the ESP32 version of the Sync Lock, using a FreeRTOS recursive
+// mutex.  The kernel owns task/core identity; reading pxCurrentTCB directly is
+// not SMP-safe because it is an array on dual-core ESP32 targets.
 class AsyncWebLock
 {
 private:
   SemaphoreHandle_t _lock;
-  mutable void *_lockedBy;
 
 public:
   AsyncWebLock() {
-    _lock = xSemaphoreCreateBinary();
-    _lockedBy = NULL;
-    xSemaphoreGive(_lock);
+    _lock = xSemaphoreCreateRecursiveMutex();
+    configASSERT(_lock != NULL);
   }
 
   ~AsyncWebLock() {
@@ -30,18 +26,11 @@ public:
   }
 
   bool lock() const {
-    extern void *pxCurrentTCB;
-    if (_lockedBy != pxCurrentTCB) {
-      xSemaphoreTake(_lock, portMAX_DELAY);
-      _lockedBy = pxCurrentTCB;
-      return true;
-    }
-    return false;
+    return xSemaphoreTakeRecursive(_lock, portMAX_DELAY) == pdTRUE;
   }
 
   void unlock() const {
-    _lockedBy = NULL;
-    xSemaphoreGive(_lock);
+    configASSERT(xSemaphoreGiveRecursive(_lock) == pdTRUE);
   }
 };
 

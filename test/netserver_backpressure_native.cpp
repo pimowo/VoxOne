@@ -40,6 +40,24 @@ struct Event {
   uint32_t clientId;
 };
 
+struct CloseRecord {
+  uint32_t clientId;
+  uint16_t code;
+  std::string reason;
+};
+
+class FakeWebSocket {
+ public:
+  void close(uint32_t clientId, uint16_t code, const char* reason) {
+    closes_.push_back({clientId, code, reason});
+  }
+
+  const std::vector<CloseRecord>& closes() const { return closes_; }
+
+ private:
+  std::vector<CloseRecord> closes_;
+};
+
 class NetserverModel {
  public:
   static constexpr size_t kCapacity = 20;
@@ -150,6 +168,11 @@ class NetserverModel {
   }
   bool rejected(uint32_t clientId) const {
     return rejected_.contains(clientId);
+  }
+  void processOverloadRejection(FakeWebSocket& websocket) {
+    uint32_t clientId = 0;
+    if (rejected_.takeFirst(clientId))
+      websocket.close(clientId, 1013, "Server busy; reconnect");
   }
   bool deferred(Request type) const {
     return (deferred_ & requestBit(type)) != 0;
@@ -329,6 +352,24 @@ void testPartialSnapshotIsExplicitlyRejectedOnOverload() {
   assert(server.deliveredFor(31) == 1);
 }
 
+void testOverloadClosesRejectedClientOnceWith1013() {
+  NetserverModel server;
+  FakeWebSocket websocket;
+  server.connect(41);
+  fillQueue(server);
+
+  assert(server.request(Request::GetSystem, 41) == EnqueueResult::Rejected);
+  assert(server.request(Request::WebStatus, 41) == EnqueueResult::Rejected);
+  assert(server.rejected(41));
+
+  server.processOverloadRejection(websocket);
+  server.processOverloadRejection(websocket);
+  assert(websocket.closes().size() == 1);
+  assert(websocket.closes()[0].clientId == 41);
+  assert(websocket.closes()[0].code == 1013);
+  assert(websocket.closes()[0].reason == "Server busy; reconnect");
+}
+
 void testMqttStateIsRetriedAfterOverload() {
   NetserverModel server;
   fillQueue(server);
@@ -377,6 +418,14 @@ void testProductionBackpressureContract() {
   assert(source.find("netserver.cancelClientRequests(client->id())") !=
          std::string::npos);
 
+  const std::string overload = functionBody(
+      source, "void NetServer::processOverloadRejection(");
+  assert(overload.find("takeOverloadRejection(clientId)") !=
+         std::string::npos);
+  assert(overload.find(
+             "websocket.close(clientId, 1013, \"Server busy; reconnect\")") !=
+         std::string::npos);
+
   const size_t clear = asyncTcp.find("static int8_t _tcp_clear_events");
   const size_t connected = asyncTcp.find("static int8_t _tcp_connected", clear);
   const std::string clearBody = asyncTcp.substr(clear, connected - clear);
@@ -395,6 +444,7 @@ int main() {
   testFloodingClientDoesNotFillQueueForSecondClient();
   testDisconnectClearsPendingSnapshot();
   testPartialSnapshotIsExplicitlyRejectedOnOverload();
+  testOverloadClosesRejectedClientOnceWith1013();
   testMqttStateIsRetriedAfterOverload();
   testProductionBackpressureContract();
   std::puts("PASS netserver_backpressure_native");

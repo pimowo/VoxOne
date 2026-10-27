@@ -808,20 +808,33 @@ ScrollCommandQueueStatus enqueueScrollSettingsCommand(
   command.clientId = clientId;
   command.settings = settings;
 
-  AsyncWebSocketClient* client = websocket.client(clientId);
-  if (!client || client->status() != WS_CONNECTED)
-    return ScrollCommandQueueStatus::Denied;
-  if (voxone::security::securityHttpEnforcementEnabled()) {
+  WebSocketAuthorization authorization = WebSocketAuthorization::Denied;
+  websocket.forEachClient([&](AsyncWebSocketClient* client) {
+    if (!client || client->id() != clientId ||
+        client->status() != WS_CONNECTED)
+      return;
+    if (!voxone::security::securityHttpEnforcementEnabled()) {
+      authorization = WebSocketAuthorization::Authorized;
+      return;
+    }
     SecurityRuntimeLock lock(true, 0);
-    if (!lock.locked()) return ScrollCommandQueueStatus::Busy;
+    if (!lock.locked()) {
+      authorization = WebSocketAuthorization::Busy;
+      return;
+    }
     const auto* binding = webSocketBinding(client);
     if (!binding ||
         !voxone::security::deviceSecuritySessionService().validateBinding(
             *binding, millis(), false))
-      return ScrollCommandQueueStatus::Denied;
+      return;
     command.binding = *binding;
     command.bindingCaptured = true;
-  }
+    authorization = WebSocketAuthorization::Authorized;
+  });
+  if (authorization == WebSocketAuthorization::Denied)
+    return ScrollCommandQueueStatus::Denied;
+  if (authorization == WebSocketAuthorization::Busy)
+    return ScrollCommandQueueStatus::Busy;
 
   if (!configurationMutationMutex || !scrollSettingsCommandQueue ||
       xSemaphoreTake(configurationMutationMutex, 0) != pdTRUE)
@@ -835,21 +848,29 @@ ScrollCommandQueueStatus enqueueScrollSettingsCommand(
 
 WebSocketAuthorization queuedScrollCommandAuthorization(
     const QueuedScrollSettingsCommand& command) {
-  AsyncWebSocketClient* client = websocket.client(command.clientId);
-  if (!client || client->status() != WS_CONNECTED)
-    return WebSocketAuthorization::Denied;
-  if (!voxone::security::securityHttpEnforcementEnabled())
-    return WebSocketAuthorization::Authorized;
-  SecurityRuntimeLock lock(true, 0);
-  if (!lock.locked()) return WebSocketAuthorization::Busy;
-  const auto* binding = webSocketBinding(client);
-  if (!command.bindingCaptured || !binding ||
-      !equalSecurityBinding(command.binding, *binding))
-    return WebSocketAuthorization::Denied;
-  return voxone::security::deviceSecuritySessionService().validateBinding(
-             *binding, millis(), false)
-             ? WebSocketAuthorization::Authorized
-             : WebSocketAuthorization::Denied;
+  WebSocketAuthorization authorization = WebSocketAuthorization::Denied;
+  websocket.forEachClient([&](AsyncWebSocketClient* client) {
+    if (!client || client->id() != command.clientId ||
+        client->status() != WS_CONNECTED)
+      return;
+    if (!voxone::security::securityHttpEnforcementEnabled()) {
+      authorization = WebSocketAuthorization::Authorized;
+      return;
+    }
+    SecurityRuntimeLock lock(true, 0);
+    if (!lock.locked()) {
+      authorization = WebSocketAuthorization::Busy;
+      return;
+    }
+    const auto* binding = webSocketBinding(client);
+    if (!command.bindingCaptured || !binding ||
+        !equalSecurityBinding(command.binding, *binding))
+      return;
+    if (voxone::security::deviceSecuritySessionService().validateBinding(
+            *binding, millis(), false))
+      authorization = WebSocketAuthorization::Authorized;
+  });
+  return authorization;
 }
 
 void sendScrollSettingsResult(
