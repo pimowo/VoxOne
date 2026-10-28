@@ -39,6 +39,23 @@ inline void formatVolume(char* output, size_t outputSize, uint8_t volume,
            static_cast<unsigned>(displayVolume(volume)));
 }
 
+inline void formatVolumePercent(char* output, size_t outputSize,
+                                uint8_t volume, bool muted) {
+  if (!output || outputSize == 0) return;
+  if (muted) {
+    snprintf(output, outputSize, "MUTE");
+    return;
+  }
+  snprintf(output, outputSize, "%u%%",
+           static_cast<unsigned>(displayVolume(volume)));
+}
+
+inline void formatSource(char* output, size_t outputSize,
+                         const char* sourceLabel) {
+  if (!output || outputSize == 0) return;
+  snprintf(output, outputSize, "[%s]", sourceLabel ? sourceLabel : "");
+}
+
 }  // namespace oled128x32
 }  // namespace voxone
 

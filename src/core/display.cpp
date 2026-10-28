@@ -176,6 +176,7 @@ class Oled128x32PlayerStatusWidget : public Widget {
   bool drawn_ = false;
   uint32_t lastCheck_ = 0;
   DisplayPlaybackState playback_ = DisplayPlaybackState::None;
+  DisplaySourceKind source_ = DisplaySourceKind::Radio;
   uint8_t volume_ = 255;
   bool muted_ = false;
   bool wifiConnected_ = false;
@@ -192,6 +193,7 @@ class Oled128x32PlayerStatusWidget : public Widget {
     const uint8_t wifiBars = voxone::oled128x32::wifiBars(
         wifiConnected, rssi_);
     if (!force && drawn_ && playback_ == view.playback &&
+        source_ == view.source &&
         volume_ == view.userVolume && muted_ == view.muted &&
         wifiConnected_ == wifiConnected && wifiBars_ == wifiBars) return;
 
@@ -213,6 +215,16 @@ class Oled128x32PlayerStatusWidget : public Widget {
       dsp.fillRect(stop.left, stop.top, stop.width, stop.height, WHITE);
     }
 
+    char source[9];
+    voxone::oled128x32::formatSource(
+        source, sizeof(source), displaySourceLabel(view.source));
+    dsp.setFont();
+    dsp.setTextColor(WHITE, BLACK);
+    dsp.setTextSize(1);
+    dsp.setCursor(voxone::oled128x32::kPlayerSource.left,
+                  voxone::oled128x32::kPlayerSource.top);
+    dsp.print(source);
+
     char level[5];
     voxone::oled128x32::formatVolume(level, sizeof(level), view.userVolume,
                                      view.muted);
@@ -230,9 +242,6 @@ class Oled128x32PlayerStatusWidget : public Widget {
       dsp.drawLine(volumeLeft + 4, top + 1, volumeLeft + 6, top + 6, BLACK);
       dsp.drawLine(volumeLeft + 6, top + 1, volumeLeft + 4, top + 6, BLACK);
     }
-    dsp.setFont();
-    dsp.setTextColor(WHITE, BLACK);
-    dsp.setTextSize(1);
     dsp.setCursor(volumeLeft + voxone::oled128x32::kPlayerSpeakerWidth +
                       voxone::oled128x32::kPlayerVolumeGap,
                   top);
@@ -254,6 +263,7 @@ class Oled128x32PlayerStatusWidget : public Widget {
 
     drawn_ = true;
     playback_ = view.playback;
+    source_ = view.source;
     volume_ = view.userVolume;
     muted_ = view.muted;
     wifiConnected_ = wifiConnected;
@@ -1030,7 +1040,7 @@ void Display::_buildPager(){
 #if VOXONE_DISPLAY_PROFILE_IS_SMALL_OLED
   if (oled128x32Active()) {
     _meta->init("*", player128x32::station, WHITE, BLACK);
-    _title1->init("*", player128x32::artist, WHITE, BLACK);
+    _title1->init("*", player128x32::hiddenMetadata, WHITE, BLACK);
   } else {
     _meta->init("*", player128x64::station, WHITE, BLACK);
     _title1->init("*", player128x64::artist, WHITE, BLACK);
@@ -1067,7 +1077,7 @@ void Display::_buildPager(){
   _plplaying = new TextWidget(oled128x32Active() ? stations128x32::playing
                                                  : stations128x64::playing,
                               8, WHITE, BLACK);
-  _plheader->setText("WEB - STACJA");
+  if (!oled128x32Active()) _plheader->setText("WEB - STACJA");
 #elif VOXONE_DISPLAY_PROFILE == VOXONE_DISPLAY_PROFILE_ST7789_284X76
   _plheader = new TextWidget(playlistHeaderConf, 30, config.theme.meta, config.theme.metabg);
   _plcounter = new TextWidget(playlistCounterConf, 16, config.theme.meta, config.theme.background);
@@ -1188,7 +1198,11 @@ void Display::_buildPager(){
 #endif
   pages[PG_PLAYER]->addWidget(_meta);
 #endif
+#if VOXONE_DISPLAY_PROFILE_IS_SMALL_OLED
+  if (!oled128x32Active()) pages[PG_PLAYER]->addWidget(_title1);
+#else
   pages[PG_PLAYER]->addWidget(_title1);
+#endif
   if(_title2) pages[PG_PLAYER]->addWidget(_title2);
 #if VOXONE_DISPLAY_PROFILE == VOXONE_DISPLAY_PROFILE_ST7796_480X320
   pages[PG_PLAYER]->addWidget(new FillWidget(st7796LowerDividerConf, config.theme.div));
@@ -1250,7 +1264,7 @@ void Display::_buildPager(){
     pages[PG_DIALOG]->addPage(_footer);
   #endif
 #if VOXONE_DISPLAY_PROFILE_IS_SMALL_OLED
-  pages[PG_PLAYLIST]->addWidget(_plheader);
+  if (!oled128x32Active()) pages[PG_PLAYLIST]->addWidget(_plheader);
   pages[PG_PLAYLIST]->addWidget(_plcurrent);
   pages[PG_PLAYLIST]->addWidget(_plplaying);
   pages[PG_PLAYLIST]->addWidget(_plcounter);
@@ -1719,17 +1733,33 @@ void Display::_renderMode(displayMode_e newmode) {
     config.isScreensaver = false;
   }
   if (newmode == VOL) {
+#if VOXONE_DISPLAY_PROFILE_IS_SMALL_OLED || VOXONE_DISPLAY_PROFILE == VOXONE_DISPLAY_PROFILE_ST7796_480X320
+    PlayerDisplayView view{};
+    capturePlayerDisplayView(view, WiFi.RSSI());
+#if VOXONE_DISPLAY_PROFILE_IS_SMALL_OLED
+    if (oled128x32Active()) {
+      char level[5];
+      voxone::oled128x32::formatVolumePercent(
+          level, sizeof(level), view.userVolume, view.muted);
+      _showDialog(level);
+      _nums->setText("");
+    } else
+#endif
+    {
+      #ifndef HIDE_IP
+        _showDialog(LANG::const_DlgVolume);
+      #else
+        _showDialog(config.ipToStr(WiFi.localIP()));
+      #endif
+      if (view.muted) _nums->setText("MUTE");
+      else _nums->setText(view.userVolume, numtxtFmt);
+    }
+#else
     #ifndef HIDE_IP
       _showDialog(LANG::const_DlgVolume);
     #else
       _showDialog(config.ipToStr(WiFi.localIP()));
     #endif
-#if VOXONE_DISPLAY_PROFILE_IS_SMALL_OLED || VOXONE_DISPLAY_PROFILE == VOXONE_DISPLAY_PROFILE_ST7796_480X320
-    PlayerDisplayView view{};
-    capturePlayerDisplayView(view, WiFi.RSSI());
-    if (view.muted) _nums->setText("MUTE");
-    else _nums->setText(view.userVolume, numtxtFmt);
-#else
     const MuteOutputSnapshot output = player.outputSnapshot();
     if (output.muted) _nums->setText("MUTE");
     else _nums->setText(output.userVolume, numtxtFmt);
@@ -1934,7 +1964,12 @@ void Display::_playerScrollBind() {
 #else
   if (_meta) rows[count++] = playerScrollBinding(_meta);
 #endif
+#if VOXONE_DISPLAY_PROFILE_IS_SMALL_OLED
+  if (_title1 && !oled128x32Active())
+    rows[count++] = playerScrollBinding(_title1);
+#else
   if (_title1) rows[count++] = playerScrollBinding(_title1);
+#endif
   if (_title2) rows[count++] = playerScrollBinding(_title2);
   _playerScrollReady = _playerScrollRuntime.setRows(rows, count);
 }
@@ -2295,8 +2330,19 @@ void Display::_volume() {
 #if VOXONE_DISPLAY_PROFILE_IS_SMALL_OLED || VOXONE_DISPLAY_PROFILE == VOXONE_DISPLAY_PROFILE_ST7796_480X320
     PlayerDisplayView view{};
     capturePlayerDisplayView(view, WiFi.RSSI());
-    if (view.muted) _nums->setText("MUTE");
-    else _nums->setText(view.userVolume, numtxtFmt);
+#if VOXONE_DISPLAY_PROFILE_IS_SMALL_OLED
+    if (oled128x32Active()) {
+      char level[5];
+      voxone::oled128x32::formatVolumePercent(
+          level, sizeof(level), view.userVolume, view.muted);
+      _meta->setText(level);
+      _nums->setText("");
+    } else
+#endif
+    {
+      if (view.muted) _nums->setText("MUTE");
+      else _nums->setText(view.userVolume, numtxtFmt);
+    }
 #else
     if (output.muted) _nums->setText("MUTE");
     else _nums->setText(output.userVolume, numtxtFmt);

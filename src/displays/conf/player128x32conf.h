@@ -24,14 +24,12 @@ constexpr ScrollConfig station = {{0, voxone::oled128x32::kPlayerStation.top,
                                     2, WA_LEFT}, 140,
                                    voxone::oled128x32::kPlayerStation.width,
                                    5000, 2, 35};
-constexpr ScrollConfig artist = {{0, voxone::oled128x32::kPlayerArtist.top,
-                                   1, WA_LEFT}, 140,
-                                  voxone::oled128x32::kPlayerArtist.width,
-                                  5000, 2, 35};
-constexpr WidgetConfig volumeLabel = {
-    0, voxone::oled128x32::kVolumeLabel.top, 1, WA_CENTER};
+// Kept initialized because the shared Display owns this widget, but it is not
+// attached to the compact PLAYER page.
+constexpr ScrollConfig hiddenMetadata = {{0, 0, 1, WA_LEFT}, 140, 128,
+                                         5000, 2, 35};
 constexpr WidgetConfig volumeNumber = {
-    0, voxone::oled128x32::kVolumeValue.top, 2, WA_CENTER};
+    0, voxone::oled128x32::kVolumePrimary.top, 2, WA_CENTER};
 constexpr WidgetConfig volumeIp = {
     0, voxone::oled128x32::kVolumeFooter.top, 1, WA_CENTER};
 constexpr WidgetConfig screensaverClock = {0, 8, 0, WA_CENTER};
@@ -39,7 +37,7 @@ constexpr WidgetConfig screensaverClock = {0, 8, 0, WA_CENTER};
 
 namespace stations128x32 {
 constexpr WidgetConfig header = {0, 0, 1, WA_CENTER};
-constexpr ScrollConfig selected = {{0, 8, 2, WA_CENTER}, 140, 128, 1200, 2, 35};
+constexpr ScrollConfig selected = {{0, 0, 2, WA_CENTER}, 140, 128, 1200, 2, 35};
 constexpr WidgetConfig playing = {2, 24, 1, WA_LEFT};
 constexpr WidgetConfig counter = {2, 24, 1, WA_RIGHT};
 }

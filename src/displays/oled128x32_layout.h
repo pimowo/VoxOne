@@ -29,11 +29,11 @@ constexpr bool contains(Bounds outer, Bounds inner) {
       inner.top + inner.height <= outer.top + outer.height;
 }
 
-constexpr Bounds kPlayerStation = {0, 0, 128, 16};
-constexpr Bounds kPlayerArtist = {0, 16, 128, 8};
+constexpr Bounds kPlayerStation = {0, 0, 128, 24};
 constexpr Bounds kPlayerStatus = {0, 24, 128, 8};
-constexpr Bounds kPlayerPlayback = {0, 24, 12, 8};
-constexpr Bounds kPlayerVolume = {20, 24, 88, 8};
+constexpr Bounds kPlayerPlayback = {0, 24, 10, 8};
+constexpr Bounds kPlayerSource = {10, 24, 42, 8};
+constexpr Bounds kPlayerVolume = {52, 24, 56, 8};
 constexpr Bounds kPlayerWifi = {108, 24, 20, 8};
 
 constexpr Bounds kPlayerPlay = {1, 24, 8, 8};
@@ -48,6 +48,7 @@ constexpr Bounds kPlayerWifiDisconnected = {114, 24, 8, 8};
 constexpr uint8_t kPlayerSpeakerWidth = 7;
 constexpr uint8_t kPlayerVolumeGap = 3;
 constexpr uint8_t kPlayerGlyphWidth = 6;
+constexpr uint8_t kPlayerSourceMaxCharacters = 7;
 
 constexpr uint8_t playerWifiBarHeight(uint8_t index) {
   return static_cast<uint8_t>((index + 1) * 2);
@@ -76,20 +77,30 @@ constexpr uint16_t playerVolumeContentLeft(uint8_t volume, bool muted) {
       (kPlayerVolume.width - playerVolumeContentWidth(volume, muted)) / 2);
 }
 
-constexpr Bounds kVolumeLabel = {0, 0, 128, 8};
-constexpr Bounds kVolumeValue = {0, 8, 128, 16};
+constexpr Bounds kVolumePrimary = {0, 0, 128, 16};
 constexpr Bounds kVolumeFooter = {0, 24, 128, 8};
+constexpr uint8_t kVolumePrimaryGlyphWidth = 12;
+constexpr uint8_t kVolumePrimaryMaxCharacters = 4;
 
-static_assert(fits(kPlayerStation) && fits(kPlayerArtist) &&
-                  fits(kPlayerStatus),
+static_assert(fits(kPlayerStation) && fits(kPlayerStatus),
               "OLED 128x32 PLAYER layout must fit the physical panel");
 static_assert(contains(kPlayerStatus, kPlayerPlayback) &&
+                  contains(kPlayerStatus, kPlayerSource) &&
                   contains(kPlayerStatus, kPlayerVolume) &&
                   contains(kPlayerStatus, kPlayerWifi),
               "OLED 128x32 PLAYER status slots must fit the bottom row");
+static_assert(kPlayerPlayback.left + kPlayerPlayback.width <=
+                      kPlayerSource.left &&
+                  kPlayerSource.left + kPlayerSource.width <=
+                      kPlayerVolume.left &&
+                  kPlayerVolume.left + kPlayerVolume.width <= kPlayerWifi.left,
+              "OLED 128x32 PLAYER status slots must not overlap");
 static_assert(contains(kPlayerPlayback, kPlayerPlay) &&
                   contains(kPlayerPlayback, kPlayerStop),
               "OLED 128x32 playback icons must fit their slot");
+static_assert(kPlayerSourceMaxCharacters * kPlayerGlyphWidth <=
+                  kPlayerSource.width,
+              "OLED 128x32 source label must fit its slot");
 static_assert(playerVolumeContentWidth(100, false) <= kPlayerVolume.width &&
                   playerVolumeContentWidth(100, true) <= kPlayerVolume.width,
               "OLED 128x32 volume content must fit its slot");
@@ -97,9 +108,11 @@ static_assert(contains(kPlayerWifi, playerWifiBar(0)) &&
                   contains(kPlayerWifi, playerWifiBar(3)) &&
                   contains(kPlayerWifi, kPlayerWifiDisconnected),
               "OLED 128x32 Wi-Fi icons must fit their slot");
-static_assert(fits(kVolumeLabel) && fits(kVolumeValue) &&
-                  fits(kVolumeFooter),
+static_assert(fits(kVolumePrimary) && fits(kVolumeFooter),
               "OLED 128x32 VOL layout must fit the physical panel");
+static_assert(kVolumePrimaryGlyphWidth * kVolumePrimaryMaxCharacters <=
+                  kVolumePrimary.width,
+              "OLED 128x32 VOL value must fit the physical panel");
 
 }  // namespace oled128x32
 }  // namespace voxone
