@@ -9,6 +9,7 @@
 #include <mutex>
 #include <string>
 #include <thread>
+#include <utility>
 #include <vector>
 
 namespace {
@@ -111,6 +112,12 @@ void testProductionLifetimeContract() {
       cleanup.find("AsyncWebLockGuard guard(_clientsLock)");
   assert(cleanupGuard < cleanup.find("_clients.count_if("));
   assert(cleanupGuard < cleanup.find("c->close()"));
+
+  const std::string textAll = functionBody(
+      source,
+      "void AsyncWebSocket::textAll(AsyncWebSocketMessageBuffer * buffer)");
+  assert(textAll.find("AsyncWebLockGuard guard(_clientsLock)") <
+         textAll.find("for(const auto& c: _clients)"));
 
   const std::string message =
       functionBody(source, "void AsyncWebSocket::message(");
@@ -365,12 +372,117 @@ void testLockedOperationPinsClientUntilMessageOwnershipTransfers() {
   assert(counters.messagesDestroyed.load() == 2);
 }
 
+class LockedBroadcastRegistry {
+ public:
+  explicit LockedBroadcastRegistry(std::vector<Client*> clients)
+      : clients_(std::move(clients)) {}
+
+  ~LockedBroadcastRegistry() {
+    std::lock_guard<std::recursive_mutex> lock(mutex_);
+    for (Client* client : clients_) delete client;
+  }
+
+  void broadcast(Counters& counters, std::mutex& barrierMutex,
+                 std::condition_variable& barrier, bool& firstClientPinned,
+                 bool& allowBroadcastToFinish) {
+    std::lock_guard<std::recursive_mutex> lock(mutex_);
+    for (Client* client : clients_) {
+      if (client->id == 7) {
+        {
+          std::lock_guard<std::mutex> barrierLock(barrierMutex);
+          firstClientPinned = true;
+        }
+        barrier.notify_all();
+        std::unique_lock<std::mutex> barrierLock(barrierMutex);
+        barrier.wait(barrierLock, [&] { return allowBroadcastToFinish; });
+      }
+      client->enqueue(new Message(counters));
+    }
+  }
+
+  void disconnect(uint32_t id, std::atomic<int>& probe) {
+    if (mutex_.try_lock()) {
+      probe.store(1);
+      mutex_.unlock();
+    } else {
+      probe.store(2);
+    }
+    std::lock_guard<std::recursive_mutex> lock(mutex_);
+    for (auto iterator = clients_.begin(); iterator != clients_.end();
+         ++iterator) {
+      if ((*iterator)->id != id) continue;
+      delete *iterator;
+      clients_.erase(iterator);
+      return;
+    }
+  }
+
+ private:
+  std::recursive_mutex mutex_;
+  std::vector<Client*> clients_;
+};
+
+void testDisconnectDuringBroadcastWaitsForLifetimeScope() {
+  Counters counters;
+  auto firstAlive = std::make_shared<std::atomic<bool>>(true);
+  auto secondAlive = std::make_shared<std::atomic<bool>>(true);
+  std::mutex barrierMutex;
+  std::condition_variable barrier;
+  bool firstClientPinned = false;
+  bool allowBroadcastToFinish = false;
+  std::atomic<int> disconnectProbe{0};
+
+  {
+    LockedBroadcastRegistry registry(
+        {new Client(7, counters, firstAlive),
+         new Client(8, counters, secondAlive)});
+    std::thread broadcaster([&] {
+      registry.broadcast(counters, barrierMutex, barrier, firstClientPinned,
+                         allowBroadcastToFinish);
+    });
+
+    {
+      std::unique_lock<std::mutex> lock(barrierMutex);
+      barrier.wait(lock, [&] { return firstClientPinned; });
+    }
+    std::thread disconnecter(
+        [&] { registry.disconnect(7, disconnectProbe); });
+    while (disconnectProbe.load() == 0) std::this_thread::yield();
+
+    // An RST/disconnect may arrive while textAll() is iterating, but removal
+    // must wait for the server lifetime lock. Both clients therefore receive
+    // ownership of their broadcast message before client 7 is destroyed.
+    assert(disconnectProbe.load() == 2);
+    assert(firstAlive->load() && secondAlive->load());
+    {
+      std::lock_guard<std::mutex> lock(barrierMutex);
+      allowBroadcastToFinish = true;
+    }
+    barrier.notify_all();
+
+    broadcaster.join();
+    disconnecter.join();
+    assert(!firstAlive->load());
+    assert(secondAlive->load());
+    assert(counters.clientsDestroyed.load() == 1);
+    assert(counters.messagesCreated.load() == 2);
+    assert(counters.messagesDestroyed.load() == 1);
+  }
+
+  assert(!secondAlive->load());
+  assert(counters.clientsCreated.load() == 2);
+  assert(counters.clientsDestroyed.load() == 2);
+  assert(counters.messagesCreated.load() == 2);
+  assert(counters.messagesDestroyed.load() == 2);
+}
+
 }  // namespace
 
 int main() {
   testProductionLifetimeContract();
   testLegacyLookupExposesDeterministicLifetimeWindow();
   testLockedOperationPinsClientUntilMessageOwnershipTransfers();
+  testDisconnectDuringBroadcastWaitsForLifetimeScope();
   std::puts("PASS websocket_client_lifetime_native");
   return 0;
 }

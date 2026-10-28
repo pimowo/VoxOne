@@ -230,6 +230,51 @@ class LaggingCloseModel {
   size_t laggingReports_ = 0;
 };
 
+class TimeoutCloseModel {
+ public:
+  explicit TimeoutCloseModel(LifetimeCounters& counters)
+      : counters_(counters) {
+    client_.onClose = [this] { disconnect(); };
+  }
+
+  void enqueue() {
+    std::lock_guard<std::mutex> lock(mutex_);
+    queue_.push_back(new Message(counters_));
+  }
+
+  void timeout() {
+    FakeAsyncClient* clientToClose = nullptr;
+    {
+      std::lock_guard<std::mutex> lock(mutex_);
+      if (connected_) clientToClose = &client_;
+    }
+    // Production AsyncClient::close() invokes disconnect synchronously. It
+    // must run after the queue guard is released or cleanup would deadlock.
+    if (clientToClose) clientToClose->close(true);
+  }
+
+  size_t closeCalls() const { return client_.closeCalls; }
+  bool forcedClose() const { return client_.lastForce; }
+  size_t queued() const { return queue_.size(); }
+
+ private:
+  void disconnect() {
+    std::lock_guard<std::mutex> lock(mutex_);
+    if (!connected_) return;
+    connected_ = false;
+    while (!queue_.empty()) {
+      delete queue_.front();
+      queue_.pop_front();
+    }
+  }
+
+  LifetimeCounters& counters_;
+  mutable std::mutex mutex_;
+  std::deque<Message*> queue_;
+  FakeAsyncClient client_;
+  bool connected_ = true;
+};
+
 void testLaggingClientIsClosedOnceAndMessagesAreReleased() {
   LifetimeCounters counters;
   LaggingCloseModel client(counters);
@@ -255,6 +300,25 @@ void testLaggingClientIsClosedOnceAndMessagesAreReleased() {
 
   client.poll();
   assert(client.closeCalls() == 1);
+}
+
+void testTimeoutClosesOnceAndReleasesQueuedMessages() {
+  LifetimeCounters counters;
+  TimeoutCloseModel client(counters);
+  client.enqueue();
+  client.enqueue();
+  assert(client.queued() == 2);
+
+  client.timeout();
+  assert(client.closeCalls() == 1);
+  assert(client.forcedClose());
+  assert(client.queued() == 0);
+  assert(counters.created.load() == 2);
+  assert(counters.destroyed.load() == counters.created.load());
+
+  client.timeout();
+  assert(client.closeCalls() == 1);
+  assert(counters.destroyed.load() == counters.created.load());
 }
 
 class StartGate {
@@ -447,6 +511,7 @@ int main() {
   testUnserializedRemovalScheduleHasTwoOwners();
   testAckEnqueueAndDisconnectHaveSingleOwnership();
   testLaggingClientIsClosedOnceAndMessagesAreReleased();
+  testTimeoutClosesOnceAndReleasesQueuedMessages();
   testLegacyDuplicatePongPoisonsFollowingMessageAck();
   testControlFrameIsSentOnceBeforeFollowingMessage();
   testProductionControlSendIsIdempotent();
