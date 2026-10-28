@@ -71,6 +71,14 @@ void auditTransport() {
          std::string::npos);
   assert(player.find("if (temporaryActive()) finishTemporary();") !=
          std::string::npos);
+
+  // The only production ingress for temporary audio is the existing MQTT
+  // command topic. Long payloads are forwarded as URL bytes to Player; the
+  // negative-path HIL therefore exercises the same browseUrl() flow as a
+  // normal announcement and needs no diagnostic endpoint.
+  const auto mqtt = readFile("src/core/mqtt.cpp");
+  assert(mqtt.find("player.requestTemporaryUrl(payload, len);") !=
+         std::string::npos);
 }
 
 struct Scenario {
@@ -259,6 +267,80 @@ int main() {
     assert(!timeout.temporary.finish(token));
     timeout.restore();
     assert(timeout.resumes == 1);
+  }
+
+  // RC1 negative-path matrix. Production decoder/connect errors signal the
+  // active callback token, while a no-data transport timeout is observed as
+  // a stopped backend. Both converge on the same one-shot cleanup/restore.
+
+  // A/B: RADIO PLAY restores exactly once after error; RADIO STOP remains
+  // stopped and cannot gain a synthetic PLAY intent.
+  for (bool playing : {true, false}) {
+    Scenario error;
+    error.radio(playing);
+    const auto token = error.temporary.begin();
+    error.end(token);  // audio_error/connect failure -> signaled terminal.
+    assert(!error.temporary.busy());
+    assert(error.resumes == (playing ? 1U : 0U));
+    assert(error.source.radioPlayIntent() == playing);
+    error.restore();
+    assert(error.resumes == (playing ? 1U : 0U));
+  }
+
+  // C: an error during BT PLAY returns ownership to the still-playing BT
+  // observation without issuing transport commands or restoring RADIO.
+  {
+    Scenario error;
+    error.radio(true);
+    error.connect(BtPlayback::Playing);
+    const auto token = error.temporary.begin();
+    error.end(token);
+    assert(!error.temporary.busy() && error.resumes == 0);
+    assert(error.source.active() == ActiveSource::Bluetooth);
+    assert(error.bt.playback == BtPlayback::Playing);
+    assert(error.route().btOutput && !error.route().radioOutput);
+  }
+
+  // D: a timeout over BT PAUSED/STOPPED preserves that observed state and
+  // never synthesizes RESUME or a RADIO restore.
+  for (const auto playback : {BtPlayback::Paused, BtPlayback::Stopped}) {
+    Scenario timeout;
+    timeout.radio(true);
+    timeout.connect(playback);
+    const auto token = timeout.temporary.begin();
+    timeout.backendStopped(token);
+    assert(!timeout.temporary.busy() && timeout.resumes == 0);
+    assert(timeout.source.active() == ActiveSource::Bluetooth);
+    assert(timeout.bt.playback == playback);
+    assert(!timeout.route().btOutput && !timeout.route().radioOutput);
+    timeout.restore();
+    assert(timeout.resumes == 0);
+  }
+
+  // F: source selection at the timeout boundary is authoritative. Neither
+  // interleaving restores the source that was active when TTS began.
+  {
+    Scenario toBluetooth;
+    toBluetooth.radio(true);
+    toBluetooth.bt.runtimeAvailable = true;
+    toBluetooth.bt.connected = true;
+    toBluetooth.bt.playback = BtPlayback::Playing;
+    toBluetooth.bt.sampleRate = 44100;
+    auto token = toBluetooth.temporary.begin();
+    assert(toBluetooth.source.select(ActiveSource::Bluetooth, toBluetooth.bt)
+               .activeChanged);
+    toBluetooth.backendStopped(token);
+    assert(toBluetooth.source.active() == ActiveSource::Bluetooth);
+    assert(toBluetooth.resumes == 0 && toBluetooth.route().btOutput);
+
+    Scenario toRadio;
+    toRadio.radio(true);
+    toRadio.connect(BtPlayback::Playing);
+    token = toRadio.temporary.begin();
+    assert(toRadio.source.select(ActiveSource::Radio, toRadio.bt).activeChanged);
+    toRadio.backendStopped(token);
+    assert(toRadio.source.active() == ActiveSource::Radio);
+    assert(toRadio.resumes == 1 && !toRadio.temporary.busy());
   }
 
   // Manual selection during TTS wins over the source at announcement start.

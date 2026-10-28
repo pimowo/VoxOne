@@ -212,6 +212,12 @@ if(-not $onWindows) {
   if($LASTEXITCODE -ne 0) { throw 'Sanitized Config runtime snapshot compile failed' }
   & $configRuntimeExe
   if($LASTEXITCODE -ne 0) { throw 'Sanitized Config runtime snapshot test failed' }
+  $temporaryAudioExe=Join-Path $work 'temporary_audio_sanitized'
+  & $Cxx @sanitizerArgs '-o' $temporaryAudioExe `
+    (Join-Path $root 'test/temporary_audio_native.cpp')
+  if($LASTEXITCODE -ne 0) { throw 'Sanitized temporary audio compile failed' }
+  & $temporaryAudioExe
+  if($LASTEXITCODE -ne 0) { throw 'Sanitized temporary audio test failed' }
   $sntpLifetimeExe=Join-Path $work 'sntp_server_lifetime_sanitized'
   & $Cxx @sanitizerArgs '-pthread' '-o' $sntpLifetimeExe `
     (Join-Path $root 'test/sntp_server_lifetime_native.cpp')
