@@ -45,6 +45,62 @@ nie są przepisywane jako pełny PASS.
 | 14 | `RC1-NO-P0-P1` | OPEN | Istnieją otwarte P1 wymagające fizycznego domknięcia. |
 | 15 | `RC1-FROZEN-RELEASE` | OPEN | Wymagane są czysty zamrożony release commit, końcowy verify, artefakty i PASS bramek 1–14. |
 
+### Bieżący checkpoint i decyzje wymagane przed finalnym RC1
+
+Checkpoint `d6896005e10dfb0098b1e8c831b1b73506ef5b3b` ma niezależny clean
+verify PASS z 2026-10-28: 156/156 native, ASan/UBSan, RADIO strict 16/16,
+buildy W0/M0/L0/S0/DIN0 5/5, full-image i WWW, L0 TX-only oraz production
+SECURITY offline. Build identity wszystkich profili to `d689600` bez
+`-dirty`. Obraz nie został fizycznie wdrożony na żadnym urządzeniu i nie
+zmienia statusu żadnej bramki ani historycznych dowodów HIL. Manifest:
+`/home/piotrek/voxone-clean-verifies/VOXONE-RC1-L0-DYNAMIC-DISPLAY-CHECKPOINT-1-GxCnHUvu/MANIFEST.md`.
+
+- [DECISION REQUIRED][STABLE][HARDWARE] Ustalić, czy przed Stable każdy
+  selectable wariant display/audio z bieżących `HardwareCapabilities` wymaga
+  fizycznego HIL, jak literalnie stanowi obecny kontrakt, czy obowiązkowa jest
+  historyczna macierz baseline, a rozszerzenia checkpointów `dfc64ef`,
+  `62ef7df`, `236950d` i `d689600` mogą pozostać jawnie `PHYSICAL NOT
+  QUALIFIED`. Do decyzji nie obniżać kryterium i nie przypisywać offline PASS
+  jako fizycznej kwalifikacji. Dwie macierze opisowe są w
+  `docs/STABLE_CONTRACT.md`.
+- [DECISION REQUIRED][STABLE][DIN0] Obecny kontrakt wymaga odrębnego
+  fizycznego HIL DIN0 i nie uznaje testu obrazu na M0. DIN0 ma jednak ten sam
+  MCU, flash/PSRAM i GPIO co M0. Ustalić, czy obraz `din0` z potwierdzoną
+  identity może przejść profilowy HIL na wspólnym stanowisku M0. Test firmware
+  `m0` nigdy nie zastępuje testu firmware `din0`; do decyzji obowiązuje
+  dotychczasowy wymóg osobnego stanowiska DIN0.
+- [DECISION REQUIRED][STABLE][L0][XSMT] Ustalić, czy XSMT PCM5102A jest
+  obowiązkową częścią baseline L0. Jeżeli tak, przypisać GPIO i wykonać HIL
+  LOW przy PAUSE/STOP, HIGH przy PLAY oraz ciszy przejść/update; jeżeli nie,
+  opisać XSMT jako nieobsługiwany element opcjonalny. Bieżący profil ma
+  `VOXONE_DAC_XSMT_PIN=255`.
+- [DECISION REQUIRED][P1][STABLE] `ASYNCTCP-EVENT-ALLOCATION-OOM-1`:
+  zdecydować, czy deterministyczna iniekcja offline wszystkich ścieżek z
+  sanitizerami oraz ograniczony nieregresyjny HIL wystarczają do zamknięcia,
+  czy wymagany jest osobno zatwierdzony test-only fault-injection firmware.
+  Nie wymuszać OOM na produkcyjnym urządzeniu bez takiej decyzji.
+- [DECISION REQUIRED][STABLE][BT] LG TV ma fizyczny PASS rzeczywistej pauzy
+  obrazu, licznika i audio, lecz MAIN pozostał w stanie BT/PLAY. Zachować to
+  jako znane ograniczenie interoperacyjności o nieustalonej przyczynie; nie
+  przypisywać winy firmware ani nie powtarzać fizycznego PAUSE bez nowej
+  poprawki lub konkretnej hipotezy. Ustalić klasyfikację release/waiver.
+- [DECISION REQUIRED][STABLE][W0][BLOCKED] W0 pozostaje obowiązkowym profilem.
+  Uszkodzone USB i brak zweryfikowanej drogi recovery blokują bezpieczną
+  aktualizację; nie pomijać bramki i nie wykonywać OTA przed potwierdzeniem
+  recovery albo zapewnieniem zastępczego W0.
+- [DECISION REQUIRED][STABLE][VOXONEBT] Potwierdzona poprawka granicy
+  `copyPeerName()` ma software/sanitizer PASS w osobnym repozytorium VoxOneBT,
+  ale nie została wdrożona. Przed finalną kwalifikacją BT potrzebne są osobny
+  checkpoint, kontrolowane wdrożenie i ograniczony lifecycle HIL.
+
+Kolejność dalszych HIL po rozstrzygnięciu zakresu: (1) kwalifikacja
+elektryczna L0 UART i jeden ograniczony HIL P1, (2) finalny L0 na dokładnym
+kandydacie z domyślnym ST7796/PCM5102A, (3) skonsolidowany M0, (4) S0,
+(5) DIN0 zgodnie z decyzją o stanowisku, (6) W0 dopiero po odzyskaniu drogi
+recovery, a następnie końcowy frozen-release verify. Nie powtarzać RADIO
+endurance, L/R+VU, M0 SNTP, M0 clean install ani zaliczonych normalnych cykli
+A2DP bez nowej przesłanki.
+
 ### Mapa historycznej numeracji
 
 Raporty sprzed przywrócenia S0 i DIN0 do obowiązkowego zakresu używają
@@ -265,14 +321,14 @@ implementacji i bez rozszerzania Stable.
   - `VOXONE-STABLE-L0-REMOTE-HIL-1` 2026-10-22 ma zdalny HIL PARTIAL PASS dla zakresu niedestrukcyjnego. Salonowy L0 odpowiada pod `<L0_PRIVATE_IP>`, ma oczekiwany MAC `<L0_MAC>` i faktycznie działa na firmware `0.8.0`/kanał `dev`, build `739e4a2`, profil `L0`, `app1` w stanie `VALID`, bez pending update. WWW, favicon i podstawowe API mają PASS; serwowane HTML/CSS/JS/SVG są bitowo zgodne z zatwierdzonym zestawem assetów commita `6b4a8cf`, a `/variables.js` oraz WebSocket zgodnie raportują wersję, build i profil. Read-only WS przeszedł handshake `voxone.v1`, ping oraz snapshoty system/player/screen: zastany stan to RADIO PLAY, volume 4%, MUTE OFF, metadata i MP3 256 kb/s; VoxOneBT `0.6.7-dev` jest online z protokołem 2, ale bez połączonego peer, a capability i ustawienie VU są aktywne bez eksportu bieżących poziomów. Dwuminutowa obserwacja 13 próbek zachowała `bootId=<L0_REMOTE_HIL_SESSION_ID>`, monotoniczny uptime, `app1/VALID`, działające HTTP/WS oraz niezmienione skróty hardware, playlisty, SECURITY i MQTT; nie wystąpił błąd komunikacji ani obserwowalny reset. Nie wysłano PLAY/STOP, MUTE, volume, source ani innej mutacji. Nadal PENDING są ocena obrazu i dźwięku przez użytkownika, local input, aktywne przełączenia/reconnect RADIO/BT, telefon/TV, rzeczywiste poziomy VU oraz pozostałe destrukcyjne i fizyczne bramki pełnego profilu L0.
 - [STABLE] Na W0 sprawdzić ukrycie suwaka jasności, restart z WWW, powrót Wi-Fi bez utraty stacji/config oraz osobno ekran aktualizacji bez regresji ScrollWidget/HOLD.
 - [STABLE][L0 READ-ONLY HIL PASS][W0 OLD-BUILD READ-ONLY+USER PHYSICAL PASS][L0 INTERACTIVE/W0 FINAL HIL PENDING] Fizycznie zweryfikować aktualne WWW na L0 i W0 (gdy bezpieczna aktualizacja W0 będzie możliwa): MUTE, selector RADIO/BT, oznaczenie BT offline, manual source priority, reconnect/resnapshot, favicon bez 404 oraz build identity w SYSTEM i AKTUALIZACJA. Na L0 z buildem `739e4a2` zdalny odczyt potwierdził działające WWW, zgodne assety i favicon bez 404, zgodną identyfikację wersji/builda/profilu przez `/variables.js` i WS oraz poprawny zastany snapshot RADIO/BT, MUTE i volume; bez fizycznej obecności nie wykonywano przełączeń, reconnectu ani oceny widoku i zachowania kontrolek, więc interaktywny HIL L0 pozostaje otwarty. Niedestrukcyjny wynik W0 na `c53ba57` jest zapisany przy bramce profilowej i nie zastępuje końcowego HIL aktualnego firmware.
-- [HARDWARE] Przypisać GPIO XSMT PCM5102A na L0 i fizycznie sprawdzić LOW przy PAUZA/STOP, HIGH przy PLAY, ciszę podczas przejść i Web Update oraz czerwoną ramkę VOL bez zmiany semantyki MUTE.
+- [DECISION REQUIRED][HARDWARE][L0][XSMT] Rozstrzygnąć, czy XSMT PCM5102A należy do baseline Stable L0. Przy odpowiedzi TAK przypisać potwierdzone sprzętowo GPIO i fizycznie sprawdzić LOW przy PAUZA/STOP, HIGH przy PLAY, ciszę podczas przejść i Web Update oraz czerwoną ramkę VOL bez zmiany semantyki MUTE. Przy odpowiedzi NIE pozostawić `VOXONE_DAC_XSMT_PIN=255` i jawnie opisać XSMT jako nieobsługiwany element opcjonalny; nie deklarować capability mute hardware.
 - [STABLE][L0 MQTT COMMAND+RETAINED STATE PARITY HIL PASS][HA/ACTIVE UPDATE HIL PENDING] Fizycznie dokończyć MQTT/Home Assistant na L0; MQTT pozostaje wspierane w pierwszym stable. Po świadomej konfiguracji użytkownika bieżący L0 raportuje `enabled=true`, broker `192.168.1.14:1883`, zapisane poświadczenie i `effectiveRoot=voxone-8CBD1C` po nowym rozruchu. Uwierzytelniony CONNECT do brokera przeszedł, a trzy jednokrotne publikacje URL na `voxone-8CBD1C/command` zostały faktycznie skonsumowane przez L0 i spowodowały trzy odrębne pobrania temporary MP3 z ASUS; dowodzi to aktywnego klienta i subskrypcji command bez odczytu hasła. Raport: `reports/VOXONE-RC1-L0-TTS-RESTORE-HIL-2.md`.
   - `VOXONE-RC1-L0-MQTT-STATE-PARITY-1` 2026-10-26 ma PASS ograniczonego pasywnego zakresu na L0 `0.8.0-dev`/`afbb6d2-dirty`, `app1 VALID`, READY i stałym `bootId=936dd6c8`. Uwierzytelniony klient HIL, korzystający z istniejącego bezpiecznego magazynu bez ujawnienia poświadczeń, zasubskrybował wyłącznie `voxone-8CBD1C/#` i niczego nie publikował. Broker dostarczył po 41 ms trzy wiadomości QoS 0 z flagą retained: `status` jako JSON `{status:0, station:3, name:"Italo4you", title:"[gotowe]", on:1}`, `volume` jako liczbę `51` w kompatybilnej skali 0–254 oraz `playlist` jako URL `http://192.168.1.56/data/stations.tsv`. REST/WS równocześnie potwierdziły RADIO/STOP, stację 3 `Italo4you`, metadata `[gotowe]`, volume 20%, MUTE OFF i `dspon=1`; 20% mapuje się dokładnie na 51/254, `status=0` oznacza STOP, a niezależne `on=1` odpowiada `config.store.dspon`. Retained URL zwrócił HTTP 200, 1691 B i 20 niepustych wierszy, SHA-256 `f060dabd870849f6dc35423f1c7228fb2846b6b3fc9a3d1439f7c5c7ccc57920`. Home Assistant odpowiada HTTP 200 na istniejącym porcie 8123, lecz bez zatwierdzonego tokenu w magazynie HIL nie odczytywano jego encji. Nadal PENDING są rzeczywiste porównanie stanu HA oraz aktywna weryfikacja publikacji i retained po zmianie PLAY/STOP, stacji/metadata, volume, reconnect brokera i ponownym rozruchu; pasywny retained payload nie zawiera czasu publikacji, więc jego dokładnego wieku nie ustalono bez wymuszania zmiany.
 - [STABLE][DOCUMENTATION PASS][HIL PENDING] Baseline `STABLE-DOCS-CONTRACT-1` opisuje aktywne profile, API, MQTT/HA, Source Manager, VoxOneBT, TTS, update/recovery, OTA, Config v7 i granicę Technical Stable/Commercial Release. Obowiązkowy zakres release-gating obejmuje W0, M0, L0, S0 i DIN0; wyłącznie przyszłe capability oraz następne rewizje należą do POST-STABLE. W0 po wydaniu przechodzi do LEGACY. Uzupełnić końcowe wyniki HIL wszystkich pięciu profili; nie traktować katalogu roadmapy sprzętu jako capability bieżącego BIN.
 
 ### Definition of Stable
 
-- [STABLE][CURRENT WORKTREE FULL VERIFY PASS][HIL/RELEASE PENDING] Zamknąć `RC1-FROZEN-RELEASE`: bieżące zachowane drzewo `ebb3c06-dirty` ma `tools/verify.ps1` PASS z 2026-10-24, obejmujący 144 testy native, sanitizery, headless WWW, diagnostykę HIL, SPIFFS/WWW, buildy i pełne obrazy W0/M0/L0/S0/DIN0, walidację obrazów, L0 TX-only, repeatability oraz `git diff --check`. Buildy nie zastępują osobnych fizycznych bramek profili. Formalne 15 bramek to pięć profilowych HIL W0/M0/L0/S0/DIN0 oraz: RADIO endurance; BT phone i LG TV; SourceManager switching/reconnect; TTS RADIO/BT restore; firmware i SPIFFS update; recovery; Config v7 persistence; L/R i VU; brak otwartych błędów P0/P1; końcowy PASS na zamrożonym release commicie.
+- [STABLE][CURRENT CLEAN CHECKPOINT FULL VERIFY PASS][HIL/RELEASE PENDING] Zamknąć `RC1-FROZEN-RELEASE`: czysty commit `d6896005e10dfb0098b1e8c831b1b73506ef5b3b` ma niezależny `tools/verify.ps1` PASS z 2026-10-28, obejmujący 156/156 native, ASan/UBSan, RADIO strict 16/16, headless Web Update, WWW/FIRST BOOT, diagnostykę HIL, SPIFFS i repeatability WWW, buildy i pełne obrazy W0/M0/L0/S0/DIN0, full-image validation, L0 TX-only oraz `git diff --check`; wszystkie profile mają identity `d689600` bez `-dirty` i production SECURITY. Firmware nie został fizycznie wdrożony. Buildy nie zastępują osobnych fizycznych bramek profili. Formalne 15 bramek pozostaje bez zmiany: pięć profilowych HIL W0/M0/L0/S0/DIN0 oraz RADIO endurance; BT phone i LG TV; SourceManager switching/reconnect; TTS RADIO/BT restore; firmware i SPIFFS update; recovery; Config v7 persistence; L/R i VU; brak otwartych błędów P0/P1; końcowy PASS na zamrożonym release commicie. Starszy `ebb3c06-dirty` i kolejne historyczne verify poniżej zachowują własny zakres dowodowy, ale nie są bieżącym checkpointem.
 
   - `VOXONE-RC1-L0-CONCURRENCY-RELEASE-CANDIDATE-1` 2026-10-26 ma **CURRENT WORKTREE FULL VERIFY PASS** na `acdaeb5-dirty`: 149/149 testów native, transport strict 16/16, ASan/UBSan, headless WWW, diagnostyka offline, SPIFFS/WWW, pełne obrazy L0/M0/S0/DIN0/W0, walidacja obrazów, L0 TX-only, repeatability i `git diff --check` zakończyły się PASS. Nowy zestaw `L0 MAIN — OFFLINE VERIFIED / NOT DEPLOYED` ma BIN 1723872 B, SHA-256 `9a18ace701dca691a84158544ff68ee4537662eea5c0a74aead7b8c916280e9b`, odpowiadający ELF 31774612 B, SHA-256 `251e0b58270ca4ba1a6096f1d6f26c36f45542514434b155fd1f92456464be02`, i manifest `/home/piotrek/voxone-preflight/VOXONE-RC1-L0-CONCURRENCY-RELEASE-CANDIDATE-1-aaeluLjv/manifest.json`. Jest to dirty worktree, nie zamrożony release commit; P1, fizyczne HIL i licznik **13/15 OPEN, 2/15 CLOSED** pozostają bez zmian.
   - `VOXONE-RC1-DEV-DEEP-STABILITY-1` 2026-10-27 ma kolejny **CURRENT WORKTREE FULL VERIFY PASS** bez zmiany produkcyjnego kodu MAIN: dokładnie jeden `tools/verify.ps1` zakończył 149/149 native, 16/16 transport strict, ASan/UBSan, headless WWW, mockową diagnostykę, SPIFFS/WWW, buildy i pełne obrazy L0/M0/S0/DIN0/W0, L0 TX-only, walidację obrazów, repeatability oraz `git diff --check`. Przed runnerem 31 produkcyjnie powiązanych testów wykonano 3091 razy pod ASan/UBSan/LSan, pięć współbieżnych testów 250 razy w osobnym TSan, a lokalny VoxOneBT 2313 razy pod ASan/UBSan/LSan; wszystkie zakończyły się PASS. L0 BIN/ELF/SPIFFS pozostały bitowo zgodne z zamrożonym zestawem `9a18ace…6280e9b` / `251e0b…64be02` / `0b1fd0…386e2`, więc nie utworzono zbędnego nowego MAIN. Nowe otwarte ryzyka AsyncTCP OOM i publikacji runtime Config oraz fizyczne HIL pozostają jawnie PENDING; licznik nadal wynosi **13/15 OPEN, 2/15 CLOSED**.
@@ -464,8 +520,8 @@ Obecna sekcja AUDIO jest zaakceptowana i nie wymaga zmian w kategorii A.
 
 VoxOneBT jest osobnym projektem/repo i posiada własną rodzinę sprzętową Vx.
 
-- [HARDWARE] Potwierdzić GPIO, rewizje PCB, opcjonalne LCD/BT/DSP oraz przyszłe warianty wyjścia PCM5102A, MAX98357A i DSPmini. Na nowych PCB zweryfikować GPIO, audio, OLED i EC11; wcześniejszy fizyczny baseline M0 obejmuje PCM5102A GPIO1/2/3, oba OLED I2C GPIO7/8 oraz EC11 GPIO4/5/6. Pozostałe OLED-y 128×64 wymagają driverów i testów.
-- [STABLE][HARDWARE][DIN0 HIL PENDING] Fizycznie zweryfikować DIN0 z tymczasowym pinoutem rewizji 0 współdzielonym z M0: PCM5102A `BCLK1/DOUT2/LRCK3`, OLED `SDA7/SCL8`, input `A5/B6/KEY4`. Potwierdzić moduł MCU, flash/PSRAM, zasilanie, złącza, brak kolizji GPIO, zgodność deskryptora oraz wszystkie zadeklarowane capability. Nie zmieniać historycznej definicji DIN0 z powodu przyszłego PCB. OLED 128×32, VoxOneBT i RTC nie są obecnie capability DIN0; nie zaliczać planów rodziny jako PASS bieżącego BIN.
+- [HARDWARE] Potwierdzić GPIO, rewizje PCB, opcjonalne LCD/BT/DSP oraz przyszłe warianty wyjścia PCM5102A, MAX98357A i DSPmini. Na nowych PCB zweryfikować GPIO, audio, OLED i EC11; wcześniejszy fizyczny baseline M0 obejmuje PCM5102A GPIO1/2/3, SSD1306/SSD1309 128×64 I2C GPIO7/8 oraz EC11 GPIO4/5/6. Bieżące dodatkowe OLED-y mają sterowniki i offline PASS, lecz poza zachowanymi baseline'ami nie mają fizycznej kwalifikacji.
+- [STABLE][HARDWARE][DIN0 HIL PENDING][DECISION REQUIRED: SHARED M0 STAND] Fizycznie zweryfikować obraz DIN0 z tymczasowym pinoutem rewizji 0 współdzielonym z M0: PCM5102A `BCLK1/DOUT2/LRCK3`, OLED `SDA7/SCL8`, input `A5/B6/KEY4`. Potwierdzić MCU, flash/PSRAM, zasilanie, złącza, brak kolizji GPIO, identity `DIN0`, deskryptor oraz wybrany obowiązkowy zakres capability. Nie zmieniać historycznej definicji DIN0 z powodu przyszłego PCB. Bieżący BIN implementuje SSD1306 128×32/128×64, SSD1309, SH1106 i CH1116G 128×64 oraz NONE; VoxOneBT i RTC nadal nie są capability DIN0. Do decyzji o uznaniu wspólnego stanowiska M0 obowiązuje wymaganie osobnego fizycznego urządzenia DIN0.
 
 ### S0 ESP32-S3 Zero — baseline Stable i rozszerzenia POST-STABLE
 
@@ -479,15 +535,8 @@ VoxOneBT jest osobnym projektem/repo i posiada własną rodzinę sprzętową Vx.
   implementacji i akceptacja UI, a nie automatyczny PASS pełnego HIL S0;
   brakujący postcheck API OTA i niewykonane kryteria sprzętowe/runtime
   pozostają otwarte.
-- [POST-STABLE][S0][AUDIO] Rozszerzyć wybór audio S0 przez WWW do
-  `PCM5102A` / `MAX98357A` / `NONE`. MAX98357A jest już zaimplementowanym
-  baseline'em, więc backlog obejmuje PCM5102A, rzeczywisty tryb bez wyjścia
-  audio, capability, bezpieczne przełączanie oraz osobny fizyczny HIL.
-- [POST-STABLE][S0][DISPLAY] Zachować zaimplementowane `NONE`, SSD1306 128×32
-  i SSD1306 128×64 bez wpisywania ich ponownie jako nowych funkcji. Dodać do
-  wyboru WWW backendy i capability dla SSD1309 128×64, CH1116 128×64 oraz
-  SH1106 128×64; każdy wariant wymaga kontroli geometrii, inicjalizacji,
-  pamięci i fizycznego HIL.
+- [POST-STABLE][S0][AUDIO][IMPLEMENTED OFFLINE][PHYSICAL HIL/SCOPE DECISION PENDING] Bieżący BIN udostępnia przez WWW `PCM5102A`, `MAX98357A MONO`, `MAX98357A STEREO` i `NONE`, z zachowaniem MAX98357A MONO jako baseline'u S0. Backend, persistence Config v7 i wspólny stereo I2S mają offline PASS; rozszerzeń nie oznaczać jako fizycznie zakwalifikowanych. Pozostaje decyzja, czy są obowiązkowe przed Stable, oraz osobny HIL zatwierdzonego zakresu.
+- [POST-STABLE][S0][DISPLAY][IMPLEMENTED OFFLINE][PHYSICAL HIL/SCOPE DECISION PENDING] Bieżący BIN zachowuje baseline `NONE`, SSD1306 128×32 i SSD1306 128×64 oraz udostępnia przez WWW SSD1309, CH1116G i SH1106 128×64. Sterowniki, geometria, init i pamięć mają offline PASS; poza zaakceptowanym fizycznie SSD1306 128×32 nie przypisywać PHYSICAL PASS. Pozostaje decyzja o obowiązkowym zakresie Stable i HIL wybranych rozszerzeń.
 - [POST-STABLE][S0][INPUT][HIL PENDING] EC11 / 3×SW / `NONE` i ich wybór przez
   WWW są już zaimplementowane. Nie tworzyć dla nich ponownie zadania
   funkcjonalnego; wykonać brakującą fizyczną walidację 3×SW, `NONE`, nawigacji,
@@ -513,9 +562,9 @@ VoxOneBT jest osobnym projektem/repo i posiada własną rodzinę sprzętową Vx.
   GPIO. Musi zachować osobny profil, deskryptor, capabilities i HIL, bez
   nadpisywania pinoutu oraz dowodów bieżącego S0.
 - [HARDWARE] Fizycznie zweryfikować Buttons3 na wspólnych liniach A/B/KEY wszystkich przeznaczonych PCB z zewnętrznymi pull-upami i filtracją na module lub PCB. Przed użyciem `VERY_LONG` przez menu dopracować wspólny gesture manager tak, aby nie wykonywał wcześniej `LONG`.
-- [POST-STABLE] Dodać runtime audio activation; nowe driver/backendy włączać tylko na PCB z potwierdzonymi capabilities.
-- [POST-STABLE] Po dodaniu runtime audio activation rozszerzyć istniejącą sekcję `SPRZĘT` w WWW o wybór audio filtrowany przez `HardwareCapabilities`, z tym samym kontrolowanym zapisem i restartem. Później rozważyć osobne installed/enabled dla modułów opcjonalnych. Jeden profil PCB ma dostarczać jeden BIN; wybory użytkownika nie tworzą nowych env.
-- [POST-STABLE] Dodać pozostałe backendy wyświetlaczy z macierzy rodzin. Layout `OLED_128X32` dla SSD1306 128×32 jest już zaimplementowany i zaakceptowany na S0, więc nie jest nowym zadaniem; nowe kontrolery mają korzystać z właściwego istniejącego układu 128×32 albo 128×64 i otrzymać osobne capability oraz HIL.
+- [POST-STABLE][IMPLEMENTED OFFLINE][PHYSICAL HIL/SCOPE DECISION PENDING] Runtime audio activation działa dla obecnej macierzy PCM5102A/MAX98357A/NONE i aktywuje wyłącznie backend dozwolony przez capability; nie rozszerzać jej o nowe drivery bez potwierdzonego PCB. Pozostaje fizyczna kwalifikacja i decyzja, które już zaimplementowane warianty należą do gate Stable.
+- [POST-STABLE][IMPLEMENTED OFFLINE] Sekcja `SPRZĘT` w WWW filtruje wybór audio przez `HardwareCapabilities`, zapisuje go w istniejącym rekordzie runtime i stosuje po restarcie. Później rozważyć osobne installed/enabled dla modułów opcjonalnych. Jeden profil PCB nadal dostarcza jeden BIN; wybory użytkownika nie tworzą nowych env.
+- [POST-STABLE][PARTIAL IMPLEMENTATION] Wspólne backendy SSD1306 128×32/128×64, SSD1309 128×64, SH1106 128×64 i CH1116G 128×64 są zaimplementowane dla obecnych profili zgodnie z capabilities; L0 dodatkowo przełącza ST7796/OLED/NONE. Nie oznacza to fizycznego PASS. Pozostałe kontrolery z macierzy rodzin, w tym SSD1322, ST7789V i GC9A01, nadal wymagają osobnej implementacji, capability i HIL.
 - [POST-STABLE] Zaprojektować później PLAYER dla `SSD1322_256X64`, bez implementacji w bieżącym stable. Wygląd ma pozostać spójny z istniejącymi ekranami VoxOne i pokazywać stację, artystę, utwór, zegar, datę, bitrate, głośność oraz słupki Wi-Fi; ikonę BT umieścić obok Wi-Fi, a w obszarze statusu pokazywać źródło i PLAY/PAUSE zamiast IP. VU stereo zachować dokładnie w zatwierdzonym układzie dwóch poziomych segmentowych pasków L/R.
 - [POST-STABLE] Wprowadzić jeden parametr `Jasność` 0–100% w WWW i menu lokalnym: TFT przez PWM podświetlenia, OLED przez contrast/current, 0% wygasza display.
 - [POST-STABLE] Przy zmianie runtime display z aktywnego backendu na `NONE` wygasić fizyczny ekran przed kontrolowanym restartem, aby soft-reset nie pozostawiał ostatniej ramki; cold boot i runtime `NONE` już spełniają kontrakt opcjonalnego display.
@@ -529,7 +578,7 @@ VoxOneBT jest osobnym projektem/repo i posiada własną rodzinę sprzętową Vx.
 
 ### Architecture baseline
 
-Obecny baseline: dane i widoki display są rozdzielone; `HardwareCapabilities` jest autorytatywnym opisem możliwości PCB i zawiera jawny `supportedInputs`; globalny `userVolume` ma zakres 0–100, a czysty Config v7 startuje z bezpieczną wartością 20%; wejście UI emituje znormalizowane zdarzenia, a `UiState` należy do core. `DisplayProfile` jest oddzielony od PCB, a `RuntimeHardwareConfig` od `UserSettings`. M0 ma jeden BIN z backendami SSD1306_128X64 i SSD1309_128X64; wybór przez `RuntimeHardwareConfig` i oba OLED mają wcześniejszy PHYSICAL PASS na tym samym prototypie. Bieżący M0 ma PHYSICAL PASS dla EC11 oraz dla kombinacji display NONE + EC11, SSD1309 + input NONE, NONE + NONE i przywrócenia SSD1309 + EC11; Buttons3 pozostaje BUILD PASS / PHYSICAL NOT TESTED. WIFI-NETIF-HARDENING-1, WIFI-REASSOC-OWNER-1 i WIFI-CONFIG-ATOMIC-REPLACE-1 mają M0 PHYSICAL PASS: HIL A 10/10, poprawny MAIN Web Update app0 → app1 oraz HIL B 5/5; konfiguracja, SPIFFS, hardware i 19 stacji zostały zachowane, a dwie fizyczne wymiany istniejącego `/data/wifi.csv` przeszły poprawnie. Każda bieżąca rodzina dopuszcza runtime `display=NONE` i `input=NONE` jako stan „sprzęt nie jest zainstalowany”, bez zmiany build defaults. Display NONE pomija backend, magistralę, framebuffer i renderer, zachowując DisplayTask dla jego obowiązków pozadisplayowych. `RuntimeHardwareConfig.input` aktywuje przy starcie dokładnie jeden backend EC11, Buttons3 albo NONE; EC11 pozostaje bezpiecznym defaultem bieżących targetów, a oba backendy kończą się na wspólnym `UiInputEvent`. Wspólne linie A/B/KEY obu backendów działają jako `INPUT` i wymagają zewnętrznych pull-upów oraz filtracji sprzętowej. To stan architektury, nie backlog.
+Obecny baseline: dane i widoki display są rozdzielone; `HardwareCapabilities` jest autorytatywnym opisem możliwości PCB i zawiera jawne `supportedInputs`, `supportedDisplays` i `supportedAudioOutputs`; globalny `userVolume` ma zakres 0–100, a czysty Config v7 startuje z bezpieczną wartością 20%; wejście UI emituje znormalizowane zdarzenia, a `UiState` należy do core. `DisplayProfile` jest oddzielony od PCB, a `RuntimeHardwareConfig` od `UserSettings`. M0/S0/DIN0 mają wspólne backendy OLED SSD1306 128×32/128×64, SSD1309, SH1106 i CH1116G 128×64 filtrowane przez capability, a L0 przełącza domyślny ST7796 z tymi OLED-ami albo NONE. Wcześniejszy PHYSICAL PASS M0 obejmuje tylko SSD1306/SSD1309 128×64, nie całą obecną macierz. Bieżący M0 ma także PHYSICAL PASS dla EC11 oraz dla kombinacji display NONE + EC11, SSD1309 + input NONE, NONE + NONE i przywrócenia SSD1309 + EC11; Buttons3 pozostaje BUILD PASS / PHYSICAL NOT TESTED. WIFI-NETIF-HARDENING-1, WIFI-REASSOC-OWNER-1 i WIFI-CONFIG-ATOMIC-REPLACE-1 mają M0 PHYSICAL PASS: HIL A 10/10, poprawny MAIN Web Update app0 → app1 oraz HIL B 5/5; konfiguracja, SPIFFS, hardware i 19 stacji zostały zachowane, a dwie fizyczne wymiany istniejącego `/data/wifi.csv` przeszły poprawnie. Każda bieżąca rodzina dopuszcza runtime `display=NONE` i `input=NONE` jako stan „sprzęt nie jest zainstalowany”, bez zmiany build defaults. Display NONE pomija backend, magistralę, framebuffer i renderer, zachowując DisplayTask dla jego obowiązków pozadisplayowych. `RuntimeHardwareConfig.input` aktywuje przy starcie dokładnie jeden backend EC11, Buttons3 albo NONE; EC11 pozostaje bezpiecznym defaultem bieżących targetów, a oba backendy kończą się na wspólnym `UiInputEvent`. Wspólne linie A/B/KEY obu backendów działają jako `INPUT` i wymagają zewnętrznych pull-upów oraz filtracji sprzętowej. To stan architektury, nie backlog.
 
 Nazwy wariantów display: `STEROWNIK_ROZDZIELCZOŚĆ`, np. `SSD1306_128X32`, `SSD1306_128X64`, `SSD1309_128X64`, `CH1116_128X64`, `SH1106_128X64`, `ST7789V_320X240`, `ST7789_284X76`, `SSD1322_256X64`, `ST7796S_480X320`, `GC9A01_240X240`. Dla modułu opisanego `ST7290_128X64` lub ST7920-compatible trzeba potwierdzić fizyczny kontroler i protokół przed nazwaniem backendu.
 

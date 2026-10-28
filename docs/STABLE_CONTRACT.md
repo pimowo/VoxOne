@@ -23,6 +23,15 @@ M0 nie spełnia tej bramki. Zakres Stable obejmuje capability faktycznie
 zadeklarowane przez bieżący profil. Elementy wymienione wyłącznie w roadmapie
 rodziny nie stają się przez tę decyzję wymaganiami ani działającymi funkcjami.
 
+Po checkpointach macierzy audio i wyświetlaczy bieżący kod udostępnia więcej
+wariantów runtime niż historycznie zatwierdzony baseline sprzętowy Stable.
+Poniższe dwie macierze rozdzielają obowiązkowe minimum profilu od rozszerzonych
+capability już obecnych w BIN. To rozdzielenie jest opisowe i samo nie obniża
+kryterium akceptacji: literalny zapis powyżej nadal wymaga fizycznego HIL każdej
+selectable capability. Dopuszczenie Stable na samym baseline przy pozostawieniu
+niezakwalifikowanych wariantów w WWW jest oznaczone `DECISION REQUIRED` i
+wymaga jawnej zgody użytkownika.
+
 S0 opisuje własny, ręcznie okablowany ESP32-S3 Zero z zatwierdzoną mapą GPIO
 rewizji S0. DIN0 zachowuje mapę GPIO M0 jako pinout rewizji DIN0. Przyszłe
 dedykowane PCB otrzymają nazwy S1 i DIN1, własne definicje pinoutu i capability
@@ -36,6 +45,13 @@ następnej linii rozwojowej.
 
 Dokładny pinout, pamięć, capability i stan testów opisuje
 [HARDWARE_TARGETS.md](HARDWARE_TARGETS.md).
+
+Aktualny czysty checkpoint dokumentacyjnego punktu odniesienia to
+`d6896005e10dfb0098b1e8c831b1b73506ef5b3b`. Niezależny clean verify z
+2026-10-28 ma 156/156 native PASS, ASan/UBSan PASS, RADIO strict 16/16,
+buildy W0/M0/L0/S0/DIN0 5/5, full-image i WWW PASS, L0 TX-only PASS oraz
+production SECURITY offline PASS. Żaden obraz `d689600` nie został fizycznie
+wdrożony; wynik offline nie zastępuje żadnej bramki HIL.
 
 ## HTTP i API
 
@@ -156,8 +172,10 @@ zachowuje `smartstart`; `turnon` włącza DSP/display i uruchamia PLAY tylko prz
 
 ## RADIO, SourceManager i Bluetooth
 
-RADIO istnieje na wszystkich profilach i odtwarza przez I2S/PCM5102A w
-bieżących BIN. Obsługiwane ścieżki obejmują MP3, AAC/AAC+, FLAC i M4A/AAC,
+RADIO istnieje na wszystkich profilach i odtwarza przez wybrane lokalne
+wyjście I2S. Domyślnie W0/M0/L0/DIN0 używają PCM5102A, a S0 MAX98357A MONO;
+runtime `NONE` wyłącza lokalne I2S tam, gdzie profil je udostępnia.
+Obsługiwane ścieżki obejmują MP3, AAC/AAC+, FLAC i M4A/AAC,
 HTTP/HTTPS, ICY metadata, M3U/PLS i redirect; pełna macierz realnych streamów
 pozostaje HIL.
 
@@ -287,18 +305,46 @@ publikować `timezone="Europe/Warsaw"` oraz ten offset. Do chwili wdrożenia kod
 nie powinien być używany jako źródło offsetu. Propozycja nie zmienia
 serialized layout ani bieżącego firmware.
 
-## Macierz kwalifikacji pięciu profili Stable
+## Macierze kwalifikacji pięciu profili Stable
 
-To jest skondensowany widok bramki wydania, nie druga lista zadań; źródłem
-prawdy pozostaje TODO.
+To jest skondensowany opis zakresu, nie druga lista zadań; źródłem prawdy
+pozostaje TODO. `NONE` oznacza zapisany wariant bez zainstalowanego lokalnego
+modułu, a nie osobny fizyczny model urządzenia.
 
-| Profil | Kwalifikowany baseline bieżącego BIN | Rzeczywisty brak / wymagany dowód | Bramka wydania |
+### A. Baseline Stable — obowiązkowe minimum kwalifikacji
+
+| Profil | Domyślny sprzęt | Pozostały wcześniej zatwierdzony baseline runtime | Minimalny fizyczny zakres bramki profilu |
 |---|---|---|---|
-| W0 | ESP32 bez PSRAM, PCM5102A, ST7789 284×76, EC11/Buttons3/NONE, RADIO/WWW/MQTT/update | Full image/first boot/AP/Wi-Fi/WWW/RADIO/audio/display/input/restart; PBKDF2 bez PSRAM; migracja 0.2.0/0.8.0, OTA/config, MAIN/SPIFFS/recovery/power-loss, Config v7, playlisty i ScrollWidget. OTA rollback wyłącznie po osobnej zgodzie i asekuracji. | Fizyczny W0 PASS; brak otwartych regresji profilu. |
-| M0 | ESP32-S3 4 MiB + 2 MiB PSRAM, PCM5102A, SSD1306/SSD1309 128×64/NONE, EC11/Buttons3/NONE | Aktualny baseline na urządzeniu; UART uzbrojony przed restartem; OTA health/rollback z `/api/ready`, bootId i UART; SECURITY OPEN/PROTECTED; Config v7; RADIO oraz wszystkie wspierane warianty display/input. | Fizyczny M0 PASS; OTA i SECURITY HIL PASS. |
-| L0 | ESP32-S3 16 MiB + PSRAM, PCM5102A, ST7796S, DS3231, VoxOneBT UART/I2S, VU, EC11/Buttons3/NONE | RADIO endurance i kodeki/playlisty; telefon/LG TV, A2DP/AVRCP, metadata/VU/poziomy; SourceManager/TTS, L/R, MQTT/HA, LCD/input, XSMT po przypisaniu GPIO, update/recovery/config i negatywne ścieżki VoxOneBT. | Fizyczny L0 PASS; endurance i pełna macierz BT/audio PASS. |
-| S0 | ESP32-S3 Zero 4 MiB + 2 MiB PSRAM; MAX98357A `BCLK5/DOUT6/LRCK4`, SSD1306 I2C `SDA1/SCL2` 128×32/128×64/NONE, EC11/Buttons3 `A9/B8/KEY7`/NONE | First boot, RADIO/audio, oba warianty OLED, wejścia, WWW, Config v7, update/recovery i OTA na właściwym stanowisku S0. Bateria, BT, RTC i VU nie są capability bieżącego BIN i nie należą do tej bramki. | Fizyczny S0 PASS; build ani test obrazu bez właściwego S0 nie kwalifikuje profilu. S1 nie blokuje tej bramki. |
-| DIN0 | ESP32-S3 Zero 4 MiB + 2 MiB PSRAM; pinout rewizji DIN0 współdzielony z M0: PCM5102A `1/2/3`, OLED I2C `7/8`, EC11/Buttons3 `5/6/4`, display/input NONE | First boot, RADIO/audio, oba OLED-y 128×64, wejścia, WWW, Config v7, update/recovery i OTA na właściwym stanowisku DIN0. OLED 128×32, VoxOneBT, RTC i VU nie są capability bieżącego BIN i nie należą do tej bramki. | Fizyczny DIN0 PASS; test obrazu na M0 nie kwalifikuje profilu. DIN1 nie blokuje tej bramki. |
+| W0 | PCM5102A; ST7789 284×76; EC11 | display/input `NONE`, Buttons3; RADIO/WWW/MQTT/update | Full image/first boot, RADIO/audio/display/input, PBKDF2 bez PSRAM, Config v7, MAIN/SPIFFS, recovery/power-loss i migracja. W0 pozostaje obowiązkowy; uszkodzone USB i brak recovery są blokerem. |
+| M0 | PCM5102A; SSD1306 128×64; EC11 | SSD1309 128×64 i display `NONE`; Buttons3/input `NONE` | Finalny build, RADIO/audio/display/input, SECURITY, Config v7, update/rollback i recovery. Zachowane PASS M0 pozostają ważne w swoim zakresie. |
+| L0 | PCM5102A; ST7796S 480×320; EC11; DS3231; VoxOneBT/VU | Buttons3/input `NONE` | Domyślny TFT/audio, BT/SourceManager/TTS, SECURITY, Config, update/recovery i otwarte P1. XSMT ma status `DECISION REQUIRED`. |
+| S0 | MAX98357A MONO; SSD1306 128×32; EC11 | SSD1306 128×64 i display `NONE`; Buttons3/input `NONE` | First boot, RADIO/audio, oba baseline OLED, wejścia, WWW, Config, update/recovery na fizycznym S0. GPIO: I2S `5/6/4`, input `9/8/7`, I2C `1/2`. |
+| DIN0 | PCM5102A; SSD1306 128×64; EC11 | SSD1309 128×64 i display `NONE`; Buttons3/input `NONE` | Obraz DIN0, tożsamość profilu, first boot, RADIO/audio/OLED/input, Config, SECURITY, update/recovery. GPIO współdzielone z M0: I2S `1/2/3`, input `5/6/4`, I2C `7/8`. |
+
+### B. Rozszerzone capability obecne w `d689600`
+
+| Profil | Dodatkowe display runtime ponad baseline A | Dodatkowe audio runtime ponad baseline A | Stan kwalifikacji |
+|---|---|---|---|
+| W0 | Brak nowych wariantów; ST7789/NONE bez zmian | Brak | W0 nie otrzymał rozszerzenia funkcjonalnego. |
+| M0 | SSD1306 128×32, SH1106 128×64, CH1116G 128×64 | MAX98357A MONO, MAX98357A STEREO, `NONE` | Implemented/offline PASS; brak pełnej fizycznej kwalifikacji nowych wariantów. |
+| L0 | SSD1306 128×32/128×64, SSD1309 128×64, SH1106 128×64, CH1116G 128×64, `NONE` | `NONE` | Implemented/offline PASS; domyślny ST7796 zachowany, nowe OLED-y fizycznie niezakwalifikowane na L0. |
+| S0 | SSD1309 128×64, SH1106 128×64, CH1116G 128×64 | PCM5102A, MAX98357A STEREO, `NONE` | Implemented/offline PASS; fizyczny S0 potwierdza tylko wcześniejszy baseline 128×32/MAX98357A MONO/EC11. |
+| DIN0 | SSD1306 128×32, SH1106 128×64, CH1116G 128×64 | Brak; tylko PCM5102A | Implemented/offline PASS; brak fizycznego HIL DIN0. |
+
+**DECISION REQUIRED — zakres wariantów:** obecny kontrakt wymaga HIL każdej
+capability udostępnionej przez profil, więc bez jawnej decyzji rozszerzenia z
+macierzy B pozostają w zakresie kwalifikacji. Alternatywą jest zatwierdzenie,
+że RC1 kwalifikuje obowiązkowo macierz A, a warianty B pozostają selectable,
+lecz jawnie `PHYSICAL NOT QUALIFIED`; ta alternatywa nie jest jeszcze częścią
+kontraktu.
+
+**DECISION REQUIRED — DIN0:** bieżący zapis wymaga osobnego fizycznego HIL
+DIN0 i mówi, że samo uruchomienie obrazu na M0 nie zamyka bramki. Ponieważ
+DIN0 ma identyczne GPIO, flash/PSRAM i bazowe komponenty jak M0, możliwe jest
+technicznie wykonanie HIL obrazu `din0` na wspólnym stanowisku M0 z jawnym
+potwierdzeniem identity `DIN0`. Uznanie takiego przebiegu za profilowy PASS
+wymaga zmiany interpretacji kontraktu i zgody użytkownika; test firmware M0
+nigdy nie zastępuje testu firmware DIN0.
 
 Formalna Definition of Stable dla RC1 liczy **15 głównych bramek**: pięć
 profilowych HIL (W0, M0, L0, S0, DIN0) oraz dziesięć niezmienionych grup wspólnych:
@@ -320,7 +366,9 @@ późniejsze S1/DIN1 pozostają POST-STABLE.
 
 Pierwszego Stable nie rozszerzają: DLNA, AUX/PCM1808, Multiroom, native Home
 Assistant, W5500, DSPmini/AutoEQ, menu lokalne, power/standby/alarm, Installer,
-nowe PCB L1/M1/S1/DIN1 ani dodatkowe backendy display. `SSD1322_256X64`
-pozostaje zatwierdzonym zadaniem POST-STABLE z dokładnie uzgodnionym PLAYER i
-dwoma poziomymi segmentowymi paskami VU L/R; katalog WWW nie oznacza, że
-backend istnieje w bieżącym firmware.
+nowe PCB L1/M1/S1/DIN1 ani backendy display niewystępujące w macierzy
+`d689600`. Status już zaimplementowanych rozszerzeń `d689600` pozostaje objęty
+decyzją o zakresie HIL opisaną wyżej. `SSD1322_256X64` pozostaje zatwierdzonym
+zadaniem POST-STABLE z dokładnie uzgodnionym PLAYER i dwoma poziomymi
+segmentowymi paskami VU L/R; katalog WWW nie oznacza, że backend istnieje w
+bieżącym firmware.

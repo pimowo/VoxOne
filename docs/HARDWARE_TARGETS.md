@@ -11,6 +11,12 @@ Zakres Stable 1.0.0 obejmuje W0, M0, L0, S0 i DIN0. Po jego wydaniu W0
 przechodzi do LEGACY, pozostając w repozytorium i buildach oraz zachowując
 możliwość krytycznego utrzymania linii 1.0.0.
 
+Stan implementacji poniżej odpowiada czystemu checkpointowi `d689600`. Lista
+capability opisuje to, co bieżący BIN pozwala wybrać; nie oznacza fizycznego
+HIL PASS każdego wariantu. Obowiązkowy historyczny baseline oraz konflikt
+kwalifikacji rozszerzonych wariantów są rozdzielone w
+[STABLE_CONTRACT.md](STABLE_CONTRACT.md).
+
 | Rodzina | Przeznaczenie | Docelowe elementy rodziny — roadmapa, nie deklaracja rewizji 0 |
 |---|---|---|
 | Lx | rozbudowana | ESP32-S3 N16R8, PCM5102, DSPmini, W5500, SSD1306/SSD1309/CH1116/SH1106/ST7290 128×64, ST7789V 320×240, SSD1322 256×64, ST7796S 480×320, GC9A01 240×240, EC11, 3×SW, VoxOneBT, DS3231 |
@@ -28,11 +34,11 @@ HIL Stable pozostaje otwarty.
 
 | Profil / env | MCU i pamięć deklarowana przez build/kod | Bieżący BIN i capability | Status hardware |
 |---|---|---|---|
-| `w0` | klasyczny ESP32; build `esp32dev`, bez PSRAM; deskryptor nie deklaruje fizycznego rozmiaru flash | PCM5102A, ST7789 284×76, EC11/Buttons3/NONE, RADIO/WWW/MQTT/Web Update; bez BT, RTC i VU | Obowiązkowy profil Stable 1.0.0; po wydaniu status LEGACY, bez nowego rozwoju funkcjonalnego |
-| `m0` | ESP32-S3 Zero, flash 4 MiB, PSRAM 2 MiB | PCM5102A, runtime SSD1306/SSD1309 128×64/NONE, EC11/Buttons3/NONE; bez BT, RTC i VU | SSD1306, SSD1309, PCM5102A, EC11 i wybrane kombinacje NONE mają wcześniejszy PHYSICAL PASS; końcowy HIL Stable PENDING |
-| `l0` | ESP32-S3; build flash 16 MiB i PSRAM OPI; rozmiar PSRAM nie jest utrwalony w deskryptorze | PCM5102A, ST7796S 480×320, EC11/Buttons3/NONE, DS3231, VoxOneBT UART + I2S RX, VU i aktualizacja VoxOneBT | Funkcje mają etapowe baseline'y, lecz skonsolidowany HIL Stable, endurance i negatywne update pozostają PENDING |
-| `s0` | ESP32-S3 Zero, flash 4 MiB, PSRAM 2 MiB | MAX98357A, runtime SSD1306 128×32/128×64/NONE, EC11/Buttons3/NONE; zatwierdzone GPIO ręcznie okablowanej rewizji S0 | Obowiązkowy profil Stable 1.0.0; osobny fizyczny HIL PENDING |
-| `din0` | ESP32-S3 Zero, flash 4 MiB, PSRAM 2 MiB | Pinout rewizji DIN0 jak M0: PCM5102A, OLED 128×64 i local input; przyszłe wyposażenie DIN nie jest włączone | Obowiązkowy profil Stable 1.0.0; osobny fizyczny HIL PENDING |
+| `w0` | klasyczny ESP32; build `esp32dev`, bez PSRAM; deskryptor nie deklaruje fizycznego rozmiaru flash | PCM5102A; ST7789 284×76/NONE; EC11/Buttons3/NONE; RADIO/WWW/MQTT/Web Update; bez BT, RTC i VU | Bez nowych funkcji; obowiązkowy profil Stable 1.0.0, po wydaniu LEGACY. Stary fizyczny baseline nie zamyka finalnego HIL. |
+| `m0` | ESP32-S3 Zero, flash 4 MiB, PSRAM 2 MiB | Audio PCM5102A/MAX98357A MONO/MAX98357A STEREO/NONE; display NONE, SSD1306 128×32/128×64, SSD1309, SH1106 i CH1116G 128×64; EC11/Buttons3/NONE | SSD1306/SSD1309 128×64, PCM5102A, EC11 i wybrane NONE mają wcześniejszy PHYSICAL PASS; rozszerzenia i końcowy HIL Stable PENDING. |
+| `l0` | ESP32-S3; build flash 16 MiB i PSRAM OPI; rozmiar PSRAM nie jest utrwalony w deskryptorze | Audio PCM5102A/NONE; display ST7796S 480×320, pięć OLED I2C lub NONE; EC11/Buttons3/NONE; DS3231, VoxOneBT UART + I2S RX, VU i aktualizacja VoxOneBT | Domyślny ST7796 i funkcje L0 mają etapowe PASS; OLED-y L0 są tylko OFFLINE PASS. Skonsolidowany HIL Stable i otwarte negatywne ścieżki PENDING. |
+| `s0` | ESP32-S3 Zero, flash 4 MiB, PSRAM 2 MiB | Audio PCM5102A/MAX98357A MONO/MAX98357A STEREO/NONE; display NONE, SSD1306 128×32/128×64, SSD1309, SH1106 i CH1116G 128×64; EC11/Buttons3/NONE | Fizyczny baseline obejmuje SSD1306 128×32, MAX98357A MONO i EC11; rozszerzenia oraz pełny HIL pozostają PENDING. |
+| `din0` | ESP32-S3 Zero, flash 4 MiB, PSRAM 2 MiB | Pinout rewizji DIN0 jak M0; PCM5102A; display NONE, SSD1306 128×32/128×64, SSD1309, SH1106 i CH1116G 128×64; EC11/Buttons3/NONE | Brak fizycznego HIL obrazu DIN0. Użycie wspólnego stanowiska M0 wymaga decyzji kontraktowej, nie zmiany GPIO. |
 
 Zatwierdzony zakres Stable 1.0.0 wymaga fizycznego HIL PASS profili W0, M0,
 L0, S0 i DIN0. Build-only nie kwalifikuje żadnego z nich. Pełny kontrakt i
@@ -66,12 +72,15 @@ każdy profil ma przejść HIL na odpowiednim urządzeniu, z potwierdzeniem
 flash/PSRAM, zasilania, złączy, audio, OLED i local input. Build ani
 uruchomienie obrazu na M0 nie zastępują identyfikacji i PASS osobnego targetu.
 
-Bieżący kontrakt S0 obejmuje MAX98357A, runtime SSD1306 128×32/128×64/NONE
-oraz EC11/Buttons3/NONE. Nie obejmuje baterii, VoxOneBT, RTC ani VU. DIN0
-pozostaje przy PCM5102A, runtime SSD1306/SSD1309 128×64/NONE i
-EC11/Buttons3/NONE; nie obejmuje OLED 128×32, VoxOneBT, RTC ani VU. Te
-dodatkowe funkcje pozostają POST-STABLE i nie należą do kwalifikacji bieżących
-profili S0/DIN0.
+Historyczny baseline S0 obejmuje MAX98357A MONO, runtime SSD1306
+128×32/128×64/NONE oraz EC11/Buttons3/NONE. Bieżący BIN implementuje ponadto
+PCM5102A, MAX98357A STEREO, audio NONE oraz SSD1309/SH1106/CH1116G 128×64.
+Historyczny baseline DIN0 pozostaje przy PCM5102A, runtime SSD1306/SSD1309
+128×64/NONE i EC11/Buttons3/NONE; bieżący BIN implementuje ponadto SSD1306
+128×32, SH1106 i CH1116G 128×64. Bateria, VoxOneBT, RTC i VU nadal nie są
+capability S0/DIN0. Status dodatkowych, już zaimplementowanych wariantów to
+OFFLINE PASS / PHYSICAL NOT QUALIFIED; ich wpływ na obowiązkowy zakres Stable
+ma status `DECISION REQUIRED` w kontrakcie.
 
 Dedykowane PCB S1 i DIN1 są przyszłymi rewizjami z własnym pinoutem i
 capability. Ich definicje należy dodać jako osobne profile, bez modyfikowania
@@ -100,7 +109,13 @@ mogą mieć 16 MiB, ale bieżąca tablica nie przeznacza pozostałych 12 MiB na
 dane. Dla W0 fizyczny rozmiar flash wymaga potwierdzenia mimo 4-miB układu
 partycji.
 
-`HardwareDescriptor` podaje tożsamość PCB, magistrale, GPIO i aktualne capabilities, w tym jawny `supportedInputs`. `RuntimeHardwareConfig` wybiera w jednym BIN warianty OLED dozwolone przez dany profil: M0/DIN0 mają SSD1306/SSD1309 128×64, a S0 SSD1306 128×32/128×64. Każdy profil wybiera także EC11, Buttons3 albo NONE. Audio pozostaje wyborem bieżącego BIN; S0 używa standardowego toru I²S z MAX98357A, pozostałe bieżące profile PCM5102A. Buttons3 używa tych samych linii A/B/KEY co EC11 i ma BUILD PASS, ale nie ma jeszcze PHYSICAL PASS. Nowe warianty wymagają fizycznej weryfikacji i osobnych capabilities.
+`HardwareDescriptor` podaje tożsamość PCB, magistrale, GPIO i aktualne
+capabilities, w tym jawne `supportedInputs`, `supportedDisplays` i
+`supportedAudioOutputs`. `RuntimeHardwareConfig` przechowuje display, input i
+audio w istniejącym rekordzie 10 B z CRC. Każdy profil wybiera EC11, Buttons3
+albo NONE. Buttons3 używa tych samych linii A/B/KEY co EC11 i ma BUILD PASS,
+ale nie ma jeszcze pełnego PHYSICAL PASS. Obecność wariantu w deskryptorze i
+WWW oznacza IMPLEMENTED, nie PHYSICAL PASS.
 
 Złącze local input ma wspólny kontrakt `A / LEFT`, `B / RIGHT`, `KEY / OK`, `GND`. Zarówno EC11, jak i klawiatura 3×SW używają zewnętrznych pull-upów oraz filtracji na module lub PCB; przyciski NO zwierają wejścia do GND. Firmware konfiguruje A, B i KEY jako zwykłe `INPUT` i nie włącza dla nich `INPUT_PULLUP`.
 
@@ -111,11 +126,19 @@ Każda bieżąca rodzina dopuszcza runtime stan „sprzęt nie jest zainstalowan
 
 | Profil | Runtime display | Runtime input |
 |---|---|---|
-| `l0` | NONE, ST7796S_480X320 | NONE, EC11, BUTTONS3 |
-| `m0` | NONE, SSD1306_128X64, SSD1309_128X64 | NONE, EC11, BUTTONS3 |
-| `s0` | NONE, SSD1306_128X32, SSD1306_128X64 | NONE, EC11, BUTTONS3 |
-| `din0` | NONE, SSD1306_128X64, SSD1309_128X64 | NONE, EC11, BUTTONS3 |
+| `l0` | NONE, ST7796S_480X320, SSD1306_128X32, SSD1306_128X64, SSD1309_128X64, SH1106_128X64, CH1116G_128X64 | NONE, EC11, BUTTONS3 |
+| `m0` | NONE, SSD1306_128X32, SSD1306_128X64, SSD1309_128X64, SH1106_128X64, CH1116G_128X64 | NONE, EC11, BUTTONS3 |
+| `s0` | NONE, SSD1306_128X32, SSD1306_128X64, SSD1309_128X64, SH1106_128X64, CH1116G_128X64 | NONE, EC11, BUTTONS3 |
+| `din0` | NONE, SSD1306_128X32, SSD1306_128X64, SSD1309_128X64, SH1106_128X64, CH1116G_128X64 | NONE, EC11, BUTTONS3 |
 | `w0` | NONE, ST7789_284X76 | NONE, EC11, BUTTONS3 |
+
+| Profil | Runtime audio |
+|---|---|
+| `l0` | PCM5102A, NONE |
+| `m0` | PCM5102A, MAX98357A MONO, MAX98357A STEREO, NONE |
+| `s0` | PCM5102A, MAX98357A MONO, MAX98357A STEREO, NONE |
+| `din0` | PCM5102A |
+| `w0` | PCM5102A |
 
 `display=NONE` nie uruchamia kontrolera ani magistrali display, nie alokuje framebufferów i nie uruchamia renderera. Techniczny DisplayTask pozostaje aktywny, ponieważ obsługuje również `timekeeper.loop0()` oraz — zależnie od konfiguracji — `netserver.loop()`; operacje display są wtedy no-op. `input=NONE` nie konfiguruje A/B/KEY, ISR, EC11 ani OneButton local input. NONE nie jest capability fizycznego urządzenia i nie zmienia build defaults.
 
