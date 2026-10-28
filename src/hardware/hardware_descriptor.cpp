@@ -36,7 +36,9 @@ constexpr uint32_t kFlashBytes = 4u * 1024u * 1024u;
 constexpr uint32_t kPsramBytes = 2u * 1024u * 1024u;
 constexpr HardwareCapabilities kCapabilities = {
   displaySupport(DisplayKind::Ssd1306_128x64) |
-      displaySupport(DisplayKind::Ssd1309_128x64),
+      displaySupport(DisplayKind::Ssd1309_128x64) |
+      displaySupport(DisplayKind::Ssd1306_128x32) |
+      displaySupport(DisplayKind::Sh1106_128x64),
   audioOutputSupport(AudioOutputKind::Pcm5102a) |
       audioOutputSupport(AudioOutputKind::Max98357) |
       audioOutputSupport(AudioOutputKind::Max98357Stereo) |
@@ -58,7 +60,9 @@ constexpr uint32_t kFlashBytes = 4u * 1024u * 1024u;
 constexpr uint32_t kPsramBytes = 2u * 1024u * 1024u;
 constexpr HardwareCapabilities kCapabilities = {
   displaySupport(DisplayKind::Ssd1306_128x32) |
-      displaySupport(DisplayKind::Ssd1306_128x64),
+      displaySupport(DisplayKind::Ssd1306_128x64) |
+      displaySupport(DisplayKind::Ssd1309_128x64) |
+      displaySupport(DisplayKind::Sh1106_128x64),
   audioOutputSupport(AudioOutputKind::Pcm5102a) |
       audioOutputSupport(AudioOutputKind::Max98357) |
       audioOutputSupport(AudioOutputKind::Max98357Stereo) |
@@ -80,7 +84,9 @@ constexpr uint32_t kFlashBytes = 4u * 1024u * 1024u;
 constexpr uint32_t kPsramBytes = 2u * 1024u * 1024u;
 constexpr HardwareCapabilities kCapabilities = {
   displaySupport(DisplayKind::Ssd1306_128x64) |
-      displaySupport(DisplayKind::Ssd1309_128x64),
+      displaySupport(DisplayKind::Ssd1309_128x64) |
+      displaySupport(DisplayKind::Ssd1306_128x32) |
+      displaySupport(DisplayKind::Sh1106_128x64),
   audioOutputSupport(AudioOutputKind::Pcm5102a),
   inputSupport(LocalInputKind::Ec11) | inputSupport(LocalInputKind::Buttons3),
   true, false, false, false, false, false, true, false,
@@ -134,7 +140,8 @@ constexpr HardwareDescriptor kCurrent = {
    fromLegacyPin(TFT_RST), kBacklight,
    (kDisplayKind == DisplayKind::Ssd1306_128x32 ||
     kDisplayKind == DisplayKind::Ssd1306_128x64 ||
-    kDisplayKind == DisplayKind::Ssd1309_128x64) ? BusKind::I2c :
+    kDisplayKind == DisplayKind::Ssd1309_128x64 ||
+    kDisplayKind == DisplayKind::Sh1106_128x64) ? BusKind::I2c :
      (kCapabilities.hasLocalDisplay() ? BusKind::Spi : BusKind::None)},
   kDacXsmt,
   kCapabilities
@@ -235,7 +242,8 @@ bool validateDescriptor(const HardwareDescriptor& d) {
     return false;
   if (d.displayKind == DisplayKind::Ssd1306_128x32 ||
       d.displayKind == DisplayKind::Ssd1306_128x64 ||
-      d.displayKind == DisplayKind::Ssd1309_128x64) {
+      d.displayKind == DisplayKind::Ssd1309_128x64 ||
+      d.displayKind == DisplayKind::Sh1106_128x64) {
     if (d.display.bus != BusKind::I2c ||
         !hasPin(d.i2c.sda) || !hasPin(d.i2c.scl)) return false;
   } else if (display) {

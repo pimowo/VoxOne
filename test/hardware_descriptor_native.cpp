@@ -67,7 +67,8 @@ int main() {
   assert(d.display.bus ==
          ((d.displayKind == DisplayKind::Ssd1306_128x32 ||
            d.displayKind == DisplayKind::Ssd1306_128x64 ||
-           d.displayKind == DisplayKind::Ssd1309_128x64) ? BusKind::I2c :
+           d.displayKind == DisplayKind::Ssd1309_128x64 ||
+           d.displayKind == DisplayKind::Sh1106_128x64) ? BusKind::I2c :
           (caps.hasLocalDisplay() ? BusKind::Spi : BusKind::None)));
   assert(d.localInput.a == fromLegacyPin(ENC_BTNL));
   assert(d.localInput.b == fromLegacyPin(ENC_BTNR));
@@ -132,6 +133,7 @@ int main() {
   assert(layout.width == 284 && layout.height == 76 && !layout.monochrome);
   assert(caps.hasLocalDisplay());
   assert(caps.supportedDisplays == displaySupport(DisplayKind::St7789_284x76));
+  assert(!caps.supportsDisplay(DisplayKind::Sh1106_128x64));
   assert(d.display.cs == 5 && d.display.dc == 4);
   assert(d.display.rst == kNoPin && d.display.backlight == kNoPin);
   assert(d.audioOut.dout == 27 && d.audioOut.bclk == 26 && d.audioOut.ws == 25);
@@ -158,6 +160,10 @@ int main() {
   assert(layout.width == 480 && layout.height == 320 && !layout.monochrome);
   assert(caps.hasLocalDisplay());
   assert(caps.supportedDisplays == displaySupport(DisplayKind::St7796_480x320));
+  assert(!caps.supportsDisplay(DisplayKind::Ssd1306_128x32));
+  assert(!caps.supportsDisplay(DisplayKind::Ssd1306_128x64));
+  assert(!caps.supportsDisplay(DisplayKind::Ssd1309_128x64));
+  assert(!caps.supportsDisplay(DisplayKind::Sh1106_128x64));
   assert(d.spi.mosi == 11 && d.spi.sck == 12 && d.spi.miso == 13);
   assert(d.display.cs == 10 && d.display.dc == 9 && d.display.backlight == 14);
   assert(d.display.rst == kNoPin);
@@ -190,9 +196,13 @@ int main() {
   assert(d.display.bus == BusKind::I2c);
   assert(caps.supportedDisplays ==
          (displaySupport(DisplayKind::Ssd1306_128x64) |
-          displaySupport(DisplayKind::Ssd1309_128x64)));
+          displaySupport(DisplayKind::Ssd1309_128x64) |
+          displaySupport(DisplayKind::Ssd1306_128x32) |
+          displaySupport(DisplayKind::Sh1106_128x64)));
+  assert(caps.supportsDisplay(DisplayKind::Ssd1306_128x32));
   assert(caps.supportsDisplay(DisplayKind::Ssd1306_128x64));
   assert(caps.supportsDisplay(DisplayKind::Ssd1309_128x64));
+  assert(caps.supportsDisplay(DisplayKind::Sh1106_128x64));
   assert(d.i2c.sda == 7 && d.i2c.scl == 8);
   assert(d.display.cs == kNoPin && d.display.dc == kNoPin);
   assert(d.audioOut.bclk == 1 && d.audioOut.ws == 3 && d.audioOut.dout == 2);
@@ -221,10 +231,13 @@ int main() {
   assert(d.display.bus == BusKind::I2c);
   assert(caps.supportedDisplays ==
          (displaySupport(DisplayKind::Ssd1306_128x32) |
-          displaySupport(DisplayKind::Ssd1306_128x64)));
+          displaySupport(DisplayKind::Ssd1306_128x64) |
+          displaySupport(DisplayKind::Ssd1309_128x64) |
+          displaySupport(DisplayKind::Sh1106_128x64)));
   assert(caps.supportsDisplay(DisplayKind::Ssd1306_128x32));
   assert(caps.supportsDisplay(DisplayKind::Ssd1306_128x64));
-  assert(!caps.supportsDisplay(DisplayKind::Ssd1309_128x64));
+  assert(caps.supportsDisplay(DisplayKind::Ssd1309_128x64));
+  assert(caps.supportsDisplay(DisplayKind::Sh1106_128x64));
   assert(d.i2c.sda == 1 && d.i2c.scl == 2);
   assert(I2CFREQ_HZ == 400000UL);
   assert(d.display.cs == kNoPin && d.display.dc == kNoPin);
@@ -255,9 +268,13 @@ int main() {
   assert(d.display.bus == BusKind::I2c);
   assert(caps.supportedDisplays ==
          (displaySupport(DisplayKind::Ssd1306_128x64) |
-          displaySupport(DisplayKind::Ssd1309_128x64)));
+          displaySupport(DisplayKind::Ssd1309_128x64) |
+          displaySupport(DisplayKind::Ssd1306_128x32) |
+          displaySupport(DisplayKind::Sh1106_128x64)));
+  assert(caps.supportsDisplay(DisplayKind::Ssd1306_128x32));
   assert(caps.supportsDisplay(DisplayKind::Ssd1306_128x64));
   assert(caps.supportsDisplay(DisplayKind::Ssd1309_128x64));
+  assert(caps.supportsDisplay(DisplayKind::Sh1106_128x64));
   assert(d.i2c.sda == 7 && d.i2c.scl == 8);
   assert(d.display.cs == kNoPin && d.display.dc == kNoPin);
   assert(d.audioOut.bclk == 1 && d.audioOut.ws == 3 && d.audioOut.dout == 2);
@@ -311,6 +328,7 @@ int main() {
   if (d.displayKind == DisplayKind::Ssd1306_128x32 ||
       d.displayKind == DisplayKind::Ssd1306_128x64 ||
       d.displayKind == DisplayKind::Ssd1309_128x64 ||
+      d.displayKind == DisplayKind::Sh1106_128x64 ||
       d.capabilities.supportsRtc)
     assert(!validateDescriptor(bad));
   bad = d;

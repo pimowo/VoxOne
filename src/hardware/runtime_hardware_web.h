@@ -8,7 +8,7 @@
 namespace voxone {
 namespace hardware {
 
-constexpr size_t kRuntimeHardwareWebJsonCapacity = 4096;
+constexpr size_t kRuntimeHardwareWebJsonCapacity = 5120;
 
 enum class HardwareRoadmapStatus : uint8_t {
   Supported,

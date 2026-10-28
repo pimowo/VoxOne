@@ -43,6 +43,7 @@ const char* runtimeDisplayName(hardware::RuntimeDisplay display) {
     case hardware::RuntimeDisplay::St7789_284x76: return "ST7789_284X76";
     case hardware::RuntimeDisplay::St7796s_480x320: return "ST7796S_480X320";
     case hardware::RuntimeDisplay::Ssd1306_128x32: return "SSD1306_128X32";
+    case hardware::RuntimeDisplay::Sh1106_128x64: return "SH1106_128X64";
   }
   return "UNKNOWN";
 }
@@ -54,6 +55,7 @@ const char* controllerName(display_profile::ControllerId controller) {
     case display_profile::ControllerId::Ssd1309: return "SSD1309";
     case display_profile::ControllerId::St7789: return "ST7789";
     case display_profile::ControllerId::St7796: return "ST7796";
+    case display_profile::ControllerId::Sh1106: return "SH1106";
   }
   return "UNKNOWN";
 }

@@ -53,7 +53,8 @@ constexpr CompiledBackends compiledBackends() {
 #if defined(VOXONE_RUNTIME_OLED_128X64_BACKENDS)
   return CompiledBackends{
       controllerSupport(display_profile::ControllerId::Ssd1306) |
-          controllerSupport(display_profile::ControllerId::Ssd1309),
+          controllerSupport(display_profile::ControllerId::Ssd1309) |
+          controllerSupport(display_profile::ControllerId::Sh1106),
       true};
 #elif defined(VOXONE_DISPLAY_CONTROLLER)
   return CompiledBackends{

@@ -7,6 +7,7 @@
 #undef BLACK
 #undef WHITE
 #include <Adafruit_SSD1305.h>
+#include <Adafruit_SH110X.h>
 #include <Wire.h>
 
 #include "display_backend_selection.h"
@@ -60,6 +61,7 @@ class RuntimeOled128x64Display : public Adafruit_GFX {
   // The existing, physically verified SSD1309 path uses Adafruit's
   // SSD1305-compatible controller implementation.
   Adafruit_SSD1305 ssd1309_;
+  Adafruit_SH1106G sh1106_;
   voxone::display_profile::ControllerId activeController_ =
       voxone::display_profile::ControllerId::None;
   voxone::display_profile::ProfileId activeProfile_ =
