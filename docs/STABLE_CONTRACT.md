@@ -206,6 +206,14 @@ bitrate A2DP nie są publikowane bez wiarygodnych danych. Aktualizacja modułu
 jest osobnym uploadem i nie jest MAIN OTA; szczegóły zawiera
 [BT_FIRMWARE_SENDER.md](BT_FIRMWARE_SENDER.md).
 
+Fizyczny test LG TV potwierdził prawidłowe audio A2DP oraz rzeczywistą pauzę
+obrazu, licznika i audio, ale MAIN nie zawsze odzwierciedla ten stan jako
+`PAUSED`. Przyczyna nie została jednoznacznie ustalona i nie jest przypisywana
+LG TV, VoxOneBT ani MAIN. To jawne ograniczenie jest zaakceptowane dla Stable
+1.0.0 i samo nie blokuje wydania; nie wymaga kolejnej sesji LG TV bez nowej
+poprawki lub konkretnej hipotezy. Nie zwalnia z pozostałych kryteriów BT
+lifecycle, SourceManager ani TTS.
+
 ## TTS / temporary audio
 
 Temporary audio przyjmuje pojedynczy URL; nowe żądanie zastępuje oczekujące.
@@ -329,7 +337,7 @@ modułu, a nie osobny fizyczny model urządzenia.
 |---|---|---|---|
 | W0 | PCM5102A; ST7789 284×76; EC11 | display/input `NONE`, Buttons3; RADIO/WWW/MQTT/update | Full image/first boot, RADIO/audio/display/input, PBKDF2 bez PSRAM, Config v7, MAIN/SPIFFS, recovery/power-loss i migracja. W0 pozostaje obowiązkowy; uszkodzone USB i brak recovery są blokerem. |
 | M0 | PCM5102A; SSD1306 128×64; EC11 | SSD1309 128×64 i display `NONE`; Buttons3/input `NONE` | Finalny build, RADIO/audio/display/input, SECURITY, Config v7, update/rollback i recovery. Zachowane PASS M0 pozostają ważne w swoim zakresie. |
-| L0 | PCM5102A; ST7796S 480×320; EC11; DS3231; VoxOneBT/VU | Buttons3/input `NONE` | Domyślny TFT/audio, BT/SourceManager/TTS, SECURITY, Config, update/recovery i otwarte P1. XSMT ma status `DECISION REQUIRED`. |
+| L0 | PCM5102A; ST7796S 480×320; EC11; DS3231; VoxOneBT/VU | Buttons3/input `NONE` | Domyślny TFT/audio, BT/SourceManager/TTS, SECURITY, Config, update/recovery i otwarte P1. Sprzętowe XSMT nie należy do baseline; bieżąca rewizja zachowuje `VOXONE_DAC_XSMT_PIN=255`, a opcjonalne sterowanie pozostaje POST-STABLE. |
 | S0 | MAX98357A MONO; SSD1306 128×32; EC11 | SSD1306 128×64 i display `NONE`; Buttons3/input `NONE` | First boot, RADIO/audio, oba baseline OLED, wejścia, WWW, Config, update/recovery na fizycznym S0. GPIO: I2S `5/6/4`, input `9/8/7`, I2C `1/2`. |
 | DIN0 | PCM5102A; SSD1306 128×64; EC11 | SSD1309 128×64 i display `NONE`; Buttons3/input `NONE` | Obraz DIN0, tożsamość profilu, first boot, RADIO/audio/OLED/input, Config, SECURITY, update/recovery. GPIO współdzielone z M0: I2S `1/2/3`, input `5/6/4`, I2C `7/8`. |
 

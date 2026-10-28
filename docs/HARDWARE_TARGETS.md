@@ -58,7 +58,7 @@ pull-upy i filtracja.
 | M0 | `1 / 2 / 3` | OLED I2C: `SDA7`, `SCL8`, `RST—`, adres `0x3C` | `5 / 6 / 4` | SSD1306 lub SSD1309 w jednym BIN |
 | S0 | MAX98357A `5 / 6 / 4` | SSD1306 I2C: `SDA1`, `SCL2`, `RST—`, adres `0x3C`; runtime 128×32/128×64 | `9 / 8 / 7` | zatwierdzona mapa rewizji S0; HIL PENDING |
 | DIN0 | `1 / 2 / 3` | OLED I2C: `SDA7`, `SCL8`, `RST—`, adres `0x3C` | `5 / 6 / 4` | zatwierdzona mapa rewizji 0 współdzielona z M0; HIL PENDING |
-| L0 | `5 / 4 / 6` | SPI `SCK12`, `MOSI11`, `MISO13`; ST7796S `CS10`, `DC9`, `RST—`, backlight `14` | `41 / 40 / 39` | RTC `SDA8/SCL7`; BT UART `RX15/TX16`; BT I2S RX `BCLK1/WS2/DIN17`; XSMT nieprzypisany |
+| L0 | `5 / 4 / 6` | SPI `SCK12`, `MOSI11`, `MISO13`; ST7796S `CS10`, `DC9`, `RST—`, backlight `14` | `41 / 40 / 39` | RTC `SDA8/SCL7`; BT UART `RX15/TX16`; BT I2S RX `BCLK1/WS2/DIN17`; XSMT poza baseline Stable, `VOXONE_DAC_XSMT_PIN=255`, bez przypisanego GPIO; opcjonalne XSMT/MUTE/ENABLE dla przyszłych PCB pozostaje POST-STABLE |
 
 W kodzie `HardwareDescriptor.audioOut` prezentuje kolejność `BCLK/WS/DOUT`;
 powyższa tabela zachowuje kolejność nazw makr profili, aby uniknąć pomylenia
