@@ -1,10 +1,15 @@
 #include "../core/options.h"
 
-#if defined(VOXONE_RUNTIME_OLED_128X64_BACKENDS)
+#if defined(VOXONE_RUNTIME_OLED_128X64_BACKENDS) || \
+    defined(VOXONE_RUNTIME_L0_DISPLAY_BACKENDS)
 
 #include "dspcore.h"
 #include "../core/config.h"
 #include "../hardware/runtime_hardware_config.h"
+#include <new>
+#if defined(VOXONE_RUNTIME_L0_DISPLAY_BACKENDS)
+  #include "../core/rtcsupport.h"
+#endif
 
 #ifndef SCREEN_ADDRESS
   #define SCREEN_ADDRESS 0x3C
@@ -20,20 +25,31 @@
 
 using voxone::display_profile::ControllerId;
 
+#if defined(VOXONE_RUNTIME_L0_DISPLAY_BACKENDS)
+RuntimeOled128x64Display::RuntimeOled128x64Display(TwoWire& sharedWire)
+    : Adafruit_GFX(128, 64),
+      wire_(sharedWire),
+      ssd1306_128x32_(128, 32, &wire_, I2C_RST, I2CFREQ_HZ),
+      ssd1306_128x64_(128, 64, &wire_, I2C_RST, I2CFREQ_HZ),
+      ssd1309_(128, 64, &wire_, I2C_RST),
+      sh1106_(128, 64, &wire_, I2C_RST, SH1106_I2CFREQ_HZ) {}
+#else
 RuntimeOled128x64Display::RuntimeOled128x64Display()
     : Adafruit_GFX(128, 64),
       wire_(0),
       ssd1306_128x32_(128, 32, &wire_, I2C_RST, I2CFREQ_HZ),
       ssd1306_128x64_(128, 64, &wire_, I2C_RST, I2CFREQ_HZ),
       ssd1309_(128, 64, &wire_, I2C_RST),
-      sh1106_(128, 64, &wire_, I2C_RST, SH1106_I2CFREQ_HZ),
-      ch1116g_(wire_) {}
+      sh1106_(128, 64, &wire_, I2C_RST, SH1106_I2CFREQ_HZ) {}
+#endif
+
+RuntimeOled128x64Display::~RuntimeOled128x64Display() { delete ch1116g_; }
 
 Adafruit_GFX* RuntimeOled128x64Display::active() {
   if (activeController_ == ControllerId::Ssd1306) return activeSsd1306();
   if (activeController_ == ControllerId::Ssd1309) return &ssd1309_;
   if (activeController_ == ControllerId::Sh1106) return &sh1106_;
-  if (activeController_ == ControllerId::Ch1116g) return &ch1116g_;
+  if (activeController_ == ControllerId::Ch1116g) return ch1116g_;
   return nullptr;
 }
 
@@ -44,7 +60,7 @@ const Adafruit_GFX* RuntimeOled128x64Display::active() const {
                : static_cast<const Adafruit_GFX*>(&ssd1306_128x64_);
   if (activeController_ == ControllerId::Ssd1309) return &ssd1309_;
   if (activeController_ == ControllerId::Sh1106) return &sh1106_;
-  if (activeController_ == ControllerId::Ch1116g) return &ch1116g_;
+  if (activeController_ == ControllerId::Ch1116g) return ch1116g_;
   return nullptr;
 }
 
@@ -58,7 +74,15 @@ bool RuntimeOled128x64Display::begin(
   activeController_ = controller;
   activeProfile_ = profile;
   ready_ = false;
+#if defined(VOXONE_RUNTIME_L0_DISPLAY_BACKENDS)
+  // Normal boot initializes RTCWire through Config before Display::init();
+  // SECURITY recovery reaches the display earlier.  The idempotent helper
+  // covers both paths without reinitializing an active DS3231 bus.
+  if (!initRTCWire()) return false;
+  wire_.setClock(I2CFREQ_HZ);
+#else
   wire_.begin(I2C_SDA, I2C_SCL);
+#endif
   switch (activeController_) {
     case ControllerId::Ssd1306:
       ready_ = activeSsd1306()->begin(SSD1306_SWITCHCAPVCC, SCREEN_ADDRESS,
@@ -72,7 +96,8 @@ bool RuntimeOled128x64Display::begin(
       break;
     case ControllerId::Ch1116g:
       wire_.setClock(400000UL);
-      ready_ = ch1116g_.begin(SCREEN_ADDRESS);
+      ch1116g_ = new (std::nothrow) DisplayCH1116G(wire_);
+      ready_ = ch1116g_ && ch1116g_->begin(SCREEN_ADDRESS);
       break;
     default:
       break;
@@ -86,7 +111,7 @@ void RuntimeOled128x64Display::display() {
   else if (activeController_ == ControllerId::Ssd1309) ssd1309_.display();
   else if (activeController_ == ControllerId::Sh1106) sh1106_.display();
   else if (activeController_ == ControllerId::Ch1116g) {
-    if (!ch1116g_.display()) ready_ = false;
+    if (!ch1116g_->display()) ready_ = false;
   }
 }
 
@@ -99,7 +124,7 @@ void RuntimeOled128x64Display::sleep() {
   else if (activeController_ == ControllerId::Sh1106)
     sh1106_.oled_command(SH110X_DISPLAYOFF);
   else if (activeController_ == ControllerId::Ch1116g)
-    ch1116g_.sleep();
+    ch1116g_->sleep();
 }
 
 void RuntimeOled128x64Display::wake() {
@@ -111,7 +136,7 @@ void RuntimeOled128x64Display::wake() {
   else if (activeController_ == ControllerId::Sh1106)
     sh1106_.oled_command(SH110X_DISPLAYON);
   else if (activeController_ == ControllerId::Ch1116g)
-    ch1116g_.wake();
+    ch1116g_->wake();
 }
 
 void RuntimeOled128x64Display::drawPixel(int16_t x, int16_t y,
@@ -183,6 +208,7 @@ void RuntimeOled128x64Display::fillScreen(uint16_t color) {
   if (ready_) active()->fillScreen(color);
 }
 
+#if !defined(VOXONE_RUNTIME_L0_DISPLAY_BACKENDS)
 DspCore::DspCore() : RuntimeOled128x64Display() {}
 
 void DspCore::initDisplay() {
@@ -204,5 +230,6 @@ void DspCore::flip() { setRotation(config.runtimeSnapshot().flipScreen ? 2 : 0);
 void DspCore::invert() { invertDisplay(config.runtimeSnapshot().invertDisplay); }
 void DspCore::sleep() { RuntimeOled128x64Display::sleep(); }
 void DspCore::wake() { RuntimeOled128x64Display::wake(); }
+#endif
 
 #endif

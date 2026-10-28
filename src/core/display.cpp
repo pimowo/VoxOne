@@ -27,7 +27,7 @@
 #include "../displays/tools/l10n.h"
 #include "../hardware/hardware_descriptor.h"
 #include <new>
-#if VOXONE_DISPLAY_PROFILE_IS_SMALL_OLED
+#if VOXONE_DISPLAY_COMPILES_SMALL_OLED
 #include "../displays/conf/player128x64conf.h"
 #include "../displays/conf/player128x32conf.h"
 #include "../displays/oled128x32_player.h"
@@ -127,7 +127,13 @@ bool renderPlayerScrollOffset(void* context, uint16_t offsetPixels) {
   return static_cast<ScrollWidget*>(context)->renderScrollOffset(offsetPixels);
 }
 
-constexpr ScrollRendererProfile activePlayerScrollProfile() {
+ScrollRendererProfile activePlayerScrollProfile() {
+#if defined(VOXONE_RUNTIME_L0_DISPLAY_BACKENDS)
+  return dsp.activeProfile() ==
+                 voxone::display_profile::ProfileId::St7796_480x320
+             ? ScrollRendererProfile::St7796_480x320
+             : ScrollRendererProfile::Oled128x64;
+#else
 #if VOXONE_DISPLAY_PROFILE_IS_SMALL_OLED
   return ScrollRendererProfile::Oled128x64;
 #elif VOXONE_DISPLAY_PROFILE == VOXONE_DISPLAY_PROFILE_ST7789_284X76
@@ -136,6 +142,7 @@ constexpr ScrollRendererProfile activePlayerScrollProfile() {
   return ScrollRendererProfile::St7796_480x320;
 #else
   return ScrollRendererProfile::None;
+#endif
 #endif
 }
 
@@ -154,8 +161,14 @@ static const char* runtimeEqPresetLabel() {
 
 DspCore dsp;
 
-#if VOXONE_DISPLAY_PROFILE_IS_SMALL_OLED
+#if VOXONE_DISPLAY_COMPILES_SMALL_OLED
 static bool oled128x32Active() { return dsp.height() == 32; }
+static bool smallOledActive() {
+  return dsp.activeProfile() ==
+             voxone::display_profile::ProfileId::Oled128x32 ||
+         dsp.activeProfile() ==
+             voxone::display_profile::ProfileId::Oled128x64;
+}
 
 class Oled128x32PlayerStatusWidget : public Widget {
  public:
@@ -469,6 +482,9 @@ class Oled128x64UpdateProgressWidget : public Widget {
                    update128x64::barInteriorHeight, WHITE);
   }
 };
+#else
+static bool oled128x32Active() { return false; }
+static bool smallOledActive() { return false; }
 #endif
 
 #if VOXONE_DISPLAY_PROFILE == VOXONE_DISPLAY_PROFILE_ST7789_284X76
@@ -932,6 +948,15 @@ void Display::init() {
   _volumeModePending = false;
   _lastVolumeDraw = millis() - DISPLAY_VOLUME_INTERVAL_MS;
   dsp.initDisplay();
+#if defined(VOXONE_RUNTIME_L0_DISPLAY_BACKENDS)
+  if (!dsp.ready()) {
+    _runtimeEnabled = false;
+    _bootStep = 2;
+    _createDspTask();
+    Serial.println("disabled (selected backend unavailable)");
+    return;
+  }
+#endif
   displayQueue=NULL;
   displayQueue = xQueueCreate( 5, sizeof( requestParams_t ) );
   while(displayQueue==NULL){;}
@@ -959,12 +984,19 @@ bool Display::initSecurityRecovery() {
   config.loadTheme();
   const auto backlight =
       voxone::hardware::currentHardware().display.backlight;
-  if (voxone::hardware::hasPin(backlight)) {
+  bool enableBacklight = voxone::hardware::hasPin(backlight);
+#if defined(VOXONE_RUNTIME_L0_DISPLAY_BACKENDS)
+  enableBacklight = enableBacklight &&
+      voxone::hardware::runtimeHardwareConfig().display ==
+          voxone::hardware::RuntimeDisplay::St7796s_480x320;
+#endif
+  if (enableBacklight) {
     pinMode(backlight, OUTPUT);
     analogWrite(backlight, 255);
   }
   dsp.initDisplay();
-#if defined(VOXONE_RUNTIME_OLED_128X64_BACKENDS)
+#if defined(VOXONE_RUNTIME_OLED_128X64_BACKENDS) || \
+    defined(VOXONE_RUNTIME_L0_DISPLAY_BACKENDS)
   if (!dsp.ready()) {
     _runtimeEnabled = false;
     Serial.println("##[WARN]# SECURITY Recovery display backend unavailable");
@@ -1007,8 +1039,8 @@ uint16_t Display::height(){ return _runtimeEnabled ? dsp.height() : 0; }
 
 void Display::_bootScreen(){
   _boot = new Page();
-#if VOXONE_DISPLAY_PROFILE_IS_SMALL_OLED
-  if (oled128x32Active()) {
+#if VOXONE_DISPLAY_COMPILES_SMALL_OLED
+  if (smallOledActive() && oled128x32Active()) {
     TextWidget* title = new TextWidget(startup128x32::title, 16, WHITE, BLACK);
     title->setText("VoxOne");
     _boot->addWidget(title);
@@ -1016,20 +1048,21 @@ void Display::_bootScreen(){
                                         WHITE, BLACK));
     _bootstring = (TextWidget*) &_boot->addWidget(new TextWidget(
         startup128x32::ssid, startup128x32::ssidBufferSize, WHITE, BLACK));
-  } else {
+  } else if (smallOledActive()) {
     _boot->addWidget(new ProgressWidget(startup128x64::progress, bootPrgConf,
                                         WHITE, BLACK));
     _bootstring = (TextWidget*) &_boot->addWidget(new TextWidget(
         startup128x64::ssid, startup128x64::ssidBufferSize, WHITE, BLACK));
-  }
-#else
+  } else
+#endif
+  {
   _boot->addWidget(new ProgressWidget(bootWdtConf, bootPrgConf, config.theme.title2, config.theme.background));
   _bootstring = (TextWidget*) &_boot->addWidget(new TextWidget(bootstrConf, 50, config.theme.meta, config.theme.background));
-#endif
+  }
   _pager->addPage(_boot);
   _pager->setPage(_boot, true);
-#if VOXONE_DISPLAY_PROFILE_IS_SMALL_OLED
-  if (!oled128x32Active()) dsp.drawLogo(bootLogoTop);
+#if VOXONE_DISPLAY_COMPILES_SMALL_OLED
+  if (!smallOledActive() || !oled128x32Active()) dsp.drawLogo(bootLogoTop);
 #else
   dsp.drawLogo(bootLogoTop);
 #endif
@@ -1037,238 +1070,270 @@ void Display::_bootScreen(){
 }
 
 void Display::_buildPager(){
-#if VOXONE_DISPLAY_PROFILE_IS_SMALL_OLED
-  if (oled128x32Active()) {
+#if VOXONE_DISPLAY_COMPILES_SMALL_OLED
+  if (smallOledActive() && oled128x32Active()) {
     _meta->init("*", player128x32::station, WHITE, BLACK);
     _title1->init("*", player128x32::hiddenMetadata, WHITE, BLACK);
-  } else {
+  } else if (smallOledActive()) {
     _meta->init("*", player128x64::station, WHITE, BLACK);
     _title1->init("*", player128x64::artist, WHITE, BLACK);
-  }
-#else
+  } else
+#endif
+  {
   _meta->init("*", metaConf, config.theme.meta, config.theme.metabg);
   #if VOXONE_DISPLAY_PROFILE == VOXONE_DISPLAY_PROFILE_ST7789_284X76
   _st7789Station = new ScrollWidget("*", st7789StationConf, config.theme.meta, config.theme.metabg);
 #endif
   _title1->init("*", title1Conf, config.theme.title1, config.theme.background);
+  }
+#if VOXONE_DISPLAY_COMPILES_SMALL_OLED
+  if (smallOledActive())
+    _clock->init(oled128x32Active() ? player128x32::screensaverClock
+                                    : player128x64::screensaverClock,
+                 0, 0);
+  else
 #endif
-  #if VOXONE_DISPLAY_PROFILE_IS_SMALL_OLED
-  _clock->init(oled128x32Active() ? player128x32::screensaverClock : clockConf,
-               0, 0);
-  #else
-  _clock->init(clockConf, 0, 0);
-  #endif
-#if VOXONE_DISPLAY_PROFILE_IS_SMALL_OLED
-  _plcurrent->init("*", oled128x32Active() ? stations128x32::selected
-                                            : stations128x64::selected,
-                   WHITE, BLACK);
-#elif VOXONE_DISPLAY_PROFILE == VOXONE_DISPLAY_PROFILE_ST7796_480X320
+    _clock->init(clockConf, 0, 0);
+#if VOXONE_DISPLAY_COMPILES_SMALL_OLED
+  if (smallOledActive())
+    _plcurrent->init("*", oled128x32Active() ? stations128x32::selected
+                                              : stations128x64::selected,
+                     WHITE, BLACK);
+  else
+#endif
+#if VOXONE_DISPLAY_PROFILE == VOXONE_DISPLAY_PROFILE_ST7796_480X320
   _plcurrent->init("*", st7796StationConf, config.theme.plcurrent, config.theme.plcurrentbg);
-  #else
+#else
     _plcurrent->init("*", playlistConf, config.theme.plcurrent, config.theme.plcurrentbg);
-  #endif
-#if VOXONE_DISPLAY_PROFILE_IS_SMALL_OLED
-  _plheader = new TextWidget(oled128x32Active() ? stations128x32::header
-                                                : stations128x64::header,
-                             24, WHITE, BLACK);
-  _plcounter = new TextWidget(oled128x32Active() ? stations128x32::counter
-                                                 : stations128x64::counter,
-                              16, WHITE, BLACK);
-  _plplaying = new TextWidget(oled128x32Active() ? stations128x32::playing
-                                                 : stations128x64::playing,
-                              8, WHITE, BLACK);
-  if (!oled128x32Active()) _plheader->setText("WEB - STACJA");
-#elif VOXONE_DISPLAY_PROFILE == VOXONE_DISPLAY_PROFILE_ST7789_284X76
+#endif
+#if VOXONE_DISPLAY_COMPILES_SMALL_OLED
+  if (smallOledActive()) {
+    _plheader = new TextWidget(oled128x32Active() ? stations128x32::header
+                                                  : stations128x64::header,
+                               24, WHITE, BLACK);
+    _plcounter = new TextWidget(oled128x32Active() ? stations128x32::counter
+                                                   : stations128x64::counter,
+                                16, WHITE, BLACK);
+    _plplaying = new TextWidget(oled128x32Active() ? stations128x32::playing
+                                                   : stations128x64::playing,
+                                8, WHITE, BLACK);
+    if (!oled128x32Active()) _plheader->setText("WEB - STACJA");
+  } else
+#endif
+#if VOXONE_DISPLAY_PROFILE == VOXONE_DISPLAY_PROFILE_ST7789_284X76
+  {
   _plheader = new TextWidget(playlistHeaderConf, 30, config.theme.meta, config.theme.metabg);
   _plcounter = new TextWidget(playlistCounterConf, 16, config.theme.meta, config.theme.background);
   _plplaying = new TextWidget(playlistPlayingConf, 8, config.theme.meta, config.theme.background);
   _plheader->setText("WEB - STACJA");
+  }
 #elif VOXONE_DISPLAY_PROFILE == VOXONE_DISPLAY_PROFILE_ST7796_480X320
+  {
   _plheader = new TextWidget(st7796PlaylistHeaderConf, 30, config.theme.meta, config.theme.metabg);
   _plcounter = new TextWidget(st7796PlaylistCounterConf, 16, config.theme.meta, config.theme.background);
   _plplaying = new TextWidget(st7796PlaylistPlayingConf, 8, config.theme.meta, config.theme.background);
   _plheader->setText("WEB - STACJA");
+  }
 #else
+  {
   _plwidget->init(_plcurrent);
     _plcurrent->moveTo({TFT_FRAMEWDT, (uint16_t)(_plwidget->currentTop()), (int16_t)playlistConf.width});
+  }
 #endif
   #ifndef HIDE_TITLE2
-#if VOXONE_DISPLAY_PROFILE_IS_SMALL_OLED
-    if (!oled128x32Active())
+#if VOXONE_DISPLAY_COMPILES_SMALL_OLED
+    if (smallOledActive() && !oled128x32Active())
       _title2 = new ScrollWidget("*", player128x64::title, WHITE, BLACK);
-#else
-    _title2 = new ScrollWidget("*", title2Conf, config.theme.title2, config.theme.background);
+    else if (!smallOledActive())
 #endif
+    _title2 = new ScrollWidget("*", title2Conf, config.theme.title2, config.theme.background);
   #endif
 #if VOXONE_DISPLAY_PROFILE == VOXONE_DISPLAY_PROFILE_ST7796_480X320
-  const auto onTextChanged = [](void* context, uint8_t row) {
-    static_cast<Display*>(context)->_st7796ScrollTextChanged(row);
-  };
-  _meta->setChangeObserver(this, 0, onTextChanged);
-  _title1->setChangeObserver(this, 1, onTextChanged);
-  if (_title2) _title2->setChangeObserver(this, 2, onTextChanged);
+  if (!smallOledActive()) {
+    const auto onTextChanged = [](void* context, uint8_t row) {
+      static_cast<Display*>(context)->_st7796ScrollTextChanged(row);
+    };
+    _meta->setChangeObserver(this, 0, onTextChanged);
+    _title1->setChangeObserver(this, 1, onTextChanged);
+    if (_title2) _title2->setChangeObserver(this, 2, onTextChanged);
+  }
 #endif
   _playerScrollBind();
 #if VOXONE_DISPLAY_PROFILE == VOXONE_DISPLAY_PROFILE_ST7789_284X76
     _plbackground = new FillWidget(playlBGConf, config.theme.metabg);
 #else
-    _plbackground = new FillWidget(playlBGConf, config.theme.plcurrentfill);
+    if (!smallOledActive())
+      _plbackground = new FillWidget(playlBGConf, config.theme.plcurrentfill);
 #endif
-    #if DSP_INVERT_TITLE || defined(DSP_OLED)
-      _metabackground = new FillWidget(metaBGConf, config.theme.metafill);
-    #else
-      _metabackground = new FillWidget(metaBGConfInv, config.theme.metafill);
-    #endif
+    if (!smallOledActive()) {
+      #if DSP_INVERT_TITLE || defined(DSP_OLED)
+        _metabackground = new FillWidget(metaBGConf, config.theme.metafill);
+      #else
+        _metabackground = new FillWidget(metaBGConfInv, config.theme.metafill);
+      #endif
+    }
   #ifndef HIDE_VU
-    _vuwidget = new VuWidget(vuConf, bandsConf, config.theme.vumax, config.theme.vumin, config.theme.background);
+    if (!smallOledActive())
+      _vuwidget = new VuWidget(vuConf, bandsConf, config.theme.vumax, config.theme.vumin, config.theme.background);
   #endif
-  #if !defined(HIDE_VOLBAR) && !VOXONE_DISPLAY_PROFILE_IS_SMALL_OLED
-    _volbar = new SliderWidget(volbarConf, config.theme.volbarin, config.theme.background, kDisplayVolumeMax, config.theme.volbarout);
+  #if !defined(HIDE_VOLBAR)
+    if (!smallOledActive())
+      _volbar = new SliderWidget(volbarConf, config.theme.volbarin, config.theme.background, kDisplayVolumeMax, config.theme.volbarout);
   #endif
   #ifndef HIDE_VOL
 #if VOXONE_DISPLAY_PROFILE == VOXONE_DISPLAY_PROFILE_ST7796_480X320
-    _st7796Volume = new St7796VolumeWidget(voltxtConf, config.theme.meta, config.theme.background);
-    PlayerDisplayView initialView{};
-    capturePlayerDisplayView(initialView, WiFi.RSSI());
-    _st7796Volume->setVolume(initialView.userVolume, initialView.muted);
+    if (!smallOledActive()) {
+      _st7796Volume = new St7796VolumeWidget(voltxtConf, config.theme.meta, config.theme.background);
+      PlayerDisplayView initialView{};
+      capturePlayerDisplayView(initialView, WiFi.RSSI());
+      _st7796Volume->setVolume(initialView.userVolume, initialView.muted);
+    }
 #else
     _voltxt = new TextWidget(voltxtConf, 10, config.theme.vol, config.theme.background);
 #endif
   #endif
   #ifndef HIDE_IP
-#if VOXONE_DISPLAY_PROFILE_IS_SMALL_OLED
-    _volip = new TextWidget(oled128x32Active() ? player128x32::volumeIp
-                                               : player128x64::volumeIp,
-                            30, WHITE, BLACK);
-#else
-    _volip = new TextWidget(iptxtConf, 30, config.theme.ip, config.theme.background);
+#if VOXONE_DISPLAY_COMPILES_SMALL_OLED
+    if (smallOledActive())
+      _volip = new TextWidget(oled128x32Active() ? player128x32::volumeIp
+                                                 : player128x64::volumeIp,
+                              30, WHITE, BLACK);
+    else
 #endif
+      _volip = new TextWidget(iptxtConf, 30, config.theme.ip, config.theme.background);
   #endif
   #ifndef HIDE_RSSI
-#if VOXONE_DISPLAY_PROFILE_IS_SMALL_OLED
-    if (!oled128x32Active())
+#if VOXONE_DISPLAY_COMPILES_SMALL_OLED
+    if (smallOledActive() && !oled128x32Active())
       _rssi = new TextWidget(player128x64::wifi, 20, WHITE, BLACK);
-#else
-    _rssi = new TextWidget(rssiConf, 20, config.theme.rssi, config.theme.background);
+    else if (!smallOledActive())
 #endif
+      _rssi = new TextWidget(rssiConf, 20, config.theme.rssi, config.theme.background);
   #endif
 #if VOXONE_DISPLAY_PROFILE == VOXONE_DISPLAY_PROFILE_ST7796_480X320
-  _st7796Playback = new St7796PlaybackIconWidget(st7796PlaybackFrameConf, config.theme.meta,
-                                               config.theme.background);
-  _st7796Loud = new St7796LabelFrameWidget(st7796LoudFrameConf, config.theme.meta,
-                                         config.theme.background, true);
-  _st7796Loud->setLabel(displayLoudLabel(false));
-  _st7796Source = new St7796LabelFrameWidget(st7796SourceFrameConf, config.theme.meta,
+  if (!smallOledActive()) {
+    _st7796Playback = new St7796PlaybackIconWidget(st7796PlaybackFrameConf, config.theme.meta,
+                                                 config.theme.background);
+    _st7796Loud = new St7796LabelFrameWidget(st7796LoudFrameConf, config.theme.meta,
                                            config.theme.background, true);
-  _st7796Source->setLabel("WEB");
-  _st7796Eq = new St7796LabelFrameWidget(st7796EqFrameConf, config.theme.meta,
-                                       config.theme.background, true);
-  _st7796Eq->setLabel(runtimeEqPresetLabel());
-  _st7796Mode = new St7796LabelFrameWidget(st7796ModeFrameConf, config.theme.meta,
+    _st7796Loud->setLabel(displayLoudLabel(false));
+    _st7796Source = new St7796LabelFrameWidget(st7796SourceFrameConf, config.theme.meta,
+                                             config.theme.background, true);
+    _st7796Source->setLabel("WEB");
+    _st7796Eq = new St7796LabelFrameWidget(st7796EqFrameConf, config.theme.meta,
                                          config.theme.background, true);
-  _st7796Mode->setLabel(displayDlnaModeLabel(DisplayDlnaMode::Unavailable));
-  _st7796BluetoothIcon = new St7796BluetoothWidget(st7796BluetoothIconConf, config.theme.meta, config.theme.background);
+    _st7796Eq->setLabel(runtimeEqPresetLabel());
+    _st7796Mode = new St7796LabelFrameWidget(st7796ModeFrameConf, config.theme.meta,
+                                           config.theme.background, true);
+    _st7796Mode->setLabel(displayDlnaModeLabel(DisplayDlnaMode::Unavailable));
+    _st7796BluetoothIcon = new St7796BluetoothWidget(st7796BluetoothIconConf, config.theme.meta, config.theme.background);
+  }
 #endif
 #if VOXONE_DISPLAY_PROFILE == VOXONE_DISPLAY_PROFILE_ST7789_284X76
   _st7789PlayerStatus = new St7789PlayerStatusWidget();
 #endif
-#if VOXONE_DISPLAY_PROFILE_IS_SMALL_OLED
-  _nums->init(oled128x32Active() ? player128x32::volumeNumber
-                                 : player128x64::volumeNumber,
-              10, config.theme.digit, config.theme.background);
-#else
-  _nums->init(numConf, 10, config.theme.digit, config.theme.background);
+#if VOXONE_DISPLAY_COMPILES_SMALL_OLED
+  if (smallOledActive())
+    _nums->init(oled128x32Active() ? player128x32::volumeNumber
+                                   : player128x64::volumeNumber,
+                10, WHITE, BLACK);
+  else
 #endif
+    _nums->init(numConf, 10, config.theme.digit, config.theme.background);
   
-#if VOXONE_DISPLAY_PROFILE != VOXONE_DISPLAY_PROFILE_ST7796_480X320
-  if(_volbar)   _footer->addWidget( _volbar);
-  if(_voltxt)   _footer->addWidget( _voltxt);
-  if(_volip)    _footer->addWidget( _volip);
-#if !VOXONE_DISPLAY_PROFILE_IS_SMALL_OLED
-  if(_rssi)     _footer->addWidget( _rssi);
-#endif
-#endif
+  if (smallOledActive()) {
+    if(_volbar) _footer->addWidget(_volbar);
+    if(_voltxt) _footer->addWidget(_voltxt);
+    if(_volip) _footer->addWidget(_volip);
+  }
   
 #if VOXONE_DISPLAY_PROFILE == VOXONE_DISPLAY_PROFILE_ST7789_284X76
   pages[PG_PLAYER]->addWidget(new FillWidget(st7789StationBandConf, config.theme.metabg));
   pages[PG_PLAYER]->addWidget(_st7789Station);
 #else
-#if !VOXONE_DISPLAY_PROFILE_IS_SMALL_OLED
-  if(_metabackground) pages[PG_PLAYER]->addWidget( _metabackground);
-#endif
+  if (!smallOledActive() && _metabackground)
+    pages[PG_PLAYER]->addWidget(_metabackground);
   pages[PG_PLAYER]->addWidget(_meta);
 #endif
-#if VOXONE_DISPLAY_PROFILE_IS_SMALL_OLED
-  if (!oled128x32Active()) pages[PG_PLAYER]->addWidget(_title1);
-#else
-  pages[PG_PLAYER]->addWidget(_title1);
-#endif
+  if (!smallOledActive() || !oled128x32Active())
+    pages[PG_PLAYER]->addWidget(_title1);
   if(_title2) pages[PG_PLAYER]->addWidget(_title2);
 #if VOXONE_DISPLAY_PROFILE == VOXONE_DISPLAY_PROFILE_ST7796_480X320
-  pages[PG_PLAYER]->addWidget(new FillWidget(st7796LowerDividerConf, config.theme.div));
+  if (!smallOledActive())
+    pages[PG_PLAYER]->addWidget(new FillWidget(st7796LowerDividerConf, config.theme.div));
 #endif
-#if VOXONE_DISPLAY_PROFILE_IS_SMALL_OLED
-  if (oled128x32Active()) {
+#if VOXONE_DISPLAY_COMPILES_SMALL_OLED
+  if (smallOledActive() && oled128x32Active()) {
     oled128x32PlayerStatus = new Oled128x32PlayerStatusWidget();
     pages[PG_PLAYER]->addWidget(oled128x32PlayerStatus);
-  } else {
+  } else if (smallOledActive()) {
     pages[PG_PLAYER]->addWidget(new Oled128x64PlayerStatusWidget());
     if (_rssi) pages[PG_PLAYER]->addWidget(_rssi);
-  }
-#elif VOXONE_DISPLAY_PROFILE == VOXONE_DISPLAY_PROFILE_ST7789_284X76
+  } else
+#endif
+#if VOXONE_DISPLAY_PROFILE == VOXONE_DISPLAY_PROFILE_ST7789_284X76
+  {
   pages[PG_PLAYER]->addWidget(new FillWidget(st7789DividerConf, config.theme.div));
   pages[PG_PLAYER]->addWidget(_st7789PlayerStatus);
+  }
 #elif BITRATE_FULL
+  {
     _fullbitrate = new BitrateWidget(fullbitrateConf, config.theme.bitrate, config.theme.background);
 #if VOXONE_DISPLAY_PROFILE == VOXONE_DISPLAY_PROFILE_ST7796_480X320
     _fullbitrate->setFrameWidth(fullbitrateWidth);
 #endif
     pages[PG_PLAYER]->addWidget( _fullbitrate);
+  }
 
   #else
+  {
     _bitrate = new TextWidget(bitrateConf, 30, config.theme.bitrate, config.theme.background);
     pages[PG_PLAYER]->addWidget( _bitrate);
+  }
   #endif
-#if !VOXONE_DISPLAY_PROFILE_IS_SMALL_OLED
-  if(_vuwidget) pages[PG_PLAYER]->addWidget( _vuwidget);
+  if (!smallOledActive()) {
+    if(_vuwidget) pages[PG_PLAYER]->addWidget(_vuwidget);
 #if VOXONE_DISPLAY_PROFILE == VOXONE_DISPLAY_PROFILE_ST7789_284X76
 #else
-  pages[PG_PLAYER]->addWidget(_clock);
+    pages[PG_PLAYER]->addWidget(_clock);
 #if VOXONE_DISPLAY_PROFILE == VOXONE_DISPLAY_PROFILE_ST7796_480X320
-  if(_st7796Volume) pages[PG_PLAYER]->addWidget(_st7796Volume);
-  pages[PG_PLAYER]->addWidget(_st7796Playback);
-  pages[PG_PLAYER]->addWidget(_st7796Loud);
-  pages[PG_PLAYER]->addWidget(_st7796Eq);
-  pages[PG_PLAYER]->addWidget(_st7796Source);
-  pages[PG_PLAYER]->addWidget(_st7796Mode);
-  pages[PG_PLAYER]->addWidget(_st7796BluetoothIcon);
-  if(_rssi) pages[PG_PLAYER]->addWidget(_rssi);
+    if(_st7796Volume) pages[PG_PLAYER]->addWidget(_st7796Volume);
+    pages[PG_PLAYER]->addWidget(_st7796Playback);
+    pages[PG_PLAYER]->addWidget(_st7796Loud);
+    pages[PG_PLAYER]->addWidget(_st7796Eq);
+    pages[PG_PLAYER]->addWidget(_st7796Source);
+    pages[PG_PLAYER]->addWidget(_st7796Mode);
+    pages[PG_PLAYER]->addWidget(_st7796BluetoothIcon);
+    if(_rssi) pages[PG_PLAYER]->addWidget(_rssi);
 #else
-  pages[PG_PLAYER]->addPage(_footer);
+    pages[PG_PLAYER]->addPage(_footer);
 #endif
 #endif
-#endif
+  }
   pages[PG_SCREENSAVER]->addWidget(_clock);
 
-#if !VOXONE_DISPLAY_PROFILE_IS_SMALL_OLED
-  if(_metabackground) pages[PG_DIALOG]->addWidget( _metabackground);
-#endif
+  if (!smallOledActive() && _metabackground)
+    pages[PG_DIALOG]->addWidget(_metabackground);
   pages[PG_DIALOG]->addWidget(_meta);
   pages[PG_DIALOG]->addWidget(_nums);
 #if VOXONE_DISPLAY_PROFILE == VOXONE_DISPLAY_PROFILE_ST7796_480X320
-  if(_volip) pages[PG_DIALOG]->addWidget(_volip);
-  if(_volip) _volip->lock();
+  if (!smallOledActive()) {
+    if(_volip) pages[PG_DIALOG]->addWidget(_volip);
+    if(_volip) _volip->lock();
+  }
 #endif
-  
-  #if VOXONE_DISPLAY_PROFILE != VOXONE_DISPLAY_PROFILE_ST7796_480X320
+  if (smallOledActive())
     pages[PG_DIALOG]->addPage(_footer);
-  #endif
-#if VOXONE_DISPLAY_PROFILE_IS_SMALL_OLED
-  if (!oled128x32Active()) pages[PG_PLAYLIST]->addWidget(_plheader);
-  pages[PG_PLAYLIST]->addWidget(_plcurrent);
-  pages[PG_PLAYLIST]->addWidget(_plplaying);
-  pages[PG_PLAYLIST]->addWidget(_plcounter);
-#elif VOXONE_DISPLAY_PROFILE == VOXONE_DISPLAY_PROFILE_ST7789_284X76 || VOXONE_DISPLAY_PROFILE == VOXONE_DISPLAY_PROFILE_ST7796_480X320
+#if VOXONE_DISPLAY_COMPILES_SMALL_OLED
+  if (smallOledActive()) {
+    if (!oled128x32Active()) pages[PG_PLAYLIST]->addWidget(_plheader);
+    pages[PG_PLAYLIST]->addWidget(_plcurrent);
+    pages[PG_PLAYLIST]->addWidget(_plplaying);
+    pages[PG_PLAYLIST]->addWidget(_plcounter);
+  } else
+#endif
+#if VOXONE_DISPLAY_PROFILE == VOXONE_DISPLAY_PROFILE_ST7789_284X76 || VOXONE_DISPLAY_PROFILE == VOXONE_DISPLAY_PROFILE_ST7796_480X320
+  {
 #if VOXONE_DISPLAY_PROFILE == VOXONE_DISPLAY_PROFILE_ST7789_284X76
   if(_plbackground) pages[PG_PLAYLIST]->addWidget(_plbackground);
 #endif
@@ -1276,7 +1341,9 @@ void Display::_buildPager(){
   pages[PG_PLAYLIST]->addWidget(_plcurrent);
   pages[PG_PLAYLIST]->addWidget(_plcounter);
   pages[PG_PLAYLIST]->addWidget(_plplaying);
+  }
 #else
+  {
   if(_plbackground) {
     pages[PG_PLAYLIST]->addWidget( _plbackground);
     _plbackground->setHeight(_plwidget->itemHeight());
@@ -1284,67 +1351,74 @@ void Display::_buildPager(){
   }
   pages[PG_PLAYLIST]->addWidget(_plcurrent);
   pages[PG_PLAYLIST]->addWidget(_plwidget);
+  }
 #endif
   #if VOXONE_DISPLAY_PROFILE == VOXONE_DISPLAY_PROFILE_ST7796_480X320
-  _btTransportPage = new Page();
-  _btTransportArtist = new ScrollWidget("*", metaConf, config.theme.meta, config.theme.background);
-  _btTransportTitle = new ScrollWidget("*", title1Conf, config.theme.title1, config.theme.background);
-  _btTransportPage->addWidget(_btTransportArtist);
-  _btTransportPage->addWidget(_btTransportTitle);
-  TextWidget* btPrev = new TextWidget(btTransportPrevConf, 4, config.theme.meta, config.theme.background);
-  btPrev->setText("<");
-  _btTransportPage->addWidget(btPrev);
-  _btTransportPage->addWidget(new FillWidget(btNoteHeadConf, config.theme.meta));
-  _btTransportPage->addWidget(new FillWidget(btNoteStemConf, config.theme.meta));
-  _btTransportPage->addWidget(new FillWidget(btNoteFlagConf, config.theme.meta));
-  _btTransportPage->addWidget(new FillWidget(btNoteFlagEndConf, config.theme.meta));
-  TextWidget* btNext = new TextWidget(btTransportNextConf, 4, config.theme.meta, config.theme.background);
-  btNext->setText(">");
-  _btTransportPage->addWidget(btNext);
-  _btTransportPlayback = new TextWidget(btTransportPlaybackConf, 8, config.theme.meta, config.theme.background);
-  _btTransportPage->addWidget(_btTransportPlayback);
+  if (!smallOledActive()) {
+    _btTransportPage = new Page();
+    _btTransportArtist = new ScrollWidget("*", metaConf, config.theme.meta, config.theme.background);
+    _btTransportTitle = new ScrollWidget("*", title1Conf, config.theme.title1, config.theme.background);
+    _btTransportPage->addWidget(_btTransportArtist);
+    _btTransportPage->addWidget(_btTransportTitle);
+    TextWidget* btPrev = new TextWidget(btTransportPrevConf, 4, config.theme.meta, config.theme.background);
+    btPrev->setText("<");
+    _btTransportPage->addWidget(btPrev);
+    _btTransportPage->addWidget(new FillWidget(btNoteHeadConf, config.theme.meta));
+    _btTransportPage->addWidget(new FillWidget(btNoteStemConf, config.theme.meta));
+    _btTransportPage->addWidget(new FillWidget(btNoteFlagConf, config.theme.meta));
+    _btTransportPage->addWidget(new FillWidget(btNoteFlagEndConf, config.theme.meta));
+    TextWidget* btNext = new TextWidget(btTransportNextConf, 4, config.theme.meta, config.theme.background);
+    btNext->setText(">");
+    _btTransportPage->addWidget(btNext);
+    _btTransportPlayback = new TextWidget(btTransportPlaybackConf, 8, config.theme.meta, config.theme.background);
+    _btTransportPage->addWidget(_btTransportPlayback);
+  }
   #endif
   for(const auto& p: pages) _pager->addPage(p);
   #if VOXONE_DISPLAY_PROFILE == VOXONE_DISPLAY_PROFILE_ST7796_480X320
-  _pager->addPage(_btTransportPage);
-  _st7796UpdatePage = new Page();
-  TextWidget* updateTitle = new TextWidget({0, 48, 3, WA_CENTER}, 32, 0xFFFF, 0x0000);
-  updateTitle->setText("AKTUALIZACJA");
-  _st7796UpdatePage->addWidget(updateTitle);
-  _st7796UpdateTarget = new TextWidget({0, 112, 2, WA_CENTER}, 48, 0xFFFF, 0x0000);
-  _st7796UpdatePage->addWidget(_st7796UpdateTarget);
-  _st7796UpdateBar = new St7796UpdateProgressWidget();
-  _st7796UpdatePage->addWidget(_st7796UpdateBar);
-  _st7796UpdatePercent = new TextWidget({0, 232, 3, WA_CENTER}, 12, 0xFFFF, 0x0000);
-  _st7796UpdatePage->addWidget(_st7796UpdatePercent);
-  _st7796UpdateActivity = new TextWidget({0, 302, 1, WA_CENTER}, 80, 0xFFFF, 0x0000);
-  _st7796UpdatePage->addWidget(_st7796UpdateActivity);
-  _pager->addPage(_st7796UpdatePage);
-  #endif
-#if VOXONE_DISPLAY_PROFILE_IS_SMALL_OLED
-  _oled128x64UpdatePage = new Page();
-  TextWidget* updateTitle = new TextWidget(
-      oled128x32Active() ? update128x32::title : update128x64::title,
-      16, WHITE, BLACK);
-  updateTitle->setText("UPDATE");
-  _oled128x64UpdatePage->addWidget(updateTitle);
-  _oled128x64UpdateTarget = new TextWidget(
-      oled128x32Active() ? update128x32::target : update128x64::target,
-      16, WHITE, BLACK);
-  _oled128x64UpdatePage->addWidget(_oled128x64UpdateTarget);
-  _oled128x64UpdatePercent = new TextWidget(
-      oled128x32Active() ? update128x32::percent : update128x64::percent,
-      8, WHITE, BLACK);
-  _oled128x64UpdatePage->addWidget(_oled128x64UpdatePercent);
-  if (!oled128x32Active()) {
-    _oled128x64UpdateBar = new Oled128x64UpdateProgressWidget();
-    _oled128x64UpdatePage->addWidget(_oled128x64UpdateBar);
+  if (!smallOledActive()) {
+    _pager->addPage(_btTransportPage);
+    _st7796UpdatePage = new Page();
+    TextWidget* updateTitle = new TextWidget({0, 48, 3, WA_CENTER}, 32, 0xFFFF, 0x0000);
+    updateTitle->setText("AKTUALIZACJA");
+    _st7796UpdatePage->addWidget(updateTitle);
+    _st7796UpdateTarget = new TextWidget({0, 112, 2, WA_CENTER}, 48, 0xFFFF, 0x0000);
+    _st7796UpdatePage->addWidget(_st7796UpdateTarget);
+    _st7796UpdateBar = new St7796UpdateProgressWidget();
+    _st7796UpdatePage->addWidget(_st7796UpdateBar);
+    _st7796UpdatePercent = new TextWidget({0, 232, 3, WA_CENTER}, 12, 0xFFFF, 0x0000);
+    _st7796UpdatePage->addWidget(_st7796UpdatePercent);
+    _st7796UpdateActivity = new TextWidget({0, 302, 1, WA_CENTER}, 80, 0xFFFF, 0x0000);
+    _st7796UpdatePage->addWidget(_st7796UpdateActivity);
+    _pager->addPage(_st7796UpdatePage);
   }
-  _oled128x64UpdateActivity = new TextWidget(
-      oled128x32Active() ? update128x32::activity : update128x64::activity,
-      24, WHITE, BLACK);
-  _oled128x64UpdatePage->addWidget(_oled128x64UpdateActivity);
-  _pager->addPage(_oled128x64UpdatePage);
+  #endif
+#if VOXONE_DISPLAY_COMPILES_SMALL_OLED
+  if (smallOledActive()) {
+    _oled128x64UpdatePage = new Page();
+    TextWidget* updateTitle = new TextWidget(
+        oled128x32Active() ? update128x32::title : update128x64::title,
+        16, WHITE, BLACK);
+    updateTitle->setText("UPDATE");
+    _oled128x64UpdatePage->addWidget(updateTitle);
+    _oled128x64UpdateTarget = new TextWidget(
+        oled128x32Active() ? update128x32::target : update128x64::target,
+        16, WHITE, BLACK);
+    _oled128x64UpdatePage->addWidget(_oled128x64UpdateTarget);
+    _oled128x64UpdatePercent = new TextWidget(
+        oled128x32Active() ? update128x32::percent : update128x64::percent,
+        8, WHITE, BLACK);
+    _oled128x64UpdatePage->addWidget(_oled128x64UpdatePercent);
+    if (!oled128x32Active()) {
+      _oled128x64UpdateBar = new Oled128x64UpdateProgressWidget();
+      _oled128x64UpdatePage->addWidget(_oled128x64UpdateBar);
+    }
+    _oled128x64UpdateActivity = new TextWidget(
+        oled128x32Active() ? update128x32::activity : update128x64::activity,
+        24, WHITE, BLACK);
+    _oled128x64UpdatePage->addWidget(_oled128x64UpdateActivity);
+    _pager->addPage(_oled128x64UpdatePage);
+  }
 #endif
 #if VOXONE_DISPLAY_PROFILE == VOXONE_DISPLAY_PROFILE_ST7789_284X76
   _st7789UpdatePage = new Page();
@@ -1370,7 +1444,7 @@ void Display::_buildPager(){
   _pager->addPage(_st7789UpdatePage);
 #endif
 #if VOXONE_DISPLAY_PROFILE == VOXONE_DISPLAY_PROFILE_ST7796_480X320
-  _st7796PlayerReady = true;
+  _st7796PlayerReady = !smallOledActive();
 #endif
 }
 
@@ -1386,8 +1460,8 @@ void Display::_apScreen() {
     const bool securityRecovery =
         activeAp &&
         presentation.screen == voxone::first_boot::Screen::SecurityRecovery;
-#if VOXONE_DISPLAY_PROFILE_IS_SMALL_OLED
-    if (oled128x32Active()) {
+#if VOXONE_DISPLAY_COMPILES_SMALL_OLED
+    if (smallOledActive() && oled128x32Active()) {
       ScrollWidget* title = (ScrollWidget*) &_boot->addWidget(
           new ScrollWidget("*", setup128x32::title, WHITE, BLACK));
       title->setText(presentationReady ? presentation.title : "VoxOne");
@@ -1406,6 +1480,49 @@ void Display::_apScreen() {
       ScrollWidget* footer = (ScrollWidget*) &_boot->addWidget(
           new ScrollWidget("*", setup128x32::footer, WHITE, BLACK));
       footer->setText(presentationReady ? presentation.statusText : "");
+      _pager->addPage(_boot);
+      _pager->setPage(_boot);
+      return;
+    }
+#endif
+#if defined(VOXONE_RUNTIME_L0_DISPLAY_BACKENDS)
+    if (smallOledActive()) {
+      ScrollWidget* title = (ScrollWidget*) &_boot->addWidget(
+          new ScrollWidget("*", setup128x64::title, WHITE, BLACK));
+      title->setText(presentationReady ? presentation.title : "VoxOne");
+
+      if (!activeAp) {
+        ScrollWidget* status = (ScrollWidget*) &_boot->addWidget(
+            new ScrollWidget("*", setup128x64::footer, WHITE, BLACK));
+        status->setText(presentationReady ? presentation.statusText : "");
+        _pager->addPage(_boot);
+        _pager->setPage(_boot);
+        return;
+      }
+
+      TextWidget* product = (TextWidget*) &_boot->addWidget(
+          new TextWidget(setup128x64::product, 30, WHITE, BLACK));
+      product->setText(securityRecovery ? presentation.product : "VoxOne");
+      ScrollWidget* ssid = (ScrollWidget*) &_boot->addWidget(
+          new ScrollWidget("*", setup128x64::ssid, WHITE, BLACK));
+      ssid->setText(presentation.apSsid);
+      TextWidget* detailLabel = (TextWidget*) &_boot->addWidget(
+          new TextWidget(setup128x64::detailLabel, 30, WHITE, BLACK));
+      TextWidget* detailValue = (TextWidget*) &_boot->addWidget(
+          new TextWidget(setup128x64::detailValue, 30, WHITE, BLACK));
+      if (securityRecovery || firstBootSetup) {
+        detailLabel->setText("IP");
+        detailValue->setText(presentation.apAddress);
+      } else {
+        detailLabel->setText(presentation.presentApCredential
+                                 ? LANG::apPassTxt : "");
+        detailValue->setText(presentation.presentApCredential
+                                 ? apPassword : "");
+      }
+      ScrollWidget* footer = (ScrollWidget*) &_boot->addWidget(
+          new ScrollWidget("*", setup128x64::footer, WHITE, BLACK));
+      if (firstBootSetup) footer->setText(presentation.statusText);
+      else footer->setText(presentation.apAddress, "IP %s");
       _pager->addPage(_boot);
       _pager->setPage(_boot);
       return;
@@ -1595,7 +1712,8 @@ void Display::_start() {
   }
   _buildPager();
 #if VOXONE_DISPLAY_PROFILE == VOXONE_DISPLAY_PROFILE_ST7796_480X320
-  if (!_playerScrollCoreEnabled()) _st7796ScrollMode(true);
+  if (!smallOledActive() && !_playerScrollCoreEnabled())
+    _st7796ScrollMode(true);
 #endif
   _renderedMode = PLAYER;
   config.setTitle(LANG::const_PlReady);
@@ -1603,7 +1721,10 @@ void Display::_start() {
   if(_vuwidget) _vuwidget->lock();
   if(_rssi)     _setRSSI(WiFi.RSSI());
   #ifndef HIDE_IP
-    if(_volip) _volip->setText(config.ipToStr(WiFi.localIP()), iptxtFmt);
+    if(_volip) {
+      if (smallOledActive()) _volip->setText(config.ipToStr(WiFi.localIP()));
+      else _volip->setText(config.ipToStr(WiFi.localIP()), iptxtFmt);
+    }
   #endif
 #if VOXONE_DISPLAY_PROFILE == VOXONE_DISPLAY_PROFILE_ST7789_284X76
   if(_volip) _volip->lock();
@@ -1613,7 +1734,7 @@ void Display::_start() {
   _volume();
   _station();
 #if VOXONE_DISPLAY_PROFILE == VOXONE_DISPLAY_PROFILE_ST7796_480X320
-  _updatePlaybackStatus();
+  if (!smallOledActive()) _updatePlaybackStatus();
 #endif
   _time(false);
   _bootStep = 2;
@@ -1643,13 +1764,27 @@ void Display::_updateUpdateScreen(const UpdateProgressSnapshot& snapshot) {
   _updateDisplayRevision = snapshot.revision;
   _updateDisplayAcquisition = snapshot.acquisition;
 #if VOXONE_DISPLAY_PROFILE == VOXONE_DISPLAY_PROFILE_ST7796_480X320
-  if (_st7796UpdateTarget) _st7796UpdateTarget->setText(updateTargetDisplayName(snapshot.target));
-  if (_st7796UpdateActivity)
-    _st7796UpdateActivity->setText(updateActivityDisplayText(snapshot.activity));
-  if (_st7796UpdateBar) _st7796UpdateBar->setProgress(progress, snapshot.acquisition);
-  if (_st7796UpdatePercent) {
-    if (progress.determinate) _st7796UpdatePercent->setText(progress.percent, "%d%%");
-    else _st7796UpdatePercent->setText("");
+  if (smallOledActive()) {
+    if (_oled128x64UpdateTarget)
+      _oled128x64UpdateTarget->setText(updateTargetCompactDisplayName(snapshot.target));
+    if (_oled128x64UpdateActivity)
+      _oled128x64UpdateActivity->setText(updateActivityCompactDisplayText(snapshot.activity));
+    if (_oled128x64UpdateBar)
+      _oled128x64UpdateBar->setProgress(progress, snapshot.acquisition);
+    if (_oled128x64UpdatePercent) {
+      if (progress.determinate)
+        _oled128x64UpdatePercent->setText(progress.percent, "%d%%");
+      else _oled128x64UpdatePercent->setText("...");
+    }
+  } else {
+    if (_st7796UpdateTarget) _st7796UpdateTarget->setText(updateTargetDisplayName(snapshot.target));
+    if (_st7796UpdateActivity)
+      _st7796UpdateActivity->setText(updateActivityDisplayText(snapshot.activity));
+    if (_st7796UpdateBar) _st7796UpdateBar->setProgress(progress, snapshot.acquisition);
+    if (_st7796UpdatePercent) {
+      if (progress.determinate) _st7796UpdatePercent->setText(progress.percent, "%d%%");
+      else _st7796UpdatePercent->setText("");
+    }
   }
 #elif VOXONE_DISPLAY_PROFILE_IS_SMALL_OLED
   if (_oled128x64UpdateTarget)
@@ -1683,7 +1818,7 @@ void Display::_renderMode(displayMode_e newmode) {
       newmode != PLAYER)
     _playerScrollLeave();
 #if VOXONE_DISPLAY_PROFILE == VOXONE_DISPLAY_PROFILE_ST7796_480X320
-  if (!_playerScrollCoreEnabled()) {
+  if (!smallOledActive() && !_playerScrollCoreEnabled()) {
     if (_renderedMode == PLAYER && newmode != PLAYER) _st7796ScrollMode(false);
     else if (_renderedMode != PLAYER && newmode == PLAYER) _st7796ScrollMode(true);
   }
@@ -1694,7 +1829,7 @@ void Display::_renderMode(displayMode_e newmode) {
   if(_rssi) _rssi->lock(newmode == VOL);
 #endif
 #if VOXONE_DISPLAY_PROFILE == VOXONE_DISPLAY_PROFILE_ST7796_480X320
-  if(_volip) _volip->lock(newmode != VOL);
+  if(!smallOledActive() && _volip) _volip->lock(newmode != VOL);
 #endif
   dsp.setScrollId(NULL);
   if (newmode == PLAYER) {
@@ -1715,7 +1850,7 @@ void Display::_renderMode(displayMode_e newmode) {
     _pager->setPage(pages[PG_PLAYER]);
     _playerScrollEnter(millis());
 #if VOXONE_DISPLAY_PROFILE == VOXONE_DISPLAY_PROFILE_ST7796_480X320
-    _updatePlaybackStatus();
+    if (!smallOledActive()) _updatePlaybackStatus();
 #endif
     config.setDspOn(config.runtimeSnapshot().dspOn, false);
   }
@@ -1736,8 +1871,8 @@ void Display::_renderMode(displayMode_e newmode) {
 #if VOXONE_DISPLAY_PROFILE_IS_SMALL_OLED || VOXONE_DISPLAY_PROFILE == VOXONE_DISPLAY_PROFILE_ST7796_480X320
     PlayerDisplayView view{};
     capturePlayerDisplayView(view, WiFi.RSSI());
-#if VOXONE_DISPLAY_PROFILE_IS_SMALL_OLED
-    if (oled128x32Active()) {
+#if VOXONE_DISPLAY_COMPILES_SMALL_OLED
+    if (smallOledActive() && oled128x32Active()) {
       char level[5];
       voxone::oled128x32::formatVolumePercent(
           level, sizeof(level), view.userVolume, view.muted);
@@ -1768,7 +1903,8 @@ void Display::_renderMode(displayMode_e newmode) {
   if (newmode == LOST)      _showDialog(LANG::const_DlgLost);
   if (newmode == UPDATING) {
 #if VOXONE_DISPLAY_PROFILE == VOXONE_DISPLAY_PROFILE_ST7796_480X320
-    _pager->setPage(_st7796UpdatePage, true);
+    _pager->setPage(smallOledActive() ? _oled128x64UpdatePage
+                                      : _st7796UpdatePage, true);
 #elif VOXONE_DISPLAY_PROFILE_IS_SMALL_OLED
     _pager->setPage(_oled128x64UpdatePage, true);
 #elif VOXONE_DISPLAY_PROFILE == VOXONE_DISPLAY_PROFILE_ST7789_284X76
@@ -1785,7 +1921,7 @@ void Display::_renderMode(displayMode_e newmode) {
     _drawPlaylist();
   }
 #if VOXONE_DISPLAY_PROFILE == VOXONE_DISPLAY_PROFILE_ST7796_480X320
-  if (newmode == BT_TRANSPORT) {
+  if (!smallOledActive() && newmode == BT_TRANSPORT) {
     _title();
     _pager->setPage(_btTransportPage);
   }
@@ -1900,6 +2036,7 @@ void Display::_layoutChange(bool played){
 
 #if VOXONE_DISPLAY_PROFILE == VOXONE_DISPLAY_PROFILE_ST7796_480X320
 void Display::_updatePlaybackStatus() {
+  if (!_st7796Playback || !_btTransportPlayback) return;
   PlayerDisplayView view{};
   capturePlayerDisplayView(view, WiFi.RSSI());
   const char* label = displayPlaybackLabel(view.playback);
@@ -1964,8 +2101,8 @@ void Display::_playerScrollBind() {
 #else
   if (_meta) rows[count++] = playerScrollBinding(_meta);
 #endif
-#if VOXONE_DISPLAY_PROFILE_IS_SMALL_OLED
-  if (_title1 && !oled128x32Active())
+#if VOXONE_DISPLAY_COMPILES_SMALL_OLED
+  if (_title1 && (!smallOledActive() || !oled128x32Active()))
     rows[count++] = playerScrollBinding(_title1);
 #else
   if (_title1) rows[count++] = playerScrollBinding(_title1);
@@ -2118,18 +2255,18 @@ void Display::loop() {
         }
         case BOOTSTRING: {
           if(_bootstring) {
-#if VOXONE_DISPLAY_PROFILE_IS_SMALL_OLED
-            _bootstring->setText(config.ssids[request.payload].ssid);
-#else
-            _bootstring->setText(config.ssids[request.payload].ssid, LANG::bootstrFmt);
-#endif
+            if (smallOledActive())
+              _bootstring->setText(config.ssids[request.payload].ssid);
+            else
+              _bootstring->setText(config.ssids[request.payload].ssid,
+                                   LANG::bootstrFmt);
           }
           break;
         }
         case DSPRSSI:
           if(_rssi) _setRSSI(request.payload);
-#if VOXONE_DISPLAY_PROFILE_IS_SMALL_OLED
-          if(oled128x32PlayerStatus)
+#if VOXONE_DISPLAY_COMPILES_SMALL_OLED
+          if(smallOledActive() && oled128x32PlayerStatus)
             oled128x32PlayerStatus->setWifiRssi(request.payload);
 #endif
           break;
@@ -2140,7 +2277,7 @@ void Display::loop() {
 #endif
 #if VOXONE_DISPLAY_PROFILE == VOXONE_DISPLAY_PROFILE_ST7796_480X320
           _station();
-          _updatePlaybackStatus();
+          if (!smallOledActive()) _updatePlaybackStatus();
 #endif
 #if VOXONE_DISPLAY_PROFILE == VOXONE_DISPLAY_PROFILE_ST7789_284X76 || VOXONE_DISPLAY_PROFILE == VOXONE_DISPLAY_PROFILE_ST7796_480X320 || VOXONE_DISPLAY_PROFILE_IS_SMALL_OLED
           if(_renderedMode==STATIONS && _plplaying) _plplaying->setText(uiState.selectedStation() == config.lastStation() ? "GRA" : "");
@@ -2153,7 +2290,7 @@ void Display::loop() {
 #endif
 #if VOXONE_DISPLAY_PROFILE == VOXONE_DISPLAY_PROFILE_ST7796_480X320
           _station();
-          _updatePlaybackStatus();
+          if (!smallOledActive()) _updatePlaybackStatus();
 #endif
 #if VOXONE_DISPLAY_PROFILE == VOXONE_DISPLAY_PROFILE_ST7789_284X76 || VOXONE_DISPLAY_PROFILE == VOXONE_DISPLAY_PROFILE_ST7796_480X320 || VOXONE_DISPLAY_PROFILE_IS_SMALL_OLED
           if(_renderedMode==STATIONS && _plplaying) _plplaying->setText("");
@@ -2162,7 +2299,12 @@ void Display::loop() {
         case DSP_START: _start();  break;
         case NEWIP: {
           #ifndef HIDE_IP
-            if(_volip) _volip->setText(config.ipToStr(WiFi.localIP()), iptxtFmt);
+            if(_volip) {
+              if (smallOledActive())
+                _volip->setText(config.ipToStr(WiFi.localIP()));
+              else
+                _volip->setText(config.ipToStr(WiFi.localIP()), iptxtFmt);
+            }
           #endif
           break;
         }
@@ -2245,7 +2387,7 @@ char *split(char *str, const char *delim) {
 void Display::_title() {
 #if VOXONE_DISPLAY_PROFILE == VOXONE_DISPLAY_PROFILE_ST7789_284X76 || VOXONE_DISPLAY_PROFILE == VOXONE_DISPLAY_PROFILE_ST7796_480X320 || VOXONE_DISPLAY_PROFILE_IS_SMALL_OLED
 #if VOXONE_DISPLAY_PROFILE == VOXONE_DISPLAY_PROFILE_ST7796_480X320
-  _updatePlaybackStatus();
+  if (!smallOledActive()) _updatePlaybackStatus();
 #endif
   PlayerDisplayView view{};
   capturePlayerDisplayView(view, WiFi.RSSI());
@@ -2253,7 +2395,8 @@ void Display::_title() {
   if (_title2) _title2->setText(view.title);
 #if VOXONE_DISPLAY_PROFILE == VOXONE_DISPLAY_PROFILE_ST7796_480X320
   // BT transport is a separate screen and keeps the original raw fields.
-  if (view.source == DisplaySourceKind::Bluetooth) {
+  if (!smallOledActive() && view.source == DisplaySourceKind::Bluetooth &&
+      _btTransportArtist && _btTransportTitle) {
     DisplaySourceView source{};
     if (getDisplaySourceView && getDisplaySourceView(source)) {
       _btTransportArtist->setText(source.artist ? source.artist : "");
@@ -2298,6 +2441,18 @@ void Display::_time(bool redraw) {
   }
 #endif
   if(config.isScreensaver && network.timeinfo.tm_sec % 60 == 0){
+#if defined(VOXONE_RUNTIME_L0_DISPLAY_BACKENDS)
+    if (smallOledActive()) {
+      const uint16_t clockHeight = 2 * CHARHEIGHT;
+      const uint16_t maxTop = dsp.height() > clockHeight + 2
+                                  ? dsp.height() - clockHeight - 1 : 1;
+      const uint16_t ft = static_cast<uint16_t>(random(1, maxTop));
+      const uint16_t maxLeft = dsp.width() > _clock->clockWidth() + 2
+                                   ? dsp.width() - _clock->clockWidth() - 1 : 1;
+      const uint16_t lt = static_cast<uint16_t>(random(1, maxLeft));
+      _clock->moveTo({lt, ft, 0});
+    } else {
+#endif
     #if TIME_SIZE<19
       uint16_t ft=static_cast<uint16_t>(random(TFT_FRAMEWDT, (dsp.height()-TIME_SIZE*CHARHEIGHT-TFT_FRAMEWDT)));
     #else
@@ -2307,6 +2462,9 @@ void Display::_time(bool redraw) {
     if(clockConf.align==WA_CENTER) lt-=(dsp.width()-_clock->clockWidth())/2;
     //_clock->moveTo({clockConf.left, ft, 0});
     _clock->moveTo({lt, ft, 0});
+#if defined(VOXONE_RUNTIME_L0_DISPLAY_BACKENDS)
+    }
+#endif
   }
   _clock->draw(redraw);
 }
@@ -2330,8 +2488,8 @@ void Display::_volume() {
 #if VOXONE_DISPLAY_PROFILE_IS_SMALL_OLED || VOXONE_DISPLAY_PROFILE == VOXONE_DISPLAY_PROFILE_ST7796_480X320
     PlayerDisplayView view{};
     capturePlayerDisplayView(view, WiFi.RSSI());
-#if VOXONE_DISPLAY_PROFILE_IS_SMALL_OLED
-    if (oled128x32Active()) {
+#if VOXONE_DISPLAY_COMPILES_SMALL_OLED
+    if (smallOledActive() && oled128x32Active()) {
       char level[5];
       voxone::oled128x32::formatVolumePercent(
           level, sizeof(level), view.userVolume, view.muted);

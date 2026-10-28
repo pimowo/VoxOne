@@ -268,10 +268,12 @@ class JsonWriter {
 
 bool appendOptions(JsonWriter& writer, const HardwareDescriptor& hardware,
                    bool displays) {
-  RuntimeHardwareWebOption options[6];
+  RuntimeHardwareWebOption options[kRuntimeDisplayOptionCapacity];
   const size_t count = displays
-      ? supportedRuntimeDisplayOptions(hardware.capabilities, options, 6)
-      : supportedRuntimeInputOptions(hardware.capabilities, options, 6);
+      ? supportedRuntimeDisplayOptions(hardware.capabilities, options,
+                                       kRuntimeDisplayOptionCapacity)
+      : supportedRuntimeInputOptions(hardware.capabilities, options,
+                                     kRuntimeDisplayOptionCapacity);
   for (size_t index = 0; index < count; ++index) {
     if (index && !writer.append(",")) return false;
     HardwareRoadmapStatus status = HardwareRoadmapStatus::Untested;

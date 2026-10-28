@@ -575,6 +575,29 @@ void VuWidget::_clear(){ }
 /************************
       NUM & CLOCK
  ************************/
+#if defined(VOXONE_RUNTIME_L0_DISPLAY_BACKENDS)
+  static bool runtimeSmallOled() {
+    return dsp.activeProfile() ==
+               voxone::display_profile::ProfileId::Oled128x32 ||
+           dsp.activeProfile() ==
+               voxone::display_profile::ProfileId::Oled128x64;
+  }
+  static uint8_t runtimeTimeSize() { return runtimeSmallOled() ? 2 : TIME_SIZE; }
+  static const GFXfont* runtimeClockFont() {
+    return runtimeSmallOled() ? nullptr : &Clock_GFXfont;
+  }
+  const GFXfont* Clock_GFXfontPtr = &Clock_GFXfont;
+  uint8_t _charWidth(unsigned char c) {
+    if (runtimeSmallOled()) return CHARWIDTH * runtimeTimeSize();
+    GFXglyph* glyph = Clock_GFXfont.glyph + c - 0x20;
+    return pgm_read_byte(&glyph->xAdvance);
+  }
+  uint16_t _textHeight() {
+    if (runtimeSmallOled()) return CHARHEIGHT * runtimeTimeSize();
+    GFXglyph* glyph = Clock_GFXfont.glyph + ('8' - 0x20);
+    return pgm_read_byte(&glyph->height);
+  }
+#else
   #if TIME_SIZE<19
   const GFXfont* Clock_GFXfontPtr = nullptr;
   #define CLOCKFONT5x7
@@ -602,6 +625,7 @@ void VuWidget::_clear(){ }
     return CHARHEIGHT * TIME_SIZE;
   }
 #endif
+#endif
 uint16_t _textWidth(const char *txt){
   uint16_t w = 0, l=strlen(txt);
   for(uint16_t c=0;c<l;c++) w+=_charWidth(txt[c]);
@@ -619,7 +643,12 @@ void NumWidget::init(WidgetConfig wconf, uint16_t buffsize, uint16_t fgcolor, ui
   _oldtext = (char *) malloc(sizeof(char) * _buffsize);
   memset(_oldtext, 0, _buffsize);
   _textwidth = _oldtextwidth = _oldleft = 0;
-  _textheight = TIME_SIZE/*wconf.textsize*/;
+  _textheight =
+#if defined(VOXONE_RUNTIME_L0_DISPLAY_BACKENDS)
+      runtimeTimeSize();
+#else
+      TIME_SIZE;
+#endif
 }
 
 void NumWidget::setText(const char* txt) {
@@ -627,15 +656,31 @@ void NumWidget::setText(const char* txt) {
   _getBounds();
   if (strcmp(_oldtext, _text) == 0) return;
   uint16_t realth = _textheight;
-#if defined(DSP_OLED) && DSP_MODEL!=DSP_SSD1322
+#if (defined(DSP_OLED) && DSP_MODEL!=DSP_SSD1322) || \
+    defined(VOXONE_RUNTIME_L0_DISPLAY_BACKENDS)
+#if defined(VOXONE_RUNTIME_L0_DISPLAY_BACKENDS)
+  if(runtimeSmallOled()) realth = _textheight * 8;
+#else
   if(Clock_GFXfontPtr==nullptr) realth = _textheight * 8; //CHARHEIGHT
 #endif
+#endif
   if (_active)
+#if defined(VOXONE_RUNTIME_L0_DISPLAY_BACKENDS)
+    if (runtimeSmallOled())
+      dsp.fillRect(_oldleft == 0 ? _realLeft() : min(_oldleft, _realLeft()),
+                   _config.top, max(_oldtextwidth, _textwidth), realth,
+                   _bgcolor);
+    else
+      dsp.fillRect(_oldleft == 0 ? _realLeft() : min(_oldleft, _realLeft()),
+                   _config.top-_textheight+1,
+                   max(_oldtextwidth, _textwidth), realth, _bgcolor);
+#else
   #ifndef CLOCKFONT5x7
     dsp.fillRect(_oldleft == 0 ? _realLeft() : min(_oldleft, _realLeft()),  _config.top-_textheight+1, max(_oldtextwidth, _textwidth), realth, _bgcolor);
   #else
     dsp.fillRect(_oldleft == 0 ? _realLeft() : min(_oldleft, _realLeft()),  _config.top, max(_oldtextwidth, _textwidth), realth, _bgcolor);
   #endif
+#endif
 
   _oldtextwidth = _textwidth;
   _oldleft = _realLeft();
@@ -652,6 +697,12 @@ void NumWidget::_getBounds() {
 #if VOXONE_DISPLAY_PROFILE == VOXONE_DISPLAY_PROFILE_ST7796_480X320 || \
     VOXONE_DISPLAY_PROFILE == VOXONE_DISPLAY_PROFILE_ST7789_284X76
   if (strcmp(_text, "MUTE") == 0) {
+#if defined(VOXONE_RUNTIME_L0_DISPLAY_BACKENDS)
+    if (runtimeSmallOled()) {
+      _textwidth = _textWidth(_text);
+      return;
+    }
+#endif
 #if VOXONE_DISPLAY_PROFILE == VOXONE_DISPLAY_PROFILE_ST7796_480X320
     _textwidth = 4 * CHARWIDTH * 8;
 #else
@@ -667,6 +718,9 @@ void NumWidget::_draw() {
 #if VOXONE_DISPLAY_PROFILE == VOXONE_DISPLAY_PROFILE_ST7796_480X320 || \
     VOXONE_DISPLAY_PROFILE == VOXONE_DISPLAY_PROFILE_ST7789_284X76
   if (strcmp(_text, "MUTE") == 0) {
+#if defined(VOXONE_RUNTIME_L0_DISPLAY_BACKENDS)
+    if (!runtimeSmallOled()) {
+#endif
     if (!_active) return;
     dsp.setFont();
 #if VOXONE_DISPLAY_PROFILE == VOXONE_DISPLAY_PROFILE_ST7796_480X320
@@ -680,11 +734,22 @@ void NumWidget::_draw() {
     strlcpy(_oldtext, _text, _buffsize);
     dsp.setTextSize(1);
     return;
+#if defined(VOXONE_RUNTIME_L0_DISPLAY_BACKENDS)
+    }
+#endif
   }
 #endif
-  if(!_active || TIME_SIZE<2) return;
-  dsp.setTextSize(Clock_GFXfontPtr==nullptr?TIME_SIZE:1);
-  dsp.setFont(Clock_GFXfontPtr);
+  const uint8_t timeSize =
+#if defined(VOXONE_RUNTIME_L0_DISPLAY_BACKENDS)
+      runtimeTimeSize();
+  const GFXfont* clockFont = runtimeClockFont();
+#else
+      TIME_SIZE;
+  const GFXfont* clockFont = Clock_GFXfontPtr;
+#endif
+  if(!_active || timeSize<2) return;
+  dsp.setTextSize(clockFont==nullptr?timeSize:1);
+  dsp.setFont(clockFont);
   dsp.setTextColor(_fgcolor, _bgcolor);
   if(!_active) return;
   dsp.setCursor(_realLeft(), _config.top);
@@ -724,9 +789,15 @@ void ProgressWidget::loop() {
 void ClockWidget::init(WidgetConfig wconf, uint16_t fgcolor, uint16_t bgcolor){
   Widget::init(wconf, fgcolor, bgcolor);
   _timeheight = _textHeight();
-  _fullclock = TIME_SIZE>35;
-  if(_fullclock) _superfont = TIME_SIZE / 17; //magick
-  else if(TIME_SIZE==19 || TIME_SIZE==2) _superfont=1;
+  const uint8_t timeSize =
+#if defined(VOXONE_RUNTIME_L0_DISPLAY_BACKENDS)
+      runtimeTimeSize();
+#else
+      TIME_SIZE;
+#endif
+  _fullclock = timeSize>35;
+  if(_fullclock) _superfont = timeSize / 17; //magick
+  else if(timeSize==19 || timeSize==2) _superfont=1;
   else _superfont=0;
   _space = (5*_superfont)/2; //magick
   #ifndef HIDE_DATE
@@ -768,7 +839,13 @@ uint16_t ClockWidget::_top(){
 
 void ClockWidget::_getTimeBounds() {
   _timewidth = _textWidth(_timebuffer);
-  uint8_t fs = _superfont>0?_superfont:TIME_SIZE;
+  const uint8_t timeSize =
+#if defined(VOXONE_RUNTIME_L0_DISPLAY_BACKENDS)
+      runtimeTimeSize();
+#else
+      TIME_SIZE;
+#endif
+  uint8_t fs = _superfont>0?_superfont:timeSize;
   uint16_t rightside = CHARWIDTH * fs * 2; // seconds
   if(_fullclock){
     rightside += _space*2+1; //2space+vline
@@ -800,8 +877,16 @@ Adafruit_GFX& ClockWidget::getRealDsp(){
 
 void ClockWidget::_printClock(bool force){
   auto& gfx = getRealDsp();
-  gfx.setTextSize(Clock_GFXfontPtr==nullptr?TIME_SIZE:1);
-  gfx.setFont(Clock_GFXfontPtr);
+  const uint8_t timeSize =
+#if defined(VOXONE_RUNTIME_L0_DISPLAY_BACKENDS)
+      runtimeTimeSize();
+  const GFXfont* clockFont = runtimeClockFont();
+#else
+      TIME_SIZE;
+  const GFXfont* clockFont = Clock_GFXfontPtr;
+#endif
+  gfx.setTextSize(clockFont==nullptr?timeSize:1);
+  gfx.setFont(clockFont);
   bool clockInTitle=!config.isScreensaver && _config.top<_timeheight;
   if(force){
     _clearClock();
@@ -844,11 +929,19 @@ void ClockWidget::_printClock(bool force){
     gfx.setFont();
     gfx.setTextSize(_superfont);
     if(!_fullclock){
+#if defined(VOXONE_RUNTIME_L0_DISPLAY_BACKENDS)
+      if (!runtimeSmallOled())
+        gfx.setCursor(_left()+_timewidth+_space,
+                      _top()-_timeheight+_space);
+      else
+        gfx.setCursor(_left()+_timewidth+_space, _top());
+#else
       #ifndef CLOCKFONT5x7
       gfx.setCursor(_left()+_timewidth+_space, _top()-_timeheight+_space);
       #else
       gfx.setCursor(_left()+_timewidth+_space, _top());
       #endif
+#endif
     }else{
       gfx.setCursor(_linesleft+_space+1, _top()-_timeheight);
     }
@@ -856,8 +949,8 @@ void ClockWidget::_printClock(bool force){
     sprintf(_tmp, "%02d", network.timeinfo.tm_sec);
     gfx.print(_tmp);
   }
-  gfx.setTextSize(Clock_GFXfontPtr==nullptr?TIME_SIZE:1);
-  gfx.setFont(Clock_GFXfontPtr);
+  gfx.setTextSize(clockFont==nullptr?timeSize:1);
+  gfx.setFont(clockFont);
   #ifndef DSP_OLED
   gfx.setTextColor(dots ? config.theme.clock : config.theme.background, config.theme.background);
   #else
@@ -878,10 +971,19 @@ void ClockWidget::_clearClock(){
   if(_fb->ready()) _fb->clear();
   else
 #endif
+#if defined(VOXONE_RUNTIME_L0_DISPLAY_BACKENDS)
+  if (!runtimeSmallOled())
+    dsp.fillRect(_left(), _top()-_timeheight, _clockwidth,
+                 _clockheight+1, config.theme.background);
+  else
+    dsp.fillRect(_left(), _top(), _clockwidth+1,
+                 _clockheight+1, config.theme.background);
+#else
 #ifndef CLOCKFONT5x7
   dsp.fillRect(_left(), _top()-_timeheight, _clockwidth, _clockheight+1, config.theme.background);
 #else
   dsp.fillRect(_left(), _top(), _clockwidth+1, _clockheight+1, config.theme.background);
+#endif
 #endif
 }
 

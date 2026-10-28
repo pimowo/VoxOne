@@ -179,7 +179,7 @@ int main() {
   assert(decodedSh1106 == sh1106Record);
   assert(validateRuntimeHardwareConfig(sh1106Record, capabilities) ==
 #if defined(VOXONE_PROFILE_M0) || defined(VOXONE_PROFILE_S0) || \
-    defined(VOXONE_PROFILE_DIN0)
+    defined(VOXONE_PROFILE_DIN0) || defined(VOXONE_PROFILE_L0)
          RuntimeHardwareValidation::Valid);
 #else
          RuntimeHardwareValidation::Unsupported);
@@ -199,7 +199,7 @@ int main() {
   assert(decodedCh1116g == ch1116gRecord);
   assert(validateRuntimeHardwareConfig(ch1116gRecord, capabilities) ==
 #if defined(VOXONE_PROFILE_M0) || defined(VOXONE_PROFILE_S0) || \
-    defined(VOXONE_PROFILE_DIN0)
+    defined(VOXONE_PROFILE_DIN0) || defined(VOXONE_PROFILE_L0)
          RuntimeHardwareValidation::Valid);
 #else
          RuntimeHardwareValidation::Unsupported);
@@ -374,7 +374,8 @@ int main() {
   assert(loaded.validation == RuntimeHardwareValidation::Unsupported);
   assert(loaded.config == defaults);
 
-#if defined(VOXONE_RUNTIME_OLED_128X64_BACKENDS)
+#if defined(VOXONE_RUNTIME_OLED_128X64_BACKENDS) || \
+    defined(VOXONE_RUNTIME_L0_DISPLAY_BACKENDS)
   RuntimeHardwareConfig boardSupportedAlternative = defaults;
   boardSupportedAlternative.display = RuntimeDisplay::Sh1106_128x64;
   putRecord(storage, boardSupportedAlternative);
@@ -386,6 +387,8 @@ int main() {
   assert(currentHardware().displayKind ==
 #if defined(VOXONE_PROFILE_S0)
          DisplayKind::Ssd1306_128x32);
+#elif defined(VOXONE_PROFILE_L0)
+         DisplayKind::St7796_480x320);
 #else
          DisplayKind::Ssd1306_128x64);
 #endif

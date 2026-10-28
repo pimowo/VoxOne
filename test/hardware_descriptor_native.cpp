@@ -86,7 +86,8 @@ int main() {
   assert(!d.btAudioRxEnabled ||
          (hasPin(d.btAudioIn.bclk) && hasPin(d.btAudioIn.ws) &&
           hasPin(d.btAudioIn.din)));
-#if defined(VOXONE_RUNTIME_OLED_128X64_BACKENDS)
+#if defined(VOXONE_RUNTIME_OLED_128X64_BACKENDS) || \
+    defined(VOXONE_RUNTIME_L0_DISPLAY_BACKENDS)
   assert(d.i2c.sda == fromLegacyPin(I2C_SDA));
   assert(d.i2c.scl == fromLegacyPin(I2C_SCL));
 #else
@@ -161,12 +162,18 @@ int main() {
   assert(activeController() == ControllerId::St7796);
   assert(layout.width == 480 && layout.height == 320 && !layout.monochrome);
   assert(caps.hasLocalDisplay());
-  assert(caps.supportedDisplays == displaySupport(DisplayKind::St7796_480x320));
-  assert(!caps.supportsDisplay(DisplayKind::Ssd1306_128x32));
-  assert(!caps.supportsDisplay(DisplayKind::Ssd1306_128x64));
-  assert(!caps.supportsDisplay(DisplayKind::Ssd1309_128x64));
-  assert(!caps.supportsDisplay(DisplayKind::Sh1106_128x64));
-  assert(!caps.supportsDisplay(DisplayKind::Ch1116g_128x64));
+  assert(caps.supportedDisplays ==
+         (displaySupport(DisplayKind::St7796_480x320) |
+          displaySupport(DisplayKind::Ssd1306_128x32) |
+          displaySupport(DisplayKind::Ssd1306_128x64) |
+          displaySupport(DisplayKind::Ssd1309_128x64) |
+          displaySupport(DisplayKind::Sh1106_128x64) |
+          displaySupport(DisplayKind::Ch1116g_128x64)));
+  assert(caps.supportsDisplay(DisplayKind::Ssd1306_128x32));
+  assert(caps.supportsDisplay(DisplayKind::Ssd1306_128x64));
+  assert(caps.supportsDisplay(DisplayKind::Ssd1309_128x64));
+  assert(caps.supportsDisplay(DisplayKind::Sh1106_128x64));
+  assert(caps.supportsDisplay(DisplayKind::Ch1116g_128x64));
   assert(d.spi.mosi == 11 && d.spi.sck == 12 && d.spi.miso == 13);
   assert(d.display.cs == 10 && d.display.dc == 9 && d.display.backlight == 14);
   assert(d.display.rst == kNoPin);
@@ -176,6 +183,14 @@ int main() {
   assert(d.localInput.ec11StepsPerDetent == 4);
   assert(d.audioOut.dout == 4 && d.audioOut.bclk == 5 && d.audioOut.ws == 6);
   assert(d.i2c.sda == 8 && d.i2c.scl == 7);
+  assert(d.i2c.sda != d.spi.sck && d.i2c.sda != d.spi.mosi &&
+         d.i2c.sda != d.spi.miso && d.i2c.sda != d.display.cs &&
+         d.i2c.sda != d.display.dc && d.i2c.sda != d.display.backlight);
+  assert(d.i2c.scl != d.spi.sck && d.i2c.scl != d.spi.mosi &&
+         d.i2c.scl != d.spi.miso && d.i2c.scl != d.display.cs &&
+         d.i2c.scl != d.display.dc && d.i2c.scl != d.display.backlight);
+  static_assert(I2CFREQ_HZ == 400000UL,
+                "L0 shared RTC/OLED bus must remain at fast-mode I2C");
   assert(d.btUart.rx == 15 && d.btUart.tx == 16);
   assert(d.btUart.rx == fromLegacyPin(VOXONE_BT_UART_RX_PIN));
   assert(d.btUart.tx == fromLegacyPin(VOXONE_BT_UART_TX_PIN));

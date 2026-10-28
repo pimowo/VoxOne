@@ -35,6 +35,7 @@ constexpr ScrollConfig title = {{0, 20, 1, WA_LEFT}, 140, 128, 5000, 2, 35};
 constexpr WidgetConfig wifi = {0, 56, 1, WA_RIGHT};
 constexpr WidgetConfig volumeNumber = {0, 24, 0, WA_CENTER};
 constexpr WidgetConfig volumeIp = {0, 56, 1, WA_CENTER};
+constexpr WidgetConfig screensaverClock = {6, 36, 0, WA_CENTER};
 constexpr uint16_t clockDigitTop = 33;
 constexpr uint16_t clockColonLeft = 59;
 // In the classic 5x7 font at size 2, digits occupy bitmap rows 0..6 while

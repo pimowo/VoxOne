@@ -16,7 +16,12 @@
 
 class RuntimeOled128x64Display : public Adafruit_GFX {
  public:
+#if defined(VOXONE_RUNTIME_L0_DISPLAY_BACKENDS)
+  explicit RuntimeOled128x64Display(TwoWire& sharedWire);
+#else
   RuntimeOled128x64Display();
+#endif
+  ~RuntimeOled128x64Display();
 
   bool begin(voxone::display_profile::ControllerId controller,
              voxone::display_profile::ProfileId profile);
@@ -56,14 +61,20 @@ class RuntimeOled128x64Display : public Adafruit_GFX {
   const Adafruit_GFX* active() const;
   Adafruit_SSD1306* activeSsd1306();
 
+#if defined(VOXONE_RUNTIME_L0_DISPLAY_BACKENDS)
+  // L0 already owns bus 0 through the RTC path.  Sharing the same TwoWire
+  // object avoids two independent owners reconfiguring one I2C peripheral.
+  TwoWire& wire_;
+#else
   TwoWire wire_;
+#endif
   Adafruit_SSD1306 ssd1306_128x32_;
   Adafruit_SSD1306 ssd1306_128x64_;
   // The existing, physically verified SSD1309 path uses Adafruit's
   // SSD1305-compatible controller implementation.
   Adafruit_SSD1305 ssd1309_;
   Adafruit_SH1106G sh1106_;
-  DisplayCH1116G ch1116g_;
+  DisplayCH1116G* ch1116g_ = nullptr;
   voxone::display_profile::ControllerId activeController_ =
       voxone::display_profile::ControllerId::None;
   voxone::display_profile::ProfileId activeProfile_ =
@@ -71,23 +82,25 @@ class RuntimeOled128x64Display : public Adafruit_GFX {
   bool ready_ = false;
 };
 
-typedef GFXcanvas1 Canvas;
-typedef RuntimeOled128x64Display yoDisplay;
+#if !defined(VOXONE_OLED_BACKEND_ONLY)
+  typedef GFXcanvas1 Canvas;
+  typedef RuntimeOled128x64Display yoDisplay;
 
-#include "tools/commongfx.h"
+  #include "tools/commongfx.h"
 
-#if __has_include("conf/displaySSD1306conf_custom.h")
-  #include "conf/displaySSD1306conf_custom.h"
-#else
-  #include "conf/displaySSD1306conf.h"
+  #if __has_include("conf/displaySSD1306conf_custom.h")
+    #include "conf/displaySSD1306conf_custom.h"
+  #else
+    #include "conf/displaySSD1306conf.h"
+  #endif
+
+  #define BOOT_PRG_COLOR WHITE
+  #define BOOT_TXT_COLOR WHITE
+  #define PINK WHITE
+  #define SILVER WHITE
+  #define TFT_BG BLACK
+  #define TFT_FG WHITE
+  #define TFT_LOGO WHITE
 #endif
-
-#define BOOT_PRG_COLOR WHITE
-#define BOOT_TXT_COLOR WHITE
-#define PINK WHITE
-#define SILVER WHITE
-#define TFT_BG BLACK
-#define TFT_FG WHITE
-#define TFT_LOGO WHITE
 
 #endif

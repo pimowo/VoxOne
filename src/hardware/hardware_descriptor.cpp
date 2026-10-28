@@ -109,7 +109,12 @@ constexpr Pin kDacXsmt = fromLegacyPin(VOXONE_DAC_XSMT_PIN);
 constexpr uint32_t kFlashBytes = 16u * 1024u * 1024u;
 constexpr uint32_t kPsramBytes = 0;  // Size not established by the current profile.
 constexpr HardwareCapabilities kCapabilities = {
-  displaySupport(DisplayKind::St7796_480x320),
+  displaySupport(DisplayKind::St7796_480x320) |
+      displaySupport(DisplayKind::Ssd1306_128x32) |
+      displaySupport(DisplayKind::Ssd1306_128x64) |
+      displaySupport(DisplayKind::Ssd1309_128x64) |
+      displaySupport(DisplayKind::Sh1106_128x64) |
+      displaySupport(DisplayKind::Ch1116g_128x64),
   audioOutputSupport(AudioOutputKind::Pcm5102a) |
       audioOutputSupport(AudioOutputKind::None),
   inputSupport(LocalInputKind::Ec11) | inputSupport(LocalInputKind::Buttons3),

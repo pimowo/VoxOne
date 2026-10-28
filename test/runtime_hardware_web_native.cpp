@@ -66,10 +66,11 @@ int main() {
   const HardwareCapabilities& capabilities = hardwareCapabilities();
   const RuntimeHardwareConfig current = defaultRuntimeHardwareConfig();
 
-  RuntimeHardwareWebOption displays[6]{};
+  RuntimeHardwareWebOption displays[kRuntimeDisplayOptionCapacity]{};
   const size_t displayCount =
-      supportedRuntimeDisplayOptions(capabilities, displays, 6);
-  assert(displayCount == 2 || displayCount == 6);
+      supportedRuntimeDisplayOptions(capabilities, displays,
+                                     kRuntimeDisplayOptionCapacity);
+  assert(displayCount == 2 || displayCount == 6 || displayCount == 7);
   assert(std::strcmp(displays[0].value, "none") == 0);
   assert(std::strcmp(displays[0].label, "Brak") == 0);
 #if defined(VOXONE_PROFILE_M0) || defined(VOXONE_PROFILE_S0) || \
@@ -88,10 +89,20 @@ int main() {
     assert(std::strcmp(displays[index].value,
                        expectedRuntimeOledOptions[index]) == 0);
 #elif defined(VOXONE_PROFILE_L0)
-  assert(displayCount == 2);
+  assert(displayCount == 7);
   assert(hasOption(displays, displayCount, "st7796s_480x320"));
-  assert(!hasOption(displays, displayCount, "ssd1306_128x64"));
-  assert(!hasOption(displays, displayCount, "sh1106_128x64"));
+  assert(hasOption(displays, displayCount, "ssd1306_128x32"));
+  assert(hasOption(displays, displayCount, "ssd1306_128x64"));
+  assert(hasOption(displays, displayCount, "ssd1309_128x64"));
+  assert(hasOption(displays, displayCount, "ch1116_128x64"));
+  assert(hasOption(displays, displayCount, "sh1106_128x64"));
+  const char* const expectedL0DisplayOptions[] = {
+      "none", "ssd1306_128x32", "ssd1306_128x64",
+      "ssd1309_128x64", "ch1116_128x64", "sh1106_128x64",
+      "st7796s_480x320"};
+  for (size_t index = 0; index < displayCount; ++index)
+    assert(std::strcmp(displays[index].value,
+                       expectedL0DisplayOptions[index]) == 0);
 #elif defined(VOXONE_PROFILE_W0)
   assert(displayCount == 2);
   assert(hasOption(displays, displayCount, "st7789_284x76"));
@@ -185,7 +196,7 @@ int main() {
       displayRoadmap, displayRoadmapCount, "ch1116_128x64");
   assert(plannedDisplay);
 #if defined(VOXONE_PROFILE_M0) || defined(VOXONE_PROFILE_S0) || \
-    defined(VOXONE_PROFILE_DIN0)
+    defined(VOXONE_PROFILE_DIN0) || defined(VOXONE_PROFILE_L0)
   assert(plannedDisplay->selectable);
   assert(plannedDisplay->status == HardwareRoadmapStatus::Untested);
 #else
@@ -303,7 +314,7 @@ int main() {
              current, capabilities, "sh1106_128x64", "ec11",
              runtimeAudioOutputWebValue(current.audio), candidate) ==
 #if defined(VOXONE_PROFILE_M0) || defined(VOXONE_PROFILE_S0) || \
-    defined(VOXONE_PROFILE_DIN0)
+    defined(VOXONE_PROFILE_DIN0) || defined(VOXONE_PROFILE_L0)
          RuntimeHardwareValidation::Valid);
 #else
          RuntimeHardwareValidation::Unsupported);
@@ -362,7 +373,7 @@ int main() {
              "ch1116_128x64",
              "ec11", candidate) ==
 #if defined(VOXONE_PROFILE_M0) || defined(VOXONE_PROFILE_S0) || \
-    defined(VOXONE_PROFILE_DIN0)
+    defined(VOXONE_PROFILE_DIN0) || defined(VOXONE_PROFILE_L0)
          RuntimeHardwareValidation::Valid);
 #else
          RuntimeHardwareValidation::Unsupported);
@@ -424,7 +435,7 @@ int main() {
   assert(loadRuntimeHardwareConfig(displayStorage, hardware).config == current);
 
 #if defined(VOXONE_PROFILE_M0) || defined(VOXONE_PROFILE_S0) || \
-    defined(VOXONE_PROFILE_DIN0)
+    defined(VOXONE_PROFILE_DIN0) || defined(VOXONE_PROFILE_L0)
   RuntimeHardwareConfig sh1106 = current;
   sh1106.display = RuntimeDisplay::Sh1106_128x64;
   FakeStorage sh1106Storage;

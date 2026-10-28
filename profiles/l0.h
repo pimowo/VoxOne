@@ -8,6 +8,10 @@
 #define VOXONE_DISPLAY_CONTROLLER VOXONE_DISPLAY_CONTROLLER_ST7796
 #define VOXONE_PROFILE_AUDIO voxone::AudioOutput::Pcm5102a
 
+// L0 keeps ST7796 as its build/runtime default, while the saved Config v7
+// hardware record may select one of the shared I2C OLED backends after reboot.
+#define VOXONE_RUNTIME_L0_DISPLAY_BACKENDS 1
+
 #define VOXONE_HAS_DISPLAY 1
 #define VOXONE_HAS_ENCODER 1
 #define VOXONE_HAS_VU 1
@@ -46,6 +50,13 @@
 #define RTC_MODULE DS3231
 #define RTC_SDA 8
 #define RTC_SCL 7
+// OLED modules share the existing L0 I2C bus with the RTC.  The controller
+// addresses (0x3C/0x3D) do not overlap DS3231 (0x68).
+#define I2C_SDA RTC_SDA
+#define I2C_SCL RTC_SCL
+// DS3231 and every selectable L0 OLED support the standard fast-mode rate.
+// Do not inherit the 4 MHz SSD1306-only default on this shared bus.
+#define I2CFREQ_HZ 400000UL
 
 // VoxOneBT UART uses the NEXTION connector, independently of legacy Nextion.
 #define VOXONE_BT_UART_RX_PIN 15

@@ -3,7 +3,11 @@
 #include "../widgets/widgetsconfig.h" // displayXXXDDDDconf.h
 #include "utf8Rus.h"
 
-#if VOXONE_DISPLAY_PROFILE == VOXONE_DISPLAY_PROFILE_OLED_128X64
+#if defined(VOXONE_RUNTIME_L0_DISPLAY_BACKENDS)
+  #include "boot_branding_codec.h"
+  #include "../fonts/voxone_boot_logo_oled_128x64.h"
+  #include "../fonts/voxone_boot_logo_st7796_480x320.h"
+#elif VOXONE_DISPLAY_PROFILE == VOXONE_DISPLAY_PROFILE_OLED_128X64
   #include "../fonts/voxone_boot_logo_oled_128x64.h"
 #elif VOXONE_DISPLAY_PROFILE == VOXONE_DISPLAY_PROFILE_ST7789_284X76
   #include "boot_branding_codec.h"
@@ -28,7 +32,28 @@ class DspCore: public yoDisplay {
     void initDisplay();
     void clearDsp(bool black=false);
     void printClock(){}
-    #ifdef DSP_OLED
+    #if defined(VOXONE_RUNTIME_L0_DISPLAY_BACKENDS)
+    inline void loop(bool force=false){
+      (void)force;
+      flushSelected();
+    }
+    inline void drawLogo(uint16_t top) {
+      if (activeProfile() ==
+          voxone::display_profile::ProfileId::St7796_480x320) {
+        (void)top;
+        using namespace voxone::display_boot_branding::st7796;
+        _drawBootLogoRle(kBootLogoRle565, kBootLogoRle565Size,
+                         kBootLogoLeft, kBootLogoTop,
+                         kBootLogoWidth, kBootLogoPixelCount);
+      } else {
+        (void)top;
+        using namespace voxone::display_boot_branding::oled;
+        drawBitmap(kBootLogoLeft, kBootLogoTop, kBootLogoBitmap,
+                   kBootLogoWidth, kBootLogoHeight, 1);
+        flushSelected();
+      }
+    }
+    #elif defined(DSP_OLED)
     inline void loop(bool force=false){
       display();
       //delay(DSP_MODEL==DSP_ST7920?20:5);
@@ -66,7 +91,8 @@ class DspCore: public yoDisplay {
 #endif
       }
     #endif
-#if VOXONE_DISPLAY_PROFILE == VOXONE_DISPLAY_PROFILE_ST7796_480X320
+#if VOXONE_DISPLAY_PROFILE == VOXONE_DISPLAY_PROFILE_ST7796_480X320 || \
+    defined(VOXONE_RUNTIME_L0_DISPLAY_BACKENDS)
     inline void drawFirstBootLogo(uint16_t top) {
       using namespace voxone::display_boot_branding::st7796;
       _drawBootLogoRle(kBootLogoRle565, kBootLogoRle565Size,
@@ -102,7 +128,8 @@ class DspCore: public yoDisplay {
     }
   private:
 #if VOXONE_DISPLAY_PROFILE == VOXONE_DISPLAY_PROFILE_ST7789_284X76 || \
-    VOXONE_DISPLAY_PROFILE == VOXONE_DISPLAY_PROFILE_ST7796_480X320
+    VOXONE_DISPLAY_PROFILE == VOXONE_DISPLAY_PROFILE_ST7796_480X320 || \
+    defined(VOXONE_RUNTIME_L0_DISPLAY_BACKENDS)
     inline void _drawBootLogoRle(const uint8_t* encoded, size_t encodedSize,
                                  int16_t left, int16_t top, uint16_t logoWidth,
                                  uint32_t expectedPixels) {

@@ -6,12 +6,21 @@
 #include <Wire.h>
 
 TwoWire RTCWire = TwoWire(0);
+namespace {
+bool rtcWireInitialized = false;
+}
   
 RTC rtc;
 
-bool RTC::init(){
+bool initRTCWire(){
+	if(rtcWireInitialized) return true;
 	const auto& bus = voxone::hardware::currentHardware().i2c;
-	RTCWire.begin(bus.sda, bus.scl);
+	rtcWireInitialized = RTCWire.begin(bus.sda, bus.scl);
+	return rtcWireInitialized;
+}
+
+bool RTC::init(){
+	if(!initRTCWire()) return false;
 	return begin(&RTCWire);
 }
 

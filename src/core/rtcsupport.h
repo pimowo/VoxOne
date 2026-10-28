@@ -21,6 +21,10 @@
 		void setTime(struct tm* tinfo);
 	};
 extern RTC rtc;
+// L0 OLED backends share the already initialized RTC bus.  Exposing the bus
+// object prevents a second TwoWire(0) owner from reconfiguring the peripheral.
+extern TwoWire RTCWire;
+bool initRTCWire();
 #endif
 
 #endif

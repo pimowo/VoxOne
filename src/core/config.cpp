@@ -57,6 +57,16 @@ bool localDisplayInstalled() {
   return display.active();
 }
 
+bool localBacklightInstalled() {
+#if defined(VOXONE_RUNTIME_L0_DISPLAY_BACKENDS)
+  return localDisplayInstalled() &&
+         voxone::hardware::runtimeHardwareConfig().display ==
+             voxone::hardware::RuntimeDisplay::St7796s_480x320;
+#else
+  return localDisplayInstalled();
+#endif
+}
+
 class WifiConfigSpiffsStorage {
  public:
   bool exists(const char* path) const { return SPIFFS.exists(path); }
@@ -349,7 +359,7 @@ void Config::initRadioPlaylist(){
 void Config::_initHW(){
   loadTheme();
   #if BRIGHTNESS_PIN!=255
-    if (localDisplayInstalled()) {
+    if (localBacklightInstalled()) {
       pinMode(BRIGHTNESS_PIN, OUTPUT);
       setBrightness(false);
     }
@@ -1019,7 +1029,7 @@ bool Config::initNetwork() {
 
 void Config::setBrightness(bool dosave){
 #if BRIGHTNESS_PIN!=255
-  if (!localDisplayInstalled()) return;
+  if (!localBacklightInstalled()) return;
   bool wake = false;
   uint8_t brightness = 0;
   {
@@ -1104,20 +1114,21 @@ void Config::setDspOn(bool dspon, bool saveval){
   if (!localDisplayInstalled()) return;
   if(!dspon){
 #if BRIGHTNESS_PIN!=255
-  analogWrite(BRIGHTNESS_PIN, 0);
+  if (localBacklightInstalled()) analogWrite(BRIGHTNESS_PIN, 0);
 #endif
     display.deepsleep();
   }else{
     display.wakeup();
 #if BRIGHTNESS_PIN!=255
-    analogWrite(BRIGHTNESS_PIN, map(
-        runtimeSnapshot().brightness, 0, 100, 0, 255));
+    if (localBacklightInstalled())
+      analogWrite(BRIGHTNESS_PIN, map(
+          runtimeSnapshot().brightness, 0, 100, 0, 255));
 #endif
   }
 }
 
 void Config::doSleep(){
-  if(BRIGHTNESS_PIN!=255 && localDisplayInstalled()) analogWrite(BRIGHTNESS_PIN, 0);
+  if(BRIGHTNESS_PIN!=255 && localBacklightInstalled()) analogWrite(BRIGHTNESS_PIN, 0);
   display.deepsleep();
 #if !defined(ARDUINO_ESP32C3_DEV)
   if(WAKE_PIN!=255) esp_sleep_enable_ext0_wakeup((gpio_num_t)WAKE_PIN, LOW);
@@ -1127,7 +1138,7 @@ void Config::doSleep(){
 }
 
 void Config::doSleepW(){
-  if(BRIGHTNESS_PIN!=255 && localDisplayInstalled()) analogWrite(BRIGHTNESS_PIN, 0);
+  if(BRIGHTNESS_PIN!=255 && localBacklightInstalled()) analogWrite(BRIGHTNESS_PIN, 0);
   display.deepsleep();
 #if !defined(ARDUINO_ESP32C3_DEV)
   if(WAKE_PIN!=255) esp_sleep_enable_ext0_wakeup((gpio_num_t)WAKE_PIN, LOW);

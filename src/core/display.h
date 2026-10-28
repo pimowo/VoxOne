@@ -8,7 +8,7 @@
 #include "player_scroll_runtime.h"
 #include "display_scroll_runtime_config.h"
 #include "../displays/display_profile.h"
-#if VOXONE_DISPLAY_PROFILE == VOXONE_DISPLAY_PROFILE_ST7796_480X320
+#if VOXONE_DISPLAY_COMPILES_ST7796
 #include "st7796_player_scroll.h"
 #endif
 
@@ -111,14 +111,14 @@ class VuWidget;
 class NumWidget;
 class ClockWidget;
 class TextWidget;
-#if VOXONE_DISPLAY_PROFILE == VOXONE_DISPLAY_PROFILE_ST7796_480X320
+#if VOXONE_DISPLAY_COMPILES_ST7796
 class St7796VolumeWidget;
 class St7796UpdateProgressWidget;
 class St7796BluetoothWidget;
 class St7796LabelFrameWidget;
 class St7796PlaybackIconWidget;
 #endif
-#if VOXONE_DISPLAY_PROFILE_IS_SMALL_OLED
+#if VOXONE_DISPLAY_COMPILES_SMALL_OLED
 class Oled128x64UpdateProgressWidget;
 #endif
 #if VOXONE_DISPLAY_PROFILE == VOXONE_DISPLAY_PROFILE_ST7789_284X76
@@ -167,7 +167,7 @@ class Display {
     ClockWidget *_clock;
     Page *_boot;
     TextWidget *_bootstring, *_volip, *_voltxt, *_rssi, *_bitrate;
-#if VOXONE_DISPLAY_PROFILE == VOXONE_DISPLAY_PROFILE_ST7796_480X320
+#if VOXONE_DISPLAY_COMPILES_ST7796
     TextWidget *_btTransportPlayback;
     St7796PlaybackIconWidget *_st7796Playback = nullptr;
     St7796VolumeWidget *_st7796Volume;
@@ -181,13 +181,13 @@ class Display {
     TextWidget *_st7796UpdateActivity = nullptr;
     St7796UpdateProgressWidget *_st7796UpdateBar = nullptr;
 #endif
-#if VOXONE_DISPLAY_PROFILE_IS_SMALL_OLED
+#if VOXONE_DISPLAY_COMPILES_SMALL_OLED
     Page *_oled128x64UpdatePage = nullptr;
     TextWidget *_oled128x64UpdateTarget = nullptr, *_oled128x64UpdatePercent = nullptr;
     TextWidget *_oled128x64UpdateActivity = nullptr;
     Oled128x64UpdateProgressWidget *_oled128x64UpdateBar = nullptr;
 #endif
-#if VOXONE_DISPLAY_PROFILE == VOXONE_DISPLAY_PROFILE_ST7789_284X76 || VOXONE_DISPLAY_PROFILE == VOXONE_DISPLAY_PROFILE_ST7796_480X320 || VOXONE_DISPLAY_PROFILE_IS_SMALL_OLED
+#if VOXONE_DISPLAY_PROFILE == VOXONE_DISPLAY_PROFILE_ST7789_284X76 || VOXONE_DISPLAY_COMPILES_ST7796 || VOXONE_DISPLAY_COMPILES_SMALL_OLED
     TextWidget *_plheader, *_plcounter, *_plplaying;
 #endif
 #if VOXONE_DISPLAY_PROFILE == VOXONE_DISPLAY_PROFILE_ST7789_284X76
@@ -234,10 +234,10 @@ class Display {
     voxone::display_scroll::PlayerScrollRuntime _playerScrollRuntime;
     bool _playerScrollReady = false;
     uint32_t _playerScrollConfigRevision = 0xffffffffu;
-#if VOXONE_DISPLAY_PROFILE == VOXONE_DISPLAY_PROFILE_ST7796_480X320
+#if VOXONE_DISPLAY_COMPILES_ST7796
     void _updatePlaybackStatus();
 #endif
-#if VOXONE_DISPLAY_PROFILE == VOXONE_DISPLAY_PROFILE_ST7796_480X320
+#if VOXONE_DISPLAY_COMPILES_ST7796
     St7796PlayerScroll _st7796Scroll;
     bool _st7796PlayerReady = false;
     void _st7796ScrollTextChanged(uint8_t row);

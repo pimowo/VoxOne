@@ -1770,11 +1770,12 @@ String firstBootTemplateValue(const String& name) {
   using namespace voxone::hardware;
   const auto& capabilities = hardwareCapabilities();
   const auto& config = runtimeHardwareConfig();
-  RuntimeHardwareWebOption options[6]{};
+  RuntimeHardwareWebOption options[kRuntimeDisplayOptionCapacity]{};
   size_t count = 0;
   const char* selected = nullptr;
   if (name == "FIRST_BOOT_DISPLAY_OPTIONS") {
-    count = supportedRuntimeDisplayOptions(capabilities, options, 6);
+    count = supportedRuntimeDisplayOptions(
+        capabilities, options, kRuntimeDisplayOptionCapacity);
     selected = runtimeDisplayWebValue(config.display);
   } else if (name == "FIRST_BOOT_INPUT_OPTIONS") {
     count = supportedRuntimeInputOptions(capabilities, options, 5);

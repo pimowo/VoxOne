@@ -146,7 +146,7 @@ int main() {
   assert(compact.find("\"V%u\"") == std::string::npos);
   assert(display.find("player128x32::artist") == std::string::npos);
   assert(display.find("player128x32::hiddenMetadata") != std::string::npos);
-  assert(display.find("if (!oled128x32Active()) pages[PG_PLAYER]->addWidget(_title1);") !=
+  assert(display.find("if (!smallOledActive() || !oled128x32Active())") !=
          std::string::npos);
   assert(display.find("player128x32::title") == std::string::npos);
   assert(display.find("new ScrollWidget(\"*\", player128x64::title") !=

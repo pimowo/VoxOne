@@ -1,5 +1,5 @@
 #include "../core/options.h"
-#if DSP_MODEL==DSP_ST7796
+#if DSP_MODEL==DSP_ST7796 && !defined(VOXONE_RUNTIME_L0_DISPLAY_BACKENDS)
 #include "dspcore.h"
 #include "../core/config.h"
 #include "../hardware/hardware_descriptor.h"
