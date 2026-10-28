@@ -15,9 +15,14 @@ możliwość krytycznego utrzymania linii 1.0.0.
 |---|---|---|
 | Lx | rozbudowana | ESP32-S3 N16R8, PCM5102, DSPmini, W5500, SSD1306/SSD1309/CH1116/SH1106/ST7290 128×64, ST7789V 320×240, SSD1322 256×64, ST7796S 480×320, GC9A01 240×240, EC11, 3×SW, VoxOneBT, DS3231 |
 | Mx | uniwersalna | ESP32-S3 Zero, PCM5102, MAX98357A, SSD1306/SSD1309/CH1116/SH1106/ST7290 128×64, ST7789V 320×240, SSD1322 256×64, ST7796S 480×320, GC9A01 240×240, EC11, 3×SW, pomiar baterii, VoxOneBT, DS3231 |
-| Sx | mini | ESP32-S3 Zero, MAX98357A, SSD1306 128×32/128×64, EC11, 3×SW, pomiar baterii, VoxOneBT, DS3231 |
+| Sx | mini | ESP32-S3 Zero, audio PCM5102A/MAX98357A/NONE, OLED SSD1306 128×32/128×64 oraz SSD1309/CH1116/SH1106 128×64/NONE, EC11/3×SW/NONE, opcjonalny pomiar baterii i DS3231, VoxOneBT RX/TX z przyszłą ścieżką MAIN → BT; rewizja S1 może otrzymać nowy pinout |
 | DINx | szyna DIN | ESP32-S3 Zero, PCM5102, SSD1306 128×32/128×64, EC11, 3×SW, VoxOneBT |
 | Wx | wspierany klasyczny ESP32 DevKit | ESP32 DevKit, PCM5102, SSD1306/SSD1309/CH1116/SH1106 128×64, ST7789V 320×240, ST7789 284×76, EC11, 3×SW, VoxOneBT |
+
+Wiersz Sx jest roadmapą rodziny, nie capability bieżącego S0. Nowe warianty
+mają być wybierane przez WWW dopiero razem z rzeczywistym backendem i
+`HardwareCapabilities`; obecny S0 zachowuje zakres opisany niżej, a jego pełny
+HIL Stable pozostaje otwarty.
 
 ## Bieżące profile i status wydania
 

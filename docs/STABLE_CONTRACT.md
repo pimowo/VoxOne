@@ -307,6 +307,11 @@ restore; firmware i SPIFFS update; recovery; Config v7 persistence; L/R i VU;
 brak otwartych P0/P1; końcowy PASS na zamrożonym release commicie. Częściowy
 test nie zmniejsza licznika bramek.
 
+Kanoniczne stabilne identyfikatory, bieżące stany oraz mapa historycznych
+numerów Gate 5/6 są utrzymywane wyłącznie w [TODO.md](TODO.md). Numery nie są
+częścią kontraktu API i nie powinny być używane jako jedyny identyfikator w
+nowych raportach.
+
 S0 i DIN0 wymagają własnego, udokumentowanego fizycznego HIL PASS w ramach
 Stable 1.0.0. Dodatkowe capability niewłączone w bieżących profilach oraz
 późniejsze S1/DIN1 pozostają POST-STABLE.

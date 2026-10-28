@@ -1,0 +1,72 @@
+{
+  "schemaVersion": 1,
+  "registryId": "VOXONE-DEV-USB-REGISTRY-1",
+  "requiredRoleCount": 5,
+  "roles": [
+    {
+      "name": "L0_NATIVE",
+      "target": "L0 ESP32-S3 DevKit",
+      "usbRole": "ESP32-S3 native USB Serial/JTAG",
+      "vid": "303a",
+      "pid": "1001",
+      "serial": "E8:F6:0A:8C:BD:1C",
+      "byId": "/dev/serial/by-id/usb-Espressif_USB_JTAG_serial_debug_unit_E8:F6:0A:8C:BD:1C-if00",
+      "model": "Espressif USB JTAG/serial debug unit",
+      "driver": "cdc_acm",
+      "identityConfidence": "CONFIRMED",
+      "controlLinesConfidence": "UNVERIFIED"
+    },
+    {
+      "name": "L0_UART",
+      "target": "L0 ESP32-S3 DevKit",
+      "usbRole": "board USB-UART bridge",
+      "vid": "0403",
+      "pid": "6001",
+      "serial": "A5069RR4",
+      "byId": "/dev/serial/by-id/usb-FTDI_FT232R_USB_UART_A5069RR4-if00-port0",
+      "model": "FTDI FT232R USB UART",
+      "driver": "ftdi_sio",
+      "identityConfidence": "CONFIRMED",
+      "controlLinesConfidence": "UNVERIFIED"
+    },
+    {
+      "name": "VOXONEBT_USB",
+      "target": "VoxOneBT module",
+      "usbRole": "module USB serial",
+      "vid": "1a86",
+      "pid": "55d4",
+      "serial": "5B09012537",
+      "byId": "/dev/serial/by-id/usb-1a86_USB_Single_Serial_5B09012537-if00",
+      "model": "1a86 USB Single Serial",
+      "driver": "cdc_acm",
+      "identityConfidence": "CONFIRMED",
+      "controlLinesConfidence": "UNVERIFIED"
+    },
+    {
+      "name": "M0_NATIVE",
+      "target": "M0 ESP32-S3 Zero",
+      "usbRole": "ESP32-S3 native USB Serial/JTAG",
+      "vid": "303a",
+      "pid": "1001",
+      "serial": "D0:CF:13:2F:EE:00",
+      "byId": "/dev/serial/by-id/usb-Espressif_USB_JTAG_serial_debug_unit_D0:CF:13:2F:EE:00-if00",
+      "model": "Espressif USB JTAG/serial debug unit",
+      "driver": "cdc_acm",
+      "identityConfidence": "CONFIRMED",
+      "controlLinesConfidence": "UNVERIFIED"
+    },
+    {
+      "name": "M0_UART",
+      "target": "M0 ESP32-S3 Zero",
+      "usbRole": "external FT232R documented as RX-only",
+      "vid": "0403",
+      "pid": "6001",
+      "serial": "A7039N0Z",
+      "byId": "/dev/serial/by-id/usb-FTDI_FT232R_USB_UART_A7039N0Z-if00-port0",
+      "model": "FTDI FT232R USB UART",
+      "driver": "ftdi_sio",
+      "identityConfidence": "CONFIRMED",
+      "controlLinesConfidence": "UNVERIFIED"
+    }
+  ]
+}
