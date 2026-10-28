@@ -11,10 +11,11 @@ Zakres Stable 1.0.0 obejmuje W0, M0, L0, S0 i DIN0. Po jego wydaniu W0
 przechodzi do LEGACY, pozostając w repozytorium i buildach oraz zachowując
 możliwość krytycznego utrzymania linii 1.0.0.
 
-Stan implementacji poniżej odpowiada czystemu checkpointowi `d689600`. Lista
-capability opisuje to, co bieżący BIN pozwala wybrać; nie oznacza fizycznego
-HIL PASS każdego wariantu. Obowiązkowy historyczny baseline oraz konflikt
-kwalifikacji rozszerzonych wariantów są rozdzielone w
+Stan implementacji poniżej odpowiada produkcyjnemu kodowi checkpointu
+`d689600`, zachowanemu bez zmian w bieżącym `e1c746e`. Lista capability
+opisuje to, co bieżący BIN pozwala wybrać; nie oznacza fizycznego HIL PASS
+każdego wariantu. Obowiązkowy baseline oraz opcjonalne, fizycznie
+niezakwalifikowane rozszerzenia są rozdzielone w
 [STABLE_CONTRACT.md](STABLE_CONTRACT.md).
 
 | Rodzina | Przeznaczenie | Docelowe elementy rodziny — roadmapa, nie deklaracja rewizji 0 |
@@ -35,14 +36,14 @@ HIL Stable pozostaje otwarty.
 | Profil / env | MCU i pamięć deklarowana przez build/kod | Bieżący BIN i capability | Status hardware |
 |---|---|---|---|
 | `w0` | klasyczny ESP32; build `esp32dev`, bez PSRAM; deskryptor nie deklaruje fizycznego rozmiaru flash | PCM5102A; ST7789 284×76/NONE; EC11/Buttons3/NONE; RADIO/WWW/MQTT/Web Update; bez BT, RTC i VU | Bez nowych funkcji; obowiązkowy profil Stable 1.0.0, po wydaniu LEGACY. Stary fizyczny baseline nie zamyka finalnego HIL. |
-| `m0` | ESP32-S3 Zero, flash 4 MiB, PSRAM 2 MiB | Audio PCM5102A/MAX98357A MONO/MAX98357A STEREO/NONE; display NONE, SSD1306 128×32/128×64, SSD1309, SH1106 i CH1116G 128×64; EC11/Buttons3/NONE | SSD1306/SSD1309 128×64, PCM5102A, EC11 i wybrane NONE mają wcześniejszy PHYSICAL PASS; rozszerzenia i końcowy HIL Stable PENDING. |
-| `l0` | ESP32-S3; build flash 16 MiB i PSRAM OPI; rozmiar PSRAM nie jest utrwalony w deskryptorze | Audio PCM5102A/NONE; display ST7796S 480×320, pięć OLED I2C lub NONE; EC11/Buttons3/NONE; DS3231, VoxOneBT UART + I2S RX, VU i aktualizacja VoxOneBT | Domyślny ST7796 i funkcje L0 mają etapowe PASS; OLED-y L0 są tylko OFFLINE PASS. Skonsolidowany HIL Stable i otwarte negatywne ścieżki PENDING. |
-| `s0` | ESP32-S3 Zero, flash 4 MiB, PSRAM 2 MiB | Audio PCM5102A/MAX98357A MONO/MAX98357A STEREO/NONE; display NONE, SSD1306 128×32/128×64, SSD1309, SH1106 i CH1116G 128×64; EC11/Buttons3/NONE | Fizyczny baseline obejmuje SSD1306 128×32, MAX98357A MONO i EC11; rozszerzenia oraz pełny HIL pozostają PENDING. |
-| `din0` | ESP32-S3 Zero, flash 4 MiB, PSRAM 2 MiB | Pinout rewizji DIN0 jak M0; PCM5102A; display NONE, SSD1306 128×32/128×64, SSD1309, SH1106 i CH1116G 128×64; EC11/Buttons3/NONE | Brak fizycznego HIL obrazu DIN0. Użycie wspólnego stanowiska M0 wymaga decyzji kontraktowej, nie zmiany GPIO. |
+| `m0` | ESP32-S3 Zero, flash 4 MiB, PSRAM 2 MiB | Audio PCM5102A/MAX98357A MONO/MAX98357A STEREO/NONE; display NONE, SSD1306 128×32/128×64, SSD1309, SH1106 i CH1116G 128×64; EC11/Buttons3/NONE | SSD1306/SSD1309 128×64, PCM5102A, EC11 i wybrane NONE mają wcześniejszy PHYSICAL PASS; finalny baseline HIL Stable PENDING, rozszerzenia `OPTIONAL / PHYSICAL HIL NOT QUALIFIED`. |
+| `l0` | ESP32-S3; build flash 16 MiB i PSRAM OPI; rozmiar PSRAM nie jest utrwalony w deskryptorze | Audio PCM5102A/NONE; display ST7796S 480×320, pięć OLED I2C lub NONE; EC11/Buttons3/NONE; DS3231, VoxOneBT UART + I2S RX, VU i aktualizacja VoxOneBT | Domyślny ST7796 i funkcje L0 mają etapowe PASS; skonsolidowany baseline HIL Stable i otwarte negatywne ścieżki PENDING, dodatkowe OLED-y i audio NONE `OPTIONAL / PHYSICAL HIL NOT QUALIFIED`. |
+| `s0` | ESP32-S3 Zero, flash 4 MiB, PSRAM 2 MiB | Audio PCM5102A/MAX98357A MONO/MAX98357A STEREO/NONE; display NONE, SSD1306 128×32/128×64, SSD1309, SH1106 i CH1116G 128×64; EC11/Buttons3/NONE | Fizyczny baseline obejmuje SSD1306 128×32, MAX98357A MONO i EC11; pełny baseline HIL pozostaje PENDING, rozszerzenia `OPTIONAL / PHYSICAL HIL NOT QUALIFIED`. |
+| `din0` | ESP32-S3 Zero, flash 4 MiB, PSRAM 2 MiB | Pinout rewizji DIN0 jak M0; PCM5102A; display NONE, SSD1306 128×32/128×64, SSD1309, SH1106 i CH1116G 128×64; EC11/Buttons3/NONE | Brak fizycznego HIL obrazu DIN0; baseline pozostaje obowiązkowy, rozszerzenia `OPTIONAL / PHYSICAL HIL NOT QUALIFIED`. Użycie wspólnego stanowiska M0 wymaga decyzji kontraktowej, nie zmiany GPIO. |
 
-Zatwierdzony zakres Stable 1.0.0 wymaga fizycznego HIL PASS profili W0, M0,
-L0, S0 i DIN0. Build-only nie kwalifikuje żadnego z nich. Pełny kontrakt i
-skondensowaną macierz zawiera
+Zatwierdzony zakres Stable 1.0.0 wymaga fizycznego HIL PASS bazowej
+konfiguracji profili W0, M0, L0, S0 i DIN0. Build-only nie kwalifikuje żadnego
+z nich. Pełny kontrakt i skondensowaną macierz zawiera
 [STABLE_CONTRACT.md](STABLE_CONTRACT.md).
 
 ### Faktyczny pinout bieżących BIN
@@ -68,9 +69,10 @@ GPIO. Żadne GPIO działających prototypów nie zostało zmienione przez rename
 `VOXONE_PIN_MAP_COMPLETE=1` oznacza, że każdy profil ma kompletną, lecz własną
 mapę. S0 nie współdzieli już GPIO M0: odpowiada ręcznie okablowanej rewizji S0
 z MAX98357A, SSD1306 i EC11. DIN0 nadal zachowuje mapę M0. W ramach Stable
-każdy profil ma przejść HIL na odpowiednim urządzeniu, z potwierdzeniem
-flash/PSRAM, zasilania, złączy, audio, OLED i local input. Build ani
-uruchomienie obrazu na M0 nie zastępują identyfikacji i PASS osobnego targetu.
+każdy profil ma przejść HIL swojej bazowej konfiguracji z potwierdzeniem
+flash/PSRAM, zasilania, złączy, audio, display i local input. Build ani test
+firmware M0 nie zastępują identyfikacji i PASS obrazu S0 lub DIN0; sposób
+użycia stanowiska M0 do HIL obrazu DIN0 pozostaje osobną decyzją.
 
 Historyczny baseline S0 obejmuje MAX98357A MONO, runtime SSD1306
 128×32/128×64/NONE oraz EC11/Buttons3/NONE. Bieżący BIN implementuje ponadto
@@ -79,8 +81,9 @@ Historyczny baseline DIN0 pozostaje przy PCM5102A, runtime SSD1306/SSD1309
 128×64/NONE i EC11/Buttons3/NONE; bieżący BIN implementuje ponadto SSD1306
 128×32, SH1106 i CH1116G 128×64. Bateria, VoxOneBT, RTC i VU nadal nie są
 capability S0/DIN0. Status dodatkowych, już zaimplementowanych wariantów to
-OFFLINE PASS / PHYSICAL NOT QUALIFIED; ich wpływ na obowiązkowy zakres Stable
-ma status `DECISION REQUIRED` w kontrakcie.
+`OPTIONAL / OFFLINE PASS / PHYSICAL HIL NOT QUALIFIED`; ich fizyczna
+kwalifikacja nie jest obowiązkowa dla Stable 1.0.0, a każdy istniejący PASS
+zachowuje swój udokumentowany zakres.
 
 Dedykowane PCB S1 i DIN1 są przyszłymi rewizjami z własnym pinoutem i
 capability. Ich definicje należy dodać jako osobne profile, bez modyfikowania

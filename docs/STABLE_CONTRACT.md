@@ -17,20 +17,22 @@ mechanizm nie istnieje w bieżącym firmware i nie należy do zakresu Technical
 Stable 1.0.0.
 
 Zatwierdzony zakres Technical Stable 1.0.0 obejmuje obowiązkowo pięć profili:
-`w0`, `m0`, `l0`, `s0` i `din0`. Każdy z nich musi uzyskać osobny fizyczny
-HIL PASS przed wydaniem; sam build ani uruchomienie obrazu S0/DIN0 na sprzęcie
-M0 nie spełnia tej bramki. Zakres Stable obejmuje capability faktycznie
-zadeklarowane przez bieżący profil. Elementy wymienione wyłącznie w roadmapie
-rodziny nie stają się przez tę decyzję wymaganiami ani działającymi funkcjami.
+`w0`, `m0`, `l0`, `s0` i `din0`. Każdy z nich musi uzyskać udokumentowany
+fizyczny HIL PASS swojej bazowej konfiguracji z macierzy A przed wydaniem;
+sam build nie spełnia tej bramki, a test firmware `m0` nie kwalifikuje obrazu
+`s0` ani `din0`. Dopuszczenie stanowiska M0 do HIL obrazu DIN0 pozostaje
+osobną decyzją. Elementy wymienione wyłącznie w roadmapie rodziny nie stają
+się przez tę decyzję wymaganiami ani działającymi funkcjami.
 
 Po checkpointach macierzy audio i wyświetlaczy bieżący kod udostępnia więcej
 wariantów runtime niż historycznie zatwierdzony baseline sprzętowy Stable.
-Poniższe dwie macierze rozdzielają obowiązkowe minimum profilu od rozszerzonych
-capability już obecnych w BIN. To rozdzielenie jest opisowe i samo nie obniża
-kryterium akceptacji: literalny zapis powyżej nadal wymaga fizycznego HIL każdej
-selectable capability. Dopuszczenie Stable na samym baseline przy pozostawieniu
-niezakwalifikowanych wariantów w WWW jest oznaczone `DECISION REQUIRED` i
-wymaga jawnej zgody użytkownika.
+Poniższe macierze rozdzielają obowiązkowe minimum profilu od rozszerzonych
+capability już obecnych w BIN. Stable 1.0.0 wymaga fizycznej kwalifikacji
+macierzy A. Warianty ponad baseline pozostają zaimplementowane i wybieralne w
+WWW oraz objęte testami offline i buildami, lecz mają status `OPTIONAL /
+PHYSICAL HIL NOT QUALIFIED`; nie blokują wydania i nie mogą być deklarowane
+jako fizycznie zweryfikowane bez odpowiedniego dowodu. Istniejące fizyczne
+PASS zachowują ważność wyłącznie w swoim udokumentowanym zakresie.
 
 S0 opisuje własny, ręcznie okablowany ESP32-S3 Zero z zatwierdzoną mapą GPIO
 rewizji S0. DIN0 zachowuje mapę GPIO M0 jako pinout rewizji DIN0. Przyszłe
@@ -47,10 +49,12 @@ Dokładny pinout, pamięć, capability i stan testów opisuje
 [HARDWARE_TARGETS.md](HARDWARE_TARGETS.md).
 
 Aktualny czysty checkpoint dokumentacyjnego punktu odniesienia to
-`d6896005e10dfb0098b1e8c831b1b73506ef5b3b`. Niezależny clean verify z
+`e1c746e3295e9db0682d23f30cd99b33dbb1a64a`; produkcyjna implementacja jest
+niezmieniona względem `d6896005e10dfb0098b1e8c831b1b73506ef5b3b`, a nowszy
+commit dodaje wyłącznie regresje WebSocket. Niezależny clean verify z
 2026-10-28 ma 156/156 native PASS, ASan/UBSan PASS, RADIO strict 16/16,
 buildy W0/M0/L0/S0/DIN0 5/5, full-image i WWW PASS, L0 TX-only PASS oraz
-production SECURITY offline PASS. Żaden obraz `d689600` nie został fizycznie
+production SECURITY offline PASS. Żaden obraz `e1c746e` nie został fizycznie
 wdrożony; wynik offline nie zastępuje żadnej bramki HIL.
 
 ## HTTP i API
@@ -148,6 +152,14 @@ sesję w trybie `protected`. Subprotocol może być pominięty; jeśli klient go
 wysyła, jedyną dopuszczalną wartością jest `voxone.v1`. Komendy przechodzą
 przez jawną allowlistę. Legacy komendy destrukcyjne `format`, `clearspiffs` i
 `reset` nie należą do allowlisty chronionego WS.
+
+Kryterium P1 dla AsyncTCP OOM akceptuje deterministyczną iniekcję wszystkich
+ścieżek alokacji w testach offline pod ASan/UBSan oraz nieinwazyjny HIL L0.
+Nie wymaga fizycznego wymuszania OOM ani test-only fault-injection firmware na
+produkcyjnym urządzeniu. HIL nadal musi rzeczywiście potwierdzić `_lagging`,
+osobne zamknięcie przeciążonego klienta kodem 1013, disconnect/RST podczas
+broadcastu, reconnect z pełnym GETINDEX oraz stabilne READY, bootId i heap bez
+panic, WDT ani restartu. Do wykonania tego HIL wynik pozostaje PENDING.
 
 ## MQTT i Home Assistant
 
@@ -321,22 +333,25 @@ modułu, a nie osobny fizyczny model urządzenia.
 | S0 | MAX98357A MONO; SSD1306 128×32; EC11 | SSD1306 128×64 i display `NONE`; Buttons3/input `NONE` | First boot, RADIO/audio, oba baseline OLED, wejścia, WWW, Config, update/recovery na fizycznym S0. GPIO: I2S `5/6/4`, input `9/8/7`, I2C `1/2`. |
 | DIN0 | PCM5102A; SSD1306 128×64; EC11 | SSD1309 128×64 i display `NONE`; Buttons3/input `NONE` | Obraz DIN0, tożsamość profilu, first boot, RADIO/audio/OLED/input, Config, SECURITY, update/recovery. GPIO współdzielone z M0: I2S `1/2/3`, input `5/6/4`, I2C `7/8`. |
 
-### B. Rozszerzone capability obecne w `d689600`
+### B. Rozszerzone capability obecne w `e1c746e`
 
 | Profil | Dodatkowe display runtime ponad baseline A | Dodatkowe audio runtime ponad baseline A | Stan kwalifikacji |
 |---|---|---|---|
 | W0 | Brak nowych wariantów; ST7789/NONE bez zmian | Brak | W0 nie otrzymał rozszerzenia funkcjonalnego. |
-| M0 | SSD1306 128×32, SH1106 128×64, CH1116G 128×64 | MAX98357A MONO, MAX98357A STEREO, `NONE` | Implemented/offline PASS; brak pełnej fizycznej kwalifikacji nowych wariantów. |
-| L0 | SSD1306 128×32/128×64, SSD1309 128×64, SH1106 128×64, CH1116G 128×64, `NONE` | `NONE` | Implemented/offline PASS; domyślny ST7796 zachowany, nowe OLED-y fizycznie niezakwalifikowane na L0. |
-| S0 | SSD1309 128×64, SH1106 128×64, CH1116G 128×64 | PCM5102A, MAX98357A STEREO, `NONE` | Implemented/offline PASS; fizyczny S0 potwierdza tylko wcześniejszy baseline 128×32/MAX98357A MONO/EC11. |
-| DIN0 | SSD1306 128×32, SH1106 128×64, CH1116G 128×64 | Brak; tylko PCM5102A | Implemented/offline PASS; brak fizycznego HIL DIN0. |
+| M0 | SSD1306 128×32, SH1106 128×64, CH1116G 128×64 | MAX98357A MONO, MAX98357A STEREO, `NONE` | Implemented/offline PASS; `OPTIONAL / PHYSICAL HIL NOT QUALIFIED`. |
+| L0 | SSD1306 128×32/128×64, SSD1309 128×64, SH1106 128×64, CH1116G 128×64, `NONE` | `NONE` | Implemented/offline PASS; domyślny ST7796 zachowany; `OPTIONAL / PHYSICAL HIL NOT QUALIFIED`. |
+| S0 | SSD1309 128×64, SH1106 128×64, CH1116G 128×64 | PCM5102A, MAX98357A STEREO, `NONE` | Implemented/offline PASS; fizyczny S0 potwierdza tylko wcześniejszy baseline 128×32/MAX98357A MONO/EC11; rozszerzenia `OPTIONAL / PHYSICAL HIL NOT QUALIFIED`. |
+| DIN0 | SSD1306 128×32, SH1106 128×64, CH1116G 128×64 | Brak; tylko PCM5102A | Implemented/offline PASS; rozszerzenia `OPTIONAL / PHYSICAL HIL NOT QUALIFIED`; profilowy baseline HIL DIN0 pozostaje wymagany. |
 
-**DECISION REQUIRED — zakres wariantów:** obecny kontrakt wymaga HIL każdej
-capability udostępnionej przez profil, więc bez jawnej decyzji rozszerzenia z
-macierzy B pozostają w zakresie kwalifikacji. Alternatywą jest zatwierdzenie,
-że RC1 kwalifikuje obowiązkowo macierz A, a warianty B pozostają selectable,
-lecz jawnie `PHYSICAL NOT QUALIFIED`; ta alternatywa nie jest jeszcze częścią
-kontraktu.
+### C. Optional HIL — dodatkowe warianty
+
+Fizyczny HIL wariantów z macierzy B jest opcjonalny dla Stable 1.0.0. Może
+być wykonywany i dokumentowany osobno, ale brak takiego testu nie blokuje
+profilowego PASS, jeżeli kompletna macierz A danego profilu spełniła kryteria
+bramki. Obecność opcji w WWW, test offline albo poprawny build nie są dowodem
+fizycznego działania. Raport wydania musi zachować jawny status `OPTIONAL /
+PHYSICAL HIL NOT QUALIFIED` dla każdego nieprzetestowanego wariantu oraz
+zachować zakres każdego wcześniej uzyskanego fizycznego PASS.
 
 **DECISION REQUIRED — DIN0:** bieżący zapis wymaga osobnego fizycznego HIL
 DIN0 i mówi, że samo uruchomienie obrazu na M0 nie zamyka bramki. Ponieważ
@@ -367,8 +382,8 @@ późniejsze S1/DIN1 pozostają POST-STABLE.
 Pierwszego Stable nie rozszerzają: DLNA, AUX/PCM1808, Multiroom, native Home
 Assistant, W5500, DSPmini/AutoEQ, menu lokalne, power/standby/alarm, Installer,
 nowe PCB L1/M1/S1/DIN1 ani backendy display niewystępujące w macierzy
-`d689600`. Status już zaimplementowanych rozszerzeń `d689600` pozostaje objęty
-decyzją o zakresie HIL opisaną wyżej. `SSD1322_256X64` pozostaje zatwierdzonym
-zadaniem POST-STABLE z dokładnie uzgodnionym PLAYER i dwoma poziomymi
-segmentowymi paskami VU L/R; katalog WWW nie oznacza, że backend istnieje w
-bieżącym firmware.
+`e1c746e`. Już zaimplementowane rozszerzenia z macierzy B pozostają
+`OPTIONAL / PHYSICAL HIL NOT QUALIFIED` zgodnie z zatwierdzonym zakresem HIL.
+`SSD1322_256X64` pozostaje zatwierdzonym zadaniem POST-STABLE z dokładnie
+uzgodnionym PLAYER i dwoma poziomymi segmentowymi paskami VU L/R; katalog WWW
+nie oznacza, że backend istnieje w bieżącym firmware.
