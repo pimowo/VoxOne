@@ -11,6 +11,7 @@
 #include <Wire.h>
 
 #include "display_backend_selection.h"
+#include "displayCH1116G.h"
 #include "fonts/bootlogo21x32.h"
 
 class RuntimeOled128x64Display : public Adafruit_GFX {
@@ -62,6 +63,7 @@ class RuntimeOled128x64Display : public Adafruit_GFX {
   // SSD1305-compatible controller implementation.
   Adafruit_SSD1305 ssd1309_;
   Adafruit_SH1106G sh1106_;
+  DisplayCH1116G ch1116g_;
   voxone::display_profile::ControllerId activeController_ =
       voxone::display_profile::ControllerId::None;
   voxone::display_profile::ProfileId activeProfile_ =

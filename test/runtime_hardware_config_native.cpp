@@ -43,7 +43,8 @@ RuntimeDisplay unsupportedDisplay(const HardwareCapabilities& capabilities) {
   const RuntimeDisplay candidates[] = {
       RuntimeDisplay::Ssd1306_128x64, RuntimeDisplay::Ssd1309_128x64,
       RuntimeDisplay::St7789_284x76, RuntimeDisplay::St7796s_480x320,
-      RuntimeDisplay::Ssd1306_128x32, RuntimeDisplay::Sh1106_128x64};
+      RuntimeDisplay::Ssd1306_128x32, RuntimeDisplay::Sh1106_128x64,
+      RuntimeDisplay::Ch1116g_128x64};
   for (RuntimeDisplay candidate : candidates) {
     DisplayKind kind = DisplayKind::None;
     assert(runtimeDisplayKind(candidate, kind));
@@ -71,6 +72,7 @@ int main() {
   static_assert(static_cast<uint8_t>(RuntimeDisplay::St7796s_480x320) == 4);
   static_assert(static_cast<uint8_t>(RuntimeDisplay::Ssd1306_128x32) == 5);
   static_assert(static_cast<uint8_t>(RuntimeDisplay::Sh1106_128x64) == 6);
+  static_assert(static_cast<uint8_t>(RuntimeDisplay::Ch1116g_128x64) == 7);
   assert(defaults.version == kRuntimeHardwareConfigVersion);
 #if defined(VOXONE_PROFILE_S0)
   assert(defaults.audio == RuntimeAudioOutput::Max98357);
@@ -143,6 +145,8 @@ int main() {
          ProfileId::Oled128x32);
   assert(runtimeDisplayProfile(RuntimeDisplay::Sh1106_128x64) ==
          ProfileId::Oled128x64);
+  assert(runtimeDisplayProfile(RuntimeDisplay::Ch1116g_128x64) ==
+         ProfileId::Oled128x64);
   assert(runtimeDisplayController(RuntimeDisplay::Ssd1306_128x64) ==
          ControllerId::Ssd1306);
   assert(runtimeDisplayController(RuntimeDisplay::Ssd1309_128x64) ==
@@ -151,6 +155,8 @@ int main() {
          ControllerId::Ssd1306);
   assert(runtimeDisplayController(RuntimeDisplay::Sh1106_128x64) ==
          ControllerId::Sh1106);
+  assert(runtimeDisplayController(RuntimeDisplay::Ch1116g_128x64) ==
+         ControllerId::Ch1116g);
   assert(runtimeDisplayProfile(RuntimeDisplay::St7789_284x76) ==
          ProfileId::St7789_284x76);
   assert(runtimeDisplayProfile(RuntimeDisplay::St7796s_480x320) ==
@@ -172,6 +178,26 @@ int main() {
          RuntimeHardwareDecodeStatus::Valid);
   assert(decodedSh1106 == sh1106Record);
   assert(validateRuntimeHardwareConfig(sh1106Record, capabilities) ==
+#if defined(VOXONE_PROFILE_M0) || defined(VOXONE_PROFILE_S0) || \
+    defined(VOXONE_PROFILE_DIN0)
+         RuntimeHardwareValidation::Valid);
+#else
+         RuntimeHardwareValidation::Unsupported);
+#endif
+
+  RuntimeHardwareConfig ch1116gRecord = defaults;
+  ch1116gRecord.display = RuntimeDisplay::Ch1116g_128x64;
+  uint8_t ch1116gBytes[kRuntimeHardwareConfigSerializedSize]{};
+  assert(serializeRuntimeHardwareConfig(ch1116gRecord, ch1116gBytes,
+                                        sizeof(ch1116gBytes)));
+  assert(ch1116gBytes[3] == 7);
+  RuntimeHardwareConfig decodedCh1116g{};
+  assert(deserializeRuntimeHardwareConfig(ch1116gBytes,
+                                           sizeof(ch1116gBytes),
+                                           decodedCh1116g) ==
+         RuntimeHardwareDecodeStatus::Valid);
+  assert(decodedCh1116g == ch1116gRecord);
+  assert(validateRuntimeHardwareConfig(ch1116gRecord, capabilities) ==
 #if defined(VOXONE_PROFILE_M0) || defined(VOXONE_PROFILE_S0) || \
     defined(VOXONE_PROFILE_DIN0)
          RuntimeHardwareValidation::Valid);

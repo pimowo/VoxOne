@@ -118,6 +118,7 @@ $nativeSources=@{
  config_restore_transaction_native=@('src/core/config_restore_transaction.cpp')
  config_startup_native=@('src/core/config_format.cpp','src/core/volume_map.cpp')
  config_persistence_native=@('src/core/config_format.cpp','src/core/volume_map.cpp')
+ ch1116g_driver_native=@('src/displays/ch1116g_driver.cpp')
  display_scroll_persistence_native=@('src/core/display_scroll_persistence.cpp')
  display_scroll_api_native=@('src/core/display_scroll_api.cpp','src/core/display_scroll_runtime_config.cpp','src/core/display_scroll_persistence.cpp')
  display_scroll_runtime_config_native=@('src/core/display_scroll_runtime_config.cpp','src/core/display_scroll_persistence.cpp')
@@ -235,6 +236,13 @@ if(-not $onWindows) {
   if($LASTEXITCODE -ne 0) { throw 'Sanitized S0 EC11 direction compile failed' }
   & $ec11DirectionExe
   if($LASTEXITCODE -ne 0) { throw 'Sanitized S0 EC11 direction test failed' }
+  $ch1116gExe=Join-Path $work 'ch1116g_driver_sanitized'
+  & $Cxx @sanitizerArgs '-o' $ch1116gExe `
+    (Join-Path $root 'test/ch1116g_driver_native.cpp') `
+    (Join-Path $root 'src/displays/ch1116g_driver.cpp')
+  if($LASTEXITCODE -ne 0) { throw 'Sanitized CH1116G driver compile failed' }
+  & $ch1116gExe
+  if($LASTEXITCODE -ne 0) { throw 'Sanitized CH1116G driver test failed' }
   $backupExe=Join-Path $work 'config_backup_sanitized'
   $backupSources=@(
    (Join-Path $root 'test/config_backup_native.cpp'),

@@ -11,7 +11,8 @@ namespace {
 constexpr RuntimeDisplay kDisplays[] = {
     RuntimeDisplay::None, RuntimeDisplay::Ssd1306_128x32,
     RuntimeDisplay::Ssd1306_128x64, RuntimeDisplay::Ssd1309_128x64,
-    RuntimeDisplay::Sh1106_128x64, RuntimeDisplay::St7789_284x76,
+    RuntimeDisplay::Ch1116g_128x64, RuntimeDisplay::Sh1106_128x64,
+    RuntimeDisplay::St7789_284x76,
     RuntimeDisplay::St7796s_480x320};
 constexpr RuntimeInput kInputs[] = {
     RuntimeInput::None, RuntimeInput::Ec11, RuntimeInput::Buttons3};
@@ -31,7 +32,7 @@ constexpr CatalogItem kLargeDisplays[] = {
     {"ssd1306_128x32", "SSD1306_128X32", ""},
     {"ssd1306_128x64", "SSD1306_128X64", ""},
     {"ssd1309_128x64", "SSD1309_128X64", ""},
-    {"ch1116_128x64", "CH1116_128X64", ""},
+    {"ch1116_128x64", "CH1116G_128X64", ""},
     {"sh1106_128x64", "SH1106_128X64", ""},
     {"st7290_128x64_tbd", "ST7290_128X64 (?)",
      "Kontroler do potwierdzenia"},
@@ -44,13 +45,13 @@ constexpr CatalogItem kSmallDisplays[] = {
     {"ssd1306_128x32", "SSD1306_128X32", ""},
     {"ssd1306_128x64", "SSD1306_128X64", ""},
     {"ssd1309_128x64", "SSD1309_128X64", ""},
-    {"ch1116_128x64", "CH1116_128X64", ""},
+    {"ch1116_128x64", "CH1116G_128X64", ""},
     {"sh1106_128x64", "SH1106_128X64", ""}};
 constexpr CatalogItem kWDisplays[] = {
     {"none", "Brak", ""},
     {"ssd1306_128x64", "SSD1306_128X64", ""},
     {"ssd1309_128x64", "SSD1309_128X64", ""},
-    {"ch1116_128x64", "CH1116_128X64", ""},
+    {"ch1116_128x64", "CH1116G_128X64", ""},
     {"sh1106_128x64", "SH1106_128X64", ""},
     {"st7789v_320x240", "ST7789V_320X240", ""},
     {"st7789_284x76", "ST7789_284X76", ""}};
@@ -200,6 +201,7 @@ const char* runtimeDisplayWebLabel(RuntimeDisplay display) {
     case RuntimeDisplay::St7796s_480x320: return "ST7796S_480X320";
     case RuntimeDisplay::Ssd1306_128x32: return "SSD1306_128X32";
     case RuntimeDisplay::Sh1106_128x64: return "SH1106_128X64";
+    case RuntimeDisplay::Ch1116g_128x64: return "CH1116G_128X64";
   }
   return nullptr;
 }
@@ -355,6 +357,7 @@ const char* runtimeDisplayWebValue(RuntimeDisplay display) {
     case RuntimeDisplay::St7796s_480x320: return "st7796s_480x320";
     case RuntimeDisplay::Ssd1306_128x32: return "ssd1306_128x32";
     case RuntimeDisplay::Sh1106_128x64: return "sh1106_128x64";
+    case RuntimeDisplay::Ch1116g_128x64: return "ch1116_128x64";
   }
   return nullptr;
 }

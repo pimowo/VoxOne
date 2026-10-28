@@ -32,6 +32,9 @@ int main() {
   static_assert(profileFor(DisplayKind::Sh1106_128x64) ==
                     ProfileId::Oled128x64,
                 "SH1106 uses the shared OLED 128x64 layout");
+  static_assert(profileFor(DisplayKind::Ch1116g_128x64) ==
+                    ProfileId::Oled128x64,
+                "CH1116G uses the shared OLED 128x64 layout");
   static_assert(profileFor(DisplayKind::St7789_284x76) ==
                     ProfileId::St7789_284x76,
                 "ST7789 284x76 uses its own layout");
@@ -50,6 +53,9 @@ int main() {
   static_assert(controllerFor(DisplayKind::Sh1106_128x64) ==
                     ControllerId::Sh1106,
                 "SH1106 keeps a distinct controller backend");
+  static_assert(controllerFor(DisplayKind::Ch1116g_128x64) ==
+                    ControllerId::Ch1116g,
+                "CH1116G keeps a distinct controller backend");
 
   const Descriptor none = descriptor(ProfileId::None);
   const Descriptor oled = descriptor(ProfileId::Oled128x64);

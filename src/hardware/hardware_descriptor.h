@@ -24,8 +24,9 @@ enum class DisplayKind {
   St7796_480x320,
   // Appended to preserve the persisted numeric values of existing variants.
   Ssd1306_128x32,
-  // Appended; CH1116 is a distinct controller and is not aliased here.
-  Sh1106_128x64
+  Sh1106_128x64,
+  // Appended; CH1116G is a distinct controller and is not aliased to SH1106.
+  Ch1116g_128x64
 };
 enum class AudioOutputKind {
   None,

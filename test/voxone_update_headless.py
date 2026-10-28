@@ -142,6 +142,7 @@ window.hardwareSnapshot = {
     {value:'ssd1306_128x32',label:'SSD1306_128X32',status:'untested',statusLabel:'DO TESTU'},
     {value:'ssd1306_128x64',label:'SSD1306_128X64',status:'supported',statusLabel:'DOSTĘPNE'},
     {value:'ssd1309_128x64',label:'SSD1309_128X64',status:'supported',statusLabel:'DOSTĘPNE'},
+    {value:'ch1116_128x64',label:'CH1116G_128X64',status:'untested',statusLabel:'DO TESTU'},
     {value:'sh1106_128x64',label:'SH1106_128X64',status:'untested',statusLabel:'DO TESTU'}
   ],
   supportedInputs:[
@@ -161,7 +162,7 @@ window.hardwareSnapshot = {
       {value:'ssd1306_128x32',label:'SSD1306_128X32',note:'',status:'untested',statusLabel:'DO TESTU',selectable:true,current:false},
       {value:'ssd1306_128x64',label:'SSD1306_128X64',note:'',status:'supported',statusLabel:'DOSTĘPNE',selectable:true,current:false},
       {value:'ssd1309_128x64',label:'SSD1309_128X64',note:'',status:'supported',statusLabel:'DOSTĘPNE',selectable:true,current:true},
-      {value:'ch1116_128x64',label:'CH1116_128X64',note:'',status:'planned',statusLabel:'PLANOWANE',selectable:false,current:false},
+      {value:'ch1116_128x64',label:'CH1116G_128X64',note:'',status:'untested',statusLabel:'DO TESTU',selectable:true,current:false},
       {value:'sh1106_128x64',label:'SH1106_128X64',note:'',status:'untested',statusLabel:'DO TESTU',selectable:true,current:false},
       {value:'st7290_128x64_tbd',label:'ST7290_128X64 (?)',note:'Kontroler do potwierdzenia',status:'planned',statusLabel:'PLANOWANE',selectable:false,current:false},
       {value:'st7789v_320x240',label:'ST7789V_320X240',note:'',status:'planned',statusLabel:'PLANOWANE',selectable:false,current:false},
@@ -1098,7 +1099,7 @@ setTimeout(async () => {
     check(get('hardware-family').textContent === 'M0' && get('hardware-mcu').textContent === 'ESP32-S3',
       'M0 hardware family from descriptor API');
     check([...hardwareDisplay.options].map(option => option.value).join(',') ===
-      'none,ssd1306_128x32,ssd1306_128x64,ssd1309_128x64,sh1106_128x64' &&
+      'none,ssd1306_128x32,ssd1306_128x64,ssd1309_128x64,ch1116_128x64,sh1106_128x64' &&
       [...hardwareDisplay.options].every(option => !option.disabled),
       'display dropdown contains only supported M0 capabilities');
     check([...hardwareInput.options].map(option => option.value).join(',') === 'none,ec11,buttons3',
@@ -1118,9 +1119,9 @@ setTimeout(async () => {
       hardwareColumns[0].querySelectorAll(':scope > .card').length === 2 &&
       hardwareColumns[1].querySelectorAll(':scope > .card').length === 2,
       'hardware cards use balanced independent columns');
-    check(!hardwareDisplay.querySelector('option[value="ch1116_128x64"]') &&
+    check(hardwareDisplay.querySelector('option[value="ch1116_128x64"]') &&
       !hardwareAudio.querySelector('option[value="dspmini"]'),
-      'planned display and DSPmini choices are not presented');
+      'CH1116G is selectable while planned DSPmini is not presented');
     check([...hardwareAudio.options].map(option => option.value).join(',') ===
       'pcm5102a,max98357a,max98357a_stereo,none' &&
       [...hardwareAudio.options].map(option => option.textContent).join(',') ===
@@ -1584,7 +1585,7 @@ setTimeout(async () => {
 
     firstBootCheck(hardwareDisplay && hardwareInput && hardwareAudio &&
       [...hardwareDisplay.options].map(option => option.value).join(',') ===
-        'none,ssd1306_128x32,ssd1306_128x64,ssd1309_128x64,sh1106_128x64' &&
+        'none,ssd1306_128x32,ssd1306_128x64,ssd1309_128x64,ch1116_128x64,sh1106_128x64' &&
       [...hardwareInput.options].map(option => option.value).join(',') ===
         'none,ec11,buttons3' &&
       [...hardwareAudio.options].map(option => option.value).join(',') ===
@@ -1952,6 +1953,7 @@ def main():
         '<option value="ssd1306_128x32">SSD1306_128X32</option>'
         '<option value="ssd1306_128x64" selected>SSD1306_128X64</option>'
         '<option value="ssd1309_128x64">SSD1309_128X64</option>'
+        '<option value="ch1116_128x64">CH1116G_128X64</option>'
         '<option value="sh1106_128x64">SH1106_128X64</option>')
     first_boot_rendered_html = first_boot_rendered_html.replace(
         '%FIRST_BOOT_INPUT_OPTIONS%',

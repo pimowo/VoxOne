@@ -26,12 +26,14 @@ RuntimeOled128x64Display::RuntimeOled128x64Display()
       ssd1306_128x32_(128, 32, &wire_, I2C_RST, I2CFREQ_HZ),
       ssd1306_128x64_(128, 64, &wire_, I2C_RST, I2CFREQ_HZ),
       ssd1309_(128, 64, &wire_, I2C_RST),
-      sh1106_(128, 64, &wire_, I2C_RST, SH1106_I2CFREQ_HZ) {}
+      sh1106_(128, 64, &wire_, I2C_RST, SH1106_I2CFREQ_HZ),
+      ch1116g_(wire_) {}
 
 Adafruit_GFX* RuntimeOled128x64Display::active() {
   if (activeController_ == ControllerId::Ssd1306) return activeSsd1306();
   if (activeController_ == ControllerId::Ssd1309) return &ssd1309_;
   if (activeController_ == ControllerId::Sh1106) return &sh1106_;
+  if (activeController_ == ControllerId::Ch1116g) return &ch1116g_;
   return nullptr;
 }
 
@@ -42,6 +44,7 @@ const Adafruit_GFX* RuntimeOled128x64Display::active() const {
                : static_cast<const Adafruit_GFX*>(&ssd1306_128x64_);
   if (activeController_ == ControllerId::Ssd1309) return &ssd1309_;
   if (activeController_ == ControllerId::Sh1106) return &sh1106_;
+  if (activeController_ == ControllerId::Ch1116g) return &ch1116g_;
   return nullptr;
 }
 
@@ -67,6 +70,10 @@ bool RuntimeOled128x64Display::begin(
     case ControllerId::Sh1106:
       ready_ = sh1106_.begin(SCREEN_ADDRESS, true);
       break;
+    case ControllerId::Ch1116g:
+      wire_.setClock(400000UL);
+      ready_ = ch1116g_.begin(SCREEN_ADDRESS);
+      break;
     default:
       break;
   }
@@ -78,6 +85,9 @@ void RuntimeOled128x64Display::display() {
   if (activeController_ == ControllerId::Ssd1306) activeSsd1306()->display();
   else if (activeController_ == ControllerId::Ssd1309) ssd1309_.display();
   else if (activeController_ == ControllerId::Sh1106) sh1106_.display();
+  else if (activeController_ == ControllerId::Ch1116g) {
+    if (!ch1116g_.display()) ready_ = false;
+  }
 }
 
 void RuntimeOled128x64Display::sleep() {
@@ -88,6 +98,8 @@ void RuntimeOled128x64Display::sleep() {
     ssd1309_.sleep();
   else if (activeController_ == ControllerId::Sh1106)
     sh1106_.oled_command(SH110X_DISPLAYOFF);
+  else if (activeController_ == ControllerId::Ch1116g)
+    ch1116g_.sleep();
 }
 
 void RuntimeOled128x64Display::wake() {
@@ -98,6 +110,8 @@ void RuntimeOled128x64Display::wake() {
     ssd1309_.wake();
   else if (activeController_ == ControllerId::Sh1106)
     sh1106_.oled_command(SH110X_DISPLAYON);
+  else if (activeController_ == ControllerId::Ch1116g)
+    ch1116g_.wake();
 }
 
 void RuntimeOled128x64Display::drawPixel(int16_t x, int16_t y,

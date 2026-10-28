@@ -24,6 +24,7 @@
 #define VOXONE_DISPLAY_CONTROLLER_ST7789 3
 #define VOXONE_DISPLAY_CONTROLLER_ST7796 4
 #define VOXONE_DISPLAY_CONTROLLER_SH1106 5
+#define VOXONE_DISPLAY_CONTROLLER_CH1116G 6
 
 #if defined(VOXONE_DISPLAY_PROFILE) != defined(VOXONE_DISPLAY_CONTROLLER)
 #error "Display profile and controller must be selected together"
@@ -46,7 +47,8 @@ enum class ControllerId : uint8_t {
   Ssd1309 = VOXONE_DISPLAY_CONTROLLER_SSD1309,
   St7789 = VOXONE_DISPLAY_CONTROLLER_ST7789,
   St7796 = VOXONE_DISPLAY_CONTROLLER_ST7796,
-  Sh1106 = VOXONE_DISPLAY_CONTROLLER_SH1106
+  Sh1106 = VOXONE_DISPLAY_CONTROLLER_SH1106,
+  Ch1116g = VOXONE_DISPLAY_CONTROLLER_CH1116G
 };
 
 struct Descriptor {
@@ -61,7 +63,8 @@ constexpr ProfileId profileFor(hardware::DisplayKind kind) {
       kind == hardware::DisplayKind::Ssd1306_128x32 ? ProfileId::Oled128x32 :
       (kind == hardware::DisplayKind::Ssd1306_128x64 ||
        kind == hardware::DisplayKind::Ssd1309_128x64 ||
-       kind == hardware::DisplayKind::Sh1106_128x64) ? ProfileId::Oled128x64 :
+       kind == hardware::DisplayKind::Sh1106_128x64 ||
+       kind == hardware::DisplayKind::Ch1116g_128x64) ? ProfileId::Oled128x64 :
       kind == hardware::DisplayKind::St7789_284x76 ? ProfileId::St7789_284x76 :
       ProfileId::St7796_480x320;
 }
@@ -72,6 +75,7 @@ constexpr ControllerId controllerFor(hardware::DisplayKind kind) {
        kind == hardware::DisplayKind::Ssd1306_128x64) ? ControllerId::Ssd1306 :
       kind == hardware::DisplayKind::Ssd1309_128x64 ? ControllerId::Ssd1309 :
       kind == hardware::DisplayKind::Sh1106_128x64 ? ControllerId::Sh1106 :
+      kind == hardware::DisplayKind::Ch1116g_128x64 ? ControllerId::Ch1116g :
       kind == hardware::DisplayKind::St7789_284x76 ? ControllerId::St7789 :
       ControllerId::St7796;
 }
@@ -96,6 +100,9 @@ static_assert(profileFor(hardware::DisplayKind::Ssd1306_128x32) ==
 static_assert(profileFor(hardware::DisplayKind::Sh1106_128x64) ==
                   ProfileId::Oled128x64,
               "SH1106 must use the shared OLED 128x64 layout");
+static_assert(profileFor(hardware::DisplayKind::Ch1116g_128x64) ==
+                  ProfileId::Oled128x64,
+              "CH1116G must use the shared OLED 128x64 layout");
 static_assert(controllerFor(hardware::DisplayKind::Ssd1306_128x64) !=
                   controllerFor(hardware::DisplayKind::Ssd1309_128x64),
               "OLED controllers remain distinct physical backends");

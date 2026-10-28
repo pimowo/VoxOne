@@ -136,7 +136,8 @@ RuntimeHardwareConfig unsupportedHardware() {
   const RuntimeDisplay displays[] = {RuntimeDisplay::None,
       RuntimeDisplay::Ssd1306_128x64, RuntimeDisplay::Ssd1309_128x64,
       RuntimeDisplay::St7789_284x76, RuntimeDisplay::St7796s_480x320,
-      RuntimeDisplay::Ssd1306_128x32, RuntimeDisplay::Sh1106_128x64};
+      RuntimeDisplay::Ssd1306_128x32, RuntimeDisplay::Sh1106_128x64,
+      RuntimeDisplay::Ch1116g_128x64};
   const RuntimeInput inputs[] = {RuntimeInput::None, RuntimeInput::Ec11,
                                  RuntimeInput::Buttons3};
   const RuntimeAudioOutput audio[] = {RuntimeAudioOutput::None,

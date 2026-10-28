@@ -23,13 +23,17 @@ enum class RuntimeDisplay : uint8_t {
   // Appended so existing Config v7 hardware records retain their meaning.
   Ssd1306_128x32 = 5,
   // Appended without changing the Config v7 record layout.
-  Sh1106_128x64 = 6
+  Sh1106_128x64 = 6,
+  // Appended without changing the Config v7 record layout or prior values.
+  Ch1116g_128x64 = 7
 };
 
 static_assert(static_cast<uint8_t>(RuntimeDisplay::Ssd1306_128x32) == 5,
               "existing OLED display identities must remain stable");
 static_assert(static_cast<uint8_t>(RuntimeDisplay::Sh1106_128x64) == 6,
               "SH1106 requires a distinct persisted identity");
+static_assert(static_cast<uint8_t>(RuntimeDisplay::Ch1116g_128x64) == 7,
+              "CH1116G requires a distinct persisted identity");
 
 enum class RuntimeInput : uint8_t {
   None = 0,

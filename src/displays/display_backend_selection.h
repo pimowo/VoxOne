@@ -54,7 +54,8 @@ constexpr CompiledBackends compiledBackends() {
   return CompiledBackends{
       controllerSupport(display_profile::ControllerId::Ssd1306) |
           controllerSupport(display_profile::ControllerId::Ssd1309) |
-          controllerSupport(display_profile::ControllerId::Sh1106),
+          controllerSupport(display_profile::ControllerId::Sh1106) |
+          controllerSupport(display_profile::ControllerId::Ch1116g),
       true};
 #elif defined(VOXONE_DISPLAY_CONTROLLER)
   return CompiledBackends{

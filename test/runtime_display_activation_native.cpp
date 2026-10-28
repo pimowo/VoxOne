@@ -78,6 +78,7 @@ int main() {
   assert(compiled.contains(ControllerId::Ssd1306));
   assert(compiled.contains(ControllerId::Ssd1309));
   assert(compiled.contains(ControllerId::Sh1106));
+  assert(compiled.contains(ControllerId::Ch1116g));
 #if defined(VOXONE_PROFILE_S0)
   assert(selected.profile == ProfileId::Oled128x32);
 #else
@@ -104,6 +105,7 @@ int main() {
        {RuntimeDisplay::Ssd1306_128x32,
         RuntimeDisplay::Ssd1306_128x64,
         RuntimeDisplay::Ssd1309_128x64,
+        RuntimeDisplay::Ch1116g_128x64,
         RuntimeDisplay::Sh1106_128x64}) {
     RuntimeHardwareConfig oled = defaults;
     oled.display = display;
@@ -137,6 +139,8 @@ int main() {
   assert(facade.find("activeSsd1306()->begin") != std::string::npos);
   assert(facade.find("ssd1309_.begin") != std::string::npos);
   assert(facade.find("sh1106_.begin") != std::string::npos);
+  assert(facade.find("ch1116g_.begin") != std::string::npos);
+  assert(facade.find("ControllerId::Ch1116g") != std::string::npos);
   assert(facade.find("SH1106_I2CFREQ_HZ 400000UL") != std::string::npos);
   assert(facade.find("tools/oledcolorfix.h") != std::string::npos);
   assert(widgets.find("_scrolldelay = millis();") != std::string::npos);
