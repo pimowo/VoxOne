@@ -37,7 +37,10 @@ constexpr uint32_t kPsramBytes = 2u * 1024u * 1024u;
 constexpr HardwareCapabilities kCapabilities = {
   displaySupport(DisplayKind::Ssd1306_128x64) |
       displaySupport(DisplayKind::Ssd1309_128x64),
-  audioOutputSupport(AudioOutputKind::Pcm5102a),
+  audioOutputSupport(AudioOutputKind::Pcm5102a) |
+      audioOutputSupport(AudioOutputKind::Max98357) |
+      audioOutputSupport(AudioOutputKind::Max98357Stereo) |
+      audioOutputSupport(AudioOutputKind::None),
   inputSupport(LocalInputKind::Ec11) | inputSupport(LocalInputKind::Buttons3),
   true, false, false, false, false, false, true, false,
   false, false, false, false
@@ -56,7 +59,10 @@ constexpr uint32_t kPsramBytes = 2u * 1024u * 1024u;
 constexpr HardwareCapabilities kCapabilities = {
   displaySupport(DisplayKind::Ssd1306_128x32) |
       displaySupport(DisplayKind::Ssd1306_128x64),
-  audioOutputSupport(AudioOutputKind::Max98357),
+  audioOutputSupport(AudioOutputKind::Pcm5102a) |
+      audioOutputSupport(AudioOutputKind::Max98357) |
+      audioOutputSupport(AudioOutputKind::Max98357Stereo) |
+      audioOutputSupport(AudioOutputKind::None),
   inputSupport(LocalInputKind::Ec11) | inputSupport(LocalInputKind::Buttons3),
   true, false, false, false, false, false, true, false,
   false, false, false, false
@@ -95,7 +101,8 @@ constexpr uint32_t kFlashBytes = 16u * 1024u * 1024u;
 constexpr uint32_t kPsramBytes = 0;  // Size not established by the current profile.
 constexpr HardwareCapabilities kCapabilities = {
   displaySupport(DisplayKind::St7796_480x320),
-  audioOutputSupport(AudioOutputKind::Pcm5102a),
+  audioOutputSupport(AudioOutputKind::Pcm5102a) |
+      audioOutputSupport(AudioOutputKind::None),
   inputSupport(LocalInputKind::Ec11) | inputSupport(LocalInputKind::Buttons3),
   true, true, true, true, true, true, true, false,
   false, false, false, false
@@ -208,7 +215,8 @@ bool validateDescriptor(const HardwareDescriptor& d) {
   const bool display = d.displayKind != DisplayKind::None;
   const bool serialI2sOutput =
       d.capabilities.supportsAudioOutput(AudioOutputKind::Pcm5102a) ||
-      d.capabilities.supportsAudioOutput(AudioOutputKind::Max98357);
+      d.capabilities.supportsAudioOutput(AudioOutputKind::Max98357) ||
+      d.capabilities.supportsAudioOutput(AudioOutputKind::Max98357Stereo);
   if ((display && !d.capabilities.supportsDisplay(d.displayKind)) ||
       (!display && d.capabilities.hasLocalDisplay()) ||
       !d.capabilities.supportsAudioOutput(d.audioOutputKind) ||

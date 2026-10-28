@@ -251,7 +251,7 @@ void setup() {
   const auto runtimeHardwareStatus =
       voxone::hardware::loadRuntimeHardwareConfig();
   Serial.printf("##[BOOT]#\truntime hardware: %s "
-                "(display/input selection active; build-time audio driver active)\n",
+                "(display/input/audio selection active)\n",
                 voxone::hardware::runtimeHardwareLoadStatusName(
                     runtimeHardwareStatus));
   const auto displaySelection = voxone::display_backend::select(
@@ -352,7 +352,9 @@ void loop() {
     if (btRuntime.physicalStarted() &&
         !btLink.hasIncompleteOnlineSnapshot())
       btAudioInput.loop(btLink.state(),
-                        bluetoothOwnsAudio(bluetoothSourceSelected(), player.temporaryActive()),
+                        player.localAudioAvailable() &&
+                            bluetoothOwnsAudio(bluetoothSourceSelected(),
+                                               player.temporaryActive()),
                         player.getSampleRate(), millis());
   #endif
   if (network.status == CONNECTED || network.status == DISCONNECTED ||
@@ -367,7 +369,9 @@ void loop() {
   const BtRuntimeStatus btStatus = btRuntime.status(bt.runtimeAvailable,
                                                     bt.connected);
   const DacPlaybackState dacPlayback = dacPlaybackForSource(
-      bluetoothOwnsAudio(bluetoothSourceSelected(), player.temporaryActive()), player.isRunning(),
+      player.localAudioAvailable() &&
+          bluetoothOwnsAudio(bluetoothSourceSelected(), player.temporaryActive()),
+      player.isRunning(),
       bluetoothAudioOutputAllowed() &&
           !btLink.hasIncompleteOnlineSnapshot() && btStatus.btOnline &&
           btStatus.btConnected && btAudioDesiredRate(bt) != 0,

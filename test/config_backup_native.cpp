@@ -141,7 +141,8 @@ RuntimeHardwareConfig unsupportedHardware() {
                                  RuntimeInput::Buttons3};
   const RuntimeAudioOutput audio[] = {RuntimeAudioOutput::None,
       RuntimeAudioOutput::Pcm5102a, RuntimeAudioOutput::DspMini,
-      RuntimeAudioOutput::Max98357};
+      RuntimeAudioOutput::Max98357,
+      RuntimeAudioOutput::Max98357Stereo};
   for (RuntimeDisplay display : displays) {
     candidate.display = display;
     if (validateRuntimeHardwareConfig(candidate, hardwareCapabilities()) ==

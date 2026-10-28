@@ -172,7 +172,9 @@ uint32_t AudioBuffer::getReadPos() {
     return m_readPtr - m_buffer;
 }
 //---------------------------------------------------------------------------------------------------------------------
-Audio::Audio(bool internalDAC /* = false */, uint8_t channelEnabled /* = I2S_DAC_CHANNEL_BOTH_EN */, uint8_t i2sPort) {
+Audio::Audio(bool internalDAC /* = false */,
+             uint8_t channelEnabled /* = I2S_DAC_CHANNEL_BOTH_EN */,
+             uint8_t i2sPort, bool initializeI2s) {
 
     //    build-in-DAC works only with ESP32 (ESP32-S3 has no build-in-DAC)
     //    build-in-DAC last working Arduino Version: 2.0.0-RC2
@@ -218,8 +220,6 @@ Audio::Audio(bool internalDAC /* = false */, uint8_t channelEnabled /* = I2S_DAC
                 m_i2s_config.communication_format = (i2s_comm_format_t)(I2S_COMM_FORMAT_I2S_MSB);
             #endif
 
-            i2s_driver_install((i2s_port_t)m_i2s_num, &m_i2s_config, 0, NULL);
-            i2s_set_dac_mode((i2s_dac_mode_t)m_f_channelEnabled);
             if(m_f_channelEnabled != I2S_DAC_CHANNEL_BOTH_EN) {
                 m_f_forceMono = true;
             }
@@ -236,11 +236,10 @@ Audio::Audio(bool internalDAC /* = false */, uint8_t channelEnabled /* = I2S_DAC
             m_i2s_config.communication_format = (i2s_comm_format_t)(I2S_COMM_FORMAT_I2S | I2S_COMM_FORMAT_I2S_MSB);
         #endif
 
-        i2s_driver_install((i2s_port_t)m_i2s_num, &m_i2s_config, 0, NULL);
         m_f_forceMono = false;
     }
 
-    i2s_zero_dma_buffer((i2s_port_t) m_i2s_num);
+    if (initializeI2s) initializeI2S();
 
     for(int i = 0; i <3; i++) {
         m_filter[i].a0  = 1;
@@ -249,6 +248,22 @@ Audio::Audio(bool internalDAC /* = false */, uint8_t channelEnabled /* = I2S_DAC
         m_filter[i].b1  = 0;
         m_filter[i].b2  = 0;
     }
+}
+//---------------------------------------------------------------------------------------------------------------------
+bool Audio::initializeI2S() {
+    if (m_f_i2sInstalled) return true;
+#if !defined(CONFIG_IDF_TARGET_ESP32)
+    if (m_f_internalDAC) return false;
+#endif
+    if (i2s_driver_install((i2s_port_t)m_i2s_num, &m_i2s_config, 0, NULL) != ESP_OK)
+        return false;
+#ifdef CONFIG_IDF_TARGET_ESP32
+    if (m_f_internalDAC)
+        i2s_set_dac_mode((i2s_dac_mode_t)m_f_channelEnabled);
+#endif
+    m_f_i2sInstalled = true;
+    i2s_zero_dma_buffer((i2s_port_t)m_i2s_num);
+    return true;
 }
 //---------------------------------------------------------------------------------------------------------------------
 void Audio::setBufsize(int rambuf_sz, int psrambuf_sz) {
@@ -317,7 +332,8 @@ Audio::~Audio() {
     //InBuff.~AudioBuffer(); #215 the AudioBuffer is automatically destroyed by the destructor
     setDefaults();
     if(m_playlistBuff) {free(m_playlistBuff); m_playlistBuff = NULL;}
-    i2s_driver_uninstall((i2s_port_t)m_i2s_num); // #215 free I2S buffer
+    if (m_f_i2sInstalled)
+        i2s_driver_uninstall((i2s_port_t)m_i2s_num); // #215 free I2S buffer
 }
 //---------------------------------------------------------------------------------------------------------------------
 void Audio::setDefaults() {
@@ -4091,6 +4107,7 @@ void Audio::printDecodeError(int r) {
 }
 //---------------------------------------------------------------------------------------------------------------------
 bool Audio::setPinout(uint8_t BCLK, uint8_t LRC, uint8_t DOUT, int8_t DIN, int8_t MCK) {
+    if (!m_f_i2sInstalled) return false;
     m_pin_config.bck_io_num   = BCLK;
     m_pin_config.ws_io_num    = LRC; //  wclk
     m_pin_config.data_out_num = DOUT;

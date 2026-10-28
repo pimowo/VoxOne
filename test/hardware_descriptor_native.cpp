@@ -27,14 +27,26 @@ int main() {
   assert(caps.supportsVoxOneBt == bool(VOXONE_HAS_BT));
   assert(caps.supportsVoxOneBt ==
          (hasPin(d.btUart.rx) && hasPin(d.btUart.tx)));
-#if defined(VOXONE_PROFILE_S0)
-  assert(!caps.supportsAudioOutput(AudioOutputKind::Pcm5102a));
+#if defined(VOXONE_PROFILE_M0) || defined(VOXONE_PROFILE_S0)
+  assert(caps.supportsAudioOutput(AudioOutputKind::Pcm5102a));
   assert(caps.supportsAudioOutput(AudioOutputKind::Max98357));
+  assert(caps.supportsAudioOutput(AudioOutputKind::Max98357Stereo));
+#if defined(VOXONE_PROFILE_S0)
   assert(d.audioOutputKind == AudioOutputKind::Max98357);
+#else
+  assert(d.audioOutputKind == AudioOutputKind::Pcm5102a);
+#endif
+  assert(caps.supportsAudioOutput(AudioOutputKind::None));
 #else
   assert(caps.supportsAudioOutput(AudioOutputKind::Pcm5102a));
   assert(!caps.supportsAudioOutput(AudioOutputKind::Max98357));
+  assert(!caps.supportsAudioOutput(AudioOutputKind::Max98357Stereo));
   assert(d.audioOutputKind == AudioOutputKind::Pcm5102a);
+#if defined(VOXONE_PROFILE_L0)
+  assert(caps.supportsAudioOutput(AudioOutputKind::None));
+#else
+  assert(!caps.supportsAudioOutput(AudioOutputKind::None));
+#endif
 #endif
   assert(!caps.supportsAudioOutput(AudioOutputKind::DspMini));
   assert(!caps.supportsDsp && !caps.supportsAux && !caps.supportsSpdif);

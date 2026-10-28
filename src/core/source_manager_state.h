@@ -188,7 +188,8 @@ class SourceManagerState {
     return update;
   }
 
-  void displayView(DisplaySourceView& view, bool radioPlaying = false) const {
+  void displayView(DisplaySourceView& view, bool radioPlaying = false,
+                   bool localPlaybackAvailable = true) const {
     view.kind = active_ == ActiveSource::Bluetooth
                     ? DisplaySourceKind::Bluetooth : DisplaySourceKind::Radio;
     view.connected = active_ == ActiveSource::Bluetooth && connected_;
@@ -204,7 +205,9 @@ class SourceManagerState {
       view.artist = "Oczekuję na połączenie...";
       view.title = "";
     } else {
-      if (playback_ == BtPlayback::Playing)
+      if (!localPlaybackAvailable)
+        view.playback = DisplayPlaybackState::Stopped;
+      else if (playback_ == BtPlayback::Playing)
         view.playback = DisplayPlaybackState::Playing;
       else if (playback_ == BtPlayback::Paused)
         view.playback = DisplayPlaybackState::Paused;

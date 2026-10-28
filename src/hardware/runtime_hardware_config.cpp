@@ -41,6 +41,7 @@ bool validRuntimeAudio(RuntimeAudioOutput value) {
     case RuntimeAudioOutput::Pcm5102a:
     case RuntimeAudioOutput::DspMini:
     case RuntimeAudioOutput::Max98357:
+    case RuntimeAudioOutput::Max98357Stereo:
       return true;
   }
   return false;
@@ -64,6 +65,8 @@ RuntimeAudioOutput runtimeAudioFromKind(AudioOutputKind kind) {
     case AudioOutputKind::Pcm5102a: return RuntimeAudioOutput::Pcm5102a;
     case AudioOutputKind::DspMini: return RuntimeAudioOutput::DspMini;
     case AudioOutputKind::Max98357: return RuntimeAudioOutput::Max98357;
+    case AudioOutputKind::Max98357Stereo:
+      return RuntimeAudioOutput::Max98357Stereo;
   }
   return RuntimeAudioOutput::None;
 }
@@ -170,6 +173,8 @@ bool runtimeAudioOutputKind(RuntimeAudioOutput selection,
       output = AudioOutputKind::DspMini; return true;
     case RuntimeAudioOutput::Max98357:
       output = AudioOutputKind::Max98357; return true;
+    case RuntimeAudioOutput::Max98357Stereo:
+      output = AudioOutputKind::Max98357Stereo; return true;
   }
   return false;
 }
@@ -207,8 +212,7 @@ RuntimeHardwareValidation validateRuntimeHardwareConfig(
 
   if ((display != DisplayKind::None &&
        !capabilities.supportsDisplay(display)) ||
-      (audio != AudioOutputKind::None &&
-       !capabilities.supportsAudioOutput(audio)))
+      !capabilities.supportsAudioOutput(audio))
     return RuntimeHardwareValidation::Unsupported;
 
   if (!capabilities.supportsInput(input))

@@ -1444,11 +1444,12 @@ window.VoxOneRestartWaiter = Object.freeze({
   function hardwareDirty() {
     return !!savedHardwareConfig && hardwareSelectionSaveable() &&
       (hardwareDisplay.value !== savedHardwareConfig.display ||
-       hardwareInput.value !== savedHardwareConfig.input);
+       hardwareInput.value !== savedHardwareConfig.input ||
+       hardwareAudio.value !== savedHardwareConfig.audio);
   }
 
   function hardwareSelectionSaveable() {
-    return [hardwareDisplay, hardwareInput].every(select =>
+    return [hardwareDisplay, hardwareInput, hardwareAudio].every(select =>
       select.selectedOptions.length === 1 && !select.selectedOptions[0].disabled);
   }
 
@@ -1457,6 +1458,7 @@ window.VoxOneRestartWaiter = Object.freeze({
     hardwareDirtyBadge.hidden = !dirty;
     hardwareDisplay.disabled = !hardwareConfigLoaded || hardwareSaving;
     hardwareInput.disabled = !hardwareConfigLoaded || hardwareSaving;
+    hardwareAudio.disabled = !hardwareConfigLoaded || hardwareSaving;
     hardwareSaveRestart.disabled = hardwareSaving || !hardwareConfigLoaded || !dirty ||
       !hardwareSelectionSaveable();
   }
@@ -1474,38 +1476,30 @@ window.VoxOneRestartWaiter = Object.freeze({
     select.value = selected;
   }
 
-  function renderHardwareAudio(items) {
-    const current = items.find(item => item.current === true);
-    if (!current) throw new Error("Brak aktualnego układu audio w profilu sprzętu");
-    hardwareAudio.replaceChildren();
-    const option = document.createElement("option");
-    option.value = current.value;
-    option.textContent = current.label;
-    hardwareAudio.append(option);
-    hardwareAudio.value = current.value;
-  }
-
   async function loadHardwareConfig() {
     try {
       const response = await fetch("/api/hardware", { cache: "no-store" });
       const snapshot = await response.json();
       if (!response.ok || !snapshot.config || !Array.isArray(snapshot.supportedDisplays) ||
-          !Array.isArray(snapshot.supportedInputs) || !snapshot.roadmap ||
+          !Array.isArray(snapshot.supportedInputs) ||
+          !Array.isArray(snapshot.supportedAudioOutputs) || !snapshot.roadmap ||
           !Array.isArray(snapshot.roadmap.audio))
         throw new Error(snapshot.error || ("HTTP " + response.status));
       replaceHardwareOptions(hardwareDisplay, snapshot.supportedDisplays,
         snapshot.config.display);
       replaceHardwareOptions(hardwareInput, snapshot.supportedInputs,
         snapshot.config.input, hardwareInputLabels);
-      if (!hardwareDisplay.value || !hardwareInput.value)
+      replaceHardwareOptions(hardwareAudio, snapshot.supportedAudioOutputs,
+        snapshot.config.audio);
+      if (!hardwareDisplay.value || !hardwareInput.value || !hardwareAudio.value)
         throw new Error("Urządzenie zwróciło niezgodną konfigurację");
       savedHardwareConfig = {
         display: snapshot.config.display,
-        input: snapshot.config.input
+        input: snapshot.config.input,
+        audio: snapshot.config.audio
       };
       text("hardware-family", snapshot.family || "—");
       text("hardware-mcu", snapshot.mcu || "—");
-      renderHardwareAudio(snapshot.roadmap.audio);
       hardwareConfigLoaded = true;
       setHardwareFeedback("");
     } catch (error) {
@@ -1558,6 +1552,7 @@ window.VoxOneRestartWaiter = Object.freeze({
     const body = new URLSearchParams();
     body.set("display", hardwareDisplay.value);
     body.set("input", hardwareInput.value);
+    body.set("audio", hardwareAudio.value);
     try {
       const response = await fetch("/api/hardware", {
         method: "POST",
@@ -1567,9 +1562,14 @@ window.VoxOneRestartWaiter = Object.freeze({
       const result = await response.json();
       if (!response.ok || result.ok !== true || result.restartRequired !== true || !result.config)
         throw new Error(hardwareSaveError(result.error || ("HTTP " + response.status)));
-      savedHardwareConfig = { display: result.config.display, input: result.config.input };
+      savedHardwareConfig = {
+        display: result.config.display,
+        input: result.config.input,
+        audio: result.config.audio
+      };
       hardwareDisplay.value = result.config.display;
       hardwareInput.value = result.config.input;
+      hardwareAudio.value = result.config.audio;
       setHardwareFeedback("Konfiguracja sprzętu została zapisana. Uruchom ponownie VoxOne, aby zastosować zmiany.");
     } catch (error) {
       setHardwareFeedback("Nie zapisano konfiguracji sprzętu: " +
@@ -3240,6 +3240,10 @@ window.VoxOneRestartWaiter = Object.freeze({
     renderHardwareFormState();
   });
   hardwareInput.addEventListener("change", () => {
+    setHardwareFeedback("");
+    renderHardwareFormState();
+  });
+  hardwareAudio.addEventListener("change", () => {
     setHardwareFeedback("");
     renderHardwareFormState();
   });

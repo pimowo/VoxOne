@@ -58,6 +58,7 @@ size_t hardwareInputRoadmap(const HardwareDescriptor& hardware,
                             const RuntimeHardwareConfig& config,
                             HardwareRoadmapItem* output, size_t capacity);
 size_t hardwareAudioRoadmap(const HardwareDescriptor& hardware,
+                            const RuntimeHardwareConfig& config,
                             HardwareRoadmapItem* output, size_t capacity);
 size_t hardwareModuleRoadmap(const HardwareDescriptor& hardware,
                              HardwareRoadmapItem* output, size_t capacity);

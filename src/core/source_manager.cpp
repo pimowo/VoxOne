@@ -234,7 +234,7 @@ bool bluetoothAudioOutputAllowed() {
   portENTER_CRITICAL(&sourceMux);
   const bool allowed = sourceState.bluetoothAudioOutputAllowed();
   portEXIT_CRITICAL(&sourceMux);
-  return allowed;
+  return allowed && player.localAudioAvailable();
 }
 
 bool bluetoothPhysicallyConnected() {
@@ -254,7 +254,8 @@ uint16_t sourceManagerGetVuLevel(uint16_t dimension, bool& playing) {
   uint32_t lastDataMs = 0;
   portENTER_CRITICAL(&sourceMux);
   bluetoothActive = sourceState.active() == ActiveSource::Bluetooth;
-  bluetoothPlaying = sourceState.bluetoothPlaying();
+  bluetoothPlaying = player.localAudioAvailable() &&
+                     sourceState.bluetoothPlaying();
   sourceState.bluetoothRawVu(vuLeft, vuRight, lastDataMs);
   portEXIT_CRITICAL(&sourceMux);
 
@@ -275,7 +276,7 @@ uint16_t sourceManagerGetVuLevel(uint16_t dimension, bool& playing) {
 #endif
 
 bool radioI2SOutputEnabled() {
-  if (systemUpdateAudioBlocked()) return false;
+  if (systemUpdateAudioBlocked() || !player.localAudioAvailable()) return false;
 #if VOXONE_BT_I2S_RX_ENABLED
   return !bluetoothOwnsAudio(bluetoothSourceSelected(), player.temporaryActive()) &&
          btAudioInput.radioOutputReady();
@@ -364,7 +365,7 @@ void sourceManagerWebSnapshot(SourceWebSnapshot& snapshot) {
   const bool radioPlaying = player.isRunning();
   portENTER_CRITICAL(&sourceMux);
   DisplaySourceView view{};
-  sourceState.displayView(view, radioPlaying);
+  sourceState.displayView(view, radioPlaying, player.localAudioAvailable());
   snapshot.kind = view.kind;
   snapshot.connected = view.connected;
   snapshot.playback = view.playback;
@@ -378,7 +379,7 @@ void sourceManagerWebSnapshot(SourceWebSnapshot& snapshot) {
 bool getDisplaySourceView(DisplaySourceView& view) {
   const bool radioPlaying = player.isRunning();
   portENTER_CRITICAL(&sourceMux);
-  sourceState.displayView(view, radioPlaying);
+  sourceState.displayView(view, radioPlaying, player.localAudioAvailable());
   if (view.kind == DisplaySourceKind::Bluetooth) {
     memcpy(displayText.peerName, view.peerName, sizeof(displayText.peerName));
     memcpy(displayText.artist, view.artist, sizeof(displayText.artist));

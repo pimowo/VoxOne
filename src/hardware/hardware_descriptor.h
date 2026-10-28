@@ -25,7 +25,14 @@ enum class DisplayKind {
   // Appended to preserve the persisted numeric values of existing variants.
   Ssd1306_128x32
 };
-enum class AudioOutputKind { None, Pcm5102a, Max98357, DspMini };
+enum class AudioOutputKind {
+  None,
+  Pcm5102a,
+  Max98357,
+  DspMini,
+  // Appended: Max98357 keeps the existing MONO identity.
+  Max98357Stereo
+};
 enum class LocalInputKind { None, Ec11, Buttons3 };
 enum class BusKind { None, Spi, I2c };
 
@@ -37,8 +44,7 @@ constexpr DisplaySupportMask displaySupport(DisplayKind kind) {
       (1u << static_cast<uint8_t>(kind));
 }
 constexpr AudioOutputSupportMask audioOutputSupport(AudioOutputKind kind) {
-  return kind == AudioOutputKind::None ? 0u :
-      (1u << static_cast<uint8_t>(kind));
+  return 1u << static_cast<uint8_t>(kind);
 }
 constexpr InputSupportMask inputSupport(LocalInputKind kind) {
   return kind == LocalInputKind::None ? 0u :

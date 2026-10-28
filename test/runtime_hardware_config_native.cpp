@@ -1,4 +1,5 @@
 #include "../src/hardware/runtime_hardware_config.h"
+#include "../src/hardware/runtime_audio_output.h"
 #include "../profiles/profile.h"
 
 #include <cassert>
@@ -72,6 +73,22 @@ int main() {
 #endif
   assert(validateRuntimeHardwareConfig(defaults, capabilities) ==
          RuntimeHardwareValidation::Valid);
+  const RuntimeAudioActivationPlan defaultAudioPlan =
+      runtimeAudioActivationPlan(defaults.audio);
+  assert(defaultAudioPlan.initializeSerialI2s);
+  assert(defaultAudioPlan.localPlaybackAvailable);
+  const RuntimeAudioActivationPlan noneAudioPlan =
+      runtimeAudioActivationPlan(RuntimeAudioOutput::None);
+  assert(!noneAudioPlan.initializeSerialI2s);
+  assert(!noneAudioPlan.localPlaybackAvailable);
+  const RuntimeAudioActivationPlan dspAudioPlan =
+      runtimeAudioActivationPlan(RuntimeAudioOutput::DspMini);
+  assert(!dspAudioPlan.initializeSerialI2s);
+  assert(!dspAudioPlan.localPlaybackAvailable);
+  const RuntimeAudioActivationPlan stereoMaxAudioPlan =
+      runtimeAudioActivationPlan(RuntimeAudioOutput::Max98357Stereo);
+  assert(stereoMaxAudioPlan.initializeSerialI2s);
+  assert(stereoMaxAudioPlan.localPlaybackAvailable);
 
 #if defined(VOXONE_PROFILE_W0)
   assert(defaults.display == RuntimeDisplay::St7789_284x76);
@@ -141,14 +158,28 @@ int main() {
   candidate.audio = RuntimeAudioOutput::DspMini;
   assert(validateRuntimeHardwareConfig(candidate, capabilities) ==
          RuntimeHardwareValidation::Unsupported);
-  candidate.audio =
-#if defined(VOXONE_PROFILE_S0)
-      RuntimeAudioOutput::Pcm5102a;
-#else
-      RuntimeAudioOutput::Max98357;
-#endif
+  candidate.audio = RuntimeAudioOutput::Max98357;
   assert(validateRuntimeHardwareConfig(candidate, capabilities) ==
+#if defined(VOXONE_PROFILE_M0) || defined(VOXONE_PROFILE_S0)
+         RuntimeHardwareValidation::Valid);
+#else
          RuntimeHardwareValidation::Unsupported);
+#endif
+  candidate.audio = RuntimeAudioOutput::None;
+  assert(validateRuntimeHardwareConfig(candidate, capabilities) ==
+#if defined(VOXONE_PROFILE_M0) || defined(VOXONE_PROFILE_S0) || \
+    defined(VOXONE_PROFILE_L0)
+         RuntimeHardwareValidation::Valid);
+#else
+         RuntimeHardwareValidation::Unsupported);
+#endif
+  candidate.audio = RuntimeAudioOutput::Max98357Stereo;
+  assert(validateRuntimeHardwareConfig(candidate, capabilities) ==
+#if defined(VOXONE_PROFILE_M0) || defined(VOXONE_PROFILE_S0)
+         RuntimeHardwareValidation::Valid);
+#else
+         RuntimeHardwareValidation::Unsupported);
+#endif
   candidate = defaults;
   candidate.input = RuntimeInput::None;
   assert(validateRuntimeHardwareConfig(candidate, capabilities) ==
@@ -200,6 +231,40 @@ int main() {
   loaded = loadRuntimeHardwareConfig(storage, hardware);
   assert(loaded.status == RuntimeHardwareLoadStatus::Loaded);
   assert(loaded.config == alternate);
+
+  // Existing value 3 remains the one-module MONO selection.
+  RuntimeHardwareConfig legacyMax = defaults;
+  legacyMax.audio = RuntimeAudioOutput::Max98357;
+  uint8_t legacyMaxRecord[kRuntimeHardwareConfigSerializedSize]{};
+  assert(serializeRuntimeHardwareConfig(legacyMax, legacyMaxRecord,
+                                        sizeof(legacyMaxRecord)));
+  assert(legacyMaxRecord[5] == 3);
+  RuntimeHardwareConfig decodedLegacyMax{};
+  assert(deserializeRuntimeHardwareConfig(legacyMaxRecord,
+                                           sizeof(legacyMaxRecord),
+                                           decodedLegacyMax) ==
+         RuntimeHardwareDecodeStatus::Valid);
+  assert(decodedLegacyMax.audio == RuntimeAudioOutput::Max98357);
+
+  // Value 4 is distinct, persists through the unchanged 10-byte record and
+  // reloads after restart only on Mx/Sx capabilities.
+  RuntimeHardwareConfig stereoMax = defaults;
+  stereoMax.audio = RuntimeAudioOutput::Max98357Stereo;
+#if defined(VOXONE_PROFILE_M0) || defined(VOXONE_PROFILE_S0)
+  FakeStorage stereoStorage;
+  assert(saveRuntimeHardwareConfig(stereoStorage, defaults, stereoMax,
+                                   capabilities) ==
+         RuntimeHardwareSaveStatus::Saved);
+  assert(stereoStorage.size == kRuntimeHardwareConfigSerializedSize);
+  assert(stereoStorage.bytes[5] == 4);
+  const RuntimeHardwareLoadResult loadedStereo =
+      loadRuntimeHardwareConfig(stereoStorage, hardware);
+  assert(loadedStereo.status == RuntimeHardwareLoadStatus::Loaded);
+  assert(loadedStereo.config == stereoMax);
+#else
+  assert(validateRuntimeHardwareConfig(stereoMax, capabilities) ==
+         RuntimeHardwareValidation::Unsupported);
+#endif
 
   RuntimeHardwareConfig invalidInput = defaults;
   invalidInput.input = static_cast<RuntimeInput>(0xff);

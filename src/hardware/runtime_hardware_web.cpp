@@ -15,8 +15,9 @@ constexpr RuntimeDisplay kDisplays[] = {
 constexpr RuntimeInput kInputs[] = {
     RuntimeInput::None, RuntimeInput::Ec11, RuntimeInput::Buttons3};
 constexpr RuntimeAudioOutput kAudioOutputs[] = {
-    RuntimeAudioOutput::None, RuntimeAudioOutput::Pcm5102a,
-    RuntimeAudioOutput::DspMini, RuntimeAudioOutput::Max98357};
+    RuntimeAudioOutput::Pcm5102a, RuntimeAudioOutput::Max98357,
+    RuntimeAudioOutput::Max98357Stereo, RuntimeAudioOutput::None,
+    RuntimeAudioOutput::DspMini};
 
 struct CatalogItem {
   const char* value;
@@ -53,11 +54,20 @@ constexpr CatalogItem kInputCatalog[] = {
     {"buttons3", "BUTTONS3", "Brak fizycznego PASS"}};
 
 constexpr CatalogItem kLAudio[] = {
-    {"pcm5102a", "PCM5102A", ""}, {"dspmini", "DSPmini", ""}};
+    {"pcm5102a", "PCM5102A", ""}, {"dspmini", "DSPmini", ""},
+    {"none", "Brak", ""}};
 constexpr CatalogItem kMAudio[] = {
-    {"pcm5102a", "PCM5102A", ""}, {"max98357a", "MAX98357A", ""}};
+    {"pcm5102a", "PCM5102A", ""},
+    {"max98357a", "MAX98357A MONO (1 moduł)", ""},
+    {"max98357a_stereo", "MAX98357A STEREO (2 moduły)",
+     "Kanały LEFT/RIGHT wybierane sprzętowo przez SD/MODE"},
+    {"none", "Brak", ""}};
 constexpr CatalogItem kSAudio[] = {
-    {"max98357a", "MAX98357A", ""}};
+    {"pcm5102a", "PCM5102A", ""},
+    {"max98357a", "MAX98357A MONO (1 moduł)", ""},
+    {"max98357a_stereo", "MAX98357A STEREO (2 moduły)",
+     "Kanały LEFT/RIGHT wybierane sprzętowo przez SD/MODE"},
+    {"none", "Brak", ""}};
 constexpr CatalogItem kDINAudio[] = {{"pcm5102a", "PCM5102A", ""}};
 constexpr CatalogItem kWAudio[] = {{"pcm5102a", "PCM5102A", ""}};
 
@@ -114,8 +124,11 @@ bool displayKindForValue(const char* value, DisplayKind& kind) {
 }
 
 bool audioKindForValue(const char* value, AudioOutputKind& kind) {
-  if (strcmp(value, "pcm5102a") == 0) kind = AudioOutputKind::Pcm5102a;
+  if (strcmp(value, "none") == 0) kind = AudioOutputKind::None;
+  else if (strcmp(value, "pcm5102a") == 0) kind = AudioOutputKind::Pcm5102a;
   else if (strcmp(value, "max98357a") == 0) kind = AudioOutputKind::Max98357;
+  else if (strcmp(value, "max98357a_stereo") == 0)
+    kind = AudioOutputKind::Max98357Stereo;
   else if (strcmp(value, "dspmini") == 0) kind = AudioOutputKind::DspMini;
   else return false;
   return true;
@@ -125,6 +138,7 @@ const char* audioValue(AudioOutputKind kind) {
   switch (kind) {
     case AudioOutputKind::Pcm5102a: return "pcm5102a";
     case AudioOutputKind::Max98357: return "max98357a";
+    case AudioOutputKind::Max98357Stereo: return "max98357a_stereo";
     case AudioOutputKind::DspMini: return "dspmini";
     case AudioOutputKind::None: return "none";
   }
@@ -134,7 +148,9 @@ const char* audioValue(AudioOutputKind kind) {
 const char* audioLabel(AudioOutputKind kind) {
   switch (kind) {
     case AudioOutputKind::Pcm5102a: return "PCM5102A";
-    case AudioOutputKind::Max98357: return "MAX98357A";
+    case AudioOutputKind::Max98357: return "MAX98357A MONO (1 moduł)";
+    case AudioOutputKind::Max98357Stereo:
+      return "MAX98357A STEREO (2 moduły)";
     case AudioOutputKind::DspMini: return "DSPmini";
     case AudioOutputKind::None: return "Brak";
   }
@@ -274,9 +290,9 @@ bool appendOptions(JsonWriter& writer, const HardwareDescriptor& hardware,
 
 bool appendAudioOptions(JsonWriter& writer,
                         const HardwareCapabilities& capabilities) {
-  RuntimeHardwareWebOption options[4];
+  RuntimeHardwareWebOption options[5];
   const size_t count =
-      supportedRuntimeAudioOutputOptions(capabilities, options, 4);
+      supportedRuntimeAudioOutputOptions(capabilities, options, 5);
   for (size_t index = 0; index < count; ++index) {
     if (index && !writer.append(",")) return false;
     if (!writer.append("{\"value\":\"%s\",\"label\":\"%s\"}",
@@ -351,6 +367,7 @@ const char* runtimeAudioOutputWebValue(RuntimeAudioOutput audio) {
     case RuntimeAudioOutput::Pcm5102a: return "pcm5102a";
     case RuntimeAudioOutput::DspMini: return "dspmini";
     case RuntimeAudioOutput::Max98357: return "max98357a";
+    case RuntimeAudioOutput::Max98357Stereo: return "max98357a_stereo";
   }
   return nullptr;
 }
@@ -478,26 +495,29 @@ size_t hardwareInputRoadmap(const HardwareDescriptor& hardware,
 }
 
 size_t hardwareAudioRoadmap(const HardwareDescriptor& hardware,
+                            const RuntimeHardwareConfig& config,
                             HardwareRoadmapItem* output, size_t capacity) {
   const CatalogItem* items = nullptr;
   size_t itemCount = 0;
   audioCatalog(hardware.board.id, items, itemCount);
-  const char* currentValue = audioValue(hardware.audioOutputKind);
+  AudioOutputKind currentKind = hardware.audioOutputKind;
+  (void)runtimeAudioOutputKind(config.audio, currentKind);
+  const char* currentValue = audioValue(currentKind);
   bool currentInCatalog = false;
   for (size_t index = 0; index < itemCount; ++index)
     if (strcmp(items[index].value, currentValue) == 0) currentInCatalog = true;
 
   size_t resultIndex = 0;
-  if (!currentInCatalog && hardware.audioOutputKind != AudioOutputKind::None) {
+  if (!currentInCatalog && currentKind != AudioOutputKind::None) {
     const bool supported = hardware.capabilities.supportsAudioOutput(
-        hardware.audioOutputKind);
+        currentKind);
     if (output && resultIndex < capacity)
       output[resultIndex] = {
-          currentValue, audioLabel(hardware.audioOutputKind),
+          currentValue, audioLabel(currentKind),
           "Bieżący prototyp", supportedStatus(
               supported, audioPhysicallyValidated(hardware.board.id,
-                                                   hardware.audioOutputKind)),
-          false, true};
+                                                   currentKind)),
+          supported, true};
     ++resultIndex;
   }
   for (size_t index = 0; index < itemCount; ++index, ++resultIndex) {
@@ -509,7 +529,7 @@ size_t hardwareAudioRoadmap(const HardwareDescriptor& hardware,
           items[index].value, items[index].label, items[index].note,
           supportedStatus(supported, known &&
               audioPhysicallyValidated(hardware.board.id, kind)),
-          false, known && hardware.audioOutputKind == kind};
+          supported, known && currentKind == kind};
   }
   return resultIndex;
 }
@@ -590,7 +610,7 @@ bool formatRuntimeHardwareWebJson(char* output, size_t capacity,
   count = hardwareInputRoadmap(hardware, config, roadmap, 12);
   writer.append("],\"inputs\":[");
   appendRoadmap(writer, roadmap, count);
-  count = hardwareAudioRoadmap(hardware, roadmap, 12);
+  count = hardwareAudioRoadmap(hardware, config, roadmap, 12);
   writer.append("],\"audio\":[");
   appendRoadmap(writer, roadmap, count);
   count = hardwareModuleRoadmap(hardware, roadmap, 12);

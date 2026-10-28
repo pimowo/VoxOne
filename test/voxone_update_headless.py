@@ -136,7 +136,7 @@ const securityResponse = (status, body = {}, headers = {}) => ({
 });
 window.hardwareSnapshot = {
   family:'M0', mcu:'ESP32-S3', restartRequired:false,
-  config:{display:'ssd1309_128x64', input:'ec11'},
+  config:{display:'ssd1309_128x64', input:'ec11', audio:'pcm5102a'},
   supportedDisplays:[
     {value:'none',label:'Brak',status:'supported',statusLabel:'DOSTĘPNE'},
     {value:'ssd1306_128x64',label:'SSD1306_128X64',status:'supported',statusLabel:'DOSTĘPNE'},
@@ -146,6 +146,12 @@ window.hardwareSnapshot = {
     {value:'none',label:'Brak',status:'supported',statusLabel:'DOSTĘPNE'},
     {value:'ec11',label:'EC11',status:'untested',statusLabel:'DO TESTU'},
     {value:'buttons3',label:'BUTTONS3',status:'untested',statusLabel:'DO TESTU'}
+  ],
+  supportedAudioOutputs:[
+    {value:'pcm5102a',label:'PCM5102A'},
+    {value:'max98357a',label:'MAX98357A MONO (1 moduł)'},
+    {value:'max98357a_stereo',label:'MAX98357A STEREO (2 moduły)'},
+    {value:'none',label:'Brak'}
   ],
   roadmap:{
     displays:[
@@ -166,8 +172,10 @@ window.hardwareSnapshot = {
       {value:'buttons3',label:'BUTTONS3',note:'Brak fizycznego PASS',status:'untested',statusLabel:'DO TESTU',selectable:true,current:false}
     ],
     audio:[
-      {value:'pcm5102a',label:'PCM5102A',note:'',status:'supported',statusLabel:'DOSTĘPNE',selectable:false,current:true},
-      {value:'max98357a',label:'MAX98357A',note:'',status:'planned',statusLabel:'PLANOWANE',selectable:false,current:false}
+      {value:'pcm5102a',label:'PCM5102A',note:'',status:'supported',statusLabel:'DOSTĘPNE',selectable:true,current:true},
+      {value:'max98357a',label:'MAX98357A MONO (1 moduł)',note:'',status:'untested',statusLabel:'DO TESTU',selectable:true,current:false},
+      {value:'max98357a_stereo',label:'MAX98357A STEREO (2 moduły)',note:'Kanały LEFT/RIGHT wybierane sprzętowo przez SD/MODE',status:'untested',statusLabel:'DO TESTU',selectable:true,current:false},
+      {value:'none',label:'Brak',note:'',status:'untested',statusLabel:'DO TESTU',selectable:true,current:false}
     ],
     modules:[
       {value:'voxonebt',label:'VoxOneBT',note:'',status:'planned',statusLabel:'PLANOWANE',selectable:false,current:false},
@@ -278,7 +286,7 @@ window.fetch = (url, options = {}) => {
     const prepared = window.hardwarePostResponses.shift();
     if (prepared) return Promise.resolve(prepared);
     const result = {ok:true, changed:true, restartRequired:true,
-      config:{display:request.display,input:request.input}};
+      config:{display:request.display,input:request.input,audio:request.audio}};
     return Promise.resolve({ok:true,status:200,json:() => Promise.resolve(result)});
   }
   if (url === '/api/mqtt') {
@@ -1098,6 +1106,9 @@ setTimeout(async () => {
       'input labels use approved Polish names and remain selectable');
     check(document.querySelector('label[for="hardware-input"]').textContent === 'Tryb sterowania',
       'input field uses approved Polish label');
+    check(get('hardware-audio-help').textContent.includes('LEFT/RIGHT') &&
+      get('hardware-audio-help').textContent.includes('SD/MODE'),
+      'MAX98357A channel split is explicitly documented as hardware SD/MODE');
     const hardwareLayout = get('hardware').querySelector('.hardware-layout');
     const hardwareColumns = [...hardwareLayout.querySelectorAll(':scope > .hardware-column')];
     check(hardwareColumns.length === 2 &&
@@ -1105,15 +1116,17 @@ setTimeout(async () => {
       hardwareColumns[1].querySelectorAll(':scope > .card').length === 2,
       'hardware cards use balanced independent columns');
     check(!hardwareDisplay.querySelector('option[value="ch1116_128x64"]') &&
-      !hardwareAudio.querySelector('option[value="max98357a"]'),
-      'planned display and audio choices are not presented');
+      !hardwareAudio.querySelector('option[value="dspmini"]'),
+      'planned display and DSPmini choices are not presented');
     check([...hardwareAudio.options].map(option => option.value).join(',') ===
-      'pcm5102a' &&
+      'pcm5102a,max98357a,max98357a_stereo,none' &&
       [...hardwareAudio.options].map(option => option.textContent).join(',') ===
-      'PCM5102A' && hardwareAudio.value === 'pcm5102a' && hardwareAudio.disabled,
-      'audio is an informational disabled select containing only the current profile value');
+      'PCM5102A,MAX98357A MONO (1 moduł),MAX98357A STEREO (2 moduły),Brak' &&
+      hardwareAudio.value === 'pcm5102a' &&
+      !hardwareAudio.disabled,
+      'audio select contains the exact M0 runtime matrix');
     check(!hardwareAudio.name,
-      'audio select remains excluded from configuration writes');
+      'audio select is submitted explicitly by the hardware API adapter');
     check(!document.querySelector('.hardware-legend') &&
       !document.querySelector('.hardware-roadmap-status') &&
       !document.querySelector('.hardware-roadmap-current') &&
@@ -1147,6 +1160,19 @@ setTimeout(async () => {
     hardwareInput.dispatchEvent(new Event('change'));
     check(get('hardware-save-restart').disabled && get('hardware-dirty-badge').hidden,
       'return to EC11 clears dirty state');
+    hardwareAudio.value = 'max98357a';
+    hardwareAudio.dispatchEvent(new Event('change'));
+    check(!get('hardware-save-restart').disabled && !get('hardware-dirty-badge').hidden,
+      'supported MAX98357A selection enables apply');
+    hardwareAudio.value = 'max98357a_stereo';
+    hardwareAudio.dispatchEvent(new Event('change'));
+    check(!get('hardware-save-restart').disabled &&
+      !get('hardware-dirty-badge').hidden,
+      'distinct MAX98357A STEREO selection enables apply');
+    hardwareAudio.value = 'pcm5102a';
+    hardwareAudio.dispatchEvent(new Event('change'));
+    check(get('hardware-save-restart').disabled && get('hardware-dirty-badge').hidden,
+      'return to PCM5102A clears audio dirty state');
     hardwareDisplay.value = 'none';
     hardwareDisplay.dispatchEvent(new Event('change'));
     hardwarePostResponses.push({ok:false,status:422,json:() => Promise.resolve({error:'unsupported_hardware'})});
@@ -1312,10 +1338,12 @@ setTimeout(async () => {
           'reconnect mute restored atomically with source');
         get('hardware-save-restart').click();
         await new Promise(resolve => setTimeout(resolve, 0));
-        check(hardwareRequests.at(-1).display === 'none' && hardwareRequests.at(-1).input === 'ec11',
+        check(hardwareRequests.at(-1).display === 'none' &&
+          hardwareRequests.at(-1).input === 'ec11' &&
+          hardwareRequests.at(-1).audio === 'pcm5102a',
           'supported hardware save request');
-        check(Object.keys(hardwareRequests.at(-1)).sort().join(',') === 'display,input',
-          'informational hardware never enters save payload');
+        check(Object.keys(hardwareRequests.at(-1)).sort().join(',') === 'audio,display,input',
+          'runtime audio enters the hardware save payload');
         check(btTestSocket.sent.some(item => item === 'reboot=1'),
           'successful hardware save uses existing restart path');
         result.textContent = 'PASS';
@@ -1557,7 +1585,8 @@ setTimeout(async () => {
       [...hardwareInput.options].map(option => option.value).join(',') ===
         'none,ec11,buttons3' &&
       [...hardwareAudio.options].map(option => option.value).join(',') ===
-        'pcm5102a' && hardwareDisplay.value === 'ssd1306_128x64' &&
+        'pcm5102a,max98357a,max98357a_stereo,none' &&
+      hardwareDisplay.value === 'ssd1306_128x64' &&
       hardwareInput.value === 'ec11' && hardwareAudio.value === 'pcm5102a',
       'first boot hardware choices must be capability-filtered');
 
@@ -1926,7 +1955,10 @@ def main():
         '<option value="buttons3">BUTTONS3</option>')
     first_boot_rendered_html = first_boot_rendered_html.replace(
         '%FIRST_BOOT_AUDIO_OPTIONS%',
-        '<option value="pcm5102a" selected>PCM5102A</option>')
+        '<option value="pcm5102a" selected>PCM5102A</option>'
+        '<option value="max98357a">MAX98357A MONO (1 moduł)</option>'
+        '<option value="max98357a_stereo">MAX98357A STEREO (2 moduły)</option>'
+        '<option value="none">Brak</option>')
     first_boot_test_html = first_boot_rendered_html.replace(
         "</head>", FIRST_BOOT_MOCK + "</head>", 1)
     first_boot_test_html = first_boot_test_html.replace(

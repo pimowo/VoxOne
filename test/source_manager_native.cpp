@@ -215,6 +215,9 @@ int main() {
   assert(std::strcmp(view.title, "Utwór") == 0);
   assert(view.playback == DisplayPlaybackState::Playing);
   assert(sources.bluetoothAudioOutputAllowed());
+  sources.displayView(view, false, false);
+  assert(view.playback == DisplayPlaybackState::Stopped);
+  sources.displayView(view);
   assert(displaySourceVuVisible(view));
   for (uint8_t volume : {0, 1, 50}) {
     assert(displayVuUnlocked(true, displaySourceVuVisible(view), volume) ==

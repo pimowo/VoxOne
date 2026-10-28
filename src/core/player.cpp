@@ -14,6 +14,8 @@
 #include "playlist_mapping.h"
 #include "playlist_store.h"
 #include "station_format.h"
+#include "../hardware/runtime_audio_output.h"
+#include "../hardware/runtime_hardware_config.h"
 #if I2S_DOUT!=255
 #include <driver/i2s.h>
 #endif
@@ -23,9 +25,9 @@ QueueHandle_t playerQueue;
 portMUX_TYPE playerVolumeMux = portMUX_INITIALIZER_UNLOCKED;
 
 #if !I2S_INTERNAL
-Player::Player() {}
+Player::Player(): Audio(false, 3, I2S_NUM_0, false) {}
 #else
-Player::Player(): Audio(true, I2S_DAC_CHANNEL_BOTH_EN) {}
+Player::Player(): Audio(true, 3, I2S_NUM_0, false) {}
 #endif
 
 
@@ -41,13 +43,24 @@ void Player::init() {
   _mute.setUserVolume(runtime.userVolume);
   _radioReconnect.reset();
   _pendingStationRefresh.reset();
+  const auto audioPlan = voxone::hardware::runtimeAudioActivationPlan(
+      voxone::hardware::runtimeHardwareConfig().audio);
+  _localAudioAvailable = audioPlan.localPlaybackAvailable;
   playerQueue = xQueueCreate( 5, sizeof( playerRequestParams_t ) );
   setOutputPins(false);
   delay(50);
   _temporaryUrls = xQueueCreate(1, MQTT_BURL_SIZE);
   if(MUTE_PIN!=255) pinMode(MUTE_PIN, OUTPUT);
-  #if I2S_DOUT!=255 && !I2S_INTERNAL
-    setPinout(I2S_BCLK, I2S_LRC, I2S_DOUT);
+  #if I2S_DOUT!=255
+    if (audioPlan.initializeSerialI2s &&
+        (!initializeI2S()
+         #if !I2S_INTERNAL
+          || !setPinout(I2S_BCLK, I2S_LRC, I2S_DOUT)
+         #endif
+        )) {
+      _localAudioAvailable = false;
+      Serial.println("failed: local I2S unavailable");
+    }
   #endif
   setBalance(runtime.balance);
   setTone(runtime.bass, runtime.middle, runtime.treble);
@@ -71,6 +84,10 @@ bool Player::ready() const {
 void Player::sendCommand(playerRequestParams_t request){
   if(playerQueue==NULL) return;
   if(systemUpdateAudioBlocked() && request.type != PR_UPDATE_STOP) return;
+  if (!_localAudioAvailable &&
+      (request.type == PR_PLAY || request.type == PR_BURL ||
+       request.type == PR_RADIO_RESUME ||
+       request.type == PR_RADIO_NETWORK_ONLINE)) return;
   if (request.type == PR_STATION_REFRESH) {
     _pendingStationRefresh.publishRefresh();
     return;
@@ -471,7 +488,7 @@ void Player::serviceRadioReconnect() {
 
 void Player::requestTemporaryUrl(const char* url, size_t length) {
   if (!_temporaryUrls || !url || !length || length >= MQTT_BURL_SIZE ||
-      systemUpdateAudioBlocked()) return;
+      systemUpdateAudioBlocked() || !_localAudioAvailable) return;
   char request[MQTT_BURL_SIZE]{};
   memcpy(request, url, length);
   // MQTT runs on another task. Replace the pending URL atomically, never a

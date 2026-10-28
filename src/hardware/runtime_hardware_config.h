@@ -34,8 +34,16 @@ enum class RuntimeAudioOutput : uint8_t {
   None = 0,
   Pcm5102a = 1,
   DspMini = 2,
-  Max98357 = 3
+  // Value 3 is the pre-existing single-module (MONO) selection.
+  Max98357 = 3,
+  // Appended without changing Config v7 record version, size or offsets.
+  Max98357Stereo = 4
 };
+
+static_assert(static_cast<uint8_t>(RuntimeAudioOutput::Max98357) == 3,
+              "existing MAX98357A Config identity must remain MONO");
+static_assert(static_cast<uint8_t>(RuntimeAudioOutput::Max98357Stereo) == 4,
+              "stereo MAX98357A must have a distinct persisted identity");
 
 struct RuntimeHardwareConfig {
   uint8_t version;
@@ -145,8 +153,8 @@ RuntimeHardwareSaveStatus saveRuntimeHardwareConfig(
     const HardwareCapabilities& capabilities);
 
 // Device API. M0/S0/DIN0 activate a selected compiled OLED backend/layout.
-// Every current board activates the selected local input backend at startup.
-// Audio and display drivers on other boards remain build-time choices.
+// Every current board activates the selected local input and audio backend at
+// startup. A saved audio change takes effect after the required restart.
 const RuntimeHardwareConfig& runtimeHardwareConfig();
 RuntimeHardwareLoadStatus loadRuntimeHardwareConfig();
 RuntimeHardwareSaveStatus saveRuntimeHardwareConfig(

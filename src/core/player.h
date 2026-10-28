@@ -70,6 +70,7 @@ class Player: public Audio {
     PlayerPendingRefresh _pendingStationRefresh;
     uint32_t _callbackToken = 0;
     QueueHandle_t _temporaryUrls = nullptr;
+    bool _localAudioAvailable = false;
     //char        _plError[PLERR_LN];
   private:
     void _stop(bool alreadyStopped = false,
@@ -100,6 +101,7 @@ class Player: public Audio {
     Player();
     void init();
     bool ready() const;
+    bool localAudioAvailable() const { return _localAudioAvailable; }
     void loop();
     void setError();
     void setError(const char *e);

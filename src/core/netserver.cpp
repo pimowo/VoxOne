@@ -2394,14 +2394,16 @@ void handleHardwareConfigSave(AsyncWebServerRequest* request) {
     return;
   }
   if (!request->hasParam("display", true) ||
-      !request->hasParam("input", true)) {
+      !request->hasParam("input", true) ||
+      !request->hasParam("audio", true)) {
     stationsReply(request, 400, R"({"error":"missing_field"})");
     return;
   }
   const String display = request->getParam("display", true)->value();
   const String input = request->getParam("input", true)->value();
+  const String audio = request->getParam("audio", true)->value();
   if (!display.length() || display.length() > 31 || !input.length() ||
-      input.length() > 15) {
+      input.length() > 15 || !audio.length() || audio.length() > 15) {
     stationsReply(request, 400, R"({"error":"invalid_value"})");
     return;
   }
@@ -2410,7 +2412,7 @@ void handleHardwareConfigSave(AsyncWebServerRequest* request) {
   voxone::hardware::RuntimeHardwareConfig requested = current;
   const auto validation = voxone::hardware::makeRuntimeHardwareWebCandidate(
       current, voxone::hardware::hardwareCapabilities(), display.c_str(),
-      input.c_str(), requested);
+      input.c_str(), audio.c_str(), requested);
   if (validation == voxone::hardware::RuntimeHardwareValidation::Invalid) {
     stationsReply(request, 400, R"({"error":"invalid_value"})");
     return;
@@ -3223,6 +3225,12 @@ void NetServer::processQueue(){
           {boardCapabilities.supportsRtc, "RTC"},
           {boardCapabilities.supportsAudioOutput(
               voxone::hardware::AudioOutputKind::Pcm5102a), "PCM5102A"},
+          {boardCapabilities.supportsAudioOutput(
+              voxone::hardware::AudioOutputKind::Max98357),
+              "MAX98357A_MONO"},
+          {boardCapabilities.supportsAudioOutput(
+              voxone::hardware::AudioOutputKind::Max98357Stereo),
+              "MAX98357A_STEREO"},
           {boardCapabilities.supportsPsram, "PSRAM"},
           {boardCapabilities.supportsDacHardwareMute, "DAC_XSMT"},
           {boardCapabilities.supportsDsp, "DSP"},
