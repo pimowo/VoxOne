@@ -3,8 +3,12 @@
 #include "../src/core/bt_audio_route_state.h"
 #include "../src/core/radio_source_policy.h"
 #include "../src/core/dac_mute_state.h"
+#include "../src/core/web_status_view.h"
+#include "../src/core/player_display_view.h"
 
 #include <cassert>
+#include <cstdio>
+#include <cstring>
 #include <initializer_list>
 #include <fstream>
 #include <iterator>
@@ -57,6 +61,11 @@ void auditTransport() {
   assert(handlers.find("player.temporaryEof();") != std::string::npos);
   assert(player.find("_temporary.signal(_callbackToken);") !=
          std::string::npos);
+  assert(player.find("if (radioMetadataAllowed()) {") != std::string::npos);
+  assert(player.find("_stop(false, RadioStopReason::SourceSwitch, true);") !=
+         std::string::npos);
+  assert(player.find("_temporary.allowRadioMetadata();") !=
+         std::string::npos);
   assert(player.find("_callbackToken = _temporary.token();") !=
          std::string::npos);
   assert(player.find("if (!_temporary.terminal()) Audio::loop();") !=
@@ -70,6 +79,33 @@ void auditTransport() {
   assert(player.find("xQueueOverwrite(_temporaryUrls, request);") !=
          std::string::npos);
   assert(player.find("if (temporaryActive()) finishTemporary();") !=
+         std::string::npos);
+  const auto browse = player.find("void Player::browseUrl(");
+  const auto browseEnd = player.find("void Player::prev()", browse);
+  assert(browse != std::string::npos && browseEnd != std::string::npos);
+  const auto browseBody = player.substr(browse, browseEnd - browse);
+  assert(browseBody.find("config.setTitle(") == std::string::npos);
+  const auto finish = player.find("void Player::finishTemporary()");
+  const auto restore = player.find("void Player::restoreTemporaryBase()", finish);
+  assert(finish != std::string::npos && restore != std::string::npos);
+  const auto finishBody = player.substr(finish, restore - finish);
+  assert(finishBody.find("requestOnChange(MODE, 0)") != std::string::npos);
+  assert(finishBody.find("requestOnChange(WEBSTATUS, 0)") != std::string::npos);
+  assert(finishBody.find("display.putRequest(NEWSTATION)") != std::string::npos);
+  assert(finishBody.find("display.putRequest(NEWTITLE)") != std::string::npos);
+
+  // Every decoder path capable of mutating the shared RADIO presentation is
+  // behind the production metadata gate. An empty showstation callback is a
+  // no-op, not a self-copy that clears config.station.name.
+  size_t guardedCallbacks = 0;
+  size_t guard = 0;
+  while ((guard = handlers.find("if (!player.radioMetadataAllowed()) return;",
+                                guard)) != std::string::npos) {
+    ++guardedCallbacks;
+    ++guard;
+  }
+  assert(guardedCallbacks >= 6);
+  assert(handlers.find("config.setStation(p?info:config.station.name)") ==
          std::string::npos);
 
   // The only production ingress for temporary audio is the existing MQTT
@@ -87,14 +123,22 @@ struct Scenario {
   BtLinkState bt{};
   uint16_t station = 17;
   unsigned resumes = 0;
+  unsigned cleanups = 0;
+  bool radioRunning = false;
+  char stationName[64] = "Radio test";
+  char metadata[96] = "Stan bazowy";
 
   void radio(bool play, uint16_t selected = 17) {
     source.recordRadioCommand(play, selected);
+    radioRunning = play;
   }
   void connect(BtPlayback playback) {
     bt.runtimeAvailable = bt.connected = true;
     bt.playback = playback;
     bt.sampleRate = 44100;
+    std::snprintf(bt.peerName, sizeof(bt.peerName), "%s", "Telefon testowy");
+    std::snprintf(bt.artist, sizeof(bt.artist), "%s", "BT artysta");
+    std::snprintf(bt.title, sizeof(bt.title), "%s", "BT utwor");
     source.observe(bt);
   }
   BtAudioRouteTarget route() const {
@@ -108,21 +152,66 @@ struct Scenario {
     if (temporary.takeRadioRestore(source.radioResumeAllowed(), online, updating)) {
       station = source.radioStationForResume(station);
       source.radioPlayConsumed();
+      temporary.allowRadioMetadata();
+      radioRunning = true;
       ++resumes;
     }
   }
   void end(uint32_t token) {
     temporary.signal(token);
     assert(temporary.terminal());
+    radioRunning = false;
     assert(temporary.finish(token));
+    ++cleanups;
     restore();
   }
   void backendStopped(uint32_t token) {
     assert(!temporary.terminal());
+    radioRunning = false;
     assert(temporary.finish(token));
+    ++cleanups;
     restore();
   }
+  bool decoderMetadata(uint32_t callbackToken, const char* stationValue,
+                       const char* metadataValue) {
+    if (!temporary.radioMetadataAllowed(callbackToken)) return false;
+    if (stationValue)
+      std::snprintf(stationName, sizeof(stationName), "%s", stationValue);
+    if (metadataValue)
+      std::snprintf(metadata, sizeof(metadata), "%s", metadataValue);
+    return true;
+  }
+  DisplaySourceView sourceView() const {
+    DisplaySourceView view{};
+    source.displayView(view, radioRunning, true);
+    return view;
+  }
+  WebStatusView webView() const {
+    const DisplaySourceView view = sourceView();
+    return selectWebStatusView(view, stationName, metadata, "", "", "MP3", 0);
+  }
+  PlayerDisplayView displayView() const {
+    const DisplaySourceView view = sourceView();
+    PlayerDisplayView display{};
+    makePlayerDisplayView(display, view, stationName, metadata, false,
+                          37, false, bt.connected, -55, 0, BF_UNKNOWN);
+    return display;
+  }
 };
+
+void assertRadioPresentation(const Scenario& scenario, bool playing) {
+  const WebStatusView web = scenario.webView();
+  assert(std::strcmp(web.activeSource, "radio") == 0);
+  assert(std::strcmp(web.name, "Radio test") == 0);
+  assert(std::strcmp(web.metadata, "Stan bazowy") == 0);
+  assert(std::strcmp(web.transport, playing ? "playing" : "stopped") == 0);
+  const PlayerDisplayView display = scenario.displayView();
+  assert(display.source == DisplaySourceKind::Radio);
+  assert(display.playback == (playing ? DisplayPlaybackState::Playing
+                                     : DisplayPlaybackState::Stopped));
+  assert(std::strstr(display.artist, "HTTP/") == nullptr);
+  assert(std::strstr(display.title, "HTTP/") == nullptr);
+}
 }
 
 int main() {
@@ -341,6 +430,131 @@ int main() {
     toRadio.backendStopped(token);
     assert(toRadio.source.active() == ActiveSource::Radio);
     assert(toRadio.resumes == 1 && !toRadio.temporary.busy());
+  }
+
+  // Presentation regressions A-H use the production metadata gate plus the
+  // real API and display view selectors. Temporary decoder text may be
+  // observed by logs, but it cannot become canonical RADIO presentation.
+
+  // A. RADIO STOP + HTTP 503: keep station, metadata and STOP.
+  {
+    Scenario error;
+    error.radio(false);
+    const auto errorToken = error.temporary.begin();
+    assert(!error.decoderMetadata(errorToken, "",
+                                  "HTTP/1.1 503 Service Unavailable"));
+    error.end(errorToken);
+    assert(error.cleanups == 1 && error.resumes == 0 && !error.radioRunning);
+    assertRadioPresentation(error, false);
+  }
+
+  // B. RADIO STOP + timeout follows the same presentation-preserving cleanup.
+  {
+    Scenario timeout;
+    timeout.radio(false);
+    const auto timeoutToken = timeout.temporary.begin();
+    timeout.backendStopped(timeoutToken);
+    assert(timeout.cleanups == 1 && timeout.resumes == 0 && !timeout.radioRunning);
+    assertRadioPresentation(timeout, false);
+  }
+
+  // C. RADIO PLAY + error reconnects once and exposes no temporary error.
+  {
+    Scenario error;
+    error.radio(true);
+    const auto errorToken = error.temporary.begin();
+    assert(!error.decoderMetadata(errorToken, "TTS service",
+                                  "HTTP/1.1 503 Service Unavailable"));
+    error.end(errorToken);
+    assert(error.cleanups == 1 && error.resumes == 1 && error.radioRunning);
+    assertRadioPresentation(error, true);
+  }
+
+  // D. BT PLAY + error returns to the observed BT stream without commands.
+  {
+    Scenario error;
+    error.radio(false);
+    error.connect(BtPlayback::Playing);
+    const auto errorToken = error.temporary.begin();
+    assert(!error.decoderMetadata(errorToken, "TTS service", "HTTP 503"));
+    error.end(errorToken);
+    const WebStatusView web = error.webView();
+    assert(std::strcmp(web.activeSource, "bt") == 0);
+    assert(std::strcmp(web.name, "Telefon testowy") == 0);
+    assert(std::strcmp(web.transport, "playing") == 0);
+    assert(error.route().btOutput && error.resumes == 0 && error.cleanups == 1);
+    assert(std::strcmp(error.stationName, "Radio test") == 0);
+    assert(std::strcmp(error.metadata, "Stan bazowy") == 0);
+  }
+
+  // E. BT PAUSED/STOPPED + timeout never synthesizes RESUME or autoplay.
+  for (const auto playback : {BtPlayback::Paused, BtPlayback::Stopped}) {
+    Scenario timeout;
+    timeout.radio(false);
+    timeout.connect(playback);
+    const auto timeoutToken = timeout.temporary.begin();
+    timeout.backendStopped(timeoutToken);
+    const WebStatusView web = timeout.webView();
+    assert(std::strcmp(web.activeSource, "bt") == 0);
+    assert(std::strcmp(web.transport,
+        playback == BtPlayback::Paused ? "paused" : "stopped") == 0);
+    assert(!timeout.route().btOutput && timeout.resumes == 0 &&
+           timeout.cleanups == 1);
+    assert(std::strcmp(timeout.stationName, "Radio test") == 0);
+    assert(std::strcmp(timeout.metadata, "Stan bazowy") == 0);
+  }
+
+  // F. BT -> RADIO STOP during timeout uses the current source and keeps the
+  // selected station. The earlier BT state is never restored late.
+  {
+    Scenario switched;
+    switched.radio(false);
+    switched.connect(BtPlayback::Playing);
+    const auto timeoutToken = switched.temporary.begin();
+    assert(switched.source.select(ActiveSource::Radio, switched.bt).activeChanged);
+    switched.backendStopped(timeoutToken);
+    assert(switched.source.active() == ActiveSource::Radio);
+    assert(switched.resumes == 0 && !switched.radioRunning);
+    assertRadioPresentation(switched, false);
+  }
+
+  // G. A stale generation cannot write after STOP cleanup or after RADIO PLAY
+  // opened the gate for tokenless callbacks from the new radio connection.
+  {
+    Scenario stopped;
+    stopped.radio(false);
+    const auto staleToken = stopped.temporary.begin();
+    stopped.end(staleToken);
+    assert(!stopped.decoderMetadata(staleToken, "stale",
+                                    "HTTP/1.1 503 stale"));
+    assertRadioPresentation(stopped, false);
+
+    Scenario playing;
+    playing.radio(true);
+    const auto oldToken = playing.temporary.begin();
+    playing.end(oldToken);
+    assert(playing.temporary.radioMetadataAllowed(0));
+    assert(!playing.decoderMetadata(oldToken, "stale", "HTTP 503 stale"));
+    assertRadioPresentation(playing, true);
+  }
+
+  // H. Duplicate terminal/finish notifications cannot repeat cleanup or
+  // restore; the state contains no owned heap allocation to free twice.
+  {
+    Scenario duplicate;
+    duplicate.radio(false);
+    const auto duplicateToken = duplicate.temporary.begin();
+    assert(duplicate.temporary.signal(duplicateToken));
+    duplicate.radioRunning = false;
+    assert(duplicate.temporary.finish(duplicateToken));
+    ++duplicate.cleanups;
+    duplicate.restore();
+    assert(!duplicate.temporary.signal(duplicateToken));
+    assert(!duplicate.temporary.finish(duplicateToken));
+    duplicate.restore();
+    assert(duplicate.cleanups == 1 && duplicate.resumes == 0 &&
+           !duplicate.temporary.busy());
+    assertRadioPresentation(duplicate, false);
   }
 
   // Manual selection during TTS wins over the source at announcement start.

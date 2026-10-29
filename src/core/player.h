@@ -74,7 +74,8 @@ class Player: public Audio {
     //char        _plError[PLERR_LN];
   private:
     void _stop(bool alreadyStopped = false,
-               RadioStopReason reason = RadioStopReason::Normal);
+               RadioStopReason reason = RadioStopReason::Normal,
+               bool preserveRadioPresentation = false);
     void _applyStop(int payload, bool consumeUserCommand);
     void _play(uint16_t stationId, bool sourceResume = false);
     bool _refreshStation(uint16_t stationId, bool* identityChanged = nullptr);
@@ -121,6 +122,9 @@ class Player: public Audio {
     }
     bool temporaryEof();
     bool interruptTemporaryForNetwork();
+    bool radioMetadataAllowed() const {
+      return _temporary.radioMetadataAllowed(_callbackToken);
+    }
     bool remoteStationName = false;
     plStatus_e status() { return _status; }
     void prev();

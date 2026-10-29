@@ -10,6 +10,10 @@
 void audio_info(const char *info) {
   if(player.lockOutput) return;
   if(config.runtimeSnapshot().audioInfo) serialCli.printf("##AUDIO.INFO#: %s\n", info);
+  if (strstr(info, "Account already in use") != NULL || strstr(info, "HTTP/1.0 401") != NULL) {
+    player.setError(info);
+  }
+  if (!player.radioMetadataAllowed()) return;
   BitrateFormat detectedFormat = BF_UNKNOWN;
   if (strstr(info, "format is aac")  != NULL) detectedFormat = BF_AAC;
   if (strstr(info, "format is flac") != NULL) detectedFormat = BF_FLAC;
@@ -22,10 +26,6 @@ void audio_info(const char *info) {
     netserver.requestOnChange(BITRATE, 0);
   }
   if (strstr(info, "skip metadata") != NULL) config.setTitle(config.station.name);
-  if (strstr(info, "Account already in use") != NULL || strstr(info, "HTTP/1.0 401") != NULL) {
-    player.setError(info);
-    
-  }
   uint32_t bitrate;
   if (parseAudioInfoBitrate(info, bitrate)) {
     char bitrateText[11];
@@ -37,6 +37,7 @@ void audio_info(const char *info) {
 void audio_bitrate(const char *info)
 {
   if(config.runtimeSnapshot().audioInfo) serialCli.printf("%s %s\n", "##AUDIO.BITRATE#:", info);
+  if (!player.radioMetadataAllowed()) return;
   config.station.bitrate = atoi(info) / 1000;
   display.putRequest(DBITRATE);
   netserver.requestOnChange(BITRATE, 0);
@@ -54,9 +55,10 @@ bool printable(const char *info) {
 }
 
 void audio_showstation(const char *info) {
+  if (!player.radioMetadataAllowed()) return;
   bool p = printable(info) && (strlen(info) > 0);(void)p;
-  if(player.remoteStationName){
-    config.setStation(p?info:config.station.name);
+  if(player.remoteStationName && p){
+    config.setStation(info);
     display.putRequest(NEWSTATION);
     netserver.requestOnChange(STATION, 0);
   }
@@ -64,6 +66,7 @@ void audio_showstation(const char *info) {
 
 void audio_showstreamtitle(const char *info) {
   if (strstr(info, "Account already in use") != NULL || strstr(info, "HTTP/1.0 401") != NULL || strstr(info, "HTTP/1.1 401") != NULL) player.setError(info);
+  if (!player.radioMetadataAllowed()) return;
   bool p = printable(info) && (strlen(info) > 0);
   #ifdef DEBUG_TITLES
     config.setTitle(DEBUG_TITLES);
@@ -77,6 +80,7 @@ void audio_error(const char *info) {
 }
 
 void audio_id3artist(const char *info){
+  if (!player.radioMetadataAllowed()) return;
   if(printable(info)) config.setStation(info);
   display.putRequest(NEWSTATION);
   netserver.requestOnChange(STATION, 0);
@@ -84,6 +88,7 @@ void audio_id3artist(const char *info){
 
 void audio_id3album(const char *info){
   if(player.lockOutput) return;
+  if (!player.radioMetadataAllowed()) return;
   if(printable(info)){
     if(strlen(config.station.title)==0){
       config.setTitle(info);

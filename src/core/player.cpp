@@ -122,9 +122,11 @@ void Player::stopInfo() {
 }
 
 void Player::setError(){
-  _hasError=true;
   _temporary.signal(_callbackToken);
-  config.setTitle(config.tmpBuf);
+  if (radioMetadataAllowed()) {
+    _hasError=true;
+    config.setTitle(config.tmpBuf);
+  }
   serialCli.printf("##ERROR#:\t%s\n", config.tmpBuf);
 }
 
@@ -133,14 +135,17 @@ void Player::setError(const char *e){
   setError();
 }
 
-void Player::_stop(bool alreadyStopped, RadioStopReason reason){
+void Player::_stop(bool alreadyStopped, RadioStopReason reason,
+                   bool preserveRadioPresentation){
   log_i("%s called", __func__);
   _status = STOPPED;
   if (reason == RadioStopReason::Normal) _radioReconnect.cancel();
   setOutputPins(false);
-  if(!_hasError) config.setTitle((uiState.mode()==LOST || uiState.mode()==UPDATING)?"":LANG::const_PlStopped);
-  config.station.bitrate = 0;
-  config.setBitrateFormat(BF_UNKNOWN);
+  if (!preserveRadioPresentation) {
+    if(!_hasError) config.setTitle((uiState.mode()==LOST || uiState.mode()==UPDATING)?"":LANG::const_PlStopped);
+    config.station.bitrate = 0;
+    config.setBitrateFormat(BF_UNKNOWN);
+  }
   setDefaults();
   if(!alreadyStopped) stopSong();
   if (systemUpdateAudioBlocked()) {
@@ -149,8 +154,10 @@ void Player::_stop(bool alreadyStopped, RadioStopReason reason){
 #endif
     systemUpdateRadioStopped();
   }
-  netserver.requestOnChange(BITRATE, 0);
-  display.putRequest(DBITRATE);
+  if (!preserveRadioPresentation) {
+    netserver.requestOnChange(BITRATE, 0);
+    display.putRequest(DBITRATE);
+  }
   display.putRequest(PSTOP);
   //setDefaults();
   //if(!alreadyStopped) stopSong();
@@ -445,6 +452,7 @@ void Player::_play(uint16_t stationId, bool sourceResume) {
   
   if(!config.prepareForPlaying(stationId, sourceResume)) return;
   _loadVol(config.runtimeSnapshot().volume);
+  _temporary.allowRadioMetadata();
   
   bool isConnected = false;
   connproc = false;
@@ -514,9 +522,16 @@ void Player::finishTemporary() {
   if (!token) return;
   _callbackToken = 0;
   // Stop/clear Player while it still owns I2S0. This is not a user RADIO STOP.
-  _stop(false, RadioStopReason::SourceSwitch);
+  _stop(false, RadioStopReason::SourceSwitch, true);
   remoteStationName = false;
-  _temporary.finish(token);
+  if (!_temporary.finish(token)) return;
+  // The station data never changed, but consumers may have observed temporary
+  // PLAY. Publish the final source/playback view and redraw from canonical
+  // RADIO/BT state without persisting configuration.
+  netserver.requestOnChange(MODE, 0);
+  netserver.requestOnChange(WEBSTATUS, 0);
+  display.putRequest(NEWSTATION);
+  display.putRequest(NEWTITLE);
 }
 
 void Player::restoreTemporaryBase() {
@@ -546,13 +561,11 @@ void Player::browseUrl(const char* url){
   config.setDspOn(1);
   display.putRequest(PSTOP);
   setOutputPins(false);
-  config.setTitle(LANG::const_PlConnect);
   _callbackToken = token;
   const bool connected = connecttohost(url);
   _callbackToken = 0;
   if (connected){
     _status = PLAYING;
-    config.setTitle("");
     netserver.requestOnChange(MODE, 0);
     setOutputPins(true);
     display.putRequest(PSTART);

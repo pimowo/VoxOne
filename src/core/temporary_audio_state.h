@@ -13,6 +13,7 @@ class TemporaryAudioState {
     generation_ = (generation_ % 0x7fffffffU) + 1;
     state_.store(generation_ << 1);
     restoring_.store(false);
+    radioMetadataAllowed_.store(false);
     if (!replacing) radioRestoreSuppressed_.store(false);
     return generation_;
   }
@@ -36,6 +37,15 @@ class TemporaryAudioState {
     radioRestoreSuppressed_.store(true);
     return true;
   }
+  // Decoder callbacks with a generation token belong to temporary audio and
+  // must never overwrite the selected RADIO station. After a stopped/BT
+  // restore the quarantine deliberately remains active: the stopped decoder
+  // has no legitimate metadata left to publish. A real RADIO connection
+  // explicitly opens the gate immediately before connecttohost().
+  bool radioMetadataAllowed(uint32_t callbackToken) const {
+    return callbackToken == 0 && radioMetadataAllowed_.load();
+  }
+  void allowRadioMetadata() { radioMetadataAllowed_.store(true); }
   // Consume restoration once, using CURRENT base intent. Wait only for network.
   bool takeRadioRestore(bool radioAllowed, bool networkReady, bool blocked) {
     if (active() || !restoring_.load()) return false;
@@ -51,6 +61,7 @@ class TemporaryAudioState {
   std::atomic<uint32_t> state_{0}; // token << 1 | terminal
   std::atomic<bool> restoring_{false};
   std::atomic<bool> radioRestoreSuppressed_{false};
+  std::atomic<bool> radioMetadataAllowed_{true};
 };
 
 inline bool bluetoothOwnsAudio(bool selected, bool temporaryActive) {
