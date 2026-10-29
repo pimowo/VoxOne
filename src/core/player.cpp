@@ -419,7 +419,17 @@ void Player::loop() {
     _radioReconnect.reset();
   }
   if (temporaryActive()) {
-    if (_temporary.terminal() || !isRunning()) finishTemporary();
+    voxone::temporary_audio::serviceTemporaryAudioTransport(
+        _temporary, _temporaryProgress, millis(), transportProgressBytes(),
+        isRunning(), transportConnected(), transportBufferedFrameAvailable(),
+        [this](uint32_t token) {
+          serialCli.printf(
+              "##[TTS]# transport stalled token=%lu timeout=%lu ms\n",
+              static_cast<unsigned long>(token),
+              static_cast<unsigned long>(
+                  voxone::temporary_audio::kInactivityTimeoutMs));
+        },
+        [this]() { finishTemporary(); });
   } else if (!isRunning() && _status==PLAYING) {
     _stop(true, RadioStopReason::SourceSwitch);
     scheduleRadioReconnect();
@@ -525,6 +535,7 @@ void Player::finishTemporary() {
   _stop(false, RadioStopReason::SourceSwitch, true);
   remoteStationName = false;
   if (!_temporary.finish(token)) return;
+  _temporaryProgress.finish(token);
   // The station data never changed, but consumers may have observed temporary
   // PLAY. Publish the final source/playback view and redraw from canonical
   // RADIO/BT state without persisting configuration.
@@ -554,6 +565,7 @@ void Player::browseUrl(const char* url){
   _callbackToken = 0;
   // Replacement invalidates the previous token without changing the base.
   const uint32_t token = _temporary.begin();
+  _temporaryProgress.begin(token, millis(), transportProgressBytes());
   stopSong();
   network.lostPlaying = false;
   _hasError=false;

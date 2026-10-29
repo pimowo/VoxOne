@@ -142,6 +142,9 @@ struct Audio {
     CHUNK_DONE, CHUNK_ERROR
   };
   explicit Audio(FakeClient* input) : _client(input) {}
+  int readClient();
+  int readClient(uint8_t* buffer, size_t length);
+  size_t readClientBytes(char* buffer, size_t length);
   uint16_t readMetadata(uint16_t maxBytes, bool first = false);
   size_t chunkedDataTransfer(uint8_t* bytes);
   void processWebStream();
@@ -172,6 +175,7 @@ struct Audio {
   uint8_t m_datamode = AUDIO_DATA;
   char chbuf[1024]{};
   unsigned stopCalls = 0;
+  uint64_t m_transportProgressBytes = 0;
 };
 '''
 
@@ -202,7 +206,8 @@ int main(int argc, char** argv) {
     uint8_t framingBytes = 0;
     check("valid hexadecimal chunk size",
           audio.chunkedDataTransfer(&framingBytes) == 10);
-    check("chunk header byte accounting", framingBytes == 3, true);
+    check("chunk header byte accounting",
+          framingBytes == 3 && audio.m_transportProgressBytes == 3, true);
   }
   {
     fakeNow = 100;
@@ -345,6 +350,9 @@ def main() -> int:
     methods = "\n\n".join(
         extract_function(source, signature)
         for signature in (
+            "int Audio::readClient()",
+            "int Audio::readClient(uint8_t* buffer, size_t length)",
+            "size_t Audio::readClientBytes(char* buffer, size_t length)",
             "uint16_t Audio::readMetadata(uint16_t maxBytes, bool first)",
             "size_t Audio::chunkedDataTransfer(uint8_t* bytes)",
             "void Audio::processWebStream()",

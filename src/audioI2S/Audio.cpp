@@ -401,6 +401,24 @@ void Audio::setConnectionTimeout(uint16_t timeout_ms, uint16_t timeout_ms_ssl){
     if(timeout_ms_ssl) m_timeout_ms_ssl = timeout_ms_ssl;
 }
 
+int Audio::readClient() {
+    const int value = _client ? _client->read() : -1;
+    if(value >= 0) ++m_transportProgressBytes;
+    return value;
+}
+
+int Audio::readClient(uint8_t* buffer, size_t length) {
+    const int bytes = _client ? _client->read(buffer, length) : -1;
+    if(bytes > 0) m_transportProgressBytes += static_cast<uint32_t>(bytes);
+    return bytes;
+}
+
+size_t Audio::readClientBytes(char* buffer, size_t length) {
+    const size_t bytes = _client ? _client->readBytes(buffer, length) : 0;
+    m_transportProgressBytes += bytes;
+    return bytes;
+}
+
 void Audio::cancelPendingConnection() {
     m_connectAttempt.requestCancel();
 }
@@ -2541,7 +2559,7 @@ bool Audio::readPlayListData() {
         while(true) { // inner while
             uint16_t pos = 0;
             while(_client->available()){ // super inner while :-))
-                pl[pos] = _client->read();
+                pl[pos] = readClient();
                 ctl++;
                 if(pl[pos] == '\n') {pl[pos] = '\0'; pos++; break;}
             //    if(pl[pos] == '&' ) {pl[pos] = '\0'; pos++; break;}
@@ -2573,8 +2591,8 @@ bool Audio::readPlayListData() {
         // 1. The http response header returns a value for contentLength -> read chars until contentLength is reached
         // 2. no contentLength, but Transfer-Encoding:chunked -> compute chunksize and read until chunksize is reached
         // 3. no chunksize and no contentlengt, but Connection: close -> read all available chars
-        if(ctl == m_contentlength){while(_client->available()) _client->read(); break;} // read '\n\n' if exists
-        if(ctl == chunksize)      {while(_client->available()) _client->read(); break;}
+        if(ctl == m_contentlength){while(_client->available()) readClient(); break;} // read '\n\n' if exists
+        if(ctl == chunksize)      {while(_client->available()) readClient(); break;}
         if(!_client->connected() && _client->available() == 0) break;
 
     } // outer while
@@ -2956,7 +2974,7 @@ void Audio::processWebStream() {
     // buffer fill routine - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
     if(availableBytes) {
         availableBytes = min(availableBytes, (uint32_t)InBuff.writeSpace());
-        int16_t bytesAddedToBuffer = _client->read(InBuff.getWritePtr(), availableBytes);
+        int16_t bytesAddedToBuffer = readClient(InBuff.getWritePtr(), availableBytes);
 
         if(bytesAddedToBuffer > 0) {
             lastDataMs = millis();
@@ -3018,7 +3036,7 @@ void Audio::processWebFile() {
     availableBytes = min(m_contentlength - byteCounter, availableBytes);
     if(m_audioDataSize) availableBytes = min(m_audioDataSize - (byteCounter - m_audioDataStart), availableBytes);
 
-    int16_t bytesAddedToBuffer = _client->read(InBuff.getWritePtr(), availableBytes);
+    int16_t bytesAddedToBuffer = readClient(InBuff.getWritePtr(), availableBytes);
 
     if(bytesAddedToBuffer > 0) {
         byteCounter  += bytesAddedToBuffer;  // Pull request #42
@@ -3122,7 +3140,7 @@ void Audio::processWebStreamTS(bool monitorTransport) {
             availableBytes = min((uint32_t)_client->available(), m_chunkcount);
         }
         const uint32_t requested = min(availableBytes, (uint32_t)(ts_packetsize - ts_packetPtr));
-        int res = _client->read(ts_packet + ts_packetPtr, requested);
+        int res = readClient(ts_packet + ts_packetPtr, requested);
         if(res > 0){
             m_segmentTransportWatchdog.received(millis());
             if(m_f_chunked) m_chunkcount -= res;
@@ -3252,10 +3270,10 @@ void Audio::processWebStreamHLS(bool monitorTransport) {
         }
         int bytesWasWritten = 0;
         if(InBuff.writeSpace() >= availableBytes){
-            bytesWasWritten = _client->read(InBuff.getWritePtr(), availableBytes);
+            bytesWasWritten = readClient(InBuff.getWritePtr(), availableBytes);
         }
         else{
-            bytesWasWritten = _client->read(InBuff.getWritePtr(), InBuff.writeSpace());
+            bytesWasWritten = readClient(InBuff.getWritePtr(), InBuff.writeSpace());
         }
         if(bytesWasWritten > 0) {
             m_segmentTransportWatchdog.received(millis());
@@ -3363,7 +3381,7 @@ bool Audio::parseHttpResponseHeader() { // this is the response to a GET / reque
             goto exit;
         }
         while(_client->available()){
-            uint8_t b = _client->read();
+            uint8_t b = readClient();
             if(b == '\n') {
                 if(!pos){ // empty line received, is the last line of this responseHeader
                     if(voxone::radio::httpResponseAction(httpStatus) ==
@@ -3372,7 +3390,7 @@ bool Audio::parseHttpResponseHeader() { // this is the response to a GET / reque
                             AUDIO_ERROR("HTTP redirect %d without Location", httpStatus);
                             goto exit;
                         }
-                        while(_client->available()) _client->read();
+                        while(_client->available()) readClient();
                         return followResolutionUrl(redirectUrl, "redirect");
                     }
                     if(ct_seen) goto lastToDo;
@@ -4734,7 +4752,7 @@ uint16_t Audio::readMetadata(uint16_t maxBytes, bool first) {
     if(!maxBytes) return 0;  // guard
 
     if(!metalen) {
-        int b = _client->read();   // First byte of metadata?
+        int b = readClient();   // First byte of metadata?
         if(b < 0) return 0;
         metalen = b * 16 ;                              // New count for metadata including length byte
         if(metalen > 512){
@@ -4747,7 +4765,7 @@ uint16_t Audio::readMetadata(uint16_t maxBytes, bool first) {
     }
     if(!metalen) {m_metacount = m_metaint; return res;} // metalen is 0
     const uint16_t budget = maxBytes > res ? maxBytes - res : 0;
-    uint16_t a = _client->readBytes(&chbuf[pos_ml], min((uint16_t)(metalen - pos_ml), budget));
+    uint16_t a = readClientBytes(&chbuf[pos_ml], min((uint16_t)(metalen - pos_ml), budget));
     res += a;
     pos_ml += a;
     if(pos_ml == metalen) {
@@ -4800,7 +4818,7 @@ size_t Audio::chunkedDataTransfer(uint8_t* bytes){
     uint32_t lastProgress = millis();
 
     while(true){
-        int b = _client->read();
+        int b = readClient();
         if(b < 0) {
             if(m_chunkState == CHUNK_TRAILER_START && !_client->available()) return finish();
             if((uint32_t)(millis() - lastProgress) >= timeout) return fail("timeout");

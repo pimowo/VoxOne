@@ -6,6 +6,7 @@
 #include "radio_reconnect_policy.h"
 #include "radio_source_policy.h"
 #include "temporary_audio_state.h"
+#include "temporary_transport_watchdog.h"
 #include "player_pending_refresh.h"
 
 #include "../audioI2S/AudioEx.h"
@@ -66,6 +67,7 @@ class Player: public Audio {
     plStatus_e  _status;
     MuteState _mute;
     TemporaryAudioState _temporary;
+    voxone::temporary_audio::ProgressWatchdog _temporaryProgress;
     voxone::radio::ReconnectPolicy _radioReconnect;
     PlayerPendingRefresh _pendingStationRefresh;
     uint32_t _callbackToken = 0;

@@ -1,4 +1,5 @@
 #include "../src/core/temporary_audio_state.h"
+#include "../src/core/temporary_transport_watchdog.h"
 #include "../src/core/source_manager_state.h"
 #include "../src/core/bt_audio_route_state.h"
 #include "../src/core/radio_source_policy.h"
@@ -19,6 +20,16 @@ std::string readFile(const char* path) {
   std::ifstream input(path, std::ios::binary);
   assert(input.good());
   return {std::istreambuf_iterator<char>(input), std::istreambuf_iterator<char>()};
+}
+
+size_t countOccurrences(const std::string& value, const std::string& needle) {
+  size_t count = 0;
+  size_t position = 0;
+  while ((position = value.find(needle, position)) != std::string::npos) {
+    ++count;
+    position += needle.size();
+  }
+  return count;
 }
 
 void auditTransport() {
@@ -70,9 +81,11 @@ void auditTransport() {
          std::string::npos);
   assert(player.find("if (!_temporary.terminal()) Audio::loop();") !=
          std::string::npos);
-  assert(player.find(
-      "if (_temporary.terminal() || !isRunning()) finishTemporary();") !=
-      std::string::npos);
+  assert(player.find("serviceTemporaryAudioTransport(") != std::string::npos);
+  assert(player.find("transportProgressBytes()") != std::string::npos);
+  assert(player.find("transportConnected()") != std::string::npos);
+  assert(player.find("transportBufferedFrameAvailable()") !=
+         std::string::npos);
   assert(player.find("const bool connected = connecttohost(url);") !=
          std::string::npos);
   assert(player.find("_temporary.signal(token);") != std::string::npos);
@@ -85,6 +98,11 @@ void auditTransport() {
   assert(browse != std::string::npos && browseEnd != std::string::npos);
   const auto browseBody = player.substr(browse, browseEnd - browse);
   assert(browseBody.find("config.setTitle(") == std::string::npos);
+  const auto progressBegin = browseBody.find("_temporaryProgress.begin(");
+  const auto connectionBegin = browseBody.find("connecttohost(url)");
+  assert(progressBegin != std::string::npos &&
+         connectionBegin != std::string::npos &&
+         progressBegin < connectionBegin);
   const auto finish = player.find("void Player::finishTemporary()");
   const auto restore = player.find("void Player::restoreTemporaryBase()", finish);
   assert(finish != std::string::npos && restore != std::string::npos);
@@ -93,6 +111,21 @@ void auditTransport() {
   assert(finishBody.find("requestOnChange(WEBSTATUS, 0)") != std::string::npos);
   assert(finishBody.find("display.putRequest(NEWSTATION)") != std::string::npos);
   assert(finishBody.find("display.putRequest(NEWTITLE)") != std::string::npos);
+  assert(finishBody.find("_temporaryProgress.finish(token)") !=
+         std::string::npos);
+
+  // Every HTTP consumer reports real bytes through one Audio-owned counter.
+  // Player observes that counter only while temporary audio is active, so the
+  // normal RADIO reconnect/timeout policy is not changed.
+  const auto audio = readFile("src/audioI2S/Audio.cpp");
+  const auto audioHeader = readFile("src/audioI2S/AudioEx.h");
+  assert(countOccurrences(audio, "_client->read(") == 2);
+  assert(countOccurrences(audio, "_client->readBytes(") == 1);
+  assert(audio.find("m_transportProgressBytes +=") != std::string::npos);
+  assert(audioHeader.find("uint64_t transportProgressBytes() const") !=
+         std::string::npos);
+  assert(audioHeader.find("bool transportBufferedFrameAvailable()") !=
+         std::string::npos);
 
   // Every decoder path capable of mutating the shared RADIO presentation is
   // behind the production metadata gate. An empty showstation callback is a
@@ -196,6 +229,34 @@ struct Scenario {
     makePlayerDisplayView(display, view, stationName, metadata, false,
                           37, false, bt.connected, -55, 0, BF_UNKNOWN);
     return display;
+  }
+};
+
+struct TransportScenario : Scenario {
+  voxone::temporary_audio::ProgressWatchdog progress;
+  unsigned timeouts = 0;
+
+  uint32_t beginTransport(uint32_t nowMs, uint64_t progressBytes) {
+    const uint32_t token = temporary.begin();
+    progress.begin(token, nowMs, progressBytes);
+    return token;
+  }
+
+  bool service(uint32_t nowMs, uint64_t progressBytes,
+               bool backendRunning = true, bool connected = true,
+               bool bufferedFrameAvailable = false) {
+    return voxone::temporary_audio::serviceTemporaryAudioTransport(
+        temporary, progress, nowMs, progressBytes, backendRunning, connected,
+        bufferedFrameAvailable,
+        [this](uint32_t) { ++timeouts; },
+        [this]() {
+          const uint32_t token = temporary.token();
+          radioRunning = false;
+          assert(temporary.finish(token));
+          progress.finish(token);
+          ++cleanups;
+          restore();
+        });
   }
 };
 
@@ -555,6 +616,151 @@ int main() {
     assert(duplicate.cleanups == 1 && duplicate.resumes == 0 &&
            !duplicate.temporary.busy());
     assertRadioPresentation(duplicate, false);
+  }
+
+  // Progress-watchdog matrix A-J. These cases drive the same production
+  // serviceTemporaryAudioTransport() dispatcher called by Player::loop(); the
+  // test never calls Player::finishTemporary() or completes a timeout by hand.
+  const uint32_t inactivity =
+      voxone::temporary_audio::kInactivityTimeoutMs;
+
+  // A/J. HTTP 503 remains a decoder terminal event. It wins before the
+  // watchdog, cleans once and cannot publish temporary metadata to RADIO.
+  {
+    TransportScenario error;
+    error.radio(false);
+    const uint32_t token = error.beginTransport(100, 64);
+    assert(!error.decoderMetadata(token, "TTS service",
+                                  "HTTP/1.1 503 Service Unavailable"));
+    assert(error.temporary.signal(token));
+    assert(error.service(101, 64));
+    assert(error.timeouts == 0 && error.cleanups == 1 && error.resumes == 0);
+    assertRadioPresentation(error, false);
+  }
+
+  // B/J. A valid response with no body progress expires autonomously at the
+  // contract boundary and preserves RADIO STOP presentation.
+  {
+    TransportScenario stalled;
+    stalled.radio(false);
+    const uint32_t token = stalled.beginTransport(1000, 96);
+    assert(!stalled.service(1000 + inactivity - 1, 96));
+    assert(stalled.service(1000 + inactivity, 96));
+    assert(stalled.timeouts == 1 && stalled.cleanups == 1 &&
+           stalled.resumes == 0 && !stalled.temporary.busy());
+    assert(!stalled.temporary.signal(token));
+    assertRadioPresentation(stalled, false);
+  }
+
+  // C. Partial body delivery starts a fresh inactivity window. Cleanup occurs
+  // only after that new window elapses without another byte.
+  {
+    TransportScenario partial;
+    partial.radio(false);
+    partial.beginTransport(2000, 100);
+    assert(!partial.service(2000 + inactivity - 1, 600));
+    assert(!partial.service(2000 + 2 * inactivity - 2, 600));
+    assert(partial.service(2000 + 2 * inactivity - 1, 600));
+    assert(partial.timeouts == 1 && partial.cleanups == 1 &&
+           partial.resumes == 0);
+    assertRadioPresentation(partial, false);
+  }
+
+  // D. RADIO PLAY restores once after the same no-progress timeout.
+  {
+    TransportScenario playing;
+    playing.radio(true, 23);
+    playing.beginTransport(3000, 10);
+    assert(playing.service(3000 + inactivity, 10));
+    assert(playing.timeouts == 1 && playing.cleanups == 1 &&
+           playing.resumes == 1 && playing.station == 23);
+    assertRadioPresentation(playing, true);
+  }
+
+  // E. A timeout over BT PAUSED/STOPPED returns ownership without emitting a
+  // RADIO restore or synthesizing a BT transport command.
+  for (const auto playback : {BtPlayback::Paused, BtPlayback::Stopped}) {
+    TransportScenario bt;
+    bt.radio(false);
+    bt.connect(playback);
+    bt.beginTransport(4000, 20);
+    assert(bt.service(4000 + inactivity, 20));
+    const WebStatusView web = bt.webView();
+    assert(bt.timeouts == 1 && bt.cleanups == 1 && bt.resumes == 0);
+    assert(bt.source.active() == ActiveSource::Bluetooth);
+    assert(std::strcmp(web.transport,
+        playback == BtPlayback::Paused ? "paused" : "stopped") == 0);
+    assert(!bt.route().btOutput);
+  }
+
+  // F/J. BT -> RADIO STOP during the stall makes the current source
+  // authoritative. Timeout cannot restore the stale BT selection.
+  {
+    TransportScenario switched;
+    switched.radio(false);
+    switched.connect(BtPlayback::Playing);
+    switched.beginTransport(5000, 30);
+    assert(switched.source.select(ActiveSource::Radio, switched.bt)
+               .activeChanged);
+    assert(switched.service(5000 + inactivity, 30));
+    assert(switched.source.active() == ActiveSource::Radio);
+    assert(switched.resumes == 0 && switched.cleanups == 1);
+    assertRadioPresentation(switched, false);
+  }
+
+  // G. A callback carrying the timed-out generation is stale after cleanup
+  // and cannot signal, finish or restart the announcement.
+  {
+    TransportScenario late;
+    late.radio(false);
+    const uint32_t token = late.beginTransport(6000, 40);
+    assert(late.service(6000 + inactivity, 40));
+    assert(!late.temporary.signal(token));
+    assert(!late.service(6000 + inactivity + 1, 41, true, true, false));
+    assert(late.cleanups == 1 && late.timeouts == 1 && late.resumes == 0);
+  }
+
+  // H. Backend completion at the timeout boundary wins deterministically;
+  // the common dispatcher requests cleanup once and records no second timeout.
+  {
+    TransportScenario race;
+    race.radio(false);
+    const uint32_t token = race.beginTransport(7000, 50);
+    assert(race.service(7000 + inactivity, 50, false, false, false));
+    assert(race.timeouts == 0 && race.cleanups == 1);
+    assert(!race.temporary.signal(token));
+    assert(!race.service(7000 + inactivity, 50, false, false, false));
+    assert(race.cleanups == 1);
+  }
+
+  // I. A slow stream is unlimited while it keeps making real progress. A
+  // complete buffered frame also prevents a false timeout under backpressure.
+  {
+    TransportScenario slow;
+    slow.radio(false);
+    const uint32_t token = slow.beginTransport(8000, 60);
+    uint32_t now = 8000;
+    uint64_t bytes = 60;
+    for (int i = 0; i < 8; ++i) {
+      now += inactivity - 1;
+      ++bytes;
+      assert(!slow.service(now, bytes));
+    }
+    assert(!slow.service(now + 2 * inactivity, bytes, true, true, true));
+    assert(slow.temporary.signal(token));
+    assert(slow.service(now + 2 * inactivity + 1, bytes));
+    assert(slow.timeouts == 0 && slow.cleanups == 1 && slow.resumes == 0);
+  }
+
+  // Once a buffered frame drains after a long network gap, the already
+  // elapsed inactivity is acted on immediately instead of granting a new gap.
+  {
+    TransportScenario drained;
+    drained.radio(false);
+    drained.beginTransport(9000, 70);
+    assert(!drained.service(9000 + 2 * inactivity, 70, true, true, true));
+    assert(drained.service(9000 + 2 * inactivity, 70, true, true, false));
+    assert(drained.timeouts == 1 && drained.cleanups == 1);
   }
 
   // Manual selection during TTS wins over the source at announcement start.

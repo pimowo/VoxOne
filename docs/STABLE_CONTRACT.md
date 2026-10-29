@@ -222,6 +222,12 @@ RADIO PLAY/STOP intent. Po końcu, błędzie albo timeout przywrócenie jest
 jednorazowe i zależy od aktualnego źródła, sieci i blokad systemowych. Jeżeli
 BT zniknie podczas TTS, komunikat nie jest przerywany, a restore RADIO jest
 stłumiony tak, aby po zakończeniu pozostało fizyczne STOP bez autoplay.
+Timeout transportu temporary audio jest timeoutem postępu, a nie całkowitego
+czasu komunikatu: każde odebranie bajtów HTTP rozpoczyna nowe okno 10 s, a
+kompletne ramki już obecne w buforze pozwalają dokończyć odtwarzanie. Brak
+postępu po opróżnieniu bufora albo rozłączenie transportu kończy bieżącą
+generację przez tę samą jednorazową ścieżkę cleanup. Krótsze, istniejące limity
+połączenia TCP i nagłówków HTTP pozostają bez zmian.
 Zaawansowana kolejka, priorytety, ducking i własne tryby głośności pozostają
 POST-STABLE.
 

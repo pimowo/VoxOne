@@ -143,6 +143,11 @@ public:
     bool pauseResume();
     bool isRunning() {return m_f_running;}
     bool audioStreamStarted() const {return m_f_playing;}
+    uint64_t transportProgressBytes() const { return m_transportProgressBytes; }
+    bool transportConnected() const { return _client && _client->connected(); }
+    bool transportBufferedFrameAvailable() {
+      return InBuff.bufferFilled() >= InBuff.getMaxBlockSize();
+    }
     void loop();
     uint32_t stopSong();
     void forceMono(bool m);
@@ -245,6 +250,9 @@ private:
     size_t   chunkedDataTransfer(uint8_t* bytes);
     bool     readID3V1Tag();
     void     slowStreamDetection(uint32_t inBuffFilled, uint32_t maxFrameSize);
+    int      readClient();
+    int      readClient(uint8_t* buffer, size_t length);
+    size_t   readClientBytes(char* buffer, size_t length);
 
     //++++ implement several function with respect to the index of string ++++
     void trim(char *s) {
@@ -518,6 +526,7 @@ private:
     uint32_t        m_t0 = 0;                       // store millis(), is needed for a small delay
     uint32_t        m_contentlength = 0;            // Stores the length if the stream comes from fileserver
     uint32_t        m_bytesNotDecoded = 0;          // pictures or something else that comes with the stream
+    uint64_t        m_transportProgressBytes = 0;   // bytes consumed from the active HTTP transport
     uint32_t        m_PlayingStartTime = 0;         // Stores the milliseconds after the start of the audio
     uint16_t        m_m3u8_targetDuration = 10;     //
     bool            m_f_metadata = false;           // assume stream without metadata
