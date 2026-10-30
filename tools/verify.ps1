@@ -173,7 +173,7 @@ Invoke-Step 'Native tests' {
    $compileLog=Join-Path $work ($label+'.compile.log')
    $compileArgs=@('-std=c++11','-O2','-Wall','-Wextra','-Werror','-Wno-unused-parameter')
    if($name -eq 'mqtt_contract_native') { $compileArgs+=@('-I',(Join-Path $root 'test')) }
-  if($name -eq 'ap_ui_www_binding_native' -or $name -eq 'asynctcp_lifecycle_native' -or $name -eq 'asyncweb_lock_native' -or $name -eq 'bt_audio_mute_crosscore_native' -or $name -eq 'config_runtime_snapshot_native' -or $name -eq 'display_scroll_runtime_config_native' -or $name -eq 'first_boot_runtime_snapshot_native' -or $name -eq 'first_boot_transaction_native' -or $name -eq 'sntp_server_lifetime_native' -or $name -eq 'websocket_client_lifetime_native' -or $name -eq 'websocket_queue_lifecycle_native') { $compileArgs+='-pthread' }
+  if($name -eq 'ap_ui_www_binding_native' -or $name -eq 'asynctcp_lifecycle_native' -or $name -eq 'asyncweb_lock_native' -or $name -eq 'bt_audio_mute_crosscore_native' -or $name -eq 'config_runtime_snapshot_native' -or $name -eq 'display_scroll_runtime_config_native' -or $name -eq 'first_boot_runtime_snapshot_native' -or $name -eq 'first_boot_transaction_native' -or $name -eq 'sntp_server_lifetime_native' -or $name -eq 'tts_hil_diagnostics_native' -or $name -eq 'websocket_client_lifetime_native' -or $name -eq 'websocket_queue_lifecycle_native') { $compileArgs+='-pthread' }
    if($variant) {
     if($variant -eq 'CLEAN' -or $variant -eq 'DIRTY') { $compileArgs+="-DBUILD_ID_TEST_$variant=1" }
     elseif($variant -eq 'SECURITY-TEST') { $compileArgs+=@('-DVOXONE_PROFILE_M0=1','-DVOXONE_SECURITY_HTTP_ENFORCEMENT_TEST=1') }
@@ -218,6 +218,18 @@ if(-not $onWindows) {
   if($LASTEXITCODE -ne 0) { throw 'Sanitized temporary audio compile failed' }
   & $temporaryAudioExe
   if($LASTEXITCODE -ne 0) { throw 'Sanitized temporary audio test failed' }
+  $wavWebFileExe=Join-Path $work 'wav_webfile_sanitized'
+  & $Cxx @sanitizerArgs '-o' $wavWebFileExe `
+    (Join-Path $root 'test/wav_webfile_native.cpp')
+  if($LASTEXITCODE -ne 0) { throw 'Sanitized WAV web-file compile failed' }
+  & $wavWebFileExe
+  if($LASTEXITCODE -ne 0) { throw 'Sanitized WAV web-file test failed' }
+  $ttsDiagnosticsExe=Join-Path $work 'tts_hil_diagnostics_sanitized'
+  & $Cxx @sanitizerArgs '-pthread' '-o' $ttsDiagnosticsExe `
+    (Join-Path $root 'test/tts_hil_diagnostics_native.cpp')
+  if($LASTEXITCODE -ne 0) { throw 'Sanitized TTS HIL diagnostics compile failed' }
+  & $ttsDiagnosticsExe
+  if($LASTEXITCODE -ne 0) { throw 'Sanitized TTS HIL diagnostics test failed' }
   $sntpLifetimeExe=Join-Path $work 'sntp_server_lifetime_sanitized'
   & $Cxx @sanitizerArgs '-pthread' '-o' $sntpLifetimeExe `
     (Join-Path $root 'test/sntp_server_lifetime_native.cpp')

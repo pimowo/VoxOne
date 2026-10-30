@@ -18,6 +18,7 @@
 #include "../core/radio_format_detection.h"
 #include "../core/radio_reconnect_policy.h"
 #include "../core/system_operation_state.h"
+#include "web_file_bounds.h"
 #include <new>
 #if VOXONE_HAS_BT && VOXONE_PIN_MAP_COMPLETE && VOXONE_BT_I2S_RX_ENABLED
 #include "../core/source_manager.h"
@@ -361,6 +362,7 @@ void Audio::setDefaults() {
     m_f_metadata = false;
     m_f_tts = false;
     m_f_firstCall = true;                                   // InitSequence for web stream processing
+    m_webFileDataComplete = false;
     m_f_running = false;
     m_f_unsync = false;                                     // set within ID3 tag but not used
     m_f_exthdr = false;                                     // ID3 extended header
@@ -376,6 +378,7 @@ void Audio::setDefaults() {
     m_audioCurrentTime = 0;                                 // Reset playtimer
     m_audioDataStart = 0;
     m_audioDataSize = 0;
+    m_wavHeaderParser.reset();
     m_avr_bitrate = 0;                                      // the same as m_bitrate if CBR, median if VBR
     m_bitRate = 0;                                          // Bitrate still unknown
     m_flacBitrateMeter.reset();
@@ -1212,141 +1215,55 @@ size_t Audio::readAudioHeader(uint32_t bytes){
 }
 //---------------------------------------------------------------------------------------------------------------------
 int Audio::read_WAV_Header(uint8_t* data, size_t len) {
-    static size_t headerSize;
-    static uint32_t cs = 0;
-    static uint8_t bts = 0;
-
-    if(m_controlCounter == 0){
-        m_controlCounter ++;
-        if((*data != 'R') || (*(data + 1) != 'I') || (*(data + 2) != 'F') || (*(data + 3) != 'F')) {
-            AUDIO_INFO("file has no RIFF tag");
-            headerSize = 0;
-            return -1; //false;
-        }
-        else{
-            headerSize = 4;
-            return 4; // ok
-        }
+    const voxone::audio::WavHeaderResult result =
+        m_wavHeaderParser.parse(data, len);
+    if(result.status == voxone::audio::WavHeaderStatus::Invalid) {
+        AUDIO_ERROR("Invalid RIFF/WAVE header");
+        stopSong();
+        return -1;
     }
+    if(result.status == voxone::audio::WavHeaderStatus::NeedMoreData)
+        return 0;
 
-    if(m_controlCounter == 1){
-        m_controlCounter ++;
-        cs = (uint32_t) (*data + (*(data + 1) << 8) + (*(data + 2) << 16) + (*(data + 3) << 24) - 8);
-        headerSize += 4;
-        return 4; // ok
-    }
-
-    if(m_controlCounter == 2){
-        m_controlCounter ++;
-        if((*data  != 'W') || (*(data + 1) != 'A') || (*(data + 2) != 'V') || (*(data + 3) != 'E')) {
-            AUDIO_INFO("format tag is not WAVE");
-            return -1;//false;
-        }
-        else {
-            headerSize += 4;
-            return 4;
-        }
-    }
-
-    if(m_controlCounter == 3){
-        if((*data  == 'f') && (*(data + 1) == 'm') && (*(data + 2) == 't')) {
-            m_controlCounter ++;
-            headerSize += 4;
-            return 4;
-        }
-        else{
-            headerSize += 4;
-            return 4;
-        }
-    }
-
-    if(m_controlCounter == 4){
-        m_controlCounter ++;
-        cs = (uint32_t) (*data + (*(data + 1) << 8));
-        if(cs > 40) return -1; //false, something going wrong
-        bts = cs - 16; // bytes to skip if fmt chunk is >16
-        headerSize += 4;
-        return 4;
-    }
-
-    if(m_controlCounter == 5){
-        m_controlCounter ++;
-        uint16_t fc  = (uint16_t) (*(data + 0)  + (*(data + 1)  << 8));         // Format code
-        uint16_t nic = (uint16_t) (*(data + 2)  + (*(data + 3)  << 8));         // Number of interleaved channels
-        uint32_t sr  = (uint32_t) (*(data + 4)  + (*(data + 5)  << 8) +
-                                  (*(data + 6)  << 16) + (*(data + 7)  << 24)); // Samplerate
-        uint32_t dr  = (uint32_t) (*(data + 8)  + (*(data + 9)  << 8) +
-                                  (*(data + 10) << 16) + (*(data + 11) << 24)); // Datarate
-        uint16_t dbs = (uint16_t) (*(data + 12) + (*(data + 13) << 8));         // Data block size
-        uint16_t bps = (uint16_t) (*(data + 14) + (*(data + 15) << 8));         // Bits per sample
-
+    if(m_wavHeaderParser.formatReady() && m_controlCounter < 2) {
+        const uint16_t fc = m_wavHeaderParser.formatCode();
+        const uint16_t nic = m_wavHeaderParser.channels();
+        const uint32_t sr = m_wavHeaderParser.sampleRate();
+        const uint32_t dr = m_wavHeaderParser.byteRate();
+        const uint16_t dbs = m_wavHeaderParser.blockAlign();
+        const uint16_t bps = m_wavHeaderParser.bitsPerSample();
         AUDIO_INFO("FormatCode: %u", fc);
-        // AUDIO_INFO("Channel: %u", nic);
-        // AUDIO_INFO("SampleRate: %u", sr);
-        AUDIO_INFO("DataRate: %lu", dr);
+        AUDIO_INFO("DataRate: %lu", static_cast<unsigned long>(dr));
         AUDIO_INFO("DataBlockSize: %u", dbs);
         AUDIO_INFO("BitsPerSample: %u", bps);
-
-        if((bps != 8) && (bps != 16)){
-            AUDIO_INFO("BitsPerSample is %u,  must be 8 or 16" , bps);
-            stopSong();
-            return -1;
-        }
-        if((nic != 1) && (nic != 2)){
-            AUDIO_INFO("num channels is %u,  must be 1 or 2" , nic); audio_info(chbuf);
-            stopSong();
-            return -1;
-        }
-        if(fc != 1) {
-            AUDIO_INFO("format code is not 1 (PCM)");
-            stopSong();
-            return -1 ; //false;
-        }
         setBitsPerSample(bps);
         setChannels(nic);
         setSampleRate(sr);
         setBitrate(nic * sr * bps);
-    //    AUDIO_INFO("BitRate: %u", m_bitRate);
-        headerSize += 16;
-        return 16; // ok
+        m_controlCounter = 2;
+    } else if(m_controlCounter == 0) {
+        m_controlCounter = 1;
     }
 
-    if(m_controlCounter == 6){
-        m_controlCounter ++;
-        headerSize += bts;
-        return bts; // skip to data
+    if(result.status == voxone::audio::WavHeaderStatus::Complete) {
+        m_audioDataStart = m_wavHeaderParser.dataOffset();
+        size_t resolvedDataSize = 0;
+        if(m_streamType == ST_WEBFILE &&
+           !voxone::audio::resolveWavDataSize(
+               m_contentlength, m_audioDataStart,
+               m_wavHeaderParser.dataSize(), resolvedDataSize)) {
+            AUDIO_ERROR("WAV data chunk exceeds HTTP Content-Length");
+            stopSong();
+            return -1;
+        }
+        m_audioDataSize = m_streamType == ST_WEBFILE
+            ? resolvedDataSize : m_wavHeaderParser.dataSize();
+        AUDIO_INFO("Audio-Length: %u",
+                   static_cast<unsigned>(m_audioDataSize));
+        m_controlCounter = 100;
+        eofHeader = true;
     }
-
-    if(m_controlCounter == 7){
-        if((*(data + 0) == 'd') && (*(data + 1) == 'a') && (*(data + 2) == 't') && (*(data + 3) == 'a')){
-            m_controlCounter ++;
-            vTaskDelay(30);
-            headerSize += 4;
-            return 4;
-        }
-        else{
-            headerSize ++;
-            return 1;
-        }
-    }
-
-    if(m_controlCounter == 8){
-        m_controlCounter ++;
-        size_t cs =  *(data + 0) + (*(data + 1) << 8) + (*(data + 2) << 16) + (*(data + 3) << 24); //read chunkSize
-        headerSize += 4;
-        if(cs){
-            m_audioDataSize = cs  - 44;
-        }
-        else { // sometimes there is nothing here
-            if(m_streamType == ST_WEBFILE) m_audioDataSize = m_contentlength - headerSize;
-        }
-        AUDIO_INFO("Audio-Length: %u", m_audioDataSize);
-        return 4;
-    }
-    m_controlCounter = 100; // header succesfully read
-    eofHeader = true;
-    m_audioDataStart = headerSize;
-    return 0;
+    return static_cast<int>(result.consumed);
 }
 //---------------------------------------------------------------------------------------------------------------------
 int Audio::read_FLAC_Header(uint8_t *data, size_t len) {
@@ -3002,14 +2919,13 @@ void Audio::processWebFile() {
 
     const uint32_t  maxFrameSize = InBuff.getMaxBlockSize();    // every mp3/aac frame is not bigger
     static bool     f_stream;                                   // first audio data received
-    static bool     f_webFileDataComplete;                      // all file data received
     static uint32_t byteCounter;                                // count received data
     static size_t   audioDataCount;                             // counts the decoded audiodata only
 
     // first call, set some values to default - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
     if(m_f_firstCall) { // runs only ont time per connection, prepare for start
         m_f_firstCall = false;
-        f_webFileDataComplete = false;
+        m_webFileDataComplete = false;
         f_stream = false;
         byteCounter = 0;
         audioDataCount = 0;
@@ -3028,24 +2944,35 @@ void Audio::processWebFile() {
     }
 
     // if the buffer is often almost empty issue a warning  - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
-    if(!f_webFileDataComplete && f_stream){
+    if(!m_webFileDataComplete && f_stream){
         slowStreamDetection(InBuff.bufferFilled(), maxFrameSize);
     }
 
     availableBytes = min((uint32_t)InBuff.writeSpace(), availableBytes);
-    availableBytes = min(m_contentlength - byteCounter, availableBytes);
-    if(m_audioDataSize) availableBytes = min(m_audioDataSize - (byteCounter - m_audioDataStart), availableBytes);
+    availableBytes = min(
+        voxone::audio::webFileReadLimit(
+            m_contentlength, byteCounter, m_audioDataStart, m_audioDataSize),
+        availableBytes);
 
     int16_t bytesAddedToBuffer = readClient(InBuff.getWritePtr(), availableBytes);
 
     if(bytesAddedToBuffer > 0) {
         byteCounter  += bytesAddedToBuffer;  // Pull request #42
+#if defined(VOXONE_TTS_HIL_DIAGNOSTICS)
+        m_hilHttpBodyProgressBytes += static_cast<uint32_t>(bytesAddedToBuffer);
+#endif
         if(m_f_chunked)             m_chunkcount   -= bytesAddedToBuffer;
         if(m_controlCounter == 100) audioDataCount += bytesAddedToBuffer;
         InBuff.bytesWritten(bytesAddedToBuffer);
     }
 
-    if(InBuff.bufferFilled() > maxFrameSize && !f_stream) {  // waiting for buffer filled
+    if(voxone::audio::webFileDataComplete(
+           m_contentlength, byteCounter, m_audioDataStart, m_audioDataSize)) {
+        m_webFileDataComplete = true;
+    }
+
+    if((InBuff.bufferFilled() > maxFrameSize || m_webFileDataComplete) &&
+       !f_stream) {  // waiting for a frame or the complete short body
         f_stream = true;  // ready to play the audio data
         uint16_t filltime = millis() - m_t0;
         AUDIO_INFO("stream ready\nbuffer filled in %d ms", filltime);
@@ -3055,12 +2982,14 @@ void Audio::processWebFile() {
 
     // we have a webfile, read the file header first - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
     if(m_controlCounter != 100){
-        InBuff.bytesWasRead(readAudioHeader(availableBytes));
+        const uint32_t headerBytes = m_codec == CODEC_WAV
+            ? static_cast<uint32_t>(InBuff.bufferFilled()) : availableBytes;
+        InBuff.bytesWasRead(readAudioHeader(headerBytes));
         return;
     }
 
     // end of webfile reached? - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
-    if(f_webFileDataComplete && InBuff.bufferFilled() < InBuff.getMaxBlockSize()){
+    if(m_webFileDataComplete && InBuff.bufferFilled() < InBuff.getMaxBlockSize()){
         if(InBuff.bufferFilled()){
             if(!readID3V1Tag()){
                 int bytesDecoded = sendBytes(InBuff.getReadPtr(), InBuff.bufferFilled());
@@ -3079,9 +3008,6 @@ void Audio::processWebFile() {
         }
         return;
     }
-
-    if(byteCounter == m_contentlength)                    {f_webFileDataComplete = true;}
-    if(byteCounter - m_audioDataStart == m_audioDataSize) {f_webFileDataComplete = true;}
 
     // play audio data - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
     if(f_stream){

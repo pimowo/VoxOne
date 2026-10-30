@@ -8,6 +8,9 @@
 #include "bt_update_progress.h"
 #include "source_manager.h"
 #include "bt_link.h"
+#if defined(VOXONE_TTS_HIL_DIAGNOSTICS)
+#include "tts_hil_diagnostics.h"
+#endif
 #include "../hardware/hardware_descriptor.h"
 #include "../hardware/runtime_hardware_web.h"
 #if defined(CONFIG_IDF_TARGET_ESP32S3) && VOXONE_HAS_BT && VOXONE_PIN_MAP_COMPLETE
@@ -2365,6 +2368,27 @@ void handleConfigRestore(AsyncWebServerRequest* request) {
 
 void handleHardwareConfigRead(AsyncWebServerRequest* request) {
   if (!deviceApiAuthorized(request)) return;
+#if defined(VOXONE_TTS_HIL_DIAGNOSTICS)
+  AsyncWebParameter* diagnosticsParameter = request->hasParam("ttsDiagnostics")
+      ? request->getParam("ttsDiagnostics") : nullptr;
+  if (diagnosticsParameter && diagnosticsParameter->value() == "1") {
+    std::unique_ptr<char[]> diagnosticsBody(new (std::nothrow)
+        char[voxone::tts_hil::Diagnostics::kJsonCapacity]);
+    if (!diagnosticsBody || !voxone::tts_hil::diagnostics().formatJson(
+            diagnosticsBody.get(),
+            voxone::tts_hil::Diagnostics::kJsonCapacity)) {
+      stationsReply(request, 500,
+                    R"({"error":"tts_diagnostics_unavailable"})");
+      return;
+    }
+    AsyncWebServerResponse* response = request->beginResponse(
+        200, "application/json; charset=utf-8", diagnosticsBody.get());
+    response->addHeader("Cache-Control", "no-store, max-age=0");
+    response->addHeader("X-Content-Type-Options", "nosniff");
+    request->send(response);
+    return;
+  }
+#endif
   std::unique_ptr<char[]> body(new (std::nothrow)
       char[voxone::hardware::kRuntimeHardwareWebJsonCapacity]);
   if (!body) {

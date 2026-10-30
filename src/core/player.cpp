@@ -14,6 +14,9 @@
 #include "playlist_mapping.h"
 #include "playlist_store.h"
 #include "station_format.h"
+#if defined(VOXONE_TTS_HIL_DIAGNOSTICS)
+#include "tts_hil_diagnostics.h"
+#endif
 #include "../hardware/runtime_audio_output.h"
 #include "../hardware/runtime_hardware_config.h"
 #if I2S_DOUT!=255
@@ -32,6 +35,10 @@ Player::Player(): Audio(true, 3, I2S_NUM_0, false) {}
 
 
 void Player::init() {
+#if defined(VOXONE_TTS_HIL_DIAGNOSTICS)
+  // Construct the fixed diagnostic store during boot, never on the audio path.
+  (void)voxone::tts_hil::diagnostics();
+#endif
   const auto runtime = config.runtimeSnapshot();
   Serial.print("##[BOOT]#\tplayer.init\t");
   playerQueue=NULL;
@@ -122,7 +129,17 @@ void Player::stopInfo() {
 }
 
 void Player::setError(){
+#if defined(VOXONE_TTS_HIL_DIAGNOSTICS)
+  const bool temporarySignalled = _temporary.signal(_callbackToken);
+  if (_callbackToken) {
+    voxone::tts_hil::diagnostics().transportError(
+        _callbackToken, millis(), transportProgressBytes(),
+        httpBodyProgressBytes(), httpContentLength(),
+        temporarySignalled);
+  }
+#else
   _temporary.signal(_callbackToken);
+#endif
   if (radioMetadataAllowed()) {
     _hasError=true;
     config.setTitle(config.tmpBuf);
@@ -252,7 +269,21 @@ void Player::_applyStop(int payload, bool consumeUserCommand) {
   if (_temporaryUrls) xQueueReset(_temporaryUrls);
   if (temporaryBusy()) {
     if (!consumeUserCommand) suppressTemporaryRadioRestore();
-    if (temporaryActive()) finishTemporary();
+    if (temporaryActive()) {
+#if defined(VOXONE_TTS_HIL_DIAGNOSTICS)
+      const uint32_t token = _temporary.token();
+      if (consumeUserCommand) {
+        voxone::tts_hil::diagnostics().userStop(
+            token, millis(), transportProgressBytes(),
+            httpBodyProgressBytes(), httpContentLength());
+      } else {
+        voxone::tts_hil::diagnostics().sourceSwitch(
+            token, millis(), transportProgressBytes(),
+            httpBodyProgressBytes(), httpContentLength());
+      }
+#endif
+      finishTemporary();
+    }
     else if (systemUpdateAudioBlocked())
       _stop(false, RadioStopReason::SourceSwitch);
     if (!sourceManagerRadioPlayIntent()) stopInfo();
@@ -322,7 +353,14 @@ void Player::loop() {
         _radioReconnect.cancel();
         if (_temporaryUrls) xQueueReset(_temporaryUrls);
         suppressTemporaryRadioRestore();
-        if (temporaryActive()) finishTemporary();
+        if (temporaryActive()) {
+#if defined(VOXONE_TTS_HIL_DIAGNOSTICS)
+          voxone::tts_hil::diagnostics().updateStop(
+              _temporary.token(), millis(), transportProgressBytes(),
+              httpBodyProgressBytes(), httpContentLength());
+#endif
+          finishTemporary();
+        }
         else _stop(false, RadioStopReason::SourceSwitch);
         break;
       case PR_STOP:
@@ -414,20 +452,46 @@ void Player::loop() {
   _callbackToken = _temporary.token();
   if (!_temporary.terminal()) Audio::loop();
   _callbackToken = 0;
+#if defined(VOXONE_TTS_HIL_DIAGNOSTICS)
+  voxone::tts_hil::diagnostics().consumeNetworkInterrupted(
+      millis(), transportProgressBytes(), httpBodyProgressBytes(),
+      httpContentLength());
+#endif
   if (_radioReconnect.failures() && audioStreamStarted()) {
     serialCli.printf("##[RADIO]# stream recovered\n");
     _radioReconnect.reset();
   }
   if (temporaryActive()) {
+#if defined(VOXONE_TTS_HIL_DIAGNOSTICS)
+    voxone::tts_hil::diagnostics().observeProgress(
+        _temporary.token(), millis(), transportProgressBytes(),
+        httpBodyProgressBytes(), httpContentLength());
+#endif
     voxone::temporary_audio::serviceTemporaryAudioTransport(
         _temporary, _temporaryProgress, millis(), transportProgressBytes(),
-        isRunning(), transportConnected(), transportBufferedFrameAvailable(),
+        isRunning(), transportConnected(), transportBodyComplete(),
+        transportBufferedBytes(), transportBufferedFrameAvailable(),
         [this](uint32_t token) {
+#if defined(VOXONE_TTS_HIL_DIAGNOSTICS)
+          voxone::tts_hil::diagnostics().watchdogTimeout(
+              token, millis(), transportProgressBytes(),
+              httpBodyProgressBytes(), httpContentLength());
+#endif
           serialCli.printf(
               "##[TTS]# transport stalled token=%lu timeout=%lu ms\n",
               static_cast<unsigned long>(token),
               static_cast<unsigned long>(
                   voxone::temporary_audio::kInactivityTimeoutMs));
+        },
+        [this](uint32_t token) {
+#if defined(VOXONE_TTS_HIL_DIAGNOSTICS)
+          voxone::tts_hil::diagnostics().transportError(
+              token, millis(), transportProgressBytes(),
+              httpBodyProgressBytes(), httpContentLength(), true);
+#endif
+          serialCli.printf(
+              "##[TTS]# transport disconnected before EOF token=%lu\n",
+              static_cast<unsigned long>(token));
         },
         [this]() { finishTemporary(); });
   } else if (!isRunning() && _status==PLAYING) {
@@ -517,24 +581,45 @@ void Player::requestTemporaryUrl(const char* url, size_t length) {
 
 bool Player::temporaryEof() {
   if (!_callbackToken) return false;
-  _temporary.signal(_callbackToken);
+  const bool accepted = _temporary.signal(_callbackToken);
+#if defined(VOXONE_TTS_HIL_DIAGNOSTICS)
+  voxone::tts_hil::diagnostics().naturalEof(
+      _callbackToken, millis(), transportProgressBytes(),
+      httpBodyProgressBytes(), httpContentLength(), accepted);
+#endif
   return true;
 }
 
 bool Player::interruptTemporaryForNetwork() {
   const bool busy = temporaryBusy();
-  _temporary.signal(_temporary.token());
+  const uint32_t token = _temporary.token();
+  const bool accepted = _temporary.signal(token);
+#if defined(VOXONE_TTS_HIL_DIAGNOSTICS)
+  voxone::tts_hil::diagnostics().notifyNetworkInterrupted(token, accepted);
+#endif
   return busy;
 }
 
 void Player::finishTemporary() {
   const uint32_t token = _temporary.token();
   if (!token) return;
+#if defined(VOXONE_TTS_HIL_DIAGNOSTICS)
+  // Close the narrow race where Wi-Fi signals terminal state after loop()'s
+  // first mailbox check but before the one-shot cleanup dispatcher runs.
+  voxone::tts_hil::diagnostics().consumeNetworkInterrupted(
+      millis(), transportProgressBytes(), httpBodyProgressBytes(),
+      httpContentLength());
+#endif
   _callbackToken = 0;
   // Stop/clear Player while it still owns I2S0. This is not a user RADIO STOP.
   _stop(false, RadioStopReason::SourceSwitch, true);
   remoteStationName = false;
   if (!_temporary.finish(token)) return;
+#if defined(VOXONE_TTS_HIL_DIAGNOSTICS)
+  voxone::tts_hil::diagnostics().cleanup(
+      token, millis(), transportProgressBytes(), httpBodyProgressBytes(),
+      httpContentLength());
+#endif
   _temporaryProgress.finish(token);
   // The station data never changed, but consumers may have observed temporary
   // PLAY. Publish the final source/playback view and redraw from canonical
@@ -564,8 +649,20 @@ void Player::browseUrl(const char* url){
 #endif
   _callbackToken = 0;
   // Replacement invalidates the previous token without changing the base.
+#if defined(VOXONE_TTS_HIL_DIAGNOSTICS)
+  const uint32_t replacedToken = _temporary.token();
+  if (replacedToken) {
+    voxone::tts_hil::diagnostics().replaced(
+        replacedToken, millis(), transportProgressBytes(),
+        httpBodyProgressBytes(), httpContentLength());
+  }
+#endif
   const uint32_t token = _temporary.begin();
   _temporaryProgress.begin(token, millis(), transportProgressBytes());
+#if defined(VOXONE_TTS_HIL_DIAGNOSTICS)
+  voxone::tts_hil::diagnostics().start(
+      token, millis(), transportProgressBytes(), httpBodyProgressBytes());
+#endif
   stopSong();
   network.lostPlaying = false;
   _hasError=false;
@@ -585,7 +682,12 @@ void Player::browseUrl(const char* url){
   }else{
     serialCli.printf("##ERROR#:\tError connecting to %.128s\n", url);
     snprintf(config.tmpBuf, sizeof(config.tmpBuf), "Error connecting to %.128s", url); setError();
-    _temporary.signal(token);
+    const bool accepted = _temporary.signal(token);
+#if defined(VOXONE_TTS_HIL_DIAGNOSTICS)
+    voxone::tts_hil::diagnostics().connectFailed(
+        token, millis(), transportProgressBytes(), httpBodyProgressBytes(),
+        httpContentLength(), accepted);
+#endif
   }
 }
 

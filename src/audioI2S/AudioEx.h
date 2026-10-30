@@ -13,6 +13,7 @@
 #include "../core/flac_bitrate_meter.h"
 #include "../core/radio_connect_lifetime.h"
 #include "../core/radio_reconnect_policy.h"
+#include "wav_header_parser.h"
 #include <Arduino.h>
 #include <libb64/cencode.h>
 #include <esp32-hal-log.h>
@@ -144,7 +145,17 @@ public:
     bool isRunning() {return m_f_running;}
     bool audioStreamStarted() const {return m_f_playing;}
     uint64_t transportProgressBytes() const { return m_transportProgressBytes; }
+#if defined(VOXONE_TTS_HIL_DIAGNOSTICS)
+    uint64_t httpBodyProgressBytes() const {
+      return m_hilHttpBodyProgressBytes;
+    }
+    uint32_t httpContentLength() const { return m_contentlength; }
+#endif
     bool transportConnected() const { return _client && _client->connected(); }
+    bool transportBodyComplete() const {
+      return m_streamType == ST_WEBFILE && m_webFileDataComplete;
+    }
+    uint32_t transportBufferedBytes() { return InBuff.bufferFilled(); }
     bool transportBufferedFrameAvailable() {
       return InBuff.bufferFilled() >= InBuff.getMaxBlockSize();
     }
@@ -527,6 +538,9 @@ private:
     uint32_t        m_contentlength = 0;            // Stores the length if the stream comes from fileserver
     uint32_t        m_bytesNotDecoded = 0;          // pictures or something else that comes with the stream
     uint64_t        m_transportProgressBytes = 0;   // bytes consumed from the active HTTP transport
+#if defined(VOXONE_TTS_HIL_DIAGNOSTICS)
+    uint64_t        m_hilHttpBodyProgressBytes = 0; // cumulative web-file body bytes
+#endif
     uint32_t        m_PlayingStartTime = 0;         // Stores the milliseconds after the start of the audio
     uint16_t        m_m3u8_targetDuration = 10;     //
     bool            m_f_metadata = false;           // assume stream without metadata
@@ -535,6 +549,7 @@ private:
     bool            m_f_ssl = false;
     bool            m_f_running = false;
     bool            m_f_firstCall = false;          // InitSequence for web stream processing
+    bool            m_webFileDataComplete = false;  // HTTP body complete; decoder may still be draining
     bool            m_f_chunked = false ;           // Station provides chunked transfer
     bool            m_f_firstmetabyte = false;      // True if first metabyte (counter)
     bool            m_f_playing = false;            // valid mp3 stream recognized
@@ -551,6 +566,7 @@ private:
     float           m_audioCurrentTime = 0;
     uint32_t        m_audioDataStart = 0;           // in bytes
     size_t          m_audioDataSize = 0;            //
+    voxone::audio::WavHeaderParser m_wavHeaderParser;
     float           m_filterBuff[3][2][2][2];       // IIR filters memory for Audio DSP
     size_t          m_i2s_bytesWritten = 0;         // set in i2s_write() but not used
     uint16_t        m_filterFrequency[2];

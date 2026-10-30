@@ -6,6 +6,7 @@
 #include "../src/core/dac_mute_state.h"
 #include "../src/core/web_status_view.h"
 #include "../src/core/player_display_view.h"
+#include "../src/audioI2S/web_file_bounds.h"
 
 #include <cassert>
 #include <cstdio>
@@ -84,14 +85,18 @@ void auditTransport() {
   assert(player.find("serviceTemporaryAudioTransport(") != std::string::npos);
   assert(player.find("transportProgressBytes()") != std::string::npos);
   assert(player.find("transportConnected()") != std::string::npos);
+  assert(player.find("transportBodyComplete()") != std::string::npos);
+  assert(player.find("transportBufferedBytes()") != std::string::npos);
   assert(player.find("transportBufferedFrameAvailable()") !=
+         std::string::npos);
+  assert(player.find("transport disconnected before EOF") !=
          std::string::npos);
   assert(player.find("const bool connected = connecttohost(url);") !=
          std::string::npos);
   assert(player.find("_temporary.signal(token);") != std::string::npos);
   assert(player.find("xQueueOverwrite(_temporaryUrls, request);") !=
          std::string::npos);
-  assert(player.find("if (temporaryActive()) finishTemporary();") !=
+  assert(player.find("if (temporaryActive()) {") !=
          std::string::npos);
   const auto browse = player.find("void Player::browseUrl(");
   const auto browseEnd = player.find("void Player::prev()", browse);
@@ -124,6 +129,18 @@ void auditTransport() {
   assert(audio.find("m_transportProgressBytes +=") != std::string::npos);
   assert(audioHeader.find("uint64_t transportProgressBytes() const") !=
          std::string::npos);
+  assert(audioHeader.find("bool transportBodyComplete() const") !=
+         std::string::npos);
+  assert(audio.find("m_webFileDataComplete = true;") != std::string::npos);
+  const auto webFile = audio.find("void Audio::processWebFile()");
+  const auto bodyComplete = audio.find(
+      "m_webFileDataComplete = true;", webFile);
+  const auto waitForStream = audio.find("if(!f_stream) return;", webFile);
+  assert(webFile != std::string::npos && bodyComplete != std::string::npos &&
+         waitForStream != std::string::npos && bodyComplete < waitForStream);
+  assert(audio.find(
+      "InBuff.bufferFilled() > maxFrameSize || m_webFileDataComplete",
+      webFile) != std::string::npos);
   assert(audioHeader.find("bool transportBufferedFrameAvailable()") !=
          std::string::npos);
 
@@ -235,6 +252,7 @@ struct Scenario {
 struct TransportScenario : Scenario {
   voxone::temporary_audio::ProgressWatchdog progress;
   unsigned timeouts = 0;
+  unsigned disconnects = 0;
 
   uint32_t beginTransport(uint32_t nowMs, uint64_t progressBytes) {
     const uint32_t token = temporary.begin();
@@ -244,11 +262,13 @@ struct TransportScenario : Scenario {
 
   bool service(uint32_t nowMs, uint64_t progressBytes,
                bool backendRunning = true, bool connected = true,
-               bool bufferedFrameAvailable = false) {
+               bool bufferedFrameAvailable = false,
+               bool bodyComplete = false, uint32_t bufferedBytes = 0) {
     return voxone::temporary_audio::serviceTemporaryAudioTransport(
         temporary, progress, nowMs, progressBytes, backendRunning, connected,
-        bufferedFrameAvailable,
+        bodyComplete, bufferedBytes, bufferedFrameAvailable,
         [this](uint32_t) { ++timeouts; },
+        [this](uint32_t) { ++disconnects; },
         [this]() {
           const uint32_t token = temporary.token();
           radioRunning = false;
@@ -733,13 +753,137 @@ int main() {
     assert(race.cleanups == 1);
   }
 
+  // F/L. Ten slow-body fragments at four-second intervals continually renew
+  // the ten-second inactivity window. The last positive read may observe the
+  // TCP close in the same Player cycle; a complete body remains decoder-owned.
+  {
+    TransportScenario slowBody;
+    slowBody.radio(false);
+    const uint32_t token = slowBody.beginTransport(8000, 0);
+    uint32_t now = 8000;
+    uint64_t bytes = 0;
+    for (int chunk = 0; chunk < 10; ++chunk) {
+      now += 4000;
+      bytes += chunk == 0 ? 364844 : 364800;
+      const bool complete = voxone::audio::webFileDataComplete(
+          3648044, static_cast<uint32_t>(bytes), 44, 3648000);
+      assert(complete == (chunk == 9));
+      assert(!slowBody.service(now, bytes, true, !complete, false,
+                               complete, complete ? 8192 : 0));
+    }
+    assert(bytes == 3648044);
+    assert(!slowBody.service(now + 100, bytes, true, false, false, true,
+                             4096));
+    assert(!slowBody.service(now + 200, bytes, true, false, false, true, 64));
+    assert(slowBody.temporary.signal(token));
+    assert(slowBody.service(now + 201, bytes, true, false, false, true, 0));
+    assert(slowBody.timeouts == 0 && slowBody.disconnects == 0 &&
+           slowBody.cleanups == 1);
+  }
+
+  // A/C. Closing TCP immediately after a complete body does not impose a
+  // one-loop grace period. The actual input-buffer level may need many decoder
+  // cycles to drain before the synchronous EOF callback signals the run.
+  {
+    TransportScenario natural;
+    natural.radio(false);
+    const uint32_t token = natural.beginTransport(9000, 3648000);
+    assert(!natural.service(9001, 3648044, true, false, false, true, 12288));
+    assert(!natural.service(9640, 3648044, true, false, false, true, 12288));
+    assert(!natural.service(9641, 3648044, true, false, false, true, 8192));
+    assert(!natural.service(11000, 3648044, true, false, false, true, 4096));
+    assert(!natural.service(12000, 3648044, true, false, false, true, 64));
+    assert(natural.temporary.signal(token));
+    assert(natural.service(12001, 3648044, true, false, false, true, 0));
+    assert(natural.timeouts == 0 && natural.disconnects == 0 &&
+           natural.cleanups == 1);
+    assert(!natural.service(12002, 3648044, false, false, false, true, 0));
+    assert(natural.cleanups == 1);
+  }
+
+  // B. A server which keeps TCP open after the declared body follows the same
+  // complete-body -> decoder EOF -> one cleanup path.
+  {
+    TransportScenario keepAlive;
+    keepAlive.radio(false);
+    const uint32_t token = keepAlive.beginTransport(13000, 3648000);
+    assert(!keepAlive.service(13001, 3648044, true, true, false, true, 4096));
+    assert(!keepAlive.service(13002, 3648044, true, true, false, true, 128));
+    assert(keepAlive.temporary.signal(token));
+    assert(keepAlive.service(13003, 3648044, true, true, false, true, 0));
+    assert(keepAlive.timeouts == 0 && keepAlive.disconnects == 0 &&
+           keepAlive.cleanups == 1);
+  }
+
+  // H. A persistent close before Content-Length is complete is classified as
+  // a transport disconnect on the next service cycle, not as a ten-second
+  // watchdog expiry. The common cleanup path still runs exactly once.
+  {
+    TransportScenario truncated;
+    truncated.radio(false);
+    truncated.beginTransport(14000, 500);
+    assert(!truncated.service(14639, 500, true, false, false));
+    assert(truncated.service(14640, 500, true, false, false));
+    assert(truncated.timeouts == 0 && truncated.disconnects == 1 &&
+           truncated.cleanups == 1);
+    assert(!truncated.service(14641, 500, true, false, false));
+    assert(truncated.cleanups == 1);
+  }
+
+  // L. A final positive read and disconnect in the same cycle renew the
+  // inactivity window. If the body is still incomplete, subsequent persistent
+  // disconnect observations remain a transport error, never natural EOF.
+  {
+    TransportScenario lastPartialRead;
+    lastPartialRead.radio(false);
+    lastPartialRead.beginTransport(15000, 100);
+    assert(!lastPartialRead.service(15001, 200, true, false, false, false, 64));
+    assert(!lastPartialRead.service(15002, 200, true, false, false, false, 64));
+    assert(lastPartialRead.service(15003, 200, true, false, false, false, 64));
+    assert(lastPartialRead.timeouts == 0 &&
+           lastPartialRead.disconnects == 1 &&
+           lastPartialRead.cleanups == 1);
+  }
+
+  // A complete body which the decoder cannot drain is bounded by the same
+  // ten-second inactivity contract; suppressing expected TCP close cannot
+  // leave a temporary run active forever.
+  {
+    TransportScenario stuckDecoder;
+    stuckDecoder.radio(false);
+    stuckDecoder.beginTransport(16000, 3648000);
+    assert(!stuckDecoder.service(16001, 3648044, true, false, false, true,
+                                 4096));
+    assert(!stuckDecoder.service(16001 + inactivity - 1, 3648044, true,
+                                 false, false, true, 4096));
+    assert(stuckDecoder.service(16001 + inactivity, 3648044, true, false,
+                                false, true, 4096));
+    assert(stuckDecoder.timeouts == 1 && stuckDecoder.disconnects == 0 &&
+           stuckDecoder.cleanups == 1);
+  }
+
+  // J. STOP is already a terminal signal when the dispatcher runs. It wins
+  // over both a simultaneous disconnect and the decoder-drain watchdog, and
+  // the common cleanup remains one-shot.
+  {
+    TransportScenario stopped;
+    stopped.radio(false);
+    const uint32_t token = stopped.beginTransport(17000, 1000);
+    assert(stopped.temporary.signal(token));
+    assert(stopped.service(17001, 1000, true, false, false, false, 0));
+    assert(stopped.timeouts == 0 && stopped.disconnects == 0 &&
+           stopped.cleanups == 1);
+    assert(!stopped.service(17002, 1000, false, false, false, false, 0));
+    assert(stopped.cleanups == 1);
+  }
+
   // I. A slow stream is unlimited while it keeps making real progress. A
   // complete buffered frame also prevents a false timeout under backpressure.
   {
     TransportScenario slow;
     slow.radio(false);
-    const uint32_t token = slow.beginTransport(8000, 60);
-    uint32_t now = 8000;
+    const uint32_t token = slow.beginTransport(18000, 60);
+    uint32_t now = 18000;
     uint64_t bytes = 60;
     for (int i = 0; i < 8; ++i) {
       now += inactivity - 1;
@@ -757,9 +901,9 @@ int main() {
   {
     TransportScenario drained;
     drained.radio(false);
-    drained.beginTransport(9000, 70);
-    assert(!drained.service(9000 + 2 * inactivity, 70, true, true, true));
-    assert(drained.service(9000 + 2 * inactivity, 70, true, true, false));
+    drained.beginTransport(19000, 70);
+    assert(!drained.service(19000 + 2 * inactivity, 70, true, true, true));
+    assert(drained.service(19000 + 2 * inactivity, 70, true, true, false));
     assert(drained.timeouts == 1 && drained.cleanups == 1);
   }
 
