@@ -1,8 +1,8 @@
 # VoxOne 1.0.0 — kontrakt techniczny
 
-Stan dokumentu: baseline `STABLE-DOCS-CONTRACT-1`, zakres sprzętowy pięciu
-profili potwierdzony w `VOXONE-RC1-S0-CONTRACT-AND-CHECKPOINT-1`. Dokument
-opisuje bieżącą implementację i granice pierwszego Stable. Kanoniczna lista
+Stan dokumentu: zakres sprzętowy zamrożony decyzją
+`VOXONE-STABLE-S0-L0-SCOPE-FREEZE-1`. Dokument opisuje bieżącą implementację,
+zatwierdzony cel S0+VoxOneBT i granice pierwszego Stable. Kanoniczna lista
 otwartych prac pozostaje wyłącznie w [TODO.md](TODO.md).
 
 ## Zakres wydania
@@ -16,29 +16,34 @@ o licencji projektu i o ewentualnej licencji offline powiązanej z ESP. Taki
 mechanizm nie istnieje w bieżącym firmware i nie należy do zakresu Technical
 Stable 1.0.0.
 
-Zatwierdzony zakres Technical Stable 1.0.0 obejmuje obowiązkowo pięć profili:
-`w0`, `m0`, `l0`, `s0` i `din0`. Każdy z nich musi uzyskać udokumentowany
+Zatwierdzony zakres Technical Stable 1.0.0 obejmuje obowiązkowo dwa profile
+fizyczne: `s0` i `l0`, oba z VoxOneBT. Każdy musi uzyskać udokumentowany
 fizyczny HIL PASS swojej bazowej konfiguracji z macierzy A przed wydaniem;
-sam build nie spełnia tej bramki, a test firmware `m0` nie kwalifikuje obrazu
-`s0` ani `din0`. Dopuszczenie stanowiska M0 do HIL obrazu DIN0 pozostaje
-osobną decyzją. Elementy wymienione wyłącznie w roadmapie rodziny nie stają
-się przez tę decyzję wymaganiami ani działającymi funkcjami.
+sam build nie spełnia tej bramki, a test innego profilu nie kwalifikuje S0
+ani L0. Profile `w0`, `m0` i `din0` pozostają wspieranymi targetami
+repozytorium, standardowych buildów, full-image i testów offline, lecz ich
+fizyczny HIL nie blokuje pierwszego Stable. Wszystkie wcześniejsze wyniki HIL
+i liczniki zachowują historyczny zakres i nie są przepisywane.
 
 Po checkpointach macierzy audio i wyświetlaczy bieżący kod udostępnia więcej
 wariantów runtime niż historycznie zatwierdzony baseline sprzętowy Stable.
-Poniższe macierze rozdzielają obowiązkowe minimum profilu od rozszerzonych
-capability już obecnych w BIN. Stable 1.0.0 wymaga fizycznej kwalifikacji
-macierzy A. Warianty ponad baseline pozostają zaimplementowane i wybieralne w
-WWW oraz objęte testami offline i buildami, lecz mają status `OPTIONAL /
+Poniższe macierze rozdzielają dwa obowiązkowe profile fizyczne, zachowane
+targety buildowe i rozszerzone capability obecne w BIN. Stable 1.0.0 wymaga
+fizycznej kwalifikacji części release-gating macierzy A. Warianty ponad
+baseline pozostają zaimplementowane i wybieralne w WWW oraz objęte testami
+offline i buildami, lecz mają status `OPTIONAL /
 PHYSICAL HIL NOT QUALIFIED`; nie blokują wydania i nie mogą być deklarowane
 jako fizycznie zweryfikowane bez odpowiedniego dowodu. Istniejące fizyczne
 PASS zachowują ważność wyłącznie w swoim udokumentowanym zakresie.
 
-S0 opisuje własny, ręcznie okablowany ESP32-S3 Zero z zatwierdzoną mapą GPIO
-rewizji S0. DIN0 zachowuje mapę GPIO M0 jako pinout rewizji DIN0. Przyszłe
-dedykowane PCB otrzymają nazwy S1 i DIN1, własne definicje pinoutu i capability
-oraz nie nadpiszą S0/DIN0. Projekt i HIL S1/DIN1 są POST-STABLE i nie blokują
-wydania zatwierdzonych rewizji 0.
+S0 opisuje własny, ręcznie okablowany ESP32-S3 Zero i zachowuje historyczną
+mapę GPIO rewizji 0 dla OLED, local audio i input. Docelowy S0 ma zawierać
+VoxOneBT, ale bieżący profil nadal deklaruje `VOXONE_HAS_BT=0`, a nowe GPIO
+UART/I2S BT nie są jeszcze zatwierdzone. S0 zachowuje VU wyłączone i
+aktualizuje VoxOneBT przez osobne USB; MAIN→BT update pozostaje wyłączone. L0
+zachowuje istniejącą PCB V-Tom, hardware, capability i GPIO. DIN0 zachowuje
+mapę GPIO M0 jako własny pinout rewizji 0. Przyszłe dedykowane PCB otrzymają
+nazwy S1 i DIN1 i nie nadpiszą historii rewizji 0.
 
 Po wydaniu Stable 1.0.0 profil W0 przechodzi do statusu LEGACY. Pozostaje w
 repozytorium i w standardowych buildach; dopuszczone jest utrzymanie poprawek
@@ -48,14 +53,14 @@ następnej linii rozwojowej.
 Dokładny pinout, pamięć, capability i stan testów opisuje
 [HARDWARE_TARGETS.md](HARDWARE_TARGETS.md).
 
-Aktualny czysty checkpoint dokumentacyjnego punktu odniesienia to
-`e1c746e3295e9db0682d23f30cd99b33dbb1a64a`; produkcyjna implementacja jest
-niezmieniona względem `d6896005e10dfb0098b1e8c831b1b73506ef5b3b`, a nowszy
-commit dodaje wyłącznie regresje WebSocket. Niezależny clean verify z
-2026-10-28 ma 156/156 native PASS, ASan/UBSan PASS, RADIO strict 16/16,
-buildy W0/M0/L0/S0/DIN0 5/5, full-image i WWW PASS, L0 TX-only PASS oraz
-production SECURITY offline PASS. Żaden obraz `e1c746e` nie został fizycznie
-wdrożony; wynik offline nie zastępuje żadnej bramki HIL.
+Aktualny czysty checkpoint to
+`3bad2c3d27c24888d2731510cf330f866bef4ac3`, oznaczony tagiem
+`voxone-rc1-tts-stall-d-closure-1`. Pełny verify ma 158 native PASS,
+transport strict 16/16, ASan/UBSan PASS, buildy i full-image
+W0/M0/L0/S0/DIN0 5/5 oraz production SECURITY offline PASS. Checkpoint
+zawiera diagnostykę HIL i poprawki WAV/watchdoga/naturalnego EOF, bez zmiany
+capability standardowych profili. S0 nadal nie implementuje BT. Wynik offline
+nie zastępuje fizycznych bramek S0 ani L0.
 
 ## HTTP i API
 
@@ -199,11 +204,15 @@ przy aktywnym BT przełącza na RADIO. Zachowany RADIO PLAY intent pozwala
 wznowić stację, a RADIO STOP intent nie powoduje autoplay.
 
 L0 komunikuje się z osobnym modułem VoxOneBT przez UART protocol 2 i odbiera
-jego PCM przez I2S. A2DP audio state decyduje, czy BT może posiadać I2S0;
+jego PCM przez I2S. Docelowy S0 ma używać tego samego kontraktu logicznego,
+ale capability i pinout nie są jeszcze wdrożone ani zatwierdzone. A2DP audio
+state decyduje, czy BT może posiadać I2S0;
 AVRCP służy do transportu i UI. Snapshot obejmuje online/connected, firmware,
 nazwę, capabilities, peer, metadata, playback, sample rate i raw VU. Codec i
-bitrate A2DP nie są publikowane bez wiarygodnych danych. Aktualizacja modułu
-jest osobnym uploadem i nie jest MAIN OTA; szczegóły zawiera
+bitrate A2DP nie są publikowane bez wiarygodnych danych. L0 zachowuje
+istniejącą aktualizację modułu jako osobny upload. S0 nie udostępnia
+MAIN→BT update i aktualizuje VoxOneBT przez jego osobne USB. Żadna z tych
+operacji nie jest MAIN OTA; szczegóły L0 zawiera
 [BT_FIRMWARE_SENDER.md](BT_FIRMWARE_SENDER.md).
 
 Fizyczny test LG TV potwierdził prawidłowe audio A2DP oraz rzeczywistą pauzę
@@ -230,6 +239,12 @@ generację przez tę samą jednorazową ścieżkę cleanup. Krótsze, istniejąc
 połączenia TCP i nagłówków HTTP pozostają bez zmian.
 Zaawansowana kolejka, priorytety, ducking i własne tryby głośności pozostają
 POST-STABLE.
+
+Fizyczny `VOXONE-RC1-TTS-STALL-D-HIL-L0-RETEST-2` zamknął scenariusz D na
+L0: pełne `3648044/3648044 B`, `watchdogTimeouts +0`, `transportErrors +0`,
+`naturalEofs +1`, `cleanups +1`, `endReason=natural_eof`, `state=cleaned` i
+READY 231/231. Dowód nie zamyka całej grupy TTS: regresje A/B/C na docelowym
+kandydacie oraz pełny HIL TTS S0+BT pozostają otwarte.
 
 ## Web Update, recovery i OTA rollback
 
@@ -331,72 +346,63 @@ publikować `timezone="Europe/Warsaw"` oraz ten offset. Do chwili wdrożenia kod
 nie powinien być używany jako źródło offsetu. Propozycja nie zmienia
 serialized layout ani bieżącego firmware.
 
-## Macierze kwalifikacji pięciu profili Stable
+## Macierz kwalifikacji i zachowanych profili buildowych
 
 To jest skondensowany opis zakresu, nie druga lista zadań; źródłem prawdy
 pozostaje TODO. `NONE` oznacza zapisany wariant bez zainstalowanego lokalnego
 modułu, a nie osobny fizyczny model urządzenia.
 
-### A. Baseline Stable — obowiązkowe minimum kwalifikacji
+### A. Profile, baseline i rola w wydaniu
 
-| Profil | Domyślny sprzęt | Pozostały wcześniej zatwierdzony baseline runtime | Minimalny fizyczny zakres bramki profilu |
+| Profil | Domyślny/bieżący sprzęt | Rola w Stable 1.0.0 | Minimalny fizyczny zakres |
 |---|---|---|---|
-| W0 | PCM5102A; ST7789 284×76; EC11 | display/input `NONE`, Buttons3; RADIO/WWW/MQTT/update | Full image/first boot, RADIO/audio/display/input, PBKDF2 bez PSRAM, Config v7, MAIN/SPIFFS, recovery/power-loss i migracja. W0 pozostaje obowiązkowy; uszkodzone USB i brak recovery są blokerem. |
-| M0 | PCM5102A; SSD1306 128×64; EC11 | SSD1309 128×64 i display `NONE`; Buttons3/input `NONE` | Finalny build, RADIO/audio/display/input, SECURITY, Config v7, update/rollback i recovery. Zachowane PASS M0 pozostają ważne w swoim zakresie. |
-| L0 | PCM5102A; ST7796S 480×320; EC11; DS3231; VoxOneBT/VU | Buttons3/input `NONE` | Domyślny TFT/audio, BT/SourceManager/TTS, SECURITY, Config, update/recovery i otwarte P1. Sprzętowe XSMT nie należy do baseline; bieżąca rewizja zachowuje `VOXONE_DAC_XSMT_PIN=255`, a opcjonalne sterowanie pozostaje POST-STABLE. |
-| S0 | MAX98357A MONO; SSD1306 128×32; EC11 | SSD1306 128×64 i display `NONE`; Buttons3/input `NONE` | First boot, RADIO/audio, oba baseline OLED, wejścia, WWW, Config, update/recovery na fizycznym S0. GPIO: I2S `5/6/4`, input `9/8/7`, I2C `1/2`. |
-| DIN0 | PCM5102A; SSD1306 128×64; EC11 | SSD1309 128×64 i display `NONE`; Buttons3/input `NONE` | Obraz DIN0, tożsamość profilu, first boot, RADIO/audio/OLED/input, Config, SECURITY, update/recovery. GPIO współdzielone z M0: I2S `1/2/3`, input `5/6/4`, I2C `7/8`. |
+| W0 | PCM5102A; ST7789 284×76; EC11 | `RETAINED BUILD / PHYSICAL HIL NON-BLOCKING` | Zachować build, full-image, testy offline i historyczne dowody. Uszkodzone USB nadal blokuje bezpieczny opcjonalny HIL/OTA W0, ale nie wydanie. |
+| M0 | PCM5102A; SSD1306/SSD1309 128×64; EC11 | `RETAINED BUILD / PHYSICAL HIL NON-BLOCKING` | Zachować build, full-image, testy offline i wcześniejsze PASS; bez wymogu końcowego profilowego HIL. |
+| L0 | istniejąca PCB V-Tom; ESP32-S3 N16R8; PCM5102A; ST7796S; EC11; DS3231; VoxOneBT; VU | **`RELEASE-GATING HIL REQUIRED`** | Domyślny TFT/audio, BT/SourceManager/TTS, SECURITY, Config, update/recovery i otwarte P1. Hardware i GPIO pozostają bez zmian; XSMT nie należy do baseline. |
+| S0 | ESP32-S3 Zero 4 MiB/2 MiB; historycznie MAX98357A MONO, SSD1306 128×32 i EC11; docelowo VoxOneBT | **`RELEASE-GATING HIL REQUIRED`** | Zachować GPIO I2S0 `5/6/4`, input `9/8/7`, I2C `1/2`; osobno zatwierdzić GPIO BT, wdrożyć UART/I2S1/SourceManager/TTS, pozostawić VU i MAIN→BT update wyłączone, a następnie wykonać pełny HIL. |
+| DIN0 | PCM5102A; SSD1306/SSD1309 128×64; EC11; pinout M0 | `RETAINED BUILD / PHYSICAL HIL NON-BLOCKING` | Zachować build, full-image, testy offline, własną identity i historię rewizji 0; fizyczny HIL nie blokuje wydania. |
 
-### B. Rozszerzone capability obecne w `e1c746e`
+### B. Rozszerzone capability obecne w `3bad2c3`
 
-| Profil | Dodatkowe display runtime ponad baseline A | Dodatkowe audio runtime ponad baseline A | Stan kwalifikacji |
+| Profil | Dodatkowe display runtime ponad historyczny baseline | Dodatkowe audio runtime | Stan kwalifikacji |
 |---|---|---|---|
-| W0 | Brak nowych wariantów; ST7789/NONE bez zmian | Brak | W0 nie otrzymał rozszerzenia funkcjonalnego. |
-| M0 | SSD1306 128×32, SH1106 128×64, CH1116G 128×64 | MAX98357A MONO, MAX98357A STEREO, `NONE` | Implemented/offline PASS; `OPTIONAL / PHYSICAL HIL NOT QUALIFIED`. |
-| L0 | SSD1306 128×32/128×64, SSD1309 128×64, SH1106 128×64, CH1116G 128×64, `NONE` | `NONE` | Implemented/offline PASS; domyślny ST7796 zachowany; `OPTIONAL / PHYSICAL HIL NOT QUALIFIED`. |
-| S0 | SSD1309 128×64, SH1106 128×64, CH1116G 128×64 | PCM5102A, MAX98357A STEREO, `NONE` | Implemented/offline PASS; fizyczny S0 potwierdza tylko wcześniejszy baseline 128×32/MAX98357A MONO/EC11; rozszerzenia `OPTIONAL / PHYSICAL HIL NOT QUALIFIED`. |
-| DIN0 | SSD1306 128×32, SH1106 128×64, CH1116G 128×64 | Brak; tylko PCM5102A | Implemented/offline PASS; rozszerzenia `OPTIONAL / PHYSICAL HIL NOT QUALIFIED`; profilowy baseline HIL DIN0 pozostaje wymagany. |
+| W0 | Brak nowych wariantów; ST7789/NONE bez zmian | Brak | Zachowany build; bez rozszerzenia funkcjonalnego. |
+| M0 | SSD1306 128×32, SH1106 128×64, CH1116G 128×64 | MAX98357A MONO, MAX98357A STEREO, `NONE` | Implemented/offline PASS; fizyczny HIL nieblokujący. |
+| L0 | SSD1306 128×32/128×64, SSD1309 128×64, SH1106 128×64, CH1116G 128×64, `NONE` | `NONE` | Implemented/offline PASS; domyślny ST7796 zachowany; warianty dodatkowe `OPTIONAL / PHYSICAL HIL NOT QUALIFIED`. |
+| S0 | SSD1309 128×64, SH1106 128×64, CH1116G 128×64 | PCM5102A, MAX98357A STEREO, `NONE` | Implemented/offline PASS; bieżący BIN nadal ma BT wyłączone. Warianty dodatkowe `OPTIONAL / PHYSICAL HIL NOT QUALIFIED`. |
+| DIN0 | SSD1306 128×32, SH1106 128×64, CH1116G 128×64 | Brak; tylko PCM5102A | Implemented/offline PASS; fizyczny HIL nieblokujący. |
 
 ### C. Optional HIL — dodatkowe warianty
 
-Fizyczny HIL wariantów z macierzy B jest opcjonalny dla Stable 1.0.0. Może
-być wykonywany i dokumentowany osobno, ale brak takiego testu nie blokuje
-profilowego PASS, jeżeli kompletna macierz A danego profilu spełniła kryteria
-bramki. Obecność opcji w WWW, test offline albo poprawny build nie są dowodem
-fizycznego działania. Raport wydania musi zachować jawny status `OPTIONAL /
-PHYSICAL HIL NOT QUALIFIED` dla każdego nieprzetestowanego wariantu oraz
-zachować zakres każdego wcześniej uzyskanego fizycznego PASS.
+Fizyczny HIL wariantów z macierzy B jest opcjonalny dla Stable 1.0.0. Brak
+takiego testu nie blokuje profilowego PASS S0/L0, jeżeli ich zatwierdzony
+baseline spełnił kryteria bramki. Obecność opcji w WWW, test offline albo
+poprawny build nie są dowodem fizycznego działania. Raport wydania zachowuje
+status `OPTIONAL / PHYSICAL HIL NOT QUALIFIED` oraz zakres każdego wcześniej
+uzyskanego fizycznego PASS.
 
-**DECISION REQUIRED — DIN0:** bieżący zapis wymaga osobnego fizycznego HIL
-DIN0 i mówi, że samo uruchomienie obrazu na M0 nie zamyka bramki. Ponieważ
-DIN0 ma identyczne GPIO, flash/PSRAM i bazowe komponenty jak M0, możliwe jest
-technicznie wykonanie HIL obrazu `din0` na wspólnym stanowisku M0 z jawnym
-potwierdzeniem identity `DIN0`. Uznanie takiego przebiegu za profilowy PASS
-wymaga zmiany interpretacji kontraktu i zgody użytkownika; test firmware M0
-nigdy nie zastępuje testu firmware DIN0.
+Formalna Definition of Stable dla RC1 liczy **12 głównych bramek**: dwa
+profilowe HIL (S0 i L0) oraz dziesięć niezmienionych grup wspólnych: RADIO
+endurance; BT lifecycle; SourceManager switching/reconnect; TTS restore;
+firmware i SPIFFS update; recovery; Config v7 persistence; L/R i VU; brak
+otwartych P0/P1; końcowy PASS na zamrożonym release commicie. Po ponownej
+ocenie dowodów bieżący stan to **10/12 OPEN, 2/12 CLOSED**; CLOSED pozostają
+RADIO endurance oraz L/R+VU. S0 ma VU wyłączone.
 
-Formalna Definition of Stable dla RC1 liczy **15 głównych bramek**: pięć
-profilowych HIL (W0, M0, L0, S0, DIN0) oraz dziesięć niezmienionych grup wspólnych:
-RADIO endurance; BT telefon/LG TV; SourceManager switching/reconnect; TTS
-restore; firmware i SPIFFS update; recovery; Config v7 persistence; L/R i VU;
-brak otwartych P0/P1; końcowy PASS na zamrożonym release commicie. Częściowy
-test nie zmniejsza licznika bramek.
-
-Kanoniczne stabilne identyfikatory, bieżące stany oraz mapa historycznych
-numerów Gate 5/6 są utrzymywane wyłącznie w [TODO.md](TODO.md). Numery nie są
-częścią kontraktu API i nie powinny być używane jako jedyny identyfikator w
-nowych raportach.
-
-S0 i DIN0 wymagają własnego, udokumentowanego fizycznego HIL PASS w ramach
-Stable 1.0.0. Dodatkowe capability niewłączone w bieżących profilach oraz
-późniejsze S1/DIN1 pozostają POST-STABLE.
+Historyczny kontrakt 3 + 10 liczył 13 bramek łącznie. Późniejszy kontrakt
+5 + 10 liczył 15 bramek, a zapis `13/15 OPEN` oznaczał 13 otwartych spośród
+15. Wyników i liczników tych okresów nie zmieniamy. Kanoniczne identyfikatory,
+bieżące stany i pełna mapa numeracji są utrzymywane w [TODO.md](TODO.md).
 
 ## Granica POST-STABLE
 
 Pierwszego Stable nie rozszerzają: DLNA, AUX/PCM1808, Multiroom, native Home
 Assistant, W5500, DSPmini/AutoEQ, menu lokalne, power/standby/alarm, Installer,
 nowe PCB L1/M1/S1/DIN1 ani backendy display niewystępujące w macierzy
-`e1c746e`. Już zaimplementowane rozszerzenia z macierzy B pozostają
+`3bad2c3`. Jedyną zatwierdzoną nową capability niezbędną przed Stable jest
+VoxOneBT dla historycznego S0 rev. 0, w minimalnym zakresie UART/I2S1,
+SourceManager i TTS, bez VU i bez MAIN→BT update. Już zaimplementowane
+rozszerzenia z macierzy B pozostają
 `OPTIONAL / PHYSICAL HIL NOT QUALIFIED` zgodnie z zatwierdzonym zakresem HIL.
 `SSD1322_256X64` pozostaje zatwierdzonym zadaniem POST-STABLE z dokładnie
 uzgodnionym PLAYER i dwoma poziomymi segmentowymi paskami VU L/R; katalog WWW
