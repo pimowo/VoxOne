@@ -56,15 +56,20 @@
       "controlLinesConfidence": "UNVERIFIED"
     },
     {
-      "name": "M0_UART",
-      "target": "M0 ESP32-S3 Zero",
-      "usbRole": "external FT232R documented as RX-only",
+      "name": "L0_LOG_RX",
+      "target": "L0 ESP32-S3 DevKit",
+      "usbRole": "dedicated passive UART log receiver; GPIO wiring pending",
       "vid": "0403",
       "pid": "6001",
       "serial": "A7039N0Z",
       "byId": "/dev/serial/by-id/usb-FTDI_FT232R_USB_UART_A7039N0Z-if00-port0",
       "model": "FTDI FT232R USB UART",
       "driver": "ftdi_sio",
+      "host": "voxone-bridge",
+      "hostAddress": "192.168.1.85",
+      "observedTty": "/dev/ttyUSB0",
+      "serialConfig": "115200 8N1",
+      "wiringState": "NOT_CONNECTED_TO_L0_GPIO",
       "identityConfidence": "CONFIRMED",
       "controlLinesConfidence": "UNVERIFIED"
     }
