@@ -4,7 +4,7 @@
 >
 > Klasyfikacja: `[BUG]` — znany problem, `[STABLE]` — wymagane do wiarygodnego stable, `[DECISION]` — potrzebna jawna decyzja, `[POST-STABLE]` — praca po pierwszym stable, `[HARDWARE]` — projekt lub test sprzętowy.
 >
-> Kanoniczne identyfikatory pięciu połączeń ASUS DEV są w [`DEV_USB_PORTS.md`](DEV_USB_PORTS.md). Przyszłe skrypty HIL/OTA mają używać nazw logicznych `L0_NATIVE`, `L0_UART`, `VOXONEBT_USB`, `M0_NATIVE` i `M0_UART`, nigdy stałych nazw `/dev/tty*`.
+> Kanoniczne identyfikatory pięciu bieżących połączeń stanowisk deweloperskich są w [`DEV_USB_PORTS.md`](DEV_USB_PORTS.md). Przyszłe skrypty HIL/OTA mają używać nazw logicznych `L0_NATIVE`, `L0_UART`, `L0_LOG_RX`, `VOXONEBT_USB` i `M0_NATIVE`, nigdy stałych nazw `/dev/tty*`. M0 nie ma obecnie przypisanego zewnętrznego konwertera UART.
 
 ## Zamrożony zakres profili 1.0.0
 
@@ -110,7 +110,7 @@ zwalnia to z pozostałych testów BT lifecycle, SourceManager ani TTS.
 
 Kolejność dalszych prac release-gating: (1) zatwierdzić pinout i wdrożyć
 minimalną capability VoxOneBT S0 bez VU i bez MAIN→BT update, (2) wykonać
-pełny HIL S0, (3) kwalifikacja elektryczna L0 UART i ograniczone HIL P1,
+pełny HIL S0, (3) kwalifikacja elektryczna `L0_LOG_RX` i ograniczone HIL P1,
 (4) finalny L0 na dokładnym kandydacie z domyślnym ST7796/PCM5102A,
 (5) końcowy frozen-release verify. Fizyczne HIL W0/M0/DIN0 mogą być
 wykonywane później jako nieblokujące. Nie powtarzać RADIO
@@ -256,6 +256,25 @@ implementacji i bez rozszerzania Stable.
 ## Stable hardening
 
 ### RADIO
+
+- [STABLE][HARDWARE][L0 LOG UART HIL PASS][ELECTRICAL MEASUREMENTS PENDING]
+  `L0_LOG_RX` ma fizyczny HIL PASS z 2026-10-31: TX L0 `GPIO43` → RX FT232R
+  `A7039N0Z`, wspólna GND, 115200 8N1; logger odebrał 3297 B logów
+  bootowania i zakończył się PASS. Dowód zamyka wyłącznie pasywny odbiór
+  logów. Pomiary poziomów napięć i kwalifikacja elektryczna nie mają
+  dostarczonego dowodu i pozostają PENDING. Nadal nie podłączać TX adaptera,
+  DTR, RTS ani zasilania L0 z konwertera.
+- [STABLE][TOOLING][MULTI-HOST USB INVENTORY PENDING] Dostosować read-only
+  inwentaryzację USB do rejestru rozdzielonego między ASUS DEV i
+  `voxone-bridge`: walidować host przypisany do roli i agregować wyniki bez
+  wymagania obecności wszystkich pięciu urządzeń na jednym hoście. Do tego
+  czasu lokalny wynik 4/5 albo 1/5 nie jest pełnym sprawdzeniem rejestru.
+- [HARDWARE][M0 NON-BLOCKING] M0 nie ma obecnie zewnętrznego konwertera
+  UART. Przed kolejnym HIL wymagającym pasywnych logów przypisać mu inny
+  konwerter, potwierdzić topologię RX-only i zaktualizować rejestr oraz
+  narzędzia M0. Historyczne ścieżki `A7039N0Z` zapisane w narzędziach i
+  raportach M0 nie opisują bieżącego sprzętu i nie mogą służyć do wyboru
+  portu.
 
 - [STABLE][L0 CANDIDATE RADIO LOGICAL HIL PASS][PHYSICAL AUDIO/LCD/VU PENDING] Aktualny kandydat `ebb3c06-dirty` zamknął zdalnie mierzalny scenariusz RADIO: dokładnie trzy zmiany stacji, osobny pojedynczy STOP → PLAY oraz terminalny endurance 14 400,922 s. Endurance zachował `bootId=8a416d6c`, `app0/app0` VALID, 240/240 READY i UART, 7738 ramek WS, RADIO/PLAY/playing `Italo4you`, MP3 256 kb/s, 47 metadata, dodatni audioBuffer i stabilne trendy heap/PSRAM/stosów/Wi-Fi; nie było restartu, panic/assert/watchdog, błędów transportu/dekodera/HTTP/HLS, reconnectu, STOP ani korupcji heap. Surowy UART 54 078 B ma PASS i SHA-256 `35cf9a344950f86c6ffffb7916e63a4da635aa740ecc64b05df32e33980e82c1`. Jedna linia miała lokalnie zniekształcone pole PSRAM, lecz sąsiednie ramki i niezależne 240 próbek WS zachowały ciągłość, więc tej pojedynczej wartości nie użyto. Historyczny wynik 14 400,477 s na `739e4a2` pozostaje oddzielnym dowodem i nie jest przypisywany kandydatowi. Nadal PENDING są fizyczny odsłuch oraz obserwacja LCD/VU. Raport: `reports/VOXONE-RC1-L0-CANDIDATE-RADIO-FINAL-1.md`.
 - [STABLE][LOGICAL TRANSPORT+STOP/PLAY HIL PASS][PHYSICAL/CANDIDATE HIL PENDING] Fizycznie potwierdzić brak słyszalnych stall/dropout oraz ciągłą reakcję LCD i VU na faktycznym kandydacie RC1. Czterogodzinny pomiar potwierdził ciągłość logiczną (`playerRunning=1`, `audioBuffer` 250933–270922 B, 50 unikalnych metadata, bez błędów transportu), a follow-up na `739e4a2` potwierdził jeden kontrolowany STOP → PLAY `Italo4you`: STOP/stopped pojawił się po 78 ms, ponowne PLAY/playing z MP3 256 kb/s po 507 ms, metadata wróciły, stacja i playlista pozostały bez zmian, `bootId` był stały, a heap po przejściowych alokacjach wrócił blisko baseline. Nadal brak dowodu odsłuchowego i obserwacji LCD/VU.
@@ -455,6 +474,20 @@ Aktualizacja trzech poniższych wpisów przez `VOXONE-RC1-L0-CONCURRENCY-RELEASE
 - [POST-STABLE] W VoxOneBT utrzymać A2DP audio state jako sterowanie I2S, a AVRCP wyłącznie jako transport/UI; uzupełnić status PLAY/PAUSE/STOP, reconnect, preferred peer, pairing window, discoverability, metadata, ograniczenia TV i realny codec/bitrate, jeśli stos udostępnia dane.
 - [POST-STABLE] Znormalizować poziom BT względem RADIO dopiero po pomiarach toru cyfrowego i analogowego.
 - [STABLE] Fizycznie sprawdzić negatywne ścieżki aktualizacji VoxOneBT: przerwanie UART, brak powrotu modułu, nieoczekiwaną `FW_VERSION`, timeout identity, uszkodzony/błędny obraz oraz Error/Aborted z odzyskaniem sterowania i zwolnieniem UPDATE_LOCK.
+  - `BT-UPDATE-UI-1` ma **SOFTWARE/UI PASS** w commicie `91426c9` oraz
+    **L0 DEPLOYMENT PASS**: L0 działa na `app1 VALID`, `ready=true`, a WWW ma
+    `READY`, `verified`, `compatible` i komplet 7/7 plików. Zakładka
+    Aktualizacja rozdziela przebieg MAIN/SPIFFS i VoxOneBT, pokazuje etap,
+    procent i bajty UART ACK, stan końcowej weryfikacji oraz wersję
+    potwierdzoną dopiero po restarcie, ponownym READY i `OTA_STATE VALID`.
+    Dostępność i wskazówki wynikają z bieżącego profilu,
+    `HardwareCapabilities`, zasobów i kontraktu sendera; UI zachowuje blokadę
+    podwójnego startu oraz odzyskuje stan po utracie WWW. Headless UI obejmuje
+    100% ACK bez fałszywego sukcesu, końcowy sukces, błędy, przerwanie i
+    precyzyjne powody blokady. Dowód wdrożenia nie jest pełnym HIL aktualizacji
+    VoxOneBT: brak dowodu końcowego `sender Success`, więc fizyczny przebieg
+    aktualizacji pozostaje otwarty. Wymienione wyżej negatywne ścieżki również
+    pozostają otwarte.
 
 ## DLNA
 
