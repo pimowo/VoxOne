@@ -535,6 +535,10 @@ window.VoxOneRestartWaiter = Object.freeze({
   const updateBtFile = document.getElementById("update-bt-file");
   const updateBtFileName = document.getElementById("update-bt-file-name");
   const updateBtButton = document.getElementById("update-bt-button");
+  const updateBtGuidance = document.getElementById("update-bt-guidance");
+  const updateBtDisabledReason = document.getElementById("update-bt-disabled-reason");
+  const updateBtStatus = document.getElementById("update-bt-status");
+  const updateBtProgress = document.getElementById("update-bt-progress");
   let updateBusy = false;
   const readDeviceReadiness = async signal => {
     const response = await fetch("/api/ready?update=" + Date.now(), {
@@ -801,6 +805,44 @@ window.VoxOneRestartWaiter = Object.freeze({
     if (node && node.textContent !== value) node.textContent = value;
   }
 
+  function btUpdateAvailability(file) {
+    const connected = state.connection === "connected";
+    const info = connected ? state.systemInfo : null;
+    const module = connected ? state.webStatus?.btModule : null;
+    const profile = (state.profile || info?.profile || "—").toUpperCase();
+    const supported = info?.btFirmwareUpdateSupported === true;
+    const capabilities = typeof info?.capabilities === "string" ? info.capabilities : "";
+    const profileHasBt = capabilities.split(/[\s,]+/).includes("BT") ||
+      state.webStatus?.availableSources?.includes("bt");
+    updateBtGuidance.textContent = supported
+      ? "Profil " + profile + " udostępnia aktualizację VoxOneBT przez MAIN → UART."
+      : info
+        ? "Profil " + profile + " nie udostępnia capability aktualizacji VoxOneBT przez MAIN." +
+          (profileHasBt ? " Użyj drogi aktualizacji przewidzianej dla tego modułu."
+            : " Jeśli moduł jest zainstalowany osobno, użyj jego własnego USB.")
+        : "Oczekiwanie na profil i capabilities urządzenia.";
+    let reason = "";
+    if (updateBusy) reason = "trwa aktualizacja MAIN/SPIFFS";
+    else if (btUpdateBusy) reason = "aktualizacja VoxOneBT już trwa";
+    else if (!connected) reason = "brak połączenia WWW z urządzeniem";
+    else if (!info) reason = "nie odebrano jeszcze capabilities profilu";
+    else if (!supported) reason = "profil " + profile + " nie ma capability aktualizacji BT przez MAIN";
+    else if (!file) reason = "nie wybrano pliku firmware VoxOneBT";
+    else if (!file.name.toLowerCase().endsWith(".bin")) reason = "wybrany plik nie ma rozszerzenia .bin";
+    else if (!file.size) reason = "wybrany plik jest pusty";
+    else if (file.size > 1310720) reason = "obraz przekracza limit 1 310 720 B";
+    else if (!Number.isSafeInteger(info.psramFree)) reason = "brak wiarygodnej informacji o wolnym PSRAM";
+    else if (info.psramFree < file.size + 384 * 1024)
+      reason = "za mało wolnego PSRAM na obraz i rezerwę 384 KiB";
+    else if (module?.online !== true) reason = "moduł VoxOneBT jest offline";
+    else if (module.protocol !== 2) reason = "VoxOneBT nie potwierdził wymaganego PROTO 2";
+    else if (!module.capabilities?.split(/\s+/).includes("FW_UPDATE"))
+      reason = "VoxOneBT nie zgłasza capability FW_UPDATE";
+    else if (state.webStatus?.activeSource === "bt")
+      reason = "aktywne jest źródło BT; wybierz RADIO";
+    return {ready: !reason, reason, supported};
+  }
+
   function renderUpdateFiles() {
     for (const image of Object.values(updateImages)) {
       const file = image.file.files[0];
@@ -810,19 +852,16 @@ window.VoxOneRestartWaiter = Object.freeze({
       image.button.disabled = updateBusy || btUpdateBusy || !file;
     }
     const file = updateBtFile.files[0];
-    const info = state.connection === "connected" ? state.systemInfo : null;
-    const module = state.webStatus?.btModule;
-    const supported = info?.btFirmwareUpdateSupported === true;
-    const ready = supported && Number.isSafeInteger(info.psramFree) &&
-      info.psramFree >= (file?.size || 0) + 384 * 1024 &&
-      module?.online === true && module?.protocol === 2 &&
-      module.capabilities?.split(/\s+/).includes("FW_UPDATE") &&
-      state.webStatus?.activeSource !== "bt";
+    const availability = btUpdateAvailability(file);
     updateBtFileName.textContent = file ? file.name + " · " +
       (file.size / 1024 / 1024).toFixed(2) + " MB" : "Nie wybrano pliku.";
-    updateBtFile.disabled = updateBusy || btUpdateBusy || !supported;
-    updateBtButton.disabled = updateBusy || btUpdateBusy || !file || !ready ||
-      !file.size || file.size > 1310720;
+    updateBtFile.disabled = updateBusy || btUpdateBusy || !availability.supported;
+    updateBtButton.disabled = !availability.ready;
+    updateBtButton.title = availability.ready ? "" : availability.reason;
+    updateBtDisabledReason.dataset.ready = availability.ready ? "true" : "false";
+    updateBtDisabledReason.textContent = availability.ready
+      ? "Gotowe: warunki profilu, PSRAM, PROTO 2, FW_UPDATE i źródło RADIO są spełnione."
+      : "Przycisk nieaktywny: " + availability.reason + ".";
   }
 
   function renderBtModule() {
@@ -932,6 +971,125 @@ window.VoxOneRestartWaiter = Object.freeze({
   function setUpdateStatus(message, error = false) {
     updateStatus.textContent = message;
     updateStatus.dataset.kind = error ? "error" : "status";
+  }
+
+  function setBtUpdateStatus(message, error = false) {
+    updateBtStatus.textContent = message;
+    updateBtStatus.dataset.kind = error ? "error" : "status";
+  }
+
+  function btSenderErrorMessage(error) {
+    const messages = {
+      1: "sender jest zajęty",
+      2: "VoxOneBT jest offline",
+      3: "brak PROTO 2 lub capability FW_UPDATE",
+      4: "źródło BT jest aktywne; wymagane RADIO",
+      5: "obraz firmware jest nieprawidłowy",
+      6: "nie udało się odczytać obrazu ze stagingu",
+      7: "błąd transportu UART",
+      8: "timeout oczekiwania na FW_READY",
+      9: "nieprawidłowa odpowiedź FW_READY",
+      10: "VoxOneBT zgłosił FW_ERR lub FW_ABORTED",
+      11: "nieprawidłowa odpowiedź sendera",
+      12: "niezgodny numer sekwencji ACK",
+      13: "niezgodna liczba bajtów ACK",
+      14: "przekroczono limit retransmisji",
+      15: "timeout końcowej weryfikacji FW_VERIFY/FW_OK",
+      16: "timeout READY i identyfikacji po restarcie",
+      17: "wersja po restarcie nie zgadza się z obrazem",
+      18: "tożsamość lub capabilities po restarcie są niezgodne",
+      19: "aktualizacja została przerwana",
+      20: "VoxOneBT zgłosił OTA CONFIRM_FAILED",
+      21: "końcowy stan OTA jest nieznany",
+      22: "VoxOneBT nie potwierdził oczekiwanego stanu OTA"
+    };
+    return messages[error] || (error ? "błąd sendera " + error : "brak kodu błędu sendera");
+  }
+
+  function renderBtHttpStage(stage, status) {
+    text("update-bt-stage", stage);
+    text("update-bt-percent", "—");
+    text("update-bt-bytes", "—");
+    text("update-bt-verification", "Nie rozpoczęta");
+    text("update-bt-version-confirmation", "Niepotwierdzona");
+    updateBtProgress.hidden = true;
+    updateBtProgress.value = 0;
+    setBtUpdateStatus(status);
+  }
+
+  function renderBtSenderProgress(progress) {
+    const senderState = Number.isInteger(progress.state) ? progress.state : 0;
+    const confirmed = Number.isSafeInteger(progress.confirmedBytes) && progress.confirmedBytes >= 0
+      ? progress.confirmedBytes : 0;
+    const total = Number.isSafeInteger(progress.totalBytes) && progress.totalBytes >= 0
+      ? progress.totalBytes : 0;
+    const percent = Number.isInteger(progress.percent)
+      ? Math.max(0, Math.min(100, progress.percent)) : 0;
+    const running = progress.receiving === true || progress.pending === true || progress.active === true;
+    const stageNames = {
+      0: "Gotowość", 1: "Rozpoczęcie sendera", 2: "Oczekiwanie na FW_READY",
+      3: "Wysyłanie przez UART", 4: "Oczekiwanie na UART ACK",
+      5: "Zamykanie transferu", 6: "Oczekiwanie na FW_VERIFY",
+      7: "Oczekiwanie na FW_OK", 8: progress.phase === 4
+        ? "Końcowa kontrola po READY" : "Restart VoxOneBT",
+      9: "Zakończona", 10: "Błąd", 11: "Przerwana"
+    };
+    text("update-bt-stage", progress.receiving ? "Odbiór obrazu przez WWW"
+      : progress.pending ? "Obraz oczekuje na sender" : stageNames[senderState] || "Aktualizacja");
+    const uartStarted = total > 0;
+    text("update-bt-percent", uartStarted ? percent + "%" : "—");
+    text("update-bt-bytes", uartStarted ? confirmed + " / " + total + " B" : "—");
+    updateBtProgress.hidden = !uartStarted;
+    updateBtProgress.value = uartStarted ? percent : 0;
+
+    let verification = "Nie rozpoczęta";
+    if (senderState === 5 || senderState === 6)
+      verification = "Transfer zakończony; oczekiwanie na FW_VERIFY";
+    else if (senderState === 7)
+      verification = "FW_VERIFY odebrane; oczekiwanie na FW_OK";
+    else if (senderState === 8 && progress.phase === 3)
+      verification = "FW_OK odebrane; oczekiwanie na restart i READY";
+    else if (senderState === 8)
+      verification = "READY odebrane; sprawdzanie wersji i OTA VALID";
+    else if (senderState === 9)
+      verification = "Zakończona: FW_VERIFY, FW_OK i OTA VALID";
+    else if (senderState === 10)
+      verification = "Niepowodzenie: " + btSenderErrorMessage(progress.error);
+    else if (senderState === 11)
+      verification = "Przerwana przed końcowym potwierdzeniem";
+    text("update-bt-verification", verification);
+
+    const observedVersion = typeof progress.confirmedVersion === "string"
+      ? progress.confirmedVersion : "";
+    const liveVersion = state.webStatus?.btModule?.online === true
+      ? state.webStatus.btModule.firmware || "" : "";
+    if (senderState === 9) {
+      text("update-bt-version-confirmation", (observedVersion || liveVersion || "Wersja zgodna z obrazem") +
+        " — potwierdzona po READY");
+    } else if (senderState === 8 && liveVersion) {
+      text("update-bt-version-confirmation", liveVersion + " — oczekiwanie na końcowe OTA VALID");
+    } else {
+      text("update-bt-version-confirmation", "Niepotwierdzona");
+    }
+
+    if (running) {
+      if (uartStarted && confirmed === total && total > 0)
+        setBtUpdateStatus("UART potwierdził 100% bajtów. To jeszcze nie jest sukces; trwa końcowa weryfikacja i powrót modułu.");
+      else if (uartStarted)
+        setBtUpdateStatus("VoxOneBT: " + (stageNames[senderState] || "aktualizacja") +
+          " · UART ACK " + confirmed + "/" + total + " B (" + percent + "%).");
+      else if (progress.receiving)
+        setBtUpdateStatus("Inny klient przesyła obraz VoxOneBT do urządzenia.");
+      else
+        setBtUpdateStatus("Obraz oczekuje na uruchomienie sendera VoxOneBT.");
+    } else if (senderState === 9) {
+      setBtUpdateStatus("Aktualizacja VoxOneBT zakończona po weryfikacji, restarcie, READY i potwierdzeniu wersji.");
+    } else if (senderState === 11) {
+      setBtUpdateStatus("Aktualizacja VoxOneBT została przerwana; sukces nie został potwierdzony.", true);
+    } else if (senderState === 10 || progress.startError) {
+      setBtUpdateStatus("Aktualizacja VoxOneBT nie powiodła się: " +
+        (progress.startError || btSenderErrorMessage(progress.error)) + ".", true);
+    }
   }
 
   async function waitForDeviceRestart({ delay = 2500, timeout = 30000, onReturn, onTimeout }) {
@@ -1174,23 +1332,10 @@ window.VoxOneRestartWaiter = Object.freeze({
       const running = progress.receiving || progress.pending || progress.active;
       if (running) {
         btUpdateBusy = true;
-        const phase = ["Przygotowanie", "Wysyłanie do VoxOneBT", "Weryfikacja",
-          "Restart VoxOneBT", "Oczekiwanie na VoxOneBT", "Sukces", "Błąd"][progress.phase] || "Aktualizacja";
-        setUpdateStatus("VoxOneBT: " + phase + " · ACK " + progress.confirmedBytes +
-          "/" + progress.totalBytes + " B (" + progress.percent + "%).");
       } else if (btUpdateBusy) {
         btUpdateBusy = false;
-        // BtFirmwareSender::State: Success=9, Error=10, Aborted=11.
-        if (progress.state === 9) {
-          setUpdateStatus("Aktualizacja VoxOneBT zakończona; wersja potwierdzona po restarcie.");
-        } else if (progress.state === 11) {
-          setUpdateStatus("Aktualizacja VoxOneBT przerwana.", true);
-        } else {
-          const reason = progress.startError ||
-            (progress.error ? "błąd sendera " + progress.error : "brak kodu błędu sendera");
-          setUpdateStatus("Aktualizacja VoxOneBT nie powiodła się: " + reason, true);
-        }
       }
+      renderBtSenderProgress(progress);
       renderUpdateFiles();
     } catch (_) { /* A disconnect does not cancel a transfer owned by MAIN. */ }
     finally { btUpdatePolling = false; }
@@ -1201,45 +1346,52 @@ window.VoxOneRestartWaiter = Object.freeze({
     const file = updateBtFile.files[0];
     if (!file || !file.name.toLowerCase().endsWith(".bin") || !file.size ||
         file.size > 1310720) {
-      setUpdateStatus("Wybierz firmware.bin VoxOneBT o rozmiarze do 1 310 720 B.", true);
+      setBtUpdateStatus("Wybierz firmware.bin VoxOneBT o rozmiarze do 1 310 720 B.", true);
       return;
     }
     btUpdateBusy = true;
     btHttpUploading = true;
     renderUpdateFiles();
-    setUpdateStatus("Wysyłanie obrazu VoxOneBT do PSRAM...");
+    renderBtHttpStage("Odbiór obrazu przez WWW", "Wysyłanie obrazu VoxOneBT do PSRAM...");
     const body = new FormData();
     body.append("filesize", String(file.size));
     body.append("update", file, file.name);
     const request = new XMLHttpRequest();
     request.open("POST", "/update/bt");
     request.upload.addEventListener("progress", event => {
-      if (event.lengthComputable) setUpdateStatus("Odbiór obrazu VoxOneBT: " +
-        Math.min(100, Math.round(event.loaded * 100 / event.total)) + "% (HTTP, nie UART).");
+      if (event.lengthComputable) setBtUpdateStatus("Odbiór obrazu VoxOneBT: " +
+        Math.min(100, Math.round(event.loaded * 100 / event.total)) + "% przez WWW; UART jeszcze nie rozpoczął transferu.");
     });
     request.addEventListener("load", () => {
       btHttpUploading = false;
       if (request.status === 202 && request.responseText.trim() === "STAGED") {
-        setUpdateStatus("Obraz zweryfikowany; oczekiwanie na start sendera VoxOneBT...");
+        renderBtHttpStage("Obraz oczekuje na sender",
+          "Obraz zweryfikowany; oczekiwanie na start sendera VoxOneBT...");
         pollBtUpdate();
       } else {
         btUpdateBusy = false;
         renderUpdateFiles();
-        setUpdateStatus(request.responseText.trim() || "Upload VoxOneBT odrzucony.", true);
+        setBtUpdateStatus(request.responseText.trim() || "Upload VoxOneBT odrzucony.", true);
+        text("update-bt-stage", "Odrzucona");
       }
     });
-    request.addEventListener("error", () => {
+    const handleUncertainBtTransportFailure = () => {
       btHttpUploading = false;
-      btUpdateBusy = false;
       renderUpdateFiles();
-      setUpdateStatus("Połączenie przerwane. Sprawdź status urządzenia przed ponowną próbą.", true);
-    });
+      setBtUpdateStatus("Połączenie WWW przerwane. Transfer należący do MAIN może nadal trwać; po ponownym połączeniu panel odczyta /api/bt/update.", true);
+      text("update-bt-stage", "Sprawdzanie po ponownym połączeniu");
+      pollBtUpdate();
+    };
+    request.addEventListener("error", handleUncertainBtTransportFailure);
+    request.addEventListener("abort", handleUncertainBtTransportFailure);
+    request.addEventListener("timeout", handleUncertainBtTransportFailure);
     try { request.send(body); }
     catch (error) {
       btHttpUploading = false;
       btUpdateBusy = false;
       renderUpdateFiles();
-      setUpdateStatus("Nie udało się rozpocząć wysyłania: " + error.message, true);
+      setBtUpdateStatus("Nie udało się rozpocząć wysyłania: " + error.message, true);
+      text("update-bt-stage", "Błąd wysyłania przez WWW");
     }
   }
 

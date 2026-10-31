@@ -454,15 +454,29 @@
             <input id="update-bt-file" type="file" accept=".bin,application/octet-stream">
             <p id="update-bt-file-name" class="update-file-name">Nie wybrano pliku.</p>
             <button id="update-bt-button" type="button" disabled>Aktualizuj VoxOneBT</button>
-            <p class="hint">Aktualizacja VoxOneBT: bezpośrednio przez USB (Wx).</p>
+            <p id="update-bt-guidance" class="hint">Sprawdzanie profilu i capabilities...</p>
+            <p id="update-bt-disabled-reason" class="update-availability" role="status">Przycisk nieaktywny: brak połączenia z urządzeniem.</p>
           </article>
         </div>
         <article class="card update-progress-card" aria-labelledby="update-progress-title">
-          <h3 id="update-progress-title">Przebieg aktualizacji</h3>
+          <h3 id="update-progress-title">Przebieg MAIN / SPIFFS</h3>
           <p id="update-status" role="status" aria-live="polite">Wybierz właściwy obraz .bin.</p>
           <progress id="update-progress" max="100" value="0" hidden></progress>
           <p class="hint">Dane użytkownika są zabezpieczane podczas aktualizacji przez Web Update. Jeśli zabezpieczenie się nie powiedzie, urządzenie zgłosi błąd i przerwie aktualizację.</p>
           <p class="hint">Nie używaj pliku full.bin. Po zakończeniu urządzenie uruchomi się ponownie.</p>
+        </article>
+        <article class="card update-progress-card bt-update-progress-card" aria-labelledby="update-bt-progress-title">
+          <h3 id="update-bt-progress-title">Przebieg VoxOneBT</h3>
+          <p id="update-bt-status" role="status" aria-live="polite">Aktualizacja nie została uruchomiona.</p>
+          <dl class="facts update-progress-facts">
+            <div><dt>Etap</dt><dd id="update-bt-stage">Gotowość</dd></div>
+            <div><dt>Postęp UART ACK</dt><dd id="update-bt-percent">—</dd></div>
+            <div><dt>Bajty potwierdzone przez UART</dt><dd id="update-bt-bytes">—</dd></div>
+            <div><dt>Weryfikacja</dt><dd id="update-bt-verification">Nie rozpoczęta</dd></div>
+            <div><dt>Wersja po restarcie BT</dt><dd id="update-bt-version-confirmation">Niepotwierdzona</dd></div>
+          </dl>
+          <progress id="update-bt-progress" max="100" value="0" hidden></progress>
+          <p class="hint">100% UART ACK oznacza wyłącznie przesłanie wszystkich bajtów. Sukces pojawi się dopiero po weryfikacji obrazu, restarcie VoxOneBT, ponownym READY, zgodnej wersji i końcowym stanie OTA VALID.</p>
         </article>
       </section>
     </main>

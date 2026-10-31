@@ -98,14 +98,19 @@ class MockUpdateRequest {
       this.handlers[result.event]();
       return;
     }
-    this.status = 202;
-    this.responseText = 'STAGED';
-    this.handlers.load();
+    window.btTransportRequests.push(this);
+    const result = window.btTransportOutcomes.shift() ||
+      {event:'load', status:202, text:'STAGED'};
+    this.status = result.status || 0;
+    this.responseText = result.text || '';
+    this.handlers[result.event]();
   }
 }
 window.XMLHttpRequest = MockUpdateRequest;
 window.updateTransportOutcomes = [];
 window.updateTransportRequests = [];
+window.btTransportOutcomes = [];
+window.btTransportRequests = [];
 window.btUpdateResponses = [];
 window.hardwareRequests = [];
 window.hardwarePostResponses = [];
@@ -842,8 +847,16 @@ setTimeout(async () => {
       card.querySelector('h3')?.textContent === 'VoxOneBT Firmware');
     check([...btUpdateCard.querySelectorAll('dt')].map(node => node.textContent).join(',') === 'Status',
       'BT update card contains only compact status fact');
-    check(btUpdateCard.textContent.includes('Aktualizacja VoxOneBT: bezpośrednio przez USB (Wx).'),
-      'BT update card keeps direct USB guidance');
+    check(!btUpdateCard.textContent.includes('bezpośrednio przez USB (Wx)') &&
+      !!get('update-bt-guidance') && !!get('update-bt-disabled-reason'),
+      'BT update guidance is capability-driven instead of static Wx text');
+    check(get('update-progress-title').textContent.includes('MAIN / SPIFFS') &&
+      get('update-bt-progress-title').textContent === 'Przebieg VoxOneBT',
+      'MAIN/SPIFFS and BT progress panels are separate');
+    ['Etap', 'Postęp UART ACK', 'Bajty potwierdzone przez UART', 'Weryfikacja',
+      'Wersja po restarcie BT'].forEach(label =>
+      check([...get('update-bt-progress').closest('.card').querySelectorAll('dt')]
+        .some(node => node.textContent === label), 'BT progress field ' + label));
     const networkCard = [...get('settings').querySelectorAll('.card')].find(card => card.querySelector('h3')?.textContent === 'Sieć');
     check(!!networkCard, 'network card');
     location.hash = '#stations';
@@ -1225,7 +1238,11 @@ setTimeout(async () => {
     check(get('system-minimum-heap').textContent === '125 kB', 'minimum free heap');
     check(get('system-psram').textContent === '8.0 MB total / 4.0 MB free', 'PSRAM');
     check(get('system-capabilities').textContent.includes('RTC'), 'system capabilities');
-    check(get('update-bt-button').disabled, 'BT update requires explicit profile capability');
+    check(get('update-bt-button').disabled &&
+      get('update-bt-disabled-reason').textContent.includes('profil L0') &&
+      get('update-bt-guidance').textContent.includes('Profil L0') &&
+      !get('update-bt-guidance').textContent.includes('bezpośrednio przez USB (Wx)'),
+      'BT update requires explicit profile capability with a precise profile reason');
     const firmwareTransfer = new DataTransfer();
     firmwareTransfer.items.add(new File(['firmware-image'], 'VoxOne-firmware.bin',
       {type:'application/octet-stream'}));
@@ -1263,31 +1280,93 @@ setTimeout(async () => {
     btTestSocket.receiveSystem(systemInfo);
     status.btModule.capabilities = 'AVRCP VU FW_UPDATE';
     btTestSocket.receive(status);
-    check(get('update-bt-button').disabled, 'active BT source blocks firmware update');
-    status.source = 'WEB';
-    status.activeSource = 'radio';
-    btTestSocket.receive(status);
+    check(get('update-bt-button').disabled &&
+      get('update-bt-disabled-reason').textContent.includes('nie wybrano pliku'),
+      'missing BT image has a precise disabled reason');
     const btTransfer = new DataTransfer();
     btTransfer.items.add(new File(['image'], 'voxonebt.bin', {type:'application/octet-stream'}));
     get('update-bt-file').files = btTransfer.files;
     get('update-bt-file').dispatchEvent(new Event('change'));
-    check(!get('update-bt-button').disabled, 'L0 enables BT upload only with capability, resources and link');
+    systemInfo.psramFree = 128000;
+    btTestSocket.receiveSystem(systemInfo);
+    check(get('update-bt-disabled-reason').textContent.includes('za mało wolnego PSRAM'),
+      'insufficient PSRAM has a precise disabled reason');
+    systemInfo.psramFree = 4194304;
+    btTestSocket.receiveSystem(systemInfo);
+    status.btModule.online = false;
+    btTestSocket.receive(status);
+    check(get('update-bt-disabled-reason').textContent.includes('VoxOneBT jest offline'),
+      'offline module has a precise disabled reason');
+    status.btModule.online = true;
+    status.btModule.protocol = 1;
+    btTestSocket.receive(status);
+    check(get('update-bt-disabled-reason').textContent.includes('PROTO 2'),
+      'wrong BT protocol has a precise disabled reason');
+    status.btModule.protocol = 2;
+    status.btModule.capabilities = 'AVRCP VU';
+    btTestSocket.receive(status);
+    check(get('update-bt-disabled-reason').textContent.includes('FW_UPDATE'),
+      'missing sender capability has a precise disabled reason');
+    status.btModule.capabilities = 'AVRCP VU FW_UPDATE';
+    btTestSocket.receive(status);
+    check(get('update-bt-button').disabled &&
+      get('update-bt-disabled-reason').textContent.includes('aktywne jest źródło BT'),
+      'active BT source blocks firmware update with a precise reason');
+    status.source = 'WEB';
+    status.activeSource = 'radio';
+    btTestSocket.receive(status);
+    check(!get('update-bt-button').disabled &&
+      get('update-bt-disabled-reason').dataset.ready === 'true' &&
+      get('update-bt-guidance').textContent.includes('MAIN → UART'),
+      'L0 enables BT upload only with capability, resources, link and RADIO');
+    const mainStatusBeforeBt = get('update-status').textContent;
     btUpdateResponses.push({receiving:false, pending:false, active:true,
       state:3, phase:1, error:0, confirmedBytes:1024, totalBytes:2048, percent:50});
     get('update-bt-button').click();
     check(btUpdateRequest.url === '/update/bt' && btUpdateRequest.method === 'POST', 'dedicated BT endpoint');
     check(btUpdateRequest.body.get('filesize') === '5', 'declared image size');
-    check(get('update-status').textContent.includes('sendera'), 'accepted staging waits for sender');
+    check(get('update-bt-status').textContent.includes('sendera') &&
+      get('update-status').textContent === mainStatusBeforeBt,
+      'accepted BT staging uses only the separate BT progress panel');
     await new Promise(resolve => setTimeout(resolve, 0));
-    check(get('update-status').textContent.includes('ACK 1024/2048'), 'BT transfer progress');
-    btUpdateResponses.push({receiving:false, pending:false, active:false,
-      state:9, phase:5, error:0, confirmedBytes:2048, totalBytes:2048, percent:100});
+    check(get('update-bt-status').textContent.includes('UART ACK 1024/2048') &&
+      get('update-bt-stage').textContent === 'Wysyłanie przez UART' &&
+      get('update-bt-percent').textContent === '50%' &&
+      get('update-bt-bytes').textContent === '1024 / 2048 B' &&
+      get('update-bt-verification').textContent === 'Nie rozpoczęta' &&
+      get('update-progress').hidden,
+      'BT UART progress is detailed and independent from MAIN progress');
+    btUpdateResponses.push({receiving:false, pending:false, active:true,
+      state:6, phase:2, error:0, confirmedBytes:2048, totalBytes:2048, percent:100});
     await btPollTest();
-    check(get('update-status').textContent.includes('zakończona') &&
-      !get('update-status').textContent.includes('błąd sendera 0') &&
-      get('update-status').dataset.kind === 'status', 'BT Success=9 with error=None');
+    check(get('update-bt-percent').textContent === '100%' &&
+      get('update-bt-status').textContent.includes('jeszcze nie jest sukces') &&
+      get('update-bt-verification').textContent.includes('FW_VERIFY') &&
+      !get('update-bt-status').textContent.includes('zakończona po weryfikacji'),
+      '100 percent ACK is not reported as BT success');
+    status.btModule.firmware = '0.6.2-dev';
+    btTestSocket.receive(status);
+    btUpdateResponses.push({receiving:false, pending:false, active:true,
+      state:8, phase:4, error:0, confirmedBytes:2048, totalBytes:2048, percent:100});
+    await btPollTest();
+    check(get('update-bt-verification').textContent.includes('READY') &&
+      get('update-bt-version-confirmation').textContent.includes('0.6.2-dev') &&
+      get('update-bt-version-confirmation').textContent.includes('oczekiwanie'),
+      'post-restart READY still waits for final OTA validation');
+    btUpdateResponses.push({receiving:false, pending:false, active:false,
+      state:9, phase:5, error:0, confirmedBytes:2048, totalBytes:2048, percent:100,
+      confirmedVersion:'0.6.2-dev'});
+    await btPollTest();
+    check(get('update-bt-status').textContent.includes('zakończona po weryfikacji') &&
+      get('update-bt-verification').textContent.includes('OTA VALID') &&
+      get('update-bt-version-confirmation').textContent ===
+        '0.6.2-dev — potwierdzona po READY' &&
+      !get('update-bt-status').textContent.includes('błąd sendera 0') &&
+      get('update-bt-status').dataset.kind === 'status' &&
+      get('update-status').textContent === mainStatusBeforeBt,
+      'BT Success=9 requires final verification and confirms version after READY');
     for (const [terminalState, errorCode, expected] of [
-      [10, 11, 'błąd sendera 11'], [10, 0, 'brak kodu błędu sendera'],
+      [10, 11, 'nieprawidłowa odpowiedź sendera'], [10, 0, 'brak kodu błędu sendera'],
       [11, 19, 'przerwana']
     ]) {
       btUpdateResponses.push({receiving:false, pending:false, active:true,
@@ -1298,10 +1377,27 @@ setTimeout(async () => {
         state:terminalState, phase:6, error:errorCode,
         confirmedBytes:0, totalBytes:2048, percent:0});
       await btPollTest();
-      check(get('update-status').textContent.includes(expected) &&
-        !get('update-status').textContent.includes('błąd sendera 0') &&
-        get('update-status').dataset.kind === 'error', 'BT terminal state ' + terminalState);
+      check(get('update-bt-status').textContent.includes(expected) &&
+        !get('update-bt-status').textContent.includes('błąd sendera 0') &&
+        get('update-bt-status').dataset.kind === 'error' &&
+        get('update-status').textContent === mainStatusBeforeBt,
+        'BT terminal state ' + terminalState + ' stays in the BT panel');
     }
+    const btRequestsBeforeDisconnect = btTransportRequests.length;
+    btTransportOutcomes.push({event:'error'});
+    btUpdateResponses.push({receiving:false, pending:false, active:false,
+      state:0, phase:0, error:0, confirmedBytes:0, totalBytes:0, percent:0});
+    get('update-bt-button').click();
+    check(get('update-bt-button').disabled &&
+      btTransportRequests.length === btRequestsBeforeDisconnect + 1,
+      'uncertain WWW disconnect keeps the BT double-start guard active');
+    get('update-bt-button').click();
+    check(btTransportRequests.length === btRequestsBeforeDisconnect + 1,
+      'a second BT upload cannot start while status is unresolved');
+    await new Promise(resolve => setTimeout(resolve, 0));
+    check(!get('update-bt-button').disabled &&
+      get('update-bt-status').textContent.includes('Połączenie WWW przerwane'),
+      'status polling releases the guard only after MAIN reports no active BT update');
     get('scroll-enabled').value = String(!savedScroll.enabled);
     get('scroll-enabled').dispatchEvent(new Event('change'));
     get('scroll-settings-form').requestSubmit();
@@ -1323,7 +1419,9 @@ setTimeout(async () => {
     get('update-bt-file').files = transfer.files;
     get('update-bt-file').dispatchEvent(new Event('change'));
     check(get('update-bt-file-name').textContent.includes('voxonebt.bin'), 'file name');
-    check(get('update-bt-button').disabled, 'update disabled after disconnect');
+    check(get('update-bt-button').disabled &&
+      get('update-bt-disabled-reason').textContent.includes('brak połączenia WWW'),
+      'update disabled after disconnect with a precise reason');
     status.btModule = {online:false, firmware:'', protocol:0, name:'', capabilities:''};
     btTestSocket.receive(status);
     check(get('update-bt-online').textContent === 'Offline', 'compact update status offline');
@@ -1832,6 +1930,9 @@ def main():
                            "/update", "/update/bt"):
         assert f'"{protected_path}"' in access_policy, \
             f"security policy inventory missing {protected_path}"
+    assert route.count('webserver.on("/api/bt/update"') == 1 and \
+           r'\"confirmedVersion\"' in route, \
+        "BT UI must extend the existing status endpoint without adding another route"
     ready_rule = re.search(
         r'"/api/ready"\s*,\s*SecurityEndpoint::Ready\s*,\s*'
         r'SecurityRouteClass::PublicBootstrap', access_policy)

@@ -652,14 +652,20 @@ void handleBtUpdateStatus(AsyncWebServerRequest* request) {
   pending = pendingBtImage != nullptr;
   active = activeBtImage != nullptr;
   portEXIT_CRITICAL(&btUpdateMux);
-  char payload[220];
+  const char* confirmedVersion =
+      snapshot.state == BtFirmwareSender::State::Success &&
+              btLink.state().runtimeAvailable
+          ? btLink.state().firmwareVersion
+          : "";
+  char payload[320];
   snprintf(payload, sizeof(payload),
-      "{\"receiving\":%s,\"pending\":%s,\"active\":%s,\"state\":%u,\"phase\":%u,\"error\":%u,\"startError\":\"%s\",\"totalBytes\":%lu,\"confirmedBytes\":%lu,\"percent\":%u}",
+      "{\"receiving\":%s,\"pending\":%s,\"active\":%s,\"state\":%u,\"phase\":%u,\"error\":%u,\"startError\":\"%s\",\"totalBytes\":%lu,\"confirmedBytes\":%lu,\"percent\":%u,\"confirmedVersion\":\"%s\"}",
       receiving ? "true" : "false", pending ? "true" : "false", active ? "true" : "false",
       static_cast<unsigned>(snapshot.state), static_cast<unsigned>(snapshot.phase),
       static_cast<unsigned>(snapshot.error), startError ? startError : "",
       static_cast<unsigned long>(snapshot.totalBytes),
-      static_cast<unsigned long>(snapshot.confirmedBytes), snapshot.percent);
+      static_cast<unsigned long>(snapshot.confirmedBytes), snapshot.percent,
+      confirmedVersion);
   AsyncWebServerResponse* response = request->beginResponse(200, "application/json", payload);
   response->addHeader("Cache-Control", "no-store");
   request->send(response);
