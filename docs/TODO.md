@@ -44,7 +44,7 @@ nie są przepisywane jako pełny PASS.
 | 3 | `RC1-RADIO-ENDURANCE` | **CLOSED** | Terminalny endurance oraz wymagane dowody transportu spełniają wspólną bramkę; zakres profilowy S0/L0 pozostaje w bramkach 1 i 2. |
 | 4 | `RC1-BT-LIFECYCLE` | OPEN / PARTIAL | L0 ma etapowe A2DP/AVRCP i fizyczne audio; pełny lifecycle zamrożonego L0 oraz cały S0+BT pozostają otwarte. |
 | 5 | `RC1-SOURCE-MANAGER` | OPEN / PARTIAL | RADIO ↔ BT, intencje PLAY/STOP, disconnect/reconnect i runtime-loss mają etapowe PASS na L0; terminalna stabilność kandydata oraz S0 pozostają otwarte. |
-| 6 | `RC1-TTS-RESTORE` | OPEN / PARTIAL | Scenariusz D na L0 ma fizyczny PASS: pełne 3648044 B, timeout/transport error +0, natural EOF +1, cleanup +1 i `natural_eof`. Regresje A/B/C na docelowym kandydacie oraz HIL S0 pozostają otwarte. |
+| 6 | `RC1-TTS-RESTORE` | OPEN / PARTIAL | Scenariusz D na L0 ma fizyczny PASS: pełne 3648044 B, timeout/transport error +0, natural EOF +1, cleanup +1 i `natural_eof`. Historyczne A/B/C zachowują PASS na `fbbdfbc`, lecz ich regresja na docelowym kandydacie jest BLOCKED: brak oryginalnych fixture i manifestów. HIL S0 pozostaje otwarty. |
 | 7 | `RC1-UPDATE` | OPEN / PARTIAL | MAIN-only OTA ma dodatnie wyniki, lecz pełna macierz MAIN/SPIFFS, przerwań i wymaganych profili S0/L0 nie jest zamknięta. S0 aktualizuje VoxOneBT wyłącznie przez jego USB. |
 | 8 | `RC1-RECOVERY` | OPEN / PARTIAL | Software i wybrane HIL mają PASS; negatywne, power-loss oraz wymagane profile S0/L0 pozostają otwarte. |
 | 9 | `RC1-CONFIG-V7` | OPEN / PARTIAL | Config/VXCF i zachowanie danych mają liczne PASS; trwałość S0/L0 oraz scenariusze błędów pozostają otwarte. |
@@ -385,6 +385,28 @@ implementacji i bez rozszerzania Stable.
 - [STABLE][L0 READ-ONLY HIL PASS][W0 OLD-BUILD EVIDENCE RETAINED][S0/L0 INTERACTIVE HIL PENDING] Fizycznie zweryfikować aktualne WWW na S0 i L0: MUTE, selector RADIO/BT, oznaczenie BT offline, manual source priority, reconnect/resnapshot, favicon bez 404 oraz build identity w SYSTEM i AKTUALIZACJA. Na L0 z buildem `739e4a2` zdalny odczyt potwierdził działające WWW, zgodne assety i favicon bez 404, zgodną identyfikację wersji/builda/profilu przez `/variables.js` i WS oraz poprawny zastany snapshot RADIO/BT, MUTE i volume; bez fizycznej obecności nie wykonywano przełączeń, reconnectu ani oceny widoku i zachowania kontrolek, więc interaktywny HIL L0 pozostaje otwarty. Niedestrukcyjny wynik W0 na `c53ba57` pozostaje historycznym dowodem i nie zastępuje końcowego HIL S0/L0; dalszy fizyczny HIL W0 jest nieblokujący.
 - [STABLE][L0 MQTT COMMAND+RETAINED STATE PARITY HIL PASS][HA/ACTIVE UPDATE HIL PENDING] Fizycznie dokończyć MQTT/Home Assistant na L0; MQTT pozostaje wspierane w pierwszym stable. Po świadomej konfiguracji użytkownika bieżący L0 raportuje `enabled=true`, broker `192.168.1.14:1883`, zapisane poświadczenie i `effectiveRoot=voxone-8CBD1C` po nowym rozruchu. Uwierzytelniony CONNECT do brokera przeszedł, a trzy jednokrotne publikacje URL na `voxone-8CBD1C/command` zostały faktycznie skonsumowane przez L0 i spowodowały trzy odrębne pobrania temporary MP3 z ASUS; dowodzi to aktywnego klienta i subskrypcji command bez odczytu hasła. Raport: `reports/VOXONE-RC1-L0-TTS-RESTORE-HIL-2.md`.
   - `VOXONE-RC1-L0-MQTT-STATE-PARITY-1` 2026-10-26 ma PASS ograniczonego pasywnego zakresu na L0 `0.8.0-dev`/`afbb6d2-dirty`, `app1 VALID`, READY i stałym `bootId=936dd6c8`. Uwierzytelniony klient HIL, korzystający z istniejącego bezpiecznego magazynu bez ujawnienia poświadczeń, zasubskrybował wyłącznie `voxone-8CBD1C/#` i niczego nie publikował. Broker dostarczył po 41 ms trzy wiadomości QoS 0 z flagą retained: `status` jako JSON `{status:0, station:3, name:"Italo4you", title:"[gotowe]", on:1}`, `volume` jako liczbę `51` w kompatybilnej skali 0–254 oraz `playlist` jako URL `http://192.168.1.56/data/stations.tsv`. REST/WS równocześnie potwierdziły RADIO/STOP, stację 3 `Italo4you`, metadata `[gotowe]`, volume 20%, MUTE OFF i `dspon=1`; 20% mapuje się dokładnie na 51/254, `status=0` oznacza STOP, a niezależne `on=1` odpowiada `config.store.dspon`. Retained URL zwrócił HTTP 200, 1691 B i 20 niepustych wierszy, SHA-256 `f060dabd870849f6dc35423f1c7228fb2846b6b3fc9a3d1439f7c5c7ccc57920`. Home Assistant odpowiada HTTP 200 na istniejącym porcie 8123, lecz bez zatwierdzonego tokenu w magazynie HIL nie odczytywano jego encji. Nadal PENDING są rzeczywiste porównanie stanu HA oraz aktywna weryfikacja publikacji i retained po zmianie PLAY/STOP, stacji/metadata, volume, reconnect brokera i ponownym rozruchu; pasywny retained payload nie zawiera czasu publikacji, więc jego dokładnego wieku nie ustalono bez wymuszania zmiany.
+  - [L0 HA↔MQTT VOLUME PHYSICAL HIL PASS — LIMITED][OTHER MQTT/HA HIL PENDING]
+    `VOXONE-L0-MQTT-HA-PARITY-HIL-2-L4FkVsh3` 2026-10-31 potwierdził sterowanie
+    L0 przez HA `media_player.salon` dla jednej kontrolowanej zmiany volume
+    20% → 15% → 20%: jeden klient WS zarejestrował oba broadcasty, a późniejsze
+    GETINDEX i `webStatus` potwierdziły wartości 15 i 20. Użytkownik
+    potwierdził nowe subskrypcje `voxone-8CBD1C/volume` z `Retain=true`
+    i wartościami 51 → 38 → 51; zrzut HA pokazał też bieżącą dostawę 38
+    (QoS 0, `Retain=false`) oraz ponowny odczyt 38 (QoS 0, `Retain=true`).
+    Końcowo pozostały RADIO/PLAY, `Italo4you` #3, MUTE OFF i balance 0;
+    `bootId=e95a3cbe` był stały, OTA `app1 VALID`, WWW READY, freeHeap
+    157876 → 157860 B, minimumFreeHeap 133628 B. Pasywny `L0_LOG_RX` zebrał
+    8730 B UART z bajtowo zgodną rekonstrukcją 111 fragmentów i SHA-256
+    zgodnym między Raspberry Pi a DEV-VM, bez panic/assert/WDT ani błędów
+    audio/MQTT. Manifest UART ma `INTERRUPTED`, ponieważ logger celowo
+    zatrzymano po ukończeniu próby; nie jest to 900 s PASS. Raport:
+    `/home/piotrek/voxone-hil/logs/l0/VOXONE-L0-MQTT-HA-PARITY-HIL-2-L4FkVsh3/REPORT.md`.
+    Ten ograniczony PASS domyka wyłącznie wcześniejsze PENDING dotyczące
+    aktywnej zmiany i retained **volume** na L0. Nadal PENDING: MQTT reconnect
+    i ponowna subskrypcja, availability/LWT, retained `status` i `playlist`
+    po aktywnych zmianach, regresja po restarcie L0, pełny parytet HA oraz
+    inne niedokończone zadania Stable; wcześniejsze historyczne PASS
+    pozostają ważne w swoim zakresie.
 - [STABLE][SCOPE DOCS FROZEN][HIL PENDING] Kontrakt opisuje aktywne
   profile, API, MQTT/HA, SourceManager, VoxOneBT, TTS, update/recovery, OTA,
   Config v7 i granicę Technical Stable/Commercial Release. Obowiązkowy
@@ -476,6 +498,7 @@ zawierał wszystkie trzy poprawki, ale nie był wdrożony.
     `state=cleaned`, READY 231/231. Dowód zamyka scenariusz D na L0, ale nie
     całą bramkę: A/B/C na docelowym kandydacie oraz pełny HIL TTS S0+BT
     pozostają otwarte.
+  - [L0 TTS A/B/C REGRESSION BLOCKED][HISTORICAL PASS RETAINED] Historyczne scenariusze A (HTTP 503, RADIO STOP, zachowanie metadanych), B (stalled body, RADIO STOP, cleanup około 10,036 s) i C (stalled body, RADIO PLAY, cleanup około 10,036 s, przywrócenie RADIO około 10,671 s) miały PASS na czystym `fbbdfbc`. Regresja na docelowym kandydacie pozostaje BLOCKED, ponieważ na DEV-VM nie odnaleziono oryginalnych fixture ani manifestów SHA; katalogów `~/voxone-hil-logs/VOXONE-RC1-TTS-STALL-L0-HIL-ABC-1-1sh7pedr/` i `~/voxone-hil-tools/VOXONE-RC1-TTS-ERROR-TIMEOUT-CLOSURE-1/` nie ma lokalnie. Nie odtwarzać URL-i ani WAV z domysłów i nie przenosić historycznego PASS na obecny obraz L0.
 - [POST-STABLE] Na LCD pokazywać dla TTS stację „KOMUNIKAT TTS”, artystę „Powiadomienie głosowe”, pusty utwór i poprawną etykietę źródła.
 - [POST-STABLE] Dodać HTTPS i redirect tylko jeśli wymagają tego używane endpointy.
 - [POST-STABLE] Rozszerzyć temporary audio restore na przyszłe DLNA i AUX bez zmiany pierwszeństwa ręcznego wyboru źródła.
