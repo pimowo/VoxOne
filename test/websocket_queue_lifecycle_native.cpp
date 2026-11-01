@@ -488,6 +488,8 @@ void testProductionControlSendIsIdempotent() {
 }
 
 void testProductionLaggingCloseIsTcpOnly() {
+  const std::string header =
+      readFile("src/AsyncWebServer/AsyncWebSocket.h");
   const std::string source =
       readFile("src/AsyncWebServer/AsyncWebSocket.cpp");
   const std::string enqueue = functionBody(
@@ -495,6 +497,10 @@ void testProductionLaggingCloseIsTcpOnly() {
   const std::string poll = functionBody(
       source, "void AsyncWebSocketClient::_onPoll(");
 
+  assert(header.find("#define WS_MAX_QUEUED_MESSAGES 128") !=
+         std::string::npos);
+  assert(enqueue.find("WS_MAX_QUEUED_MESSAGES > 32 ? 32 : WS_MAX_QUEUED_MESSAGES") !=
+         std::string::npos);
   assert(enqueue.find("_messageQueue.length() >= highWater") !=
          std::string::npos);
   assert(enqueue.find("_lagging = true") != std::string::npos);

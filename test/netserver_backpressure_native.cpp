@@ -356,7 +356,11 @@ void testOverloadClosesRejectedClientOnceWith1013() {
   NetserverModel server;
   FakeWebSocket websocket;
   server.connect(41);
-  fillQueue(server);
+  server.connect(42);
+  assert(server.request(Request::GetSystem, 42) == EnqueueResult::Queued);
+  for (size_t index = 1; index < NetserverModel::kCapacity; ++index)
+    assert(server.request(Request::Other, 0) == EnqueueResult::Queued);
+  assert(server.queueSize() == NetserverModel::kCapacity);
 
   assert(server.request(Request::GetSystem, 41) == EnqueueResult::Rejected);
   assert(server.request(Request::WebStatus, 41) == EnqueueResult::Rejected);
@@ -368,6 +372,9 @@ void testOverloadClosesRejectedClientOnceWith1013() {
   assert(websocket.closes()[0].clientId == 41);
   assert(websocket.closes()[0].code == 1013);
   assert(websocket.closes()[0].reason == "Server busy; reconnect");
+  server.service();
+  assert(server.deliveredFor(42) == 1);
+  assert(!server.rejected(42));
 }
 
 void testMqttStateIsRetriedAfterOverload() {
@@ -386,6 +393,8 @@ void testMqttStateIsRetriedAfterOverload() {
 void testProductionBackpressureContract() {
   const std::string source = readFile("src/core/netserver.cpp");
   const std::string asyncTcp = readFile("src/AsyncWebServer/AsyncTCP.cpp");
+  assert(source.find("constexpr UBaseType_t kNetserverQueueLength = 20;") !=
+         std::string::npos);
   assert(source.find("#define NSQ_SEND_DELAY       0") != std::string::npos);
   assert(source.find("xQueueCreate(kNetserverQueueLength") !=
          std::string::npos);

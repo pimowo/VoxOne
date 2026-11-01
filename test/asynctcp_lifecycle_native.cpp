@@ -654,6 +654,8 @@ void testFullQueueCleanupUnblocksPrependForClearErrorAndFin() {
 
 void testAsyncConsumerClearOnFullQueueDoesNotSelfDeadlock() {
   constexpr size_t kCapacity = 32;
+  const std::string header = readFile("src/AsyncWebServer/AsyncTCP.h");
+  assert(header.find("#define XQUEUE_SIZE     32") != std::string::npos);
   constexpr uint8_t kClosingEvents = 4;
   SerializedBoundedQueue queue(kCapacity);
   Pcb* closingPcb = new Pcb;
