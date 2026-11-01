@@ -40,17 +40,36 @@ nie są przepisywane jako pełny PASS.
 | Nr | Stabilny identyfikator | Stan | Zachowany zakres dowodów / brak |
 |---:|---|---|---|
 | 1 | `RC1-PROFILE-S0` | OPEN / PARTIAL | Historyczny S0 rev. 0 ma częściowe dowody SSD1306 128×32/MAX98357A/EC11, lecz zatwierdzony cel S0+VoxOneBT nie jest jeszcze capability bieżącego BIN, nie ma zatwierdzonego pinoutu BT ani pełnego HIL. |
-| 2 | `RC1-PROFILE-L0` | OPEN / PARTIAL | Zachowane PASS obejmują RADIO, A2DP/AVRCP, SourceManager oraz TTS D; pełny HIL dokładnego zamrożonego kandydata i pozostałe wymagania profilu są otwarte. |
+| 2 | `RC1-PROFILE-L0` | OPEN / PARTIAL | Zachowane PASS obejmują RADIO, A2DP/AVRCP, SourceManager oraz TTS A/B/C/D w potwierdzonych zakresach; pełny HIL dokładnego zamrożonego kandydata i pozostałe wymagania profilu są otwarte. |
 | 3 | `RC1-RADIO-ENDURANCE` | **CLOSED** | Terminalny endurance oraz wymagane dowody transportu spełniają wspólną bramkę; zakres profilowy S0/L0 pozostaje w bramkach 1 i 2. |
 | 4 | `RC1-BT-LIFECYCLE` | OPEN / PARTIAL | L0 ma etapowe A2DP/AVRCP i fizyczne audio; pełny lifecycle zamrożonego L0 oraz cały S0+BT pozostają otwarte. |
 | 5 | `RC1-SOURCE-MANAGER` | OPEN / PARTIAL | RADIO ↔ BT, intencje PLAY/STOP, disconnect/reconnect i runtime-loss mają etapowe PASS na L0; terminalna stabilność kandydata oraz S0 pozostają otwarte. |
-| 6 | `RC1-TTS-RESTORE` | OPEN / PARTIAL | Scenariusz D na L0 ma fizyczny PASS: pełne 3648044 B, timeout/transport error +0, natural EOF +1, cleanup +1 i `natural_eof`. Historyczne A/B/C zachowują PASS na `fbbdfbc`, lecz ich regresja na docelowym kandydacie jest BLOCKED: brak oryginalnych fixture i manifestów. HIL S0 pozostaje otwarty. |
+| 6 | `RC1-TTS-RESTORE` | OPEN / PARTIAL | Scenariusz D na L0 ma fizyczny PASS: pełne 3648044 B, timeout/transport error +0, natural EOF +1, cleanup +1 i `natural_eof`. A/B/C mają fizyczny PASS obserwowalnych kontraktów na `bf1d147` z nowymi deterministycznymi fixture; historyczny PASS na `fbbdfbc` pozostaje odrębny. Wewnętrzny licznik cleanup dla A/B/C jest UNVERIFIED; HIL S0 i pozostałe wymagania bramki pozostają otwarte. |
 | 7 | `RC1-UPDATE` | OPEN / PARTIAL | MAIN-only OTA ma dodatnie wyniki, lecz pełna macierz MAIN/SPIFFS, przerwań i wymaganych profili S0/L0 nie jest zamknięta. S0 aktualizuje VoxOneBT wyłącznie przez jego USB. |
 | 8 | `RC1-RECOVERY` | OPEN / PARTIAL | Software i wybrane HIL mają PASS; negatywne, power-loss oraz wymagane profile S0/L0 pozostają otwarte. |
 | 9 | `RC1-CONFIG-V7` | OPEN / PARTIAL | Config/VXCF i zachowanie danych mają liczne PASS; trwałość S0/L0 oraz scenariusze błędów pozostają otwarte. |
 | 10 | `RC1-LR-VU` | **CLOSED** | Kontrolowany fizyczny L0 potwierdził lewy/prawy kanał i VU. S0 ma VU wyłączone; lifecycle BT należy do odrębnych otwartych bramek. |
 | 11 | `RC1-NO-P0-P1` | OPEN | Istnieją otwarte P1 wymagające fizycznego domknięcia. |
 | 12 | `RC1-FROZEN-RELEASE` | OPEN | Wymagane są czysty zamrożony release commit, końcowy verify, artefakty i PASS bramek 1–11. |
+
+`VOXONE-L0-RC-CANDIDATE-PREP-1` przygotował odizolowany, czysty zestaw L0
+z bazowego commita `bf1d147958b6c4f6b66c29bf0e3bc416063a8814` oraz
+manifest offline. `VOXONE-L0-RC-CANDIDATE-PHYSICAL-HIL-1` 2026-11-01
+potwierdził na fizycznym L0 ograniczony HIL funkcjonalny: runtime zgłasza
+`0.8.0/dev`, `bf1d147`, profil L0, `app0 VALID`, stały
+`bootId=ca5d5657`; WWW READY/verified/compatible i assetSet zgodny z
+manifestem, HTTP/WS/GETINDEX i naturalna zmiana metadata mają PASS. Użytkownik
+potwierdził dźwięk RADIO, ST7796S, reakcję enkodera i WWW. Logger L0_LOG_RX
+pracował naturalnie 240 s, 1444 B, z integralnością PASS, bez markerów
+panic/assert/WDT; volume 20%, MUTE OFF, balance 0 i Italo4you pozostały
+bez zmian. **Dokładna bitowa tożsamość MAIN i całego SPIFFS pozostaje
+UNVERIFIED**: build-id i assetSet nie są odczytem SHA obrazów z flash.
+Wynik „dokładny L0 RC” jest PARTIAL, a wszystkie BLOCKED/PENDING i status
+10/12 OPEN pozostają bez zmian. Nie jest to zatwierdzony frozen release
+commit ani RC READY. Po ewentualnym zatwierdzeniu nowego commita trzeba
+przebudować obrazy z jego dokładnej czystej rewizji.
+Raporty: `reports/VOXONE-L0-RC-CANDIDATE-PREP-1.md` i
+`~/voxone-hil/logs/l0/VOXONE-L0-RC-CANDIDATE-PHYSICAL-HIL-1-20261101T1626+0100/REPORT.md`.
 
 ### Bieżący checkpoint, zatwierdzone zasady i decyzje wymagane przed finalnym RC1
 
@@ -407,6 +426,28 @@ implementacji i bez rozszerzania Stable.
     po aktywnych zmianach, regresja po restarcie L0, pełny parytet HA oraz
     inne niedokończone zadania Stable; wcześniejsze historyczne PASS
     pozostają ważne w swoim zakresie.
+  - [L0 MQTT STATUS/PLAYLIST PASSIVE RETAINED PASS][ACTIVE STATUS RETAINED UNVERIFIED]
+    `VOXONE-L0-MQTT-STATUS-RETAINED-HIL-1` 2026-10-31: użytkownik potwierdził
+    w HA nowe subskrypcje QoS 0, `Retain=true`: `status` z `status=1`,
+    `station=3`, `name=Italo4you`, `title="Amy & Alba - Look Into My Eyes
+    (Remix)"`, `on=1`, oraz `playlist` z URL
+    `http://192.168.1.56/data/stations.tsv`. Ograniczony, wyłącznie odczytowy
+    follow-up z jednym WS zarejestrował naturalną zmianę metadata na
+    `Lian Ross - Dr. Mabuse` o 21:58:55; końcowy GETINDEX i `webStatus`
+    potwierdziły tytuł, RADIO/PLAY, tę samą stację, volume 20%, MUTE OFF i
+    balance 0. `bootId=e95a3cbe` pozostał stały, READY/OTA VALID/WWW READY;
+    heap 157864 → 157824 B. `L0_LOG_RX` zakończył 240 s integralnym PASS
+    (1344 B, zgodne SHA-256 mostu i DEV-VM), bez panic/assert/WDT ani
+    jawnych błędów audio/MQTT. Brakuje odczytu HA wiadomości bieżącej oraz
+    nowej subskrypcji `status` po tej zmianie, więc aktywna publikacja i
+    retained `status` pozostają **UNVERIFIED**. Zmiana metadata nie wyzwala
+    publikacji `playlist`; jej aktywna ponowna publikacja nadal jest PENDING.
+    Uzupełniony `mqtt_contract_native` potwierdza programowo, że oba warianty
+    `sessionPresent` w `onMqttConnect` ponawiają subskrypcję `command` QoS 2
+    oraz publikują `status`, `volume`, `playlist` w tej kolejności z QoS 0 i
+    `retain=true`; test celowany ma zwykły i ASan/UBSan PASS, ale nie zastępuje
+    fizycznego HIL reconnectu ani potwierdzenia zapisu retained przez broker.
+    Raport: `/home/piotrek/voxone-hil/logs/l0/VOXONE-L0-MQTT-STATUS-RETAINED-HIL-1-20261031T2158/REPORT.md`.
 - [STABLE][SCOPE DOCS FROZEN][HIL PENDING] Kontrakt opisuje aktywne
   profile, API, MQTT/HA, SourceManager, VoxOneBT, TTS, update/recovery, OTA,
   Config v7 i granicę Technical Stable/Commercial Release. Obowiązkowy
@@ -487,7 +528,7 @@ zawierał wszystkie trzy poprawki, ale nie był wdrożony.
 - [POST-STABLE] TTS-ADVANCED-1 — rozszerzyć TTS o kolejkę i priorytety komunikatów, konfigurowalne źródła/głosy oraz kontrolowane ducking, cache i restore; zachować jeden kontrakt temporary audio i nie traktować etapu jako blokującego Stable 1.0.0.
 - [POST-STABLE] Wprowadzić tryby TTS Volume `CURRENT`, `FIXED` i `AUTO`. `CURRENT` używa normalnego `userVolume`; `FIXED` ma własne 0–100 bez zmiany `userVolume`; `AUTO` wybiera wartość na początku komunikatu na podstawie rzeczywistego base playback i utrzymuje ją do końca TTS.
 - [POST-STABLE] Zachować Max Volume jako hard clamp i nie wysyłać BT Absolute Volume podczas TTS.
-- [STABLE][RC1-TTS-RESTORE PARTIAL][LEGACY GATE 7][SOFTWARE PASS][L0 NORMAL-END/BT-LOSS/INTERRUPTION HIL PASS][ERROR/TIMEOUT HIL PENDING] Fizycznie dokończyć ownership I2S0, sample rate i routing po błędzie i timeout; nie wymuszać ich sztuczną awarią sieci ani wadliwą trwałą konfiguracją. `VOXONE-RC1-L0-TTS-RESTORE-OFFLINE-1` domyka dowód programowy: rzeczywiste spięcie callbacków `audio_error`/EOF z tokenem bieżącej generacji, ścieżka błędu `connecttohost()`, fallback timeoutu przez `!isRunning()`, jednokrotne restore, odporność na spóźniony callback oraz aktualna intencja/source mają native i ASan/UBSan PASS; kod produkcyjny nie wymagał zmiany. `VOXONE-RC1-L0-TTS-RESTORE-HIL-2` ma PASS normalnego końca dla RADIO PLAY, RADIO STOP i BT PLAY. `VOXONE-RC1-L0-TTS-FINAL-HIL-1` dodatkowo potwierdził BT PAUSED → TTS → PAUSED, BT STOPPED → TTS → STOPPED oraz utratę BT podczas aktywnego TTS: temporary MP3 grał dalej, po końcu pozostało RADIO/STOP i przez ponad 30 s nie wystąpił stale RESUME/autoplay. `VOXONE-RC1-L0-TTS-CLOSURE-AFTER-WS-FIX-1` zamknął ręczne przerwanie na poprawionym `app1 VALID`: jedna publikacja MQTT QoS1 uruchomiła rzeczywisty temporary MP3, dokładnie jedno `stop=1` podczas aktywnego TTS dało RADIO/STOP po 36 ms i przez 75,707 s nie wystąpił opóźniony RESUME/autoplay; pojedynczy cleanup `start=1` przywrócił `Italo4you` RADIO/PLAY. Przez 300,268 s UART/WS zachowały `bootId=e68b1745`, READY i stabilny heap bez panic/assert/watchdog/korupcji/resetu; MQTT, SECURITY i playlista pozostały identyczne z checkpointem po poprawce WS. Error/timeout nie wykonywano fizycznie, ponieważ brak jawnej produkcyjnej iniekcji, a sztuczna awaria sieci lub wadliwy URL nie kwalifikują bramki. Nadal PENDING są error/timeout, fizyczny odsłuch oraz pomiar analogowego L/R/I2S0; WS dla RADIO raportuje `sampleRate=0`. Sprzętowe XSMT nie jest kryterium Stable. Raporty: `reports/VOXONE-RC1-L0-TTS-RESTORE-HIL-2.md`, `reports/VOXONE-RC1-L0-TTS-FINAL-HIL-1.md`, `reports/VOXONE-RC1-L0-BAD-HEAD-OTA-RETRY-1.md`, `reports/VOXONE-RC1-L0-TTS-CLOSURE-AFTER-WS-FIX-1.md`.
+- [STABLE][RC1-TTS-RESTORE PARTIAL][LEGACY GATE 7][SOFTWARE PASS][L0 NORMAL-END/BT-LOSS/INTERRUPTION HIL PASS][L0 A/B/C ERROR/TIMEOUT HIL PASS] Fizycznie dokończyć ownership I2S0, sample rate i routing po błędzie i timeout poza zakresem potwierdzonych scenariuszy A/B/C; nie wymuszać ich sztuczną awarią sieci ani wadliwą trwałą konfiguracją. `VOXONE-RC1-L0-TTS-RESTORE-OFFLINE-1` domyka dowód programowy: rzeczywiste spięcie callbacków `audio_error`/EOF z tokenem bieżącej generacji, ścieżka błędu `connecttohost()`, fallback timeoutu przez `!isRunning()`, jednokrotne restore, odporność na spóźniony callback oraz aktualna intencja/source mają native i ASan/UBSan PASS; kod produkcyjny nie wymagał zmiany. `VOXONE-RC1-L0-TTS-RESTORE-HIL-2` ma PASS normalnego końca dla RADIO PLAY, RADIO STOP i BT PLAY. `VOXONE-RC1-L0-TTS-FINAL-HIL-1` dodatkowo potwierdził BT PAUSED → TTS → PAUSED, BT STOPPED → TTS → STOPPED oraz utratę BT podczas aktywnego TTS: temporary MP3 grał dalej, po końcu pozostało RADIO/STOP i przez ponad 30 s nie wystąpił stale RESUME/autoplay. `VOXONE-RC1-L0-TTS-CLOSURE-AFTER-WS-FIX-1` zamknął ręczne przerwanie na poprawionym `app1 VALID`: jedna publikacja MQTT QoS1 uruchomiła rzeczywisty temporary MP3, dokładnie jedno `stop=1` podczas aktywnego TTS dało RADIO/STOP po 36 ms i przez 75,707 s nie wystąpił opóźniony RESUME/autoplay; pojedynczy cleanup `start=1` przywrócił `Italo4you` RADIO/PLAY. Przez 300,268 s UART/WS zachowały `bootId=e68b1745`, READY i stabilny heap bez panic/assert/watchdog/korupcji/resetu; MQTT, SECURITY i playlista pozostały identyczne z checkpointem po poprawce WS. W tym historycznym HIL error/timeout nie wykonywano; obecnie A/B/C na `bf1d147` mają osobny fizyczny PASS w obserwowalnym zakresie. Nadal PENDING są fizyczny odsłuch samego temporary audio, pomiar analogowego L/R/I2S0 i kwalifikacja S0; wewnętrzny licznik cleanup A/B/C pozostaje UNVERIFIED, a WS dla RADIO raportuje `sampleRate=0`. Sprzętowe XSMT nie jest kryterium Stable. Raporty: `reports/VOXONE-RC1-L0-TTS-RESTORE-HIL-2.md`, `reports/VOXONE-RC1-L0-TTS-FINAL-HIL-1.md`, `reports/VOXONE-RC1-L0-BAD-HEAD-OTA-RETRY-1.md`, `reports/VOXONE-RC1-L0-TTS-CLOSURE-AFTER-WS-FIX-1.md`, `reports/VOXONE-L0-TTS-ABC-CLOSURE-1.md`.
   - `VOXONE-RC1-TTS-STALL-D-HIL-L0-RETEST-2` ma **L0 PHYSICAL HIL PASS**
     scenariusza D na obrazie diagnostycznym SHA-256
     `518200bbded961689c74d3ca64dcc681e8e81a29dde91bd8acc29c35a8041f99`,
@@ -496,9 +537,22 @@ zawierał wszystkie trzy poprawki, ale nie był wdrożony.
     4,266350368 s, `watchdogTimeouts +0`, `transportErrors +0`,
     `naturalEofs +1`, `cleanups +1`, `endReason=natural_eof`,
     `state=cleaned`, READY 231/231. Dowód zamyka scenariusz D na L0, ale nie
-    całą bramkę: A/B/C na docelowym kandydacie oraz pełny HIL TTS S0+BT
-    pozostają otwarte.
-  - [L0 TTS A/B/C REGRESSION BLOCKED][HISTORICAL PASS RETAINED] Historyczne scenariusze A (HTTP 503, RADIO STOP, zachowanie metadanych), B (stalled body, RADIO STOP, cleanup około 10,036 s) i C (stalled body, RADIO PLAY, cleanup około 10,036 s, przywrócenie RADIO około 10,671 s) miały PASS na czystym `fbbdfbc`. Regresja na docelowym kandydacie pozostaje BLOCKED, ponieważ na DEV-VM nie odnaleziono oryginalnych fixture ani manifestów SHA; katalogów `~/voxone-hil-logs/VOXONE-RC1-TTS-STALL-L0-HIL-ABC-1-1sh7pedr/` i `~/voxone-hil-tools/VOXONE-RC1-TTS-ERROR-TIMEOUT-CLOSURE-1/` nie ma lokalnie. Nie odtwarzać URL-i ani WAV z domysłów i nie przenosić historycznego PASS na obecny obraz L0.
+    całą bramkę: A/B/C na `bf1d147` mają osobny PASS w obserwowalnym zakresie,
+    lecz pełny HIL TTS S0+BT i pozostałe wymagania bramki pozostają otwarte.
+  Nowe deterministyczne fixture `VOXONE-L0-TTS-ABC-RELEASE-FIXTURES-1`
+  zastąpiły brakujące oryginalne materiały A/B/C z 2026-10-29; to nie są
+  historycznie identyczne bajty ani URL-e. Historyczny PASS na czystym
+  `fbbdfbc` zachowuje odrębny zakres. Nowe fixture obejmują HTTP 503 bez body
+  oraz dwa endpointy WAV PCM16 mono 22050 Hz, deklarujące 176444 B i
+  wysyłające 32812 B przed 15-sekundowym stall; manifest i wyniki offline:
+  `~/voxone-hil/tts-abc-release-fixtures-1/`. Osobne fizyczne HIL na L0
+  `bf1d147` potwierdziły A: 503/RADIO STOP; B: watchdog około 10,06 s i
+  RADIO STOP bez autoplay; C: watchdog około 10,41 s, autonomiczny powrót
+  RADIO PLAY/playing około 10,80 s i metadanych. READY, `app0 VALID`, WWW
+  READY i `bootId=ca5d5657` były stabilne, UART integralny i bez
+  panic/assert/WDT. Wewnętrzny licznik cleanup pozostaje UNVERIFIED; PASS nie
+  obejmuje innych scenariuszy, S0 ani pełnej bramki Stable. Raport:
+  `reports/VOXONE-L0-TTS-ABC-CLOSURE-1.md`.
 - [POST-STABLE] Na LCD pokazywać dla TTS stację „KOMUNIKAT TTS”, artystę „Powiadomienie głosowe”, pusty utwór i poprawną etykietę źródła.
 - [POST-STABLE] Dodać HTTPS i redirect tylko jeśli wymagają tego używane endpointy.
 - [POST-STABLE] Rozszerzyć temporary audio restore na przyszłe DLNA i AUX bez zmiany pierwszeństwa ręcznego wyboru źródła.
