@@ -5,6 +5,7 @@
 #include <cstdio>
 #include <cstring>
 #include <string>
+#include <utility>
 #include <vector>
 
 #define options_h
@@ -188,7 +189,10 @@ class AsyncMqttClient {
   void disconnect(bool) { connected_ = false; }
   bool connected() const { return connected_; }
   bool tcpActive() const { return connected_; }
-  uint16_t subscribe(const char*, uint8_t) { return 1; }
+  uint16_t subscribe(const char* subscribedTopic, uint8_t qos) {
+    subscriptions.emplace_back(subscribedTopic, qos);
+    return 1;
+  }
   uint16_t publish(const char* publishedTopic, uint8_t qos, bool retained,
                    const char* payload) {
     published.push_back({publishedTopic, qos, retained, payload});
@@ -196,6 +200,7 @@ class AsyncMqttClient {
   }
 
   bool connected_ = false;
+  std::vector<std::pair<std::string, uint8_t>> subscriptions;
   std::vector<PublishedMessage> published;
 };
 
@@ -242,6 +247,32 @@ void testLegacyStatusJsonContract() {
          std::string::npos);
   assert(publishStatus(STOPPED, 0).payload.find("\"on\": 0") !=
          std::string::npos);
+}
+
+void testConnectResubscribesAndRefreshesRetained(bool sessionPresent) {
+  mqttClient.subscriptions.clear();
+  mqttClient.published.clear();
+  player.currentStatus = PLAYING;
+  config.store.dspon = 1;
+  config.userVolume = 50;
+
+  onMqttConnect(sessionPresent);
+
+  assert(mqttClient.subscriptions.size() == 1);
+  assert(mqttClient.subscriptions[0].first == "voxone-test/command");
+  assert(mqttClient.subscriptions[0].second == 2);
+  assert(mqttClient.published.size() == 3);
+  assert(mqttClient.published[0].topic == "voxone-test/status");
+  assert(mqttClient.published[0].payload.find("\"status\": 1") !=
+         std::string::npos);
+  assert(mqttClient.published[1].topic == "voxone-test/volume");
+  assert(mqttClient.published[1].payload == "50");
+  assert(mqttClient.published[2].topic == "voxone-test/playlist");
+  assert(mqttClient.published[2].payload ==
+         "http://192.168.1.42/data/stations.tsv");
+  for (const auto& message : mqttClient.published) {
+    assert(message.qos == 0 && message.retained);
+  }
 }
 
 void sendMessage(const char* text) {
@@ -293,6 +324,8 @@ int main() {
   mqttInit();
   assert(mqttActive() && mqttClient.connected());
   testLegacyStatusJsonContract();
+  testConnectResubscribesAndRefreshesRetained(false);
+  testConnectResubscribesAndRefreshesRetained(true);
   testLegacyTurnOff();
   testLegacyTurnOn();
   return 0;

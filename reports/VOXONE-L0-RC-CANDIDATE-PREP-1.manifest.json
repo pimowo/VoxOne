@@ -1,0 +1,54 @@
+{
+  "schema": "voxone-l0-rc-candidate-prep-v1",
+  "status": "OFFLINE_PREPARED_NOT_DEPLOYED_NOT_RC_READY",
+  "artifactSetId": "9d8188f8002cd3eee3c74cce983d11a64156a5c6215a683adcdd1bc3619184e0",
+  "source": {
+    "commit": "bf1d147958b6c4f6b66c29bf0e3bc416063a8814",
+    "cleanWorktree": true,
+    "buildIdentity": "bf1d147",
+    "version": "0.8.0",
+    "channel": "dev",
+    "profile": "L0",
+    "pioEnvironment": "l0",
+    "security": "production"
+  },
+  "flash": {
+    "mcu": "esp32s3",
+    "sizeBytes": 16777216,
+    "mode": "dio",
+    "frequency": "80m",
+    "partitionCsv": "partitions_yoradio.csv",
+    "partitionCsvSha256": "d663056659f51542adfed090aaf128779ab8f849a16d0a38a77c6df7c98585db",
+    "partitionsBinarySha256": "1ae446228d79cf83a4b83de41c33d1e01dc21a3557149d7da90fbcbfc303311d",
+    "requiredPartitions": {
+      "nvs": {"offset": 36864, "sizeBytes": 20480},
+      "otadata": {"offset": 57344, "sizeBytes": 8192},
+      "app0": {"offset": 65536, "sizeBytes": 1966080},
+      "app1": {"offset": 2031616, "sizeBytes": 1966080},
+      "spiffs": {"offset": 3997696, "sizeBytes": 196608}
+    }
+  },
+  "www": {
+    "manifestSchema": 1,
+    "wwwContract": 1,
+    "filesChecked": 7,
+    "assetSetId": "1d7762d8eac4570ba7bee2954ac86abb3d32af61842b681989a9219275915c61",
+    "assetManifestSha256": "a804eda4bbee7f05574ed53a7b2ad78793db56badd2f4684a69bad52ba16df71"
+  },
+  "artifactDirectory": "/home/piotrek/voxone-hil-firmware/VOXONE-L0-RC-CANDIDATE-PREP-1-bf1d147-clean",
+  "artifacts": {
+    "firmware.bin": {"sizeBytes": 1764432, "sha256": "f417e0f00435d45d389b42a518d95e7685355274975341f84a89cdf6a99b2446"},
+    "firmware.elf": {"sizeBytes": 32723368, "sha256": "a8a4d6dacea310d66fef84e2f7fbcaac9c456b76aa6631d3a064b4071fd6e8b7"},
+    "spiffs.bin": {"sizeBytes": 196608, "sha256": "058895a892ac93963000ad97e9c9712318a7ac3e1ffe0711a58e4d3b99ab4929"},
+    "VoxOne-0.8.0-full.bin": {"sizeBytes": 16777216, "sha256": "56a4d453286c49322840533e9753df12a5887ad9855c8a843caeb25606ed3e8e"},
+    "firmware.validation.json": {"sizeBytes": 661, "sha256": "20440c66f0bbe09b0884e7609b00871cfc0666ada7ce1f9b4329fb96b8a0ac1a"},
+    "VoxOne-0.8.0-full.manifest.json": {"sizeBytes": 1311, "sha256": "14f8706e055d29a42e8ee093f97e2bed02d04e5ead55c036f8a5d55595d76d03"},
+    "assets.vxwm": {"sizeBytes": 848, "sha256": "a804eda4bbee7f05574ed53a7b2ad78793db56badd2f4684a69bad52ba16df71"}
+  },
+  "verification": {
+    "platformioBuildfs": "PASS",
+    "platformioFullimageValidation": "PASS",
+    "wwwAssetManifest": "PASS",
+    "physicalL0": "NOT_TESTED"
+  }
+}
