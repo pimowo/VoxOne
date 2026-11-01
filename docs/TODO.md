@@ -448,6 +448,30 @@ implementacji i bez rozszerzania Stable.
     `retain=true`; test celowany ma zwykły i ASan/UBSan PASS, ale nie zastępuje
     fizycznego HIL reconnectu ani potwierdzenia zapisu retained przez broker.
     Raport: `/home/piotrek/voxone-hil/logs/l0/VOXONE-L0-MQTT-STATUS-RETAINED-HIL-1-20261031T2158/REPORT.md`.
+  - [L0 MQTT READ-ONLY DEV-VM PREFLIGHT BLOCKED][HA LIVE/RETAINED PHYSICAL HIL PASS — LIMITED]
+    `VOXONE-L0-MQTT-RETAINED-LIVE-HIL-1` 2026-11-01 na `bf1d147`:
+    L0 pozostał READY, `app0 VALID`, WWW READY i ze stałym `bootId=ca5d5657`
+    podczas krótkiego odczytu API/WS, ale broker odrzucił anonimowy CONNECT
+    kodem 5 (`Not authorized`), a na DEV-VM nie ma zatwierdzonego magazynu
+    poświadczeń HIL. Z DEV-VM nie subskrybowano tematów ani nie wykonano
+    planowanej 180 s obserwacji; ten etap pozostaje BLOCKED. Następnie
+    użytkownik potwierdził w HA 18 kolejnych aktualizacji `status` stacji
+    10 `RMF Dla dzieci` między 20:59 a 21:46 (QoS 0, `Retain=false`),
+    m.in. tytuły `Przedszkojak - Radę sobie dam` o 21:43 i
+    `Majka Jeżowska - Kołysanka dla Michałka` o 21:46. Live publikacja
+    metadanych ma **PHYSICAL HIL PASS** w zakresie obserwacji użytkownika.
+    Bieżące odczyty HA trzech tematów `voxone-8CBD1C/status`,
+    `voxone-8CBD1C/volume` (surowa wartość `30`) i
+    `voxone-8CBD1C/playlist`
+    (`http://192.168.1.56/data/stations.tsv`) miały QoS 0,
+    `Retain=true`: **PHYSICAL HIL PASS** w zakresie odczytu retained.
+    Nie ma surowego eksportu HA, równoległego porównania pełnego JSON `status`
+    z WS ani ciągłego READY/bootId/UART dla okna 20:59–21:46; nie
+    przypisywać im PASS. Aktywna ponowna publikacja `playlist`, MQTT
+    reconnect/re-subscription, availability/LWT i regresja po restarcie
+    pozostają UNVERIFIED/PENDING; pełna bramka MQTT pozostaje otwarta.
+    Zachować wcześniejsze ograniczone PASS. Raport:
+    `reports/VOXONE-L0-MQTT-RETAINED-LIVE-HIL-1.md`.
 - [STABLE][SCOPE DOCS FROZEN][HIL PENDING] Kontrakt opisuje aktywne
   profile, API, MQTT/HA, SourceManager, VoxOneBT, TTS, update/recovery, OTA,
   Config v7 i granicę Technical Stable/Commercial Release. Obowiązkowy
