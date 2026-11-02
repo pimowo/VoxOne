@@ -18,6 +18,7 @@ import os
 import random
 import re
 import select
+import shlex
 import signal
 import socket
 import subprocess
@@ -26,6 +27,7 @@ import threading
 import time
 import urllib.request
 import uuid
+import wave
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
@@ -93,6 +95,7 @@ SCENARIOS = (
     Scenario("radio_ws_interleave", "RADIO", frozenset({"radio", "ws"})),
     Scenario("ws_reconnect", "WS", frozenset({"ws"})),
     Scenario("bt_radio_cycle", "BT", frozenset({"bt", "radio"})),
+    Scenario("bt_disconnect_during_play", "BT", frozenset({"bt", "radio"})),
     Scenario("tts_radio", "TTS", frozenset({"tts", "radio"})),
     Scenario("mqtt_retained_live", "MQTT", frozenset({"mqtt", "radio"})),
     Scenario("mixed_bt_tts_ws", "MIXED", frozenset({"bt", "tts", "ws", "radio"})),
@@ -565,58 +568,128 @@ class MqttObserver:
 
 
 class BlueAlsaSource:
-    """Pre-paired, pre-powered bridge A2DP only; never scan/pair/unblock."""
+    """Owned, pre-paired A2DP Source only; no install/unblock/scan/pair."""
     PEER = "30:76:F5:EF:F3:5A"
+    TONE_SHA256 = "d0b913799f15bd0f30715ba975c6b1b50b405c5871cf7afa39a6fdbf763a0d41"
 
     def __init__(self, tone: Path, journal: Journal):
         self.tone, self.journal = tone, journal
         self.play_process = None
+        self.remote_pid = None
         self.connected_by_us = False
+        self._validate_tone()
+        self._preflight()
+
+    def _validate_tone(self):
+        if not self.tone.is_file() or self.tone.stat().st_size != 1920044 or sha(self.tone) != self.TONE_SHA256:
+            raise StopRun("missing or non-approved BT tone")
+        with wave.open(str(self.tone), "rb") as wav:
+            if (wav.getnchannels(), wav.getsampwidth(), wav.getframerate(), wav.getnframes()) != (
+                    2, 2, 48000, 480000):
+                raise StopRun("BT tone PCM format mismatch")
+
+    def _preflight(self):
+        rfkill = self._ssh("/usr/sbin/rfkill list bluetooth")
+        if "Soft blocked: no" not in rfkill or "Hard blocked: no" not in rfkill:
+            raise StopRun("bridge Bluetooth rfkill blocked")
         show = self._ssh("bluetoothctl show")
-        paired = self._ssh("bluetoothctl devices Paired")
-        alsa_devices = self._ssh("aplay -L") if self._ssh("command -v aplay") else ""
-        if ("Powered: yes" not in show or "Audio Source" not in show or
-                self.PEER not in paired or "bluealsa" not in alsa_devices.lower()):
-            raise StopRun("bridge A2DP Source preflight unavailable")
-        if "Connected: no" not in self._ssh("bluetoothctl info " + self.PEER):
+        if "Powered: yes" not in show or "Audio Source" not in show:
+            raise StopRun("bridge A2DP Source profile not registered/powered")
+        if self._ssh("systemctl is-active bluealsa").strip() != "active":
+            raise StopRun("BlueALSA service not active")
+        if "org.bluealsa" not in self._ssh("busctl --system --no-pager list"):
+            raise StopRun("BlueALSA D-Bus service absent")
+        if self._ssh("test -f /usr/lib/arm-linux-gnueabihf/alsa-lib/libasound_module_pcm_bluealsa.so && echo plugin-ok").strip() != "plugin-ok":
+            raise StopRun("BlueALSA ALSA plugin absent")
+        if self._ssh("command -v aplay").strip() != "/usr/bin/aplay":
+            raise StopRun("aplay absent")
+        peer = self.status()
+        if (not peer["paired"] or not peer["trusted"] or
+                peer["name"] != "VoxOneBT-EFF35A"):
+            raise StopRun("expected VoxOneBT is not paired/trusted/identified")
+        if peer["connected"]:
             raise StopRun("BT peer already connected; refusing to take ownership")
-        if not tone.is_file() or tone.stat().st_size > 5_000_000:
-            raise StopRun("missing/big BT tone")
+        self.journal.write("events.jsonl", kind="bt_preflight", peer=peer,
+                           controller="A2DP Source", service="bluealsa")
 
     @staticmethod
     def _ssh(command, timeout=8):
         return subprocess.run(["ssh", "-o", "BatchMode=yes", BRIDGE, command],
                               capture_output=True, text=True, timeout=timeout, check=True).stdout
 
-    def connect(self):
-        self._ssh("bluetoothctl connect " + self.PEER, timeout=20)
-        self.connected_by_us = True
+    def status(self):
         info = self._ssh("bluetoothctl info " + self.PEER)
-        if "Connected: yes" not in info:
+        match = re.search(r"^\s*Name:\s*(.+)$", info, re.M)
+        state = {"peer": self.PEER, "name": match.group(1).strip() if match else None,
+                 "paired": "Paired: yes" in info, "trusted": "Trusted: yes" in info,
+                 "connected": "Connected: yes" in info}
+        self.journal.write("operations.jsonl", kind="bt_status", **state)
+        return state
+
+    def connect(self):
+        if self.connected_by_us or self.status()["connected"]:
+            raise StopRun("BT peer already connected")
+        # Own the attempted connection before invoking BlueZ: even a timeout
+        # followed by an unavailable readback must trigger exact-peer cleanup.
+        self.connected_by_us = True
+        self._ssh("timeout 20 bluetoothctl connect " + self.PEER, timeout=24)
+        if not self.status()["connected"]:
             raise StopRun("BT connect readback mismatch")
         self.journal.write("operations.jsonl", kind="bt_connect", peer=self.PEER)
 
     def play(self):
-        if self.play_process is not None:
+        if self.play_process is not None or not self.connected_by_us:
             raise StopRun("BT tone already playing")
         pcm = "bluealsa:DEV=" + self.PEER + ",PROFILE=a2dp"
         stream = self.tone.open("rb")
-        self.play_process = subprocess.Popen(["ssh", "-o", "BatchMode=yes", BRIDGE,
-                                               "aplay -q -D " + pcm + " -"],
-                                              stdin=stream, stdout=subprocess.DEVNULL,
-                                              stderr=subprocess.PIPE)
-        stream.close()
+        try:
+            # The remote timeout is a second, independent playback bound.
+            # Its PID is retained so STOP targets only this run's transmitter.
+            remote = "echo VOXONE_BT_PID=$$; exec timeout -s TERM -k 3s 16s aplay -q -D " + pcm + " -"
+            process = subprocess.Popen(["ssh", "-o", "BatchMode=yes", BRIDGE, remote],
+                                       stdin=stream, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        finally:
+            stream.close()
+        if not select.select([process.stdout], [], [], 5)[0]:
+            process.terminate()
+            raise StopRun("BT transmitter did not report PID")
+        line = process.stdout.readline().decode(errors="replace").strip()
+        if not re.fullmatch(r"VOXONE_BT_PID=[1-9][0-9]*", line):
+            process.terminate()
+            raise StopRun("BT transmitter PID handshake failed")
+        self.remote_pid = int(line.split("=", 1)[1])
+        self.play_process = process
         self.journal.write("operations.jsonl", kind="bt_tone_start", sha256=sha(self.tone))
 
     def stop(self):
         if self.play_process is not None:
-            self.play_process.terminate()
+            process = self.play_process
+            remote_error = None
+            if process.poll() is None and self.remote_pid is not None:
+                # pidfd prevents PID-reuse races; verify this is our transmitter.
+                remote_code = (
+                    "import os,signal,sys; p=int(sys.argv[1]); fd=os.pidfd_open(p); "
+                    "cmd=open('/proc/%d/cmdline'%p,'rb').read(); "
+                    f"assert b'timeout' in cmd and b'bluealsa:DEV={self.PEER}' in cmd; "
+                    "signal.pidfd_send_signal(fd,signal.SIGTERM)"
+                )
+                try:
+                    self._ssh("python3 -c " + shlex.quote(remote_code) + " " +
+                              str(self.remote_pid), timeout=5)
+                except Exception as exc:
+                    remote_error = exc
+                    self.journal.write("events.jsonl", kind="bt_remote_stop_error", error=type(exc).__name__)
+            process.terminate()
             try:
-                self.play_process.wait(timeout=4)
+                process.wait(timeout=4)
             except subprocess.TimeoutExpired:
-                self.play_process.kill()
+                process.kill()
+                process.wait(timeout=4)
             self.play_process = None
+            self.remote_pid = None
             self.journal.write("operations.jsonl", kind="bt_tone_stop")
+            if remote_error is not None:
+                raise StopRun("BT remote transmitter termination unverified") from remote_error
 
     def verify_playback(self):
         if self.play_process is None:
@@ -625,14 +698,26 @@ class BlueAlsaSource:
         if code not in (None, 0):
             raise StopRun("BT aplay exited with error")
 
-    def disconnect(self):
-        self.stop()
-        self._ssh("bluetoothctl disconnect " + self.PEER, timeout=20)
-        info = self._ssh("bluetoothctl info " + self.PEER)
-        if "Connected: no" not in info:
-            raise StopRun("BT disconnect readback mismatch")
-        self.connected_by_us = False
-        self.journal.write("operations.jsonl", kind="bt_disconnect", peer=self.PEER)
+    def disconnect(self, while_playing=False):
+        if not while_playing:
+            self.stop()
+        try:
+            if self.connected_by_us:
+                self._ssh("timeout 20 bluetoothctl disconnect " + self.PEER, timeout=24)
+                if self.status()["connected"]:
+                    raise StopRun("BT disconnect readback mismatch")
+                self.connected_by_us = False
+                self.journal.write("operations.jsonl", kind="bt_disconnect", peer=self.PEER,
+                                   whilePlaying=while_playing)
+        finally:
+            self.stop()
+
+    def cleanup(self):
+        try:
+            self.stop()
+        finally:
+            if self.connected_by_us:
+                self.disconnect()
 
 
 class LiveRunner:
@@ -718,6 +803,20 @@ class LiveRunner:
         target = self.rng.choice([x for x in self.SAFE_STATIONS if x != current])
         return self.command(f"playstation={target}", lambda x: x["station"] == target and x["playerwrap"] == "playing")
 
+    def expect_bt_connected(self, expected: bool, timeout=8):
+        deadline = min(self.deadline, time.monotonic() + timeout)
+        while time.monotonic() < deadline:
+            self.check()
+            bridge = self.bt.status()
+            state = self.ws.snapshot()
+            l0 = state["webStatus"].get("btConnected") is True
+            if bridge["connected"] == expected and l0 == expected:
+                self.journal.write("operations.jsonl", kind="bt_dual_readback",
+                                   expected=expected, bridge=bridge, l0=l0)
+                return state
+            self.wait(0.5)
+        raise StopRun("BT bridge/L0 connection readback mismatch")
+
     def fixture(self):
         path = Path.home() / "voxone-hil" / "tts-abc-release-fixtures-1" / "tts-abc-release-4s-mono.wav"
         if not path.is_file() or sha(path) != "781f1a9def10816a70b07c3de77198e92d9a23b547519908b7da78cd0906980c":
@@ -787,19 +886,43 @@ class LiveRunner:
         elif name == "bt_radio_cycle":
             self.bt.connect()
             try:
+                self.expect_bt_connected(True)
+                self.command("source=bt", lambda x: x["webStatus"].get("activeSource") == "bt")
+                self.bt.play()
+                self.wait(10)
+                self.bt.verify_playback()
+                self.bt.stop()
+                self.bt.disconnect()
+                self.expect_bt_connected(False)
+                self.bt.connect()
+                self.expect_bt_connected(True)
+                self.command("source=bt", lambda x: x["webStatus"].get("activeSource") == "bt")
+                self.bt.play()
+                self.wait(10)
+                self.bt.verify_playback()
+            finally:
+                self.bt.cleanup()
+            self.expect_bt_connected(False)
+            restore(self.ws, self.initial, self.journal)
+        elif name == "bt_disconnect_during_play":
+            self.bt.connect()
+            try:
+                self.expect_bt_connected(True)
                 self.command("source=bt", lambda x: x["webStatus"].get("activeSource") == "bt")
                 self.bt.play()
                 self.wait(2)
                 self.bt.verify_playback()
+                self.bt.disconnect(while_playing=True)
+                self.expect_bt_connected(False)
+                self.bt.connect()
+                self.expect_bt_connected(True)
+                self.command("source=bt", lambda x: x["webStatus"].get("activeSource") == "bt")
+                self.bt.play()
                 self.wait(10)
                 self.bt.verify_playback()
-                state = self.ws.snapshot()
-                if not state["webStatus"].get("btConnected"):
-                    raise StopRun("BT connected status absent")
             finally:
-                self.bt.stop()
-                if self.bt.connected_by_us:
-                    self.bt.disconnect()
+                self.bt.cleanup()
+            self.expect_bt_connected(False)
             restore(self.ws, self.initial, self.journal)
         elif name == "tts_radio":
             before = self.ws.snapshot()
@@ -844,19 +967,19 @@ class LiveRunner:
         elif name == "mixed_bt_tts_ws":
             self.bt.connect()
             try:
+                self.expect_bt_connected(True)
+                self.command("source=bt", lambda x: x["webStatus"].get("activeSource") == "bt")
                 self.bt.play()
                 self.wait(2)
                 self.bt.verify_playback()
-                self.command("source=bt", lambda x: x["webStatus"].get("activeSource") == "bt")
                 self.ws.reconnect()
                 self.fixture()
                 after = self.ws.snapshot()
                 if after["webStatus"].get("activeSource") != "bt" or not after["webStatus"].get("btConnected"):
                     raise StopRun("mixed BT/TTS restore mismatch")
             finally:
-                self.bt.stop()
-                if self.bt.connected_by_us:
-                    self.bt.disconnect()
+                self.bt.cleanup()
+            self.expect_bt_connected(False)
             restore(self.ws, self.initial, self.journal)
         else:
             raise StopRun("unknown scenario")
@@ -933,6 +1056,22 @@ class LiveRunner:
                            activeSeconds=round(time.monotonic() - start, 3), qualified=qualified)
         return qualified
 
+    def run_bt_smoke(self):
+        """Two bounded BT cases only; run once each, then restore immediately."""
+        cases = [s for s in SCENARIOS if s.phase == "BT"]
+        for case in cases:
+            self.check()
+            self.execute(case)
+            self.api_probe()
+            self.wait(MIN_ACTION_GAP)
+        seen = {s.name: self.coverage.scenarios[s.name] for s in cases}
+        ok = (all(count == 1 for count in seen.values()) and
+              not self.coverage.failed["BT"] and not self.bt.connected_by_us and
+              self.bt.play_process is None)
+        self.journal.write("events.jsonl", kind="bt_smoke_coverage", scenarios=seen,
+                           qualified=ok, bridgeDisconnected=not self.bt.connected_by_us)
+        return ok
+
     def run(self):
         if not self.args.safe_volume_confirmed:
             raise StopRun("safe volume was not separately confirmed")
@@ -982,6 +1121,10 @@ class LiveRunner:
                 if self.args.smoke and any((self.args.bt_tone, self.args.ha_token_fd is not None,
                                             self.args.mqtt_auth_fd is not None)):
                     raise StopRun("smoke forbids BT/TTS/MQTT adapters")
+                if self.args.bt_smoke and (not self.args.bt_tone or
+                                            self.args.ha_token_fd is not None or
+                                            self.args.mqtt_auth_fd is not None):
+                    raise StopRun("BT smoke requires tone and forbids TTS/MQTT adapters")
                 if self.args.bt_tone and not self.initial["webStatus"].get("btConnected"):
                     try:
                         self.bt = BlueAlsaSource(self.args.bt_tone, self.journal)
@@ -1004,6 +1147,8 @@ class LiveRunner:
                         caps.add("mqtt")
                     except Exception as exc:
                         self.journal.write("events.jsonl", kind="mqtt_blocked", reason=type(exc).__name__)
+                if self.args.bt_smoke and "bt" not in caps:
+                    raise StopRun("BT smoke blocked by bridge A2DP preflight")
                 budgets, blocked = plan(self.args.duration - 90, caps)
                 self.journal.write("events.jsonl", kind="admission", caps=sorted(caps), budgets=budgets,
                                    blocked=blocked)
@@ -1011,6 +1156,8 @@ class LiveRunner:
                 self.telemetry.arm()
                 if self.args.smoke:
                     self.result = "SMOKE_PASS" if self.run_smoke() else "SMOKE_PARTIAL"
+                elif self.args.bt_smoke:
+                    self.result = "BT_SMOKE_PASS" if self.run_bt_smoke() else "BT_SMOKE_PARTIAL"
                 else:
                     for phase, seconds in budgets.items():
                         self.check()
@@ -1024,10 +1171,9 @@ class LiveRunner:
                 signal.signal(signal.SIGINT, original_handler)
                 if self.bt:
                     try:
-                        self.bt.stop()
-                        if self.bt.connected_by_us:
-                            self.bt.disconnect()
+                        self.bt.cleanup()
                     except Exception as exc:
+                        self.result = "STOPPED/BT_CLEANUP_UNVERIFIED"
                         self.journal.write("events.jsonl", kind="bt_cleanup_error", reason=str(exc))
                 restored = False
                 if self.ws and self.initial:
@@ -1092,7 +1238,8 @@ class LiveRunner:
                                      "scenarioCounts": dict(self.coverage.scenarios),
                                      "failedScenarios": dict(self.coverage.failed),
                                      "restored": restored})
-        return 0 if self.result in ("PASS", "PARTIAL", "SMOKE_PASS", "SMOKE_PARTIAL") else 2
+        return 0 if self.result in ("PASS", "PARTIAL", "SMOKE_PASS", "SMOKE_PARTIAL",
+                                    "BT_SMOKE_PASS", "BT_SMOKE_PARTIAL") else 2
 
 
 def dry_run(seed: int, duration: int, capabilities: set[str] | None = None):
@@ -1122,6 +1269,18 @@ def dry_run(seed: int, duration: int, capabilities: set[str] | None = None):
             "full_coverage": not blocked, "stop_cleanup_probe": "see unit tests"}
 
 
+def bt_smoke_dry_run(seed: int, duration: int):
+    if duration != 600:
+        raise ValueError("BT smoke dry-run requires the 600 s ceiling")
+    cases = [s.name for s in SCENARIOS if s.phase == "BT"]
+    assert cases == ["bt_radio_cycle", "bt_disconnect_during_play"]
+    return {"mode": "bt-smoke-dry-run", "seed": seed,
+            "durationLimitSeconds": duration, "cases": cases,
+            "maxExecutionPerCase": 1, "physicalReadiness": "UNVERIFIED",
+            "requires": ["approved Pi A2DP Source", "paired/trusted VoxOneBT",
+                         "approved low-volume L0", "RX-only UART"]}
+
+
 def main():
     p = argparse.ArgumentParser(description=__doc__)
     p.add_argument("--dry-run", action="store_true")
@@ -1129,6 +1288,7 @@ def main():
                    help="offline planner simulation only; does not assert hardware readiness")
     p.add_argument("--live", action="store_true")
     p.add_argument("--smoke", action="store_true", help="bounded RADIO/WS/volume/MUTE live smoke only")
+    p.add_argument("--bt-smoke", action="store_true", help="two bounded BT scenarios only; no TTS/MQTT")
     p.add_argument("--confirm-live", action="store_true")
     p.add_argument("--duration", type=int, default=900)
     p.add_argument("--seed", type=int, default=16328847690973426075)
@@ -1137,9 +1297,15 @@ def main():
     p.add_argument("--mqtt-auth-fd", type=int, help="explicitly provided JSON username/password on inherited FD")
     p.add_argument("--bt-tone", type=Path, help="verified local synthetic 48 kHz PCM WAV")
     args = p.parse_args()
+    if args.bt_smoke and (args.smoke or args.duration != 600):
+        p.error("BT smoke must be exclusive and use the 600 s ceiling")
     if args.dry_run or not args.live:
-        caps = {"radio", "ws", "bt", "tts", "mqtt"} if args.simulate_all_capabilities else None
-        print(json.dumps(dry_run(args.seed, args.duration, caps), ensure_ascii=False, indent=2))
+        if args.bt_smoke:
+            result = bt_smoke_dry_run(args.seed, args.duration)
+        else:
+            caps = {"radio", "ws", "bt", "tts", "mqtt"} if args.simulate_all_capabilities else None
+            result = dry_run(args.seed, args.duration, caps)
+        print(json.dumps(result, ensure_ascii=False, indent=2))
         return 0
     if not args.confirm_live:
         p.error("live mode requires separate approval and --confirm-live")

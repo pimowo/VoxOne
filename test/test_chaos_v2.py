@@ -83,7 +83,7 @@ class FakeTelemetry:
 class ChaosV2Tests(unittest.TestCase):
     def test_dry_run_current_capabilities(self):
         result = c.dry_run(16328847690973426075, 900)
-        self.assertEqual(result["planned_scenarios"], 11)
+        self.assertEqual(result["planned_scenarios"], 12)
         self.assertEqual(result["active_scenarios"], 7)
         self.assertEqual(set(result["blocked"]), {"BT", "TTS", "MQTT", "MIXED"})
         self.assertFalse(result["full_coverage"])
@@ -91,7 +91,7 @@ class ChaosV2Tests(unittest.TestCase):
     def test_dry_run_simulated_full_capabilities(self):
         result = c.dry_run(16328847690973426075, 900,
                            {"radio", "ws", "bt", "tts", "mqtt"})
-        self.assertEqual(result["active_scenarios"], 11)
+        self.assertEqual(result["active_scenarios"], 12)
         self.assertTrue(result["full_coverage"])
         self.assertEqual(set(result["phase_budgets"]), set(c.PHASE_ORDER))
 
@@ -118,6 +118,188 @@ class ChaosV2Tests(unittest.TestCase):
             self.assertEqual(runner.ws.state["volume100"], 12)
             self.assertEqual(runner.ws.state["muted"], 0)
             self.assertEqual(runner.ws.commands_sent, 4)
+
+    def test_bt_preflight_blocks_rfkill_without_other_actions(self):
+        with tempfile.TemporaryDirectory() as tmp, \
+             mock.patch.object(c.BlueAlsaSource, "_validate_tone"), \
+             mock.patch.object(c.BlueAlsaSource, "_ssh",
+                               return_value="Soft blocked: yes\nHard blocked: no\n") as ssh:
+            with self.assertRaisesRegex(c.StopRun, "rfkill blocked"):
+                c.BlueAlsaSource(Path(tmp) / "tone.wav", c.Journal(Path(tmp) / "run"))
+            ssh.assert_called_once_with("/usr/sbin/rfkill list bluetooth")
+
+    def test_bt_preflight_requires_known_paired_source(self):
+        def ssh(command, timeout=8):
+            if command == "/usr/sbin/rfkill list bluetooth":
+                return "Soft blocked: no\nHard blocked: no\n"
+            if command == "bluetoothctl show":
+                return "Powered: yes\nUUID: Audio Source\n"
+            if command == "systemctl is-active bluealsa":
+                return "active\n"
+            if command == "busctl --system --no-pager list":
+                return "org.bluealsa service\n"
+            if command.startswith("test -f "):
+                return "plugin-ok\n"
+            if command == "command -v aplay":
+                return "/usr/bin/aplay\n"
+            if command.startswith("bluetoothctl info "):
+                return "Name: VoxOneBT-EFF35A\nPaired: yes\nTrusted: yes\nConnected: no\n"
+            raise AssertionError("unexpected remote command: " + command)
+
+        with tempfile.TemporaryDirectory() as tmp, \
+             mock.patch.object(c.BlueAlsaSource, "_validate_tone"), \
+             mock.patch.object(c.BlueAlsaSource, "_ssh", side_effect=ssh) as remote:
+            source = c.BlueAlsaSource(Path(tmp) / "tone.wav", c.Journal(Path(tmp) / "run"))
+            self.assertFalse(source.connected_by_us)
+            self.assertFalse(any("aplay -L" in call.args[0] for call in remote.call_args_list))
+
+    def test_bt_scenarios_reconnect_and_disconnect_during_play_offline(self):
+        class FakeBt:
+            def __init__(self, ws):
+                self.ws, self.events = ws, []
+                self.connected_by_us = False
+                self.playing = False
+
+            def status(self):
+                return {"connected": self.connected_by_us}
+
+            def connect(self):
+                self.connected_by_us = True
+                self.ws.state["webStatus"]["btConnected"] = True
+                self.events.append("connect")
+
+            def play(self):
+                self.playing = True
+                self.events.append("play")
+
+            def verify_playback(self):
+                if not self.playing:
+                    raise c.StopRun("fake transmitter stopped")
+
+            def stop(self):
+                if self.playing:
+                    self.events.append("stop")
+                self.playing = False
+
+            def disconnect(self, while_playing=False):
+                if while_playing and not self.playing:
+                    raise c.StopRun("not playing at disconnect")
+                self.events.append("disconnect_playing" if while_playing else "disconnect")
+                self.connected_by_us = False
+                self.ws.state["webStatus"]["btConnected"] = False
+                self.stop()
+
+            def cleanup(self):
+                self.stop()
+                if self.connected_by_us:
+                    self.disconnect()
+
+        for name in ("bt_radio_cycle", "bt_disconnect_during_play"):
+            with self.subTest(name=name), tempfile.TemporaryDirectory() as tmp:
+                runner = c.LiveRunner(mock.Mock(seed=42))
+                runner.journal = c.Journal(Path(tmp) / "run")
+                runner.ws = FakeWs(runner.journal)
+                runner.initial = runner.ws.snapshot()
+                runner.deadline = c.time.monotonic() + 30
+                runner.wait = lambda _seconds: None
+                runner.bt = FakeBt(runner.ws)
+                runner.scenario(name)
+                self.assertEqual(runner.bt.events.count("connect"), 2)
+                self.assertEqual(runner.bt.events.count("play"), 2)
+                self.assertFalse(runner.bt.connected_by_us)
+                self.assertTrue(c.validate_restore(runner.initial, runner.ws.snapshot()))
+                if name == "bt_disconnect_during_play":
+                    self.assertIn("disconnect_playing", runner.bt.events)
+
+    def test_bt_stop_targets_owned_pidfd_only(self):
+        class FakeProcess:
+            def __init__(self):
+                self.terminated = False
+
+            def poll(self):
+                return None
+
+            def terminate(self):
+                self.terminated = True
+
+            def wait(self, timeout=4):
+                return 0
+
+        with tempfile.TemporaryDirectory() as tmp:
+            source = c.BlueAlsaSource.__new__(c.BlueAlsaSource)
+            source.journal = c.Journal(Path(tmp) / "run")
+            source.play_process = FakeProcess()
+            source.remote_pid = 4242
+            source.connected_by_us = True
+            with mock.patch.object(source, "_ssh", return_value="") as remote:
+                source.stop()
+            command = remote.call_args.args[0]
+            self.assertIn("pidfd_open", command)
+            self.assertIn("4242", command)
+            self.assertNotIn("pkill", command)
+            self.assertTrue(source.play_process is None)
+            self.assertIsNone(source.remote_pid)
+
+    def test_bt_connect_timeout_keeps_exact_peer_cleanup_ownership(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            source = c.BlueAlsaSource.__new__(c.BlueAlsaSource)
+            source.journal = c.Journal(Path(tmp) / "run")
+            source.connected_by_us = False
+            source.play_process = None
+            source.remote_pid = None
+            source.status = lambda: {"connected": False}
+            with mock.patch.object(source, "_ssh", side_effect=TimeoutError) as remote:
+                with self.assertRaises(TimeoutError):
+                    source.connect()
+            self.assertTrue(source.connected_by_us)
+            self.assertEqual(remote.call_args.args[0],
+                             "timeout 20 bluetoothctl connect " + c.BlueAlsaSource.PEER)
+
+    def test_bt_remote_stop_failure_is_not_silent_pass(self):
+        class FakeProcess:
+            def poll(self):
+                return None
+
+            def terminate(self):
+                pass
+
+            def wait(self, timeout=4):
+                return 0
+
+        with tempfile.TemporaryDirectory() as tmp:
+            source = c.BlueAlsaSource.__new__(c.BlueAlsaSource)
+            source.journal = c.Journal(Path(tmp) / "run")
+            source.play_process = FakeProcess()
+            source.remote_pid = 4242
+            with mock.patch.object(source, "_ssh", side_effect=TimeoutError):
+                with self.assertRaisesRegex(c.StopRun, "termination unverified"):
+                    source.stop()
+            self.assertIsNone(source.play_process)
+            self.assertIsNone(source.remote_pid)
+
+    def test_bt_smoke_admits_only_two_bounded_cases_offline(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            runner = c.LiveRunner(mock.Mock(seed=42))
+            runner.journal = c.Journal(Path(tmp) / "run")
+            runner.deadline = c.time.monotonic() + 600
+            runner.bt = mock.Mock(connected_by_us=False, play_process=None)
+            executed = []
+
+            def execute(case):
+                executed.append(case.name)
+                runner.coverage.record(case.phase, case.name, True)
+
+            runner.execute = execute
+            runner.api_probe = lambda: None
+            runner.wait = lambda _seconds: None
+            self.assertTrue(runner.run_bt_smoke())
+            self.assertEqual(executed, ["bt_radio_cycle", "bt_disconnect_during_play"])
+
+    def test_bt_smoke_dry_run_is_not_hardware_evidence(self):
+        result = c.bt_smoke_dry_run(16328847690973426075, 600)
+        self.assertEqual(result["mode"], "bt-smoke-dry-run")
+        self.assertEqual(len(result["cases"]), 2)
+        self.assertEqual(result["physicalReadiness"], "UNVERIFIED")
 
     def test_coverage_never_counts_missing_or_passive_phase(self):
         coverage = c.Coverage()
@@ -267,7 +449,7 @@ class ChaosV2Tests(unittest.TestCase):
             runner.ws.state["station"] = 2
             raise c.StopRun("simulated STOP after mutation")
 
-        args = mock.Mock(duration=900, seed=42, safe_volume_confirmed=True, smoke=False,
+        args = mock.Mock(duration=900, seed=42, safe_volume_confirmed=True, smoke=False, bt_smoke=False,
                          bt_tone=None, ha_token_fd=None, mqtt_auth_fd=None)
         with tempfile.TemporaryDirectory() as tmp, \
              mock.patch.object(c, "OUT_ROOT", Path(tmp) / "runs"), \
