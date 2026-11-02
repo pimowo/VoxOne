@@ -75,6 +75,8 @@ void BtLinkProtocol::begin(uint32_t nowMs) {
   lineLength_ = 0;
   discardingLine_ = false;
   statusOpen_ = false;
+  statusDisconnectedSeen_ = false;
+  pendingTransportCount_ = 0;
   statusIdentityFields_ = 0;
   statusOtaMalformed_ = false;
   diagnosticsOpen_ = false;
@@ -106,7 +108,19 @@ void BtLinkProtocol::requestStatus(uint32_t nowMs) {
 void BtLinkProtocol::requestDiag() { send("GET_DIAG"); }
 
 bool BtLinkProtocol::sendTransport(const char* command) {
-  if (updateExclusive_ || !state_.runtimeAvailable || !state_.connected || statusOpen_) return false;
+  if (updateExclusive_ || !state_.runtimeAvailable) return false;
+  if (statusOpen_) {
+    // STATUS_BEGIN temporarily clears the session. Preserve a bounded FIFO
+    // until the complete snapshot confirms that the link is still connected.
+    if (!statusBackup_.connected ||
+        statusBackup_.otaState == BtOtaState::Missing ||
+        statusBackup_.protocolVersion != 2 ||
+        pendingTransportCount_ >= PendingTransportCapacity ||
+        strlen(command) >= sizeof(pendingTransport_[0])) return false;
+    strcpy(pendingTransport_[pendingTransportCount_++], command);
+    return true;
+  }
+  if (!state_.connected) return false;
   send(command);
   return true;
 }
@@ -205,6 +219,8 @@ void BtLinkProtocol::goOffline() {
   clearSession();
   clearVolumeSessionEvents();
   statusOpen_ = false;
+  statusDisconnectedSeen_ = false;
+  pendingTransportCount_ = 0;
   statusIdentityFields_ = 0;
   statusOtaMalformed_ = false;
   diagnosticsOpen_ = false;
@@ -263,7 +279,8 @@ bool BtLinkProtocol::handleLine(uint32_t nowMs) {
   }
 
   if (strcmp(line_, "STATUS_BEGIN") == 0) {
-    if (updateExclusive_) statusBackup_ = state_;
+    if (statusOpen_) pendingTransportCount_ = 0;
+    statusBackup_ = state_;
     clearSession();
     // A new status snapshot is the only handshake authority. Discard frames
     // buffered before its boundary; a capable VoxOneBT includes a fresh
@@ -271,6 +288,7 @@ bool BtLinkProtocol::handleLine(uint32_t nowMs) {
     clearVolumeSessionEvents();
     volumeSessionHandshakeTrusted_ = false;
     statusOpen_ = true;
+    statusDisconnectedSeen_ = false;
     statusIdentityFields_ = 0;
     statusOtaMalformed_ = false;
     state_.otaState = BtOtaState::Missing;
@@ -305,6 +323,16 @@ bool BtLinkProtocol::handleLine(uint32_t nowMs) {
     if (updateExclusive_ && completeOtaIdentity && state_.runtimeAvailable &&
         state_.protocolVersion == 2)
       notify(BtLinkEvent::UpdateIdentity);
+    if (pendingTransportCount_ != 0) {
+      if (completeOtaIdentity && state_.runtimeAvailable && state_.connected &&
+          !statusDisconnectedSeen_ && state_.protocolVersion == 2 &&
+          (statusBackup_.peerName[0] == '\0' || state_.peerName[0] == '\0' ||
+           strcmp(statusBackup_.peerName, state_.peerName) == 0)) {
+        for (uint8_t i = 0; i < pendingTransportCount_; ++i)
+          send(pendingTransport_[i]);
+      }
+      pendingTransportCount_ = 0;
+    }
     return true;
   }
 
@@ -326,6 +354,7 @@ bool BtLinkProtocol::handleLine(uint32_t nowMs) {
     return true;
   }
   if (strcmp(line_, "DISCONNECTED") == 0) {
+    if (statusOpen_) statusDisconnectedSeen_ = true;
     clearSession();
     return true;
   }

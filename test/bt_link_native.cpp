@@ -496,4 +496,78 @@ int main() {
   v1.link.tick(4000);
   assert(v1.sent.size() == 3);
   assert(!v1.link.state().runtimeAvailable);
+
+  // An explicit PLAY during STATUS_BEGIN/END must not disappear when the
+  // partial snapshot temporarily clears connected. Dispatch once only after
+  // the fresh snapshot proves that the same peer is still connected.
+  LinkHarness deferred;
+  deferred.link.begin(0);
+  const auto snapshot = [](LinkHarness& h, uint32_t at, bool connected) {
+    h.line("STATUS_BEGIN", at++);
+    h.line("PROTO 2", at++);
+    h.line("FW_VERSION 0.6.7-dev", at++);
+    h.line("BT_NAME VoxOneBT-EFF35A", at++);
+    h.line("CAPS A2DP AVRCP", at++);
+    h.line("OTA_STATE NOT_PENDING", at++);
+    h.line(connected ? "CONNECTED" : "DISCONNECTED", at++);
+    h.line("STOPPED", at++);
+    h.line("STATUS_END", at++);
+  };
+  snapshot(deferred, 1, true);
+  assert(deferred.link.state().runtimeAvailable && deferred.link.state().connected);
+  const size_t beforePlay = deferred.sent.size();
+  deferred.line("STATUS_BEGIN", 20);
+  assert(deferred.link.play());
+  assert(deferred.link.pause());
+  assert(deferred.link.play());
+  assert(deferred.link.pause());
+  assert(!deferred.link.play());  // Bounded FIFO rejects overflow.
+  assert(deferred.sent.size() == beforePlay);
+  deferred.line("PROTO 2", 21);
+  deferred.line("FW_VERSION 0.6.7-dev", 22);
+  deferred.line("BT_NAME VoxOneBT-EFF35A", 23);
+  deferred.line("CAPS A2DP AVRCP", 24);
+  deferred.line("OTA_STATE NOT_PENDING", 25);
+  deferred.line("CONNECTED", 26);
+  deferred.line("STOPPED", 27);
+  deferred.line("STATUS_END", 28);
+  assert(deferred.sent.size() == beforePlay + 4);
+  assert(deferred.sent[beforePlay] == "PLAY");
+  assert(deferred.sent[beforePlay + 1] == "PAUSE");
+  assert(deferred.sent[beforePlay + 2] == "PLAY");
+  assert(deferred.sent[beforePlay + 3] == "PAUSE");
+
+  // If that complete snapshot reveals a disconnect, never replay PAUSE into
+  // a later session, nor after a READY/offline transition.
+  const size_t beforeDisconnect = deferred.sent.size();
+  deferred.line("STATUS_BEGIN", 30);
+  assert(deferred.link.pause());
+  deferred.line("PROTO 2", 31);
+  deferred.line("FW_VERSION 0.6.7-dev", 32);
+  deferred.line("BT_NAME VoxOneBT-EFF35A", 33);
+  deferred.line("CAPS A2DP AVRCP", 34);
+  deferred.line("OTA_STATE NOT_PENDING", 35);
+  deferred.line("DISCONNECTED", 36);
+  deferred.line("STATUS_END", 37);
+  assert(deferred.sent.size() == beforeDisconnect);
+  snapshot(deferred, 40, true);
+  assert(deferred.sent.size() == beforeDisconnect);
+  deferred.line("STATUS_BEGIN", 50);
+  assert(deferred.link.play());
+  deferred.link.suspend();
+  assert(deferred.sent.size() == beforeDisconnect);
+
+  snapshot(deferred, 60, true);
+  const size_t beforeReconnect = deferred.sent.size();
+  deferred.line("STATUS_BEGIN", 70);
+  assert(deferred.link.play());
+  deferred.line("PROTO 2", 71);
+  deferred.line("FW_VERSION 0.6.7-dev", 72);
+  deferred.line("BT_NAME VoxOneBT-EFF35A", 73);
+  deferred.line("CAPS A2DP AVRCP", 74);
+  deferred.line("OTA_STATE NOT_PENDING", 75);
+  deferred.line("DISCONNECTED", 76);
+  deferred.line("CONNECTED", 77);
+  deferred.line("STATUS_END", 78);
+  assert(deferred.sent.size() == beforeReconnect);
 }

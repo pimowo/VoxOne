@@ -134,6 +134,10 @@ class BtLinkProtocol {
   size_t lineLength_ = 0;
   bool discardingLine_ = false;
   bool statusOpen_ = false;
+  bool statusDisconnectedSeen_ = false;
+  static constexpr uint8_t PendingTransportCapacity = 4;
+  char pendingTransport_[PendingTransportCapacity][6]{};
+  uint8_t pendingTransportCount_ = 0;
   uint8_t statusIdentityFields_ = 0;
   bool statusOtaMalformed_ = false;
   bool diagnosticsOpen_ = false;
