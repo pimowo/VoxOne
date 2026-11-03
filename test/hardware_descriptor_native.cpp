@@ -277,11 +277,11 @@ int main() {
   assert(caps.supportsInput(LocalInputKind::Ec11) &&
          caps.supportsInput(LocalInputKind::Buttons3) && caps.supportsLocalUi);
   assert(caps.supportsPsram);
-  assert(d.btUart.rx == 10 && d.btUart.tx == 11);
+  assert(d.btUart.rx == 44 && d.btUart.tx == 43);
   assert(d.btUart.rx == fromLegacyPin(VOXONE_BT_UART_RX_PIN));
   assert(d.btUart.tx == fromLegacyPin(VOXONE_BT_UART_TX_PIN));
-  assert(d.btAudioIn.bclk == 12 && d.btAudioIn.ws == 13 &&
-         d.btAudioIn.din == 14 && d.btAudioRxEnabled);
+  assert(d.btAudioIn.bclk == 11 && d.btAudioIn.ws == 12 &&
+         d.btAudioIn.din == 13 && d.btAudioRxEnabled);
   assert(!bool(VOXONE_BT_FW_UPDATE_ENABLED));
   assert(!bool(VOXONE_BT_TRANSPORT_UI_ENABLED));
 #elif defined(VOXONE_PROFILE_DIN0)

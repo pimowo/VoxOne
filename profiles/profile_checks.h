@@ -73,6 +73,16 @@ static_assert(!VOXONE_HAS_LOCAL_UI ||
 static_assert(!VOXONE_BT_FW_UPDATE_ENABLED || VOXONE_HAS_BT,
               "VoxOneBT firmware update requires the BT capability");
 
+// S0 deliberately reuses the ESP32-S3 default UART0 pads for UART1 to match
+// the physical prototype. Application diagnostics must therefore use the
+// native USB Serial/JTAG CDC endpoint, never UART0 on GPIO43/44.
+#if defined(ARDUINO) && defined(VOXONE_PROFILE_S0)
+#if !defined(ARDUINO_USB_MODE) || ARDUINO_USB_MODE != 1 || \
+    !defined(ARDUINO_USB_CDC_ON_BOOT) || ARDUINO_USB_CDC_ON_BOOT != 1
+#error "S0 GPIO43/44 requires native USB CDC Serial diagnostics"
+#endif
+#endif
+
 static_assert(!VOXONE_BT_TRANSPORT_UI_ENABLED ||
               (VOXONE_HAS_BT &&
                VOXONE_DISPLAY_PROFILE ==

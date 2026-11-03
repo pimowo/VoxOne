@@ -179,15 +179,30 @@ void testCompleteCommandSyntax() {
 
 void testUartAndVolumeSessionContractsRemainSeparate() {
   const auto link = readFile("src/core/bt_link.cpp");
-  const auto profile = readFile("profiles/l0.h");
+  const auto l0Profile = readFile("profiles/l0.h");
+  const auto s0Profile = readFile("profiles/s0.h");
   const auto protocol = readFile("src/core/bt_link_protocol.cpp");
   const auto build = readFile("platformio.ini");
   assert(link.find("BtLinkBaud = 921600") != std::string::npos);
   assert(link.find("serial_(1)") != std::string::npos);
-  assert(profile.find("VOXONE_BT_UART_RX_PIN 15") != std::string::npos);
-  assert(profile.find("VOXONE_BT_UART_TX_PIN 16") != std::string::npos);
+  assert(l0Profile.find("VOXONE_BT_UART_RX_PIN 15") != std::string::npos);
+  assert(l0Profile.find("VOXONE_BT_UART_TX_PIN 16") != std::string::npos);
+  assert(s0Profile.find("VOXONE_BT_UART_RX_PIN 44") != std::string::npos);
+  assert(s0Profile.find("VOXONE_BT_UART_TX_PIN 43") != std::string::npos);
+  assert(s0Profile.find("VOXONE_BT_I2S_BCLK_PIN 11") !=
+         std::string::npos);
+  assert(s0Profile.find("VOXONE_BT_I2S_WS_PIN 12") != std::string::npos);
+  assert(s0Profile.find("VOXONE_BT_I2S_DATA_PIN 13") !=
+         std::string::npos);
   assert(protocol.find("VOL_SESSION_BEGIN") != std::string::npos);
   assert(protocol.find("VOL_LOCAL_ACK") != std::string::npos);
+  const auto s0Begin = build.find("[env:s0]");
+  const auto s0End = build.find("[env:din0]");
+  assert(s0Begin != std::string::npos && s0End != std::string::npos &&
+         s0End > s0Begin);
+  const auto s0Environment = build.substr(s0Begin, s0End - s0Begin);
+  assert(s0Environment.find("-DARDUINO_USB_CDC_ON_BOOT=1") !=
+         std::string::npos);
   assert(build.find("[env:l0-tx-only]") != std::string::npos);
   assert(build.find("-DVOXONE_SERIALCLI_RX_ENABLED=0") != std::string::npos);
 }

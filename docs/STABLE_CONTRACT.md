@@ -38,9 +38,10 @@ PASS zachowują ważność wyłącznie w swoim udokumentowanym zakresie.
 
 S0 opisuje własny, ręcznie okablowany ESP32-S3 Zero i zachowuje historyczną
 mapę GPIO rewizji 0 dla OLED, local audio i input. Kandydat S0 deklaruje
-`VOXONE_HAS_BT=1`: UART1 używa RX/TX GPIO10/11, a I2S1 RX używa
-BCLK/WS/DATA GPIO12/13/14. S0 zachowuje VU wyłączone i aktualizuje VoxOneBT
-przez osobne USB; MAIN→BT update pozostaje wyłączone. L0
+`VOXONE_HAS_BT=1`: UART1 używa RX44/TX43, a I2S1 RX używa
+BCLK11/WS12/DATA13. Logi aplikacji korzystają z native USB CDC. S0 zachowuje
+VU wyłączone i aktualizuje VoxOneBT przez osobne USB; MAIN→BT update
+pozostaje wyłączone. L0
 zachowuje istniejącą PCB V-Tom, hardware, capability i GPIO. DIN0 zachowuje
 mapę GPIO M0 jako własny pinout rewizji 0. Przyszłe dedykowane PCB otrzymają
 nazwy S1 i DIN1 i nie nadpiszą historii rewizji 0.
@@ -204,8 +205,9 @@ wznowić stację, a RADIO STOP intent nie powoduje autoplay.
 
 L0 komunikuje się z osobnym modułem VoxOneBT przez UART protocol 2 i odbiera
 jego PCM przez I2S. S0 używa tego samego kontraktu logicznego na UART1
-GPIO10/11 i I2S1 RX GPIO12/13/14. A2DP audio state decyduje, czy BT może
-posiadać I2S0;
+RX44/TX43 i I2S1 RX BCLK11/WS12/DATA13. Aplikacyjne logi S0 korzystają z
+natywnego USB CDC, aby UART0 nie konkurował o GPIO43/44. A2DP audio state
+decyduje, czy BT może posiadać I2S0;
 AVRCP służy do transportu i UI. Snapshot obejmuje online/connected, firmware,
 nazwę, capabilities, peer, metadata, playback, sample rate i raw VU. Codec i
 bitrate A2DP nie są publikowane bez wiarygodnych danych. L0 zachowuje
@@ -358,7 +360,7 @@ modułu, a nie osobny fizyczny model urządzenia.
 | W0 | PCM5102A; ST7789 284×76; EC11 | `RETAINED BUILD / PHYSICAL HIL NON-BLOCKING` | Zachować build, full-image, testy offline i historyczne dowody. Uszkodzone USB nadal blokuje bezpieczny opcjonalny HIL/OTA W0, ale nie wydanie. |
 | M0 | PCM5102A; SSD1306/SSD1309 128×64; EC11 | `RETAINED BUILD / PHYSICAL HIL NON-BLOCKING` | Zachować build, full-image, testy offline i wcześniejsze PASS; bez wymogu końcowego profilowego HIL. |
 | L0 | istniejąca PCB V-Tom; ESP32-S3 N16R8; PCM5102A; ST7796S; EC11; DS3231; VoxOneBT; VU | **`RELEASE-GATING HIL REQUIRED`** | Domyślny TFT/audio, BT/SourceManager/TTS, SECURITY, Config, update/recovery i otwarte P1. Hardware i GPIO pozostają bez zmian; XSMT nie należy do baseline. |
-| S0 | ESP32-S3 Zero 4 MiB/2 MiB; MAX98357A MONO, SSD1306 128×32, EC11 i VoxOneBT | **`RELEASE-GATING HIL REQUIRED`** | Zachować GPIO I2S0 `5/6/4`, input `9/8/7`, I2C `1/2`; VoxOneBT UART1 `10/11` i I2S1 RX `12/13/14`; VU i MAIN→BT update wyłączone. Software PASS nie zastępuje pełnego fizycznego HIL. |
+| S0 | ESP32-S3 Zero 4 MiB/2 MiB; MAX98357A MONO, SSD1306 128×32, EC11 i VoxOneBT | **`RELEASE-GATING HIL REQUIRED`** | Zachować GPIO I2S0 `5/6/4`, input `9/8/7`, I2C `1/2`; VoxOneBT UART1 `RX44/TX43` i I2S1 RX `11/12/13`; logi aplikacji przez native USB CDC; GPIO3 i GPIO10 są rezerwami bez implementacji; VU i MAIN→BT update wyłączone. Software PASS nie zastępuje pełnego fizycznego HIL. |
 | DIN0 | PCM5102A; SSD1306/SSD1309 128×64; EC11; pinout M0 | `RETAINED BUILD / PHYSICAL HIL NON-BLOCKING` | Zachować build, full-image, testy offline, własną identity i historię rewizji 0; fizyczny HIL nie blokuje wydania. |
 
 ### B. Rozszerzone capability obecne w `3bad2c3`

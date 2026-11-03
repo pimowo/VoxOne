@@ -39,7 +39,7 @@ Stable S0 nadal jest otwarty.
 | `w0` | klasyczny ESP32; build `esp32dev`, bez PSRAM; deskryptor nie deklaruje fizycznego rozmiaru flash | PCM5102A; ST7789 284×76/NONE; EC11/Buttons3/NONE; RADIO/WWW/MQTT/Web Update; bez BT, RTC i VU | `RETAINED BUILD / HIL NON-BLOCKING` | Bez nowych funkcji; po wydaniu LEGACY. Stary fizyczny baseline zachowuje zakres historyczny. |
 | `m0` | ESP32-S3 Zero, flash 4 MiB, PSRAM 2 MiB | Audio PCM5102A/MAX98357A MONO/MAX98357A STEREO/NONE; display NONE, SSD1306 128×32/128×64, SSD1309, SH1106 i CH1116G 128×64; EC11/Buttons3/NONE | `RETAINED BUILD / HIL NON-BLOCKING` | Wcześniejsze PHYSICAL PASS pozostają ważne; dalszy fizyczny HIL nie blokuje Stable. |
 | `l0` | istniejąca PCB V-Tom, ESP32-S3 N16R8; build flash 16 MiB i PSRAM OPI | Audio PCM5102A/NONE; display ST7796S 480×320, pięć OLED I2C lub NONE; EC11/Buttons3/NONE; DS3231, VoxOneBT UART + I2S RX, VU i aktualizacja VoxOneBT | **`RELEASE-GATING HIL REQUIRED`** | Hardware i GPIO bez zmian. Etapowe PASS, w tym TTS D, są zachowane; pełny baseline i otwarte negatywne ścieżki PENDING. |
-| `s0` | ESP32-S3 Zero, flash 4 MiB, PSRAM 2 MiB | Audio PCM5102A/MAX98357A MONO/MAX98357A STEREO/NONE; OLED-y; EC11/Buttons3/NONE; VoxOneBT UART protocol 2 + I2S RX; `VOXONE_HAS_BT=1`, `VOXONE_HAS_VU=0`, updater BT wyłączony | **`RELEASE-GATING HIL REQUIRED`** | Capability i GPIO10–14 mają SOFTWARE PASS. VU oraz MAIN→BT update pozostają wyłączone; update modułu przez osobne USB. Fizyczny HIL PENDING. |
+| `s0` | ESP32-S3 Zero, flash 4 MiB, PSRAM 2 MiB | Audio PCM5102A/MAX98357A MONO/MAX98357A STEREO/NONE; OLED-y; EC11/Buttons3/NONE; VoxOneBT UART protocol 2 + I2S RX; `VOXONE_HAS_BT=1`, `VOXONE_HAS_VU=0`, updater BT wyłączony | **`RELEASE-GATING HIL REQUIRED`** | Rewizja laptopowa: UART1 RX44/TX43, I2S1 RX 11/12/13 i logi aplikacji przez native USB CDC. VU oraz MAIN→BT update pozostają wyłączone; update modułu przez osobne USB. Fizyczny HIL PENDING. |
 | `din0` | ESP32-S3 Zero, flash 4 MiB, PSRAM 2 MiB | Pinout rewizji DIN0 jak M0; PCM5102A; OLED-y; EC11/Buttons3/NONE | `RETAINED BUILD / HIL NON-BLOCKING` | Brak fizycznego HIL obrazu DIN0 nie blokuje Stable; profil, buildy i historia pozostają zachowane. |
 
 Zatwierdzony zakres Stable 1.0.0 wymaga fizycznego HIL PASS bazowej
@@ -58,7 +58,7 @@ pull-upy i filtracja.
 |---|---|---|---|---|
 | W0 | `26 / 27 / 25` | ST7789: `CS5`, `DC4`, `RST—`; SCK/MOSI korzystają z domyślnej magistrali frameworka i nie są jawnie zakontraktowane w deskryptorze | `33 / 35 / 32` | brak PSRAM, BT, RTC, VU i XSMT |
 | M0 | `1 / 2 / 3` | OLED I2C: `SDA7`, `SCL8`, `RST—`, adres `0x3C` | `5 / 6 / 4` | SSD1306 lub SSD1309 w jednym BIN |
-| S0 | MAX98357A `5 / 6 / 4` | SSD1306 I2C: `SDA1`, `SCL2`, `RST—`, adres `0x3C`; runtime 128×32/128×64 | `9 / 8 / 7` | BT UART1 `RX10/TX11`; BT I2S1 RX `BCLK12/WS13/DIN14`; mapa rev. 0 ma SOFTWARE PASS, fizyczny HIL PENDING |
+| S0 | MAX98357A `5 / 6 / 4` | SSD1306 I2C: `SDA1`, `SCL2`, `RST—`, adres `0x3C`; runtime 128×32/128×64 | `9 / 8 / 7` | BT UART1 `RX44/TX43`; BT I2S1 RX `BCLK11/WS12/DIN13`; native USB CDC dla logów; GPIO3 POWER/MENU i GPIO10 przyszły BT TX są tylko rezerwami; fizyczny HIL PENDING |
 | DIN0 | `1 / 2 / 3` | OLED I2C: `SDA7`, `SCL8`, `RST—`, adres `0x3C` | `5 / 6 / 4` | zatwierdzona mapa rewizji 0 współdzielona z M0; HIL PENDING |
 | L0 | `5 / 4 / 6` | SPI `SCK12`, `MOSI11`, `MISO13`; ST7796S `CS10`, `DC9`, `RST—`, backlight `14` | `41 / 40 / 39` | RTC `SDA8/SCL7`; BT UART `RX15/TX16`; BT I2S RX `BCLK1/WS2/DIN17`; XSMT poza baseline Stable, `VOXONE_DAC_XSMT_PIN=255`, bez przypisanego GPIO; opcjonalne XSMT/MUTE/ENABLE dla przyszłych PCB pozostaje POST-STABLE |
 
@@ -71,7 +71,8 @@ GPIO. Żadne GPIO działających prototypów nie zostało zmienione przez rename
 `VOXONE_PIN_MAP_COMPLETE=1` oznacza, że bieżący profil ma kompletną własną
 mapę dla obecnie deklarowanych capability. S0 nie współdzieli GPIO M0:
 odpowiada ręcznie okablowanej rewizji S0 z MAX98357A, SSD1306 i EC11, a jego
-VoxOneBT używa zatwierdzonych linii GPIO10–14. DIN0 nadal zachowuje mapę M0.
+VoxOneBT używa UART1 GPIO44/43 i I2S1 RX GPIO11/12/13. GPIO3 i GPIO10 nie
+mają implementacji. DIN0 nadal zachowuje mapę M0.
 W ramach Stable S0 i L0 mają
 przejść własny HIL z potwierdzeniem flash/PSRAM, zasilania, złączy, audio,
 display, local input i VoxOneBT. Build ani test M0 nie zastępują S0.

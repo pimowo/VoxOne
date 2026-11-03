@@ -16,10 +16,15 @@ Stable. Wszystkie wcześniejsze wyniki tych profili pozostają historycznymi
 dowodami w dokładnie zapisanym zakresie.
 
 S0 docelowo używa ESP32-S3 Zero 4 MiB Flash / 2 MiB PSRAM i VoxOneBT.
-Checkpoint `RC1-S0-BT-IMPLEMENT-1` włącza tę capability z UART1 RX/TX
-GPIO10/11 i I2S1 RX BCLK/WS/DATA GPIO12/13/14; pełny verify i obrazy S0/L0
-mają software PASS, ale fizyczny HIL S0 dokładnego czystego kandydata nadal
-jest wymagany. VU pozostaje na S0 wyłączone,
+Checkpoint P1 `RC1-S0-BT-IMPLEMENT-1` włącza tę capability, a rewizja
+pinoutu P2 dostosowuje rzeczywiste okablowanie laptopowe do UART1 RX44/TX43
+i I2S1 RX BCLK11/WS12/DATA13. Aplikacyjne logi S0 są kierowane przez
+natywne USB CDC; GPIO3 i GPIO10 pozostają niezaimplementowanymi rezerwami.
+`RC1-S0-BT-PINOUT-REVISION-1` ma software PASS: pełny verify, ASan/UBSan,
+strict transport, obrazy S0/L0 i full-image przeszły. Fizyczny HIL S0
+dokładnego czystego kandydata nadal jest wymagany; cold boot musi pasywnie
+potwierdzić, że log ROM 115200 na GPIO43 nie jest interpretowany przez
+VoxOneBT 921600 jako polecenie. VU pozostaje na S0 wyłączone,
 a aktualizacja VoxOneBT ma używać osobnego USB — MAIN→BT update pozostaje
 wyłączone. L0 zachowuje istniejącą PCB V-Tom, hardware, capability i mapę
 GPIO. Poza niezbędną obsługą VoxOneBT na S0 oraz poprawkami krytycznymi nowe
