@@ -9,7 +9,7 @@
 
 namespace {
 UiInputAction action(displayMode_e mode, UiInputEvent event) {
-  const UiInputContext context{mode, true, true, false, false, false};
+  const UiInputContext context{mode, true, true, false, false, false, false};
   return resolveUiInput(context, event).action;
 }
 

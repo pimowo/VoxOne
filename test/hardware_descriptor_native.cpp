@@ -52,6 +52,8 @@ int main() {
   assert(!caps.supportsDsp && !caps.supportsAux && !caps.supportsSpdif);
   assert(!caps.supportsTda7719);
   assert(caps.supportsBtAudioRx == bool(VOXONE_BT_I2S_RX_ENABLED));
+  assert(caps.supportsBtFirmwareUpdate ==
+         bool(VOXONE_BT_FW_UPDATE_ENABLED));
   assert(caps.supportsDacHardwareMute == hasPin(d.dacXsmt));
   assert(d.audioOut.bclk == fromLegacyPin(I2S_BCLK));
   assert(d.audioOut.ws == fromLegacyPin(I2S_LRC));
@@ -269,14 +271,19 @@ int main() {
   assert(!bool(ENC_INTERNALPULLUP));
   assert(!bool(ENC_BUTTON_INTERNALPULLUP));
   assert(!caps.supportsRtc);
-  assert(!caps.supportsVoxOneBt);
+  assert(caps.supportsVoxOneBt);
+  assert(caps.supportsBtAudioRx && d.btAudioRxEnabled);
   assert(!caps.supportsBtFirmwareUpdate);
   assert(caps.supportsInput(LocalInputKind::Ec11) &&
          caps.supportsInput(LocalInputKind::Buttons3) && caps.supportsLocalUi);
   assert(caps.supportsPsram);
-  assert(d.btUart.rx == kNoPin && d.btUart.tx == kNoPin);
-  assert(d.btAudioIn.bclk == kNoPin && d.btAudioIn.ws == kNoPin &&
-         d.btAudioIn.din == kNoPin && !d.btAudioRxEnabled);
+  assert(d.btUart.rx == 10 && d.btUart.tx == 11);
+  assert(d.btUart.rx == fromLegacyPin(VOXONE_BT_UART_RX_PIN));
+  assert(d.btUart.tx == fromLegacyPin(VOXONE_BT_UART_TX_PIN));
+  assert(d.btAudioIn.bclk == 12 && d.btAudioIn.ws == 13 &&
+         d.btAudioIn.din == 14 && d.btAudioRxEnabled);
+  assert(!bool(VOXONE_BT_FW_UPDATE_ENABLED));
+  assert(!bool(VOXONE_BT_TRANSPORT_UI_ENABLED));
 #elif defined(VOXONE_PROFILE_DIN0)
   assert(d.board.id == BoardId::BoardDIN0);
   assert(d.board.family == 'D' && d.board.revision == 0);
@@ -330,6 +337,10 @@ int main() {
   bad.capabilities.supportsDsp = true;
   // Future optional capabilities are not inferred from current GPIO.
   assert(validateDescriptor(bad));
+  bad = d;
+  bad.capabilities.supportsBtFirmwareUpdate = true;
+  bad.capabilities.supportsPsram = false;
+  assert(!validateDescriptor(bad));
   bad = d;
   bad.capabilities.supportedDisplays = d.capabilities.hasLocalDisplay()
       ? 0 : displaySupport(DisplayKind::St7789_284x76);

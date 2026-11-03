@@ -23,7 +23,8 @@ UiInputContext currentUiInputContext() {
 #endif
   return {uiState.mode(), network.status == CONNECTED,
           capabilities.hasLocalDisplay(), capabilities.supportsVoxOneBt,
-          bluetoothSelected, bluetoothConnected};
+          bluetoothSelected, bluetoothConnected,
+          VOXONE_BT_TRANSPORT_UI_ENABLED != 0};
 }
 
 int8_t signedSteps(UiInputAction action, int8_t steps) {

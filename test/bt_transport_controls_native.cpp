@@ -10,7 +10,8 @@ static UiInputContext context(displayMode_e mode,
   sources.displayView(view);
   return {mode, true, true, true,
           sources.active() == ActiveSource::Bluetooth,
-          view.kind == DisplaySourceKind::Bluetooth && view.connected};
+          view.kind == DisplaySourceKind::Bluetooth && view.connected,
+          true};
 }
 
 static displayMode_e longPress(displayMode_e mode,

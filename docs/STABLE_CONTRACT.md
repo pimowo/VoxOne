@@ -37,10 +37,10 @@ jako fizycznie zweryfikowane bez odpowiedniego dowodu. Istniejące fizyczne
 PASS zachowują ważność wyłącznie w swoim udokumentowanym zakresie.
 
 S0 opisuje własny, ręcznie okablowany ESP32-S3 Zero i zachowuje historyczną
-mapę GPIO rewizji 0 dla OLED, local audio i input. Docelowy S0 ma zawierać
-VoxOneBT, ale bieżący profil nadal deklaruje `VOXONE_HAS_BT=0`, a nowe GPIO
-UART/I2S BT nie są jeszcze zatwierdzone. S0 zachowuje VU wyłączone i
-aktualizuje VoxOneBT przez osobne USB; MAIN→BT update pozostaje wyłączone. L0
+mapę GPIO rewizji 0 dla OLED, local audio i input. Kandydat S0 deklaruje
+`VOXONE_HAS_BT=1`: UART1 używa RX/TX GPIO10/11, a I2S1 RX używa
+BCLK/WS/DATA GPIO12/13/14. S0 zachowuje VU wyłączone i aktualizuje VoxOneBT
+przez osobne USB; MAIN→BT update pozostaje wyłączone. L0
 zachowuje istniejącą PCB V-Tom, hardware, capability i GPIO. DIN0 zachowuje
 mapę GPIO M0 jako własny pinout rewizji 0. Przyszłe dedykowane PCB otrzymają
 nazwy S1 i DIN1 i nie nadpiszą historii rewizji 0.
@@ -53,14 +53,13 @@ następnej linii rozwojowej.
 Dokładny pinout, pamięć, capability i stan testów opisuje
 [HARDWARE_TARGETS.md](HARDWARE_TARGETS.md).
 
-Aktualny czysty checkpoint to
+Historyczny czysty checkpoint
 `3bad2c3d27c24888d2731510cf330f866bef4ac3`, oznaczony tagiem
-`voxone-rc1-tts-stall-d-closure-1`. Pełny verify ma 158 native PASS,
-transport strict 16/16, ASan/UBSan PASS, buildy i full-image
-W0/M0/L0/S0/DIN0 5/5 oraz production SECURITY offline PASS. Checkpoint
-zawiera diagnostykę HIL i poprawki WAV/watchdoga/naturalnego EOF, bez zmiany
-capability standardowych profili. S0 nadal nie implementuje BT. Wynik offline
-nie zastępuje fizycznych bramek S0 ani L0.
+`voxone-rc1-tts-stall-d-closure-1`, pozostaje bazą wcześniejszych dowodów.
+Checkpoint `RC1-S0-BT-IMPLEMENT-1` dodaje minimalną capability S0+VoxOneBT;
+jego pełny verify ma 160 native PASS, transport strict 16/16, ASan/UBSan
+PASS, buildy i full-image W0/M0/L0/S0/DIN0 5/5 oraz production SECURITY
+offline PASS. Wynik offline nie zastępuje fizycznych bramek S0 ani L0.
 
 ## HTTP i API
 
@@ -204,9 +203,9 @@ przy aktywnym BT przełącza na RADIO. Zachowany RADIO PLAY intent pozwala
 wznowić stację, a RADIO STOP intent nie powoduje autoplay.
 
 L0 komunikuje się z osobnym modułem VoxOneBT przez UART protocol 2 i odbiera
-jego PCM przez I2S. Docelowy S0 ma używać tego samego kontraktu logicznego,
-ale capability i pinout nie są jeszcze wdrożone ani zatwierdzone. A2DP audio
-state decyduje, czy BT może posiadać I2S0;
+jego PCM przez I2S. S0 używa tego samego kontraktu logicznego na UART1
+GPIO10/11 i I2S1 RX GPIO12/13/14. A2DP audio state decyduje, czy BT może
+posiadać I2S0;
 AVRCP służy do transportu i UI. Snapshot obejmuje online/connected, firmware,
 nazwę, capabilities, peer, metadata, playback, sample rate i raw VU. Codec i
 bitrate A2DP nie są publikowane bez wiarygodnych danych. L0 zachowuje
@@ -359,7 +358,7 @@ modułu, a nie osobny fizyczny model urządzenia.
 | W0 | PCM5102A; ST7789 284×76; EC11 | `RETAINED BUILD / PHYSICAL HIL NON-BLOCKING` | Zachować build, full-image, testy offline i historyczne dowody. Uszkodzone USB nadal blokuje bezpieczny opcjonalny HIL/OTA W0, ale nie wydanie. |
 | M0 | PCM5102A; SSD1306/SSD1309 128×64; EC11 | `RETAINED BUILD / PHYSICAL HIL NON-BLOCKING` | Zachować build, full-image, testy offline i wcześniejsze PASS; bez wymogu końcowego profilowego HIL. |
 | L0 | istniejąca PCB V-Tom; ESP32-S3 N16R8; PCM5102A; ST7796S; EC11; DS3231; VoxOneBT; VU | **`RELEASE-GATING HIL REQUIRED`** | Domyślny TFT/audio, BT/SourceManager/TTS, SECURITY, Config, update/recovery i otwarte P1. Hardware i GPIO pozostają bez zmian; XSMT nie należy do baseline. |
-| S0 | ESP32-S3 Zero 4 MiB/2 MiB; historycznie MAX98357A MONO, SSD1306 128×32 i EC11; docelowo VoxOneBT | **`RELEASE-GATING HIL REQUIRED`** | Zachować GPIO I2S0 `5/6/4`, input `9/8/7`, I2C `1/2`; osobno zatwierdzić GPIO BT, wdrożyć UART/I2S1/SourceManager/TTS, pozostawić VU i MAIN→BT update wyłączone, a następnie wykonać pełny HIL. |
+| S0 | ESP32-S3 Zero 4 MiB/2 MiB; MAX98357A MONO, SSD1306 128×32, EC11 i VoxOneBT | **`RELEASE-GATING HIL REQUIRED`** | Zachować GPIO I2S0 `5/6/4`, input `9/8/7`, I2C `1/2`; VoxOneBT UART1 `10/11` i I2S1 RX `12/13/14`; VU i MAIN→BT update wyłączone. Software PASS nie zastępuje pełnego fizycznego HIL. |
 | DIN0 | PCM5102A; SSD1306/SSD1309 128×64; EC11; pinout M0 | `RETAINED BUILD / PHYSICAL HIL NON-BLOCKING` | Zachować build, full-image, testy offline, własną identity i historię rewizji 0; fizyczny HIL nie blokuje wydania. |
 
 ### B. Rozszerzone capability obecne w `3bad2c3`
@@ -369,7 +368,7 @@ modułu, a nie osobny fizyczny model urządzenia.
 | W0 | Brak nowych wariantów; ST7789/NONE bez zmian | Brak | Zachowany build; bez rozszerzenia funkcjonalnego. |
 | M0 | SSD1306 128×32, SH1106 128×64, CH1116G 128×64 | MAX98357A MONO, MAX98357A STEREO, `NONE` | Implemented/offline PASS; fizyczny HIL nieblokujący. |
 | L0 | SSD1306 128×32/128×64, SSD1309 128×64, SH1106 128×64, CH1116G 128×64, `NONE` | `NONE` | Implemented/offline PASS; domyślny ST7796 zachowany; warianty dodatkowe `OPTIONAL / PHYSICAL HIL NOT QUALIFIED`. |
-| S0 | SSD1309 128×64, SH1106 128×64, CH1116G 128×64 | PCM5102A, MAX98357A STEREO, `NONE` | Implemented/offline PASS; bieżący BIN nadal ma BT wyłączone. Warianty dodatkowe `OPTIONAL / PHYSICAL HIL NOT QUALIFIED`. |
+| S0 | SSD1309 128×64, SH1106 128×64, CH1116G 128×64 | PCM5102A, MAX98357A STEREO, `NONE` | Implemented/offline PASS; minimalny BT audio ma software PASS, fizyczny HIL PENDING. Warianty dodatkowe `OPTIONAL / PHYSICAL HIL NOT QUALIFIED`. |
 | DIN0 | SSD1306 128×32, SH1106 128×64, CH1116G 128×64 | Brak; tylko PCM5102A | Implemented/offline PASS; fizyczny HIL nieblokujący. |
 
 ### C. Optional HIL — dodatkowe warianty

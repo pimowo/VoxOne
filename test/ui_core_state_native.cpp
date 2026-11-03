@@ -12,7 +12,7 @@ UiModeContext ready(bool bluetooth = false) {
 }
 
 UiInputContext radio(const UiState& state) {
-  return {state.mode(), true, true, true, false, false};
+  return {state.mode(), true, true, true, false, false, true};
 }
 
 std::string readFile(const char* path) {
@@ -102,7 +102,7 @@ int main() {
   UiState bt;
   assert(!bt.requestMode(BT_TRANSPORT, ready(false)));
   assert(bt.requestMode(BT_TRANSPORT, ready(true)));
-  assert(resolveUiInput({bt.mode(), true, true, true, true, true},
+  assert(resolveUiInput({bt.mode(), true, true, true, true, true, true},
                         UiInputEvent::Long).action ==
          UiInputAction::ShowPlayer);
   assert(bt.requestMode(PLAYER, ready(true)));

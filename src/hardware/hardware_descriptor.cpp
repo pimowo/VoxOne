@@ -54,7 +54,8 @@ constexpr char kBoardFamily = 'S';
 constexpr DisplayKind kDisplayKind = DisplayKind::Ssd1306_128x32;
 constexpr SpiBusPins kSpi = {kNoPin, kNoPin, kNoPin};
 constexpr I2cBusPins kI2c = {fromLegacyPin(I2C_SDA), fromLegacyPin(I2C_SCL)};
-constexpr UartPins kBtUart = {kNoPin, kNoPin};
+constexpr UartPins kBtUart = {fromLegacyPin(VOXONE_BT_UART_RX_PIN),
+                               fromLegacyPin(VOXONE_BT_UART_TX_PIN)};
 constexpr Pin kBacklight = kNoPin;
 constexpr Pin kDacXsmt = kNoPin;
 constexpr uint32_t kFlashBytes = 4u * 1024u * 1024u;
@@ -70,7 +71,7 @@ constexpr HardwareCapabilities kCapabilities = {
       audioOutputSupport(AudioOutputKind::Max98357Stereo) |
       audioOutputSupport(AudioOutputKind::None),
   inputSupport(LocalInputKind::Ec11) | inputSupport(LocalInputKind::Buttons3),
-  true, false, false, false, false, false, true, false,
+  true, true, true, false, false, false, true, false,
   false, false, false, false
 };
 #elif defined(VOXONE_PROFILE_DIN0)
@@ -179,6 +180,9 @@ static_assert(bool(VOXONE_HAS_TDA7719) == kCapabilities.supportsTda7719,
               "TDA7719 compile gate must match board capabilities");
 static_assert(bool(VOXONE_BT_I2S_RX_ENABLED) == kCapabilities.supportsBtAudioRx,
               "BT audio RX compile gate must match board capabilities");
+static_assert(bool(VOXONE_BT_FW_UPDATE_ENABLED) ==
+                  kCapabilities.supportsBtFirmwareUpdate,
+              "BT firmware update compile gate must match board capabilities");
 #if defined(ARDUINO) && defined(BOARD_HAS_PSRAM)
 static_assert(kCapabilities.supportsPsram,
               "PSRAM build flag requires board PSRAM capability");
@@ -244,6 +248,10 @@ bool validateDescriptor(const HardwareDescriptor& d) {
         (hasPin(d.audioOut.bclk) && hasPin(d.audioOut.ws) &&
          hasPin(d.audioOut.dout)) ||
       d.capabilities.supportsDacHardwareMute != hasPin(d.dacXsmt) ||
+      (d.capabilities.supportsBtFirmwareUpdate &&
+       (!d.capabilities.supportsVoxOneBt ||
+        !d.capabilities.supportsPsram ||
+        d.board.mcu != McuFamily::Esp32S3)) ||
       (d.board.psramBytes != 0 && !d.capabilities.supportsPsram) ||
       (d.capabilities.supportsLocalUi &&
        (!d.capabilities.hasLocalDisplay() ||

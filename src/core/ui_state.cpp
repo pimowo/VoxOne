@@ -14,7 +14,8 @@ namespace {
 portMUX_TYPE uiStateMux = portMUX_INITIALIZER_UNLOCKED;
 
 bool bluetoothTransportAvailableForUi() {
-#if VOXONE_HAS_BT && VOXONE_PIN_MAP_COMPLETE
+#if VOXONE_HAS_BT && VOXONE_PIN_MAP_COMPLETE && \
+    VOXONE_BT_TRANSPORT_UI_ENABLED
   return bluetoothSourceSelected() && bluetoothTransportAvailable();
 #else
   return false;

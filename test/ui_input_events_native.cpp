@@ -8,12 +8,12 @@
 namespace {
 
 UiInputContext radio(displayMode_e mode = PLAYER) {
-  return {mode, true, true, true, false, false};
+  return {mode, true, true, true, false, false, true};
 }
 
 UiInputContext bluetooth(displayMode_e mode = PLAYER,
                          bool connected = true) {
-  return {mode, true, true, true, true, connected};
+  return {mode, true, true, true, true, connected, true};
 }
 
 UiInputAction action(const UiInputContext& context, UiInputEvent event) {
@@ -85,6 +85,14 @@ int main() {
          UiInputAction::ShowPlayer);
   assert(action(bluetooth(PLAYER, false), UiInputEvent::Long) ==
          UiInputAction::None);
+  UiInputContext compactBluetooth = bluetooth();
+  compactBluetooth.supportsBluetoothTransportView = false;
+  assert(action(compactBluetooth, UiInputEvent::Long) ==
+         UiInputAction::None);
+  assert(action(compactBluetooth, UiInputEvent::Ok) ==
+         UiInputAction::BluetoothToggle);
+  assert(action(compactBluetooth, UiInputEvent::Double) ==
+         UiInputAction::CycleSource);
 
   // Source cycling is unavailable without the board capability.
   UiInputContext noBluetooth = radio();

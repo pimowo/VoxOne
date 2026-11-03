@@ -1,4 +1,5 @@
 #include "../src/core/config_persistence.h"
+#include "../src/core/config_capability_migration.h"
 #include "../src/core/bt_runtime.h"
 #include <cassert>
 #include <cstdio>
@@ -204,6 +205,58 @@ int main() {
       assert(stored(backend).btEnabled == enabled);
     }
   }
+
+  // Exact S0 capability introduction: a valid pre-BT v7 false requires an
+  // explicit verified write before its separate marker may be committed.
+  FakeEeprom s0BeforeBt;
+  config_v6_t s0Runtime{};
+  defaults(s0Runtime);
+  ConfigPersistence s0Seed;
+  s0Seed.begin(S::DEFAULTS_REQUIRED, false);
+  assert(s0Seed.persist(s0Runtime, s0BeforeBt) == W::OK);
+  assert(!stored(s0BeforeBt).btEnabled);
+  config_v6_t s0Introduced{};
+  const auto s0Loaded = loadStartupConfig(
+      s0BeforeBt.durable + 500, 268, true, s0Introduced, defaults);
+  ConfigPersistence s0State;
+  s0State.begin(s0Loaded.status, s0Loaded.storedBtEnabled);
+  const auto s0Plan =
+      voxone::config_capability_migration::planS0BtIntroduction(
+          true, true, s0Loaded.status, s0Loaded.storedBtEnabled,
+          voxone::config_capability_migration::MarkerStatus::Missing);
+  assert(s0Plan.enableForThisBoot && s0Plan.persistEnabled &&
+         s0Plan.markAppliedAfterPersistence);
+  s0State.setStoredBtEnabled(true);
+  const unsigned s0WritesBeforeMigration = s0BeforeBt.writes;
+  assert(s0State.persist(s0Introduced, s0BeforeBt) == W::OK);
+  assert(s0BeforeBt.writes == s0WritesBeforeMigration + 1);
+  assert(stored(s0BeforeBt).btEnabled);
+
+  // After the marker, restart is idempotent and a later explicit/restore
+  // false remains false without being interpreted as a legacy S0 value.
+  config_v6_t s0Restarted{};
+  ConfigPersistence s0RestartState;
+  const auto s0Restart = startup(
+      s0BeforeBt, s0Restarted, s0RestartState, true);
+  const auto noRepeat =
+      voxone::config_capability_migration::planS0BtIntroduction(
+          true, true, s0Restart.status, s0Restart.storedBtEnabled,
+          voxone::config_capability_migration::MarkerStatus::Applied);
+  assert(!noRepeat.enableForThisBoot && !noRepeat.persistEnabled &&
+         !noRepeat.markAppliedAfterPersistence);
+  s0RestartState.setStoredBtEnabled(false);
+  assert(s0RestartState.persist(s0Restarted, s0BeforeBt) == W::OK);
+  config_v6_t s0Disabled{};
+  ConfigPersistence s0DisabledState;
+  const auto s0DisabledBoot = startup(
+      s0BeforeBt, s0Disabled, s0DisabledState, true);
+  assert(!s0DisabledBoot.btEnabled && !s0DisabledBoot.storedBtEnabled);
+  const auto restoredFalse =
+      voxone::config_capability_migration::planS0BtIntroduction(
+          true, true, s0DisabledBoot.status, s0DisabledBoot.storedBtEnabled,
+          voxone::config_capability_migration::MarkerStatus::Applied);
+  assert(!restoredFalse.enableForThisBoot && !restoredFalse.persistEnabled &&
+         !restoredFalse.markAppliedAfterPersistence);
 
   // A restart or firmware replacement sees the same valid v7 record and must
   // neither apply new-device defaults nor rewrite the stored user volume.

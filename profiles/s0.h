@@ -14,7 +14,9 @@
 #define VOXONE_HAS_DISPLAY 1
 #define VOXONE_HAS_ENCODER 1
 #define VOXONE_HAS_VU 0
-#define VOXONE_HAS_BT 0
+#define VOXONE_HAS_BT 1
+#define VOXONE_BT_FW_UPDATE_ENABLED 0
+#define VOXONE_BT_TRANSPORT_UI_ENABLED 0
 #define VOXONE_HAS_AUX 0
 #define VOXONE_HAS_SPDIF 0
 #define VOXONE_HAS_TDA7719 false
@@ -24,6 +26,16 @@
 #define I2S_BCLK 5
 #define I2S_DOUT 6
 #define I2S_LRC 4
+
+// External VoxOneBT UART protocol 2. Keep UART0 free for diagnostics.
+#define VOXONE_BT_UART_RX_PIN 10
+#define VOXONE_BT_UART_TX_PIN 11
+
+// VoxOneBT is the I2S master; S0 receives stereo S16 PCM on I2S1.
+#define VOXONE_BT_I2S_RX_ENABLED 1
+#define VOXONE_BT_I2S_BCLK_PIN 12
+#define VOXONE_BT_I2S_WS_PIN 13
+#define VOXONE_BT_I2S_DATA_PIN 14
 
 #define ENC_BTNB 7
 #define ENC_BTNR 8

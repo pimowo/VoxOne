@@ -1,6 +1,7 @@
 #include "options.h"
 #include "config.h"
 #include "config_startup.h"
+#include "config_capability_migration.h"
 #include "config_eeprom_storage.h"
 #include "config_restore_adapter.h"
 #include "bt_runtime.h"
@@ -224,7 +225,22 @@ void Config::init() {
       [this](config_t&) { _applyDefaults(); });
   _startupStatus = loaded.status;
   _storage.begin(loaded.status, loaded.storedBtEnabled);
-  btRuntime.configureBeforeStart(loaded.btEnabled);
+#if defined(VOXONE_PROFILE_S0)
+  constexpr bool exactS0Profile = true;
+  const auto btMigrationMarker =
+      voxone::config_capability_migration::readS0BtIntroductionMarker();
+#else
+  constexpr bool exactS0Profile = false;
+  const auto btMigrationMarker =
+      voxone::config_capability_migration::MarkerStatus::Applied;
+#endif
+  const auto btMigration =
+      voxone::config_capability_migration::planS0BtIntroduction(
+          exactS0Profile, supportsBt, loaded.status, loaded.storedBtEnabled,
+          btMigrationMarker);
+  if (btMigration.persistEnabled) _storage.setStoredBtEnabled(true);
+  btRuntime.configureBeforeStart(btMigration.enableForThisBoot
+                                     ? true : loaded.btEnabled);
   Serial.printf("[CONFIG] %s\n", voxone::config_format::configStartupMessage(loaded.status));
   bootInfo(); // https://github.com/e2002/yoradio/pull/149
   const bool migratingVolume = loaded.migratingVolume;
@@ -245,10 +261,28 @@ void Config::init() {
   // A valid v7 boot does not rewrite the record. Legacy/default records get
   // one full write; future versions remain read-only for this entire boot.
   voxone::config_storage::ConfigEepromStorage backend;
-  const auto startupWrite = _storage.finishStartup(store, backend);
+  const auto startupWrite = btMigration.persistEnabled
+      ? _storage.persist(store, backend)
+      : _storage.finishStartup(store, backend);
   if (startupWrite != voxone::config_format::ConfigWriteStatus::OK &&
       _storage.mode() != voxone::config_format::ConfigStorageMode::FUTURE_READ_ONLY)
     Serial.printf("[CONFIG] persistence: %s\n", voxone::config_format::configWriteMessage(startupWrite));
+#if defined(VOXONE_PROFILE_S0)
+  if (btMigration.markAppliedAfterPersistence &&
+      startupWrite == voxone::config_format::ConfigWriteStatus::OK &&
+      _storage.mode() == voxone::config_format::ConfigStorageMode::V7 &&
+      _storage.storedBtEnabled()) {
+    if (voxone::config_capability_migration::writeS0BtIntroductionMarker())
+      Serial.println("[CONFIG] S0 VoxOneBT capability migration applied");
+    else
+      Serial.println("##[ERROR]# S0 VoxOneBT migration marker write failed");
+  } else if (btMigrationMarker ==
+                 voxone::config_capability_migration::MarkerStatus::Invalid ||
+             btMigrationMarker ==
+                 voxone::config_capability_migration::MarkerStatus::Unavailable) {
+    Serial.println("##[ERROR]# S0 VoxOneBT migration marker unavailable; stored setting preserved");
+  }
+#endif
   _publishRuntimeLocked();
   BOOTLOG("CONFIG_VERSION\t%d", store.version);
   _initHW();

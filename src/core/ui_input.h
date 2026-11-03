@@ -84,6 +84,7 @@ struct UiInputContext {
   bool supportsBluetooth;
   bool bluetoothSelected;
   bool bluetoothConnected;
+  bool supportsBluetoothTransportView;
 };
 
 struct UiInputDecision {
@@ -158,10 +159,13 @@ inline UiInputDecision resolveUiInput(const UiInputContext& context,
     if (context.mode == BT_TRANSPORT)
       return uiInputDecision(UiInputAction::ShowPlayer);
     if (context.mode == PLAYER) {
-      if (context.supportsBluetooth && context.bluetoothSelected)
+      if (context.supportsBluetooth && context.bluetoothSelected) {
+        if (!context.supportsBluetoothTransportView)
+          return uiInputDecision(UiInputAction::None);
         return uiInputDecision(context.bluetoothConnected
                                    ? UiInputAction::OpenBluetoothTransport
                                    : UiInputAction::None);
+      }
       return uiInputDecision(UiInputAction::OpenStations);
     }
     return uiInputDecision(UiInputAction::ShowPlayer);

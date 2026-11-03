@@ -12,10 +12,11 @@ W0, M0 i DIN0 pozostają w repozytorium, standardowych buildach, full-image i
 testach offline, lecz ich fizyczny HIL nie blokuje wydania. Po Stable W0
 przechodzi do LEGACY, zachowując możliwość krytycznego utrzymania linii 1.0.0.
 
-Stan implementacji poniżej odpowiada bieżącemu checkpointowi `3bad2c3`. Lista capability
-opisuje to, co bieżący BIN pozwala wybrać; nie oznacza fizycznego HIL PASS
-każdego wariantu. Obowiązkowy baseline oraz opcjonalne, fizycznie
-niezakwalifikowane rozszerzenia są rozdzielone w
+Stan implementacji poniżej uwzględnia checkpoint
+`RC1-S0-BT-IMPLEMENT-1`. Lista capability opisuje to, co kod kandydata
+pozwala zbudować i wybrać; nie oznacza fizycznego HIL PASS żadnego wariantu.
+Obowiązkowy baseline oraz opcjonalne, fizycznie niezakwalifikowane
+rozszerzenia są rozdzielone w
 [STABLE_CONTRACT.md](STABLE_CONTRACT.md).
 
 | Rodzina | Przeznaczenie | Docelowe elementy rodziny — roadmapa, nie deklaracja rewizji 0 |
@@ -26,10 +27,10 @@ niezakwalifikowane rozszerzenia są rozdzielone w
 | DINx | szyna DIN | ESP32-S3 Zero, PCM5102, SSD1306 128×32/128×64, EC11, 3×SW, VoxOneBT |
 | Wx | wspierany klasyczny ESP32 DevKit | ESP32 DevKit, PCM5102, SSD1306/SSD1309/CH1116/SH1106 128×64, ST7789V 320×240, ST7789 284×76, EC11, 3×SW, VoxOneBT |
 
-Wiersz Sx opisuje rodzinę i zatwierdzony cel S0+VoxOneBT, nie capability
-bieżącego BIN. Nowe warianty mają być wybierane przez WWW dopiero razem z
-rzeczywistym backendem i `HardwareCapabilities`; obecny S0 zachowuje zakres
-opisany niżej, `VOXONE_HAS_BT=0` i otwarty pełny HIL Stable.
+Wiersz Sx opisuje rodzinę i zatwierdzony cel S0+VoxOneBT. Kandydat S0 ma
+`VOXONE_HAS_BT=1`, audio BT RX i rzeczywisty backend w
+`HardwareCapabilities`; VU i MAIN→BT update pozostają wyłączone. Pełny HIL
+Stable S0 nadal jest otwarty.
 
 ## Bieżące profile i status wydania
 
@@ -38,7 +39,7 @@ opisany niżej, `VOXONE_HAS_BT=0` i otwarty pełny HIL Stable.
 | `w0` | klasyczny ESP32; build `esp32dev`, bez PSRAM; deskryptor nie deklaruje fizycznego rozmiaru flash | PCM5102A; ST7789 284×76/NONE; EC11/Buttons3/NONE; RADIO/WWW/MQTT/Web Update; bez BT, RTC i VU | `RETAINED BUILD / HIL NON-BLOCKING` | Bez nowych funkcji; po wydaniu LEGACY. Stary fizyczny baseline zachowuje zakres historyczny. |
 | `m0` | ESP32-S3 Zero, flash 4 MiB, PSRAM 2 MiB | Audio PCM5102A/MAX98357A MONO/MAX98357A STEREO/NONE; display NONE, SSD1306 128×32/128×64, SSD1309, SH1106 i CH1116G 128×64; EC11/Buttons3/NONE | `RETAINED BUILD / HIL NON-BLOCKING` | Wcześniejsze PHYSICAL PASS pozostają ważne; dalszy fizyczny HIL nie blokuje Stable. |
 | `l0` | istniejąca PCB V-Tom, ESP32-S3 N16R8; build flash 16 MiB i PSRAM OPI | Audio PCM5102A/NONE; display ST7796S 480×320, pięć OLED I2C lub NONE; EC11/Buttons3/NONE; DS3231, VoxOneBT UART + I2S RX, VU i aktualizacja VoxOneBT | **`RELEASE-GATING HIL REQUIRED`** | Hardware i GPIO bez zmian. Etapowe PASS, w tym TTS D, są zachowane; pełny baseline i otwarte negatywne ścieżki PENDING. |
-| `s0` | ESP32-S3 Zero, flash 4 MiB, PSRAM 2 MiB | Bieżący BIN: audio PCM5102A/MAX98357A MONO/MAX98357A STEREO/NONE; OLED-y; EC11/Buttons3/NONE; `VOXONE_HAS_BT=0`, `VOXONE_HAS_VU=0` | **`RELEASE-GATING HIL REQUIRED`** | Cel S0+VoxOneBT zatwierdzony, lecz capability i GPIO BT niewdrożone. VU oraz MAIN→BT update pozostają wyłączone; update modułu przez osobne USB. |
+| `s0` | ESP32-S3 Zero, flash 4 MiB, PSRAM 2 MiB | Audio PCM5102A/MAX98357A MONO/MAX98357A STEREO/NONE; OLED-y; EC11/Buttons3/NONE; VoxOneBT UART protocol 2 + I2S RX; `VOXONE_HAS_BT=1`, `VOXONE_HAS_VU=0`, updater BT wyłączony | **`RELEASE-GATING HIL REQUIRED`** | Capability i GPIO10–14 mają SOFTWARE PASS. VU oraz MAIN→BT update pozostają wyłączone; update modułu przez osobne USB. Fizyczny HIL PENDING. |
 | `din0` | ESP32-S3 Zero, flash 4 MiB, PSRAM 2 MiB | Pinout rewizji DIN0 jak M0; PCM5102A; OLED-y; EC11/Buttons3/NONE | `RETAINED BUILD / HIL NON-BLOCKING` | Brak fizycznego HIL obrazu DIN0 nie blokuje Stable; profil, buildy i historia pozostają zachowane. |
 
 Zatwierdzony zakres Stable 1.0.0 wymaga fizycznego HIL PASS bazowej
@@ -57,7 +58,7 @@ pull-upy i filtracja.
 |---|---|---|---|---|
 | W0 | `26 / 27 / 25` | ST7789: `CS5`, `DC4`, `RST—`; SCK/MOSI korzystają z domyślnej magistrali frameworka i nie są jawnie zakontraktowane w deskryptorze | `33 / 35 / 32` | brak PSRAM, BT, RTC, VU i XSMT |
 | M0 | `1 / 2 / 3` | OLED I2C: `SDA7`, `SCL8`, `RST—`, adres `0x3C` | `5 / 6 / 4` | SSD1306 lub SSD1309 w jednym BIN |
-| S0 | MAX98357A `5 / 6 / 4` | SSD1306 I2C: `SDA1`, `SCL2`, `RST—`, adres `0x3C`; runtime 128×32/128×64 | `9 / 8 / 7` | faktyczna mapa bieżącego BIN rev. 0; `BT UART/I2S —`, nowe GPIO BT niezatwierdzone; HIL PENDING |
+| S0 | MAX98357A `5 / 6 / 4` | SSD1306 I2C: `SDA1`, `SCL2`, `RST—`, adres `0x3C`; runtime 128×32/128×64 | `9 / 8 / 7` | BT UART1 `RX10/TX11`; BT I2S1 RX `BCLK12/WS13/DIN14`; mapa rev. 0 ma SOFTWARE PASS, fizyczny HIL PENDING |
 | DIN0 | `1 / 2 / 3` | OLED I2C: `SDA7`, `SCL8`, `RST—`, adres `0x3C` | `5 / 6 / 4` | zatwierdzona mapa rewizji 0 współdzielona z M0; HIL PENDING |
 | L0 | `5 / 4 / 6` | SPI `SCK12`, `MOSI11`, `MISO13`; ST7796S `CS10`, `DC9`, `RST—`, backlight `14` | `41 / 40 / 39` | RTC `SDA8/SCL7`; BT UART `RX15/TX16`; BT I2S RX `BCLK1/WS2/DIN17`; XSMT poza baseline Stable, `VOXONE_DAC_XSMT_PIN=255`, bez przypisanego GPIO; opcjonalne XSMT/MUTE/ENABLE dla przyszłych PCB pozostaje POST-STABLE |
 
@@ -69,9 +70,9 @@ GPIO. Żadne GPIO działających prototypów nie zostało zmienione przez rename
 
 `VOXONE_PIN_MAP_COMPLETE=1` oznacza, że bieżący profil ma kompletną własną
 mapę dla obecnie deklarowanych capability. S0 nie współdzieli GPIO M0:
-odpowiada ręcznie okablowanej rewizji S0 z MAX98357A, SSD1306 i EC11. Flaga
-nie rezerwuje ani nie zatwierdza nowych linii VoxOneBT; ich wybór wymaga
-osobnej decyzji. DIN0 nadal zachowuje mapę M0. W ramach Stable S0 i L0 mają
+odpowiada ręcznie okablowanej rewizji S0 z MAX98357A, SSD1306 i EC11, a jego
+VoxOneBT używa zatwierdzonych linii GPIO10–14. DIN0 nadal zachowuje mapę M0.
+W ramach Stable S0 i L0 mają
 przejść własny HIL z potwierdzeniem flash/PSRAM, zasilania, złączy, audio,
 display, local input i VoxOneBT. Build ani test M0 nie zastępują S0.
 
@@ -80,10 +81,10 @@ Historyczny baseline S0 obejmuje MAX98357A MONO, runtime SSD1306
 PCM5102A, MAX98357A STEREO, audio NONE oraz SSD1309/SH1106/CH1116G 128×64.
 Historyczny baseline DIN0 pozostaje przy PCM5102A, runtime SSD1306/SSD1309
 128×64/NONE i EC11/Buttons3/NONE; bieżący BIN implementuje ponadto SSD1306
-128×32, SH1106 i CH1116G 128×64. Bateria, VoxOneBT, RTC i VU nadal nie są
-capability bieżącego S0; VoxOneBT jest zatwierdzonym, niewdrożonym celem
-Stable, natomiast VU pozostaje wyłączone. VoxOneBT i RTC nie są capability
-DIN0. Status dodatkowych, już zaimplementowanych wariantów to
+128×32, SH1106 i CH1116G 128×64. S0 ma capability VoxOneBT audio; bateria,
+RTC, VU i aktualizacja firmware modułu przez MAIN pozostają wyłączone.
+VoxOneBT i RTC nie są capability DIN0. Status dodatkowych, już
+zaimplementowanych wariantów to
 `OPTIONAL / OFFLINE PASS / PHYSICAL HIL NOT QUALIFIED`; ich fizyczna
 kwalifikacja nie jest obowiązkowa, z wyjątkiem docelowej integracji BT S0.
 Każdy istniejący PASS zachowuje swój udokumentowany zakres.

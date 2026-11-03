@@ -17,7 +17,9 @@ std::string readFile(const char* path) {
                      std::istreambuf_iterator<char>());
 }
 
-UiInputContext radio() { return {PLAYER, true, true, false, false, false}; }
+UiInputContext radio() {
+  return {PLAYER, true, true, false, false, false, false};
+}
 }  // namespace
 
 int main() {

@@ -13,7 +13,8 @@
 #endif
 #include "../hardware/hardware_descriptor.h"
 #include "../hardware/runtime_hardware_web.h"
-#if defined(CONFIG_IDF_TARGET_ESP32S3) && VOXONE_HAS_BT && VOXONE_PIN_MAP_COMPLETE
+#if defined(CONFIG_IDF_TARGET_ESP32S3) && VOXONE_HAS_BT && \
+    VOXONE_PIN_MAP_COMPLETE && VOXONE_BT_FW_UPDATE_ENABLED
 #define VOXONE_BT_UPDATE_UPLOAD 1
 #include "bt_firmware_staging.h"
 #else
@@ -3328,9 +3329,7 @@ void NetServer::processQueue(){
                                   runtime.screensaverPlayingBlank,
                                   uiTimeoutConfig().stationListSeconds,
                                   uiTimeoutConfig().btTransportSeconds,
-                                  VOXONE_HAS_BT &&
-                                      VOXONE_DISPLAY_PROFILE ==
-                                          VOXONE_DISPLAY_PROFILE_ST7796_480X320,
+                                  VOXONE_BT_TRANSPORT_UI_ENABLED,
                                   scroll.canScrollSettings ? "true" : "false",
                                   scroll.settings.enabled ? "true" : "false",
                                   voxone::display_scroll::scrollSpeedApiName(

@@ -1,3 +1,11 @@
+#if defined(ARDUINO)
+#include "options.h"
+#else
+#define VOXONE_BT_FW_UPDATE_ENABLED 1
+#endif
+
+#if !defined(ARDUINO) || VOXONE_BT_FW_UPDATE_ENABLED
+
 #include "bt_firmware_staging.h"
 #include <algorithm>
 #include <string.h>
@@ -127,3 +135,5 @@ BtFirmwareStaging::Error BtFirmwareStaging::finalize() {
   ready_ = true;
   return Error::None;
 }
+
+#endif  // !defined(ARDUINO) || VOXONE_BT_FW_UPDATE_ENABLED

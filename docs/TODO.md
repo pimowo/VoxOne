@@ -15,13 +15,15 @@ full-image i testów offline, lecz ich fizyczny HIL nie blokuje pierwszego
 Stable. Wszystkie wcześniejsze wyniki tych profili pozostają historycznymi
 dowodami w dokładnie zapisanym zakresie.
 
-S0 docelowo używa ESP32-S3 Zero 4 MiB Flash / 2 MiB PSRAM i VoxOneBT, ale
-bieżący `profiles/s0.h` nadal deklaruje `VOXONE_HAS_BT=0`; capability, pinout
-BT i fizyczny HIL nie są jeszcze wdrożone ani zatwierdzone. VU pozostaje na
-S0 wyłączone, a aktualizacja VoxOneBT ma używać osobnego USB — MAIN→BT update
-pozostaje wyłączone. L0 zachowuje istniejącą PCB V-Tom, hardware, capability
-i mapę GPIO. Poza niezbędną obsługą VoxOneBT na S0 oraz poprawkami
-krytycznymi nowe funkcje pozostają POST-STABLE.
+S0 docelowo używa ESP32-S3 Zero 4 MiB Flash / 2 MiB PSRAM i VoxOneBT.
+Checkpoint `RC1-S0-BT-IMPLEMENT-1` włącza tę capability z UART1 RX/TX
+GPIO10/11 i I2S1 RX BCLK/WS/DATA GPIO12/13/14; pełny verify i obrazy S0/L0
+mają software PASS, ale fizyczny HIL S0 dokładnego czystego kandydata nadal
+jest wymagany. VU pozostaje na S0 wyłączone,
+a aktualizacja VoxOneBT ma używać osobnego USB — MAIN→BT update pozostaje
+wyłączone. L0 zachowuje istniejącą PCB V-Tom, hardware, capability i mapę
+GPIO. Poza niezbędną obsługą VoxOneBT na S0 oraz poprawkami krytycznymi nowe
+funkcje pozostają POST-STABLE.
 
 Formalna Definition of Stable liczy teraz **12 głównych bramek**: dwie
 profilowe HIL oraz dziesięć niezmienionych grup wspólnych. Statusy oceniono
@@ -39,7 +41,7 @@ nie są przepisywane jako pełny PASS.
 
 | Nr | Stabilny identyfikator | Stan | Zachowany zakres dowodów / brak |
 |---:|---|---|---|
-| 1 | `RC1-PROFILE-S0` | OPEN / PARTIAL | Historyczny S0 rev. 0 ma częściowe dowody SSD1306 128×32/MAX98357A/EC11, lecz zatwierdzony cel S0+VoxOneBT nie jest jeszcze capability bieżącego BIN, nie ma zatwierdzonego pinoutu BT ani pełnego HIL. |
+| 1 | `RC1-PROFILE-S0` | OPEN / PARTIAL | Historyczny S0 rev. 0 ma częściowe dowody SSD1306 128×32/MAX98357A/EC11. Checkpoint S0+VoxOneBT ma software PASS z zatwierdzonym pinoutem, bez VU i bez MAIN→BT update; pełny fizyczny HIL dokładnego czystego BIN pozostaje wymagany. |
 | 2 | `RC1-PROFILE-L0` | OPEN / PARTIAL | Zachowane PASS obejmują RADIO, A2DP/AVRCP, SourceManager oraz TTS A/B/C/D w potwierdzonych zakresach; pełny HIL dokładnego zamrożonego kandydata i pozostałe wymagania profilu są otwarte. |
 | 3 | `RC1-RADIO-ENDURANCE` | **CLOSED** | Terminalny endurance oraz wymagane dowody transportu spełniają wspólną bramkę; zakres profilowy S0/L0 pozostaje w bramkach 1 i 2. |
 | 4 | `RC1-BT-LIFECYCLE` | OPEN / PARTIAL | L0 ma etapowe A2DP/AVRCP i fizyczne audio; pełny lifecycle zamrożonego L0 oraz cały S0+BT pozostają otwarte. |
@@ -73,7 +75,23 @@ Raporty: `reports/VOXONE-L0-RC-CANDIDATE-PREP-1.md` i
 
 ### Bieżący checkpoint, zatwierdzone zasady i decyzje wymagane przed finalnym RC1
 
-Aktualny czysty checkpoint to
+`RC1-S0-BT-IMPLEMENT-1` ma **SOFTWARE PASS / PHYSICAL HIL PENDING**.
+Pierwotny zweryfikowany przebieg pochodził z dirty worktree bazującego na
+`8ff87067f40610b851fc4491557a4c2c59df2908`; nie jest release identity.
+Checkpoint S0 aktywuje VoxOneBT protocol 2, BtLink, BtAudioInput i SourceManager na
+zatwierdzonym UART1/I2S1, zachowuje I2S0/OLED/EC11 i nie kompiluje stagingu
+ani tras MAIN→BT update. Jednorazowa, idempotentna migracja Config v7 używa
+odrębnego markera NVS bez zmiany formatu binarnego; po migracji świadome
+wyłączenie i VXCF restore pozostają skuteczne. Pełny `tools/verify.ps1` ma
+PASS: 160 native, strict transport 16/16, ASan/UBSan, pięć standardowych
+buildów, pełne obrazy i negatywna walidacja. S0 `firmware.bin` zajmuje
+1685568/1966080 B i ma SHA-256
+`c0653f941eb1da4c1bdff6306736a0b7b21f55bec0b9abc88b30c813482bb20d`.
+Hash powyżej dokumentuje wyłącznie wcześniejszy dirty build. Kandydat nie
+został wdrożony; rzeczywiste PSRAM, PCM/mono, GPIO, UART protocol 2, UI i
+migracja NVS wymagają fizycznego HIL dokładnego czystego artefaktu.
+
+Poprzedni zachowany czysty checkpoint to
 `3bad2c3d27c24888d2731510cf330f866bef4ac3`, oznaczony tagiem
 `voxone-rc1-tts-stall-d-closure-1`. Pełny `tools/verify.ps1` ma PASS:
 158 native, transport strict 16/16, ASan/UBSan, standardowe buildy i pełne
@@ -129,11 +147,11 @@ zwalnia to z pozostałych testów BT lifecycle, SourceManager ani TTS.
   ale nie została wdrożona. Przed finalną kwalifikacją BT potrzebne są osobny
   checkpoint, kontrolowane wdrożenie i ograniczony lifecycle HIL.
 
-Kolejność dalszych prac release-gating: (1) zatwierdzić pinout i wdrożyć
-minimalną capability VoxOneBT S0 bez VU i bez MAIN→BT update, (2) wykonać
-pełny HIL S0, (3) kwalifikacja elektryczna `L0_LOG_RX` i ograniczone HIL P1,
-(4) finalny L0 na dokładnym kandydacie z domyślnym ST7796/PCM5102A,
-(5) końcowy frozen-release verify. Fizyczne HIL W0/M0/DIN0 mogą być
+Kolejność dalszych prac release-gating: (1) wykonać pełny HIL S0 dokładnego
+czystego kandydata z minimalną capability VoxOneBT bez VU i bez MAIN→BT
+update, (2) kwalifikacja elektryczna `L0_LOG_RX` i ograniczone HIL P1,
+(3) finalny L0 na dokładnym kandydacie z domyślnym ST7796/PCM5102A,
+(4) końcowy frozen-release verify. Fizyczne HIL W0/M0/DIN0 mogą być
 wykonywane później jako nieblokujące. Nie powtarzać RADIO
 endurance, L/R+VU, M0 SNTP, M0 clean install ani zaliczonych normalnych cykli
 A2DP bez nowej przesłanki.
@@ -391,9 +409,10 @@ implementacji i bez rozszerzania Stable.
   Zakres obejmuje właściwy full image, first boot/AP/Wi-Fi/WWW, RADIO, audio,
   zadeklarowany wyświetlacz i local input, restart, Config v7,
   update/recovery, podstawową ścieżkę OTA oraz VoxOneBT/SourceManager/TTS.
-  Na L0 zachować istniejący hardware i GPIO; na S0 najpierw wdrożyć minimalną
-  capability BT po osobnym zatwierdzeniu pinoutu, z VU wyłączonym i update BT
-  przez osobne USB. S0 i L0 muszą zakończyć się osobnymi PASS. W0, M0 i DIN0
+  Na L0 zachować istniejący hardware i GPIO; minimalna capability BT S0 ma
+  software PASS z VU wyłączonym i update BT przez osobne USB, lecz nadal
+  wymaga fizycznej kwalifikacji dokładnego czystego kandydata. S0 i L0 muszą
+  zakończyć się osobnymi PASS. W0, M0 i DIN0
   pozostają w pięcioprofilowej macierzy buildów, a ich poniższe fizyczne
   wyniki są zachowaną historią, nie bramkami wydania.
   - `VOXONE-RC1-W0-NONDESTRUCTIVE-HIL-1` 2026-10-26 ma READ-ONLY HIL PASS na fizycznym W0/ESP32-WROOM-32 pod `192.168.1.54`, MAC `68:FE:71:0C:75:F8`, firmware `0.8.0-dev`, build `c53ba57` i `bootId=0342dad3`. `/variables.js`, API i ograniczony WebSocket zgodnie potwierdziły profil W0, ST7789 284×76, EC11 i PCM5102A; WWW oraz osadzone HTML/JS/CSS były bajtowo zgodne z buildem, playlista miała 19 stacji, READY i bootId pozostały stabilne, a pojedynczy handshake WS zwrócił ograniczone snapshoty, pong i zamknął się kodem 1000. `app1/app1` raportował `VALID`, `pending=false` i `rollbackAvailable=true`; SECURITY pozostawał PROTECTED przy `protectionEnforced=false`. Read-only backup VXCF był dostępny bez restore ani ujawnienia zawartości. Jednorazowy reset połączenia przy pierwszym `/api/stations` nie zmienił READY ani bootId, a późniejszy izolowany odczyt przeszedł; zachować jako obserwację, nie potwierdzony defekt.
