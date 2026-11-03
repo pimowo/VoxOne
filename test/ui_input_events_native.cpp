@@ -1,4 +1,5 @@
 #include "../src/core/ui_input.h"
+#include "../src/core/display.h"
 
 #include <cassert>
 #include <fstream>
@@ -39,6 +40,13 @@ std::string readFile(const char* path) {
 }  // namespace
 
 int main() {
+  using voxone::display_profile::ProfileId;
+  assert(displayBluetoothTransportViewAvailable(true, ProfileId::Oled128x64));
+  assert(displayBluetoothTransportViewAvailable(true,
+                                                ProfileId::St7796_480x320));
+  assert(!displayBluetoothTransportViewAvailable(true, ProfileId::Oled128x32));
+  assert(!displayBluetoothTransportViewAvailable(false, ProfileId::Oled128x64));
+
   // EC11 and the future 3xSW adapter produce the same physical vocabulary.
   assert(uiInputEvent(EncoderInput::CounterClockwise) ==
          uiInputEvent(Buttons3Input::Left));

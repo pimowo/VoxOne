@@ -52,6 +52,18 @@ constexpr WidgetConfig playing = {2, 56, 1, WA_LEFT};
 constexpr WidgetConfig counter = {2, 56, 1, WA_RIGHT};
 }
 
+// OLED 128x64 Bluetooth transport. Metadata keeps the same scrolling behavior
+// as PLAYER, while the bottom half makes every encoder gesture explicit.
+namespace btTransport128x64 {
+constexpr WidgetConfig header = {0, 0, 1, WA_CENTER};
+constexpr ScrollConfig artist = {{0, 10, 1, WA_LEFT}, 140, 128, 1200, 2, 35};
+constexpr ScrollConfig title = {{0, 20, 1, WA_LEFT}, 140, 128, 1200, 2, 35};
+constexpr WidgetConfig previous = {2, 36, 2, WA_LEFT};
+constexpr WidgetConfig playback = {0, 40, 1, WA_CENTER};
+constexpr WidgetConfig next = {2, 36, 2, WA_RIGHT};
+constexpr WidgetConfig hint = {0, 56, 1, WA_CENTER};
+}
+
 // OLED 128x64 UPDATE coordinates shared by SSD1306 and SSD1309.
 namespace update128x64 {
 constexpr WidgetConfig title = {0, 0, 1, WA_CENTER};

@@ -3329,7 +3329,8 @@ void NetServer::processQueue(){
                                   runtime.screensaverPlayingBlank,
                                   uiTimeoutConfig().stationListSeconds,
                                   uiTimeoutConfig().btTransportSeconds,
-                                  VOXONE_BT_TRANSPORT_UI_ENABLED,
+                                  VOXONE_BT_TRANSPORT_UI_ENABLED &&
+                                      display.supportsBluetoothTransportView(),
                                   scroll.canScrollSettings ? "true" : "false",
                                   scroll.settings.enabled ? "true" : "false",
                                   voxone::display_scroll::scrollSpeedApiName(

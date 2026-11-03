@@ -1025,6 +1025,14 @@ void Display::serviceSecurityRecovery() {
 
 uint16_t Display::width(){ return _runtimeEnabled ? dsp.width() : 0; }
 uint16_t Display::height(){ return _runtimeEnabled ? dsp.height() : 0; }
+bool Display::supportsBluetoothTransportView() const {
+#if VOXONE_DISPLAY_COMPILES_ST7796 || VOXONE_DISPLAY_COMPILES_SMALL_OLED
+  return displayBluetoothTransportViewAvailable(_runtimeEnabled,
+                                                 dsp.activeProfile());
+#else
+  return false;
+#endif
+}
 #if TIME_SIZE>19
   #if DSP_MODEL==DSP_SSD1322
     #define BOOT_PRG_COLOR    WHITE
@@ -1374,6 +1382,36 @@ void Display::_buildPager(){
     _btTransportPage->addWidget(_btTransportPlayback);
   }
   #endif
+#if VOXONE_DISPLAY_COMPILES_SMALL_OLED
+  if (smallOledActive() && !oled128x32Active()) {
+    _oledBtTransportPage = new Page();
+    TextWidget* header = new TextWidget(btTransport128x64::header, 16,
+                                        WHITE, BLACK);
+    header->setText("BT TRANSPORT");
+    _oledBtTransportPage->addWidget(header);
+    _oledBtTransportArtist = new ScrollWidget(
+        "*", btTransport128x64::artist, WHITE, BLACK);
+    _oledBtTransportTitle = new ScrollWidget(
+        "*", btTransport128x64::title, WHITE, BLACK);
+    _oledBtTransportPage->addWidget(_oledBtTransportArtist);
+    _oledBtTransportPage->addWidget(_oledBtTransportTitle);
+    TextWidget* previous = new TextWidget(btTransport128x64::previous, 4,
+                                          WHITE, BLACK);
+    previous->setText("<");
+    _oledBtTransportPage->addWidget(previous);
+    _oledBtTransportPlayback = new TextWidget(
+        btTransport128x64::playback, 8, WHITE, BLACK);
+    _oledBtTransportPage->addWidget(_oledBtTransportPlayback);
+    TextWidget* next = new TextWidget(btTransport128x64::next, 4,
+                                      WHITE, BLACK);
+    next->setText(">");
+    _oledBtTransportPage->addWidget(next);
+    TextWidget* hint = new TextWidget(btTransport128x64::hint, 20,
+                                      WHITE, BLACK);
+    hint->setText("LONG: PLAYER");
+    _oledBtTransportPage->addWidget(hint);
+  }
+#endif
   for(const auto& p: pages) _pager->addPage(p);
   #if VOXONE_DISPLAY_PROFILE == VOXONE_DISPLAY_PROFILE_ST7796_480X320
   if (!smallOledActive()) {
@@ -1393,6 +1431,9 @@ void Display::_buildPager(){
     _pager->addPage(_st7796UpdatePage);
   }
   #endif
+#if VOXONE_DISPLAY_COMPILES_SMALL_OLED
+  if (_oledBtTransportPage) _pager->addPage(_oledBtTransportPage);
+#endif
 #if VOXONE_DISPLAY_COMPILES_SMALL_OLED
   if (smallOledActive()) {
     _oled128x64UpdatePage = new Page();
@@ -1926,6 +1967,13 @@ void Display::_renderMode(displayMode_e newmode) {
     _pager->setPage(_btTransportPage);
   }
 #endif
+#if VOXONE_DISPLAY_COMPILES_SMALL_OLED
+  if (smallOledActive() && !oled128x32Active() &&
+      newmode == BT_TRANSPORT) {
+    _title();
+    _pager->setPage(_oledBtTransportPage);
+  }
+#endif
   
 }
 
@@ -2393,6 +2441,16 @@ void Display::_title() {
   capturePlayerDisplayView(view, WiFi.RSSI());
   _title1->setText(view.artist);
   if (_title2) _title2->setText(view.title);
+#if VOXONE_DISPLAY_COMPILES_SMALL_OLED
+  if (smallOledActive() && !oled128x32Active() &&
+      view.source == DisplaySourceKind::Bluetooth &&
+      _oledBtTransportArtist && _oledBtTransportTitle &&
+      _oledBtTransportPlayback) {
+    _oledBtTransportArtist->setText(view.artist);
+    _oledBtTransportTitle->setText(view.title);
+    _oledBtTransportPlayback->setText(displayPlaybackLabel(view.playback));
+  }
+#endif
 #if VOXONE_DISPLAY_PROFILE == VOXONE_DISPLAY_PROFILE_ST7796_480X320
   // BT transport is a separate screen and keeps the original raw fields.
   if (!smallOledActive() && view.source == DisplaySourceKind::Bluetooth &&
@@ -2535,6 +2593,7 @@ void Display::wakeup(){
 void Display::init(){
   _createDspTask();
 }
+bool Display::supportsBluetoothTransportView() const { return false; }
 void Display::_start(){
   config.setTitle(LANG::const_PlReady);
 }

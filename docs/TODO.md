@@ -30,6 +30,20 @@ wyłączone. L0 zachowuje istniejącą PCB V-Tom, hardware, capability i mapę
 GPIO. Poza niezbędną obsługą VoxOneBT na S0 oraz poprawkami krytycznymi nowe
 funkcje pozostają POST-STABLE.
 
+`RC1-S0-BT-LOCAL-TRANSPORT-1` ma **SOFTWARE PASS / PHYSICAL HIL PENDING**.
+S0 kompiluje wspólny tryb BT transport, lecz udostępnia go runtime wyłącznie
+na OLED 128×64; OLED 128×32 zachowuje PLAYER bez wejścia w nierenderowany
+ekran. LONG z BT/PLAYER otwiera stronę z nagłówkiem `BT TRANSPORT`, przewijanym
+artystą i tytułem, stanem PLAY/PAUZA/STOP, znakami `<`/`>` i podpowiedzią
+`LONG: PLAYER`. Obrót wysyła istniejące AVRCP PREVIOUS/NEXT, klik PLAY/PAUSE,
+LONG wraca do PLAYER, a timeout pozostaje z Config. Disconnect/offline wraca
+do RADIO/PLAYER; TTS zachowuje bazowe źródło BT i istniejącą semantykę
+transportu. Pełny verify ma 160 native, strict transport 16/16, ASan/UBSan,
+pięć buildów, full-image i negatywną walidację PASS. Nie zmieniono UART,
+VoxOneBT, L0 ani `VOXONE_VERSION`; fizycznie pozostają do potwierdzenia OLED,
+gesty, AVRCP, timeout, disconnect/reconnect, TTS i nieaktywny BT na dokładnym
+BIN checkpointu.
+
 Formalna Definition of Stable liczy teraz **12 głównych bramek**: dwie
 profilowe HIL oraz dziesięć niezmienionych grup wspólnych. Statusy oceniono
 ponownie względem nowego zakresu, bez automatycznego przenoszenia CLOSED.
@@ -805,9 +819,10 @@ VoxOneBT jest osobnym projektem/repo i posiada własną rodzinę sprzętową Vx.
   implementacji i akceptacja UI, a nie automatyczny PASS pełnego HIL S0;
   brakujący postcheck API OTA i niewykonane kryteria sprzętowe/runtime
   pozostają otwarte. Zatwierdzony cel Stable rozszerza ten sam historyczny S0
-  rev. 0 o VoxOneBT, ale bieżący profil nadal ma `VOXONE_HAS_BT=0`; nowe GPIO
-  BT nie są zatwierdzone. S0 zachowuje `VOXONE_HAS_VU=0`, a update modułu ma
-  odbywać się przez osobne USB, bez MAIN→BT stagingu.
+  rev. 0 o VoxOneBT; bieżący profil ma `VOXONE_HAS_BT=1`, a GPIO BT są
+  zaimplementowane zgodnie z zatwierdzonym pinoutem
+  UART1 RX44/TX43 i I2S1 RX 11/12/13. S0 zachowuje `VOXONE_HAS_VU=0`,
+  a update modułu ma odbywać się przez osobne USB, bez MAIN→BT stagingu.
 - [POST-STABLE][S0][AUDIO][IMPLEMENTED OFFLINE][OPTIONAL][PHYSICAL HIL NOT QUALIFIED] Bieżący BIN udostępnia przez WWW `PCM5102A`, `MAX98357A MONO`, `MAX98357A STEREO` i `NONE`, z zachowaniem MAX98357A MONO jako baseline'u S0. Backend, persistence Config v7 i wspólny stereo I2S mają offline PASS; rozszerzeń nie oznaczać jako fizycznie zakwalifikowanych. Ich osobny fizyczny HIL jest opcjonalny i nie blokuje Stable 1.0.0.
 - [POST-STABLE][S0][DISPLAY][IMPLEMENTED OFFLINE][OPTIONAL][PHYSICAL HIL NOT QUALIFIED] Bieżący BIN zachowuje baseline `NONE`, SSD1306 128×32 i SSD1306 128×64 oraz udostępnia przez WWW SSD1309, CH1116G i SH1106 128×64. Sterowniki, geometria, init i pamięć mają offline PASS; poza zaakceptowanym fizycznie SSD1306 128×32 nie przypisywać PHYSICAL PASS. Osobny HIL dodatkowych wariantów jest opcjonalny i nie blokuje Stable 1.0.0.
 - [POST-STABLE][S0][INPUT][HIL PENDING] EC11 / 3×SW / `NONE` i ich wybór przez
@@ -821,14 +836,15 @@ VoxOneBT jest osobnym projektem/repo i posiada własną rodzinę sprzętową Vx.
 - [POST-STABLE][S0][HARDWARE] Dodać opcjonalny DS3231 przez I²C, z wykrywaniem
   obecności, wyborem przez WWW, współpracą z SNTP i zachowaniem poprawnego
   działania bez modułu.
-- [STABLE][S0][BLUETOOTH][TARGET APPROVED][IMPLEMENTATION/PINOUT/HIL PENDING]
-  Wdrożyć minimalną obsługę VoxOneBT RX/TX dla historycznego S0 rev. 0 po
-  osobnym zatwierdzeniu GPIO: dwa kierunki UART, I2S1 RX, capability, routing,
-  SourceManager, TTS oraz lifecycle connect/disconnect/reconnect. Nie zmieniać
-  dotychczasowych GPIO OLED, local audio ani input. VU pozostaje wyłączone.
-  Aktualizacja VoxOneBT odbywa się przez osobne USB; MAIN→BT update i jego
-  endpoint pozostają na S0 wyłączone. Sam cel kontraktowy nie oznacza
-  bieżącego wsparcia BIN.
+- [STABLE][S0][BLUETOOTH][SOFTWARE PASS][PHYSICAL HIL PENDING] Fizycznie
+  zweryfikować na dokładnym BIN checkpointu istniejącą obsługę VoxOneBT:
+  UART protocol 2, I2S1 RX, SourceManager, TTS i lifecycle
+  connect/disconnect/reconnect oraz lokalny BT_TRANSPORT na OLED 128×64.
+  Potwierdzić LONG PLAYER → BT_TRANSPORT, lewo PREVIOUS, prawo NEXT, klik
+  PLAY/PAUSE, LONG → PLAYER, timeout → PLAYER, bezpieczny powrót po disconnect
+  i brak wejścia przy nieaktywnym BT. Zachować GPIO OLED/local audio/input,
+  VU wyłączone oraz aktualizację VoxOneBT wyłącznie przez osobne USB;
+  MAIN→BT update i jego endpoint pozostają na S0 wyłączone.
 - [POST-STABLE][S0][WWW] Rozszerzać istniejącą sekcję `SPRZĘT` o nowe opcje
   dopiero razem z rzeczywistym backendem i `HardwareCapabilities`; wartości
   nieobsługiwane przez dany BIN mają pozostać odrzucone. Jeden profil S0 ma

@@ -283,7 +283,7 @@ int main() {
   assert(d.btAudioIn.bclk == 11 && d.btAudioIn.ws == 12 &&
          d.btAudioIn.din == 13 && d.btAudioRxEnabled);
   assert(!bool(VOXONE_BT_FW_UPDATE_ENABLED));
-  assert(!bool(VOXONE_BT_TRANSPORT_UI_ENABLED));
+  assert(bool(VOXONE_BT_TRANSPORT_UI_ENABLED));
 #elif defined(VOXONE_PROFILE_DIN0)
   assert(d.board.id == BoardId::BoardDIN0);
   assert(d.board.family == 'D' && d.board.revision == 0);

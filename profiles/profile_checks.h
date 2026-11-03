@@ -85,9 +85,9 @@ static_assert(!VOXONE_BT_FW_UPDATE_ENABLED || VOXONE_HAS_BT,
 
 static_assert(!VOXONE_BT_TRANSPORT_UI_ENABLED ||
               (VOXONE_HAS_BT &&
-               VOXONE_DISPLAY_PROFILE ==
-                   VOXONE_DISPLAY_PROFILE_ST7796_480X320),
-              "Dedicated BT transport UI requires BT and the ST7796 renderer");
+               (VOXONE_DISPLAY_COMPILES_ST7796 ||
+                VOXONE_DISPLAY_COMPILES_SMALL_OLED)),
+              "Dedicated BT transport UI requires BT and a compiled renderer");
 
 static_assert(bool(VOXONE_HAS_VU) == displaySupportsVu(VOXONE_PROFILE_DISPLAY),
               "VU compile gate does not match the selected display configuration");

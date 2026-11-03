@@ -104,6 +104,30 @@ int main() {
   static_assert(stations128x64::selected.width == 128,
                 "STATIONS selected row must clip to OLED width");
 
+  static_assert(bottom(btTransport128x64::header) <=
+                    btTransport128x64::artist.widget.top,
+                "BT transport header overlaps artist");
+  static_assert(bottom(btTransport128x64::artist.widget) <=
+                    btTransport128x64::title.widget.top,
+                "BT transport artist overlaps title");
+  static_assert(bottom(btTransport128x64::title.widget) <=
+                    btTransport128x64::previous.top,
+                "BT transport metadata overlaps controls");
+  static_assert(bottom(btTransport128x64::previous) <=
+                    btTransport128x64::hint.top,
+                "BT transport controls overlap hint");
+  static_assert(bottom(btTransport128x64::hint) <= 64,
+                "BT transport hint exceeds OLED");
+  static_assert(btTransport128x64::artist.width == 128 &&
+                    btTransport128x64::title.width == 128,
+                "BT transport metadata must clip to OLED width");
+  static_assert(btTransport128x64::previous.align == WA_LEFT &&
+                    btTransport128x64::playback.align == WA_CENTER &&
+                    btTransport128x64::next.align == WA_RIGHT,
+                "BT transport controls must preserve left/center/right order");
+  assert(std::strlen("BT TRANSPORT") * charWidth <= 128);
+  assert(std::strlen("LONG: PLAYER") * charWidth <= 128);
+
   static_assert(player128x64::volumeNumber.top == 24 &&
                     player128x64::volumeNumber.align == WA_CENTER,
                 "VOL value must be centered in the middle band");

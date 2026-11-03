@@ -109,6 +109,16 @@ int main() {
   sources.displayView(view);
   assert(btTransportAction(BtTransportInput::Toggle, view) == BtTransportAction::Play);
 
+  // Temporary/TTS audio does not change the selected base source. The local
+  // display reports BT as stopped while the temporary decoder owns output,
+  // and the AVRCP target remains the connected peer.
+  DisplaySourceView temporaryView{};
+  sources.displayView(temporaryView, false, false);
+  assert(temporaryView.kind == DisplaySourceKind::Bluetooth);
+  assert(temporaryView.connected);
+  assert(temporaryView.playback == DisplayPlaybackState::Stopped);
+  assert(sources.canControlBluetooth());
+
   // BT PLAYER: double-click selects RADIO; other screens remain unchanged.
   assert(doubleClick(VOL, sources, bt, cycleCalls) == VOL);
   assert(cycleCalls == 2 && sources.active() == ActiveSource::Bluetooth);
@@ -145,9 +155,20 @@ int main() {
   assert(calls.radioToggle == 1 && calls.btPause == 1 && calls.btPlay == 3);
 
   bt.connected = false;
-  sources.observe(bt);
+  const SourceUpdate disconnected = sources.observe(bt);
+  assert(disconnected.reason == SourceChangeReason::BtDisconnect);
+  assert(sources.active() == ActiveSource::Radio);
+  assert(resolveUiInput(context(BT_TRANSPORT, sources), UiInputEvent::Left).action ==
+         UiInputAction::None);
+  assert(resolveUiInput(context(BT_TRANSPORT, sources), UiInputEvent::Long).action ==
+         UiInputAction::ShowPlayer);
   sources.cycle(bt);  // Manually select BT while the phone is disconnected.
   assert(sources.active() == ActiveSource::Bluetooth);
   click(PLAYER, sources, calls);
   assert(calls.radioToggle == 1 && calls.btPause == 1 && calls.btPlay == 3);
+
+  bt.runtimeAvailable = false;
+  const SourceUpdate offline = sources.observe(bt);
+  assert(offline.reason == SourceChangeReason::BtOffline);
+  assert(sources.active() == ActiveSource::Radio);
 }
