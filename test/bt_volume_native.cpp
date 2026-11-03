@@ -1,5 +1,7 @@
 #include "../src/core/bt_volume.h"
+#include "../src/core/audio_balance.h"
 #include "../src/core/source_manager_state.h"
+#include "../src/core/volume_map.h"
 
 #include <cassert>
 #include <fstream>
@@ -57,6 +59,16 @@ int main() {
       {0, 5, 10, 20, 30, 40, 50, 60, 70, 80, 90, 100};
   for (size_t i = 0; i < sizeof(expectedUser); ++i)
     assert(btUserToAbsolute(expectedUser[i]) == expectedAbsolute[i]);
+
+  // Deployed HIL state: user volume 12 with maximumVolume 50. RADIO maps to
+  // raw gain 7 after its fixed 1/2 headroom step; BT maps to ABSVOL 21. These
+  // are separate source-specific gains, not two serial MAIN gains.
+  assert(volumeUserToRaw(12, 50) == 7);
+  assert(btUserToAbsolute(12) == 21);
+  const int16_t knownPeak = 1642;
+  const int32_t nominalRadioOutput = voxone::audio_balance::scalePcmSample(
+      static_cast<int16_t>(knownPeak >> 1), 7);
+  assert(nominalRadioOutput == 22);
 
   int maxUserRoundTripError = 0;
   for (int user = 0; user <= 100; ++user) {
