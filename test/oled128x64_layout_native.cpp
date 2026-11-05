@@ -131,6 +131,21 @@ int main() {
   static_assert(player128x64::volumeNumber.top == 24 &&
                     player128x64::volumeNumber.align == WA_CENTER,
                 "VOL value must be centered in the middle band");
+  static_assert(player128x64::station.widget.top == 0 &&
+                    player128x64::artist.widget.top == 10 &&
+                    player128x64::title.widget.top == 20,
+                "PLAYER must preserve station, artist and title rows");
+  static_assert(player128x64::station.widget.textsize == 1 &&
+                    player128x64::artist.widget.textsize == 1 &&
+                    player128x64::title.widget.textsize == 1,
+                "PLAYER must preserve the original metadata fonts");
+  static_assert(player128x64::station.width == 128 &&
+                    player128x64::artist.width == 128 &&
+                    player128x64::title.width == 128 &&
+                    player128x64::station.startscrolldelay == 5000 &&
+                    player128x64::artist.startscrolldelay == 5000 &&
+                    player128x64::title.startscrolldelay == 5000,
+                "PLAYER must preserve scrolling for all metadata rows");
   static_assert(player128x64::volumeIp.textsize ==
                     stations128x64::header.textsize,
                 "VOL IP and STATIONS header must use the same font");
