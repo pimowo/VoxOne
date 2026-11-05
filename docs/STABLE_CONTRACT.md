@@ -38,8 +38,9 @@ PASS zachowują ważność wyłącznie w swoim udokumentowanym zakresie.
 
 S0 opisuje własny, ręcznie okablowany ESP32-S3 Zero i zachowuje historyczną
 mapę GPIO rewizji 0 dla OLED, local audio i input. Kandydat S0 deklaruje
-`VOXONE_HAS_BT=1`: UART1 używa RX10/TX11, a I2S1 RX używa
-BCLK12/WS13/DATA14. Logi aplikacji korzystają z native USB CDC. S0 zachowuje
+`VOXONE_HAS_BT=1`: UART1 używa RX44/TX43, a I2S1 RX używa
+BCLK11/WS12/DATA13. Logi aplikacji korzystają z native USB CDC, aby nie
+uruchamiać UART0 na współdzielonych padach GPIO43/44. S0 zachowuje
 VU wyłączone i aktualizuje VoxOneBT przez osobne USB; MAIN→BT update
 pozostaje wyłączone. L0
 zachowuje istniejącą PCB V-Tom, hardware, capability i GPIO. DIN0 zachowuje
@@ -208,8 +209,9 @@ wznowić stację, a RADIO STOP intent nie powoduje autoplay.
 
 L0 komunikuje się z osobnym modułem VoxOneBT przez UART protocol 2 i odbiera
 jego PCM przez I2S. S0 nie ma odrębnego forka tej logiki: używa wspólnego
-CORE SourceManager/BtLink/BtAudioInput na UART1 RX10/TX11 i I2S1 RX
-BCLK12/WS13/DATA14. Aplikacyjne logi S0 nadal korzystają z natywnego USB CDC.
+CORE SourceManager/BtLink/BtAudioInput na UART1 RX44/TX43 i I2S1 RX
+BCLK11/WS12/DATA13. Aplikacyjne logi S0 korzystają z natywnego USB CDC,
+więc globalna logika `Serial` innych profili pozostaje bez zmian.
 A2DP audio state
 decyduje, czy BT może posiadać I2S0;
 AVRCP służy do transportu i UI. Snapshot obejmuje online/connected, firmware,
@@ -364,7 +366,7 @@ modułu, a nie osobny fizyczny model urządzenia.
 | W0 | PCM5102A; ST7789 284×76; EC11 | `RETAINED BUILD / PHYSICAL HIL NON-BLOCKING` | Zachować build, full-image, testy offline i historyczne dowody. Uszkodzone USB nadal blokuje bezpieczny opcjonalny HIL/OTA W0, ale nie wydanie. |
 | M0 | PCM5102A; SSD1306/SSD1309 128×64; EC11 | `RETAINED BUILD / PHYSICAL HIL NON-BLOCKING` | Zachować build, full-image, testy offline i wcześniejsze PASS; bez wymogu końcowego profilowego HIL. |
 | L0 | istniejąca PCB V-Tom; ESP32-S3 N16R8; PCM5102A; ST7796S; EC11; DS3231; VoxOneBT; VU | **`RELEASE-GATING HIL REQUIRED`** | Domyślny TFT/audio, BT/SourceManager/TTS, SECURITY, Config, update/recovery i otwarte P1. Hardware i GPIO pozostają bez zmian; XSMT nie należy do baseline. |
-| S0 | ESP32-S3 Zero 4 MiB/2 MiB; MAX98357A MONO, SSD1306 128×32, EC11 i VoxOneBT | **`RELEASE-GATING HIL REQUIRED`** | Zachować GPIO I2S0 `5/6/4`, input `9/8/7`, I2C `1/2`; VoxOneBT UART1 `RX10/TX11` i I2S1 RX `12/13/14`; logi aplikacji przez native USB CDC; VU i MAIN→BT update wyłączone. Software PASS nie zastępuje pełnego fizycznego HIL. |
+| S0 | ESP32-S3 Zero 4 MiB/2 MiB; MAX98357A MONO, SSD1306 128×32, EC11 i VoxOneBT | **`RELEASE-GATING HIL REQUIRED`** | Zachować GPIO I2S0 `BCLK5/DOUT6/WS4`, input `A9/B8/KEY7`, I2C `SDA1/SCL2`; VoxOneBT UART1 `RX44/TX43` i I2S1 RX `BCLK11/WS12/DATA13`; logi aplikacji przez native USB CDC; VU i MAIN→BT update wyłączone. Software PASS nie zastępuje pełnego fizycznego HIL. |
 | DIN0 | PCM5102A; SSD1306/SSD1309 128×64; EC11; pinout M0 | `RETAINED BUILD / PHYSICAL HIL NON-BLOCKING` | Zachować build, full-image, testy offline, własną identity i historię rewizji 0; fizyczny HIL nie blokuje wydania. |
 
 ### B. Rozszerzone capability obecne w `3bad2c3`
@@ -376,6 +378,38 @@ modułu, a nie osobny fizyczny model urządzenia.
 | L0 | SSD1306 128×32/128×64, SSD1309 128×64, SH1106 128×64, CH1116G 128×64, `NONE` | `NONE` | Implemented/offline PASS; domyślny ST7796 zachowany; warianty dodatkowe `OPTIONAL / PHYSICAL HIL NOT QUALIFIED`. |
 | S0 | SSD1309 128×64, SH1106 128×64, CH1116G 128×64 | PCM5102A, MAX98357A STEREO, `NONE` | Implemented/offline PASS; minimalny BT audio ma software PASS, fizyczny HIL PENDING. Warianty dodatkowe `OPTIONAL / PHYSICAL HIL NOT QUALIFIED`. |
 | DIN0 | SSD1306 128×32, SH1106 128×64, CH1116G 128×64 | Brak; tylko PCM5102A | Implemented/offline PASS; fizyczny HIL nieblokujący. |
+
+Wszystkie profile, które w runtime wybierają `OLED128x64`, używają jednego
+wspólnego renderera CORE niezależnie od profilu sprzętowego. STARTUP zachowuje
+pasma `y=0..31` (logo VoxOne), `y=32..47` (animacja) i `y=48..63` (SSID bez
+hasła). PLAYER zachowuje trzy przewijane wiersze stacja/artysta/utwór oraz
+dolny pasek z rzeczywistym PLAY/PAUSE/STOP, wyśrodkowanym źródłem, ikoną
+głośnika zgodną z OLED 128×32, głośnością i Wi-Fi. Napis `BT` jest biały, bez
+tła i obramowania, wyśrodkowany pomiędzy głośnością a Wi-Fi oraz widoczny
+wyłącznie zgodnie z istniejącym stanem i capability BT. VOL pokazuje `0–100%`
+albo `MUTE`. Wspólny renderer nie ujednolica sterowników: SSD1306, SSD1309,
+SH1106 i CH1116G zachowują odrębne backendy i wymagają własnej kwalifikacji
+fizycznej. Kontrakt nie zmienia OLED 128×32 ani TFT.
+
+Wszystkie profile, które w runtime wybierają `OLED128x32`, używają jednego
+wspólnego renderera CORE. STARTUP zachowuje pasma `y=0..15` (wyśrodkowany
+bitmapowe logo OLED32 75×16 px), `y=16..23` (animacja Wi-Fi) i `y=24..31`
+(SSID bez hasła).
+PLAYER używa stacji w komórce 12×8 px umieszczonej w paśmie `y=0..11`,
+wspólnego tekstu `Artysta - Utwór` w komórce 6×8 px w `y=14..21` oraz
+wspólnej belki `y=24..31`. Dwa odstępy mają dokładnie po 2 px. Belka zachowuje
+PLAY/PAUSE/STOP, wyśrodkowane źródło, geometrię ikony głośnika zgodną z OLED
+128×64, głośność, capability-gated biały napis BT bez tła i obramowania oraz
+Wi-Fi. VOL pokazuje `0–100%` albo `MUTE`. Odrębny widok `BT_TRANSPORT` pokazuje
+przewijany artysta w `y=0..11`, przewijany utwór w `y=14..21` i sterowanie
+`< PLAY/PAUSE/STOP >` w `y=24..31`; korzysta z tej samej maszyny wejścia CORE
+co OLED 128×64. Ten kontrakt nie zmienia renderera OLED 128×64 ani TFT.
+
+Pełny `tools/verify.ps1` na integracyjnym SHA
+`02285e26f315eefd8bc30dd17151351296416eb1` ma PASS: 161 testów native,
+strict transport 16/16, ROM 26/26, ASan/UBSan, pięć standardowych profili
+i pięć full-image, regresja full-image validation 10/10, L0 TX-only, WWW
+repeatability oraz `git diff --check`.
 
 ### C. Optional HIL — dodatkowe warianty
 

@@ -17,29 +17,46 @@ dowodami w dokładnie zapisanym zakresie.
 
 S0 docelowo używa ESP32-S3 Zero 4 MiB Flash / 2 MiB PSRAM i VoxOneBT.
 `RC1-S0-BT-IMPLEMENT-1` ma **SOFTWARE PASS / PHYSICAL HIL PENDING**.
-Zatwierdzony pinout rzeczywistego okablowania to UART1 RX10/TX11 i I2S1 RX
-BCLK12/WS13/DATA14. Implementacja korzysta ze wspólnego CORE
+Zatwierdzony pinout rzeczywistego okablowania to UART1 RX44/TX43 i I2S1 RX
+BCLK11/WS12/DATA13. OLED używa SDA1/SCL2, I2S0 używa WS4/BCLK5/DOUT6, a
+EC11 używa KEY7/B8/A9. Implementacja korzysta ze wspólnego CORE
 SourceManager/BtLink/BtAudioInput, a aplikacyjne logi S0 nadal są kierowane
-przez natywne USB CDC. Fizyczny HIL S0 dokładnego czystego kandydata nadal
+przez natywne USB CDC, ponieważ GPIO43/44 są domyślnymi padami UART0.
+Fizyczny HIL S0 dokładnego czystego kandydata nadal
 jest wymagany. VU pozostaje na S0 wyłączone,
 a aktualizacja VoxOneBT ma używać osobnego USB — MAIN→BT update pozostaje
 wyłączone. L0 zachowuje istniejącą PCB V-Tom, hardware, capability i mapę
 GPIO. Poza niezbędną obsługą VoxOneBT na S0 oraz poprawkami krytycznymi nowe
 funkcje pozostają POST-STABLE.
 
-`RC1-S0-BT-LOCAL-TRANSPORT-1` ma **SOFTWARE PASS / PHYSICAL HIL PENDING**.
-S0 kompiluje wspólny tryb BT transport, lecz udostępnia go runtime wyłącznie
-na OLED 128×64; OLED 128×32 zachowuje PLAYER bez wejścia w nierenderowany
-ekran. LONG z BT/PLAYER otwiera stronę z nagłówkiem `BT TRANSPORT`, przewijanym
-artystą i tytułem, stanem PLAY/PAUZA/STOP, znakami `<`/`>` i podpowiedzią
-`LONG: PLAYER`. Obrót wysyła istniejące AVRCP PREVIOUS/NEXT, klik PLAY/PAUSE,
-LONG wraca do PLAYER, a timeout pozostaje z Config. Disconnect/offline wraca
-do RADIO/PLAYER; TTS zachowuje bazowe źródło BT i istniejącą semantykę
-transportu. Pełny verify ma 160 native, strict transport 16/16, ASan/UBSan,
-pięć buildów, full-image i negatywną walidację PASS. Nie zmieniono UART,
-VoxOneBT, L0 ani `VOXONE_VERSION`; fizycznie pozostają do potwierdzenia OLED,
-gesty, AVRCP, timeout, disconnect/reconnect, TTS i nieaktywny BT na dokładnym
-BIN checkpointu.
+`RC1-S0-BT-LOCAL-TRANSPORT-1` ma **SOFTWARE PASS / PARTIAL PHYSICAL PASS**;
+pełna profilowa bramka S0 pozostaje **PHYSICAL HIL PENDING**.
+S0 kompiluje wspólny tryb BT transport dla OLED 128×64 i OLED 128×32. LONG
+z BT/PLAYER otwiera stronę `BT TRANSPORT`; wariant 128×64 zachowuje istniejące
+sterowanie bez zmian, a kompaktowy wariant 128×32 pokazuje osobno przewijane
+wiersze artysty i utworu oraz `< PLAY/PAUSE/STOP >`. Oba renderery używają tej
+samej maszyny wejścia CORE bez stanu w warstwie Display: obrót bezpośrednio
+wysyła istniejące AVRCP PREVIOUS/NEXT, klik PLAY/PAUSE, LONG wraca do PLAYER,
+a timeout pozostaje z Config. Regresyjny stan wyboru OLED32, który przechwytywał
+gesty, został usunięty. Widok jest capability-gated; regulacja głośności BT
+i RADIO oraz pozostałe gesty zachowują wspólną semantykę. Celowane testy
+parytetu OLED32/OLED64, geometrii, wejścia, mapowania transportu, głośności
+i ASan/UBSan oraz build S0 z post-link validation mają PASS. Pełny verify na
+`02285e26f315eefd8bc30dd17151351296416eb1` ma 161 native, strict transport
+16/16, ROM 26/26, ASan/UBSan, pięć standardowych profili i pięć full-image,
+regresję full-image validation 10/10, L0 TX-only, WWW repeatability oraz
+`git diff --check` PASS. Nie zmieniono UART, VoxOneBT, L0 ani
+`VOXONE_VERSION`.
+
+BIN `98aa43f-dirty` o SHA-256
+`f0bde6e97629e11035f90cbe7cc4264323fb36bffef1f19e685c00160a0fcf89`
+i rozmiarze 1 694 400 B został wgrany i fizycznie zweryfikowany na S0
+(BT_TRANSPORT + input + RADIO volume). PASS obejmuje wyłącznie wygląd
+BT_TRANSPORT OLED32, dwa przebiegi przewijania, NEXT, PREVIOUS, klik
+PLAY/PAUSE, LONG, timeout, głośność PLAYER BT i głośność RADIO. Nie jest to
+dowód dla OTA MAIN/SPIFFS, rollback/recovery, Config v7, security ani pełnej
+bramki S0. Nadal PENDING pozostają OLED64, disconnect/reconnect, TTS,
+nieaktywny BT oraz pełny HIL dokładnego czystego kandydata.
 
 Formalna Definition of Stable liczy teraz **12 głównych bramek**: dwie
 profilowe HIL oraz dziesięć niezmienionych grup wspólnych. Statusy oceniono
@@ -103,12 +120,18 @@ PASS: 160 native, strict transport 16/16, ASan/UBSan, pięć standardowych
 buildów, pełne obrazy i negatywna walidacja. S0 `firmware.bin` zajmuje
 1685568/1966080 B i ma SHA-256
 `c0653f941eb1da4c1bdff6306736a0b7b21f55bec0b9abc88b30c813482bb20d`.
-Hash powyżej dokumentuje wyłącznie wcześniejszy dirty build. Bieżący pinout
-UART1 RX10/TX11 i I2S1 RX BCLK12/WS13/DATA14 ma celowane PASS: 21 uruchomień
-native, 3 uruchomienia ASan/UBSan, strict transport 16/16, buildy S0 i L0
-oraz `git diff --check`. Kandydat nie został wdrożony; rzeczywiste PSRAM,
-PCM/mono, GPIO, UART protocol 2, UI i migracja NVS wymagają fizycznego HIL
-dokładnego czystego artefaktu.
+Hash powyżej dokumentuje wyłącznie wcześniejszy dirty build. Przywrócony
+pinout UART1 RX44/TX43 i I2S1 RX BCLK11/WS12/DATA13 zachowuje aplikacyjne
+logi na native USB CDC i ma SOFTWARE PASS: celowane testy deskryptora S0/L0
+oraz kontraktu UART mają 3/3 PASS, a buildy S0 i L0 mają PASS. Artefakt
+`98aa43f-dirty` o SHA-256
+`f0bde6e97629e11035f90cbe7cc4264323fb36bffef1f19e685c00160a0fcf89`
+i rozmiarze 1 694 400 B został wgrany i fizycznie zweryfikowany na S0
+(BT_TRANSPORT + input + RADIO volume) wyłącznie w zakresie opisanym powyżej.
+Poprzedni artefakt `9fecb710…` jest niepotwierdzony jako wgrany i został
+zastąpiony testowo. Rzeczywiste PSRAM, PCM/mono, pełny UART protocol 2,
+OTA MAIN/SPIFFS, rollback/recovery, Config v7, security oraz pełny HIL
+dokładnego czystego artefaktu nadal wymagają osobnych dowodów.
 
 Poprzedni zachowany czysty checkpoint to
 `3bad2c3d27c24888d2731510cf330f866bef4ac3`, oznaczony tagiem
@@ -297,7 +320,7 @@ pozostają POST-STABLE.
 
 VoxOneBT jest obowiązkowym docelowym elementem profilów S0 i L0 w Stable
 1.0.0. L0 ma tę capability, a implementacja S0 ma SOFTWARE PASS z
-zatwierdzonym pinoutem UART1 RX10/TX11 i I2S1 RX BCLK12/WS13/DATA14;
+zatwierdzonym pinoutem UART1 RX44/TX43 i I2S1 RX BCLK11/WS12/DATA13;
 fizyczny HIL S0 pozostaje PENDING. Dla przyszłych rewizji S/DIN/M/L/XL VoxOneBT
 pozostaje capability zależną od konkretnego profilu. W0 nie otrzymuje
 rozbudowy, a M0 i DIN0 nie uzyskują BT przez zmianę zakresu HIL. Pomiar
@@ -915,10 +938,11 @@ VoxOneBT jest osobnym projektem/repo i posiada własną rodzinę sprzętową Vx.
   pozostają otwarte. Zatwierdzony cel Stable rozszerza ten sam historyczny S0
   rev. 0 o VoxOneBT; bieżący profil ma `VOXONE_HAS_BT=1`, a GPIO BT są
   zaimplementowane zgodnie z zatwierdzonym pinoutem
-  UART1 RX10/TX11 i I2S1 RX 12/13/14. S0 zachowuje `VOXONE_HAS_VU=0`,
+  UART1 RX44/TX43 i I2S1 RX BCLK11/WS12/DATA13. S0 zachowuje `VOXONE_HAS_VU=0`,
   a update modułu ma odbywać się przez osobne USB, bez MAIN→BT stagingu.
 - [POST-STABLE][S0][AUDIO][IMPLEMENTED OFFLINE][OPTIONAL][PHYSICAL HIL NOT QUALIFIED] Bieżący BIN udostępnia przez WWW `PCM5102A`, `MAX98357A MONO`, `MAX98357A STEREO` i `NONE`, z zachowaniem MAX98357A MONO jako baseline'u S0. Backend, persistence Config v7 i wspólny stereo I2S mają offline PASS; rozszerzeń nie oznaczać jako fizycznie zakwalifikowanych. Ich osobny fizyczny HIL jest opcjonalny i nie blokuje Stable 1.0.0.
-- [POST-STABLE][S0][DISPLAY][IMPLEMENTED OFFLINE][OPTIONAL][PHYSICAL HIL NOT QUALIFIED] Bieżący BIN zachowuje baseline `NONE`, SSD1306 128×32 i SSD1306 128×64 oraz udostępnia przez WWW SSD1309, CH1116G i SH1106 128×64. Sterowniki, geometria, init i pamięć mają offline PASS; poza zaakceptowanym fizycznie SSD1306 128×32 nie przypisywać PHYSICAL PASS. Osobny HIL dodatkowych wariantów jest opcjonalny i nie blokuje Stable 1.0.0.
+- [POST-STABLE][COMMON CORE][DISPLAY][SOFTWARE PASS][OPTIONAL PHYSICAL HIL PENDING] Fizycznie zaakceptowany na S0 wygląd OLED 128×64 jest produkcyjnym, wspólnym rendererem dla każdego profilu wybierającego w runtime `OLED128x64`; osobne środowisko i flaga `s0-oled64-polish` zostały usunięte po potwierdzeniu równoważności. STARTUP zachowuje dokładne pasma 32/16/16 px (logo/animacja/SSID bez hasła), PLAYER trzy przewijane wiersze z równymi odstępami, rzeczywiste PLAY/PAUSE/STOP, wyśrodkowane źródło, ikonę głośnika z OLED 128×32, biały napis BT bez tła i obramowania oraz Wi-Fi, a VOL pokazuje `0–100%` lub `MUTE`. BT pozostaje widoczny wyłącznie zgodnie z istniejącym stanem i capability; profile bez BT nie otrzymują wskaźnika. Backendów SSD1306, SSD1309, SH1106 i CH1116G nie utożsamiać: zachowują odrębne sterowniki i osobną kwalifikację fizyczną. Celowane testy `oled128x64_common_native`, `oled128x64_layout_native` i regresja `oled128x32_layout_native` mają PASS; buildy `s0`, `m0`, `din0`, `l0` i `w0` mają PASS. OLED 128×32 oraz TFT pozostają niezmienione. Fizyczny PASS dotyczy wyłącznie wcześniej zaakceptowanego wyglądu na testowanym module S0; dodatkowe kontrolery nadal wymagają opcjonalnego HIL i nie blokują Stable 1.0.0.
+- [POST-STABLE][COMMON CORE][OLED128X32][IMPLEMENTED][SOFTWARE PASS][PARTIAL PHYSICAL PASS] Wspólny produkcyjny renderer OLED 128×32 ma STARTUP 16/8/8 px z bitmapowym logo OLED32 75×16 px i bezpiecznie skracanym SSID, PLAYER ze stacją 12×8 px, wspólnym wierszem `Artysta - Utwór` 6×8 px, dwoma odstępami po 2 px i belką 8 px oraz niezmieniony VOL `0–100%`/`MUTE`. Belka ma odrębne PLAY/PAUSE/STOP, centrowane źródło, geometrię głośnika zgodną z OLED 128×64, głośność, capability-gated biały napis BT i Wi-Fi. `BT_TRANSPORT` pokazuje osobno przewijane wiersze artysty i utworu oraz `< PLAY/PAUSE/STOP >`. Celowane testy OLED32 oraz regresje OLED64 mają PASS. Post-link validator używa teraz pojedynczego wersjonowanego markera tożsamości powiązanego z runtime HardwareDescriptor i odrzuca brak, duplikat oraz obcy profil. Dwie regresje potwierdzają, że bajty `\0L0\0` z little-endian wskaźnika `0x4200304c` do `AsyncClient::_lwip_error()` nie są tożsamością, natomiast rzeczywiste markery M0+L0 nadal kończą się FAIL. Buildy i manifesty M0, S0, DIN0 oraz L0 mają PASS. OLED 128×64 ma zachowane pliki i geometrię bez zmian. Fizyczny PASS OLED32 jest ograniczony do wyżej zapisanego BIN i zakresu BT_TRANSPORT/input/RADIO volume; kwalifikacja innych profili i pełna bramka S0 pozostają PENDING.
 - [POST-STABLE][S0][INPUT][HIL PENDING] EC11 / 3×SW / `NONE` i ich wybór przez
   WWW są już zaimplementowane. Nie tworzyć dla nich ponownie zadania
   funkcjonalnego; wykonać brakującą fizyczną walidację 3×SW, `NONE`, nawigacji,
@@ -934,11 +958,13 @@ VoxOneBT jest osobnym projektem/repo i posiada własną rodzinę sprzętową Vx.
   zweryfikować na dokładnym BIN checkpointu istniejącą obsługę VoxOneBT:
   UART protocol 2, I2S1 RX, SourceManager, TTS i lifecycle
   connect/disconnect/reconnect oraz lokalny BT_TRANSPORT na OLED 128×64.
-  Potwierdzić LONG PLAYER → BT_TRANSPORT, lewo PREVIOUS, prawo NEXT, klik
-  PLAY/PAUSE, LONG → PLAYER, timeout → PLAYER, bezpieczny powrót po disconnect
-  i brak wejścia przy nieaktywnym BT. Zachować GPIO OLED/local audio/input,
-  VU wyłączone oraz aktualizację VoxOneBT wyłącznie przez osobne USB;
-  MAIN→BT update i jego endpoint pozostają na S0 wyłączone.
+  Na OLED 128×32 wgrany BIN `f0bde6e…` ma częściowy fizyczny PASS wyglądu
+  BT_TRANSPORT, NEXT/PREVIOUS, klik PLAY/PAUSE, LONG, timeout oraz głośności
+  PLAYER BT i RADIO. Nadal potwierdzić OLED 128×64, bezpieczny powrót po
+  disconnect, reconnect, TTS, brak wejścia przy nieaktywnym BT i pozostałe
+  kryteria pełnej bramki S0 na dokładnym czystym kandydacie. Zachować GPIO
+  OLED/local audio/input, VU wyłączone oraz aktualizację VoxOneBT wyłącznie
+  przez osobne USB; MAIN→BT update i jego endpoint pozostają na S0 wyłączone.
 - [POST-STABLE][S0][WWW] Rozszerzać istniejącą sekcję `SPRZĘT` o nowe opcje
   dopiero razem z rzeczywistym backendem i `HardwareCapabilities`; wartości
   nieobsługiwane przez dany BIN mają pozostać odrzucone. Jeden profil S0 ma

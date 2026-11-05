@@ -313,7 +313,7 @@ Warunki wejścia:
 2. Operator zna fizyczną, ręczną sekwencję BOOT/RESET. Obecność native USB
    nie jest dowodem, że ta sekwencja działa.
 3. Zasilanie MAIN i VoxOneBT jest stabilne; nie ma back-power. Połączenia
-   UART1 RX10/TX11 oraz I2S1 12/13/14 pozostają obserwowane. Sesja ROM nie
+   UART1 RX44/TX43 oraz I2S1 BCLK11/WS12/DATA13 pozostają obserwowane. Sesja ROM nie
    otwiera UART ani I2S VoxOneBT; każda zmiana stanu modułu jest STOP.
 4. Zachowany jest dodatni PHYSICAL PASS MAIN-only OTA `81f984e`; sesja
    recovery go nie powtarza.
