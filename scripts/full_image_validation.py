@@ -27,6 +27,7 @@ ESP_IMAGE_CHECKSUM_SEED = 0xEF
 ESP_APP_DESC_MAGIC = 0xABCD5432
 ESP_APP_DESC_SIZE = 256
 ESP_APP_DESC_ELF_SHA_OFFSET = 144
+PROFILE_IDENTITY_PREFIX = b"VOXONE_PROFILE_IDENTITY:v1:"
 
 
 class ValidationError(RuntimeError):
@@ -310,14 +311,24 @@ def _validate_esp_image(
 
 def _require_identity_tokens(data: bytes, context: dict[str, Any]) -> None:
     profile = context["profile"]
-    expected = b"\0" + profile.encode("ascii") + b"\0"
-    if expected not in data:
-        raise ValidationError(f"firmware does not contain profile identity {profile}")
-    for other in PROFILE_CONTRACTS:
-        if other != profile and b"\0" + other.encode("ascii") + b"\0" in data:
+    identities: list[str] = []
+    for candidate in PROFILE_CONTRACTS:
+        marker = PROFILE_IDENTITY_PREFIX + candidate.encode("ascii") + b"\0"
+        count = data.count(marker)
+        if count > 1:
             raise ValidationError(
-                f"firmware contains conflicting profile identity {other}"
+                f"firmware contains duplicate profile identity {candidate}"
             )
+        if count == 1:
+            identities.append(candidate)
+    if not identities:
+        raise ValidationError(f"firmware does not contain profile identity {profile}")
+    if len(identities) != 1 or identities[0] != profile:
+        conflicts = [candidate for candidate in identities if candidate != profile]
+        conflict = conflicts[0] if conflicts else identities[0]
+        raise ValidationError(
+            f"firmware contains conflicting profile identity {conflict}"
+        )
     build = context["buildIdentity"].encode("ascii")
     if b"\0" + build + b"\0" not in data:
         raise ValidationError(

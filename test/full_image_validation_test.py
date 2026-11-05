@@ -6,6 +6,7 @@ from __future__ import annotations
 import json
 import os
 from pathlib import Path
+import struct
 import sys
 import tempfile
 import unittest
@@ -15,8 +16,10 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "scripts"))
 
 from full_image_validation import (  # noqa: E402
+    PROFILE_IDENTITY_PREFIX,
     PROFILE_CONTRACTS,
     ValidationError,
+    _require_identity_tokens,
     validate_component_set,
     validate_full_image,
 )
@@ -24,6 +27,34 @@ from full_image_validation import (  # noqa: E402
 
 BUILD_ROOT_VALUE = os.environ.get("VOXONE_FULL_IMAGE_BUILD_DIR", "")
 BUILD_ROOT = Path(BUILD_ROOT_VALUE).resolve() if BUILD_ROOT_VALUE else None
+
+
+class ProfileIdentityValidationTest(unittest.TestCase):
+    def context(self, profile: str = "M0") -> dict[str, str]:
+        return {"profile": profile, "buildIdentity": "98aa43f-dirty"}
+
+    def firmware_data(self, *profiles: str) -> bytearray:
+        data = bytearray(b"\0" + b"98aa43f-dirty" + b"\0")
+        for profile in profiles:
+            data.extend(PROFILE_IDENTITY_PREFIX + profile.encode("ascii") + b"\0")
+        return data
+
+    def test_l0_bytes_from_little_endian_pointer_are_not_a_profile(self) -> None:
+        data = bytearray(b"\xA5" * 291791)
+        data.extend(b"\0")
+        data.extend(struct.pack("<I", 0x4200304C))
+        self.assertEqual(data[291791:291795], b"\0L0\0")
+        data.extend(self.firmware_data("M0"))
+
+        _require_identity_tokens(bytes(data), self.context())
+
+    def test_real_m0_l0_profile_marker_conflict_is_rejected(self) -> None:
+        data = self.firmware_data("M0", "L0")
+
+        with self.assertRaisesRegex(
+            ValidationError, "conflicting profile identity L0"
+        ):
+            _require_identity_tokens(bytes(data), self.context())
 
 
 @unittest.skipUnless(BUILD_ROOT is not None, "integration build directory not provided")

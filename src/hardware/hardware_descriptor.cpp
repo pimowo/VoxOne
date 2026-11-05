@@ -4,6 +4,12 @@
 namespace voxone {
 namespace hardware {
 namespace {
+constexpr char kProfileIdentityPrefix[] = "VOXONE_PROFILE_IDENTITY:v1:";
+constexpr char kProfileIdentity[] =
+    "VOXONE_PROFILE_IDENTITY:v1:" VOXONE_PROFILE_NAME;
+constexpr unsigned kProfileIdentityPrefixLength =
+    sizeof(kProfileIdentityPrefix) - 1;
+
 #if defined(VOXONE_PROFILE_W0)
 constexpr BoardId kBoardId = BoardId::BoardW0;
 constexpr char kBoardFamily = 'W';
@@ -128,7 +134,10 @@ constexpr HardwareCapabilities kCapabilities = {
 #endif
 
 constexpr HardwareDescriptor kCurrent = {
-  {kBoardId, VOXONE_PROFILE_NAME, kBoardFamily, 0,
+  // Point into the retained, versioned image marker so runtime consumers keep
+  // seeing the short profile name while post-link validation gets an
+  // unambiguous profile identity tied to this descriptor.
+  {kBoardId, kProfileIdentity + kProfileIdentityPrefixLength, kBoardFamily, 0,
    VOXONE_PROFILE_MCU == Mcu::Esp32 ? McuFamily::Esp32 : McuFamily::Esp32S3,
    kFlashBytes, kPsramBytes},
   kDisplayKind,
