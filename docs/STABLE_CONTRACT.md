@@ -161,10 +161,13 @@ przez jawną allowlistę. Legacy komendy destrukcyjne `format`, `clearspiffs` i
 Kryterium P1 dla AsyncTCP OOM akceptuje deterministyczną iniekcję wszystkich
 ścieżek alokacji w testach offline pod ASan/UBSan oraz nieinwazyjny HIL L0.
 Nie wymaga fizycznego wymuszania OOM ani test-only fault-injection firmware na
-produkcyjnym urządzeniu. HIL nadal musi rzeczywiście potwierdzić `_lagging`,
-osobne zamknięcie przeciążonego klienta kodem 1013, disconnect/RST podczas
-broadcastu, reconnect z pełnym GETINDEX oraz stabilne READY, bootId i heap bez
-panic, WDT ani restartu. Do wykonania tego HIL wynik pozostaje PENDING.
+produkcyjnym urządzeniu. Historyczny closeout na L0 `4ef1e53` potwierdził TCP
+RST dla ówczesnej ścieżki `_lagging` oraz, oddzielnie, prawidłową ramkę CLOSE
+1013 globalnego overloadu; zachowuje PASS wyłącznie w tym zakresie. Bieżący
+checkpoint programowy kolejkuje per-client CLOSE 1013, czeka ograniczone 5 s
+na dostarczenie i handshake, a potem dopuszcza wymuszone zamknięcie TCP jako
+fail-safe. Ma SOFTWARE PASS, lecz fizyczny HIL musi jeszcze potwierdzić odbiór
+i odpowiedź peer dla tej nowej ramki; sam fallback TCP nie jest 1013 PASS.
 
 ## MQTT i Home Assistant
 

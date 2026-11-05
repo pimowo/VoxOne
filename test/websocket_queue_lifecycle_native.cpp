@@ -176,9 +176,7 @@ struct FakeAsyncClient {
 class LaggingCloseModel {
  public:
   explicit LaggingCloseModel(LifetimeCounters& counters)
-      : counters_(counters) {
-    client_.onClose = [this] { disconnect(); };
-  }
+      : counters_(counters) {}
 
   void enqueue() {
     std::lock_guard<std::mutex> lock(mutex_);
@@ -194,26 +192,64 @@ class LaggingCloseModel {
     queue_.push_back(message);
   }
 
-  void poll() {
-    FakeAsyncClient* clientToClose = nullptr;
-    {
-      std::lock_guard<std::mutex> lock(mutex_);
-      if (connected_ && lagging_) clientToClose = &client_;
+  void poll(bool transportWritable = true) {
+    std::lock_guard<std::mutex> lock(mutex_);
+    if (!connected_ || !lagging_) return;
+    if (!closeQueued_) {
+      closeQueued_ = true;
+      ++closeFramesQueued_;
+      closeFrame_ = {0x88, static_cast<uint8_t>(2 + reason().size()),
+                     static_cast<uint8_t>(kCloseCode >> 8),
+                     static_cast<uint8_t>(kCloseCode & 0xff)};
+      closeFrame_.insert(closeFrame_.end(), reason().begin(), reason().end());
     }
-    if (clientToClose) clientToClose->close(true);
+    if (transportWritable && !closeDelivered_) closeDelivered_ = true;
+  }
+
+  void peerConfirmsClose() {
+    std::lock_guard<std::mutex> lock(mutex_);
+    assert(closeDelivered_);
+    assert(receivedCloseCode() == kCloseCode);
+    assert(receivedCloseReason() == reason());
+    peerConfirmed_ = true;
+    disconnectLocked();
+  }
+
+  void timeout() {
+    std::lock_guard<std::mutex> lock(mutex_);
+    if (!connected_) return;
+    ++forcedCloseCalls_;
+    disconnectLocked();
   }
 
   bool lagging() const { return lagging_; }
   size_t queued() const { return queue_.size(); }
   size_t laggingReports() const { return laggingReports_; }
-  size_t closeCalls() const { return client_.closeCalls; }
-  bool forcedClose() const { return client_.lastForce; }
+  size_t closeFramesQueued() const { return closeFramesQueued_; }
+  bool closeDelivered() const { return closeDelivered_; }
+  bool peerConfirmed() const { return peerConfirmed_; }
+  size_t forcedCloseCalls() const { return forcedCloseCalls_; }
+
+  uint16_t receivedCloseCode() const {
+    assert(closeFrame_.size() >= 4);
+    return static_cast<uint16_t>((closeFrame_[2] << 8) | closeFrame_[3]);
+  }
+
+  std::string receivedCloseReason() const {
+    assert(closeFrame_.size() >= 4);
+    return std::string(closeFrame_.begin() + 4, closeFrame_.end());
+  }
 
   static constexpr size_t kHighWater = 32;
+  static constexpr uint16_t kCloseCode = 1013;
 
  private:
-  void disconnect() {
-    std::lock_guard<std::mutex> lock(mutex_);
+  static const std::string& reason() {
+    static const std::string value = "Server busy; reconnect";
+    return value;
+  }
+
+  void disconnectLocked() {
     connected_ = false;
     while (!queue_.empty()) {
       delete queue_.front();
@@ -224,10 +260,15 @@ class LaggingCloseModel {
   LifetimeCounters& counters_;
   mutable std::mutex mutex_;
   std::deque<Message*> queue_;
-  FakeAsyncClient client_;
+  std::deque<uint8_t> closeFrame_;
   bool connected_ = true;
   bool lagging_ = false;
+  bool closeQueued_ = false;
+  bool closeDelivered_ = false;
+  bool peerConfirmed_ = false;
   size_t laggingReports_ = 0;
+  size_t closeFramesQueued_ = 0;
+  size_t forcedCloseCalls_ = 0;
 };
 
 class TimeoutCloseModel {
@@ -275,7 +316,7 @@ class TimeoutCloseModel {
   bool connected_ = true;
 };
 
-void testLaggingClientIsClosedOnceAndMessagesAreReleased() {
+void testLaggingClientQueuesOne1013AndWaitsForPeerConfirmation() {
   LifetimeCounters counters;
   LaggingCloseModel client(counters);
 
@@ -292,14 +333,48 @@ void testLaggingClientIsClosedOnceAndMessagesAreReleased() {
   assert(counters.created.load() == LaggingCloseModel::kHighWater + 2);
   assert(counters.destroyed.load() == 2);
 
-  client.poll();
-  assert(client.closeCalls() == 1);
-  assert(client.forcedClose());
-  assert(client.queued() == 0);
-  assert(counters.destroyed.load() == counters.created.load());
+  client.poll(false);
+  assert(client.closeFramesQueued() == 1);
+  assert(!client.closeDelivered());
+  assert(!client.peerConfirmed());
+  assert(client.forcedCloseCalls() == 0);
+  assert(client.queued() == LaggingCloseModel::kHighWater);
+
+  client.enqueue();
+  assert(client.queued() == LaggingCloseModel::kHighWater);
+  assert(client.closeFramesQueued() == 1);
+  assert(counters.destroyed.load() == 3);
 
   client.poll();
-  assert(client.closeCalls() == 1);
+  client.poll();
+  assert(client.closeFramesQueued() == 1);
+  assert(client.closeDelivered());
+  assert(client.receivedCloseCode() == 1013);
+  assert(client.receivedCloseReason() == "Server busy; reconnect");
+  assert(client.queued() == LaggingCloseModel::kHighWater);
+
+  client.peerConfirmsClose();
+  assert(client.peerConfirmed());
+  assert(client.forcedCloseCalls() == 0);
+  assert(client.queued() == 0);
+  assert(counters.destroyed.load() == counters.created.load());
+}
+
+void testLaggingTimeoutDoesNotMasqueradeAsConfirmed1013() {
+  LifetimeCounters counters;
+  LaggingCloseModel client(counters);
+  for (size_t index = 0; index < LaggingCloseModel::kHighWater + 1; ++index)
+    client.enqueue();
+
+  client.poll(false);
+  assert(client.closeFramesQueued() == 1);
+  assert(!client.closeDelivered());
+  assert(!client.peerConfirmed());
+  client.timeout();
+  assert(client.forcedCloseCalls() == 1);
+  assert(!client.peerConfirmed());
+  assert(client.queued() == 0);
+  assert(counters.destroyed.load() == counters.created.load());
 }
 
 void testTimeoutClosesOnceAndReleasesQueuedMessages() {
@@ -487,7 +562,7 @@ void testProductionControlSendIsIdempotent() {
   assert(guard < markSent && markSent < write);
 }
 
-void testProductionLaggingCloseIsTcpOnly() {
+void testProductionLaggingCloseUsesProtocol1013Once() {
   const std::string header =
       readFile("src/AsyncWebServer/AsyncWebSocket.h");
   const std::string source =
@@ -505,9 +580,19 @@ void testProductionLaggingCloseIsTcpOnly() {
          std::string::npos);
   assert(enqueue.find("_lagging = true") != std::string::npos);
   assert(enqueue.find("delete dataMessage") != std::string::npos);
-  assert(poll.find("if(_lagging)") != std::string::npos);
-  assert(poll.find("clientToClose->close(true)") != std::string::npos);
-  assert(poll.find("1013") == std::string::npos);
+  assert(poll.find("if(_lagging && !_laggingCloseQueued)") !=
+         std::string::npos);
+  assert(header.find("bool _laggingCloseQueued;") != std::string::npos);
+  assert(header.find("uint32_t _laggingCloseQueuedAt;") != std::string::npos);
+  assert(poll.find("!_laggingCloseQueued") != std::string::npos);
+  assert(poll.find("_laggingCloseQueued = true") != std::string::npos);
+  assert(poll.find("close(1013, \"Server busy; reconnect\")") !=
+         std::string::npos);
+  const size_t protocolClose =
+      poll.find("close(1013, \"Server busy; reconnect\")");
+  const size_t grace = poll.find("AWSC_LAGGING_CLOSE_GRACE_MS");
+  const size_t tcpFallback = poll.find("clientToClose->close(true)");
+  assert(protocolClose < grace && grace < tcpFallback);
 }
 
 }  // namespace
@@ -516,12 +601,13 @@ int main() {
   testProductionQueueSynchronizationContract();
   testUnserializedRemovalScheduleHasTwoOwners();
   testAckEnqueueAndDisconnectHaveSingleOwnership();
-  testLaggingClientIsClosedOnceAndMessagesAreReleased();
+  testLaggingClientQueuesOne1013AndWaitsForPeerConfirmation();
+  testLaggingTimeoutDoesNotMasqueradeAsConfirmed1013();
   testTimeoutClosesOnceAndReleasesQueuedMessages();
   testLegacyDuplicatePongPoisonsFollowingMessageAck();
   testControlFrameIsSentOnceBeforeFollowingMessage();
   testProductionControlSendIsIdempotent();
-  testProductionLaggingCloseIsTcpOnly();
+  testProductionLaggingCloseUsesProtocol1013Once();
   std::puts("PASS websocket_queue_lifecycle_native");
   return 0;
 }

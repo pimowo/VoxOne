@@ -475,6 +475,7 @@ AsyncWebSocketMultiMessage::~AsyncWebSocketMultiMessage() {
  */
  const char * AWSC_PING_PAYLOAD = "ESPAsyncWebServer-PING";
  const size_t AWSC_PING_PAYLOAD_LEN = 22;
+ const uint32_t AWSC_LAGGING_CLOSE_GRACE_MS = 5000;
 
 AsyncWebSocketClient::AsyncWebSocketClient(AsyncWebServerRequest *request, AsyncWebSocket *server)
   : _controlQueue(LinkedList<AsyncWebSocketControl *>([](AsyncWebSocketControl *c){ delete  c; }))
@@ -489,6 +490,8 @@ AsyncWebSocketClient::AsyncWebSocketClient(AsyncWebServerRequest *request, Async
   _lastMessageTime = millis();
   _keepAlivePeriod = 0;
   _lagging = false;
+  _laggingCloseQueued = false;
+  _laggingCloseQueuedAt = 0;
   _client->setRxTimeout(0);
   _client->onError([](void *r, AsyncClient* c, int8_t error){ (void)c; ((AsyncWebSocketClient*)(r))->_onError(error); }, this);
   _client->onAck([](void *r, AsyncClient* c, size_t len, uint32_t time){ (void)c; ((AsyncWebSocketClient*)(r))->_onAck(len, time); }, this);
@@ -562,7 +565,11 @@ void AsyncWebSocketClient::_onPoll(){
     AsyncWebLockGuard guard(_queueLock);
     if(!_client)
       return;
-    if(_lagging){
+    if(_lagging && !_laggingCloseQueued){
+      _laggingCloseQueued = true;
+      _laggingCloseQueuedAt = millis();
+      close(1013, "Server busy; reconnect");
+    } else if(_lagging && static_cast<uint32_t>(millis() - _laggingCloseQueuedAt) >= AWSC_LAGGING_CLOSE_GRACE_MS){
       clientToClose = _client;
     } else if(_client->canSend() && (!_controlQueue.isEmpty() || !_messageQueue.isEmpty())){
       _runQueue();
@@ -570,6 +577,9 @@ void AsyncWebSocketClient::_onPoll(){
       ping((uint8_t *)AWSC_PING_PAYLOAD, AWSC_PING_PAYLOAD_LEN);
     }
   }
+  // The peer gets a bounded opportunity to complete the WebSocket close
+  // handshake.  If TCP backpressure prevents that, release the connection
+  // without claiming that code 1013 was delivered.
   if(clientToClose){
     clientToClose->close(true);
   }
