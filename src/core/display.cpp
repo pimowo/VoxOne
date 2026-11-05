@@ -32,6 +32,7 @@
 #include "../displays/conf/player128x32conf.h"
 #include "../displays/oled128x32_player.h"
 #include "../displays/oled128x64_layout.h"
+#include "../displays/fonts/voxone_boot_logo_oled_128x32.h"
 #include "../displays/fonts/voxone_boot_logo_oled_128x64.h"
 #endif
 #if VOXONE_DISPLAY_PROFILE == VOXONE_DISPLAY_PROFILE_ST7789_284X76
@@ -195,6 +196,29 @@ class Oled128x64StartupLogoWidget : public Widget {
   }
 };
 
+class Oled128x32StartupLogoWidget : public Widget {
+ public:
+  Oled128x32StartupLogoWidget() {
+    Widget::init({voxone::oled128x32::kStartupLogo.left,
+                  voxone::oled128x32::kStartupLogo.top,
+                  0, WA_LEFT}, WHITE, BLACK);
+  }
+
+  void loop() override { _draw(); }
+
+ private:
+  void _draw() override {
+    if (!_active) return;
+    using namespace voxone::display_boot_branding::oled32;
+    dsp.fillRect(voxone::oled128x32::kStartupLogoBand.left,
+                 voxone::oled128x32::kStartupLogoBand.top,
+                 voxone::oled128x32::kStartupLogoBand.width,
+                 voxone::oled128x32::kStartupLogoBand.height, BLACK);
+    dsp.drawBitmap(kBootLogoLeft, kBootLogoTop, kBootLogoBitmap,
+                   kBootLogoWidth, kBootLogoHeight, WHITE);
+  }
+};
+
 class Oled128x32PlayerStatusWidget : public Widget {
  public:
   Oled128x32PlayerStatusWidget() {
@@ -217,6 +241,7 @@ class Oled128x32PlayerStatusWidget : public Widget {
   DisplaySourceKind source_ = DisplaySourceKind::Radio;
   uint8_t volume_ = 255;
   bool muted_ = false;
+  bool btConnected_ = false;
   bool wifiConnected_ = false;
   uint8_t wifiBars_ = 255;
   int rssi_ = -127;
@@ -233,24 +258,36 @@ class Oled128x32PlayerStatusWidget : public Widget {
     if (!force && drawn_ && playback_ == view.playback &&
         source_ == view.source &&
         volume_ == view.userVolume && muted_ == view.muted &&
+        btConnected_ == view.btConnected &&
         wifiConnected_ == wifiConnected && wifiBars_ == wifiBars) return;
 
     dsp.fillRect(0, voxone::oled128x32::kPlayerStatus.top,
                  voxone::oled128x32::kPlayerStatus.width,
                  voxone::oled128x32::kPlayerStatus.height, BLACK);
 
-    if (voxone::oled128x32::playbackIcon(
-            view.playback == DisplayPlaybackState::Playing) ==
-        voxone::oled128x32::PlaybackIcon::Play) {
-      dsp.fillTriangle(voxone::oled128x32::kPlayerPlayLeft,
-                       voxone::oled128x32::kPlayerPlayTop,
-                       voxone::oled128x32::kPlayerPlayLeft,
-                       voxone::oled128x32::kPlayerPlayBottom,
-                       voxone::oled128x32::kPlayerPlayRight,
-                       voxone::oled128x32::kPlayerPlayTipY, WHITE);
-    } else {
-      const auto stop = voxone::oled128x32::kPlayerStop;
-      dsp.fillRect(stop.left, stop.top, stop.width, stop.height, WHITE);
+    switch (voxone::oled128x32::playbackIcon(
+        view.playback == DisplayPlaybackState::Playing,
+        view.playback == DisplayPlaybackState::Paused,
+        view.playback == DisplayPlaybackState::Stopped)) {
+      case voxone::oled128x32::PlaybackIcon::Play:
+        dsp.fillTriangle(voxone::oled128x32::kPlayerPlayLeft,
+                         voxone::oled128x32::kPlayerPlayTop,
+                         voxone::oled128x32::kPlayerPlayLeft,
+                         voxone::oled128x32::kPlayerPlayBottom,
+                         voxone::oled128x32::kPlayerPlayRight,
+                         voxone::oled128x32::kPlayerPlayTipY, WHITE);
+        break;
+      case voxone::oled128x32::PlaybackIcon::Pause:
+        dsp.fillRect(1, 24, 2, 8, WHITE);
+        dsp.fillRect(5, 24, 2, 8, WHITE);
+        break;
+      case voxone::oled128x32::PlaybackIcon::Stop: {
+        const auto stop = voxone::oled128x32::kPlayerStop;
+        dsp.fillRect(stop.left, stop.top, stop.width, stop.height, WHITE);
+        break;
+      }
+      case voxone::oled128x32::PlaybackIcon::None:
+        break;
     }
 
     char source[9];
@@ -259,7 +296,8 @@ class Oled128x32PlayerStatusWidget : public Widget {
     dsp.setFont();
     dsp.setTextColor(WHITE, BLACK);
     dsp.setTextSize(1);
-    dsp.setCursor(voxone::oled128x32::kPlayerSource.left,
+    dsp.setCursor(voxone::oled128x32::centeredTextLeft(
+                      voxone::oled128x32::kPlayerSource, strlen(source)),
                   voxone::oled128x32::kPlayerSource.top);
     dsp.print(source);
 
@@ -268,22 +306,32 @@ class Oled128x32PlayerStatusWidget : public Widget {
                                      view.muted);
     const uint8_t shownVolume = voxone::oled128x32::displayVolume(
         view.userVolume);
-    const uint16_t volumeLeft = voxone::oled128x32::playerVolumeContentLeft(
+    const uint16_t volumeLeft = voxone::oled128x32::playerVolumeTextLeft(
         shownVolume, view.muted);
     const uint16_t top = voxone::oled128x32::kPlayerStatus.top;
-    dsp.fillRect(volumeLeft, top + 2, 2, 4, WHITE);
-    dsp.fillTriangle(volumeLeft + 1, top + 2, volumeLeft + 6, top,
-                     volumeLeft + 6, top + 7, WHITE);
-    dsp.fillTriangle(volumeLeft + 1, top + 2, volumeLeft + 1, top + 5,
-                     volumeLeft + 6, top + 7, WHITE);
+    const uint16_t speakerLeft = voxone::oled128x32::kPlayerSpeaker.left;
+    dsp.fillRect(speakerLeft, top + 2, 2, 4, WHITE);
+    dsp.fillTriangle(speakerLeft + 1, top + 2, speakerLeft + 6, top,
+                     speakerLeft + 6, top + 7, WHITE);
+    dsp.fillTriangle(speakerLeft + 1, top + 2, speakerLeft + 1, top + 5,
+                     speakerLeft + 6, top + 7, WHITE);
     if (view.muted) {
-      dsp.drawLine(volumeLeft + 4, top + 1, volumeLeft + 6, top + 6, BLACK);
-      dsp.drawLine(volumeLeft + 6, top + 1, volumeLeft + 4, top + 6, BLACK);
+      dsp.drawLine(speakerLeft + 4, top + 1, speakerLeft + 6, top + 6,
+                   BLACK);
+      dsp.drawLine(speakerLeft + 6, top + 1, speakerLeft + 4, top + 6,
+                   BLACK);
     }
-    dsp.setCursor(volumeLeft + voxone::oled128x32::kPlayerSpeakerWidth +
-                      voxone::oled128x32::kPlayerVolumeGap,
-                  top);
+    dsp.setCursor(volumeLeft, top);
     dsp.print(level);
+
+    if (voxone::oled128x32::bluetoothVisible(view.btConnected)) {
+      const uint16_t volumeRight = volumeLeft +
+          voxone::oled128x32::playerVolumeTextWidth(shownVolume, view.muted);
+      const uint16_t btLeft =
+          voxone::oled128x32::playerBluetoothTextLeft(volumeRight);
+      dsp.setCursor(btLeft, voxone::oled128x32::kPlayerBluetoothBand.top);
+      dsp.print("BT");
+    }
 
     if (wifiConnected) {
       for (uint8_t i = 0; i < wifiBars; ++i) {
@@ -304,6 +352,7 @@ class Oled128x32PlayerStatusWidget : public Widget {
     source_ = view.source;
     volume_ = view.userVolume;
     muted_ = view.muted;
+    btConnected_ = view.btConnected;
     wifiConnected_ = wifiConnected;
     wifiBars_ = wifiBars;
   }
@@ -1096,13 +1145,16 @@ void Display::_bootScreen(){
   _boot = new Page();
 #if VOXONE_DISPLAY_COMPILES_SMALL_OLED
   if (smallOledActive() && oled128x32Active()) {
-    TextWidget* title = new TextWidget(startup128x32::title, 16, WHITE, BLACK);
-    title->setText("VoxOne");
-    _boot->addWidget(title);
     _boot->addWidget(new ProgressWidget(startup128x32::progress, bootPrgConf,
                                         WHITE, BLACK));
+    // Page::loop() preserves insertion order: repaint the logo after every
+    // animation update so the y=0..15 band remains visible for every frame.
+    _boot->addWidget(new Oled128x32StartupLogoWidget());
     _bootstring = (TextWidget*) &_boot->addWidget(new TextWidget(
         startup128x32::ssid, startup128x32::ssidBufferSize, WHITE, BLACK));
+    char ssid[startup128x32::ssidBufferSize];
+    voxone::oled128x32::formatStartupSsid(ssid, sizeof(ssid), "");
+    _bootstring->setText(ssid);
   } else if (smallOledActive()) {
     _boot->addWidget(new Oled128x64StartupLogoWidget());
     _boot->addWidget(new ProgressWidget(startup128x64::progress,
@@ -1132,7 +1184,9 @@ void Display::_buildPager(){
 #if VOXONE_DISPLAY_COMPILES_SMALL_OLED
   if (smallOledActive() && oled128x32Active()) {
     _meta->init("*", player128x32::station, WHITE, BLACK);
-    _title1->init("*", player128x32::hiddenMetadata, WHITE, BLACK);
+    _meta->setTextScale(voxone::oled128x32::kStationScaleX,
+                        voxone::oled128x32::kStationScaleY);
+    _title1->init("*", player128x32::artist, WHITE, BLACK);
   } else if (smallOledActive()) {
     _meta->init("*", player128x64::station, WHITE, BLACK);
     _title1->init("*", player128x64::artist, WHITE, BLACK);
@@ -1314,8 +1368,7 @@ void Display::_buildPager(){
     pages[PG_PLAYER]->addWidget(_metabackground);
   pages[PG_PLAYER]->addWidget(_meta);
 #endif
-  if (!smallOledActive() || !oled128x32Active())
-    pages[PG_PLAYER]->addWidget(_title1);
+  pages[PG_PLAYER]->addWidget(_title1);
   if(_title2) pages[PG_PLAYER]->addWidget(_title2);
 #if VOXONE_DISPLAY_PROFILE == VOXONE_DISPLAY_PROFILE_ST7796_480X320
   if (!smallOledActive())
@@ -1968,8 +2021,8 @@ void Display::_renderMode(displayMode_e newmode) {
       char level[5];
       voxone::oled128x32::formatVolumePercent(
           level, sizeof(level), view.userVolume, view.muted);
-      _showDialog(level);
-      _nums->setText("");
+      _showDialog("");
+      _nums->setText(level);
     } else
 #endif
     {
@@ -2211,8 +2264,7 @@ void Display::_playerScrollBind() {
   if (_meta) rows[count++] = playerScrollBinding(_meta);
 #endif
 #if VOXONE_DISPLAY_COMPILES_SMALL_OLED
-  if (_title1 && (!smallOledActive() || !oled128x32Active()))
-    rows[count++] = playerScrollBinding(_title1);
+  if (_title1) rows[count++] = playerScrollBinding(_title1);
 #else
   if (_title1) rows[count++] = playerScrollBinding(_title1);
 #endif
@@ -2370,6 +2422,11 @@ void Display::loop() {
               voxone::oled128x64::formatStartupSsid(
                   ssid, sizeof(ssid), config.ssids[request.payload].ssid);
               _bootstring->setText(ssid);
+            } else if (smallOledActive() && oled128x32Active()) {
+              char ssid[startup128x32::ssidBufferSize];
+              voxone::oled128x32::formatStartupSsid(
+                  ssid, sizeof(ssid), config.ssids[request.payload].ssid);
+              _bootstring->setText(ssid);
             } else if (smallOledActive())
               _bootstring->setText(config.ssids[request.payload].ssid);
             else
@@ -2507,8 +2564,18 @@ void Display::_title() {
 #endif
   PlayerDisplayView view{};
   capturePlayerDisplayView(view, WiFi.RSSI());
-  _title1->setText(view.artist);
-  if (_title2) _title2->setText(view.title);
+#if VOXONE_DISPLAY_COMPILES_SMALL_OLED
+  if (smallOledActive() && oled128x32Active()) {
+    char metadata[voxone::oled128x32::kMetadataBufferSize];
+    voxone::oled128x32::formatMetadata(
+        metadata, sizeof(metadata), view.artist, view.title);
+    _title1->setText(metadata);
+  } else
+#endif
+  {
+    _title1->setText(view.artist);
+    if (_title2) _title2->setText(view.title);
+  }
 #if VOXONE_DISPLAY_COMPILES_SMALL_OLED
   if (smallOledActive() && !oled128x32Active() &&
       view.source == DisplaySourceKind::Bluetooth &&
@@ -2619,8 +2686,8 @@ void Display::_volume() {
       char level[5];
       voxone::oled128x32::formatVolumePercent(
           level, sizeof(level), view.userVolume, view.muted);
-      _meta->setText(level);
-      _nums->setText("");
+      _meta->setText("");
+      _nums->setText(level);
     } else
 #endif
     {

@@ -6,8 +6,8 @@
 #include "../widgets/widgetsconfig.h"
 
 namespace startup128x32 {
-constexpr WidgetConfig title = {0, 0, 1, WA_CENTER};
-constexpr WidgetConfig progress = {0, 9, 1, WA_CENTER};
+constexpr WidgetConfig title = {0, 4, 1, WA_CENTER};
+constexpr WidgetConfig progress = {0, 16, 1, WA_CENTER};
 constexpr WidgetConfig ssid = {0, 24, 1, WA_CENTER};
 constexpr uint16_t ssidBufferSize = 22;
 }
@@ -20,14 +20,14 @@ constexpr ScrollConfig footer = {{0, 24, 1, WA_CENTER}, 140, 128, 0, 2, 15};
 }
 
 namespace player128x32 {
-constexpr ScrollConfig station = {{0, voxone::oled128x32::kPlayerStation.top,
-                                    2, WA_LEFT}, 140,
-                                   voxone::oled128x32::kPlayerStation.width,
+constexpr ScrollConfig station = {{0, voxone::oled128x32::kPlayerStationText.top,
+                                    1, WA_LEFT}, 140,
+                                   voxone::oled128x32::kPlayerStationText.width,
                                    5000, 2, 35};
-// Kept initialized because the shared Display owns this widget, but it is not
-// attached to the compact PLAYER page.
-constexpr ScrollConfig hiddenMetadata = {{0, 0, 1, WA_LEFT}, 140, 128,
-                                         5000, 2, 35};
+constexpr ScrollConfig artist = {{0, voxone::oled128x32::kPlayerArtist.top,
+                                   1, WA_LEFT}, 140,
+                                  voxone::oled128x32::kPlayerArtist.width,
+                                  5000, 2, 35};
 constexpr WidgetConfig volumeNumber = {
     0, voxone::oled128x32::kVolumePrimary.top, 2, WA_CENTER};
 constexpr WidgetConfig volumeIp = {

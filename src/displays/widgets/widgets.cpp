@@ -126,6 +126,8 @@ ScrollWidget::~ScrollWidget() {
 
 void ScrollWidget::init(const char* separator, ScrollConfig conf, uint16_t fgcolor, uint16_t bgcolor) {
   TextWidget::init(conf.widget, conf.buffsize, fgcolor, bgcolor);
+  _textScaleX = _config.textsize;
+  _textScaleY = _config.textsize;
   _sep = (char *) malloc(sizeof(char) * 4);
   memset(_sep, 0, 4);
   snprintf(_sep, 4, " %.*s ", 1, separator);
@@ -148,15 +150,26 @@ void ScrollWidget::init(const char* separator, ScrollConfig conf, uint16_t fgcol
   #endif
 }
 
+void ScrollWidget::setTextScale(uint8_t scaleX, uint8_t scaleY) {
+  if (scaleX == 0 || scaleY == 0) return;
+  _textScaleX = scaleX;
+  _textScaleY = scaleY;
+  _charWidth = static_cast<uint8_t>(CHARWIDTH * scaleX);
+  _textheight = static_cast<uint16_t>(CHARHEIGHT * scaleY);
+  _sepwidth = strlen(_sep) * _charWidth;
+  _textwidth = strlen(_text) * _charWidth;
+  _doscroll = _checkIsScrollNeeded();
+}
+
 void ScrollWidget::_setTextParams() {
   if (_config.textsize == 0) return;
   if(_frameBufferReady()){
   #ifdef PSFBUFFER
-    _fb->setTextSize(_config.textsize);
+    _fb->setTextSize(_textScaleX, _textScaleY);
     _fb->setTextColor(_fgcolor, _bgcolor);
   #endif
   }else{
-    dsp.setTextSize(_config.textsize);
+    dsp.setTextSize(_textScaleX, _textScaleY);
     dsp.setTextColor(_fgcolor, _bgcolor);
   }
 }

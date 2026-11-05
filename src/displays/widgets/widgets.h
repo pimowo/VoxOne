@@ -104,6 +104,7 @@ class ScrollWidget: public TextWidget {
     void loop();
     void setText(const char* txt);
     void setText(const char* txt, const char *format);
+    void setTextScale(uint8_t scaleX, uint8_t scaleY);
     bool scrollNeeded() const { return _doscroll; }
     voxone::display_scroll::PlayerScrollRowMetrics coreScrollMetrics() const;
     void setCoreControlled(bool enabled);
@@ -132,6 +133,8 @@ class ScrollWidget: public TextWidget {
     uint32_t _scrolldelay;
     uint16_t _sepwidth, _startscrolldelay;
     uint8_t _charWidth;
+    uint8_t _textScaleX = 1;
+    uint8_t _textScaleY = 1;
     psFrameBuffer* _fb=nullptr;
     bool _coreControlled = false;
     uint32_t _contentRevision = 0;
