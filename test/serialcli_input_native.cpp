@@ -187,12 +187,12 @@ void testUartAndVolumeSessionContractsRemainSeparate() {
   assert(link.find("serial_(1)") != std::string::npos);
   assert(l0Profile.find("VOXONE_BT_UART_RX_PIN 15") != std::string::npos);
   assert(l0Profile.find("VOXONE_BT_UART_TX_PIN 16") != std::string::npos);
-  assert(s0Profile.find("VOXONE_BT_UART_RX_PIN 44") != std::string::npos);
-  assert(s0Profile.find("VOXONE_BT_UART_TX_PIN 43") != std::string::npos);
-  assert(s0Profile.find("VOXONE_BT_I2S_BCLK_PIN 11") !=
+  assert(s0Profile.find("VOXONE_BT_UART_RX_PIN 10") != std::string::npos);
+  assert(s0Profile.find("VOXONE_BT_UART_TX_PIN 11") != std::string::npos);
+  assert(s0Profile.find("VOXONE_BT_I2S_BCLK_PIN 12") !=
          std::string::npos);
-  assert(s0Profile.find("VOXONE_BT_I2S_WS_PIN 12") != std::string::npos);
-  assert(s0Profile.find("VOXONE_BT_I2S_DATA_PIN 13") !=
+  assert(s0Profile.find("VOXONE_BT_I2S_WS_PIN 13") != std::string::npos);
+  assert(s0Profile.find("VOXONE_BT_I2S_DATA_PIN 14") !=
          std::string::npos);
   assert(protocol.find("VOL_SESSION_BEGIN") != std::string::npos);
   assert(protocol.find("VOL_LOCAL_ACK") != std::string::npos);

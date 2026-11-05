@@ -16,15 +16,12 @@ Stable. Wszystkie wcześniejsze wyniki tych profili pozostają historycznymi
 dowodami w dokładnie zapisanym zakresie.
 
 S0 docelowo używa ESP32-S3 Zero 4 MiB Flash / 2 MiB PSRAM i VoxOneBT.
-Checkpoint P1 `RC1-S0-BT-IMPLEMENT-1` włącza tę capability, a rewizja
-pinoutu P2 dostosowuje rzeczywiste okablowanie laptopowe do UART1 RX44/TX43
-i I2S1 RX BCLK11/WS12/DATA13. Aplikacyjne logi S0 są kierowane przez
-natywne USB CDC; GPIO3 i GPIO10 pozostają niezaimplementowanymi rezerwami.
-`RC1-S0-BT-PINOUT-REVISION-1` ma software PASS: pełny verify, ASan/UBSan,
-strict transport, obrazy S0/L0 i full-image przeszły. Fizyczny HIL S0
-dokładnego czystego kandydata nadal jest wymagany; cold boot musi pasywnie
-potwierdzić, że log ROM 115200 na GPIO43 nie jest interpretowany przez
-VoxOneBT 921600 jako polecenie. VU pozostaje na S0 wyłączone,
+`RC1-S0-BT-IMPLEMENT-1` ma **SOFTWARE PASS / PHYSICAL HIL PENDING**.
+Zatwierdzony pinout rzeczywistego okablowania to UART1 RX10/TX11 i I2S1 RX
+BCLK12/WS13/DATA14. Implementacja korzysta ze wspólnego CORE
+SourceManager/BtLink/BtAudioInput, a aplikacyjne logi S0 nadal są kierowane
+przez natywne USB CDC. Fizyczny HIL S0 dokładnego czystego kandydata nadal
+jest wymagany. VU pozostaje na S0 wyłączone,
 a aktualizacja VoxOneBT ma używać osobnego USB — MAIN→BT update pozostaje
 wyłączone. L0 zachowuje istniejącą PCB V-Tom, hardware, capability i mapę
 GPIO. Poza niezbędną obsługą VoxOneBT na S0 oraz poprawkami krytycznymi nowe
@@ -64,7 +61,7 @@ nie są przepisywane jako pełny PASS.
 | 2 | `RC1-PROFILE-L0` | OPEN / PARTIAL | Zachowane PASS obejmują RADIO, A2DP/AVRCP, SourceManager oraz TTS A/B/C/D w potwierdzonych zakresach; pełny HIL dokładnego zamrożonego kandydata i pozostałe wymagania profilu są otwarte. |
 | 3 | `RC1-RADIO-ENDURANCE` | **CLOSED** | Terminalny endurance oraz wymagane dowody transportu spełniają wspólną bramkę; zakres profilowy S0/L0 pozostaje w bramkach 1 i 2. |
 | 4 | `RC1-BT-LIFECYCLE` | OPEN / PARTIAL | L0 ma etapowe A2DP/AVRCP i fizyczne audio; pełny lifecycle zamrożonego L0 oraz cały S0+BT pozostają otwarte. |
-| 5 | `RC1-SOURCE-MANAGER` | OPEN / PARTIAL | RADIO ↔ BT, intencje PLAY/STOP, disconnect/reconnect i runtime-loss mają etapowe PASS na L0; terminalna stabilność kandydata oraz S0 pozostają otwarte. |
+| 5 | `RC1-SOURCE-MANAGER` | OPEN / PARTIAL | RADIO ↔ BT, intencje PLAY/STOP, disconnect/reconnect i runtime-loss mają etapowe PASS na L0. Disconnect/runtime-loss wybiera RADIO; zapisany intent PLAY może wznowić stację, a STOP pozostaje STOP bez autoplay. Terminalna stabilność kandydata oraz S0 pozostają otwarte. |
 | 6 | `RC1-TTS-RESTORE` | OPEN / PARTIAL | Scenariusz D na L0 ma fizyczny PASS: pełne 3648044 B, timeout/transport error +0, natural EOF +1, cleanup +1 i `natural_eof`. A/B/C mają fizyczny PASS obserwowalnych kontraktów na `bf1d147` z nowymi deterministycznymi fixture; historyczny PASS na `fbbdfbc` pozostaje odrębny. Wewnętrzny licznik cleanup dla A/B/C jest UNVERIFIED; HIL S0 i pozostałe wymagania bramki pozostają otwarte. |
 | 7 | `RC1-UPDATE` | OPEN / PARTIAL | MAIN-only OTA ma dodatnie wyniki, lecz pełna macierz MAIN/SPIFFS, przerwań i wymaganych profili S0/L0 nie jest zamknięta. S0 aktualizuje VoxOneBT wyłącznie przez jego USB. |
 | 8 | `RC1-RECOVERY` | OPEN / PARTIAL | Software i wybrane HIL mają PASS; negatywne, power-loss oraz wymagane profile S0/L0 pozostają otwarte. |
@@ -96,19 +93,22 @@ Raporty: `reports/VOXONE-L0-RC-CANDIDATE-PREP-1.md` i
 
 `RC1-S0-BT-IMPLEMENT-1` ma **SOFTWARE PASS / PHYSICAL HIL PENDING**.
 Pierwotny zweryfikowany przebieg pochodził z dirty worktree bazującego na
-`8ff87067f40610b851fc4491557a4c2c59df2908`; nie jest release identity.
-Checkpoint S0 aktywuje VoxOneBT protocol 2, BtLink, BtAudioInput i SourceManager na
-zatwierdzonym UART1/I2S1, zachowuje I2S0/OLED/EC11 i nie kompiluje stagingu
-ani tras MAIN→BT update. Jednorazowa, idempotentna migracja Config v7 używa
+`8ff87067f40610b851fc4491557a4c2c59df2908`; nie jest release identity ani
+atestacją bieżącego pinoutu. Checkpoint S0 aktywuje VoxOneBT protocol 2,
+BtLink, BtAudioInput i SourceManager, zachowuje I2S0/OLED/EC11 i nie kompiluje
+stagingu ani tras MAIN→BT update. Jednorazowa, idempotentna migracja Config v7 używa
 odrębnego markera NVS bez zmiany formatu binarnego; po migracji świadome
 wyłączenie i VXCF restore pozostają skuteczne. Pełny `tools/verify.ps1` ma
 PASS: 160 native, strict transport 16/16, ASan/UBSan, pięć standardowych
 buildów, pełne obrazy i negatywna walidacja. S0 `firmware.bin` zajmuje
 1685568/1966080 B i ma SHA-256
 `c0653f941eb1da4c1bdff6306736a0b7b21f55bec0b9abc88b30c813482bb20d`.
-Hash powyżej dokumentuje wyłącznie wcześniejszy dirty build. Kandydat nie
-został wdrożony; rzeczywiste PSRAM, PCM/mono, GPIO, UART protocol 2, UI i
-migracja NVS wymagają fizycznego HIL dokładnego czystego artefaktu.
+Hash powyżej dokumentuje wyłącznie wcześniejszy dirty build. Bieżący pinout
+UART1 RX10/TX11 i I2S1 RX BCLK12/WS13/DATA14 ma celowane PASS: 21 uruchomień
+native, 3 uruchomienia ASan/UBSan, strict transport 16/16, buildy S0 i L0
+oraz `git diff --check`. Kandydat nie został wdrożony; rzeczywiste PSRAM,
+PCM/mono, GPIO, UART protocol 2, UI i migracja NVS wymagają fizycznego HIL
+dokładnego czystego artefaktu.
 
 Poprzedni zachowany czysty checkpoint to
 `3bad2c3d27c24888d2731510cf330f866bef4ac3`, oznaczony tagiem
@@ -292,8 +292,9 @@ pozostają POST-STABLE.
 ### Bluetooth, bateria, audio i sieć
 
 VoxOneBT jest obowiązkowym docelowym elementem profilów S0 i L0 w Stable
-1.0.0. L0 ma tę capability, natomiast S0 jeszcze jej nie implementuje i nie
-ma zatwierdzonego pinoutu BT. Dla przyszłych rewizji S/DIN/M/L/XL VoxOneBT
+1.0.0. L0 ma tę capability, a implementacja S0 ma SOFTWARE PASS z
+zatwierdzonym pinoutem UART1 RX10/TX11 i I2S1 RX BCLK12/WS13/DATA14;
+fizyczny HIL S0 pozostaje PENDING. Dla przyszłych rewizji S/DIN/M/L/XL VoxOneBT
 pozostaje capability zależną od konkretnego profilu. W0 nie otrzymuje
 rozbudowy, a M0 i DIN0 nie uzyskują BT przez zmianę zakresu HIL. Pomiar
 baterii jest planowany dla S i M, przy czym obie rodziny mogą być również
@@ -584,9 +585,9 @@ implementacji i bez rozszerzania Stable.
   profile, API, MQTT/HA, SourceManager, VoxOneBT, TTS, update/recovery, OTA,
   Config v7 i granicę Technical Stable/Commercial Release. Obowiązkowy
   release-gating obejmuje S0 i L0; W0/M0/DIN0 pozostają targetami buildowymi.
-  S0+BT jest zatwierdzonym celem, ale nie capability bieżącego BIN. Uzupełnić
-  końcowe HIL S0 i L0; nie traktować roadmapy ani proponowanych GPIO jako
-  działającej capability.
+  S0+BT jest capability bieżącej implementacji i ma SOFTWARE PASS; fizyczny
+  HIL dokładnego czystego BIN pozostaje PENDING. Uzupełnić końcowe HIL S0 i
+  L0; sam wynik software nie kwalifikuje sprzętu.
 
 ### Definition of Stable
 
@@ -897,7 +898,7 @@ VoxOneBT jest osobnym projektem/repo i posiada własną rodzinę sprzętową Vx.
 
 ### S0 ESP32-S3 Zero — baseline Stable i rozszerzenia POST-STABLE
 
-- [STABLE][S0 REV0 BASELINE IMPLEMENTED][S0+BT TARGET NOT IMPLEMENTED][FULL HIL OPEN] Bieżący profil S0 na ESP32-S3 Zero
+- [STABLE][S0 REV0 BASELINE IMPLEMENTED][S0+BT SOFTWARE PASS][PHYSICAL HIL PENDING] Bieżący profil S0 na ESP32-S3 Zero
   4 MiB Flash / 2 MiB PSRAM pozostaje w zakresie Stable 1.0.0. Firmware
   `78acbce` ma własny pinout S0 oraz zaimplementowane: MAX98357A; display
   `NONE`, SSD1306 128×32 i SSD1306 128×64; input `NONE`, EC11 i 3×SW
@@ -909,7 +910,7 @@ VoxOneBT jest osobnym projektem/repo i posiada własną rodzinę sprzętową Vx.
   pozostają otwarte. Zatwierdzony cel Stable rozszerza ten sam historyczny S0
   rev. 0 o VoxOneBT; bieżący profil ma `VOXONE_HAS_BT=1`, a GPIO BT są
   zaimplementowane zgodnie z zatwierdzonym pinoutem
-  UART1 RX44/TX43 i I2S1 RX 11/12/13. S0 zachowuje `VOXONE_HAS_VU=0`,
+  UART1 RX10/TX11 i I2S1 RX 12/13/14. S0 zachowuje `VOXONE_HAS_VU=0`,
   a update modułu ma odbywać się przez osobne USB, bez MAIN→BT stagingu.
 - [POST-STABLE][S0][AUDIO][IMPLEMENTED OFFLINE][OPTIONAL][PHYSICAL HIL NOT QUALIFIED] Bieżący BIN udostępnia przez WWW `PCM5102A`, `MAX98357A MONO`, `MAX98357A STEREO` i `NONE`, z zachowaniem MAX98357A MONO jako baseline'u S0. Backend, persistence Config v7 i wspólny stereo I2S mają offline PASS; rozszerzeń nie oznaczać jako fizycznie zakwalifikowanych. Ich osobny fizyczny HIL jest opcjonalny i nie blokuje Stable 1.0.0.
 - [POST-STABLE][S0][DISPLAY][IMPLEMENTED OFFLINE][OPTIONAL][PHYSICAL HIL NOT QUALIFIED] Bieżący BIN zachowuje baseline `NONE`, SSD1306 128×32 i SSD1306 128×64 oraz udostępnia przez WWW SSD1309, CH1116G i SH1106 128×64. Sterowniki, geometria, init i pamięć mają offline PASS; poza zaakceptowanym fizycznie SSD1306 128×32 nie przypisywać PHYSICAL PASS. Osobny HIL dodatkowych wariantów jest opcjonalny i nie blokuje Stable 1.0.0.
