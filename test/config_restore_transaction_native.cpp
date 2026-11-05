@@ -26,6 +26,7 @@ struct DurableDevice {
   bool snapshot = false;
   bool staged = false;
   bool marker = false;
+  bool markerCorrupt = false;
   Phase phase = Phase::Prepared;
 };
 
@@ -42,6 +43,7 @@ class FakeBackend : public Backend {
 
   MarkerStatus readMarker(Phase& phase) override {
     if (!device_.marker) return MarkerStatus::None;
+    if (device_.markerCorrupt) return MarkerStatus::Error;
     phase = device_.phase;
     return MarkerStatus::Pending;
   }
@@ -138,6 +140,46 @@ int main() {
     assert(transaction.commit());
     assert(same(device.active, device.candidate));
     assert(!device.marker);
+  }
+
+  // Re-applying the same complete candidate is idempotent: it produces the
+  // same durable generation and leaves no recovery marker or staging state.
+  {
+    DurableDevice device;
+    for (unsigned attempt = 0; attempt < 2; ++attempt) {
+      FakeBackend backend(device);
+      TransactionStorage transaction(backend);
+      assert(transaction.begin());
+      assert(transaction.stage(dummyCandidate()));
+      assert(transaction.commit());
+      assert(same(device.active, device.candidate));
+      assert(!device.marker && !device.staged && !device.snapshot);
+    }
+  }
+
+  // A malformed durable marker is never interpreted as no transaction. Both
+  // normal start and recovery fail closed without accepting or changing the
+  // mixed active generation. Once the marker is readable again, recovery can
+  // restore and verify the complete previous generation.
+  {
+    DurableDevice device;
+    const State oldState = device.active;
+    device.rollback = oldState;
+    device.snapshot = true;
+    device.active.values[static_cast<unsigned>(Component::Config)] = 2;
+    const State mixedState = device.active;
+    device.marker = true;
+    device.markerCorrupt = true;
+    device.phase = Phase::ConfigWritten;
+
+    FakeBackend blockedBackend(device);
+    TransactionStorage blocked(blockedBackend);
+    assert(!blocked.begin());
+    assert(!blocked.recover());
+    assert(device.marker && same(device.active, mixedState));
+
+    device.markerCorrupt = false;
+    recoverAfterCut(device, oldState);
   }
 
   // A valid candidate that cannot be staged is rejected before the durable
