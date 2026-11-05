@@ -29,6 +29,32 @@ $root=(Resolve-Path (Join-Path $PSScriptRoot '..')).Path
 Set-Location -LiteralPath $root
 $work=Join-Path $root '.pio/verify'
 [void][System.IO.Directory]::CreateDirectory($work)
+function Resolve-RomTestPython {
+ $resolver=@'
+import importlib.util
+from pathlib import Path
+import sys
+
+root = Path(sys.argv[1]).resolve(strict=True)
+spec = importlib.util.spec_from_file_location(
+    "rom_flash_recovery_verify_runtime",
+    root / "scripts" / "rom_flash_recovery.py",
+)
+module = importlib.util.module_from_spec(spec)
+sys.modules[spec.name] = module
+spec.loader.exec_module(module)
+print(module.resolve_esptool_runtime()[0])
+'@
+ $output=@(& $Python -B -c $resolver $root 2>&1)
+ if($LASTEXITCODE -ne 0) {
+  throw "ROM runtime validation failed: $($output -join [Environment]::NewLine)"
+ }
+ $lines=@($output | ForEach-Object { "$($_)".Trim() } | Where-Object { $_ })
+ if($lines.Count -ne 1 -or -not (Test-Path -LiteralPath $lines[0] -PathType Leaf)) {
+  throw "ROM runtime validation returned an invalid Python path"
+ }
+ return $lines[0]
+}
 $partitionsPath=Join-Path $root 'partitions_yoradio.csv'
 $partitionRows=Import-Csv -LiteralPath $partitionsPath -Header Name,Type,SubType,Offset,Size,Flags
 function Get-PartitionSize([string]$name) {
@@ -518,7 +544,12 @@ Invoke-Step 'Web Update headless' {
 }
 Invoke-Step 'HIL diagnostics' {
  foreach($testName in @('hil_credentials_test.py','m0_flash_backup_test.py','rom_flash_recovery_test.py','security_enforce_hil_test.py','spiffs_usb_recovery_test.py','uart_rx_logger_test.py','www_asset_manifest_test.py')) {
-  & $Python (Join-Path $root "test/$testName") 2>&1 | ForEach-Object { Write-Host $_ }
+  if($testName -eq 'rom_flash_recovery_test.py') {
+   $romTestPython=Resolve-RomTestPython
+   & $romTestPython -E -s (Join-Path $root "test/$testName") 2>&1 | ForEach-Object { Write-Host $_ }
+  } else {
+   & $Python (Join-Path $root "test/$testName") 2>&1 | ForEach-Object { Write-Host $_ }
+  }
   if($LASTEXITCODE -ne 0) { throw "HIL diagnostic test failed: $testName" }
  }
 }
