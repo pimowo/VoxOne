@@ -166,6 +166,47 @@ int main() {
   for (uint8_t i = 0; i < 4; ++i)
     assert(contains(kPlayerWifi, playerWifiBar(i)));
 
+  assert(kBtTransportArtist.top == 0 && kBtTransportArtist.height == 12);
+  assert(kBtTransportArtistText.top == 2 &&
+         kBtTransportArtistText.height == 8);
+  assert(contains(kBtTransportArtist, kBtTransportArtistText));
+  assert(kBtTransportTitle.top == 14 && kBtTransportTitle.height == 8);
+  assert(verticalGap(kBtTransportArtist, kBtTransportTitle) == 2);
+  assert(kBtTransportControls.top == 24 &&
+         kBtTransportControls.height == 8);
+  assert(verticalGap(kBtTransportTitle, kBtTransportControls) == 2);
+  assert(contains(kBtTransportControls, kBtTransportPrevious));
+  assert(contains(kBtTransportControls, kBtTransportPlayback));
+  assert(contains(kBtTransportControls, kBtTransportNext));
+  assert(kBtTransportPrevious.left == 0 && kBtTransportPrevious.width == 6);
+  assert(kBtTransportNext.left == 121 && kBtTransportNext.width == 6);
+  assert(right(kBtTransportPrevious) <= kBtTransportPlayback.left);
+  assert(right(kBtTransportPlayback) <= kBtTransportNext.left);
+  assert(centeredTextLeft(kBtTransportPlayback, 4) == 52);
+  assert(centeredTextLeft(kBtTransportPlayback, 5) == 49);
+  assert(btTransport128x32::artist.widget.top == 2);
+  assert(btTransport128x32::artist.width == 128);
+  assert(btTransport128x32::title.widget.top == 14);
+  assert(btTransport128x32::title.width == 128);
+  assert(scrollTextNeedsScrolling(
+      scrollTextPixelWidth(11, kStationCellWidth),
+      btTransport128x32::artist.width,
+      kStationCellWidth, kStationCellHeight));
+  assert(scrollTextNeedsScrolling(
+      scrollTextPixelWidth(22, kArtistCellWidth),
+      btTransport128x32::title.width,
+      kArtistCellWidth, kArtistCellHeight));
+  assert(std::strcmp(btTransportPlaybackLabel(PlaybackIcon::Play), "PLAY") == 0);
+  assert(std::strcmp(btTransportPlaybackLabel(PlaybackIcon::Pause), "PAUSE") == 0);
+  assert(std::strcmp(btTransportPlaybackLabel(PlaybackIcon::Stop), "STOP") == 0);
+  assert(std::strcmp(btTransportPlaybackLabel(PlaybackIcon::None), "") == 0);
+
+  const std::string smallFont = readFile("src/displays/fonts/yofont5x7.c");
+  assert(smallFont.find("0x05, 0x08, 0x14, 0x22, 0x41, 0x00") !=
+         std::string::npos);
+  assert(smallFont.find("0x05, 0x00, 0x41, 0x22, 0x14, 0x08") !=
+         std::string::npos);
+
   assertVolume(0, false, "0");
   assertVolume(1, false, "1");
   assertVolume(20, false, "20");
@@ -311,6 +352,38 @@ int main() {
   assert(display.find("player128x32::title") == std::string::npos);
   assert(display.find("new ScrollWidget(\"*\", player128x64::title") !=
          std::string::npos);
+  assert(display.find("btTransport128x32::artist") != std::string::npos);
+  assert(display.find("btTransport128x32::title") != std::string::npos);
+  assert(display.find("_oledBtTransportArtist->setTextScale(") !=
+         std::string::npos);
+  assert(display.find("_oledBtTransportArtist->setText(view.artist)") !=
+         std::string::npos);
+  assert(display.find("_oledBtTransportTitle->setText(view.title)") !=
+         std::string::npos);
+  assert(display.find("new Oled128x32BtTransportWidget") !=
+         std::string::npos);
+  const size_t transportBegin = display.find(
+      "class Oled128x32BtTransportWidget");
+  const size_t transportEnd = display.find(
+      "class Oled128x64PlayerStatusWidget", transportBegin);
+  assert(transportBegin != std::string::npos && transportEnd > transportBegin);
+  const std::string transport = display.substr(
+      transportBegin, transportEnd - transportBegin);
+  assert(transport.find("dsp.print(\"<\")") != std::string::npos);
+  assert(transport.find("dsp.print(\">\")") != std::string::npos);
+  assert(transport.find("btTransportPlaybackLabel(icon)") !=
+         std::string::npos);
+  assert(transport.find("displayPlaybackLabel") == std::string::npos);
+  assert(transport.find("PREV") == std::string::npos);
+  assert(transport.find("NEXT") == std::string::npos);
+  assert(transport.find("formatVolume") == std::string::npos);
+  assert(transport.find("dsp.print(\"BT\")") == std::string::npos);
+  assert(transport.find("wifiBars") == std::string::npos);
+  assert(display.find("moveBluetoothTransportSelection") ==
+         std::string::npos);
+  assert(display.find("selectedBluetoothTransportInput") ==
+         std::string::npos);
+
   const size_t volumeMode = display.find("if (newmode == VOL)");
   const size_t lostMode = display.find("if (newmode == LOST)", volumeMode);
   assert(volumeMode != std::string::npos && lostMode > volumeMode);

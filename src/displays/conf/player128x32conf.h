@@ -42,6 +42,15 @@ constexpr WidgetConfig playing = {2, 24, 1, WA_LEFT};
 constexpr WidgetConfig counter = {2, 24, 1, WA_RIGHT};
 }
 
+namespace btTransport128x32 {
+constexpr ScrollConfig artist = {
+    {0, voxone::oled128x32::kBtTransportArtistText.top, 1, WA_LEFT},
+    140, voxone::oled128x32::kBtTransportArtistText.width, 1200, 2, 35};
+constexpr ScrollConfig title = {
+    {0, voxone::oled128x32::kBtTransportTitle.top, 1, WA_LEFT},
+    140, voxone::oled128x32::kBtTransportTitle.width, 1200, 2, 35};
+}
+
 namespace update128x32 {
 constexpr WidgetConfig title = {0, 0, 1, WA_CENTER};
 constexpr WidgetConfig target = {0, 8, 1, WA_CENTER};

@@ -58,6 +58,16 @@ constexpr uint16_t kPlayerPlayBottom = 31;
 constexpr uint16_t kPlayerPlayTipY = 27;
 constexpr Bounds kPlayerWifiDisconnected = {118, 24, 8, 8};
 
+// Compact Bluetooth transport view. The accepted STARTUP and PLAYER layouts
+// above are intentionally independent from this dedicated page.
+constexpr Bounds kBtTransportArtist = {0, 0, 128, 12};
+constexpr Bounds kBtTransportArtistText = {0, 2, 128, 8};
+constexpr Bounds kBtTransportTitle = {0, 14, 128, 8};
+constexpr Bounds kBtTransportControls = {0, 24, 128, 8};
+constexpr Bounds kBtTransportPrevious = {0, 24, 6, 8};
+constexpr Bounds kBtTransportPlayback = {31, 24, 66, 8};
+constexpr Bounds kBtTransportNext = {121, 24, 6, 8};
+
 constexpr uint8_t kPlayerSpeakerWidth = 7;
 constexpr uint8_t kPlayerSourceMaxCharacters = 7;
 constexpr uint8_t kPlayerBluetoothTextWidth = 2 * kGlyphWidth;
@@ -172,6 +182,17 @@ static_assert(contains(kPlayerWifi, playerWifiBar(0)) &&
                   contains(kPlayerWifi, playerWifiBar(3)) &&
                   contains(kPlayerWifi, kPlayerWifiDisconnected),
               "OLED 128x32 Wi-Fi icons must fit their slot");
+static_assert(fits(kBtTransportArtist) && fits(kBtTransportArtistText) &&
+                  fits(kBtTransportTitle) && fits(kBtTransportControls) &&
+                  contains(kBtTransportArtist, kBtTransportArtistText) &&
+                  verticalGap(kBtTransportArtist, kBtTransportTitle) == 2 &&
+                  verticalGap(kBtTransportTitle, kBtTransportControls) == 2 &&
+                  contains(kBtTransportControls, kBtTransportPrevious) &&
+                  contains(kBtTransportControls, kBtTransportPlayback) &&
+                  contains(kBtTransportControls, kBtTransportNext) &&
+                  right(kBtTransportPrevious) <= kBtTransportPlayback.left &&
+                  right(kBtTransportPlayback) <= kBtTransportNext.left,
+              "OLED 128x32 BT transport rows must fit without overlap");
 static_assert(fits(kVolumePrimary) && fits(kVolumeFooter),
               "OLED 128x32 VOL layout must fit the physical panel");
 static_assert(kVolumePrimaryGlyphWidth * kVolumePrimaryMaxCharacters <=

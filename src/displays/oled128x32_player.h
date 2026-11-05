@@ -13,6 +13,16 @@ namespace oled128x32 {
 
 enum class PlaybackIcon : uint8_t { None, Play, Pause, Stop };
 
+inline const char* btTransportPlaybackLabel(PlaybackIcon playback) {
+  switch (playback) {
+    case PlaybackIcon::Play: return "PLAY";
+    case PlaybackIcon::Pause: return "PAUSE";
+    case PlaybackIcon::Stop: return "STOP";
+    case PlaybackIcon::None: return "";
+  }
+  return "";
+}
+
 constexpr PlaybackIcon playbackIcon(bool playing, bool paused, bool stopped) {
   return playing ? PlaybackIcon::Play
                  : paused ? PlaybackIcon::Pause

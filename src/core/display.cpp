@@ -360,6 +360,48 @@ class Oled128x32PlayerStatusWidget : public Widget {
 
 static Oled128x32PlayerStatusWidget* oled128x32PlayerStatus = nullptr;
 
+class Oled128x32BtTransportWidget : public Widget {
+ public:
+  Oled128x32BtTransportWidget() {
+    Widget::init({0, voxone::oled128x32::kBtTransportControls.top, 1, WA_LEFT},
+                 WHITE, BLACK);
+  }
+
+  void setPlayback(DisplayPlaybackState playback) {
+    if (playback_ == playback) return;
+    playback_ = playback;
+    if (_active) render();
+  }
+
+ private:
+  DisplayPlaybackState playback_ = DisplayPlaybackState::None;
+
+  void _draw() override { if (_active) render(); }
+
+  void render() {
+    using namespace voxone::oled128x32;
+    dsp.fillRect(kBtTransportControls.left, kBtTransportControls.top,
+                 kBtTransportControls.width, kBtTransportControls.height,
+                 BLACK);
+    dsp.setFont();
+    dsp.setTextSize(1);
+    dsp.setTextColor(WHITE, BLACK);
+    dsp.setCursor(kBtTransportPrevious.left, kBtTransportPrevious.top);
+    dsp.print("<");
+    const PlaybackIcon icon = playbackIcon(
+        playback_ == DisplayPlaybackState::Playing,
+        playback_ == DisplayPlaybackState::Paused,
+        playback_ == DisplayPlaybackState::Stopped);
+    const char* playback = btTransportPlaybackLabel(icon);
+    dsp.setCursor(centeredTextLeft(kBtTransportPlayback, strlen(playback)),
+                  kBtTransportPlayback.top);
+    dsp.print(playback);
+    dsp.setCursor(kBtTransportNext.left, kBtTransportNext.top);
+    dsp.print(">");
+    dsp.setTextColor(WHITE, BLACK);
+  }
+};
+
 class Oled128x64PlayerStatusWidget : public Widget {
  public:
   Oled128x64PlayerStatusWidget() { Widget::init({0, 30, 1, WA_LEFT}, WHITE, BLACK); }
@@ -1129,6 +1171,7 @@ bool Display::supportsBluetoothTransportView() const {
   return false;
 #endif
 }
+
 #if TIME_SIZE>19
   #if DSP_MODEL==DSP_SSD1322
     #define BOOT_PRG_COLOR    WHITE
@@ -1487,7 +1530,20 @@ void Display::_buildPager(){
   }
   #endif
 #if VOXONE_DISPLAY_COMPILES_SMALL_OLED
-  if (smallOledActive() && !oled128x32Active()) {
+  if (smallOledActive() && oled128x32Active()) {
+    _oledBtTransportPage = new Page();
+    _oledBtTransportArtist = new ScrollWidget(
+        "*", btTransport128x32::artist, WHITE, BLACK);
+    _oledBtTransportArtist->setTextScale(
+        voxone::oled128x32::kStationScaleX,
+        voxone::oled128x32::kStationScaleY);
+    _oledBtTransportTitle = new ScrollWidget(
+        "*", btTransport128x32::title, WHITE, BLACK);
+    _oledBtTransportPage->addWidget(_oledBtTransportArtist);
+    _oledBtTransportPage->addWidget(_oledBtTransportTitle);
+    _oled128x32BtTransport = new Oled128x32BtTransportWidget();
+    _oledBtTransportPage->addWidget(_oled128x32BtTransport);
+  } else if (smallOledActive()) {
     _oledBtTransportPage = new Page();
     TextWidget* header = new TextWidget(btTransport128x64::header, 16,
                                         WHITE, BLACK);
@@ -2082,8 +2138,7 @@ void Display::_renderMode(displayMode_e newmode) {
   }
 #endif
 #if VOXONE_DISPLAY_COMPILES_SMALL_OLED
-  if (smallOledActive() && !oled128x32Active() &&
-      newmode == BT_TRANSPORT) {
+  if (smallOledActive() && newmode == BT_TRANSPORT) {
     _title();
     _pager->setPage(_oledBtTransportPage);
   }
@@ -2577,7 +2632,14 @@ void Display::_title() {
     if (_title2) _title2->setText(view.title);
   }
 #if VOXONE_DISPLAY_COMPILES_SMALL_OLED
-  if (smallOledActive() && !oled128x32Active() &&
+  if (smallOledActive() && oled128x32Active() &&
+      view.source == DisplaySourceKind::Bluetooth &&
+      _oledBtTransportArtist && _oledBtTransportTitle &&
+      _oled128x32BtTransport) {
+    _oledBtTransportArtist->setText(view.artist);
+    _oledBtTransportTitle->setText(view.title);
+    _oled128x32BtTransport->setPlayback(view.playback);
+  } else if (smallOledActive() && !oled128x32Active() &&
       view.source == DisplaySourceKind::Bluetooth &&
       _oledBtTransportArtist && _oledBtTransportTitle &&
       _oledBtTransportPlayback) {

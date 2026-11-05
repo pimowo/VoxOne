@@ -52,7 +52,8 @@ inline bool displaySlotVisible(const char* label) {
 inline bool displayBluetoothTransportViewAvailable(
     bool runtimeEnabled, voxone::display_profile::ProfileId profile) {
     return runtimeEnabled &&
-           (profile == voxone::display_profile::ProfileId::Oled128x64 ||
+           (profile == voxone::display_profile::ProfileId::Oled128x32 ||
+            profile == voxone::display_profile::ProfileId::Oled128x64 ||
             profile == voxone::display_profile::ProfileId::St7796_480x320);
 }
 enum class DisplayPlaybackState : uint8_t { None, Stopped, Playing, Paused };
@@ -126,6 +127,7 @@ class St7796PlaybackIconWidget;
 #endif
 #if VOXONE_DISPLAY_COMPILES_SMALL_OLED
 class Oled128x64UpdateProgressWidget;
+class Oled128x32BtTransportWidget;
 #endif
 #if VOXONE_DISPLAY_PROFILE == VOXONE_DISPLAY_PROFILE_ST7789_284X76
 class St7789PlayerStatusWidget;
@@ -192,6 +194,7 @@ class Display {
     ScrollWidget *_oledBtTransportArtist = nullptr;
     ScrollWidget *_oledBtTransportTitle = nullptr;
     TextWidget *_oledBtTransportPlayback = nullptr;
+    Oled128x32BtTransportWidget *_oled128x32BtTransport = nullptr;
     Page *_oledBtTransportPage = nullptr;
     Page *_oled128x64UpdatePage = nullptr;
     TextWidget *_oled128x64UpdateTarget = nullptr, *_oled128x64UpdatePercent = nullptr;

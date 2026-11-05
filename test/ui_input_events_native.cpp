@@ -3,6 +3,7 @@
 
 #include <cassert>
 #include <fstream>
+#include <initializer_list>
 #include <iterator>
 #include <string>
 
@@ -44,7 +45,7 @@ int main() {
   assert(displayBluetoothTransportViewAvailable(true, ProfileId::Oled128x64));
   assert(displayBluetoothTransportViewAvailable(true,
                                                 ProfileId::St7796_480x320));
-  assert(!displayBluetoothTransportViewAvailable(true, ProfileId::Oled128x32));
+  assert(displayBluetoothTransportViewAvailable(true, ProfileId::Oled128x32));
   assert(!displayBluetoothTransportViewAvailable(false, ProfileId::Oled128x64));
 
   // EC11 and the future 3xSW adapter produce the same physical vocabulary.
@@ -79,6 +80,10 @@ int main() {
   // Bluetooth behavior is selected by capabilities and runtime source state.
   assert(action(bluetooth(), UiInputEvent::Ok) ==
          UiInputAction::BluetoothToggle);
+  assert(action(bluetooth(), UiInputEvent::Left) ==
+         UiInputAction::VolumeDown);
+  assert(action(bluetooth(), UiInputEvent::Right) ==
+         UiInputAction::VolumeUp);
   assert(action(bluetooth(), UiInputEvent::Double) ==
          UiInputAction::CycleSource);
   assert(action(bluetooth(), UiInputEvent::Long) ==
@@ -91,6 +96,14 @@ int main() {
          UiInputAction::BluetoothToggle);
   assert(action(bluetooth(BT_TRANSPORT), UiInputEvent::Long) ==
          UiInputAction::ShowPlayer);
+
+  // Display resolution is not an input-state dimension. Both OLED renderers
+  // feed the same event sequence into the same CORE decisions.
+  const UiInputContext oled32Transport = bluetooth(BT_TRANSPORT);
+  const UiInputContext oled64Transport = bluetooth(BT_TRANSPORT);
+  for (const UiInputEvent event : {UiInputEvent::Left, UiInputEvent::Right,
+                                   UiInputEvent::Ok, UiInputEvent::Long})
+    assert(action(oled32Transport, event) == action(oled64Transport, event));
   assert(action(bluetooth(PLAYER, false), UiInputEvent::Long) ==
          UiInputAction::None);
   UiInputContext compactBluetooth = bluetooth();
@@ -112,6 +125,8 @@ int main() {
   assert(applyVolume(100, action(radio(), UiInputEvent::Right)) == 100);
   assert(applyVolume(0, action(radio(), UiInputEvent::Right)) == 1);
   assert(applyVolume(100, action(radio(), UiInputEvent::Left)) == 99);
+  assert(applyVolume(0, action(bluetooth(), UiInputEvent::Right)) == 1);
+  assert(applyVolume(100, action(bluetooth(), UiInputEvent::Left)) == 99);
 
   // VeryLong is reserved in the event contract and has no behavior yet.
   assert(action(radio(), UiInputEvent::VeryLong) == UiInputAction::None);
@@ -121,4 +136,17 @@ int main() {
                               "PROFILE_W0", "VOXONE_PROFILE_"})
     assert(implementation.find(profile) == std::string::npos);
   assert(implementation.find("hardwareCapabilities()") != std::string::npos);
+  assert(implementation.find("moveBluetoothTransportSelection") ==
+         std::string::npos);
+  assert(implementation.find("selectedBluetoothTransportInput") ==
+         std::string::npos);
+  assert(implementation.find(
+      "sourceManagerTransport(BtTransportInput::Previous)") !=
+         std::string::npos);
+  assert(implementation.find(
+      "sourceManagerTransport(BtTransportInput::Next)") !=
+         std::string::npos);
+  assert(implementation.find(
+      "sourceManagerTransport(BtTransportInput::Toggle)") !=
+         std::string::npos);
 }
