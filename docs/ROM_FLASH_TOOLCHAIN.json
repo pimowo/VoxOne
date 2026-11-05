@@ -1,0 +1,95 @@
+{
+  "dependencies": {
+    "PyYAML": "6.0.3",
+    "argcomplete": "3.7.2",
+    "bitarray": "3.12.3",
+    "bitstring": "4.3.1",
+    "cffi": "2.1.1",
+    "cryptography": "46.0.7",
+    "ecdsa": "0.19.2",
+    "intelhex": "2.3.0",
+    "pycparser": "3.12",
+    "pyserial": "3.5",
+    "reedsolo": "1.7.0",
+    "six": "1.17.0"
+  },
+  "profiles": {
+    "linux-armv7l": {
+      "architectureAliases": ["armv7l"],
+      "dependencies": {
+        "PyYAML": {"distInfo": "pyyaml-6.0.3.dist-info", "fileCount": 25, "root": "python", "treeSha256": "29e3d8f9a72d0d54f8d35aa302a7d3eedd0785d74ce8ce2f2708631d683f515d"},
+        "argcomplete": {"distInfo": "argcomplete-3.7.2.dist-info", "fileCount": 25, "root": "python", "treeSha256": "40aa19b37e5d5364485380b447c5aa87c4c4684409052675f0ae978e5cafd7cf"},
+        "bitarray": {"distInfo": "bitarray-3.12.3.dist-info", "fileCount": 22, "root": "esptool", "treeSha256": "ac39d8a6fe231dfd7b1b7b98cb6dfe28cfe2fb03d84ae39b1d0946d2fa7a28f9"},
+        "bitstring": {"distInfo": "bitstring-4.3.1.dist-info", "fileCount": 24, "root": "esptool", "treeSha256": "1f50f74fe3758af2adcf716cdf6862e9ad78405abf34b98c3133c5c7a6e0001a"},
+        "cffi": {"distInfo": "cffi-2.1.1.dist-info", "fileCount": 33, "root": "esptool", "treeSha256": "b0031423521796984504859679ffdfcb19772ab8c1674040ceb1e180b4b26363"},
+        "cryptography": {"distInfo": "cryptography-46.0.7.dist-info", "fileCount": 312, "root": "esptool", "treeSha256": "eefc2d65615ec2d506d1a70041b7be164f91effd58ba8517766b0fc9886b6725"},
+        "ecdsa": {"distInfo": "ecdsa-0.19.2.dist-info", "fileCount": 35, "root": "esptool", "treeSha256": "398ae9b05e71f7b1c571079ab74f003dd11b2dd803942680e27cfd9ea09dca97"},
+        "intelhex": {"distInfo": "intelhex-2.3.0.dist-info", "fileCount": 15, "root": "esptool", "treeSha256": "4fcf4877c11d349e43dd43ab331e0c0d2936a7967409f81584a6e226b0a2c9e8"},
+        "pycparser": {"distInfo": "pycparser-3.12.dist-info", "fileCount": 15, "root": "esptool", "treeSha256": "4eae987ce8351f7700dcfe51b5c234e2031dd62a3f1b3c7f7ac10f4018d67edd"},
+        "pyserial": {"distInfo": "pyserial-3.5.dist-info", "fileCount": 37, "root": "python", "treeSha256": "adccccc7c2261ddfd8cac9d539e8946ec26cc3e716637689c42d81eb5d2c44a0"},
+        "reedsolo": {"distInfo": "reedsolo-1.7.0.dist-info", "fileCount": 8, "root": "esptool", "treeSha256": "8f66f8ceeec6d436cde802be96fcf49794913a20ed6979d5f142c63b02a73b7f"},
+        "six": {"distInfo": "six-1.17.0.dist-info", "fileCount": 8, "root": "esptool", "treeSha256": "6cfa66f5992d12fdadba0a617eafffd708924977c3772495eeddfb86f8a6e01a"}
+      },
+      "dependencyRoots": {
+        "esptool": "tool-esptoolpy/_contrib",
+        "python": "venv/lib/python3.13/site-packages"
+      },
+      "esptool": {
+        "packageTreeSha256": "08e7e39d912f0011a9fe5beb4e9a8d91bbd6fb18ceb767b8e1127e66dd209710",
+        "relativePath": "tool-esptoolpy/esptool.py",
+        "sha256": "7e6833367b891629474c7717eb1689178377c1b13be286016ef72ee2c4e269a9",
+        "version": "4.11.0"
+      },
+      "portOpenMayAssertDtrRts": true,
+      "python": {
+        "relativePath": "venv/bin/python",
+        "sha256": "84c2c7d007a630bd033d8307e865726cc27a963f07e28612ff5c2e980deb4908",
+        "version": "3.13.5"
+      },
+      "requiresExplicitRoot": true,
+      "system": "Linux"
+    },
+    "linux-x86_64": {
+      "architectureAliases": ["x86_64", "amd64"],
+      "dependencies": {
+        "PyYAML": {"distInfo": "pyyaml-6.0.3.dist-info", "fileCount": 26, "root": "python", "treeSha256": "3dac2eebf15c56c8c2d18422bb768e5bb34cf39b60751cac2c3b962842efebc6"},
+        "argcomplete": {"distInfo": "argcomplete-3.7.2.dist-info", "fileCount": 25, "root": "python", "treeSha256": "c8076b747fb74ff2b4a4850d2317dfda905593afaa8fce12dd1eb05c089f9584"},
+        "bitarray": {"distInfo": "bitarray-3.12.3.dist-info", "fileCount": 21, "root": "esptool", "treeSha256": "54b87849489bac2100cc5428a48aa0c92a54b9c572194b9abd345b8fc92fd853"},
+        "bitstring": {"distInfo": "bitstring-4.3.1.dist-info", "fileCount": 24, "root": "esptool", "treeSha256": "1f50f74fe3758af2adcf716cdf6862e9ad78405abf34b98c3133c5c7a6e0001a"},
+        "cffi": {"distInfo": "cffi-2.1.1.dist-info", "fileCount": 32, "root": "esptool", "treeSha256": "e25f177724660e095202ca0e3ff2381fc4d9020f8d4cd38d17b382cfb06e9279"},
+        "cryptography": {"distInfo": "cryptography-46.0.7.dist-info", "fileCount": 109, "root": "esptool", "treeSha256": "47a8b9c3fa3df4aa60bea7109d36c24574214b87522a2264ee93a12a54ce9d54"},
+        "ecdsa": {"distInfo": "ecdsa-0.19.2.dist-info", "fileCount": 37, "root": "esptool", "treeSha256": "ee3156f92b75bf27754257e96eb46b9cedd54fe0bf32e682b683d30a01a0d778"},
+        "intelhex": {"distInfo": "intelhex-2.3.0.dist-info", "fileCount": 15, "root": "esptool", "treeSha256": "9545fddbd3fed8c0104e7d86d6385755fe8a875a768062f9e19e4682f0db51ff"},
+        "pycparser": {"distInfo": "pycparser-3.12.dist-info", "fileCount": 14, "root": "esptool", "treeSha256": "6b67ac58e000cbd0397d3384fd0aead528ba6841a5c1b67587debaa52ba6b47e"},
+        "pyserial": {"distInfo": "pyserial-3.5.dist-info", "fileCount": 36, "root": "python", "treeSha256": "1d64d783d28ffd49bd0ed2ebbc9d4566f59bed6fefa7a39b07d5e4204c3ac4f7"},
+        "reedsolo": {"distInfo": "reedsolo-1.7.0.dist-info", "fileCount": 8, "root": "esptool", "treeSha256": "8f66f8ceeec6d436cde802be96fcf49794913a20ed6979d5f142c63b02a73b7f"},
+        "six": {"distInfo": "six-1.17.0.dist-info", "fileCount": 7, "root": "esptool", "treeSha256": "f74a2f72f76b98979370720f06ae33e4aabfb2e63f0378fb5fc62bf9176a89ef"}
+      },
+      "dependencyRoots": {
+        "esptool": ".platformio/packages/tool-esptoolpy/_contrib",
+        "python": ".local/share/pipx/venvs/platformio/lib/python3.13/site-packages"
+      },
+      "esptool": {
+        "packageTreeSha256": "bb396ed2039d30a6fd97a8910c3dd7caa44ba35c4974e5107c21fd410e4aecba",
+        "relativePath": ".platformio/packages/tool-esptoolpy/esptool.py",
+        "sha256": "7e6833367b891629474c7717eb1689178377c1b13be286016ef72ee2c4e269a9",
+        "version": "4.11.0"
+      },
+      "portOpenMayAssertDtrRts": true,
+      "python": {
+        "relativePath": ".local/share/pipx/venvs/platformio/bin/python",
+        "sha256": "889c603f0d17cb54060951bcf4c4f9b8c9ebd9e52b392c70209bbb9755d797d9",
+        "version": "3.13.5"
+      },
+      "requiresExplicitRoot": false,
+      "system": "Linux"
+    }
+  },
+  "writeRetryGuard": {
+    "maxBlockAttempts": 1,
+    "maxWriteFlashAttempts": 1,
+    "relativePath": "scripts/esptool_write_once.py",
+    "sha256": "8f62b9c1262e9432468f402bffa11ab25b21c48da0a068c1842dd207fe5ca464"
+  },
+  "schema": "voxone-rom-toolchain-v2"
+}
