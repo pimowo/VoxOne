@@ -42,7 +42,13 @@ UART_PORT = "/dev/serial/by-id/usb-FTDI_FT232R_USB_UART_A7039N0Z-if00-port0"
 OUT_ROOT = Path.home() / "voxone-hil" / "chaos-v2" / "runs"
 FATAL_UART = re.compile(rb"Guru Meditation|panic|assert failed|Task watchdog|\bWDT\b|Stack canary|CORRUPT HEAP|Bad (head|tail)", re.I)
 READS = ("getindex=1", "getsystem=1", "getwebstatus=1")
-SAFE_COMMAND = re.compile(r"^(?:start=1|stop=1|next=1|prev=1|source=(?:radio|bt)|mute=[01]|vol100=(?:[0-9]|[1-9][0-9]|100)|playstation=[1-9][0-9]*)$")
+SAFE_COMMAND = re.compile(r"^(?:start=1|stop=1|next=1|prev=1|webtransport=(?:prev|toggle|next)|source=(?:radio|bt)|mute=[01]|vol100=(?:[0-9]|[1-9][0-9]|100)|playstation=[1-9][0-9]*)$")
+BT_TRANSPORT_COMMAND = {"PLAY": "toggle", "PAUSE": "toggle",
+                        "NEXT": "next", "PREV": "prev"}
+
+
+def normalize_bt_playback(value):
+    return "PAUSE" if value == "PAUZA" else value
 
 
 def iso():
@@ -783,6 +789,33 @@ class LiveRunner:
         self.command_times.append(self.last_command_at)
         self.check()
         return result
+
+    def bt_transport(self, action: str):
+        """Send an explicit BT transport action through the shared WS route."""
+        action = action.upper()
+        if action not in BT_TRANSPORT_COMMAND:
+            raise StopRun("unsupported BT transport command: " + action)
+        state = self.ws.snapshot()
+        status = state["webStatus"]
+        if status.get("activeSource") != "bt" or status.get("btConnected") is not True:
+            raise StopRun("BT transport requires connected active BT source")
+
+        if action in ("PLAY", "PAUSE"):
+            current = normalize_bt_playback(status.get("playback"))
+            if current == action:
+                self.journal.write("operations.jsonl", kind="bt_transport_noop",
+                                   action=action, playback=current)
+                return state
+            if action == "PAUSE" and current != "PLAY":
+                raise StopRun("BT PAUSE requires PLAY state")
+            expected = lambda x: (x["webStatus"].get("activeSource") == "bt" and
+                                  x["webStatus"].get("btConnected") is True and
+                                  normalize_bt_playback(
+                                      x["webStatus"].get("playback")) == action)
+        else:
+            expected = lambda x: (x["webStatus"].get("activeSource") == "bt" and
+                                  x["webStatus"].get("btConnected") is True)
+        return self.command("webtransport=" + BT_TRANSPORT_COMMAND[action], expected)
 
     def api_probe(self):
         self.check()
