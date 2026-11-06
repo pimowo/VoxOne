@@ -1,7 +1,7 @@
 # VoxOne
 
 VoxOne to firmware radia sieciowego dla klasycznego ESP32 i ESP32-S3. Bieżąca
-linia rozwojowa ma wersję `1.0.0-rc1`; Stable 1.0.0 nie został jeszcze wydany.
+linia rozwojowa ma wersję `1.0.0-rc2`; Stable 1.0.0 nie został jeszcze wydany.
 Projekt rozwija bazę yoRadio, zachowując jej atrybucję i zgodność tam, gdzie
 jest ona nadal częścią działającego kodu.
 

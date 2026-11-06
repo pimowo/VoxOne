@@ -993,6 +993,13 @@ Obecny baseline: dane i widoki display są rozdzielone; `HardwareCapabilities` j
 
 Nazwy wariantów display: `STEROWNIK_ROZDZIELCZOŚĆ`, np. `SSD1306_128X32`, `SSD1306_128X64`, `SSD1309_128X64`, `CH1116_128X64`, `SH1106_128X64`, `ST7789V_320X240`, `ST7789_284X76`, `SSD1322_256X64`, `ST7796S_480X320`, `GC9A01_240X240`. Dla modułu opisanego `ST7290_128X64` lub ST7920-compatible trzeba potwierdzić fizyczny kontroler i protokół przed nazwaniem backendu.
 
+## Backlog 1.1.0
+
+- [POST-STABLE][1.1.0][ARCHITECTURE] Usunąć zależność migracji Config od bezpośredniego rozpoznawania profilu S0; zachować wersjonowaną, jednokrotną migrację, marker oraz świadome ustawienia użytkownika, a warunek oprzeć na wspólnym kontrakcie capability/migracji.
+- [POST-STABLE][1.1.0][ARCHITECTURE] Zastąpić profilowe bramkowanie DSP L0 w CORE wspólną capability lub adapterem sprzętowym, zachowując endpointy i zachowanie tylko na sprzęcie rzeczywiście obsługującym DSP.
+- [POST-STABLE][1.1.0][ARCHITECTURE] Zastąpić hardkodowaną listę profili produkcyjnych w warstwie SECURITY wspólnym, fail-closed kontraktem build/security, aby nowe profile nie wymagały ręcznego dopisywania do allowlisty.
+- [POST-STABLE][1.1.0][ARCHITECTURE] Usunąć politykę UI z plików profili (`VOXONE_BT_TRANSPORT_UI_ENABLED`); dostępność widoku wyprowadzać ze wspólnych capabilities i stanu UI bez logiki interfejsu zależnej od konkretnego profilu.
+
 ## Installer, first boot i release
 
 - [POST-STABLE] Przygotować VoxOne Installer dla Windows jako portable EXE dla VoxOne: wybór rodziny L/M/S/DIN/W i właściwej rewizji PCB, embedded stable factory binaries, install, erase/install, auto COM, auto chip i brak ręcznych offsetów.

@@ -11,7 +11,7 @@
 
 int main() {
   assert(std::strcmp(VOXONE_VERSION, "1.0.0") == 0);
-  assert(std::strcmp(VOXONE_BUILD_CHANNEL, "rc1") == 0);
+  assert(std::strcmp(VOXONE_BUILD_CHANNEL, "rc2") == 0);
 #if defined(BUILD_ID_TEST_CLEAN)
   const char* expectedBuild = "192a400";
 #elif defined(BUILD_ID_TEST_DIRTY)
@@ -42,6 +42,6 @@ int main() {
   assert(length > 0 && static_cast<size_t>(length) < sizeof(identity));
   char expectedPrefix[65];
   std::snprintf(expectedPrefix, sizeof(expectedPrefix),
-      "VoxOne v1.0.0-rc1\nbuild: %s\nprofile: ", expectedBuild);
+      "VoxOne v1.0.0-rc2\nbuild: %s\nprofile: ", expectedBuild);
   assert(std::strstr(identity, expectedPrefix) == identity);
 }
