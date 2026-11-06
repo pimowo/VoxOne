@@ -176,10 +176,15 @@ int main() {
   assert(renderer.find("VOXONE_PROFILE_M0") == std::string::npos);
   const size_t noneGuard = renderer.find("if (!_runtimeEnabled)");
   const size_t backendInit = renderer.find("dsp.initDisplay()");
-  const size_t rendererAllocation = renderer.find("_pager = new Pager()");
+  const size_t rendererAllocation =
+      renderer.find("_pager = new (std::nothrow) Pager()");
+  const size_t rendererAllocationFailure =
+      renderer.find("if (!_pager)", rendererAllocation);
   assert(noneGuard != std::string::npos && backendInit != std::string::npos &&
-         rendererAllocation != std::string::npos);
+         rendererAllocation != std::string::npos &&
+         rendererAllocationFailure != std::string::npos);
   assert(noneGuard < backendInit && backendInit < rendererAllocation);
+  assert(rendererAllocation < rendererAllocationFailure);
   assert(controls.find("activationFor(selected)") != std::string::npos);
   assert(m0Profile.find("#define VOXONE_RUNTIME_OLED_128X64_BACKENDS 1") !=
          std::string::npos);

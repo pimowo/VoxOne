@@ -34,12 +34,18 @@ bool BtLink::startFirmwareUpdate(BtFirmwareImage& image) {
   p.activeBtSource = bluetoothSourceSelected();
   const bool started = sender_.start(image, p, millis());
   protocol_.setUpdateExclusive(sender_.exclusive());
+  if (started) {
+    commandsAccepted_.store(false, std::memory_order_release);
+    clearCommands();
+  }
   return started;
 }
 
 void BtLink::abortFirmwareUpdate() {
   sender_.abort();
   protocol_.setUpdateExclusive(sender_.exclusive());
+  commandsAccepted_.store(btRuntime.available() && !sender_.exclusive(),
+                          std::memory_order_release);
 }
 
 void BtLink::begin() {
@@ -57,16 +63,20 @@ void BtLink::begin() {
   serialCli.printf("##[BT]# UART RX=%d TX=%d baud=%lu\n",
                    uart.rx, uart.tx, static_cast<unsigned long>(BtLinkBaud));
   protocol_.begin(millis());
+  commandsAccepted_.store(true, std::memory_order_release);
+  publishState();
 }
 
 void BtLink::loop() {
   if (!started_) return;
   const bool enabled = btRuntime.available();
   if (!enabled) {
+    commandsAccepted_.store(false, std::memory_order_release);
     if (sender_.exclusive()) sender_.onLine("FW_ERR LINK_UNAVAILABLE", millis());
     protocol_.setUpdateExclusive(false);
     if (runtimeActive_) protocol_.suspend();
     runtimeActive_ = false;
+    publishState();
     return;
   }
   if (!runtimeActive_) {
@@ -77,6 +87,8 @@ void BtLink::loop() {
     runtimeActive_ = true;
   }
   protocol_.setUpdateExclusive(sender_.exclusive());
+  commandsAccepted_.store(!sender_.exclusive(), std::memory_order_release);
+  processCommands();
   // Bound work per main loop so a busy UART cannot starve the radio player.
   uint16_t remaining = 512;
   while (remaining-- != 0 && serial_.available() > 0) {
@@ -88,38 +100,134 @@ void BtLink::loop() {
   sender_.tick(millis());
   protocol_.setUpdateExclusive(sender_.exclusive());
   protocol_.tick(millis());
+  commandsAccepted_.store(!sender_.exclusive(), std::memory_order_release);
+  publishState();
 }
 
 void BtLink::requestStatus() {
-  if (started_ && btRuntime.available() && !sender_.exclusive())
-    protocol_.requestStatus(millis());
+  enqueue(BtLinkCommand(BtLinkCommandKind::RequestStatus));
 }
 
 void BtLink::requestDiag() {
-  if (started_ && btRuntime.available() && !sender_.exclusive()) protocol_.requestDiag();
+  enqueue(BtLinkCommand(BtLinkCommandKind::RequestDiagnostics));
 }
 
 void BtLink::ping() {
-  if (started_ && btRuntime.available() && !sender_.exclusive()) protocol_.ping(millis());
+  enqueue(BtLinkCommand(BtLinkCommandKind::Ping));
 }
 
-bool BtLink::play() { return started_ && btRuntime.available() && !sender_.exclusive() && protocol_.play(); }
-bool BtLink::pause() { return started_ && btRuntime.available() && !sender_.exclusive() && protocol_.pause(); }
-bool BtLink::next() { return started_ && btRuntime.available() && !sender_.exclusive() && protocol_.next(); }
-bool BtLink::prev() { return started_ && btRuntime.available() && !sender_.exclusive() && protocol_.prev(); }
+bool BtLink::play() { return enqueue(BtLinkCommand(BtLinkCommandKind::Play)); }
+bool BtLink::pause() { return enqueue(BtLinkCommand(BtLinkCommandKind::Pause)); }
+bool BtLink::next() { return enqueue(BtLinkCommand(BtLinkCommandKind::Next)); }
+bool BtLink::prev() { return enqueue(BtLinkCommand(BtLinkCommandKind::Previous)); }
 bool BtLink::setVolume(uint8_t absoluteVolume) {
-  return started_ && btRuntime.available() && !sender_.exclusive() &&
-         protocol_.setVolume(absoluteVolume);
+  BtLinkCommand command{BtLinkCommandKind::SetVolume};
+  command.volume = absoluteVolume;
+  return enqueue(command);
 }
 bool BtLink::setSessionVolume(const BtVolumeSessionCommand& command) {
-  return started_ && btRuntime.available() && !sender_.exclusive() &&
-         protocol_.setSessionVolume(command);
+  BtLinkCommand queued{BtLinkCommandKind::SetSessionVolume};
+  queued.session = command;
+  return enqueue(queued);
 }
 bool BtLink::takeVolumeSessionEvent(BtVolumeSessionEvent& event) {
   return protocol_.takeVolumeSessionEvent(event);
 }
 bool BtLink::volumeSessionCapable() const {
   return btRuntime.available() && protocol_.volumeSessionCapable();
+}
+
+bool BtLink::enqueue(const BtLinkCommand& command) {
+  if (!commandsAccepted_.load(std::memory_order_acquire)) return false;
+  portENTER_CRITICAL(&commandMux_);
+  const bool queued = commandsAccepted_.load(std::memory_order_relaxed) &&
+                      commands_.push(command);
+  portEXIT_CRITICAL(&commandMux_);
+  return queued;
+}
+
+bool BtLink::dequeue(BtLinkCommand& command) {
+  portENTER_CRITICAL(&commandMux_);
+  const bool found = commands_.pop(command);
+  portEXIT_CRITICAL(&commandMux_);
+  return found;
+}
+
+void BtLink::clearCommands() {
+  BtLinkCommand ignored;
+  portENTER_CRITICAL(&commandMux_);
+  while (commands_.pop(ignored)) {}
+  portEXIT_CRITICAL(&commandMux_);
+}
+
+void BtLink::processCommands() {
+  if (sender_.exclusive()) return;
+  BtLinkCommand command;
+  while (dequeue(command)) {
+    switch (command.kind) {
+      case BtLinkCommandKind::RequestStatus:
+        protocol_.requestStatus(millis());
+        break;
+      case BtLinkCommandKind::RequestDiagnostics:
+        protocol_.requestDiag();
+        break;
+      case BtLinkCommandKind::Ping:
+        protocol_.ping(millis());
+        break;
+      case BtLinkCommandKind::Play:
+        protocol_.play();
+        break;
+      case BtLinkCommandKind::Pause:
+        protocol_.pause();
+        break;
+      case BtLinkCommandKind::Next:
+        protocol_.next();
+        break;
+      case BtLinkCommandKind::Previous:
+        protocol_.prev();
+        break;
+      case BtLinkCommandKind::SetVolume:
+        protocol_.setVolume(command.volume);
+        break;
+      case BtLinkCommandKind::SetSessionVolume:
+        protocol_.setSessionVolume(command.session);
+        break;
+    }
+  }
+}
+
+void BtLink::publishState() {
+  const BtLinkState state = protocol_.state();
+  const BtLinkDiagnostics diagnostics = protocol_.diagnostics();
+  const bool incomplete = protocol_.hasIncompleteOnlineSnapshot();
+  portENTER_CRITICAL(&stateMux_);
+  publishedState_ = state;
+  publishedDiagnostics_ = diagnostics;
+  publishedIncompleteSnapshot_ = incomplete;
+  portEXIT_CRITICAL(&stateMux_);
+}
+
+BtLinkState BtLink::state() const {
+  if (!btRuntime.available()) return {};
+  portENTER_CRITICAL(&stateMux_);
+  const BtLinkState state = publishedState_;
+  portEXIT_CRITICAL(&stateMux_);
+  return state;
+}
+
+BtLinkDiagnostics BtLink::diagnostics() const {
+  portENTER_CRITICAL(&stateMux_);
+  const BtLinkDiagnostics diagnostics = publishedDiagnostics_;
+  portEXIT_CRITICAL(&stateMux_);
+  return diagnostics;
+}
+
+bool BtLink::hasIncompleteOnlineSnapshot() const {
+  if (!btRuntime.available()) return false;
+  portENTER_CRITICAL(&stateMux_);
+  const bool incomplete = publishedIncompleteSnapshot_;
+  portEXIT_CRITICAL(&stateMux_);
+  return incomplete;
 }
 
 bool BtLink::onLine(void* context, const char* line, uint32_t nowMs) {

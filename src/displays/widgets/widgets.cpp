@@ -3,6 +3,8 @@
 #include "../dspcore.h"
 #include "Arduino.h"
 #include "widgets.h"
+
+#include <new>
 #include "scroll_text_state.h"
 #include "../../core/player.h"    //  for VU widget
 #if VOXONE_HAS_BT && VOXONE_PIN_MAP_COMPLETE && VOXONE_BT_I2S_RX_ENABLED
@@ -37,8 +39,6 @@ void FillWidget::setHeight(uint16_t newHeight){
       TEXT WIDGET
  ************************/
 TextWidget::~TextWidget() {
-  free(_text);
-  free(_oldtext);
 }
 
 void TextWidget::_charSize(uint8_t textsize, uint8_t& width, uint16_t& height){
@@ -49,15 +49,23 @@ void TextWidget::_charSize(uint8_t textsize, uint8_t& width, uint16_t& height){
 void TextWidget::init(WidgetConfig wconf, uint16_t buffsize, uint16_t fgcolor, uint16_t bgcolor) {
   Widget::init(wconf, fgcolor, bgcolor);
   _buffsize = buffsize;
-  _text = (char *) malloc(sizeof(char) * _buffsize);
-  memset(_text, 0, _buffsize);
-  _oldtext = (char *) malloc(sizeof(char) * _buffsize);
-  memset(_oldtext, 0, _buffsize);
+  if (!_textBuffer.allocate(_buffsize) ||
+      !_oldTextBuffer.allocate(_buffsize)) {
+    _textBuffer.reset();
+    _oldTextBuffer.reset();
+    _text = _oldtext = nullptr;
+    _buffsize = 0;
+    markUnavailable();
+    return;
+  }
+  _text = _textBuffer.data();
+  _oldtext = _oldTextBuffer.data();
   _charSize(_config.textsize, _charWidth, _textheight);
   _textwidth = _oldtextwidth = _oldleft = 0;
 }
 
 void TextWidget::setText(const char* txt) {
+  if (!available() || !_text || !_oldtext || _buffsize == 0) return;
   strlcpy(_text, utf8Rus(txt), _buffsize);
   _textwidth = strlen(_text) * _charWidth;
   if (strcmp(_oldtext, _text) == 0) return;
@@ -68,12 +76,14 @@ void TextWidget::setText(const char* txt) {
 }
 
 void TextWidget::setText(int val, const char *format){
+  if (!available() || _buffsize == 0) return;
   char buf[_buffsize];
   snprintf(buf, _buffsize, format, val);
   setText(buf);
 }
 
 void TextWidget::setText(const char* txt, const char *format){
+  if (!available() || _buffsize == 0) return;
   char buf[_buffsize];
   snprintf(buf, _buffsize, format, txt);
   setText(buf);
@@ -89,7 +99,7 @@ uint16_t TextWidget::_realLeft(bool w_fb) {
 }
 
 void TextWidget::_draw() {
-  if(!_active) return;
+  if(!_active || !available() || !_text || !_oldtext) return;
   dsp.setTextColor(_fgcolor, _bgcolor);
   dsp.setCursor(_realLeft(), _config.top);
   dsp.setFont();
@@ -120,16 +130,17 @@ ScrollWidget::ScrollWidget(const char* separator, ScrollConfig conf, uint16_t fg
 
 ScrollWidget::~ScrollWidget() {
   delete _fb;
-  free(_sep);
-  free(_window);
 }
 
 void ScrollWidget::init(const char* separator, ScrollConfig conf, uint16_t fgcolor, uint16_t bgcolor) {
   TextWidget::init(conf.widget, conf.buffsize, fgcolor, bgcolor);
   _textScaleX = _config.textsize;
   _textScaleY = _config.textsize;
-  _sep = (char *) malloc(sizeof(char) * 4);
-  memset(_sep, 0, 4);
+  if (!available() || !_separatorBuffer.allocate(4)) {
+    markUnavailable();
+    return;
+  }
+  _sep = _separatorBuffer.data();
   snprintf(_sep, 4, " %.*s ", 1, separator);
   _x = conf.widget.left;
   _startscrolldelay = conf.startscrolldelay;
@@ -140,18 +151,21 @@ void ScrollWidget::init(const char* separator, ScrollConfig conf, uint16_t fgcol
   _width = conf.width;
   _backMove.width = _width;
   _windowCapacity = scrollWindowCapacity(dsp.width(), _charWidth);
-  _window = (char *) malloc(_windowCapacity);
-  memset(_window, 0, _windowCapacity);
+  if (!_windowBuffer.allocate(_windowCapacity)) {
+    markUnavailable();
+    return;
+  }
+  _window = _windowBuffer.data();
   _doscroll = false;
   #ifdef PSFBUFFER
-  _fb = new psFrameBuffer(dsp.width(), dsp.height());
+  _fb = new (std::nothrow) psFrameBuffer(dsp.width(), dsp.height());
   uint16_t _rl = (_config.align==WA_CENTER)?(dsp.width()-_width)/2:_config.left;
-  _fb->begin(&dsp, _rl, _config.top, _width, _textheight, _bgcolor);
+  if (_fb) _fb->begin(&dsp, _rl, _config.top, _width, _textheight, _bgcolor);
   #endif
 }
 
 void ScrollWidget::setTextScale(uint8_t scaleX, uint8_t scaleY) {
-  if (scaleX == 0 || scaleY == 0) return;
+  if (!available() || scaleX == 0 || scaleY == 0) return;
   _textScaleX = scaleX;
   _textScaleY = scaleY;
   _charWidth = static_cast<uint8_t>(CHARWIDTH * scaleX);
@@ -179,10 +193,11 @@ bool ScrollWidget::_checkIsScrollNeeded() {
 }
 
 bool ScrollWidget::_frameBufferReady() const {
-  return _fb && _fb->ready();
+  return voxone::display::frameBufferReady(_fb);
 }
 
 void ScrollWidget::setText(const char* txt) {
+  if (!available()) return;
   const char* encoded = utf8Rus(txt ? txt : "");
   int16_t assignedOffset = _x;
   const bool changed = scrollTextAssign(
@@ -241,12 +256,14 @@ void ScrollWidget::setText(const char* txt) {
 }
 
 void ScrollWidget::setText(const char* txt, const char *format){
+  if (!available() || _buffsize == 0) return;
   char buf[_buffsize];
   snprintf(buf, _buffsize, format, txt);
   setText(buf);
 }
 
 void ScrollWidget::loop() {
+  if (!available()) return;
   if(_locked) return;
   if (_coreControlled) return;
   if (_externallyScheduled) return;
@@ -268,6 +285,7 @@ void ScrollWidget::loop() {
 
 voxone::display_scroll::PlayerScrollRowMetrics
 ScrollWidget::coreScrollMetrics() const {
+  if (!available()) return {};
   return voxone::display_scroll::PlayerScrollRowMetrics{
       1, _width, _textwidth,
       scrollCyclePixelWidth(_textwidth, _sepwidth), _contentRevision};
@@ -282,7 +300,7 @@ void ScrollWidget::setCoreControlled(bool enabled) {
 }
 
 bool ScrollWidget::renderScrollOffset(uint16_t offsetPixels) {
-  if (!_coreControlled || !_active || _locked) return false;
+  if (!available() || !_coreControlled || !_active || _locked) return false;
   const int16_t origin = _frameBufferReady() ? 0 : _config.left;
   const uint16_t cyclePixels =
       scrollCyclePixelWidth(_textwidth, _sepwidth);
@@ -303,7 +321,7 @@ void ScrollWidget::setExternallyScheduled(bool enabled) {
 }
 
 void ScrollWidget::startScheduledTurn() {
-  if (!_externallyScheduled || !_doscroll) return;
+  if (!available() || !_externallyScheduled || !_doscroll) return;
   const int16_t start = _frameBufferReady() ? 0 : _config.left;
   const bool redraw = _x != start;
   _x = start;
@@ -312,13 +330,14 @@ void ScrollWidget::startScheduledTurn() {
 }
 
 bool ScrollWidget::stepScheduledTurn(uint8_t pixels) {
-  if (!_externallyScheduled || !_doscroll || !_active || _locked) return false;
+  if (!available() || !_externallyScheduled || !_doscroll || !_active || _locked) return false;
   _calcX(pixels);
   _draw();
   return _x == (_frameBufferReady() ? 0 : _config.left);
 }
 
 void ScrollWidget::_clear(){
+  if (!available()) return;
   if(_frameBufferReady()){
     #ifdef PSFBUFFER
     _fb->fillRect(0, 0, _width, _textheight, _bgcolor);
@@ -330,7 +349,7 @@ void ScrollWidget::_clear(){
 }
 
 void ScrollWidget::_draw() {
-  if(!_active || _locked) return;
+  if(!available() || !_active || _locked) return;
   _setTextParams();
   if (_doscroll) {
     uint16_t fbl = _frameBufferReady()?0:_config.left;
@@ -406,12 +425,13 @@ bool ScrollWidget::_checkDelay(int m, uint32_t &tstamp) {
 }
 
 void ScrollWidget::_reset(){
+  if (!available()) return;
   if (_coreControlled) {
     _doscroll = _checkIsScrollNeeded();
     #ifdef PSFBUFFER
-    _fb->freeBuffer();
+    if (_fb) _fb->freeBuffer();
     uint16_t _rl = (_config.align==WA_CENTER)?(dsp.width()-_width)/2:_config.left;
-    _fb->begin(&dsp, _rl, _config.top, _width, _textheight, _bgcolor);
+    if (_fb) _fb->begin(&dsp, _rl, _config.top, _width, _textheight, _bgcolor);
     #endif
     return;
   }
@@ -423,9 +443,9 @@ void ScrollWidget::_reset(){
   _scrolldelay = millis();
   _doscroll = _checkIsScrollNeeded();
   #ifdef PSFBUFFER
-  _fb->freeBuffer();
+  if (_fb) _fb->freeBuffer();
   uint16_t _rl = (_config.align==WA_CENTER)?(dsp.width()-_width)/2:_config.left;
-  _fb->begin(&dsp, _rl, _config.top, _width, _textheight, _bgcolor);
+  if (_fb) _fb->begin(&dsp, _rl, _config.top, _width, _textheight, _bgcolor);
   #endif
 }
 
@@ -649,12 +669,8 @@ uint16_t _textWidth(const char *txt){
       NUM WIDGET
  ************************/
 void NumWidget::init(WidgetConfig wconf, uint16_t buffsize, uint16_t fgcolor, uint16_t bgcolor) {
-  Widget::init(wconf, fgcolor, bgcolor);
-  _buffsize = buffsize;
-  _text = (char *) malloc(sizeof(char) * _buffsize);
-  memset(_text, 0, _buffsize);
-  _oldtext = (char *) malloc(sizeof(char) * _buffsize);
-  memset(_oldtext, 0, _buffsize);
+  TextWidget::init(wconf, buffsize, fgcolor, bgcolor);
+  if (!available()) return;
   _textwidth = _oldtextwidth = _oldleft = 0;
   _textheight =
 #if defined(VOXONE_RUNTIME_L0_DISPLAY_BACKENDS)
@@ -665,6 +681,7 @@ void NumWidget::init(WidgetConfig wconf, uint16_t buffsize, uint16_t fgcolor, ui
 }
 
 void NumWidget::setText(const char* txt) {
+  if (!available()) return;
   strlcpy(_text, txt, _buffsize);
   _getBounds();
   if (strcmp(_oldtext, _text) == 0) return;
@@ -701,6 +718,7 @@ void NumWidget::setText(const char* txt) {
 }
 
 void NumWidget::setText(int val, const char *format){
+  if (!available() || _buffsize == 0) return;
   char buf[_buffsize];
   snprintf(buf, _buffsize, format, val);
   setText(buf);
@@ -728,6 +746,7 @@ void NumWidget::_getBounds() {
 }
 
 void NumWidget::_draw() {
+  if (!available()) return;
 #if VOXONE_DISPLAY_PROFILE == VOXONE_DISPLAY_PROFILE_ST7796_480X320 || \
     VOXONE_DISPLAY_PROFILE == VOXONE_DISPLAY_PROFILE_ST7789_284X76
   if (strcmp(_text, "MUTE") == 0) {
@@ -825,8 +844,8 @@ void ClockWidget::init(WidgetConfig wconf, uint16_t fgcolor, uint16_t bgcolor){
   #endif
   _getTimeBounds();
 #ifdef PSFBUFFER
-  _fb = new psFrameBuffer(dsp.width(), dsp.height());
-  _begin();
+  _fb = new (std::nothrow) psFrameBuffer(dsp.width(), dsp.height());
+  if (_fb) _begin();
 #endif
 }
 
@@ -844,10 +863,14 @@ bool ClockWidget::_getTime(){
 }
 
 uint16_t ClockWidget::_left(){
-  if(_fb->ready()) return 0; else return _clockleft;
+  if(_frameBufferReady()) return 0; else return _clockleft;
 }
 uint16_t ClockWidget::_top(){
-  if(_fb->ready()) return _timeheight; else return _config.top;
+  if(_frameBufferReady()) return _timeheight; else return _config.top;
+}
+
+bool ClockWidget::_frameBufferReady() const {
+  return voxone::display::frameBufferReady(_fb);
 }
 
 void ClockWidget::_getTimeBounds() {
@@ -912,7 +935,7 @@ void ClockWidget::_printClock(bool force){
     gfx.print(_timebuffer);
     if(_fullclock){
       // lines, date & dow
-      bool fullClockOnScreensaver = (!config.isScreensaver || (_fb->ready() && FULL_SCR_CLOCK));
+      bool fullClockOnScreensaver = (!config.isScreensaver || (_frameBufferReady() && FULL_SCR_CLOCK));
       _linesleft = _left()+_timewidth+_space;
       if(fullClockOnScreensaver){
         gfx.drawFastVLine(_linesleft, _top()-_timeheight, _timeheight, config.theme.div);
@@ -976,12 +999,12 @@ void ClockWidget::_printClock(bool force){
   gfx.setCursor(_left()+_dotsleft, _top());
   gfx.print(":");
   gfx.setFont();
-  if(_fb->ready()) _fb->display();
+  if(_frameBufferReady()) _fb->display();
 }
 
 void ClockWidget::_clearClock(){
 #ifdef PSFBUFFER
-  if(_fb->ready()) _fb->clear();
+  if(_frameBufferReady()) _fb->clear();
   else
 #endif
 #if defined(VOXONE_RUNTIME_L0_DISPLAY_BACKENDS)
@@ -1012,7 +1035,7 @@ void ClockWidget::_draw(){
 
 void ClockWidget::_reset(){
 #ifdef PSFBUFFER
-  if(_fb->ready()) {
+  if(_frameBufferReady()) {
     _fb->freeBuffer();
     _getTimeBounds();
     _begin();

@@ -17,6 +17,7 @@
 #include "../core/audio_balance.h"
 #include "../core/radio_format_detection.h"
 #include "../core/radio_reconnect_policy.h"
+#include "../core/radio_url_request_parts.h"
 #include "../core/system_operation_state.h"
 #include "web_file_bounds.h"
 #include <new>
@@ -485,9 +486,13 @@ bool Audio::connectToHost(const char* host, const char* user, const char* pwd,
     strcpy(l_host, normalizedHost);
     if(startResolution) m_urlHopBudget.reset(l_host);
 
-    char* h_host = NULL; // pointer of l_host without http:// or https://
-    if(startsWith(l_host, "https")) h_host = strdup(l_host + 8);
-    else                            h_host = strdup(l_host + 7);
+    voxone::radio::OwnedCString strippedHost;
+    if(!strippedHost.assign(startsWith(l_host, "https") ? l_host + 8
+                                                          : l_host + 7)) {
+        free(l_host);
+        return resolutionError("out of memory preparing URL");
+    }
+    char* h_host = strippedHost.get(); // l_host without http:// or https://
 
     // initializationsequence
     int16_t pos_slash;                                        // position of "/" in hostname
@@ -501,22 +506,14 @@ bool Audio::connectToHost(const char* host, const char* user, const char* pwd,
         if(isalpha(h_host[pos_colon + 1])) pos_colon = -1; // no portnumber follows
     pos_ampersand = indexOf(h_host, "&", 0);
 
-    char *hostwoext = NULL;                                  // "skonto.ls.lv:8002" in "skonto.ls.lv:8002/mp3"
-    char *extension = NULL;                                  // "/mp3" in "skonto.ls.lv:8002/mp3"
-
-    if(pos_slash > 1) {
-        hostwoext = (char*)malloc(pos_slash + 2);
-        memcpy(hostwoext, h_host, pos_slash);
-        hostwoext[pos_slash] = '\0';
-        uint16_t extLen =  urlencode_expected_len(h_host + pos_slash);
-        extension = (char *)malloc(extLen + 20);
-        memcpy(extension, h_host + pos_slash, extLen);
-        urlencode(extension, extLen, true);
+    voxone::radio::UrlRequestParts requestParts;
+    if(!requestParts.assign(h_host, pos_slash)) {
+        free(l_host);
+        return resolutionError("out of memory preparing URL parts");
     }
-    else{  // url has no extension
-        hostwoext = strdup(h_host);
-        extension = strdup("/");
-    }
+    char *hostwoext = requestParts.authority();               // "skonto.ls.lv:8002"
+    char *extension = requestParts.path();                    // "/mp3"
+    urlencode(extension, requestParts.pathCapacity(), true);
 
     if((pos_colon >= 0) && ((pos_ampersand == -1) or (pos_ampersand > pos_colon))){
         port = atoi(h_host + pos_colon + 1);// Get portnumber as integer
@@ -651,10 +648,7 @@ bool Audio::connectToHost(const char* host, const char* user, const char* pwd,
         if(audio_icyurl) audio_icyurl("");
         m_lastHost[0] = 0;
     }
-    if(hostwoext) {free(hostwoext); hostwoext = NULL;}
-    if(extension) {free(extension); extension = NULL;}
     if(l_host   ) {free(l_host);    l_host    = NULL;}
-    if(h_host   ) {free(h_host);    h_host    = NULL;}
     return res;
 }
 //---------------------------------------------------------------------------------------------------------------------
@@ -689,9 +683,12 @@ bool Audio::httpPrint(const char* host) {
         return false;
     }
 
-    char* h_host = NULL; // pointer of l_host without http:// or https://
-    if(m_f_ssl) h_host = strdup(host + 8);
-    else        h_host = strdup(host + 7);
+    voxone::radio::OwnedCString strippedHost;
+    if(!strippedHost.assign(m_f_ssl ? host + 8 : host + 7)) {
+        AUDIO_ERROR("Out of memory preparing URL");
+        return false;
+    }
+    char* h_host = strippedHost.get(); // host without http:// or https://
 
     int16_t pos_slash;                                        // position of "/" in hostname
     int16_t pos_colon;                                        // position of ":" in hostname
@@ -704,22 +701,14 @@ bool Audio::httpPrint(const char* host) {
         if(isalpha(h_host[pos_colon + 1])) pos_colon = -1; // no portnumber follows
     pos_ampersand = indexOf(h_host, "&", 0);
 
-    char *hostwoext = NULL;                                  // "skonto.ls.lv:8002" in "skonto.ls.lv:8002/mp3"
-    char *extension = NULL;                                  // "/mp3" in "skonto.ls.lv:8002/mp3"
-
-    if(pos_slash > 1) {
-        hostwoext = (char*)malloc(pos_slash + 2);
-        memcpy(hostwoext, h_host, pos_slash);
-        hostwoext[pos_slash] = '\0';
-        uint16_t extLen =  urlencode_expected_len(h_host + pos_slash);
-        extension = (char *)malloc(extLen + 20);
-        memcpy(extension, h_host + pos_slash, extLen);
-        urlencode(extension, extLen, true);
+    voxone::radio::UrlRequestParts requestParts;
+    if(!requestParts.assign(h_host, pos_slash)) {
+        AUDIO_ERROR("Out of memory preparing URL parts");
+        return false;
     }
-    else{  // url has no extension
-        hostwoext = strdup(h_host);
-        extension = strdup("/");
-    }
+    char *hostwoext = requestParts.authority();
+    char *extension = requestParts.path();
+    urlencode(extension, requestParts.pathCapacity(), true);
 
     if((pos_colon >= 0) && ((pos_ampersand == -1) or (pos_ampersand > pos_colon))){
         port = atoi(h_host + pos_colon + 1);// Get portnumber as integer
@@ -769,9 +758,6 @@ bool Audio::httpPrint(const char* host) {
     m_contentlength = 0;
     m_f_chunked = false;
 
-    if(hostwoext) {free(hostwoext); hostwoext = NULL;}
-    if(extension) {free(extension); extension = NULL;}
-    if(h_host   ) {free(h_host);    h_host    = NULL;}
     return true;
 }
 //---------------------------------------------------------------------------------------------------------------------

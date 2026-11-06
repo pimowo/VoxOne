@@ -1042,7 +1042,11 @@ class St7796BluetoothWidget : public Widget {
 };
 #endif
 
-Page *pages[] = { new Page(), new Page(), new Page(), new Page() };
+Page playerPage(false);
+Page dialogPage(false);
+Page playlistPage(false);
+Page screensaverPage(false);
+Page *pages[] = { &playerPage, &dialogPage, &playlistPage, &screensaverPage };
 
 #if !(DSP_MODEL==DSP_ST7789 || VOXONE_DISPLAY_PROFILE == VOXONE_DISPLAY_PROFILE_ST7796_480X320)
   #undef  BITRATE_FULL
@@ -1097,21 +1101,42 @@ void Display::init() {
 #endif
   displayQueue=NULL;
   displayQueue = xQueueCreate( 5, sizeof( requestParams_t ) );
-  while(displayQueue==NULL){;}
-  _pager = new Pager();
+  if (displayQueue == nullptr) {
+    _runtimeEnabled = false;
+    _bootStep = 2;
+    Serial.println("disabled (display queue allocation failed)");
+    return;
+  }
+  _pager = new (std::nothrow) Pager();
+  if (!_pager) {
+    _runtimeEnabled = false;
+    _bootStep = 2;
+    Serial.println("disabled (display pager allocation failed)");
+    return;
+  }
   _createDspTask();
   while(_bootStep == 0) { delay(10); }
-  _footer = new Page();
+  _footer = new (std::nothrow) Page();
 #if VOXONE_DISPLAY_PROFILE == VOXONE_DISPLAY_PROFILE_ST7789_284X76 || VOXONE_DISPLAY_PROFILE == VOXONE_DISPLAY_PROFILE_ST7796_480X320 || VOXONE_DISPLAY_PROFILE_IS_SMALL_OLED
   _plwidget = nullptr;
 #else
-  _plwidget = new PlayListWidget();
+  _plwidget = new (std::nothrow) PlayListWidget();
 #endif
-  _nums = new NumWidget();
-  _clock = new ClockWidget();
-  _meta = new ScrollWidget();
-  _title1 = new ScrollWidget();
-  _plcurrent = new ScrollWidget();
+  _nums = new (std::nothrow) NumWidget();
+  _clock = new (std::nothrow) ClockWidget();
+  _meta = new (std::nothrow) ScrollWidget();
+  _title1 = new (std::nothrow) ScrollWidget();
+  _plcurrent = new (std::nothrow) ScrollWidget();
+  if (!_footer || !_nums || !_clock || !_meta || !_title1 || !_plcurrent
+#if !(VOXONE_DISPLAY_PROFILE == VOXONE_DISPLAY_PROFILE_ST7789_284X76 || VOXONE_DISPLAY_PROFILE == VOXONE_DISPLAY_PROFILE_ST7796_480X320 || VOXONE_DISPLAY_PROFILE_IS_SMALL_OLED)
+      || !_plwidget
+#endif
+  ) {
+    _runtimeEnabled = false;
+    _bootStep = 2;
+    Serial.println("disabled (display widget allocation failed)");
+    return;
+  }
   Serial.println("done");
 }
 

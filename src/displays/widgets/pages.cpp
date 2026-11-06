@@ -3,6 +3,7 @@
 #include "../dspcore.h"
 #include "pages.h"
 #include "widgets.h"
+#include "owned_pointer_list.h"
 
 void Pager::begin(){
 
@@ -47,7 +48,7 @@ void Pager::setPage(Page* page, bool black){
 //}
 
 Page::~Page() {
-  for (const auto& w : _widgets) removeWidget(w);
+  if (_ownsWidgets) voxone::display::deleteOwnedPointers(_widgets);
   // what about deleting _pages ???
 }
 

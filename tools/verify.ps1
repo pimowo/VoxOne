@@ -199,7 +199,7 @@ Invoke-Step 'Native tests' {
    $compileLog=Join-Path $work ($label+'.compile.log')
    $compileArgs=@('-std=c++11','-O2','-Wall','-Wextra','-Werror','-Wno-unused-parameter')
    if($name -eq 'mqtt_contract_native') { $compileArgs+=@('-I',(Join-Path $root 'test')) }
-  if($name -eq 'ap_ui_www_binding_native' -or $name -eq 'asynctcp_lifecycle_native' -or $name -eq 'asyncweb_lock_native' -or $name -eq 'bt_audio_mute_crosscore_native' -or $name -eq 'config_runtime_snapshot_native' -or $name -eq 'display_scroll_runtime_config_native' -or $name -eq 'first_boot_runtime_snapshot_native' -or $name -eq 'first_boot_transaction_native' -or $name -eq 'sntp_server_lifetime_native' -or $name -eq 'tts_hil_diagnostics_native' -or $name -eq 'websocket_client_lifetime_native' -or $name -eq 'websocket_queue_lifecycle_native') { $compileArgs+='-pthread' }
+  if($name -eq 'ap_ui_www_binding_native' -or $name -eq 'asynctcp_lifecycle_native' -or $name -eq 'asyncweb_lock_native' -or $name -eq 'bt_audio_mute_crosscore_native' -or $name -eq 'bt_link_single_owner_native' -or $name -eq 'config_runtime_snapshot_native' -or $name -eq 'display_scroll_runtime_config_native' -or $name -eq 'first_boot_runtime_snapshot_native' -or $name -eq 'first_boot_transaction_native' -or $name -eq 'sntp_server_lifetime_native' -or $name -eq 'tts_hil_diagnostics_native' -or $name -eq 'websocket_client_lifetime_native' -or $name -eq 'websocket_queue_lifecycle_native') { $compileArgs+='-pthread' }
    if($variant) {
     if($variant -eq 'CLEAN' -or $variant -eq 'DIRTY') { $compileArgs+="-DBUILD_ID_TEST_$variant=1" }
     elseif($variant -eq 'SECURITY-TEST') { $compileArgs+=@('-DVOXONE_PROFILE_M0=1','-DVOXONE_SECURITY_HTTP_ENFORCEMENT_TEST=1') }
@@ -226,6 +226,24 @@ Invoke-Step 'Native tests' {
 if(-not $onWindows) {
  Invoke-Step 'Native sanitizers' {
   $sanitizerArgs=@('-std=c++11','-O1','-g','-fsanitize=address,undefined','-fno-omit-frame-pointer','-Wall','-Wextra','-Werror','-Wno-unused-parameter')
+  $widgetBlockersExe=Join-Path $work 'code_audit_widget_blockers_sanitized'
+  & $Cxx @sanitizerArgs '-o' $widgetBlockersExe `
+    (Join-Path $root 'test/code_audit_widget_blockers_native.cpp')
+  if($LASTEXITCODE -ne 0) { throw 'Sanitized code-audit widget blockers compile failed' }
+  & $widgetBlockersExe
+  if($LASTEXITCODE -ne 0) { throw 'Sanitized code-audit widget blockers test failed' }
+  $radioUrlPartsExe=Join-Path $work 'radio_url_request_parts_sanitized'
+  & $Cxx @sanitizerArgs '-o' $radioUrlPartsExe `
+    (Join-Path $root 'test/radio_url_request_parts_native.cpp')
+  if($LASTEXITCODE -ne 0) { throw 'Sanitized radio URL request parts compile failed' }
+  & $radioUrlPartsExe
+  if($LASTEXITCODE -ne 0) { throw 'Sanitized radio URL request parts test failed' }
+  $btSingleOwnerExe=Join-Path $work 'bt_link_single_owner_sanitized'
+  & $Cxx @sanitizerArgs '-pthread' '-o' $btSingleOwnerExe `
+    (Join-Path $root 'test/bt_link_single_owner_native.cpp')
+  if($LASTEXITCODE -ne 0) { throw 'Sanitized BT single-owner compile failed' }
+  & $btSingleOwnerExe
+  if($LASTEXITCODE -ne 0) { throw 'Sanitized BT single-owner test failed' }
  $btAudioMuteExe=Join-Path $work 'bt_audio_mute_crosscore_sanitized'
   & $Cxx @sanitizerArgs '-pthread' '-o' $btAudioMuteExe `
     (Join-Path $root 'test/bt_audio_mute_crosscore_native.cpp')

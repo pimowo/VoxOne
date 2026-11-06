@@ -152,7 +152,8 @@ int main() {
   assert(scrollStart != std::string::npos && scrollEnd != std::string::npos);
   const std::string scroll = widgets.substr(scrollStart, scrollEnd - scrollStart);
   assert(scroll.find("delete _fb;") != std::string::npos);
-  assert(scroll.find("return _fb && _fb->ready();") != std::string::npos);
+  assert(scroll.find("return voxone::display::frameBufferReady(_fb);") !=
+         std::string::npos);
   assert(scroll.find("if(_fb->ready())") == std::string::npos);
   assert(scroll.find("scrollTextAssign(") != std::string::npos);
   assert(scroll.find("scrollComposeWindow(") != std::string::npos);

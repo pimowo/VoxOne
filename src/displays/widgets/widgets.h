@@ -3,6 +3,7 @@
 #include "../display_profile.h"
 #if DSP_MODEL!=DSP_DUMMY
 #include "widgetsconfig.h"
+#include "widget_memory.h"
 #include "../../core/player_scroll_controller.h"
 
   #define CHARWIDTH   6
@@ -12,7 +13,7 @@ class psFrameBuffer;
 
 class Widget{
   public:
-    Widget(){ _active   = false; }
+    Widget(){ _active = false; }
     virtual ~Widget(){}
     virtual void loop(){}
     virtual void init(WidgetConfig conf, uint16_t fgcolor, uint16_t bgcolor){
@@ -23,11 +24,12 @@ class Widget{
       _backMove.x = _config.left;
       _backMove.y = _config.top;
       _moved = _locked = false;
+      _available = true;
     }
     void setAlign(WidgetAlign align){
       _config.align = align;
     }
-    void setActive(bool act, bool clr=false) { _active = act; if(_active && !_locked) _draw(); if(clr && !_locked) _clear(); }
+    void setActive(bool act, bool clr=false) { _active = act && _available; if(_active && !_locked) _draw(); if(clr && !_locked && _available) _clear(); }
     void lock(bool lck=true) { _locked = lck; if(_locked) _reset(); if(_locked && _active) _clear();  }
     void unlock() { _locked = false; }
     bool locked() { return _locked; }
@@ -53,12 +55,15 @@ class Widget{
     }
   protected:
     bool _active, _moved, _locked;
+    bool _available = true;
     uint16_t _fgcolor, _bgcolor, _width;
     WidgetConfig _config;
     MoveConfig   _backMove;
     virtual void _draw() {}
     virtual void _clear() {}
     virtual void _reset() {}
+    void markUnavailable() { _available = false; _active = false; }
+    bool available() const { return _available; }
 };
 
 class TextWidget: public Widget {
@@ -72,8 +77,10 @@ class TextWidget: public Widget {
     void setText(int val, const char *format);
     void setText(const char* txt, const char *format);
   protected:
-    char *_text;
-    char *_oldtext;
+    char *_text = nullptr;
+    char *_oldtext = nullptr;
+    voxone::display::WidgetBuffer _textBuffer;
+    voxone::display::WidgetBuffer _oldTextBuffer;
     uint16_t  _buffsize, _textwidth, _oldtextwidth, _oldleft, _textheight;
     uint8_t _charWidth;
   protected:
@@ -123,8 +130,10 @@ class ScrollWidget: public TextWidget {
     static void nextSt7789ScrollFrame();
 #endif
   private:
-    char *_sep;
-    char *_window;
+    char *_sep = nullptr;
+    char *_window = nullptr;
+    voxone::display::WidgetBuffer _separatorBuffer;
+    voxone::display::WidgetBuffer _windowBuffer;
     size_t _windowCapacity;
     int16_t _x;
     bool _doscroll;
@@ -260,6 +269,7 @@ class ClockWidget: public Widget {
     uint16_t _left();
     uint16_t _top();
     void _begin();
+    bool _frameBufferReady() const;
 };
 
 class BitrateWidget: public Widget {

@@ -9,9 +9,10 @@ class Page {
   protected:
     std::list<Widget*> _widgets;
     std::list<Page*> _pages;
-    bool _active;
+    bool _active = false;
+    bool _ownsWidgets;
   public:
-    //Page();
+    explicit Page(bool ownsWidgets = true) : _ownsWidgets(ownsWidgets) {}
     ~Page();
     void loop();
     Widget& addWidget(Widget* widget);
