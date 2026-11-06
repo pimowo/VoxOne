@@ -6,6 +6,7 @@ from __future__ import annotations
 import json
 import os
 from pathlib import Path
+import re
 import struct
 import sys
 import tempfile
@@ -27,6 +28,20 @@ from full_image_validation import (  # noqa: E402
 
 BUILD_ROOT_VALUE = os.environ.get("VOXONE_FULL_IMAGE_BUILD_DIR", "")
 BUILD_ROOT = Path(BUILD_ROOT_VALUE).resolve() if BUILD_ROOT_VALUE else None
+VERSION_HEADER = ROOT / "src" / "core" / "version.h"
+VERSION_PATTERN = re.compile(
+    r'^\s*#define\s+VOXONE_VERSION\s+"(\d+\.\d+\.\d+)"\s*$',
+    re.MULTILINE,
+)
+
+
+def read_product_version() -> str:
+    match = VERSION_PATTERN.search(VERSION_HEADER.read_text(encoding="utf-8"))
+    if not match:
+        raise AssertionError(
+            "VOXONE_VERSION must be SemVer in src/core/version.h"
+        )
+    return match.group(1)
 
 
 class ProfileIdentityValidationTest(unittest.TestCase):
@@ -66,7 +81,7 @@ class FullImageValidationIntegrationTest(unittest.TestCase):
         assert BUILD_ROOT is not None
         cls.workspace = ROOT / ".pio" / "verify" / "full-image-validation"
         cls.workspace.mkdir(parents=True, exist_ok=True)
-        cls.version = "0.8.0"
+        cls.version = read_product_version()
         for profile, contract in PROFILE_CONTRACTS.items():
             build = BUILD_ROOT / contract["environment"]
             required = [
