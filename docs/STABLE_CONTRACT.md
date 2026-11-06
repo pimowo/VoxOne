@@ -5,6 +5,12 @@ Stan dokumentu: zakres sprzętowy zamrożony decyzją
 zatwierdzony cel S0+VoxOneBT i granice pierwszego Stable. Kanoniczna lista
 otwartych prac pozostaje wyłącznie w [TODO.md](TODO.md).
 
+Status wydania: **RC1 12/12 PASS (2026-11-06)**. Finalny closeout obejmuje
+końcowe fizyczne HIL L0 i S0 oraz kontrolowane testy OTA MAIN, OTA SPIFFS,
+rollback, Recovery, trwałości NVS i Balance. Wcześniejsze opisy PENDING i
+PARTIAL w sekcjach historycznych dokumentują stan pośrednich checkpointów;
+nie zmieniają finalnego statusu bramek poniżej.
+
 ## Zakres wydania
 
 Technical Stable 1.0.0 oznacza zweryfikowane firmware, dane WWW, formaty
@@ -365,8 +371,8 @@ modułu, a nie osobny fizyczny model urządzenia.
 |---|---|---|---|
 | W0 | PCM5102A; ST7789 284×76; EC11 | `RETAINED BUILD / PHYSICAL HIL NON-BLOCKING` | Zachować build, full-image, testy offline i historyczne dowody. Uszkodzone USB nadal blokuje bezpieczny opcjonalny HIL/OTA W0, ale nie wydanie. |
 | M0 | PCM5102A; SSD1306/SSD1309 128×64; EC11 | `RETAINED BUILD / PHYSICAL HIL NON-BLOCKING` | Zachować build, full-image, testy offline i wcześniejsze PASS; bez wymogu końcowego profilowego HIL. |
-| L0 | istniejąca PCB V-Tom; ESP32-S3 N16R8; PCM5102A; ST7796S; EC11; DS3231; VoxOneBT; VU | **`RELEASE-GATING HIL REQUIRED`** | Domyślny TFT/audio, BT/SourceManager/TTS, SECURITY, Config, update/recovery i otwarte P1. Hardware i GPIO pozostają bez zmian; XSMT nie należy do baseline. |
-| S0 | ESP32-S3 Zero 4 MiB/2 MiB; MAX98357A MONO, SSD1306 128×32, EC11 i VoxOneBT | **`RELEASE-GATING HIL REQUIRED`** | Zachować GPIO I2S0 `BCLK5/DOUT6/WS4`, input `A9/B8/KEY7`, I2C `SDA1/SCL2`; VoxOneBT UART1 `RX44/TX43` i I2S1 RX `BCLK11/WS12/DATA13`; logi aplikacji przez native USB CDC; VU i MAIN→BT update wyłączone. Software PASS nie zastępuje pełnego fizycznego HIL. |
+| L0 | istniejąca PCB V-Tom; ESP32-S3 N16R8; PCM5102A; ST7796S; EC11; DS3231; VoxOneBT; VU | **`RELEASE-GATING HIL PASS 2026-11-06`** | Końcowy HIL potwierdził domyślny TFT/audio, BT/SourceManager/TTS, Config, update/recovery i Balance. Hardware i GPIO pozostają bez zmian; XSMT nie należy do baseline. |
+| S0 | ESP32-S3 Zero 4 MiB/2 MiB; MAX98357A MONO, SSD1306 128×32, EC11 i VoxOneBT | **`RELEASE-GATING HIL PASS 2026-11-06`** | Końcowy HIL potwierdził bazowy S0+VoxOneBT. Zachowane GPIO: I2S0 `BCLK5/DOUT6/WS4`, input `A9/B8/KEY7`, I2C `SDA1/SCL2`, UART1 `RX44/TX43` i I2S1 RX `BCLK11/WS12/DATA13`; VU i MAIN→BT update pozostają wyłączone. |
 | DIN0 | PCM5102A; SSD1306/SSD1309 128×64; EC11; pinout M0 | `RETAINED BUILD / PHYSICAL HIL NON-BLOCKING` | Zachować build, full-image, testy offline, własną identity i historię rewizji 0; fizyczny HIL nie blokuje wydania. |
 
 ### B. Rozszerzone capability obecne w `3bad2c3`
@@ -421,12 +427,27 @@ status `OPTIONAL / PHYSICAL HIL NOT QUALIFIED` oraz zakres każdego wcześniej
 uzyskanego fizycznego PASS.
 
 Formalna Definition of Stable dla RC1 liczy **12 głównych bramek**: dwa
-profilowe HIL (S0 i L0) oraz dziesięć niezmienionych grup wspólnych: RADIO
-endurance; BT lifecycle; SourceManager switching/reconnect; TTS restore;
-firmware i SPIFFS update; recovery; Config v7 persistence; L/R i VU; brak
-otwartych P0/P1; końcowy PASS na zamrożonym release commicie. Po ponownej
-ocenie dowodów bieżący stan to **10/12 OPEN, 2/12 CLOSED**; CLOSED pozostają
-RADIO endurance oraz L/R+VU. S0 ma VU wyłączone.
+profilowe HIL (S0 i L0) oraz dziesięć grup wspólnych: RADIO endurance; BT
+lifecycle; SourceManager switching/reconnect; TTS restore; firmware i SPIFFS
+update; recovery; Config v7 persistence; L/R i VU; brak otwartych P0/P1;
+końcowy PASS na zamrożonym release commicie.
+
+| Nr | Bramka RC1 | Status 2026-11-06 | Dowód closeoutu |
+|---:|---|---|---|
+| 1 | `RC1-PROFILE-S0` | **PASS** | Końcowy fizyczny HIL S0+VoxOneBT. |
+| 2 | `RC1-PROFILE-L0` | **PASS** | Końcowy fizyczny HIL L0+VoxOneBT. |
+| 3 | `RC1-RADIO-ENDURANCE` | **PASS** | Terminalny endurance i końcowe HIL profili. |
+| 4 | `RC1-BT-LIFECYCLE` | **PASS** | Lifecycle BT w końcowym HIL L0/S0. |
+| 5 | `RC1-SOURCE-MANAGER` | **PASS** | RADIO/BT, disconnect/reconnect i intencje źródła w końcowym HIL. |
+| 6 | `RC1-TTS-RESTORE` | **PASS** | Restore TTS na wymaganych profilach; zachowane scenariusze A/B/C/D. |
+| 7 | `RC1-UPDATE` | **PASS** | Kontrolowane OTA MAIN i OTA SPIFFS. |
+| 8 | `RC1-RECOVERY` | **PASS** | Kontrolowany rollback i Recovery. |
+| 9 | `RC1-CONFIG-V7` | **PASS** | Trwałość Config v7 i danych NVS. |
+| 10 | `RC1-LR-VU` | **PASS** | Balance/L/R/VU na L0; VU S0 poza zakresem. |
+| 11 | `RC1-NO-P0-P1` | **PASS** | Brak otwartych release-blocking P0/P1. |
+| 12 | `RC1-FROZEN-RELEASE` | **PASS** | Zamrożony commit, finalne obrazy OTA MAIN i tag `v1.0.0`. |
+
+Wynik końcowy: **RC1 12/12 PASS**. S0 ma VU wyłączone zgodnie z kontraktem.
 
 Historyczny kontrakt 3 + 10 liczył 13 bramek łącznie. Późniejszy kontrakt
 5 + 10 liczył 15 bramek, a zapis `13/15 OPEN` oznaczał 13 otwartych spośród

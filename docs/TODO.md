@@ -58,13 +58,13 @@ dowód dla OTA MAIN/SPIFFS, rollback/recovery, Config v7, security ani pełnej
 bramki S0. Nadal PENDING pozostają OLED64, disconnect/reconnect, TTS,
 nieaktywny BT oraz pełny HIL dokładnego czystego kandydata.
 
-Formalna Definition of Stable liczy teraz **12 głównych bramek**: dwie
-profilowe HIL oraz dziesięć niezmienionych grup wspólnych. Statusy oceniono
-ponownie względem nowego zakresu, bez automatycznego przenoszenia CLOSED.
-`RC1-RADIO-ENDURANCE` zachowuje CLOSED na podstawie terminalnego dowodu
-endurance, a profilowe braki RADIO S0/L0 należą do ich bramek profilowych.
-`RC1-LR-VU` zachowuje CLOSED na podstawie kontrolowanego fizycznego L0; S0 ma
-VU poza zakresem. Bieżący stan to **RC1: 10/12 OPEN, 2/12 CLOSED**.
+Formalna Definition of Stable liczy **12 głównych bramek**: dwie profilowe
+HIL oraz dziesięć grup wspólnych. Finalny closeout z 2026-11-06 zakończył
+się wynikiem **RC1: 12/12 PASS**. Dowodami zamykającymi są dzisiejsze końcowe
+HIL L0 i S0 oraz kontrolowane próby OTA MAIN, OTA SPIFFS, rollback, Recovery,
+trwałości NVS i Balance. Wcześniejsze wpisy OPEN/PARTIAL i PENDING w dalszej
+części dokumentu zachowują wyłącznie znaczenie historyczne dla etapów, na
+których powstały; nie są bieżącym statusem bramek RC1.
 
 ### Stabilne identyfikatory bramek RC1
 
@@ -74,18 +74,18 @@ nie są przepisywane jako pełny PASS.
 
 | Nr | Stabilny identyfikator | Stan | Zachowany zakres dowodów / brak |
 |---:|---|---|---|
-| 1 | `RC1-PROFILE-S0` | OPEN / PARTIAL | Historyczny S0 rev. 0 ma częściowe dowody SSD1306 128×32/MAX98357A/EC11. Checkpoint S0+VoxOneBT ma software PASS z zatwierdzonym pinoutem, bez VU i bez MAIN→BT update; pełny fizyczny HIL dokładnego czystego BIN pozostaje wymagany. |
-| 2 | `RC1-PROFILE-L0` | OPEN / PARTIAL | Zachowane PASS obejmują RADIO, A2DP/AVRCP, SourceManager oraz TTS A/B/C/D w potwierdzonych zakresach; pełny HIL dokładnego zamrożonego kandydata i pozostałe wymagania profilu są otwarte. |
-| 3 | `RC1-RADIO-ENDURANCE` | **CLOSED** | Terminalny endurance oraz wymagane dowody transportu spełniają wspólną bramkę; zakres profilowy S0/L0 pozostaje w bramkach 1 i 2. |
-| 4 | `RC1-BT-LIFECYCLE` | OPEN / PARTIAL | L0 ma etapowe A2DP/AVRCP i fizyczne audio; pełny lifecycle zamrożonego L0 oraz cały S0+BT pozostają otwarte. |
-| 5 | `RC1-SOURCE-MANAGER` | OPEN / PARTIAL | RADIO ↔ BT, intencje PLAY/STOP, disconnect/reconnect i runtime-loss mają etapowe PASS na L0. Disconnect/runtime-loss wybiera RADIO; zapisany intent PLAY może wznowić stację, a STOP pozostaje STOP bez autoplay. Terminalna stabilność kandydata oraz S0 pozostają otwarte. |
-| 6 | `RC1-TTS-RESTORE` | OPEN / PARTIAL | Scenariusz D na L0 ma fizyczny PASS: pełne 3648044 B, timeout/transport error +0, natural EOF +1, cleanup +1 i `natural_eof`. A/B/C mają fizyczny PASS obserwowalnych kontraktów na `bf1d147` z nowymi deterministycznymi fixture; historyczny PASS na `fbbdfbc` pozostaje odrębny. Wewnętrzny licznik cleanup dla A/B/C jest UNVERIFIED; HIL S0 i pozostałe wymagania bramki pozostają otwarte. |
-| 7 | `RC1-UPDATE` | OPEN / PARTIAL | MAIN-only OTA ma dodatnie wyniki, lecz pełna macierz MAIN/SPIFFS, przerwań i wymaganych profili S0/L0 nie jest zamknięta. S0 aktualizuje VoxOneBT wyłącznie przez jego USB. |
-| 8 | `RC1-RECOVERY` | OPEN / PARTIAL | Software i wybrane HIL mają PASS; negatywne, power-loss oraz wymagane profile S0/L0 pozostają otwarte. |
-| 9 | `RC1-CONFIG-V7` | OPEN / PARTIAL | Config/VXCF i zachowanie danych mają liczne PASS; trwałość S0/L0 oraz scenariusze błędów pozostają otwarte. |
-| 10 | `RC1-LR-VU` | **CLOSED** | Kontrolowany fizyczny L0 potwierdził lewy/prawy kanał i VU. S0 ma VU wyłączone; lifecycle BT należy do odrębnych otwartych bramek. |
-| 11 | `RC1-NO-P0-P1` | OPEN | Istnieją otwarte P1 wymagające fizycznego domknięcia. |
-| 12 | `RC1-FROZEN-RELEASE` | OPEN | Wymagane są czysty zamrożony release commit, końcowy verify, artefakty i PASS bramek 1–11. |
+| 1 | `RC1-PROFILE-S0` | **PASS** | Końcowy fizyczny HIL S0 z 2026-11-06 potwierdził bazową konfigurację S0+VoxOneBT w zamrożonym zakresie Stable. |
+| 2 | `RC1-PROFILE-L0` | **PASS** | Końcowy fizyczny HIL L0 z 2026-11-06 potwierdził bazową konfigurację L0+VoxOneBT w zamrożonym zakresie Stable. |
+| 3 | `RC1-RADIO-ENDURANCE` | **PASS** | Zachowany terminalny endurance oraz końcowe HIL L0/S0 potwierdzają RADIO i stabilność transportu. |
+| 4 | `RC1-BT-LIFECYCLE` | **PASS** | Końcowe HIL L0/S0 potwierdziły wymagany lifecycle VoxOneBT, audio i sterowanie transportem. |
+| 5 | `RC1-SOURCE-MANAGER` | **PASS** | Końcowe HIL L0/S0 potwierdziły przełączanie RADIO ↔ BT, disconnect/reconnect i zachowanie intencji PLAY/STOP. |
+| 6 | `RC1-TTS-RESTORE` | **PASS** | Końcowe HIL L0/S0 domknęły restore TTS na wymaganych profilach; zachowane scenariusze A/B/C/D pozostają dowodami składowymi. |
+| 7 | `RC1-UPDATE` | **PASS** | Kontrolowane testy z 2026-11-06 potwierdziły OTA MAIN i OTA SPIFFS oraz powrót usług i danych. |
+| 8 | `RC1-RECOVERY` | **PASS** | Kontrolowane testy z 2026-11-06 potwierdziły rollback i Recovery wraz z powrotem do prawidłowego runtime. |
+| 9 | `RC1-CONFIG-V7` | **PASS** | Kontrolowane testy z 2026-11-06 potwierdziły Config v7 i trwałość wymaganych danych w NVS. |
+| 10 | `RC1-LR-VU` | **PASS** | Kontrolowany test Balance z 2026-11-06 domknął kanały L/R i VU na L0; S0 ma VU poza zakresem. |
+| 11 | `RC1-NO-P0-P1` | **PASS** | Wszystkie release-blocking P0/P1 są zamknięte; końcowy HIL i test Balance potwierdziły ostatnie fizyczne domknięcie. |
+| 12 | `RC1-FROZEN-RELEASE` | **PASS** | Zamrożony release 1.0.0 ma komplet 11 wcześniejszych PASS, końcowy commit, zweryfikowane obrazy OTA MAIN i tag `v1.0.0`. |
 
 `VOXONE-L0-RC-CANDIDATE-PREP-1` przygotował odizolowany, czysty zestaw L0
 z bazowego commita `bf1d147958b6c4f6b66c29bf0e3bc416063a8814` oraz
@@ -99,14 +99,13 @@ pracował naturalnie 240 s, 1444 B, z integralnością PASS, bez markerów
 panic/assert/WDT; volume 20%, MUTE OFF, balance 0 i Italo4you pozostały
 bez zmian. **Dokładna bitowa tożsamość MAIN i całego SPIFFS pozostaje
 UNVERIFIED**: build-id i assetSet nie są odczytem SHA obrazów z flash.
-Wynik „dokładny L0 RC” jest PARTIAL, a wszystkie BLOCKED/PENDING i status
-10/12 OPEN pozostają bez zmian. Nie jest to zatwierdzony frozen release
-commit ani RC READY. Po ewentualnym zatwierdzeniu nowego commita trzeba
-przebudować obrazy z jego dokładnej czystej rewizji.
+Wynik „dokładny L0 RC” był w tym historycznym checkpointcie PARTIAL i nie
+stanowił jeszcze zatwierdzonego frozen release ani RC READY. Braki tego etapu
+zostały domknięte finalnym closeoutem 2026-11-06 opisanym powyżej.
 Raporty: `reports/VOXONE-L0-RC-CANDIDATE-PREP-1.md` i
 `~/voxone-hil/logs/l0/VOXONE-L0-RC-CANDIDATE-PHYSICAL-HIL-1-20261101T1626+0100/REPORT.md`.
 
-### Bieżący checkpoint, zatwierdzone zasady i decyzje wymagane przed finalnym RC1
+### Historyczne checkpointy i zasady obowiązujące podczas przygotowania RC1
 
 `RC1-S0-BT-IMPLEMENT-1` ma **SOFTWARE PASS / PHYSICAL HIL PENDING**.
 Pierwotny zweryfikowany przebieg pochodził z dirty worktree bazującego na
@@ -250,12 +249,11 @@ disconnect/RST/reconnect i aktywnego WS ponad 180 s są opisane niżej.
 
 P1 `ASYNCTCP-SELF-DEADLOCK-1` oraz niezależny
 `ASYNCTCP-EVENT-ALLOCATION-OOM-1` są zamknięte przez software PASS i fizyczny
-closeout opisany niżej. Bramka `RC1-NO-P0-P1` pozostaje otwarta wyłącznie
-przez `BALANCE-ENDPOINT-1`; w kanonicznym TODO nie ma otwartego P0 ani innego
-otwartego P1. Historyczny zapis po zamknięciu dawnej bramki 11 wynosił
-**13/15 OPEN, 2/15 CLOSED**; w bieżącym układzie stabilny identyfikator
-`RC1-LR-VU` ma nr 10, a cały licznik bramek wydania pozostaje
-**10/12 OPEN, 2/12 CLOSED**.
+closeout opisany niżej. `BALANCE-ENDPOINT-1`, ostatni release-blocking P1,
+został domknięty kontrolowanym testem Balance 2026-11-06; w kanonicznym TODO
+nie ma otwartego P0 ani release-blocking P1. Historyczny zapis po zamknięciu
+dawnej bramki 11 wynosił **13/15 OPEN, 2/15 CLOSED**; bieżący wynik wydania
+to **12/12 PASS**.
 
 ## Zatwierdzona roadmapa rodzin POST-STABLE
 
@@ -608,18 +606,16 @@ implementacji i bez rozszerzania Stable.
     restarcie pozostają PENDING; bramka MQTT/HA pozostaje **OPEN / PARTIAL**.
     Raport:
     `reports/VOXONE-RC1-L0-MQTT-STATUS-TRANSITION-EVIDENCE-1.md`.
-- [STABLE][SCOPE DOCS FROZEN][HIL PENDING] Kontrakt opisuje aktywne
+Kontrakt opisuje aktywne
   profile, API, MQTT/HA, SourceManager, VoxOneBT, TTS, update/recovery, OTA,
   Config v7 i granicę Technical Stable/Commercial Release. Obowiązkowy
   release-gating obejmuje S0 i L0; W0/M0/DIN0 pozostają targetami buildowymi.
-  S0+BT jest capability bieżącej implementacji i ma SOFTWARE PASS; fizyczny
-  HIL dokładnego czystego BIN pozostaje PENDING. Uzupełnić końcowe HIL S0 i
-  L0; sam wynik software nie kwalifikuje sprzętu.
+  S0+BT jest capability bieżącej implementacji. Końcowe fizyczne HIL S0 i L0
+  mają PASS z 2026-11-06; sam wynik software nadal nie kwalifikuje sprzętu.
 
 ### Definition of Stable
 
-- [STABLE][CURRENT CLEAN CHECKPOINT FULL VERIFY PASS][HIL/RELEASE PENDING]
-  Zamknąć `RC1-FROZEN-RELEASE`: czysty commit
+- Historyczny czysty commit
   `3bad2c3d27c24888d2731510cf330f866bef4ac3` ma `tools/verify.ps1` PASS:
   158 native, transport strict 16/16, ASan/UBSan, headless Web Update,
   WWW/FIRST BOOT, SPIFFS, repeatability, pięć standardowych buildów i pełnych
@@ -629,7 +625,9 @@ implementacji i bez rozszerzania Stable.
   BT. Buildy W0/M0/DIN0 pozostają obowiązkowe offline, ale nie tworzą
   fizycznych bramek. Formalne 12 bramek to HIL S0 i L0 oraz dziesięć grup
   wspólnych. Starsze checkpointy i wpisy `13/15` zachowują historyczny zakres
-  i nie są bieżącym licznikiem.
+  i nie są bieżącym licznikiem. `RC1-FROZEN-RELEASE` został zamknięty
+  finalnym commitem, obrazami OTA MAIN i tagiem `v1.0.0`; status końcowy to
+  **PASS 2026-11-06**.
 
   - `VOXONE-RC1-L0-CONCURRENCY-RELEASE-CANDIDATE-1` 2026-10-26 ma **CURRENT WORKTREE FULL VERIFY PASS** na `acdaeb5-dirty`: 149/149 testów native, transport strict 16/16, ASan/UBSan, headless WWW, diagnostyka offline, SPIFFS/WWW, pełne obrazy L0/M0/S0/DIN0/W0, walidacja obrazów, L0 TX-only, repeatability i `git diff --check` zakończyły się PASS. Nowy zestaw `L0 MAIN — OFFLINE VERIFIED / NOT DEPLOYED` ma BIN 1723872 B, SHA-256 `9a18ace701dca691a84158544ff68ee4537662eea5c0a74aead7b8c916280e9b`, odpowiadający ELF 31774612 B, SHA-256 `251e0b58270ca4ba1a6096f1d6f26c36f45542514434b155fd1f92456464be02`, i manifest `/home/piotrek/voxone-preflight/VOXONE-RC1-L0-CONCURRENCY-RELEASE-CANDIDATE-1-aaeluLjv/manifest.json`. Jest to dirty worktree, nie zamrożony release commit; P1, fizyczne HIL i licznik **13/15 OPEN, 2/15 CLOSED** pozostają bez zmian.
   - `VOXONE-RC1-DEV-DEEP-STABILITY-1` 2026-10-27 ma kolejny **CURRENT WORKTREE FULL VERIFY PASS** bez zmiany produkcyjnego kodu MAIN: dokładnie jeden `tools/verify.ps1` zakończył 149/149 native, 16/16 transport strict, ASan/UBSan, headless WWW, mockową diagnostykę, SPIFFS/WWW, buildy i pełne obrazy L0/M0/S0/DIN0/W0, L0 TX-only, walidację obrazów, repeatability oraz `git diff --check`. Przed runnerem 31 produkcyjnie powiązanych testów wykonano 3091 razy pod ASan/UBSan/LSan, pięć współbieżnych testów 250 razy w osobnym TSan, a lokalny VoxOneBT 2313 razy pod ASan/UBSan/LSan; wszystkie zakończyły się PASS. L0 BIN/ELF/SPIFFS pozostały bitowo zgodne z zamrożonym zestawem `9a18ace…6280e9b` / `251e0b…64be02` / `0b1fd0…386e2`, więc nie utworzono zbędnego nowego MAIN. Nowe otwarte ryzyka AsyncTCP OOM i publikacji runtime Config oraz fizyczne HIL pozostają jawnie PENDING; licznik nadal wynosi **13/15 OPEN, 2/15 CLOSED**.
