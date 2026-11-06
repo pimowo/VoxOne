@@ -217,5 +217,10 @@ bool CommandHandler::exec(const char *command, const char *value, uint32_t cid) 
   if (strEquals(command, "vumeter"))   { config.saveValue(&config.store.vumeter, static_cast<bool>(atoi(value))); display.putRequest(SHOWVUMETER); netserver.requestOnChange(GETSYSTEM, 0); return true; }
   if (strEquals(command, "softap"))    { config.saveValue(&config.store.softapdelay, static_cast<uint8_t>(atoi(value))); return true; }
   if (strEquals(command, "mdnsname"))  { config.saveValue(config.store.mdnsname, value, MDNS_LENGTH); return true; }
+  if (strEquals(command, "hadiscovery")) {
+    config.saveValue(&config.store.haDiscoveryEnabled, static_cast<bool>(atoi(value)));
+    netserver.requestOnChange(GETSYSTEM, 0);
+    return true;
+  }
   return false;
 }

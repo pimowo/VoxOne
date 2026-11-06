@@ -58,6 +58,7 @@ struct Snapshot {
   int8_t timezoneMinute;
   uint16_t encoderAcceleration;
   uint8_t volumeSteps;
+  bool haDiscoveryEnabled;
   char mdnsName[kMdnsNameCapacity];
 };
 

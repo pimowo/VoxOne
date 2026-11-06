@@ -224,8 +224,10 @@
         <div class="settings-layout">
           <div class="settings-column">
           <article class="card network-card" aria-labelledby="network-title">
-            <div class="settings-card-heading"><h3 id="network-title">Sieć</h3><span class="settings-state">Tylko podgląd</span></div>
+            <div class="settings-card-heading"><h3 id="network-title">Sieć</h3><span class="settings-state">Konfiguracja</span></div>
             <dl class="facts"><div><dt>Hostname</dt><dd id="network-hostname">—</dd></div><div><dt>Aktywna sieć Wi-Fi</dt><dd id="network-active-ssid">—</dd></div></dl>
+            <label class="display-setting-toggle" for="ha-discovery-toggle"><input id="ha-discovery-toggle" type="checkbox" disabled><span>Automatyczne wykrywanie w Home Assistant (mDNS)</span></label>
+            <p id="ha-discovery-feedback" class="hint" role="status" aria-live="polite">Zmiana rozgłaszania zacznie obowiązywać po ponownym uruchomieniu urządzenia.</p>
             <h4>Profile Wi-Fi</h4>
             <ol id="network-profiles" class="network-profiles"><li class="muted">Oczekiwanie na dane urządzenia.</li></ol>
             <p class="hint">Hasła nie są wysyłane do przeglądarki. Kolejność określa kolejność prób połączenia; połączenie rozpoczyna się od ostatniego użytego profilu. Edycja i włączanie profili nie są obecnie obsługiwane.</p>

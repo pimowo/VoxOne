@@ -105,7 +105,8 @@ bool securityWebSocketCommandAllowed(const char* command) {
       "scrollsettings",
       "tzh", "tzm", "sntp2", "sntp1", "timeint", "timeintrtc",
       "volsteps", "encacc", "oneclickswitching", "balance", "reboot",
-      "boot", "smartstart", "vumeter", "softap", "mdnsname"};
+      "boot", "smartstart", "vumeter", "softap", "mdnsname",
+      "hadiscovery"};
   for (const char* allowedCommand : allowed)
     if (std::strcmp(command, allowedCommand) == 0) return true;
   return false;

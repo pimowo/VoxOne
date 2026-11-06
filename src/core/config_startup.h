@@ -9,6 +9,38 @@ namespace config_format {
 
 constexpr uint8_t kDefaultUserVolume = 20;
 
+template <typename Runtime>
+auto runtimeHaDiscoveryEnabledImpl(const Runtime& runtime, int)
+    -> decltype(runtime.haDiscoveryEnabled, bool()) {
+  return runtime.haDiscoveryEnabled;
+}
+
+template <typename Runtime>
+bool runtimeHaDiscoveryEnabledImpl(const Runtime& runtime, long) {
+  return !runtime.reservedTelnet;
+}
+
+template <typename Runtime>
+bool runtimeHaDiscoveryEnabled(const Runtime& runtime) {
+  return runtimeHaDiscoveryEnabledImpl(runtime, 0);
+}
+
+template <typename Runtime>
+auto setRuntimeHaDiscoveryEnabledImpl(Runtime& runtime, bool enabled, int)
+    -> decltype(runtime.haDiscoveryEnabled = enabled, void()) {
+  runtime.haDiscoveryEnabled = enabled;
+}
+
+template <typename Runtime>
+void setRuntimeHaDiscoveryEnabledImpl(Runtime& runtime, bool enabled, long) {
+  runtime.reservedTelnet = !enabled;
+}
+
+template <typename Runtime>
+void setRuntimeHaDiscoveryEnabled(Runtime& runtime, bool enabled) {
+  setRuntimeHaDiscoveryEnabledImpl(runtime, enabled, 0);
+}
+
 struct ConfigStartupResult {
   ConfigRecordStatus status;
   bool btEnabled;
@@ -168,6 +200,7 @@ void buildConfigDefaults(Runtime& store, const char* ntp1, const char* ntp2,
   store.screensaverPlayingBlank = false;
   store.abuff = audioBuffer;
   store.reservedTelnet = false;
+  setRuntimeHaDiscoveryEnabled(store, true);
   store.watchdog = true;
   store.timeSyncInterval = 60;    //min
   store.timeSyncIntervalRTC = 24; //hour
@@ -207,6 +240,9 @@ ConfigStartupResult loadStartupConfig(const uint8_t* input, std::size_t size,
       status == ConfigRecordStatus::MIGRATED_V6;
   if (success) {
     copyConfigFields(loaded.fields, runtime);
+    // Config v7's retired telnet bit is stored inverted so every existing
+    // record (where the reserved bit is false) upgrades to discovery enabled.
+    setRuntimeHaDiscoveryEnabled(runtime, !loaded.fields.reservedTelnet);
     runtime.config_set = kConfigV7Magic;
     runtime.version = kConfigV7;
     // Legacy records have no CRC; bound strings before runtime C string calls.

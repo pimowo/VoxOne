@@ -489,6 +489,7 @@ void Config::resetSystem(const char *val, uint8_t clientId){
     saveValue(&store.vumeter, false, false);
     saveValue(&store.softapdelay, (uint8_t)0, false);
     saveValue(&store.abuff, (uint16_t)7, false);
+    saveValue(&store.haDiscoveryEnabled, true, false);
     saveValue(&store.watchdog, true);
     _makeDefaultMdnsName(tmpBuf, sizeof(tmpBuf));
     saveValue(store.mdnsname, tmpBuf, MDNS_LENGTH, true, true);
@@ -1134,6 +1135,7 @@ void Config::_publishRuntimeLocked() {
   runtime.timezoneMinute = store.tzMin;
   runtime.encoderAcceleration = store.encacc;
   runtime.volumeSteps = store.volsteps;
+  runtime.haDiscoveryEnabled = store.haDiscoveryEnabled;
   strlcpy(runtime.mdnsName, store.mdnsname, sizeof(runtime.mdnsName));
   _runtime.publish(runtime);
 }

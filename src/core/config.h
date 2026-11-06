@@ -116,6 +116,7 @@ struct config_t
   bool      skipPlaylistUpDown;
   uint16_t  abuff;
   bool      reservedTelnet;
+  bool      haDiscoveryEnabled;
   bool      watchdog; // legacy/reserved: runtime always forces audio watchdog on
   uint16_t  timeSyncInterval;
   uint16_t  timeSyncIntervalRTC;

@@ -59,6 +59,10 @@ struct FakeEeprom {
   }
 };
 
+struct RuntimeConfigV7 : config_v6_t {
+  bool haDiscoveryEnabled;
+};
+
 void defaults(config_v6_t& runtime) {
   buildConfigDefaults(runtime, "0.pl.pool.ntp.org", "1.pl.pool.ntp.org", "VoxOne-test", 7);
 }
@@ -184,6 +188,31 @@ int main() {
   assert(state.mode() == M::V7 && !state.dirty());
   assert(stored(backend).fields.config_set == 0xc7a7);
   assert(stored(backend).fields.version == 7);
+
+  // The retired telnet bit keeps the Config v7 wire size frozen while its
+  // inverted value round-trips the user-facing discovery setting.  Old false
+  // reserved bits therefore retain the new default of discovery enabled.
+  FakeEeprom discoveryBackend;
+  RuntimeConfigV7 discoveryRuntime{};
+  buildConfigDefaults(discoveryRuntime, "0.pl.pool.ntp.org",
+                      "1.pl.pool.ntp.org", "VoxOne-test", 7);
+  assert(discoveryRuntime.haDiscoveryEnabled);
+  ConfigPersistence discoveryState;
+  discoveryState.begin(S::DEFAULTS_REQUIRED, false);
+  assert(discoveryState.persist(discoveryRuntime, discoveryBackend) == W::OK);
+  assert(!stored(discoveryBackend).fields.reservedTelnet);
+  discoveryState.update(discoveryRuntime.haDiscoveryEnabled, false);
+  assert(discoveryState.persist(discoveryRuntime, discoveryBackend) == W::OK);
+  assert(stored(discoveryBackend).fields.reservedTelnet);
+  RuntimeConfigV7 discoveryReloaded{};
+  const auto discoveryLoaded = loadStartupConfig(
+      discoveryBackend.durable + 500, 268, false, discoveryReloaded,
+      [](RuntimeConfigV7& value) {
+        buildConfigDefaults(value, "0.pl.pool.ntp.org", "1.pl.pool.ntp.org",
+                            "VoxOne-test", 7);
+      });
+  assert(discoveryLoaded.status == S::LOADED_V7);
+  assert(!discoveryReloaded.haDiscoveryEnabled);
 
   for (bool enabled : {false, true}) {
     state.setStoredBtEnabled(enabled);

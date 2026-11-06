@@ -75,6 +75,9 @@ class ConfigPersistence {
     if (!writable()) return last_ = ConfigWriteStatus::BLOCKED;
     config_v7_t model{};
     copyConfigFields(runtime, model.fields);
+    // Preserve the frozen 255-byte Config v7 wire format.  The retired telnet
+    // bit now persists the inverse of the runtime discovery setting.
+    model.fields.reservedTelnet = !runtimeHaDiscoveryEnabled(runtime);
     model.fields.config_set = kConfigV7Magic;
     model.fields.version = kConfigV7;
     model.btEnabled = storedBt_ ? 1 : 0;

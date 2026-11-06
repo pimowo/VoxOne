@@ -555,18 +555,20 @@ void MyNetwork::begin() {
     const bool is_protected =
         security.state == voxone::security::SecurityState::Protected;
 
-    MDNS.addService("http", "tcp", 80);
-    MDNS.addService("voxone", "tcp", 80);
-    MDNS.addServiceTxt("voxone", "tcp", "mac",
-                       mac_address_string.c_str());
-    MDNS.addServiceTxt("voxone", "tcp", "version",
-                       firmware_version.c_str());
-    MDNS.addServiceTxt("voxone", "tcp", "model", model_string.c_str());
-    MDNS.addServiceTxt("voxone", "tcp", "host", runtime.mdnsName);
-    MDNS.addServiceTxt("voxone", "tcp", "name", friendly_name.c_str());
-    MDNS.addServiceTxt("voxone", "tcp", "security",
-                       is_protected ? "protected" : "open");
-    MDNS.addServiceTxt("voxone", "tcp", "manufacturer", "VoxOne");
+    if (runtime.haDiscoveryEnabled) {
+      MDNS.addService("http", "tcp", 80);
+      MDNS.addService("voxone", "tcp", 80);
+      MDNS.addServiceTxt("voxone", "tcp", "mac",
+                         mac_address_string.c_str());
+      MDNS.addServiceTxt("voxone", "tcp", "version",
+                         firmware_version.c_str());
+      MDNS.addServiceTxt("voxone", "tcp", "model", model_string.c_str());
+      MDNS.addServiceTxt("voxone", "tcp", "host", runtime.mdnsName);
+      MDNS.addServiceTxt("voxone", "tcp", "name", friendly_name.c_str());
+      MDNS.addServiceTxt("voxone", "tcp", "security",
+                         is_protected ? "protected" : "open");
+      MDNS.addServiceTxt("voxone", "tcp", "manufacturer", "VoxOne");
+    }
   }
   mqttInit();
   

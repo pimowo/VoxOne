@@ -3288,10 +3288,11 @@ void NetServer::processQueue(){
         const unsigned long long uptimeSeconds =
             static_cast<unsigned long long>(esp_timer_get_time() / 1000000LL);
         const int prefixLength = snprintf(wsBuf, sizeof(wsBuf),
-            "{\"sst\":%d,\"vu\":%d,\"canVu\":%d,\"softr\":%d,\"vut\":%d,\"mdns\":\"%s\",\"ipaddr\":\"%s\",\"abuff\":%d,\"systemInfo\":{\"version\":\"%s\",\"channel\":\"%s\",\"build\":\"%s\",\"profile\":\"%s\",\"mac\":\"%s\",\"rssi\":%d,\"uptimeSeconds\":%llu,\"freeHeap\":%lu,\"minimumFreeHeap\":%lu,\"psramTotal\":%lu,\"psramFree\":%lu,\"btFirmwareUpdateSupported\":%s,\"capabilities\":\"%s\"},\"networkInfo\":",
+            "{\"sst\":%d,\"vu\":%d,\"canVu\":%d,\"softr\":%d,\"vut\":%d,\"mdns\":\"%s\",\"haDiscoveryEnabled\":%s,\"ipaddr\":\"%s\",\"abuff\":%d,\"systemInfo\":{\"version\":\"%s\",\"channel\":\"%s\",\"build\":\"%s\",\"profile\":\"%s\",\"mac\":\"%s\",\"rssi\":%d,\"uptimeSeconds\":%llu,\"freeHeap\":%lu,\"minimumFreeHeap\":%lu,\"psramTotal\":%lu,\"psramFree\":%lu,\"btFirmwareUpdateSupported\":%s,\"capabilities\":\"%s\"},\"networkInfo\":",
             runtime.smartStart != 2, runtime.vuMeter,
             boardCapabilities.supportsVu, runtime.softApDelay,
-            config.vuThresholdSnapshot(), runtime.mdnsName, ipText,
+            config.vuThresholdSnapshot(), runtime.mdnsName,
+            runtime.haDiscoveryEnabled ? "true" : "false", ipText,
             runtime.audioBuffer,
             VOXONE_VERSION, VOXONE_BUILD_CHANNEL, VOXONE_BUILD_SHA,
             VOXONE_BUILD_PROFILE, macText, wifiRssi,

@@ -76,7 +76,9 @@ class MockWebSocket {
   close() { this.readyState = 3; this.onclose?.(); }
   receive(status) { this.onmessage({data: JSON.stringify({webStatus: status})}); }
   receiveSystem(info) { this.onmessage({data: JSON.stringify({systemInfo: info})}); }
-  receiveNetwork(info) { this.onmessage({data: JSON.stringify({networkInfo: info})}); }
+  receiveNetwork(info, haDiscoveryEnabled = true) {
+    this.onmessage({data: JSON.stringify({networkInfo: info, haDiscoveryEnabled})});
+  }
   receiveVolume(volume, muted) { this.onmessage({data: JSON.stringify({payload:[
     {id:'volume100',value:volume},{id:'muted',value:muted ? 1 : 0}
   ]})}); }
@@ -906,7 +908,16 @@ setTimeout(async () => {
     check(get('network-profiles').textContent.includes('Hasło: zapisane'), 'passwordSet true');
     check(get('network-profiles').textContent.includes('Hasło: brak'), 'passwordSet false');
     check(get('network-profiles').textContent.includes('kolejność prób: 2'), 'profile order');
-    check(!networkCard.querySelector('input,button,select,textarea'), 'network card has no unsupported edit controls');
+    const networkEditControls = [...networkCard.querySelectorAll('input,button,select,textarea')];
+    check(networkEditControls.length === 1 &&
+      networkEditControls[0] === get('ha-discovery-toggle') &&
+      get('ha-discovery-toggle').checked && !get('ha-discovery-toggle').disabled,
+      'network card exposes only the HA discovery toggle');
+    get('ha-discovery-toggle').checked = false;
+    get('ha-discovery-toggle').dispatchEvent(new Event('change'));
+    check(btTestSocket.sent.at(-1) === 'hadiscovery=0' &&
+      get('ha-discovery-feedback').textContent.includes('ponownym uruchomieniu'),
+      'HA discovery toggle persists through the WebSocket API');
     check(!get('network-profiles').textContent.includes('secret'), 'no password value rendered');
     const settingsLayout = get('settings').querySelector('.settings-layout');
     const settingsColumns = [...settingsLayout.querySelectorAll(':scope > .settings-column')];
@@ -917,9 +928,9 @@ setTimeout(async () => {
     check(get('network-profiles').querySelector('.is-active')?.querySelector('strong')?.textContent === 'HomeNet' &&
       get('network-profiles').querySelector('.is-active')?.getAttribute('aria-current') === 'true',
       'active Wi-Fi profile is identified without exposing credentials');
-    check(networkCard.textContent.includes('Tylko podgląd') &&
+    check(networkCard.textContent.includes('Konfiguracja') &&
       networkCard.textContent.includes('Edycja i włączanie profili nie są obecnie obsługiwane'),
-      'network card describes the read-only contract');
+      'network card keeps Wi-Fi profiles read-only');
     btTestSocket.onmessage({data:JSON.stringify({canFlip:1,flip:0,canBrightness:1,br:72,
       canVu:0,stationListTimeout:15,canBtTransport:0})});
     check(!get('display-settings-card').hidden && !get('brightness-control').hidden &&

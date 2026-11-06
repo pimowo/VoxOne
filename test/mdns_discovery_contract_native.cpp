@@ -26,16 +26,19 @@ int main() {
   assert(position != std::string::npos);
 
   position = requireAfter(
+      source, "if (runtime.haDiscoveryEnabled) {", position);
+
+  position = requireAfter(
       source, "MDNS.addService(\"http\", \"tcp\", 80);", position);
   position = requireAfter(
       source, "MDNS.addService(\"voxone\", \"tcp\", 80);", position);
   position = requireAfter(source,
       "MDNS.addServiceTxt(\"voxone\", \"tcp\", \"mac\",\n"
-      "                       mac_address_string.c_str());",
+      "                         mac_address_string.c_str());",
       position);
   position = requireAfter(source,
       "MDNS.addServiceTxt(\"voxone\", \"tcp\", \"version\",\n"
-      "                       firmware_version.c_str());",
+      "                         firmware_version.c_str());",
       position);
   position = requireAfter(source,
       "MDNS.addServiceTxt(\"voxone\", \"tcp\", \"model\", "
@@ -51,7 +54,7 @@ int main() {
       position);
   position = requireAfter(source,
       "MDNS.addServiceTxt(\"voxone\", \"tcp\", \"security\",\n"
-      "                       is_protected ? \"protected\" : \"open\");",
+      "                         is_protected ? \"protected\" : \"open\");",
       position);
   requireAfter(source,
       "MDNS.addServiceTxt(\"voxone\", \"tcp\", \"manufacturer\", "

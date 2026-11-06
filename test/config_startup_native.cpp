@@ -18,6 +18,7 @@ struct Runtime {
   uint16_t timeSyncInterval;
   bool watchdog;
   bool reservedTelnet;
+  bool haDiscoveryEnabled;
   uint16_t abuff;
   bool skipPlaylistUpDown;
   char mdnsname[24];
@@ -196,6 +197,7 @@ int main() {
   assert(fresh.volume == volumeUserToRaw(kDefaultUserVolume));
   assert(fresh.volume == 31 && fresh.lastUserVolume == 20);
   assert(fresh.startupMode == 0 && fresh.startupFixedVolume == 20);
+  assert(fresh.haDiscoveryEnabled);
   const VolumeState freshLast = volumeStateAtStartup(
       fresh.volume, fresh.lastUserVolume, fresh.maximumVolume,
       fresh.startupMode == 1, fresh.startupFixedVolume, false);
@@ -214,6 +216,7 @@ int main() {
     for (bool supports : {false, true}) {
       auto result = run(area, sizeof(area), supports, runtime, status, false);
       equalFields(runtime, golden.fields);
+      assert(runtime.haDiscoveryEnabled == !golden.fields.reservedTelnet);
       assert(result.btEnabled == supports);
       assert(result.migratingVolume == (version == 5));
       if (version == 5) {
@@ -242,6 +245,7 @@ int main() {
     for (bool supports : {false, true}) {
       const auto result = run(area, sizeof(area), supports, runtime, S::LOADED_V7, false);
       equalFields(runtime, v6);
+      assert(runtime.haDiscoveryEnabled == !v6.reservedTelnet);
       assert(runtime.volume == 111 && runtime.lastUserVolume == 53);
       assert(result.btEnabled == (supports && enabled));
       assert(result.storedBtEnabled == (enabled != 0));

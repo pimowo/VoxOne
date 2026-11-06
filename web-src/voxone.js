@@ -593,6 +593,8 @@ window.VoxOneRestartWaiter = Object.freeze({
   const vuMeterControl = document.getElementById("vu-meter-control");
   const vuMeterToggle = document.getElementById("vu-meter-toggle");
   const vuMeterValue = document.getElementById("vu-meter-value");
+  const haDiscoveryToggle = document.getElementById("ha-discovery-toggle");
+  const haDiscoveryFeedback = document.getElementById("ha-discovery-feedback");
   const brightnessControl = document.getElementById("brightness-control");
   const brightnessUnavailable = document.getElementById("brightness-unavailable");
   const brightnessSlider = document.getElementById("brightness-slider");
@@ -706,6 +708,7 @@ window.VoxOneRestartWaiter = Object.freeze({
     webStatus: null,
     systemInfo: null,
     networkInfo: null,
+    haDiscoveryEnabled: null,
     source: null,
     station: null,
     metadata: null,
@@ -935,6 +938,10 @@ window.VoxOneRestartWaiter = Object.freeze({
     const info = state.connection === "connected" ? state.networkInfo : null;
     text("network-hostname", info?.hostname || "—");
     text("network-active-ssid", info?.activeSsid || "—");
+    haDiscoveryToggle.disabled = state.connection !== "connected" ||
+      state.haDiscoveryEnabled === null;
+    if (state.haDiscoveryEnabled !== null)
+      haDiscoveryToggle.checked = state.haDiscoveryEnabled;
     const list = document.getElementById("network-profiles");
     if (!list) return;
     list.replaceChildren();
@@ -2501,7 +2508,7 @@ window.VoxOneRestartWaiter = Object.freeze({
   }
   function resetRuntime() {
     const previousCurrent = state.current;
-    for (const key of ["source", "station", "metadata", "codec", "bitrate", "rssi", "volume", "volume100", "muted", "maximumVolume", "startupMode", "startupFixedVolume", "brightness", "stationListTimeout", "btTransportTimeout", "bass", "middle", "treble", "balance", "playing", "current", "ip"]) {
+    for (const key of ["source", "station", "metadata", "codec", "bitrate", "rssi", "volume", "volume100", "muted", "maximumVolume", "startupMode", "startupFixedVolume", "brightness", "stationListTimeout", "btTransportTimeout", "bass", "middle", "treble", "balance", "playing", "current", "ip", "haDiscoveryEnabled"]) {
       state[key] = null;
     }
     state.webStatus = null;
@@ -2748,6 +2755,10 @@ window.VoxOneRestartWaiter = Object.freeze({
       renderSystemInfo();
     }
     const networkInfo = message.networkInfo;
+    if (typeof message.haDiscoveryEnabled === "boolean") {
+      state.haDiscoveryEnabled = message.haDiscoveryEnabled;
+      renderNetworkInfo();
+    }
     if (networkInfo && typeof networkInfo.hostname === "string" &&
         typeof networkInfo.activeSsid === "string" && Array.isArray(networkInfo.profiles)) {
       const profiles = networkInfo.profiles.slice(0, 5).filter(profile =>
@@ -3148,6 +3159,20 @@ window.VoxOneRestartWaiter = Object.freeze({
       send("getsystem", 1);
     }, 2000);
     renderDisplaySettings();
+  });
+
+  haDiscoveryToggle.addEventListener("change", () => {
+    const requested = haDiscoveryToggle.checked;
+    if (state.haDiscoveryEnabled === null ||
+        !send("hadiscovery", requested ? 1 : 0)) {
+      renderNetworkInfo();
+      return;
+    }
+    state.haDiscoveryEnabled = requested;
+    haDiscoveryFeedback.textContent =
+      "Zapisano. Zmiana rozgłaszania zacznie obowiązywać po ponownym uruchomieniu urządzenia.";
+    renderNetworkInfo();
+    setTimeout(() => send("getsystem", 1), 500);
   });
 
   function sendPendingBrightness() {
