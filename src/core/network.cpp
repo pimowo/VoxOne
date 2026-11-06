@@ -547,12 +547,25 @@ void MyNetwork::begin() {
   runtimeCallbacksEnabled = true;
   const auto runtime = config.runtimeSnapshot();
   if (strlen(runtime.mdnsName) > 0 && MDNS.begin(runtime.mdnsName)) {
+    const String mac_address_string = WiFi.macAddress();
+    const String model_string = "VoxOne-" + String(VOXONE_PROFILE_NAME);
+    const String firmware_version = VOXONE_VERSION;
+    const String friendly_name = runtime.mdnsName;
+    const bool is_protected =
+        security.state == voxone::security::SecurityState::Protected;
+
     MDNS.addService("http", "tcp", 80);
     MDNS.addService("voxone", "tcp", 80);
-    MDNS.addServiceTxt("voxone", "tcp", "model", "VoxOne");
-    MDNS.addServiceTxt("voxone", "tcp", "version", VOXONE_VERSION);
-    MDNS.addServiceTxt("voxone", "tcp", "mac", WiFi.macAddress().c_str());
-    MDNS.addServiceTxt("voxone", "tcp", "profile", VOXONE_PROFILE_NAME);
+    MDNS.addServiceTxt("voxone", "tcp", "mac",
+                       mac_address_string.c_str());
+    MDNS.addServiceTxt("voxone", "tcp", "version",
+                       firmware_version.c_str());
+    MDNS.addServiceTxt("voxone", "tcp", "model", model_string.c_str());
+    MDNS.addServiceTxt("voxone", "tcp", "host", runtime.mdnsName);
+    MDNS.addServiceTxt("voxone", "tcp", "name", friendly_name.c_str());
+    MDNS.addServiceTxt("voxone", "tcp", "security",
+                       is_protected ? "protected" : "open");
+    MDNS.addServiceTxt("voxone", "tcp", "manufacturer", "VoxOne");
   }
   mqttInit();
   

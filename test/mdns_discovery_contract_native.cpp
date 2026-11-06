@@ -30,20 +30,53 @@ int main() {
   position = requireAfter(
       source, "MDNS.addService(\"voxone\", \"tcp\", 80);", position);
   position = requireAfter(source,
-      "MDNS.addServiceTxt(\"voxone\", \"tcp\", \"model\", \"VoxOne\");",
+      "MDNS.addServiceTxt(\"voxone\", \"tcp\", \"mac\",\n"
+      "                       mac_address_string.c_str());",
       position);
   position = requireAfter(source,
-      "MDNS.addServiceTxt(\"voxone\", \"tcp\", \"version\", "
-      "VOXONE_VERSION);",
+      "MDNS.addServiceTxt(\"voxone\", \"tcp\", \"version\",\n"
+      "                       firmware_version.c_str());",
       position);
   position = requireAfter(source,
-      "MDNS.addServiceTxt(\"voxone\", \"tcp\", \"mac\", "
-      "WiFi.macAddress().c_str());",
+      "MDNS.addServiceTxt(\"voxone\", \"tcp\", \"model\", "
+      "model_string.c_str());",
+      position);
+  position = requireAfter(source,
+      "MDNS.addServiceTxt(\"voxone\", \"tcp\", \"host\", "
+      "runtime.mdnsName);",
+      position);
+  position = requireAfter(source,
+      "MDNS.addServiceTxt(\"voxone\", \"tcp\", \"name\", "
+      "friendly_name.c_str());",
+      position);
+  position = requireAfter(source,
+      "MDNS.addServiceTxt(\"voxone\", \"tcp\", \"security\",\n"
+      "                       is_protected ? \"protected\" : \"open\");",
       position);
   requireAfter(source,
-      "MDNS.addServiceTxt(\"voxone\", \"tcp\", \"profile\", "
-      "VOXONE_PROFILE_NAME);",
+      "MDNS.addServiceTxt(\"voxone\", \"tcp\", \"manufacturer\", "
+      "\"VoxOne\");",
       position);
+
+  assert(source.find(
+      "const String mac_address_string = WiFi.macAddress();") !=
+      std::string::npos);
+  assert(source.find(
+      "const String model_string = \"VoxOne-\" + "
+      "String(VOXONE_PROFILE_NAME);") != std::string::npos);
+  assert(source.find(
+      "const String firmware_version = VOXONE_VERSION;") !=
+      std::string::npos);
+  assert(source.find(
+      "const String friendly_name = runtime.mdnsName;") !=
+      std::string::npos);
+  assert(source.find(
+      "security.state == voxone::security::SecurityState::Protected") !=
+      std::string::npos);
+
+  assert(source.find(
+      "MDNS.addServiceTxt(\"voxone\", \"tcp\", \"profile\"") ==
+      std::string::npos);
 
   assert(source.find(
       "strlen(runtime.mdnsName) > 0 && MDNS.begin(runtime.mdnsName)") !=
