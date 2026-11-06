@@ -546,8 +546,14 @@ void MyNetwork::begin() {
   staReconnectEnabled = true;
   runtimeCallbacksEnabled = true;
   const auto runtime = config.runtimeSnapshot();
-  if(strlen(runtime.mdnsName)>0)
-    MDNS.begin(runtime.mdnsName);
+  if (strlen(runtime.mdnsName) > 0 && MDNS.begin(runtime.mdnsName)) {
+    MDNS.addService("http", "tcp", 80);
+    MDNS.addService("voxone", "tcp", 80);
+    MDNS.addServiceTxt("voxone", "tcp", "model", "VoxOne");
+    MDNS.addServiceTxt("voxone", "tcp", "version", VOXONE_VERSION);
+    MDNS.addServiceTxt("voxone", "tcp", "mac", WiFi.macAddress().c_str());
+    MDNS.addServiceTxt("voxone", "tcp", "profile", VOXONE_PROFILE_NAME);
+  }
   mqttInit();
   
   Serial.println("##[BOOT]#\tdone");

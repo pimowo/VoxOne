@@ -997,8 +997,6 @@ Nazwy wariantów display: `STEROWNIK_ROZDZIELCZOŚĆ`, np. `SSD1306_128X32`, `SS
 - [POST-STABLE][1.1.0][ARCHITECTURE] Zastąpić profilowe bramkowanie DSP L0 w CORE wspólną capability lub adapterem sprzętowym, zachowując endpointy i zachowanie tylko na sprzęcie rzeczywiście obsługującym DSP.
 - [POST-STABLE][1.1.0][ARCHITECTURE] Zastąpić hardkodowaną listę profili produkcyjnych w warstwie SECURITY wspólnym, fail-closed kontraktem build/security, aby nowe profile nie wymagały ręcznego dopisywania do allowlisty.
 - [POST-STABLE][1.1.0][ARCHITECTURE] Usunąć politykę UI z plików profili (`VOXONE_BT_TRANSPORT_UI_ENABLED`); dostępność widoku wyprowadzać ze wspólnych capabilities i stanu UI bez logiki interfejsu zależnej od konkretnego profilu.
-- [POST-STABLE][1.1.0][INTEGRATION] Automatyczne wykrywanie VoxOne przez Home Assistant (mDNS/ZeroConf). Wymaga dodania `MDNS.addService("http", "tcp", 80)` oraz odpowiednich TXT records (model, wersja) w `src/core/network.cpp`.
-
 ## Installer, first boot i release
 
 - [POST-STABLE] Przygotować VoxOne Installer dla Windows jako portable EXE dla VoxOne: wybór rodziny L/M/S/DIN/W i właściwej rewizji PCB, embedded stable factory binaries, install, erase/install, auto COM, auto chip i brak ręcznych offsetów.
