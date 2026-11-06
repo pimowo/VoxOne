@@ -65,7 +65,8 @@ int main() {
       "const String model_string = \"VoxOne-\" + "
       "String(VOXONE_PROFILE_NAME);") != std::string::npos);
   assert(source.find(
-      "const String firmware_version = VOXONE_VERSION;") !=
+      "const String firmware_version =\n"
+      "        String(VOXONE_VERSION) + \"-\" + VOXONE_BUILD_CHANNEL;") !=
       std::string::npos);
   assert(source.find(
       "const String friendly_name = runtime.mdnsName;") !=

@@ -549,7 +549,8 @@ void MyNetwork::begin() {
   if (strlen(runtime.mdnsName) > 0 && MDNS.begin(runtime.mdnsName)) {
     const String mac_address_string = WiFi.macAddress();
     const String model_string = "VoxOne-" + String(VOXONE_PROFILE_NAME);
-    const String firmware_version = VOXONE_VERSION;
+    const String firmware_version =
+        String(VOXONE_VERSION) + "-" + VOXONE_BUILD_CHANNEL;
     const String friendly_name = runtime.mdnsName;
     const bool is_protected =
         security.state == voxone::security::SecurityState::Protected;
