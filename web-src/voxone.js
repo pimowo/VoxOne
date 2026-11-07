@@ -595,6 +595,10 @@ window.VoxOneRestartWaiter = Object.freeze({
   const vuMeterValue = document.getElementById("vu-meter-value");
   const haDiscoveryToggle = document.getElementById("ha-discovery-toggle");
   const haDiscoveryFeedback = document.getElementById("ha-discovery-feedback");
+  const haSettingsForm = document.getElementById("ha-settings-form");
+  const haNameInput = document.getElementById("ha-name");
+  const haSettingsSave = document.getElementById("ha-settings-save");
+  const haNameFeedback = document.getElementById("ha-name-feedback");
   const brightnessControl = document.getElementById("brightness-control");
   const brightnessUnavailable = document.getElementById("brightness-unavailable");
   const brightnessSlider = document.getElementById("brightness-slider");
@@ -678,6 +682,8 @@ window.VoxOneRestartWaiter = Object.freeze({
   let rtcStatusLoading = false;
   let hardwareConfigLoaded = false;
   let hardwareSaving = false;
+  let haSettingsLoading = false;
+  let haSettingsSaving = false;
   let savedHardwareConfig = null;
   const state = {
     connection: "connecting",
@@ -685,6 +691,7 @@ window.VoxOneRestartWaiter = Object.freeze({
     systemInfo: null,
     networkInfo: null,
     haDiscoveryEnabled: null,
+    haName: null,
     source: null,
     station: null,
     metadata: null,
@@ -914,10 +921,6 @@ window.VoxOneRestartWaiter = Object.freeze({
     const info = state.connection === "connected" ? state.networkInfo : null;
     text("network-hostname", info?.hostname || "—");
     text("network-active-ssid", info?.activeSsid || "—");
-    haDiscoveryToggle.disabled = state.connection !== "connected" ||
-      state.haDiscoveryEnabled === null;
-    if (state.haDiscoveryEnabled !== null)
-      haDiscoveryToggle.checked = state.haDiscoveryEnabled;
     const list = document.getElementById("network-profiles");
     if (!list) return;
     list.replaceChildren();
@@ -941,6 +944,16 @@ window.VoxOneRestartWaiter = Object.freeze({
       item.append(name, detail);
       list.append(item);
     }
+  }
+
+  function renderHaSettings() {
+    const connected = state.connection === "connected";
+    haDiscoveryToggle.disabled = !connected || state.haDiscoveryEnabled === null;
+    if (state.haDiscoveryEnabled !== null)
+      haDiscoveryToggle.checked = state.haDiscoveryEnabled;
+    haNameInput.disabled = !connected || state.haName === null ||
+      haSettingsLoading || haSettingsSaving;
+    haSettingsSave.disabled = haNameInput.disabled;
   }
 
   function scheduleSystemInfoRefresh() {
@@ -1388,7 +1401,10 @@ window.VoxOneRestartWaiter = Object.freeze({
       else link.removeAttribute("aria-current");
     }
     if (selected === "stations" && state.stationsStatus === "idle") loadStations();
-    if (selected === "settings") loadTimeStatus();
+    if (selected === "settings") {
+      loadTimeStatus();
+      loadHaSettings();
+    }
     if (selected === "hardware" && !hardwareConfigLoaded) loadHardwareConfig();
     if (selected === "update") send("getwebstatus", 1);
     if (selected === "dsp") {
@@ -1405,6 +1421,67 @@ window.VoxOneRestartWaiter = Object.freeze({
   function showStartupTab() {
     history.replaceState(null, "", "#status");
     showTab();
+  }
+
+  function setHaNameFeedback(message, error = false) {
+    haNameFeedback.textContent = message;
+    haNameFeedback.dataset.kind = error ? "error" : "status";
+  }
+
+  async function loadHaSettings() {
+    if (haSettingsLoading || haSettingsSaving) return;
+    haSettingsLoading = true;
+    renderHaSettings();
+    try {
+      const response = await fetch("/api/ha", { cache: "no-store" });
+      if (!response.ok) throw new Error("HTTP " + response.status);
+      const settings = await response.json();
+      if (typeof settings.name !== "string" || settings.maximumBytes !== 32)
+        throw new Error("invalid HA settings response");
+      state.haName = settings.name;
+      haNameInput.value = settings.name;
+      setHaNameFeedback("");
+    } catch (error) {
+      state.haName = null;
+      setHaNameFeedback("Nie udało się odczytać ustawień Home Assistant.", true);
+    } finally {
+      haSettingsLoading = false;
+      renderHaSettings();
+    }
+  }
+
+  async function saveHaSettings(event) {
+    event.preventDefault();
+    if (haSettingsSaving || state.connection !== "connected") return;
+    const name = haNameInput.value.trim();
+    const byteLength = new TextEncoder().encode(name).length;
+    if (byteLength > 32 || /[\u0000-\u001f\u007f]/u.test(name)) {
+      setHaNameFeedback("Nazwa może zajmować maksymalnie 32 bajty UTF-8 i nie może zawierać znaków sterujących.", true);
+      return;
+    }
+    haSettingsSaving = true;
+    renderHaSettings();
+    setHaNameFeedback("Zapisywanie…");
+    try {
+      const body = new URLSearchParams({ name });
+      const response = await fetch("/api/ha", {
+        method: "POST",
+        headers: { "Content-Type": "application/x-www-form-urlencoded;charset=UTF-8" },
+        body
+      });
+      if (!response.ok) throw new Error("HTTP " + response.status);
+      const settings = await response.json();
+      if (settings?.ok !== true || typeof settings.name !== "string")
+        throw new Error("invalid HA settings response");
+      state.haName = settings.name;
+      haNameInput.value = settings.name;
+      setHaNameFeedback("Zapisano. Nowa nazwa mDNS zacznie obowiązywać po ponownym uruchomieniu urządzenia.");
+    } catch (error) {
+      setHaNameFeedback("Nie zapisano nazwy Home Assistant.", true);
+    } finally {
+      haSettingsSaving = false;
+      renderHaSettings();
+    }
   }
 
   function setRtcFeedback(message, error = false) {
@@ -1664,6 +1741,7 @@ window.VoxOneRestartWaiter = Object.freeze({
     renderDisplaySettings();
     renderFooter();
     renderNetworkInfo();
+    renderHaSettings();
     advancedAudio.syncShared();
   }
 
@@ -2623,7 +2701,7 @@ window.VoxOneRestartWaiter = Object.freeze({
     const networkInfo = message.networkInfo;
     if (typeof message.haDiscoveryEnabled === "boolean") {
       state.haDiscoveryEnabled = message.haDiscoveryEnabled;
-      renderNetworkInfo();
+      renderHaSettings();
     }
     if (networkInfo && typeof networkInfo.hostname === "string" &&
         typeof networkInfo.activeSsid === "string" && Array.isArray(networkInfo.profiles)) {
@@ -3031,15 +3109,18 @@ window.VoxOneRestartWaiter = Object.freeze({
     const requested = haDiscoveryToggle.checked;
     if (state.haDiscoveryEnabled === null ||
         !send("hadiscovery", requested ? 1 : 0)) {
-      renderNetworkInfo();
+      renderHaSettings();
       return;
     }
     state.haDiscoveryEnabled = requested;
     haDiscoveryFeedback.textContent =
       "Zapisano. Zmiana rozgłaszania zacznie obowiązywać po ponownym uruchomieniu urządzenia.";
-    renderNetworkInfo();
+    renderHaSettings();
     setTimeout(() => send("getsystem", 1), 500);
   });
+
+  haSettingsForm.addEventListener("submit", saveHaSettings);
+  haNameInput.addEventListener("input", () => setHaNameFeedback(""));
 
   function sendPendingBrightness() {
     clearTimeout(brightnessTimer);

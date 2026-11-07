@@ -116,6 +116,8 @@ window.btTransportRequests = [];
 window.btUpdateResponses = [];
 window.hardwareRequests = [];
 window.hardwarePostResponses = [];
+window.haSettings = {name:'Salon VoxOne', maximumBytes:32};
+window.haSettingsRequests = [];
 window.timeRequests = 0;
 window.configBackupRequests = 0;
 window.configDownloadedName = '';
@@ -296,6 +298,17 @@ window.fetch = (url, options = {}) => {
     const result = {ok:true, changed:true, restartRequired:true,
       config:{display:request.display,input:request.input,audio:request.audio}};
     return Promise.resolve({ok:true,status:200,json:() => Promise.resolve(result)});
+  }
+  if (url === '/api/ha') {
+    if ((options.method || 'GET') === 'GET')
+      return Promise.resolve({ok:true,status:200,
+        json:() => Promise.resolve({...window.haSettings})});
+    const request = Object.fromEntries(new URLSearchParams(options.body || ''));
+    window.haSettingsRequests.push(request);
+    window.haSettings.name = request.name;
+    return Promise.resolve({ok:true,status:200,json:() => Promise.resolve({
+      ok:true,name:request.name,maximumBytes:32
+    })});
   }
   if (url === '/api/time') {
     window.timeRequests++;
@@ -888,15 +901,24 @@ setTimeout(async () => {
     check(get('network-profiles').textContent.includes('Hasło: brak'), 'passwordSet false');
     check(get('network-profiles').textContent.includes('kolejność prób: 2'), 'profile order');
     const networkEditControls = [...networkCard.querySelectorAll('input,button,select,textarea')];
-    check(networkEditControls.length === 1 &&
-      networkEditControls[0] === get('ha-discovery-toggle') &&
-      get('ha-discovery-toggle').checked && !get('ha-discovery-toggle').disabled,
-      'network card exposes only the HA discovery toggle');
+    check(networkEditControls.length === 0,
+      'network card remains read-only after moving HA settings');
+    const haCard = get('ha-settings-form').closest('.ha-card');
+    check(!!haCard && get('ha-discovery-toggle').checked &&
+      !get('ha-discovery-toggle').disabled && get('ha-name').value === 'Salon VoxOne' &&
+      !get('ha-name').disabled && !get('ha-settings-save').disabled,
+      'Home Assistant card exposes discovery and name settings');
     get('ha-discovery-toggle').checked = false;
     get('ha-discovery-toggle').dispatchEvent(new Event('change'));
     check(btTestSocket.sent.at(-1) === 'hadiscovery=0' &&
       get('ha-discovery-feedback').textContent.includes('ponownym uruchomieniu'),
       'HA discovery toggle persists through the WebSocket API');
+    get('ha-name').value = 'Kuchnia';
+    get('ha-settings-form').dispatchEvent(new Event('submit', {cancelable:true}));
+    await settleSecurity();
+    check(haSettingsRequests.at(-1)?.name === 'Kuchnia' &&
+      get('ha-name-feedback').textContent.includes('Zapisano'),
+      'Home Assistant name persists through the protected REST API');
     check(!get('network-profiles').textContent.includes('secret'), 'no password value rendered');
     const settingsLayout = get('settings').querySelector('.settings-layout');
     const settingsColumns = [...settingsLayout.querySelectorAll(':scope > .settings-column')];

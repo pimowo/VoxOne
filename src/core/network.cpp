@@ -545,7 +545,8 @@ void MyNetwork::begin() {
     const String model_string = "VoxOne-" + String(VOXONE_PROFILE_NAME);
     const String firmware_version =
         String(VOXONE_VERSION) + "-" + VOXONE_BUILD_CHANNEL;
-    const String friendly_name = runtime.mdnsName;
+    const String friendly_name = runtime.haName[0]
+        ? String(runtime.haName) : String(runtime.mdnsName);
     const bool is_protected =
         security.state == voxone::security::SecurityState::Protected;
 

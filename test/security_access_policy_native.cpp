@@ -95,6 +95,10 @@ const EndpointCase kEndpoints[] = {
      SecurityRouteClass::ProtectedRest, false, false},
     {SecurityAccessMethod::Post, "/api/hardware", SecurityEndpoint::HardwareWrite,
      SecurityRouteClass::ProtectedRest, true, false},
+    {SecurityAccessMethod::Get, "/api/ha", SecurityEndpoint::HaSettingsRead,
+     SecurityRouteClass::ProtectedRest, false, false},
+    {SecurityAccessMethod::Post, "/api/ha", SecurityEndpoint::HaSettingsWrite,
+     SecurityRouteClass::ProtectedRest, true, false},
     {SecurityAccessMethod::Get, "/api/config/backup", SecurityEndpoint::ConfigBackup,
      SecurityRouteClass::ProtectedRest, false, false},
     {SecurityAccessMethod::Post, "/api/config/restore", SecurityEndpoint::ConfigRestore,
@@ -248,11 +252,11 @@ void testCompleteEndpointInventory() {
     assert(std::strcmp(securityEndpointName(actual.endpoint), "unknown") != 0);
     assert(std::strcmp(securityRouteClassName(actual.routeClass), "unknown") != 0);
   }
-  assert(sizeof(kEndpoints) / sizeof(kEndpoints[0]) == 49);
+  assert(sizeof(kEndpoints) / sizeof(kEndpoints[0]) == 51);
 
   size_t ruleCount = 0;
   const SecurityRouteRule* rules = securityAccessRouteRules(ruleCount);
-  assert(rules != nullptr && ruleCount == 49);
+  assert(rules != nullptr && ruleCount == 51);
   for (size_t index = 0; index < ruleCount; ++index) {
     const SecurityRouteRule& rule = rules[index];
     assert(rule.path && rule.path[0] == '/');
@@ -446,6 +450,8 @@ void testProtectedOpenAndLockedPolicy() {
        SecurityRouteClass::ProtectedRest, false, false},
       {SecurityAccessMethod::Post, "/api/hardware", SecurityEndpoint::HardwareWrite,
        SecurityRouteClass::ProtectedRest, true, false},
+      {SecurityAccessMethod::Post, "/api/ha", SecurityEndpoint::HaSettingsWrite,
+       SecurityRouteClass::ProtectedRest, true, false},
       {SecurityAccessMethod::WebSocketHandshake, "/ws", SecurityEndpoint::WebSocket,
        SecurityRouteClass::ProtectedWebSocket, false, false},
   };
@@ -621,7 +627,7 @@ void testProductionInventoryAndHttpOnlyIntegration() {
       "/api/stations/import", "kStationsSnapshotRoute", "kDirectorySearchRoute",
       "/api/stations/add", "/api/stations/edit", "/api/stations/delete",
       "/api/stations/reorder", "/api/stations/metadata",
-      "/api/hardware", "kBackupRoute", "kRestoreRoute", "/api/time",
+      "/api/hardware", "/api/ha", "kBackupRoute", "kRestoreRoute", "/api/time",
       "/api/time/sync", "kSecurityStateRoute", "kSecuritySetupRoute",
       "kSecurityLoginRoute", "kSecurityLogoutRoute", "kSecurityManageRoute",
       "/api/ready",

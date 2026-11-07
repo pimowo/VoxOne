@@ -220,6 +220,10 @@ void Config::init() {
   const auto loaded = voxone::config_format::loadStartupConfig(
       eepromReady ? configArea : nullptr, sizeof(configArea), supportsBt, store,
       [this](config_t&) { _applyDefaults(); });
+  if (!voxone::ha_name::decode(
+          store.reservedWeather, sizeof(store.reservedWeather),
+          store.haName, sizeof(store.haName)))
+    store.haName[0] = '\0';
   _startupStatus = loaded.status;
   _storage.begin(loaded.status, loaded.storedBtEnabled);
   const bool needsBtIntroductionMigration =
@@ -578,6 +582,9 @@ void Config::_applyDefaults() {
   _makeDefaultMdnsName(mdns, sizeof(mdns));
   voxone::config_format::buildConfigDefaults(
       store, DEFAULT_NTP_1, DEFAULT_NTP_2, mdns, 7);
+  store.haName[0] = '\0';
+  voxone::ha_name::encode(
+      store.haName, 0, store.reservedWeather, sizeof(store.reservedWeather));
 }
 
 bool Config::persistV7() {
@@ -590,6 +597,22 @@ bool Config::persistV7() {
       (result != previous || result != voxone::config_format::ConfigWriteStatus::BLOCKED))
     Serial.printf("[CONFIG] persistence: %s\n", voxone::config_format::configWriteMessage(result));
   return result == voxone::config_format::ConfigWriteStatus::OK;
+}
+
+bool Config::setHaName(const char* value) {
+  if (!value) return false;
+  const size_t length = strlen(value);
+  if (!voxone::ha_name::valid(value, length)) return false;
+  WriteLock lock(_persistMutex);
+  if (strcmp(store.haName, value) == 0) return true;
+  if (!voxone::ha_name::encode(
+          value, length, store.reservedWeather,
+          sizeof(store.reservedWeather)))
+    return false;
+  strlcpy(store.haName, value, sizeof(store.haName));
+  _storage.markDirty();
+  _publishRuntimeLocked();
+  return !_startupReadOnly && persistV7();
 }
 
 bool Config::setBtEnabled(bool enabled) {
@@ -1126,6 +1149,7 @@ void Config::_publishRuntimeLocked() {
   runtime.volumeSteps = store.volsteps;
   runtime.haDiscoveryEnabled = store.haDiscoveryEnabled;
   strlcpy(runtime.mdnsName, store.mdnsname, sizeof(runtime.mdnsName));
+  strlcpy(runtime.haName, store.haName, sizeof(runtime.haName));
   _runtime.publish(runtime);
 }
 

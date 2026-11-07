@@ -7,6 +7,7 @@
 #include <EEPROM.h>
 #include "config_persistence.h"
 #include "config_runtime_snapshot.h"
+#include "ha_name_config.h"
 #include "sntp_server_lifetime.h"
 #include "www_asset_integrity.h"
 #include "wifi_config_parser.h"
@@ -117,6 +118,10 @@ struct config_t
   uint16_t  abuff;
   bool      reservedTelnet;
   bool      haDiscoveryEnabled;
+  // Config v7 runtime field. Persistence is encoded into the retired weather
+  // bytes so the 255-byte wire format, CRC, backup and downgrade guard remain
+  // unchanged.
+  char      haName[voxone::ha_name::kRuntimeCapacity];
   bool      watchdog; // legacy/reserved: runtime always forces audio watchdog on
   uint16_t  timeSyncInterval;
   uint16_t  timeSyncIntervalRTC;
@@ -126,7 +131,9 @@ struct config_t
   uint8_t   startupFixedVolume;
   uint8_t   lastUserVolume;
 };
-static_assert(EEPROM_START + sizeof(config_t) <= EEPROM_SIZE, "config_t exceeds EEPROM");
+static_assert(sizeof(((config_t*)nullptr)->haName) ==
+                  voxone::ha_name::kRuntimeCapacity,
+              "HA name runtime capacity changed");
 
 struct station_t
 {
@@ -170,6 +177,7 @@ class Config {
     //void save();
     void init();
     bool persistV7();
+    bool setHaName(const char* value);
     bool setBtEnabled(bool enabled);
     voxone::config_format::ConfigStorageMode storageMode() const { return _storage.mode(); }
     voxone::config_format::ConfigRecordStatus startupStatus() const { return _startupStatus; }

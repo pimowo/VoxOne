@@ -72,7 +72,10 @@ int main() {
       "        String(VOXONE_VERSION) + \"-\" + VOXONE_BUILD_CHANNEL;") !=
       std::string::npos);
   assert(source.find(
-      "const String friendly_name = runtime.mdnsName;") !=
+      "const String friendly_name = runtime.haName[0]") !=
+      std::string::npos);
+  assert(source.find(
+      "? String(runtime.haName) : String(runtime.mdnsName);") !=
       std::string::npos);
   assert(source.find(
       "security.state == voxone::security::SecurityState::Protected") !=

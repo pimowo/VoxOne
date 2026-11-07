@@ -16,6 +16,7 @@ namespace voxone {
 namespace config_runtime {
 
 constexpr size_t kMdnsNameCapacity = 24;
+constexpr size_t kHaNameCapacity = 33;
 
 struct Snapshot {
   uint32_t revision;
@@ -60,6 +61,7 @@ struct Snapshot {
   uint8_t volumeSteps;
   bool haDiscoveryEnabled;
   char mdnsName[kMdnsNameCapacity];
+  char haName[kHaNameCapacity];
 };
 
 class SnapshotStore {

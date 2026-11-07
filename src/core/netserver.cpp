@@ -252,6 +252,8 @@ void handleStationsImportUpload(AsyncWebServerRequest *request, String filename,
                                 size_t index, uint8_t *data, size_t len, bool final);
 void handleHardwareConfigRead(AsyncWebServerRequest *request);
 void handleHardwareConfigSave(AsyncWebServerRequest *request);
+void handleHaSettingsRead(AsyncWebServerRequest *request);
+void handleHaSettingsSave(AsyncWebServerRequest *request);
 void handleConfigBackup(AsyncWebServerRequest *request);
 void handleConfigRestore(AsyncWebServerRequest *request);
 void handleConfigRestoreBody(AsyncWebServerRequest *request, uint8_t *data,
@@ -1077,6 +1079,8 @@ bool NetServer::begin(bool quiet) {
   webserver.on("/api/stations/metadata", HTTP_POST, handleStationMetadata);
   webserver.on("/api/hardware", HTTP_GET, handleHardwareConfigRead);
   webserver.on("/api/hardware", HTTP_POST, handleHardwareConfigSave);
+  webserver.on("/api/ha", HTTP_GET, handleHaSettingsRead);
+  webserver.on("/api/ha", HTTP_POST, handleHaSettingsSave);
   webserver.on(voxone::config_backup_web::kBackupRoute, HTTP_GET,
                handleConfigBackup);
   webserver.on(voxone::config_backup_web::kRestoreRoute, HTTP_POST,
@@ -1626,6 +1630,23 @@ static void stationsReply(AsyncWebServerRequest* request, int code, const String
       code, "application/json; charset=utf-8", body);
   response->addHeader("Cache-Control", "no-store");
   request->send(response);
+}
+
+static bool formatHaSettingsJson(char* output, size_t capacity,
+                                 const char* name, bool saved) {
+  if (!output || !capacity || !name) return false;
+  size_t used = 0;
+  const char* prefix = saved ? "{\"ok\":true,\"name\":\"" : "{\"name\":\"";
+  const size_t prefixLength = strlen(prefix);
+  if (prefixLength >= capacity) return false;
+  memcpy(output, prefix, prefixLength);
+  used = prefixLength;
+  if (!appendJsonEscaped(output, capacity, used, name)) return false;
+  const int written = snprintf(
+      output + used, capacity - used,
+      "\",\"maximumBytes\":%u}",
+      static_cast<unsigned>(voxone::ha_name::kMaximumBytes));
+  return written > 0 && static_cast<size_t>(written) < capacity - used;
 }
 
 void handleStationDirectorySearch(AsyncWebServerRequest* request) {
@@ -2360,6 +2381,51 @@ void handleConfigRestore(AsyncWebServerRequest* request) {
                  result.restartRequired
                      ? R"({"ok":true,"restartRequired":true})"
                      : R"({"ok":true,"restartRequired":false})");
+}
+
+void handleHaSettingsRead(AsyncWebServerRequest* request) {
+  if (!deviceApiAuthorized(request)) return;
+  const auto runtime = config.runtimeSnapshot();
+  char body[160];
+  if (!formatHaSettingsJson(body, sizeof(body), runtime.haName, false)) {
+    stationsReply(request, 500, R"({"error":"ha_settings_unavailable"})");
+    return;
+  }
+  stationsReply(request, 200, body);
+}
+
+void handleHaSettingsSave(AsyncWebServerRequest* request) {
+  if (!deviceApiAuthorized(request)) return;
+  if (systemRestartPending()) {
+    stationsReply(request, 409, R"({"error":"reboot_pending"})");
+    return;
+  }
+  voxone::configuration_mutation::Lease mutation(
+      voxone::configuration_mutation::deviceCoordinator(),
+      voxone::configuration_mutation::Owner::HaSettingsApi);
+  if (!mutation.acquired()) {
+    stationsReply(request, 409, R"({"error":"configuration_busy"})");
+    return;
+  }
+  if (!request->hasParam("name", true)) {
+    stationsReply(request, 400, R"({"error":"missing_name"})");
+    return;
+  }
+  const String name = request->getParam("name", true)->value();
+  if (!voxone::ha_name::valid(name.c_str(), name.length())) {
+    stationsReply(request, 400, R"({"error":"invalid_name"})");
+    return;
+  }
+  if (!config.setHaName(name.c_str())) {
+    stationsReply(request, 500, R"({"error":"storage_failed"})");
+    return;
+  }
+  char body[176];
+  if (!formatHaSettingsJson(body, sizeof(body), name.c_str(), true)) {
+    stationsReply(request, 500, R"({"error":"ha_response_failed"})");
+    return;
+  }
+  stationsReply(request, 200, body);
 }
 
 void handleHardwareConfigRead(AsyncWebServerRequest* request) {

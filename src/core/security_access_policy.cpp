@@ -114,6 +114,10 @@ const SecurityRouteRule kRouteRules[] = {
     {SecurityAccessMethod::Post, "/api/hardware",
      SecurityEndpoint::HardwareWrite, SecurityRouteClass::ProtectedRest, true,
      false},
+    {SecurityAccessMethod::Get, "/api/ha", SecurityEndpoint::HaSettingsRead,
+     SecurityRouteClass::ProtectedRest, false, false},
+    {SecurityAccessMethod::Post, "/api/ha", SecurityEndpoint::HaSettingsWrite,
+     SecurityRouteClass::ProtectedRest, true, false},
     {SecurityAccessMethod::Get, "/api/config/backup",
      SecurityEndpoint::ConfigBackup, SecurityRouteClass::ProtectedRest, false,
      false},
@@ -332,6 +336,8 @@ const char* securityEndpointName(SecurityEndpoint endpoint) {
     case SecurityEndpoint::StationsMetadata: return "stations-metadata";
     case SecurityEndpoint::HardwareRead: return "hardware-read";
     case SecurityEndpoint::HardwareWrite: return "hardware-write";
+    case SecurityEndpoint::HaSettingsRead: return "ha-settings-read";
+    case SecurityEndpoint::HaSettingsWrite: return "ha-settings-write";
     case SecurityEndpoint::ConfigBackup: return "config-backup";
     case SecurityEndpoint::ConfigRestore: return "config-restore";
     case SecurityEndpoint::TimeRead: return "time-read";

@@ -11,6 +11,7 @@ enum class Owner : uint8_t {
   None = 0,
   FirstBoot,
   HardwareApi,
+  HaSettingsApi,
   ConfigRestore,
   WifiRecovery,
   SerialHardware,
