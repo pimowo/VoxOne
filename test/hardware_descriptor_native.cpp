@@ -49,8 +49,18 @@ int main() {
 #endif
 #endif
   assert(!caps.supportsAudioOutput(AudioOutputKind::DspMini));
-  assert(!caps.supportsDsp && !caps.supportsAux && !caps.supportsSpdif);
+#if defined(VOXONE_PROFILE_L0)
+  assert(caps.supportsDsp);
+#else
+  assert(!caps.supportsDsp);
+#endif
+  assert(!caps.supportsAux && !caps.supportsSpdif);
   assert(!caps.supportsTda7719);
+#if defined(VOXONE_PROFILE_S0)
+  assert(caps.needsVoxOneBtIntroductionMigration);
+#else
+  assert(!caps.needsVoxOneBtIntroductionMigration);
+#endif
   assert(caps.supportsBtAudioRx == bool(VOXONE_BT_I2S_RX_ENABLED));
   assert(caps.supportsBtFirmwareUpdate ==
          bool(VOXONE_BT_FW_UPDATE_ENABLED));

@@ -88,6 +88,7 @@ struct HardwareCapabilities {
   bool supportsAux;
   bool supportsSpdif;
   bool supportsTda7719;
+  bool needsVoxOneBtIntroductionMigration;
 
   constexpr bool hasLocalDisplay() const { return supportedDisplays != 0; }
   constexpr bool supportsDisplay(DisplayKind kind) const {

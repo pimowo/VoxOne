@@ -1,7 +1,6 @@
 #ifndef VOXONE_DSP_TRANSPORT_RUNTIME_H
 #define VOXONE_DSP_TRANSPORT_RUNTIME_H
 
-#if defined(VOXONE_PROFILE_L0)
 #include "dsp_model.h"
 
 #include <cstddef>
@@ -23,6 +22,5 @@ void unlockDspToneMutation();
 
 }  // namespace dsp
 }  // namespace voxone
-#endif
 
 #endif

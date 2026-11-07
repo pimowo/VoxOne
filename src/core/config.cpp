@@ -12,9 +12,7 @@
 #include "player.h"
 #include "network.h"
 #include "netserver.h"
-#if defined(VOXONE_PROFILE_L0)
 #include "dsp_transport_runtime.h"
-#endif
 #include "controls.h"
 #include "timekeeper.h"
 #include "serialcli.h"
@@ -219,24 +217,22 @@ void Config::init() {
     for (size_t i = 0; i < sizeof(configArea); ++i)
       configArea[i] = EEPROM.read(EEPROM_START + i);
   }
-  const bool supportsBt = voxone::hardware::hardwareCapabilities().supportsVoxOneBt;
+  const auto& capabilities = voxone::hardware::hardwareCapabilities();
+  const bool supportsBt = capabilities.supportsVoxOneBt;
   const auto loaded = voxone::config_format::loadStartupConfig(
       eepromReady ? configArea : nullptr, sizeof(configArea), supportsBt, store,
       [this](config_t&) { _applyDefaults(); });
   _startupStatus = loaded.status;
   _storage.begin(loaded.status, loaded.storedBtEnabled);
-#if defined(VOXONE_PROFILE_S0)
-  constexpr bool exactS0Profile = true;
-  const auto btMigrationMarker =
-      voxone::config_capability_migration::readS0BtIntroductionMarker();
-#else
-  constexpr bool exactS0Profile = false;
-  const auto btMigrationMarker =
-      voxone::config_capability_migration::MarkerStatus::Applied;
-#endif
+  const bool needsBtIntroductionMigration =
+      capabilities.needsVoxOneBtIntroductionMigration;
+  const auto btMigrationMarker = needsBtIntroductionMigration
+      ? voxone::config_capability_migration::readS0BtIntroductionMarker()
+      : voxone::config_capability_migration::MarkerStatus::Applied;
   const auto btMigration =
       voxone::config_capability_migration::planS0BtIntroduction(
-          exactS0Profile, supportsBt, loaded.status, loaded.storedBtEnabled,
+          needsBtIntroductionMigration, supportsBt, loaded.status,
+          loaded.storedBtEnabled,
           btMigrationMarker);
   if (btMigration.persistEnabled) _storage.setStoredBtEnabled(true);
   btRuntime.configureBeforeStart(btMigration.enableForThisBoot
@@ -267,8 +263,8 @@ void Config::init() {
   if (startupWrite != voxone::config_format::ConfigWriteStatus::OK &&
       _storage.mode() != voxone::config_format::ConfigStorageMode::FUTURE_READ_ONLY)
     Serial.printf("[CONFIG] persistence: %s\n", voxone::config_format::configWriteMessage(startupWrite));
-#if defined(VOXONE_PROFILE_S0)
-  if (btMigration.markAppliedAfterPersistence &&
+  if (needsBtIntroductionMigration &&
+      btMigration.markAppliedAfterPersistence &&
       startupWrite == voxone::config_format::ConfigWriteStatus::OK &&
       _storage.mode() == voxone::config_format::ConfigStorageMode::V7 &&
       _storage.storedBtEnabled()) {
@@ -276,13 +272,13 @@ void Config::init() {
       Serial.println("[CONFIG] S0 VoxOneBT capability migration applied");
     else
       Serial.println("##[ERROR]# S0 VoxOneBT migration marker write failed");
-  } else if (btMigrationMarker ==
+  } else if (needsBtIntroductionMigration &&
+             (btMigrationMarker ==
                  voxone::config_capability_migration::MarkerStatus::Invalid ||
              btMigrationMarker ==
-                 voxone::config_capability_migration::MarkerStatus::Unavailable) {
+                 voxone::config_capability_migration::MarkerStatus::Unavailable)) {
     Serial.println("##[ERROR]# S0 VoxOneBT migration marker unavailable; stored setting preserved");
   }
-#endif
   _publishRuntimeLocked();
   BOOTLOG("CONFIG_VERSION\t%d", store.version);
   _initHW();
@@ -705,9 +701,8 @@ void Config::setStartupFixedVolume(uint8_t user) {
 }
 
 bool Config::setTone(int8_t bass, int8_t middle, int8_t trebble) {
-#if defined(VOXONE_PROFILE_L0)
-  const bool toneLocked = voxone::dsp::lockDspToneMutation();
-#endif
+  const bool hasDsp = voxone::hardware::hardwareCapabilities().supportsDsp;
+  const bool toneLocked = hasDsp && voxone::dsp::lockDspToneMutation();
   WriteLock lock(_persistMutex);
   bass = clampTone(bass);
   middle = clampTone(middle);
@@ -723,10 +718,10 @@ bool Config::setTone(int8_t bass, int8_t middle, int8_t trebble) {
   }
   player.setTone(store.bass, store.middle, store.trebble);
   netserver.requestOnChange(EQUALIZER, 0);
-#if defined(VOXONE_PROFILE_L0)
-  voxone::dsp::dspTransportToneChanged({store.bass, store.middle, store.trebble});
+  if (hasDsp)
+    voxone::dsp::dspTransportToneChanged(
+        {store.bass, store.middle, store.trebble});
   if (toneLocked) voxone::dsp::unlockDspToneMutation();
-#endif
   return persisted;
 }
 
