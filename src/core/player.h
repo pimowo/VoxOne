@@ -6,14 +6,11 @@
 #include "radio_reconnect_policy.h"
 #include "radio_source_policy.h"
 #include "temporary_audio_state.h"
+#include "temporary_audio_url.h"
 #include "temporary_transport_watchdog.h"
 #include "player_pending_refresh.h"
 
 #include "../audioI2S/AudioEx.h"
-
-#ifndef TEMPORARY_AUDIO_URL_SIZE
-  #define TEMPORARY_AUDIO_URL_SIZE  512
-#endif
 
 #ifndef PLQ_SEND_DELAY
   #define PLQ_SEND_DELAY pdMS_TO_TICKS(1000) //portMAX_DELAY

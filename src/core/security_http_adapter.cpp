@@ -93,7 +93,7 @@ bool securityWebSocketCommandAllowed(const char* command) {
   // appear here; they have dedicated recovery/configuration workflows.
   static const char* const allowed[] = {
       "ping", "tone", "trebble", "middle", "bass", "source",
-      "webtransport", "start", "stop", "toggle", "prev", "next",
+      "webtransport", "start", "stop", "playurl", "toggle", "prev", "next",
       "volm", "volp", "ballance", "playstation", "play", "vol",
       "volume", "vol100", "mute", "maximumvolume", "startupmode",
       "startupfixedvolume", "dspon", "dim", "getindex", "getrssi",

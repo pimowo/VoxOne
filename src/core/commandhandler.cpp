@@ -84,6 +84,12 @@ bool CommandHandler::exec(const char *command, const char *value, uint32_t cid) 
   }
   if (strEquals(command, "start"))    { player.sendCommand({PR_PLAY, config.lastStation()}); return true; }
   if (strEquals(command, "stop"))     { player.sendCommand({PR_STOP, 0}); return true; }
+  if (strEquals(command, "playurl")) {
+    const size_t length = value ? strlen(value) : 0;
+    if (!voxone::temporary_audio::isSafeUrl(value, length)) return false;
+    player.requestTemporaryUrl(value, length);
+    return true;
+  }
   if (strEquals(command, "toggle"))   { player.toggle(); return true; }
   if (strEquals(command, "prev"))     { player.prev(); return true; }
   if (strEquals(command, "next"))     { player.next(); return true; }

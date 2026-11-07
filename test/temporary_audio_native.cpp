@@ -1,4 +1,5 @@
 #include "../src/core/temporary_audio_state.h"
+#include "../src/core/temporary_audio_url.h"
 #include "../src/core/temporary_transport_watchdog.h"
 #include "../src/core/source_manager_state.h"
 #include "../src/core/bt_audio_route_state.h"
@@ -158,10 +159,39 @@ void auditTransport() {
   assert(handlers.find("config.setStation(p?info:config.station.name)") ==
          std::string::npos);
 
-  // Temporary audio remains an internal Player primitive used by integrations;
-  // it must not expose a diagnostic HTTP endpoint.
+  // Temporary audio is exposed only as the authenticated WebSocket command;
+  // there is no parallel diagnostic HTTP endpoint or station mutation path.
   const auto server = readFile("src/core/netserver.cpp");
   assert(server.find("requestTemporaryUrl") == std::string::npos);
+  const auto commands = readFile("src/core/commandhandler.cpp");
+  assert(commands.find("strEquals(command, \"playurl\")") !=
+         std::string::npos);
+  assert(commands.find("player.requestTemporaryUrl(value, length);") !=
+         std::string::npos);
+  assert(commands.find("isSafeUrl(value, length)") != std::string::npos);
+}
+
+void validateTemporaryUrls() {
+  using voxone::temporary_audio::isSafeUrl;
+  using voxone::temporary_audio::kUrlCapacity;
+  const char* http = "http://192.168.1.10:8123/api/tts_proxy/file.mp3?token=a=b";
+  const char* https = "https://ha.local/media/audio.mp3#fragment";
+  assert(isSafeUrl(http, std::strlen(http)));
+  assert(isSafeUrl(https, std::strlen(https)));
+  assert(!isSafeUrl(nullptr, 0));
+  assert(!isSafeUrl("", 0));
+  const char* ftp = "ftp://ha.local/file.mp3";
+  const char* missingHost = "http:///file.mp3";
+  const char* credentials = "http://user@ha.local/file.mp3";
+  const char* space = "http://ha.local/file mp3";
+  const char* crlf = "http://ha.local/file\r\nX:1";
+  assert(!isSafeUrl(ftp, std::strlen(ftp)));
+  assert(!isSafeUrl(missingHost, std::strlen(missingHost)));
+  assert(!isSafeUrl(credentials, std::strlen(credentials)));
+  assert(!isSafeUrl(space, std::strlen(space)));
+  assert(!isSafeUrl(crlf, std::strlen(crlf)));
+  const std::string tooLong(kUrlCapacity, 'a');
+  assert(!isSafeUrl(tooLong.c_str(), tooLong.size()));
 }
 
 struct Scenario {
@@ -294,6 +324,7 @@ void assertRadioPresentation(const Scenario& scenario, bool playing) {
 
 int main() {
   auditTransport();
+  validateTemporaryUrls();
   // Update STOP cancels an active announcement without changing smartstart
   // or restoring the previous RADIO intent after the lock is released.
   {
