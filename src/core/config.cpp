@@ -224,6 +224,10 @@ void Config::init() {
           store.reservedWeather, sizeof(store.reservedWeather),
           store.haName, sizeof(store.haName)))
     store.haName[0] = '\0';
+  if (!voxone::tft_theme::decode(
+          store.reservedWeather, sizeof(store.reservedWeather),
+          store.tftTheme))
+    store.tftTheme = THEME_DEFAULT;
   _startupStatus = loaded.status;
   _storage.begin(loaded.status, loaded.storedBtEnabled);
   const bool needsBtIntroductionMigration =
@@ -585,6 +589,9 @@ void Config::_applyDefaults() {
   store.haName[0] = '\0';
   voxone::ha_name::encode(
       store.haName, 0, store.reservedWeather, sizeof(store.reservedWeather));
+  store.tftTheme = THEME_DEFAULT;
+  voxone::tft_theme::encode(
+      store.tftTheme, store.reservedWeather, sizeof(store.reservedWeather));
 }
 
 bool Config::persistV7() {
@@ -610,6 +617,19 @@ bool Config::setHaName(const char* value) {
           sizeof(store.reservedWeather)))
     return false;
   strlcpy(store.haName, value, sizeof(store.haName));
+  _storage.markDirty();
+  _publishRuntimeLocked();
+  return !_startupReadOnly && persistV7();
+}
+
+bool Config::setTftTheme(TftTheme theme) {
+  if (!voxone::tft_theme::valid(theme)) return false;
+  WriteLock lock(_persistMutex);
+  if (store.tftTheme == theme) return true;
+  if (!voxone::tft_theme::encode(
+          theme, store.reservedWeather, sizeof(store.reservedWeather)))
+    return false;
+  store.tftTheme = theme;
   _storage.markDirty();
   _publishRuntimeLocked();
   return !_startupReadOnly && persistV7();
@@ -1148,6 +1168,7 @@ void Config::_publishRuntimeLocked() {
   runtime.encoderAcceleration = store.encacc;
   runtime.volumeSteps = store.volsteps;
   runtime.haDiscoveryEnabled = store.haDiscoveryEnabled;
+  runtime.tftTheme = static_cast<uint8_t>(store.tftTheme);
   strlcpy(runtime.mdnsName, store.mdnsname, sizeof(runtime.mdnsName));
   strlcpy(runtime.haName, store.haName, sizeof(runtime.haName));
   _runtime.publish(runtime);

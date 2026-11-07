@@ -254,6 +254,8 @@ void handleHardwareConfigRead(AsyncWebServerRequest *request);
 void handleHardwareConfigSave(AsyncWebServerRequest *request);
 void handleHaSettingsRead(AsyncWebServerRequest *request);
 void handleHaSettingsSave(AsyncWebServerRequest *request);
+void handleDisplayThemeRead(AsyncWebServerRequest *request);
+void handleDisplayThemeSave(AsyncWebServerRequest *request);
 void handleConfigBackup(AsyncWebServerRequest *request);
 void handleConfigRestore(AsyncWebServerRequest *request);
 void handleConfigRestoreBody(AsyncWebServerRequest *request, uint8_t *data,
@@ -1081,6 +1083,8 @@ bool NetServer::begin(bool quiet) {
   webserver.on("/api/hardware", HTTP_POST, handleHardwareConfigSave);
   webserver.on("/api/ha", HTTP_GET, handleHaSettingsRead);
   webserver.on("/api/ha", HTTP_POST, handleHaSettingsSave);
+  webserver.on("/api/display/theme", HTTP_GET, handleDisplayThemeRead);
+  webserver.on("/api/display/theme", HTTP_POST, handleDisplayThemeSave);
   webserver.on(voxone::config_backup_web::kBackupRoute, HTTP_GET,
                handleConfigBackup);
   webserver.on(voxone::config_backup_web::kRestoreRoute, HTTP_POST,
@@ -2425,6 +2429,53 @@ void handleHaSettingsSave(AsyncWebServerRequest* request) {
     stationsReply(request, 500, R"({"error":"ha_response_failed"})");
     return;
   }
+  stationsReply(request, 200, body);
+}
+
+void handleDisplayThemeRead(AsyncWebServerRequest* request) {
+  if (!deviceApiAuthorized(request)) return;
+  const TftTheme theme = static_cast<TftTheme>(
+      config.runtimeSnapshot().tftTheme);
+  char body[96];
+  snprintf(body, sizeof(body),
+           "{\"supported\":%s,\"theme\":\"%s\"}",
+           display.active() && display.width() == 480 && display.height() == 320
+               ? "true" : "false",
+           voxone::tft_theme::apiName(theme));
+  stationsReply(request, 200, body);
+}
+
+void handleDisplayThemeSave(AsyncWebServerRequest* request) {
+  if (!deviceApiAuthorized(request)) return;
+  if (systemRestartPending()) {
+    stationsReply(request, 409, R"({"error":"reboot_pending"})");
+    return;
+  }
+  voxone::configuration_mutation::Lease mutation(
+      voxone::configuration_mutation::deviceCoordinator(),
+      voxone::configuration_mutation::Owner::DisplayThemeApi);
+  if (!mutation.acquired()) {
+    stationsReply(request, 409, R"({"error":"configuration_busy"})");
+    return;
+  }
+  if (!request->hasParam("theme", true)) {
+    stationsReply(request, 400, R"({"error":"missing_theme"})");
+    return;
+  }
+  const String requested = request->getParam("theme", true)->value();
+  TftTheme theme = THEME_DEFAULT;
+  if (!voxone::tft_theme::parseApiName(requested.c_str(), theme)) {
+    stationsReply(request, 400, R"({"error":"invalid_theme"})");
+    return;
+  }
+  if (!config.setTftTheme(theme)) {
+    stationsReply(request, 500, R"({"error":"storage_failed"})");
+    return;
+  }
+  char body[96];
+  snprintf(body, sizeof(body),
+           "{\"ok\":true,\"theme\":\"%s\"}",
+           voxone::tft_theme::apiName(theme));
   stationsReply(request, 200, body);
 }
 

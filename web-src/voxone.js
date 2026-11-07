@@ -603,6 +603,10 @@ window.VoxOneRestartWaiter = Object.freeze({
   const brightnessUnavailable = document.getElementById("brightness-unavailable");
   const brightnessSlider = document.getElementById("brightness-slider");
   const brightnessValue = document.getElementById("brightness-value");
+  const tftThemeForm = document.getElementById("tft-theme-form");
+  const tftThemeSelect = document.getElementById("tft-theme");
+  const tftThemeStatus = document.getElementById("tft-theme-status");
+  const tftThemeSave = document.getElementById("tft-theme-save");
   const autoReturnControl = document.getElementById("auto-return-control");
   const stationListTimeoutInput = document.getElementById("station-list-timeout");
   const btTimeoutControl = document.getElementById("bt-timeout-control");
@@ -684,6 +688,8 @@ window.VoxOneRestartWaiter = Object.freeze({
   let hardwareSaving = false;
   let haSettingsLoading = false;
   let haSettingsSaving = false;
+  let tftThemeLoading = false;
+  let tftThemeSaving = false;
   let savedHardwareConfig = null;
   const state = {
     connection: "connecting",
@@ -706,6 +712,8 @@ window.VoxOneRestartWaiter = Object.freeze({
     startupFixedVolume: null,
     brightness: null,
     canBrightness: false,
+    canTftTheme: false,
+    tftTheme: null,
     stationListTimeout: null,
     btTransportTimeout: null,
     canBtTransport: false,
@@ -954,6 +962,15 @@ window.VoxOneRestartWaiter = Object.freeze({
     haNameInput.disabled = !connected || state.haName === null ||
       haSettingsLoading || haSettingsSaving;
     haSettingsSave.disabled = haNameInput.disabled;
+  }
+
+  function renderTftTheme() {
+    const ready = state.connection === "connected" && state.canTftTheme &&
+      state.tftTheme !== null;
+    tftThemeForm.hidden = !state.canTftTheme;
+    tftThemeSelect.disabled = !ready || tftThemeLoading || tftThemeSaving;
+    tftThemeSave.disabled = tftThemeSelect.disabled ||
+      tftThemeSelect.value === state.tftTheme;
   }
 
   function scheduleSystemInfoRefresh() {
@@ -1404,6 +1421,7 @@ window.VoxOneRestartWaiter = Object.freeze({
     if (selected === "settings") {
       loadTimeStatus();
       loadHaSettings();
+      loadTftTheme();
     }
     if (selected === "hardware" && !hardwareConfigLoaded) loadHardwareConfig();
     if (selected === "update") send("getwebstatus", 1);
@@ -1481,6 +1499,59 @@ window.VoxOneRestartWaiter = Object.freeze({
     } finally {
       haSettingsSaving = false;
       renderHaSettings();
+    }
+  }
+
+  async function loadTftTheme() {
+    if (tftThemeLoading || tftThemeSaving) return;
+    tftThemeLoading = true;
+    renderTftTheme();
+    try {
+      const response = await fetch("/api/display/theme", {cache: "no-store"});
+      if (!response.ok) throw new Error("HTTP " + response.status);
+      const settings = await response.json();
+      if (typeof settings.supported !== "boolean" ||
+          !["default", "yamaha"].includes(settings.theme))
+        throw new Error("invalid TFT theme response");
+      state.canTftTheme = settings.supported;
+      state.tftTheme = settings.theme;
+      tftThemeSelect.value = settings.theme;
+      tftThemeStatus.textContent = "";
+    } catch (_) {
+      state.canTftTheme = false;
+      state.tftTheme = null;
+    } finally {
+      tftThemeLoading = false;
+      renderDisplaySettings();
+    }
+  }
+
+  async function saveTftTheme(event) {
+    event.preventDefault();
+    const theme = tftThemeSelect.value;
+    if (tftThemeSaving || !state.canTftTheme ||
+        !["default", "yamaha"].includes(theme)) return;
+    tftThemeSaving = true;
+    tftThemeStatus.textContent = "Zapisywanie…";
+    renderTftTheme();
+    try {
+      const response = await fetch("/api/display/theme", {
+        method: "POST",
+        headers: {"Content-Type": "application/x-www-form-urlencoded;charset=UTF-8"},
+        body: new URLSearchParams({theme})
+      });
+      const result = await response.json();
+      if (!response.ok || result.ok !== true || result.theme !== theme)
+        throw new Error(result.error || ("HTTP " + response.status));
+      state.tftTheme = result.theme;
+      tftThemeStatus.dataset.kind = "notice";
+      tftThemeStatus.textContent = "Zapisano. Motyw został zastosowany.";
+    } catch (_) {
+      tftThemeStatus.dataset.kind = "error";
+      tftThemeStatus.textContent = "Nie zapisano motywu TFT.";
+    } finally {
+      tftThemeSaving = false;
+      renderTftTheme();
     }
   }
 
@@ -1742,6 +1813,7 @@ window.VoxOneRestartWaiter = Object.freeze({
     renderFooter();
     renderNetworkInfo();
     renderHaSettings();
+    renderTftTheme();
     advancedAudio.syncShared();
   }
 
@@ -1866,7 +1938,8 @@ window.VoxOneRestartWaiter = Object.freeze({
 
   function renderDisplaySettings() {
     displaySettingsCard.hidden = !state.canFlip && !state.canVu && !state.canBrightness &&
-      !state.canScrollSettings;
+      !state.canScrollSettings && !state.canTftTheme;
+    renderTftTheme();
     flipScreenControl.hidden = !state.canFlip;
     flipScreenToggle.disabled = state.connection !== "connected" ||
       !state.canFlip || state.flip === null || flipPending;
@@ -3121,6 +3194,8 @@ window.VoxOneRestartWaiter = Object.freeze({
 
   haSettingsForm.addEventListener("submit", saveHaSettings);
   haNameInput.addEventListener("input", () => setHaNameFeedback(""));
+  tftThemeForm.addEventListener("submit", saveTftTheme);
+  tftThemeSelect.addEventListener("change", renderTftTheme);
 
   function sendPendingBrightness() {
     clearTimeout(brightnessTimer);

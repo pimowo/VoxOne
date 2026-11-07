@@ -60,6 +60,7 @@ struct Snapshot {
   uint16_t encoderAcceleration;
   uint8_t volumeSteps;
   bool haDiscoveryEnabled;
+  uint8_t tftTheme;
   char mdnsName[kMdnsNameCapacity];
   char haName[kHaNameCapacity];
 };

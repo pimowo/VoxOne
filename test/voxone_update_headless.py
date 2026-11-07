@@ -310,6 +310,18 @@ window.fetch = (url, options = {}) => {
       ok:true,name:request.name,maximumBytes:32
     })});
   }
+  if (url === '/api/display/theme') {
+    if ((options.method || 'GET') === 'GET')
+      return Promise.resolve({ok:true,status:200,json:() => Promise.resolve({
+        supported:window.tftThemeSupported === true,
+        theme:window.tftTheme || 'default'
+      })});
+    const request = Object.fromEntries(new URLSearchParams(options.body || ''));
+    window.tftTheme = request.theme;
+    return Promise.resolve({ok:true,status:200,json:() => Promise.resolve({
+      ok:true,theme:request.theme
+    })});
+  }
   if (url === '/api/time') {
     window.timeRequests++;
     return Promise.resolve({ok:true,status:200,json:() => Promise.resolve({rtcSupported:false})});

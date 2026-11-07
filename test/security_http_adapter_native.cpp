@@ -131,7 +131,7 @@ void testStrictHandshakeAndFakeUpgradeCannotBypassHttp() {
   const char* protectedPosts[] = {
       "/update", "/update/bt", "/api/config/restore",
       "/api/stations/import", "/api/time/sync", "/api/hardware",
-      "/api/stations/add"};
+      "/api/display/theme", "/api/stations/add"};
   unsigned writes = 0;
   for (const char* path : protectedPosts) {
     const std::string raw = std::string("POST ") + path +

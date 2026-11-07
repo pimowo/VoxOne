@@ -240,6 +240,15 @@
               <p class="hint">Regulacja dotyczy fizycznego podświetlenia obsługiwanego wyświetlacza.</p>
             </div>
             <p id="brightness-unavailable" class="settings-notice" hidden>Ten sterownik nie udostępnia regulacji jasności w WWW.</p>
+            <form id="tft-theme-form" class="tft-theme-settings audio-control" hidden>
+              <label for="tft-theme">Motyw TFT</label>
+              <select id="tft-theme" class="setting-select" disabled>
+                <option value="default">Domyślny</option>
+                <option value="yamaha">Yamaha</option>
+              </select>
+              <p id="tft-theme-status" class="scroll-settings-status" role="status" aria-live="polite"></p>
+              <button id="tft-theme-save" type="submit" disabled>Zapisz motyw</button>
+            </form>
             <div id="auto-return-control" class="audio-control" hidden>
               <h4>Automatyczny powrót</h4>
               <label class="idle-setting" for="station-list-timeout">Lista stacji <span>(sekundy)</span><input id="station-list-timeout" type="number" min="0" max="120" step="1" inputmode="numeric" disabled></label>

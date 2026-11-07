@@ -99,6 +99,10 @@ const EndpointCase kEndpoints[] = {
      SecurityRouteClass::ProtectedRest, false, false},
     {SecurityAccessMethod::Post, "/api/ha", SecurityEndpoint::HaSettingsWrite,
      SecurityRouteClass::ProtectedRest, true, false},
+    {SecurityAccessMethod::Get, "/api/display/theme", SecurityEndpoint::DisplayThemeRead,
+     SecurityRouteClass::ProtectedRest, false, false},
+    {SecurityAccessMethod::Post, "/api/display/theme", SecurityEndpoint::DisplayThemeWrite,
+     SecurityRouteClass::ProtectedRest, true, false},
     {SecurityAccessMethod::Get, "/api/config/backup", SecurityEndpoint::ConfigBackup,
      SecurityRouteClass::ProtectedRest, false, false},
     {SecurityAccessMethod::Post, "/api/config/restore", SecurityEndpoint::ConfigRestore,
@@ -252,11 +256,11 @@ void testCompleteEndpointInventory() {
     assert(std::strcmp(securityEndpointName(actual.endpoint), "unknown") != 0);
     assert(std::strcmp(securityRouteClassName(actual.routeClass), "unknown") != 0);
   }
-  assert(sizeof(kEndpoints) / sizeof(kEndpoints[0]) == 51);
+  assert(sizeof(kEndpoints) / sizeof(kEndpoints[0]) == 53);
 
   size_t ruleCount = 0;
   const SecurityRouteRule* rules = securityAccessRouteRules(ruleCount);
-  assert(rules != nullptr && ruleCount == 51);
+  assert(rules != nullptr && ruleCount == 53);
   for (size_t index = 0; index < ruleCount; ++index) {
     const SecurityRouteRule& rule = rules[index];
     assert(rule.path && rule.path[0] == '/');
@@ -452,6 +456,8 @@ void testProtectedOpenAndLockedPolicy() {
        SecurityRouteClass::ProtectedRest, true, false},
       {SecurityAccessMethod::Post, "/api/ha", SecurityEndpoint::HaSettingsWrite,
        SecurityRouteClass::ProtectedRest, true, false},
+      {SecurityAccessMethod::Post, "/api/display/theme", SecurityEndpoint::DisplayThemeWrite,
+       SecurityRouteClass::ProtectedRest, true, false},
       {SecurityAccessMethod::WebSocketHandshake, "/ws", SecurityEndpoint::WebSocket,
        SecurityRouteClass::ProtectedWebSocket, false, false},
   };
@@ -627,7 +633,7 @@ void testProductionInventoryAndHttpOnlyIntegration() {
       "/api/stations/import", "kStationsSnapshotRoute", "kDirectorySearchRoute",
       "/api/stations/add", "/api/stations/edit", "/api/stations/delete",
       "/api/stations/reorder", "/api/stations/metadata",
-      "/api/hardware", "/api/ha", "kBackupRoute", "kRestoreRoute", "/api/time",
+      "/api/hardware", "/api/ha", "/api/display/theme", "kBackupRoute", "kRestoreRoute", "/api/time",
       "/api/time/sync", "kSecurityStateRoute", "kSecuritySetupRoute",
       "kSecurityLoginRoute", "kSecurityLogoutRoute", "kSecurityManageRoute",
       "/api/ready",

@@ -38,6 +38,9 @@
 #if VOXONE_DISPLAY_PROFILE == VOXONE_DISPLAY_PROFILE_ST7789_284X76
 #include "st7789_284x76_layout.h"
 #endif
+#if VOXONE_DISPLAY_COMPILES_ST7796
+#include "../displays/yamaha_tft_layout.h"
+#endif
 
 Display display;
 static TaskHandle_t displayTaskHandle = nullptr;
@@ -2171,6 +2174,103 @@ void Display::_renderMode(displayMode_e newmode) {
   
 }
 
+#if VOXONE_DISPLAY_COMPILES_ST7796
+bool Display::_yamahaTftActive() const {
+  return _renderedMode == PLAYER && !smallOledActive() &&
+         config.runtimeSnapshot().tftTheme == THEME_YAMAHA;
+}
+
+namespace {
+uint32_t yamahaHashBytes(uint32_t hash, const void* data, size_t length) {
+  const uint8_t* bytes = static_cast<const uint8_t*>(data);
+  while (length--) {
+    hash ^= *bytes++;
+    hash *= 16777619u;
+  }
+  return hash;
+}
+
+uint32_t yamahaViewSignature(const PlayerDisplayView& view) {
+  uint32_t hash = 2166136261u;
+  hash = yamahaHashBytes(hash, view.station, strlen(view.station));
+  hash = yamahaHashBytes(hash, view.artist, strlen(view.artist));
+  hash = yamahaHashBytes(hash, view.title, strlen(view.title));
+  hash = yamahaHashBytes(hash, &view.source, sizeof(view.source));
+  hash = yamahaHashBytes(hash, &view.playback, sizeof(view.playback));
+  hash = yamahaHashBytes(hash, &view.userVolume, sizeof(view.userVolume));
+  hash = yamahaHashBytes(hash, &view.muted, sizeof(view.muted));
+  hash = yamahaHashBytes(hash, &view.btConnected, sizeof(view.btConnected));
+  return yamahaHashBytes(hash, &view.wifiLevel, sizeof(view.wifiLevel));
+}
+}  // namespace
+
+void Display::render_yamaha_tft() {
+  if (!_yamahaTftActive()) return;
+  PlayerDisplayView view{};
+  capturePlayerDisplayView(view, WiFi.RSSI());
+  const uint32_t signature = yamahaViewSignature(view);
+  if (_yamahaDrawn && signature == _yamahaSignature) return;
+
+  using namespace voxone::yamaha_tft;
+  dsp.clearClipping();
+  dsp.fillScreen(kBackground);
+  dsp.setFont();
+  dsp.setTextWrap(false);
+  dsp.setTextColor(kCyan, kBackground);
+
+  auto printLine = [](const char* text, int16_t left, int16_t top,
+                      int16_t width, int16_t height, uint8_t size) {
+    dsp.setClipping({static_cast<uint16_t>(left), static_cast<uint16_t>(top),
+                     static_cast<uint16_t>(width),
+                     static_cast<uint16_t>(height)});
+    dsp.setTextSize(size);
+    dsp.setCursor(left, top);
+    dsp.print(utf8Rus(text && text[0] ? text : "—"));
+    dsp.clearClipping();
+  };
+
+  dsp.drawFastHLine(0, kTopBarBottom, kWidth, kCyan);
+  dsp.setTextSize(3);
+  dsp.setCursor(14, 16);
+  dsp.print(view.source == DisplaySourceKind::Bluetooth ? "BT" : "RADIO");
+  dsp.setCursor(190, 16);
+  dsp.print(displayPlaybackLabel(view.playback));
+
+  const uint8_t signal = boundedSignalLevel(view.wifiLevel);
+  for (uint8_t index = 0; index < kSignalBars; ++index) {
+    const int16_t barHeight = 8 + index * 8;
+    const int16_t left = 402 + index * 17;
+    const int16_t top = 45 - barHeight;
+    if (index < signal)
+      dsp.fillRect(left, top, 11, barHeight, kCyan);
+    else
+      dsp.drawRect(left, top, 11, barHeight, kCyan);
+  }
+
+  printLine(view.station, 16, kContentTop, 448, 42, 4);
+  const char* middle = view.title[0] ? view.title :
+                       (view.artist[0] ? view.artist : "Brak informacji");
+  printLine(middle, 16, 136, 448, 62, 4);
+  if (view.artist[0] && view.title[0])
+    printLine(view.artist, 18, 202, 444, 28, 2);
+
+  dsp.drawRect(0, kVolumeTop, kWidth, kHeight - kVolumeTop, kCyan);
+  dsp.setTextSize(5);
+  dsp.setCursor(18, 262);
+  if (view.muted) {
+    dsp.print("MUTE");
+  } else {
+    char volume[16];
+    snprintf(volume, sizeof(volume), "VOL %3u",
+             static_cast<unsigned>(view.userVolume));
+    dsp.print(volume);
+  }
+
+  _yamahaSignature = signature;
+  _yamahaDrawn = true;
+}
+#endif
+
 void Display::resetQueue(){
   if(displayQueue!=NULL) xQueueReset(displayQueue);
 }
@@ -2404,10 +2504,26 @@ void Display::loop() {
     dsp.loop();
     return;
   }
+  const bool yamahaTft =
+#if VOXONE_DISPLAY_COMPILES_ST7796
+      _yamahaTftActive();
+#else
+      false;
+#endif
+#if VOXONE_DISPLAY_COMPILES_ST7796
+  if (_yamahaWasActive && !yamahaTft) {
+    _yamahaDrawn = false;
+    if (_renderedMode == PLAYER) {
+      dsp.fillScreen(config.theme.background);
+      _pager->setPage(pages[PG_PLAYER], true);
+    }
+  }
+  _yamahaWasActive = yamahaTft;
+#endif
   if (_playerScrollCoreEnabled()) {
-    if (_renderedMode == PLAYER && !systemUpdateAudioBlocked())
+    if (!yamahaTft && _renderedMode == PLAYER && !systemUpdateAudioBlocked())
       _playerScrollTick(millis());
-  } else {
+  } else if (!yamahaTft) {
 #if VOXONE_DISPLAY_PROFILE == VOXONE_DISPLAY_PROFILE_ST7789_284X76
     if(_renderedMode == PLAYER && !systemUpdateAudioBlocked()) ScrollWidget::nextSt7789ScrollFrame();
 #endif
@@ -2415,7 +2531,7 @@ void Display::loop() {
     if (_st7796PlayerReady && _renderedMode == PLAYER && !systemUpdateAudioBlocked()) _st7796ScrollTick();
 #endif
   }
-  _pager->loop();
+  if (!yamahaTft) _pager->loop();
 #if VOXONE_DISPLAY_PROFILE == VOXONE_DISPLAY_PROFILE_ST7796_480X320
   if (_bootStep == 2) {
     PlayerDisplayView view{};
@@ -2431,6 +2547,9 @@ void Display::loop() {
 #endif
   requestParams_t request;
   if(xQueueReceive(displayQueue, &request, DSP_QUEUE_TICKS)){
+#if VOXONE_DISPLAY_COMPILES_ST7796
+    if (yamahaTft) _yamahaDrawn = false;
+#endif
     switch (request.type){
         case NEWMODE: {
           _renderMode((displayMode_e)request.payload);
@@ -2585,6 +2704,9 @@ void Display::loop() {
     }
   }
 
+#if VOXONE_DISPLAY_COMPILES_ST7796
+  if (_yamahaTftActive()) render_yamaha_tft();
+#endif
   dsp.loop();
 /*
   #if I2S_DOUT==255

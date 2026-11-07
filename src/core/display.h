@@ -250,6 +250,11 @@ class Display {
     uint32_t _playerScrollConfigRevision = 0xffffffffu;
 #if VOXONE_DISPLAY_COMPILES_ST7796
     void _updatePlaybackStatus();
+    bool _yamahaTftActive() const;
+    void render_yamaha_tft();
+    uint32_t _yamahaSignature = 0;
+    bool _yamahaDrawn = false;
+    bool _yamahaWasActive = false;
 #endif
 #if VOXONE_DISPLAY_COMPILES_ST7796
     St7796PlayerScroll _st7796Scroll;
