@@ -56,7 +56,7 @@ void Player::init() {
   playerQueue = xQueueCreate( 5, sizeof( playerRequestParams_t ) );
   setOutputPins(false);
   delay(50);
-  _temporaryUrls = xQueueCreate(1, MQTT_BURL_SIZE);
+  _temporaryUrls = xQueueCreate(1, TEMPORARY_AUDIO_URL_SIZE);
   if(MUTE_PIN!=255) pinMode(MUTE_PIN, OUTPUT);
   #if I2S_DOUT!=255
     if (audioPlan.initializeSerialI2s &&
@@ -444,7 +444,7 @@ void Player::loop() {
   }
   if (uxQueueMessagesWaiting(playerQueue) == 0)
     _servicePendingStationRefresh();
-  char url[MQTT_BURL_SIZE];
+  char url[TEMPORARY_AUDIO_URL_SIZE];
   if (_temporaryUrls && xQueueReceive(_temporaryUrls, url, 0) == pdTRUE &&
       !systemUpdateAudioBlocked()) browseUrl(url);
   // Backend EOF/error callbacks run synchronously inside these calls. They
@@ -569,11 +569,11 @@ void Player::serviceRadioReconnect() {
 }
 
 void Player::requestTemporaryUrl(const char* url, size_t length) {
-  if (!_temporaryUrls || !url || !length || length >= MQTT_BURL_SIZE ||
+  if (!_temporaryUrls || !url || !length || length >= TEMPORARY_AUDIO_URL_SIZE ||
       systemUpdateAudioBlocked() || !_localAudioAvailable) return;
-  char request[MQTT_BURL_SIZE]{};
+  char request[TEMPORARY_AUDIO_URL_SIZE]{};
   memcpy(request, url, length);
-  // MQTT runs on another task. Replace the pending URL atomically, never a
+  // Network commands run on another task. Replace the pending URL atomically, never a
   // buffer currently used by connecttohost(). Latest pending request wins.
   xQueueOverwrite(_temporaryUrls, request);
   sendCommand({PR_BURL, 0});

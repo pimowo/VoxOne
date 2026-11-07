@@ -127,9 +127,9 @@ Przed aktualizacją lub pracą serwisową otwórz **SYSTEM**:
 1. wybierz **Pobierz backup** i zachowaj plik
    `VoxOne-<wersja>-backup.vxcf`;
 2. sprawdź, czy plik ma niezerowy rozmiar;
-3. przechowuj go jak dane poufne — zawiera zapisane hasła Wi-Fi i MQTT.
+3. przechowuj go jak dane poufne — zawiera zapisane hasła Wi-Fi.
 
-Bieżący backup VXCF obejmuje Config v7, runtime hardware, MQTT, ustawienia
+Bieżący backup VXCF obejmuje Config v7, runtime hardware, ustawienia
 interfejsu i przewijania, profile Wi-Fi oraz listę stacji. Nie obejmuje hasła
 WWW i rekordu SECURITY, aktywnych sesji, chwilowego MUTE/source/playback,
 pełnego NVS, firmware, slotów OTA ani `otadata`.
@@ -199,8 +199,9 @@ dwie operacje:
 - **Przywróć ustawienia fabryczne** — usuwa konfigurację oraz dane
   użytkownika, a po weryfikacji zapisu automatycznie restartuje urządzenie.
 
-Factory reset usuwa Wi-Fi, stacje, runtime hardware, MQTT, ustawienia UI,
-scroll, SECURITY i dane transakcji użytkownika. Zachowuje bootloader,
+Factory reset usuwa Wi-Fi, stacje, runtime hardware, ustawienia UI, scroll,
+SECURITY, dane transakcji użytkownika oraz pozostałości historycznego
+namespace MQTT. Zachowuje bootloader,
 firmware, tablicę partycji, `otadata`, oba sloty aplikacji, systemowy stan OTA
 i fabryczne zasoby WWW.
 
@@ -222,11 +223,11 @@ pozwala także wybrać `display=NONE` i `input=NONE`.
 
 | Profil | MCU / pamięć builda | Wyświetlacz runtime | Sterowanie | Pozostałe potwierdzone capability bieżącego BIN |
 |---|---|---|---|---|
-| W0 | ESP32, bez PSRAM; wymagane co najmniej 4 MiB flash | ST7789 284×76 | EC11 / Buttons3 / NONE | PCM5102A, RADIO, WWW, MQTT, Web Update; bez BT, RTC i VU. |
-| M0 | ESP32-S3 Zero, 4 MiB flash, 2 MiB PSRAM | SSD1306 lub SSD1309 128×64 | EC11 / Buttons3 / NONE | PCM5102A, RADIO, WWW, MQTT, Web Update; bez BT, RTC i VU. |
+| W0 | ESP32, bez PSRAM; wymagane co najmniej 4 MiB flash | ST7789 284×76 | EC11 / Buttons3 / NONE | PCM5102A, RADIO, WWW, Web Update; bez BT, RTC i VU. |
+| M0 | ESP32-S3 Zero, 4 MiB flash, 2 MiB PSRAM | SSD1306 lub SSD1309 128×64 | EC11 / Buttons3 / NONE | PCM5102A, RADIO, WWW, Web Update; bez BT, RTC i VU. |
 | S0 | ESP32-S3 Zero, 4 MiB flash, 2 MiB PSRAM | SSD1306 lub SSD1309 128×64 | EC11 / Buttons3 / NONE | Tymczasowy pinout rewizji 0 jak M0; przyszłe wyposażenie rodziny S nie jest dostępne. |
 | DIN0 | ESP32-S3 Zero, 4 MiB flash, 2 MiB PSRAM | SSD1306 lub SSD1309 128×64 | EC11 / Buttons3 / NONE | Tymczasowy pinout rewizji 0 jak M0; przyszłe wyposażenie DIN nie jest dostępne. |
-| L0 | ESP32-S3, build 16 MiB flash i PSRAM OPI | ST7796S 480×320 | EC11 / Buttons3 / NONE | PCM5102A, DS3231, VoxOneBT przez UART/I2S, VU, RADIO, WWW, MQTT i Web Update. |
+| L0 | ESP32-S3, build 16 MiB flash i PSRAM OPI | ST7796S 480×320 | EC11 / Buttons3 / NONE | PCM5102A, DS3231, VoxOneBT przez UART/I2S, VU, RADIO, WWW i Web Update. |
 
 Audio w bieżących pięciu profilach jest ograniczone do PCM5102A. Pozycja w
 katalogu roadmapy nie oznacza, że dany układ można wybrać w aktualnym

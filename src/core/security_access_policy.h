@@ -45,8 +45,6 @@ enum class SecurityEndpoint : uint8_t {
   StationsDelete,
   StationsReorder,
   StationsMetadata,
-  MqttRead,
-  MqttWrite,
   HardwareRead,
   HardwareWrite,
   ConfigBackup,

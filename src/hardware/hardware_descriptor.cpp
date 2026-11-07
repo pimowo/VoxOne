@@ -26,7 +26,7 @@ constexpr HardwareCapabilities kCapabilities = {
   displaySupport(DisplayKind::St7789_284x76),
   audioOutputSupport(AudioOutputKind::Pcm5102a),
   inputSupport(LocalInputKind::Ec11) | inputSupport(LocalInputKind::Buttons3),
-  true, false, false, false, false, false, false, false,
+  true, false, false, false, false, false, false, false, false,
   false, false, false, false, false
 };
 #elif defined(VOXONE_PROFILE_M0)
@@ -51,7 +51,7 @@ constexpr HardwareCapabilities kCapabilities = {
       audioOutputSupport(AudioOutputKind::Max98357Stereo) |
       audioOutputSupport(AudioOutputKind::None),
   inputSupport(LocalInputKind::Ec11) | inputSupport(LocalInputKind::Buttons3),
-  true, false, false, false, false, false, true, false,
+  true, false, false, false, false, false, false, true, false,
   false, false, false, false, false
 };
 #elif defined(VOXONE_PROFILE_S0)
@@ -77,7 +77,7 @@ constexpr HardwareCapabilities kCapabilities = {
       audioOutputSupport(AudioOutputKind::Max98357Stereo) |
       audioOutputSupport(AudioOutputKind::None),
   inputSupport(LocalInputKind::Ec11) | inputSupport(LocalInputKind::Buttons3),
-  true, true, true, false, false, false, true, false,
+  true, true, true, true, false, false, false, true, false,
   false, false, false, false, true
 };
 #elif defined(VOXONE_PROFILE_DIN0)
@@ -99,7 +99,7 @@ constexpr HardwareCapabilities kCapabilities = {
       displaySupport(DisplayKind::Ch1116g_128x64),
   audioOutputSupport(AudioOutputKind::Pcm5102a),
   inputSupport(LocalInputKind::Ec11) | inputSupport(LocalInputKind::Buttons3),
-  true, false, false, false, false, false, true, false,
+  true, false, false, false, false, false, false, true, false,
   false, false, false, false, false
 };
 #elif defined(VOXONE_PROFILE_L0)
@@ -125,7 +125,7 @@ constexpr HardwareCapabilities kCapabilities = {
   audioOutputSupport(AudioOutputKind::Pcm5102a) |
       audioOutputSupport(AudioOutputKind::None),
   inputSupport(LocalInputKind::Ec11) | inputSupport(LocalInputKind::Buttons3),
-  true, true, true, true, true, true, true, false,
+  true, true, true, true, true, true, true, true, false,
   true, false, false, false, false
 };
 #else
@@ -179,6 +179,11 @@ static_assert(bool(VOXONE_HAS_LOCAL_UI) == kCapabilities.supportsLocalUi,
               "Local UI compile gate must match board capabilities");
 static_assert(bool(VOXONE_HAS_BT) == kCapabilities.supportsVoxOneBt,
               "BT compile gate must match board capabilities");
+static_assert(!kCapabilities.supportsBtTransportUi ||
+              (kCapabilities.supportsVoxOneBt &&
+               (VOXONE_DISPLAY_COMPILES_ST7796 ||
+                VOXONE_DISPLAY_COMPILES_SMALL_OLED)),
+              "BT transport UI capability requires BT and a compiled renderer");
 static_assert(bool(VOXONE_HAS_VU) == kCapabilities.supportsVu,
               "VU compile gate must match board capabilities");
 static_assert(bool(VOXONE_HAS_AUX) == kCapabilities.supportsAux,

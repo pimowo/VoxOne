@@ -9,14 +9,15 @@
 #include "source_manager.h"
 #include "ui_timeout_config.h"
 #include "update_display_view.h"
+#include "../hardware/hardware_descriptor.h"
 
 namespace {
 portMUX_TYPE uiStateMux = portMUX_INITIALIZER_UNLOCKED;
 
 bool bluetoothTransportAvailableForUi() {
-#if VOXONE_HAS_BT && VOXONE_PIN_MAP_COMPLETE && \
-    VOXONE_BT_TRANSPORT_UI_ENABLED
-  return display.supportsBluetoothTransportView() &&
+#if VOXONE_HAS_BT && VOXONE_PIN_MAP_COMPLETE
+  return voxone::hardware::hardwareCapabilities().supportsBtTransportUi &&
+         display.supportsBluetoothTransportView() &&
          bluetoothSourceSelected() && bluetoothTransportAvailable();
 #else
   return false;

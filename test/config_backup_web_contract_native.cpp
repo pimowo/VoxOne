@@ -58,7 +58,7 @@ int main() {
          std::string::npos);
   assert(download.find("##[CONFIG-BACKUP]# ready total=%u wifi=%u stations=%u crc=%08lX") !=
          std::string::npos);
-  for (const char* secret : {"password", "data.wifi", "data.mqtt"})
+  for (const char* secret : {"password", "data.wifi"})
     assert(download.find(secret) == std::string::npos);
   assert(upload.find("Serial") == std::string::npos);
   assert(restore.find("Serial") == std::string::npos);
@@ -90,7 +90,7 @@ int main() {
          std::string::npos);
   assert(html.find("id=\"config-backup-button\"") != std::string::npos);
   assert(html.find("id=\"config-restore-file\"") != std::string::npos);
-  assert(html.find("hasła Wi-Fi/MQTT") != std::string::npos);
+  assert(html.find("hasła Wi-Fi") != std::string::npos);
   assert(script.find("/api/config/backup") != std::string::npos);
   assert(script.find("/api/config/restore") != std::string::npos);
   assert(script.find("recovery_pending") != std::string::npos);

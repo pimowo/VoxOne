@@ -280,34 +280,13 @@
           </article>
           </div>
           <div class="settings-column">
-          <article class="card mqtt-card" aria-labelledby="mqtt-title">
-            <h3 id="mqtt-title">MQTT</h3>
-            <form id="mqtt-form" novalidate>
-              <label class="mqtt-toggle"><input id="mqtt-enabled" type="checkbox"><span>Włącz MQTT</span></label>
-              <div id="mqtt-fields" class="mqtt-fields">
-                <div class="mqtt-form-grid">
-                  <label>Broker<input id="mqtt-host" name="host" type="text" placeholder="192.168.1.10 lub mqtt.local" autocomplete="off" autocapitalize="off" spellcheck="false"></label>
-                  <label>Port<input id="mqtt-port" name="port" type="number" min="1" max="65535" step="1" value="1883" inputmode="numeric"></label>
-                  <label>Użytkownik<input id="mqtt-username" name="username" type="text" autocomplete="username"></label>
-                  <label>Hasło<input id="mqtt-password" name="password" type="password" autocomplete="new-password"><small id="mqtt-password-state" class="mqtt-help"></small></label>
-                </div>
-                <label class="mqtt-clear-password"><input id="mqtt-clear-password" type="checkbox"><span>Usuń zapisane hasło</span></label>
-                <fieldset class="mqtt-root-choice"><legend>Root topic</legend><label><input type="radio" name="mqtt-root-mode" value="auto" checked> Automatyczny</label><label><input type="radio" name="mqtt-root-mode" value="custom"> Własny</label></fieldset>
-                <label id="mqtt-custom-root-wrap" class="mqtt-custom-root" hidden>Własny root<input id="mqtt-root-topic" name="rootTopic" type="text" placeholder="radio-l0" autocomplete="off" autocapitalize="off" spellcheck="false"></label>
-                <p class="mqtt-effective">Aktualny root: <code id="mqtt-effective-root">—</code><span id="mqtt-root-mode-label">Automatyczny</span></p>
-                <div class="mqtt-topics"><span>Tematy</span><code id="mqtt-topic-list">—</code></div>
-              </div>
-              <p id="mqtt-feedback" class="mqtt-feedback" role="status" aria-live="polite"></p>
-              <button id="mqtt-save" class="mqtt-save" type="submit">ZAPISZ</button>
-            </form>
-          </article>
           <article class="card ha-card" aria-labelledby="ha-title">
             <h3 id="ha-title">Home Assistant</h3>
-            <label>Nazwa w Home Assistant<input id="ha-name" type="text" value="VoxOne" autocomplete="off"></label>
-            <label for="ha-yaml">YAML</label>
-            <pre id="ha-yaml" class="ha-yaml" aria-live="polite">Ładowanie konfiguracji…</pre>
-            <button id="ha-copy" type="button" disabled>Kopiuj</button><span id="ha-copy-status" class="mqtt-help" role="status" aria-live="polite"></span>
-            <p class="hint">Jeżeli masz już sekcję media_player: w configuration.yaml, dopisz tylko wpis zaczynający się od - platform: yoradio.</p>
+            <p class="hint">Integracja wykrywa VoxOne automatycznie przez mDNS. Rozgłaszanie możesz włączyć lub wyłączyć w sekcji Sieć.</p>
+          </article>
+          <article class="card local-access-card" aria-labelledby="local-access-title">
+            <h3 id="local-access-title">Dostęp lokalny</h3>
+            <p class="hint">Panel WWW i integracja Home Assistant komunikują się z urządzeniem bezpośrednio w sieci lokalnej przez HTTP i WebSocket.</p>
           </article>
           <article id="sleep-card" class="card settings-placeholder-card" aria-labelledby="sleep-title">
             <div class="settings-card-heading"><h3 id="sleep-title">Sen</h3><span class="settings-state">Niedostępne</span></div>
@@ -411,8 +390,8 @@
         <div class="grid config-transfer-grid">
           <article class="card config-transfer-card">
             <h3>Backup konfiguracji</h3>
-            <p class="muted">Backup obejmuje ustawienia VoxOne, konfigurację sprzętu, Wi-Fi, MQTT i stacje.</p>
-            <p class="config-secret-warning">Plik backupu zawiera zapisane hasła Wi-Fi/MQTT. Przechowuj go bezpiecznie.</p>
+            <p class="muted">Backup obejmuje ustawienia VoxOne, konfigurację sprzętu, Wi-Fi i stacje.</p>
+            <p class="config-secret-warning">Plik backupu zawiera zapisane hasła Wi-Fi. Przechowuj go bezpiecznie.</p>
             <button id="config-backup-button" type="button">Pobierz backup</button>
             <p id="config-backup-status" class="config-transfer-status" role="status" aria-live="polite"></p>
           </article>

@@ -14,7 +14,6 @@
 #include "config_backup_web.h"
 #include "config_restore_transaction.h"
 #include "display_scroll_persistence.h"
-#include "mqtt_config.h"
 #include "playlist_store.h"
 #include "ui_timeout_config.h"
 #include "../hardware/hardware_descriptor.h"
@@ -29,7 +28,6 @@ constexpr char kMarkerKey[] = "marker";
 constexpr char kFlagsKey[] = "flags";
 constexpr char kConfigKey[] = "config";
 constexpr char kHardwareKey[] = "hardware";
-constexpr char kMqttKey[] = "mqtt";
 constexpr char kUiKey[] = "ui";
 constexpr char kScrollKey[] = "scroll";
 constexpr char kWifiMetaKey[] = "wifimeta";
@@ -45,7 +43,8 @@ constexpr std::size_t kMarkerSize = 12;
 enum SnapshotFlag : uint8_t {
   ConfigPresent = 1u << 0,
   HardwarePresent = 1u << 1,
-  MqttPresent = 1u << 2,
+  // Bit 2 was used by a retired integration. It remains reserved so marker
+  // schema 1 snapshots keep their durable bit assignments.
   UiPresent = 1u << 3,
   WifiPresent = 1u << 4,
   StationsPresent = 1u << 5,
@@ -324,9 +323,6 @@ class ProductionBackend : public Backend {
           hardware::RuntimeHardwareValidation::Valid) return false;
       flags |= HardwarePresent;
     }
-    MqttSettings mqtt{};
-    if (!mqttReadPersistent(mqtt, found)) return false;
-    if (found) flags |= MqttPresent;
     UiTimeoutSettings ui{};
     if (!uiTimeoutReadPersistent(ui, found)) return false;
     if (found) flags |= UiPresent;
@@ -359,7 +355,6 @@ class ProductionBackend : public Backend {
     if (ok && (flags & ConfigPresent))
       ok = nvs_set_blob(handle, kConfigKey, configBytes, sizeof(configBytes)) == ESP_OK;
     if (ok && (flags & HardwarePresent)) ok = setBlob(handle, kHardwareKey, hardwareConfig);
-    if (ok && (flags & MqttPresent)) ok = setBlob(handle, kMqttKey, mqtt);
     if (ok && (flags & UiPresent)) ok = setBlob(handle, kUiKey, ui);
     if (ok && (flags & ScrollPresent))
       ok = nvs_set_blob(handle, kScrollKey, scrollBytes,
@@ -369,7 +364,7 @@ class ProductionBackend : public Backend {
       ok = setBlob(handle, kStationsMetaKey, stationsMeta);
     ok = ok && nvs_commit(handle) == ESP_OK;
     nvs_close(handle);
-    return ok && verifyStoredSnapshot(flags, configBytes, hardwareConfig, mqtt,
+    return ok && verifyStoredSnapshot(flags, configBytes, hardwareConfig,
                                       ui, scrollBytes, wifiMeta, stationsMeta);
   }
 
@@ -391,7 +386,6 @@ class ProductionBackend : public Backend {
       case Component::Config: return writeConfig(candidate_->config);
       case Component::Hardware:
         return hardware::writeRuntimeHardwarePersistent(candidate_->hardware);
-      case Component::Mqtt: return mqttWritePersistent(candidate_->mqtt);
       case Component::Ui: return uiTimeoutWritePersistent(candidate_->ui);
       case Component::Scroll:
         return applyScrollState(candidate_->scrollMode,
@@ -415,9 +409,6 @@ class ProductionBackend : public Backend {
     bool found = false;
     if (!hardware::readRuntimeHardwarePersistent(hardwareConfig, found) || !found ||
         hardwareConfig != candidate_->hardware) return false;
-    MqttSettings mqtt{};
-    if (!mqttReadPersistent(mqtt, found) || !found ||
-        std::memcmp(&mqtt, &candidate_->mqtt, sizeof(mqtt)) != 0) return false;
     UiTimeoutSettings ui{};
     if (!uiTimeoutReadPersistent(ui, found) || !found ||
         std::memcmp(&ui, &candidate_->ui, sizeof(ui)) != 0) return false;
@@ -437,7 +428,6 @@ class ProductionBackend : public Backend {
         nvs_get_u8(handle, kFlagsKey, &flags) != ESP_OK) return false;
     uint8_t configBytes[config_format::kConfigV7SerializedSize]{};
     hardware::RuntimeHardwareConfig hardwareConfig{};
-    MqttSettings mqtt{};
     UiTimeoutSettings ui{};
     uint8_t scrollBytes[display_scroll::kScrollSettingsRecordSize]{};
     display_scroll::ScrollSettings scrollSettings =
@@ -450,7 +440,6 @@ class ProductionBackend : public Backend {
              size == sizeof(configBytes);
     }
     if (read && (flags & HardwarePresent)) read = getBlob(handle, kHardwareKey, hardwareConfig);
-    if (read && (flags & MqttPresent)) read = getBlob(handle, kMqttKey, mqtt);
     if (read && (flags & UiPresent)) read = getBlob(handle, kUiKey, ui);
     if (read && (flags & ScrollPresent)) {
       std::size_t size = sizeof(scrollBytes);
@@ -474,8 +463,6 @@ class ProductionBackend : public Backend {
     restored = restored && ((flags & HardwarePresent)
         ? hardware::writeRuntimeHardwarePersistent(hardwareConfig)
         : hardware::eraseRuntimeHardwarePersistent());
-    restored = restored && ((flags & MqttPresent)
-        ? mqttWritePersistent(mqtt) : mqttErasePersistent());
     restored = restored && ((flags & UiPresent)
         ? uiTimeoutWritePersistent(ui) : uiTimeoutErasePersistent());
     restored = restored && applyScrollState(
@@ -501,7 +488,6 @@ class ProductionBackend : public Backend {
         nvs_get_u8(handle, kFlagsKey, &flags) != ESP_OK) return false;
     uint8_t configBytes[config_format::kConfigV7SerializedSize]{};
     hardware::RuntimeHardwareConfig hardwareConfig{};
-    MqttSettings mqtt{};
     UiTimeoutSettings ui{};
     uint8_t scrollBytes[display_scroll::kScrollSettingsRecordSize]{};
     display_scroll::ScrollSettings scrollSettings =
@@ -514,7 +500,6 @@ class ProductionBackend : public Backend {
              size == sizeof(configBytes);
     }
     if (read && (flags & HardwarePresent)) read = getBlob(handle, kHardwareKey, hardwareConfig);
-    if (read && (flags & MqttPresent)) read = getBlob(handle, kMqttKey, mqtt);
     if (read && (flags & UiPresent)) read = getBlob(handle, kUiKey, ui);
     if (read && (flags & ScrollPresent)) {
       std::size_t size = sizeof(scrollBytes);
@@ -531,7 +516,6 @@ class ProductionBackend : public Backend {
     nvs_close(handle);
     if (!read || !verifyConfigPresence(flags & ConfigPresent, configBytes) ||
         !verifyHardwarePresence(flags & HardwarePresent, hardwareConfig) ||
-        !verifyMqttPresence(flags & MqttPresent, mqtt) ||
         !verifyUiPresence(flags & UiPresent, ui) ||
         !verifyScrollState(
             !(flags & ScrollCaptured)
@@ -582,7 +566,7 @@ class ProductionBackend : public Backend {
 
   bool verifyStoredSnapshot(uint8_t flags, const uint8_t* configBytes,
                             const hardware::RuntimeHardwareConfig& hardwareConfig,
-                            const MqttSettings& mqtt, const UiTimeoutSettings& ui,
+                            const UiTimeoutSettings& ui,
                             const uint8_t* scrollBytes,
                             const FileFingerprint& wifiMeta,
                             const FileFingerprint& stationsMeta) {
@@ -599,13 +583,9 @@ class ProductionBackend : public Backend {
            std::memcmp(actualConfig, configBytes, sizeof(actualConfig)) == 0;
     }
     hardware::RuntimeHardwareConfig actualHardware{};
-    MqttSettings actualMqtt{};
     UiTimeoutSettings actualUi{};
     if (ok && (flags & HardwarePresent))
       ok = getBlob(handle, kHardwareKey, actualHardware) && actualHardware == hardwareConfig;
-    if (ok && (flags & MqttPresent))
-      ok = getBlob(handle, kMqttKey, actualMqtt) &&
-           std::memcmp(&actualMqtt, &mqtt, sizeof(mqtt)) == 0;
     if (ok && (flags & UiPresent))
       ok = getBlob(handle, kUiKey, actualUi) &&
            std::memcmp(&actualUi, &ui, sizeof(ui)) == 0;
@@ -663,13 +643,6 @@ class ProductionBackend : public Backend {
     bool found = false;
     return hardware::readRuntimeHardwarePersistent(actual, found) && found == present &&
            (!present || actual == expected);
-  }
-
-  bool verifyMqttPresence(bool present, const MqttSettings& expected) {
-    MqttSettings actual{};
-    bool found = false;
-    return mqttReadPersistent(actual, found) && found == present &&
-           (!present || std::memcmp(&actual, &expected, sizeof(actual)) == 0);
   }
 
   bool verifyUiPresence(bool present, const UiTimeoutSettings& expected) {
@@ -732,7 +705,6 @@ const char* backupStageName(BackupStage stage) {
     case BackupStage::StationLock: return "BACKUP_STATION_LOCK";
     case BackupStage::ConfigRead: return "BACKUP_CONFIG_READ";
     case BackupStage::HardwareRead: return "BACKUP_HARDWARE_READ";
-    case BackupStage::MqttRead: return "BACKUP_MQTT_READ";
     case BackupStage::UiRead: return "BACKUP_UI_READ";
     case BackupStage::ScrollRead: return "BACKUP_SCROLL_READ";
     case BackupStage::StationsMissing: return "BACKUP_STATIONS_MISSING";
@@ -782,10 +754,6 @@ bool ProductionBackupStream::begin(config_backup::Status& status) {
   if (!hardware::readRuntimeHardwarePersistent(data.hardware, found))
     return false;
   if (!found) data.hardware = hardware::runtimeHardwareConfig();
-  impl_->stage = BackupStage::MqttRead;
-  if (!mqttReadPersistent(data.mqtt, found))
-    return false;
-  if (!found) data.mqtt = mqttConfig();
   impl_->stage = BackupStage::UiRead;
   if (!uiTimeoutReadPersistent(data.ui, found))
     return false;
@@ -843,7 +811,6 @@ bool ProductionBackupStream::begin(config_backup::Status& status) {
     else if (status != config_backup::Status::InvalidConfig &&
              status != config_backup::Status::InvalidHardware &&
              status != config_backup::Status::UnsupportedHardware &&
-             status != config_backup::Status::InvalidMqtt &&
              status != config_backup::Status::InvalidUi &&
              status != config_backup::Status::InvalidScroll &&
              status != config_backup::Status::InvalidWifi &&

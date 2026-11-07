@@ -18,7 +18,6 @@
 #include "serialcli.h"
 #include "rtcsupport.h"
 #include "volume_map.h"
-#include "mqtt_config.h"
 #include "ui_timeout_config.h"
 #include "ui_state.h"
 #include "www_readiness.h"
@@ -189,7 +188,6 @@ void Config::init() {
   voxone::config_format::ConfigStartupReadOnlyScope readOnly(_startupReadOnly);
   if (!_persistMutex) _persistMutex = xSemaphoreCreateRecursiveMutex();
   const bool eepromReady = _persistMutex && voxone::config_storage::beginEeprom();
-  mqttConfig();
   uiTimeoutConfig();
   screensaverTicks = 0;
   screensaverPlayingTicks = 0;
@@ -436,10 +434,6 @@ void Config::loadTheme(){
 void Config::reset(){
   if (!_storage.writable()) {
     Serial.println("[CONFIG] factory reset blocked: storage read-only/unavailable");
-    return;
-  }
-  if (!mqttClearConfig()) {
-    Serial.println("##[ERROR]# MQTT config reset failed; factory reset cancelled");
     return;
   }
   if (!setDefaults()) return;

@@ -25,6 +25,8 @@ int main() {
          (hasPin(d.localInput.a) && hasPin(d.localInput.b) &&
           hasPin(d.localInput.key)));
   assert(caps.supportsVoxOneBt == bool(VOXONE_HAS_BT));
+  assert(caps.supportsBtTransportUi ==
+         (d.board.id == BoardId::BoardL0 || d.board.id == BoardId::BoardS0));
   assert(caps.supportsVoxOneBt ==
          (hasPin(d.btUart.rx) && hasPin(d.btUart.tx)));
 #if defined(VOXONE_PROFILE_M0) || defined(VOXONE_PROFILE_S0)
@@ -293,7 +295,7 @@ int main() {
   assert(d.btAudioIn.bclk == 11 && d.btAudioIn.ws == 12 &&
          d.btAudioIn.din == 13 && d.btAudioRxEnabled);
   assert(!bool(VOXONE_BT_FW_UPDATE_ENABLED));
-  assert(bool(VOXONE_BT_TRANSPORT_UI_ENABLED));
+  assert(caps.supportsBtTransportUi);
 #elif defined(VOXONE_PROFILE_DIN0)
   assert(d.board.id == BoardId::BoardDIN0);
   assert(d.board.family == 'D' && d.board.revision == 0);

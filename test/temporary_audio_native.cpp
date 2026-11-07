@@ -158,13 +158,10 @@ void auditTransport() {
   assert(handlers.find("config.setStation(p?info:config.station.name)") ==
          std::string::npos);
 
-  // The only production ingress for temporary audio is the existing MQTT
-  // command topic. Long payloads are forwarded as URL bytes to Player; the
-  // negative-path HIL therefore exercises the same browseUrl() flow as a
-  // normal announcement and needs no diagnostic endpoint.
-  const auto mqtt = readFile("src/core/mqtt.cpp");
-  assert(mqtt.find("player.requestTemporaryUrl(payload, len);") !=
-         std::string::npos);
+  // Temporary audio remains an internal Player primitive used by integrations;
+  // it must not expose a diagnostic HTTP endpoint.
+  const auto server = readFile("src/core/netserver.cpp");
+  assert(server.find("requestTemporaryUrl") == std::string::npos);
 }
 
 struct Scenario {

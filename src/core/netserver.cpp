@@ -62,8 +62,6 @@
 #include "serialcli.h"
 #include "display.h"
 #include "network.h"
-#include "mqtt.h"
-#include "mqtt_config.h"
 #include "controls.h"
 #include "commandhandler.h"
 #include "volume_map.h"
@@ -252,8 +250,6 @@ void handleStationsExport(AsyncWebServerRequest *request);
 void handleStationsImport(AsyncWebServerRequest *request);
 void handleStationsImportUpload(AsyncWebServerRequest *request, String filename,
                                 size_t index, uint8_t *data, size_t len, bool final);
-void handleMqttConfigRead(AsyncWebServerRequest *request);
-void handleMqttConfigSave(AsyncWebServerRequest *request);
 void handleHardwareConfigRead(AsyncWebServerRequest *request);
 void handleHardwareConfigSave(AsyncWebServerRequest *request);
 void handleConfigBackup(AsyncWebServerRequest *request);
@@ -274,7 +270,6 @@ void onWsEvent(AsyncWebSocket *server, AsyncWebSocketClient *client, AwsEventTyp
 static bool deviceApiAuthorized(AsyncWebServerRequest* request);
 
 uint32_t webUpdateRebootAt = 0;
-//Ticker mqttplaylistticker;
 namespace {
 SystemOperationState systemOperationState;
 UpdateRuntimeGuard updateRuntimeGuard;
@@ -1080,8 +1075,6 @@ bool NetServer::begin(bool quiet) {
   webserver.on("/api/stations/delete", HTTP_POST, handleStationsMutation);
   webserver.on("/api/stations/reorder", HTTP_POST, handleStationsMutation);
   webserver.on("/api/stations/metadata", HTTP_POST, handleStationMetadata);
-  webserver.on("/api/mqtt", HTTP_GET, handleMqttConfigRead);
-  webserver.on("/api/mqtt", HTTP_POST, handleMqttConfigSave);
   webserver.on("/api/hardware", HTTP_GET, handleHardwareConfigRead);
   webserver.on("/api/hardware", HTTP_POST, handleHardwareConfigSave);
   webserver.on(voxone::config_backup_web::kBackupRoute, HTTP_GET,
@@ -2474,7 +2467,7 @@ void handleHardwareConfigSave(AsyncWebServerRequest* request) {
   stationsReply(request, 200, body);
 }
 
-static void mqttApiError(AsyncWebServerRequest* request, int code, const char* error) {
+static void apiError(AsyncWebServerRequest* request, int code, const char* error) {
   stationsReply(request, code, String("{\"error\":\"") + error + "\"}");
 }
 
@@ -2512,7 +2505,7 @@ void handleTimeStatus(AsyncWebServerRequest* request) {
       runtime.timeSyncInterval, runtime.timeSyncIntervalRtc,
       static_cast<unsigned long>(timekeeper.successfulSyncCount));
   if (length < 0 || static_cast<size_t>(length) >= sizeof(body)) {
-    mqttApiError(request, 500, "time_status_failed");
+    apiError(request, 500, "time_status_failed");
     return;
   }
   stationsReply(request, 200, body);
@@ -2520,111 +2513,11 @@ void handleTimeStatus(AsyncWebServerRequest* request) {
 
 void handleTimeSync(AsyncWebServerRequest* request) {
   if (!deviceApiAuthorized(request)) return;
-  if (!RTCSUPPORTED) { mqttApiError(request, 404, "rtc_unsupported"); return; }
-  if (network.status != CONNECTED) { mqttApiError(request, 503, "network_unavailable"); return; }
+  if (!RTCSUPPORTED) { apiError(request, 404, "rtc_unsupported"); return; }
+  if (network.status != CONNECTED) { apiError(request, 503, "network_unavailable"); return; }
   const uint32_t beforeSync = timekeeper.successfulSyncCount;
   network.requestTimeSync(false);
   stationsReply(request, 202, String("{\"ok\":true,\"syncCount\":") + beforeSync + "}");
-}
-
-static bool mqttApiText(AsyncWebServerRequest* request, const char* key, String& value) {
-  if (!request->hasParam(key, true)) return false;
-  value = request->getParam(key, true)->value();
-  for (size_t i = 0; i < value.length(); ++i)
-    if (value[i] == '\0') return false;
-  return true;
-}
-
-static __attribute__((noinline)) String mqttJsonText(const char* value) {
-  char escaped[128 * 6 + 1];
-  size_t used = 0;
-  if (!appendJsonEscaped(escaped, sizeof(escaped), used, value)) return String();
-  return String(escaped);
-}
-
-void handleMqttConfigRead(AsyncWebServerRequest* request) {
-  if (!deviceApiAuthorized(request)) return;
-  char autoRoot[14];
-  char effectiveRoot[64];
-  if (!mqttAutoRoot(autoRoot) || !mqttEffectiveRoot(effectiveRoot, sizeof(effectiveRoot))) {
-    mqttApiError(request, 500, "mac_unavailable");
-    return;
-  }
-  const MqttSettings& settings = mqttConfig();
-  String body = String("{\"enabled\":") + (settings.enabled ? "true" : "false") +
-      ",\"host\":\"" + mqttJsonText(settings.host) +
-      "\",\"port\":" + String(settings.port) +
-      ",\"username\":\"" + mqttJsonText(settings.username) +
-      "\",\"passwordSet\":" + (settings.password[0] ? "true" : "false") +
-      ",\"rootTopic\":\"" + mqttJsonText(settings.rootTopic) +
-      "\",\"effectiveRoot\":\"" + mqttJsonText(effectiveRoot) +
-      "\",\"autoRoot\":\"" + mqttJsonText(autoRoot) + "\"}";
-  stationsReply(request, 200, body);
-}
-
-void handleMqttConfigSave(AsyncWebServerRequest* request) {
-  if (!deviceApiAuthorized(request)) return;
-  if (systemRestartPending()) { mqttApiError(request, 409, "reboot_pending"); return; }
-  String enabledText, hostText, portText, usernameText, rootText;
-  if (!mqttApiText(request, "enabled", enabledText) ||
-      !mqttApiText(request, "host", hostText) ||
-      !mqttApiText(request, "port", portText) ||
-      !mqttApiText(request, "username", usernameText) ||
-      !mqttApiText(request, "rootTopic", rootText)) {
-    mqttApiError(request, 400, "missing_or_invalid_field");
-    return;
-  }
-  if (enabledText != "true" && enabledText != "false" && enabledText != "1" && enabledText != "0") {
-    mqttApiError(request, 400, "invalid_enabled");
-    return;
-  }
-  if (portText.length() == 0 || portText.length() > 5 ||
-      hostText.length() > 255 || usernameText.length() > 63 || rootText.length() > 255) {
-    mqttApiError(request, 400, "field_too_long");
-    return;
-  }
-  unsigned port = 0;
-  for (char digit : portText) {
-    if (digit < '0' || digit > '9') { mqttApiError(request, 400, "invalid_port"); return; }
-    port = port * 10 + static_cast<unsigned>(digit - '0');
-  }
-  if (port == 0 || port > 65535) { mqttApiError(request, 400, "invalid_port"); return; }
-  String newPassword;
-  if (request->hasParam("password", true) && !mqttApiText(request, "password", newPassword)) {
-    mqttApiError(request, 400, "invalid_password");
-    return;
-  }
-  String clearText;
-  const bool hasClear = request->hasParam("clearPassword", true);
-  if (hasClear && !mqttApiText(request, "clearPassword", clearText)) {
-    mqttApiError(request, 400, "invalid_clear_password");
-    return;
-  }
-  if (hasClear && clearText != "true" && clearText != "false") {
-    mqttApiError(request, 400, "invalid_clear_password");
-    return;
-  }
-  if (newPassword.length() > 127) { mqttApiError(request, 400, "field_too_long"); return; }
-  MqttSettings candidate = mqttConfig();
-  candidate.enabled = enabledText == "true" || enabledText == "1";
-  candidate.port = static_cast<uint16_t>(port);
-  memset(candidate.host, 0, sizeof(candidate.host));
-  memset(candidate.username, 0, sizeof(candidate.username));
-  memset(candidate.rootTopic, 0, sizeof(candidate.rootTopic));
-  if (!mqttNormalizeHost(hostText.c_str(), candidate.host, sizeof(candidate.host)) ||
-      !mqttNormalizeRoot(rootText.c_str(), candidate.rootTopic, sizeof(candidate.rootTopic))) {
-    mqttApiError(request, 400, "invalid_host_or_root");
-    return;
-  }
-  usernameText.toCharArray(candidate.username, sizeof(candidate.username));
-  if (!mqttApplyPassword(candidate, newPassword.c_str(), clearText == "true") ||
-      !mqttValidSettings(candidate)) {
-    mqttApiError(request, 400, "invalid_config");
-    return;
-  }
-  if (!mqttSaveConfig(candidate)) { mqttApiError(request, 500, "storage_failed"); return; }
-  stationsReply(request, 200, "{\"ok\":true,\"rebooting\":true}");
-  scheduleSystemRestart("SYSTEM");
 }
 
 static void stationsError(AsyncWebServerRequest* request, int code, const char* error) {
@@ -3326,7 +3219,7 @@ void NetServer::processQueue(){
                                   runtime.screensaverPlayingBlank,
                                   uiTimeoutConfig().stationListSeconds,
                                   uiTimeoutConfig().btTransportSeconds,
-                                  VOXONE_BT_TRANSPORT_UI_ENABLED &&
+                                  voxone::hardware::hardwareCapabilities().supportsBtTransportUi &&
                                       display.supportsBluetoothTransportView(),
                                   scroll.canScrollSettings ? "true" : "false",
                                   scroll.settings.enabled ? "true" : "false",
@@ -3371,8 +3264,6 @@ void NetServer::processQueue(){
       } else {
         delivered = securityWebSocketText(clientId, wsBuf);
       }
-      if (clientId == 0 && (request.type == STATION || request.type == ITEM || request.type == TITLE || request.type == MODE)) mqttPublishStatus();
-      if (clientId == 0 && request.type == VOLUME) mqttPublishVolume();
     }
     if (clientId == 0 && websocket.count() > 0 &&
         (request.type == STATIONNAME || request.type == TITLE ||
@@ -3454,7 +3345,6 @@ void NetServer::processVolumeUpdate(){
   sprintf(wsBuf, "{\"payload\":[{\"id\":\"volume\",\"value\":%d},{\"id\":\"volume100\",\"value\":%d},{\"id\":\"muted\",\"value\":%d},{\"id\":\"maximumVolume\",\"value\":%d},{\"id\":\"startupMode\",\"value\":%d},{\"id\":\"startupFixedVolume\",\"value\":%d}]}", volume.config.volume, volume.output.userVolume, volume.output.muted, volume.config.maximumVolume, volume.config.startupMode, volume.config.startupFixedVolume);
   if(hasWebClients) securityWebSocketTextAll(wsBuf);
   serialCli.printf("##CLI.VOL#: %d\n", volume.config.volume);
-  mqttPublishVolume();
 }
 
 void NetServer::loop() {
@@ -3560,14 +3450,12 @@ void NetServer::serviceUpdateRestart() {
   }
   const uint32_t wsCount = webSocketSessions.load();
   const uint32_t httpCount = webserver.activeRequestCount();
-  const bool mqttReady = mqttUpdateShutdownComplete();
   const UpdateProgressSnapshot snapshot = updateProgress();
   const bool webReady = updateNetworkShutdownStarted && wsCount == 0 && httpCount == 0;
-  const bool networkReady = mqttReady && webReady;
+  const bool networkReady = webReady;
   switch (updateRestartCoordinator.tick(snapshot, millis(), networkReady)) {
     case UpdateRestartCoordinator::Action::BeginNetworkQuiesce:
       restartingUpdate(snapshot.target);
-      mqttBeginUpdateShutdown();
       updateNetworkQuiescing.store(true);
       Serial.println("##[UPDATE-NET]# network quiesce requested");
       break;
@@ -3577,8 +3465,7 @@ void NetServer::serviceUpdateRestart() {
       ESP.restart();
       break;
     case UpdateRestartCoordinator::Action::RestartAfterTimeout:
-      Serial.printf("##[UPDATE-NET]# network quiesce timeout mqttConnected=%u mqttTcpActive=%u websocket=%lu http=%lu\n",
-                    mqttIsConnected() ? 1u : 0u, mqttTcpActive() ? 1u : 0u,
+      Serial.printf("##[UPDATE-NET]# network quiesce timeout websocket=%lu http=%lu\n",
                     static_cast<unsigned long>(wsCount),
                     static_cast<unsigned long>(httpCount));
       Serial.println("##[UPDATE]# restarting VoxOne after successful update");

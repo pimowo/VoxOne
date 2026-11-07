@@ -156,7 +156,6 @@ $nativeSources=@{
  dsp_service_native=@('src/core/dsp_model.cpp','src/core/dsp_service.cpp')
  dsp_transport_native=@('src/core/dsp_model.cpp','src/core/dsp_storage_format.cpp','src/core/dsp_service.cpp','src/core/dsp_transport_protocol.cpp')
  dsp_state_json_native=@('src/core/dsp_model.cpp','src/core/dsp_storage_format.cpp','src/core/dsp_service.cpp','src/core/dsp_state_json.cpp')
- mqtt_config_native=@('src/core/volume_map.cpp')
  ota_boot_health_native=@('src/core/ota_boot_health.cpp')
  ota_update_policy_native=@('src/core/ota_update_policy.cpp')
  radio_format_detection_native=@('src/core/radio_format_detection.cpp')
@@ -198,11 +197,10 @@ Invoke-Step 'Native tests' {
    $exe=Join-Path $work ($label+$(if($onWindows) { '.exe' } else { '' }))
    $compileLog=Join-Path $work ($label+'.compile.log')
    $compileArgs=@('-std=c++11','-O2','-Wall','-Wextra','-Werror','-Wno-unused-parameter')
-   if($name -eq 'mqtt_contract_native') { $compileArgs+=@('-I',(Join-Path $root 'test')) }
   if($name -eq 'ap_ui_www_binding_native' -or $name -eq 'asynctcp_lifecycle_native' -or $name -eq 'asyncweb_lock_native' -or $name -eq 'bt_audio_mute_crosscore_native' -or $name -eq 'bt_link_single_owner_native' -or $name -eq 'config_runtime_snapshot_native' -or $name -eq 'display_scroll_runtime_config_native' -or $name -eq 'first_boot_runtime_snapshot_native' -or $name -eq 'first_boot_transaction_native' -or $name -eq 'sntp_server_lifetime_native' -or $name -eq 'tts_hil_diagnostics_native' -or $name -eq 'websocket_client_lifetime_native' -or $name -eq 'websocket_queue_lifecycle_native') { $compileArgs+='-pthread' }
    if($variant) {
     if($variant -eq 'CLEAN' -or $variant -eq 'DIRTY') { $compileArgs+="-DBUILD_ID_TEST_$variant=1" }
-    elseif($variant -eq 'SECURITY-TEST') { $compileArgs+=@('-DVOXONE_PROFILE_M0=1','-DVOXONE_SECURITY_HTTP_ENFORCEMENT_TEST=1') }
+    elseif($variant -eq 'SECURITY-TEST') { $compileArgs+=@('-DVOXONE_PROFILE_M0=1','-DVOXONE_BUILD_IS_PRODUCTION_FIRMWARE=0','-DVOXONE_SECURITY_HTTP_ENFORCEMENT_TEST=1') }
     else { $compileArgs+="-DVOXONE_PROFILE_$variant=1" }
     $sourcesForVariant=if($name -eq 'config_backup_native' -or $name -eq 'first_boot_spiffs_transaction_native' -or $name -eq 'first_boot_transaction_native' -or $name -eq 'hardware_descriptor_native' -or $name -eq 'runtime_hardware_config_native' -or $name -eq 'runtime_hardware_web_native' -or $name -eq 'runtime_display_activation_native' -or $name -eq 'security_recovery_display_native') { $sources+@(Join-Path $root 'src/hardware/hardware_descriptor.cpp') } else { $sources }
    } else { $sourcesForVariant=$sources }

@@ -492,122 +492,8 @@ implementacji i bez rozszerzania Stable.
   - `VOXONE-STABLE-L0-REMOTE-HIL-1` 2026-10-22 ma zdalny HIL PARTIAL PASS dla zakresu niedestrukcyjnego. Salonowy L0 odpowiada pod `<L0_PRIVATE_IP>`, ma oczekiwany MAC `<L0_MAC>` i faktycznie działa na firmware `0.8.0`/kanał `dev`, build `739e4a2`, profil `L0`, `app1` w stanie `VALID`, bez pending update. WWW, favicon i podstawowe API mają PASS; serwowane HTML/CSS/JS/SVG są bitowo zgodne z zatwierdzonym zestawem assetów commita `6b4a8cf`, a `/variables.js` oraz WebSocket zgodnie raportują wersję, build i profil. Read-only WS przeszedł handshake `voxone.v1`, ping oraz snapshoty system/player/screen: zastany stan to RADIO PLAY, volume 4%, MUTE OFF, metadata i MP3 256 kb/s; VoxOneBT `0.6.7-dev` jest online z protokołem 2, ale bez połączonego peer, a capability i ustawienie VU są aktywne bez eksportu bieżących poziomów. Dwuminutowa obserwacja 13 próbek zachowała `bootId=<L0_REMOTE_HIL_SESSION_ID>`, monotoniczny uptime, `app1/VALID`, działające HTTP/WS oraz niezmienione skróty hardware, playlisty, SECURITY i MQTT; nie wystąpił błąd komunikacji ani obserwowalny reset. Nie wysłano PLAY/STOP, MUTE, volume, source ani innej mutacji. Nadal PENDING są ocena obrazu i dźwięku przez użytkownika, local input, aktywne przełączenia/reconnect RADIO/BT, telefon/TV, rzeczywiste poziomy VU oraz pozostałe destrukcyjne i fizyczne bramki pełnego profilu L0.
 - [STABLE] Na W0 sprawdzić ukrycie suwaka jasności, restart z WWW, powrót Wi-Fi bez utraty stacji/config oraz osobno ekran aktualizacji bez regresji ScrollWidget/HOLD.
 - [STABLE][L0 READ-ONLY HIL PASS][W0 OLD-BUILD EVIDENCE RETAINED][S0/L0 INTERACTIVE HIL PENDING] Fizycznie zweryfikować aktualne WWW na S0 i L0: MUTE, selector RADIO/BT, oznaczenie BT offline, manual source priority, reconnect/resnapshot, favicon bez 404 oraz build identity w SYSTEM i AKTUALIZACJA. Na L0 z buildem `739e4a2` zdalny odczyt potwierdził działające WWW, zgodne assety i favicon bez 404, zgodną identyfikację wersji/builda/profilu przez `/variables.js` i WS oraz poprawny zastany snapshot RADIO/BT, MUTE i volume; bez fizycznej obecności nie wykonywano przełączeń, reconnectu ani oceny widoku i zachowania kontrolek, więc interaktywny HIL L0 pozostaje otwarty. Niedestrukcyjny wynik W0 na `c53ba57` pozostaje historycznym dowodem i nie zastępuje końcowego HIL S0/L0; dalszy fizyczny HIL W0 jest nieblokujący.
-- [STABLE][L0 MQTT COMMAND+RETAINED STATE PARITY HIL PASS][HA/MQTT STATUS TRANSITION HIL PASS][RECONNECT/ACTIVE PLAYLIST HIL PENDING] Fizycznie dokończyć MQTT/Home Assistant na L0; MQTT pozostaje wspierane w pierwszym stable. Po świadomej konfiguracji użytkownika bieżący L0 raportuje `enabled=true`, broker `192.168.1.14:1883`, zapisane poświadczenie i `effectiveRoot=voxone-8CBD1C` po nowym rozruchu. Uwierzytelniony CONNECT do brokera przeszedł, a trzy jednokrotne publikacje URL na `voxone-8CBD1C/command` zostały faktycznie skonsumowane przez L0 i spowodowały trzy odrębne pobrania temporary MP3 z ASUS; dowodzi to aktywnego klienta i subskrypcji command bez odczytu hasła. Raport: `reports/VOXONE-RC1-L0-TTS-RESTORE-HIL-2.md`.
-  - `VOXONE-RC1-L0-MQTT-STATE-PARITY-1` 2026-10-26 ma PASS ograniczonego pasywnego zakresu na L0 `0.8.0-dev`/`afbb6d2-dirty`, `app1 VALID`, READY i stałym `bootId=936dd6c8`. Uwierzytelniony klient HIL, korzystający z istniejącego bezpiecznego magazynu bez ujawnienia poświadczeń, zasubskrybował wyłącznie `voxone-8CBD1C/#` i niczego nie publikował. Broker dostarczył po 41 ms trzy wiadomości QoS 0 z flagą retained: `status` jako JSON `{status:0, station:3, name:"Italo4you", title:"[gotowe]", on:1}`, `volume` jako liczbę `51` w kompatybilnej skali 0–254 oraz `playlist` jako URL `http://192.168.1.56/data/stations.tsv`. REST/WS równocześnie potwierdziły RADIO/STOP, stację 3 `Italo4you`, metadata `[gotowe]`, volume 20%, MUTE OFF i `dspon=1`; 20% mapuje się dokładnie na 51/254, `status=0` oznacza STOP, a niezależne `on=1` odpowiada `config.store.dspon`. Retained URL zwrócił HTTP 200, 1691 B i 20 niepustych wierszy, SHA-256 `f060dabd870849f6dc35423f1c7228fb2846b6b3fc9a3d1439f7c5c7ccc57920`. Home Assistant odpowiada HTTP 200 na istniejącym porcie 8123, lecz bez zatwierdzonego tokenu w magazynie HIL nie odczytywano jego encji. Nadal PENDING są rzeczywiste porównanie stanu HA oraz aktywna weryfikacja publikacji i retained po zmianie PLAY/STOP, stacji/metadata, volume, reconnect brokera i ponownym rozruchu; pasywny retained payload nie zawiera czasu publikacji, więc jego dokładnego wieku nie ustalono bez wymuszania zmiany.
-  - [L0 HA↔MQTT VOLUME PHYSICAL HIL PASS — LIMITED][OTHER MQTT/HA HIL PENDING]
-    `VOXONE-L0-MQTT-HA-PARITY-HIL-2-L4FkVsh3` 2026-10-31 potwierdził sterowanie
-    L0 przez HA `media_player.salon` dla jednej kontrolowanej zmiany volume
-    20% → 15% → 20%: jeden klient WS zarejestrował oba broadcasty, a późniejsze
-    GETINDEX i `webStatus` potwierdziły wartości 15 i 20. Użytkownik
-    potwierdził nowe subskrypcje `voxone-8CBD1C/volume` z `Retain=true`
-    i wartościami 51 → 38 → 51; zrzut HA pokazał też bieżącą dostawę 38
-    (QoS 0, `Retain=false`) oraz ponowny odczyt 38 (QoS 0, `Retain=true`).
-    Końcowo pozostały RADIO/PLAY, `Italo4you` #3, MUTE OFF i balance 0;
-    `bootId=e95a3cbe` był stały, OTA `app1 VALID`, WWW READY, freeHeap
-    157876 → 157860 B, minimumFreeHeap 133628 B. Pasywny `L0_LOG_RX` zebrał
-    8730 B UART z bajtowo zgodną rekonstrukcją 111 fragmentów i SHA-256
-    zgodnym między Raspberry Pi a DEV-VM, bez panic/assert/WDT ani błędów
-    audio/MQTT. Manifest UART ma `INTERRUPTED`, ponieważ logger celowo
-    zatrzymano po ukończeniu próby; nie jest to 900 s PASS. Raport:
-    `/home/piotrek/voxone-hil/logs/l0/VOXONE-L0-MQTT-HA-PARITY-HIL-2-L4FkVsh3/REPORT.md`.
-    Ten ograniczony PASS domyka wyłącznie wcześniejsze PENDING dotyczące
-    aktywnej zmiany i retained **volume** na L0. Nadal PENDING: MQTT reconnect
-    i ponowna subskrypcja, availability/LWT, retained `status` i `playlist`
-    po aktywnych zmianach, regresja po restarcie L0, pełny parytet HA oraz
-    inne niedokończone zadania Stable; wcześniejsze historyczne PASS
-    pozostają ważne w swoim zakresie.
-  - [L0 MQTT STATUS/PLAYLIST PASSIVE RETAINED PASS][ACTIVE STATUS RETAINED UNVERIFIED]
-    `VOXONE-L0-MQTT-STATUS-RETAINED-HIL-1` 2026-10-31: użytkownik potwierdził
-    w HA nowe subskrypcje QoS 0, `Retain=true`: `status` z `status=1`,
-    `station=3`, `name=Italo4you`, `title="Amy & Alba - Look Into My Eyes
-    (Remix)"`, `on=1`, oraz `playlist` z URL
-    `http://192.168.1.56/data/stations.tsv`. Ograniczony, wyłącznie odczytowy
-    follow-up z jednym WS zarejestrował naturalną zmianę metadata na
-    `Lian Ross - Dr. Mabuse` o 21:58:55; końcowy GETINDEX i `webStatus`
-    potwierdziły tytuł, RADIO/PLAY, tę samą stację, volume 20%, MUTE OFF i
-    balance 0. `bootId=e95a3cbe` pozostał stały, READY/OTA VALID/WWW READY;
-    heap 157864 → 157824 B. `L0_LOG_RX` zakończył 240 s integralnym PASS
-    (1344 B, zgodne SHA-256 mostu i DEV-VM), bez panic/assert/WDT ani
-    jawnych błędów audio/MQTT. Brakuje odczytu HA wiadomości bieżącej oraz
-    nowej subskrypcji `status` po tej zmianie, więc aktywna publikacja i
-    retained `status` pozostają **UNVERIFIED**. Zmiana metadata nie wyzwala
-    publikacji `playlist`; jej aktywna ponowna publikacja nadal jest PENDING.
-    Uzupełniony `mqtt_contract_native` potwierdza programowo, że oba warianty
-    `sessionPresent` w `onMqttConnect` ponawiają subskrypcję `command` QoS 2
-    oraz publikują `status`, `volume`, `playlist` w tej kolejności z QoS 0 i
-    `retain=true`; test celowany ma zwykły i ASan/UBSan PASS, ale nie zastępuje
-    fizycznego HIL reconnectu ani potwierdzenia zapisu retained przez broker.
-    Raport: `/home/piotrek/voxone-hil/logs/l0/VOXONE-L0-MQTT-STATUS-RETAINED-HIL-1-20261031T2158/REPORT.md`.
-  - [L0 MQTT READ-ONLY DEV-VM PREFLIGHT BLOCKED][HA LIVE/RETAINED PHYSICAL HIL PASS — LIMITED]
-    `VOXONE-L0-MQTT-RETAINED-LIVE-HIL-1` 2026-11-01 na `bf1d147`:
-    L0 pozostał READY, `app0 VALID`, WWW READY i ze stałym `bootId=ca5d5657`
-    podczas krótkiego odczytu API/WS, ale broker odrzucił anonimowy CONNECT
-    kodem 5 (`Not authorized`), a na DEV-VM nie ma zatwierdzonego magazynu
-    poświadczeń HIL. Z DEV-VM nie subskrybowano tematów ani nie wykonano
-    planowanej 180 s obserwacji; ten etap pozostaje BLOCKED. Następnie
-    użytkownik potwierdził w HA 18 kolejnych aktualizacji `status` stacji
-    10 `RMF Dla dzieci` między 20:59 a 21:46 (QoS 0, `Retain=false`),
-    m.in. tytuły `Przedszkojak - Radę sobie dam` o 21:43 i
-    `Majka Jeżowska - Kołysanka dla Michałka` o 21:46. Live publikacja
-    metadanych ma **PHYSICAL HIL PASS** w zakresie obserwacji użytkownika.
-    Bieżące odczyty HA trzech tematów `voxone-8CBD1C/status`,
-    `voxone-8CBD1C/volume` (surowa wartość `30`) i
-    `voxone-8CBD1C/playlist`
-    (`http://192.168.1.56/data/stations.tsv`) miały QoS 0,
-    `Retain=true`: **PHYSICAL HIL PASS** w zakresie odczytu retained.
-    Nie ma surowego eksportu HA, równoległego porównania pełnego JSON `status`
-    z WS ani ciągłego READY/bootId/UART dla okna 20:59–21:46; nie
-    przypisywać im PASS. Aktywna ponowna publikacja `playlist`, MQTT
-    reconnect/re-subscription, availability/LWT i regresja po restarcie
-    pozostają UNVERIFIED/PENDING; pełna bramka MQTT pozostaje otwarta.
-    Zachować wcześniejsze ograniczone PASS. Raport:
-    `reports/VOXONE-L0-MQTT-RETAINED-LIVE-HIL-1.md`.
-  - [L0 CURRENT MQTT RETAINED 3/3 OPERATOR PASS][HA/REST/WS REMOTE HIL PASS][DEV MQTT BLOCKED]
-    `VOXONE-RC1-L0-MQTT-RETAINED-EVIDENCE-1` 2026-11-04 zachowuje rozdzielne
-    okna dowodowe. Godzinny `RC1-L0-HA-ENDURANCE-60M-1` zakończył o 16:10:55
-    z 360/360 REST, 120/120 WS i 60/60 HA MCP PASS, stałym
-    `bootId=3cb6512e`, READY, app1 VALID oraz końcowym RADIO/PLAY na stacji #2
-    `Meloradio Wrocław`, volume100=10, MUTE OFF i balance 0. Później, o
-    16:48–16:49 CET, operator odczytał w panelu HA trzy wiadomości QoS 0 z
-    `Retain=true`: `voxone-8CBD1C/status` z `status=1`, stacją 2, nazwą i
-    tytułem `Meloradio Wrocław` oraz `on=1`; `voxone-8CBD1C/volume` z
-    wartością `25`, dokładnie odpowiadającą 10% w skali 0–254; oraz
-    `voxone-8CBD1C/playlist` z URL
-    `http://192.168.1.56/data/stations.tsv`. Jest to **MQTT retained 3/3
-    OPERATOR PASS**, zgodny z przywróconym stanem po kontrolowanych testach
-    MCP PAUSE/UNPAUSE i volume 10% → 9% → 10%, ale nie wolno przypisywać tych
-    odczytów do wcześniejszego godzinnego okna ani zmieniać retrospektywnie
-    jego werdyktu. Bezpośredni odczyt MQTT z DEV i broker-side ACL klienta
-    read-only pozostają BLOCKED; reconnect/re-subscription, aktywne okno
-    aktualizacji `status`/`playlist`, regresja po restarcie i fizyczny
-    odsłuch pozostają PENDING/UNVERIFIED. Bramka MQTT/HA pozostaje
-    **OPEN / PARTIAL**. Raport:
-    `reports/VOXONE-RC1-L0-MQTT-RETAINED-EVIDENCE-1.md`.
-  - [L0 MQTT ACTIVE STATUS TRANSITION LOGICAL HIL PASS][RECONNECT/ACTIVE PLAYLIST PENDING]
-    `VOXONE-RC1-L0-MQTT-STATUS-TRANSITION-EVIDENCE-1` 2026-11-04 ma PASS
-    kontrolowanego RADIO PLAY → STOP → PLAY na L0 `4ef1e53`. Dokładnie jedno
-    MCP PAUSE o 17:45:45.575 CET dało HA `idle`, WebSocket RADIO/STOP i dwie
-    ręcznie zaobserwowane w panelu HA publikacje live QoS 0, `Retain=false`,
-    z `status=0`, stacją 2, tytułem `[zatrzymano]` i `on=1`; świeża
-    subskrypcja o 17:47 zwróciła ten sam końcowy payload z `Retain=true`.
-    Po osobnej zgodzie dokładnie jedno MCP PLAY o 17:49:55.028 CET dało HA
-    `playing`, WebSocket RADIO/PLAY i pięć publikacji live `0,0,0,1,1`:
-    trzy pierwsze miały tytuł `[łączenie]`, czwarta `status=1` nadal z
-    `[łączenie]`, a piąta końcowe `status=1` i `Meloradio Wrocław`. Wszystkie
-    miały stację 2, nazwę `Meloradio Wrocław`, `on=1`, QoS 0 i
-    `Retain=false`; świeża subskrypcja o 17:51 potwierdziła końcowy retained
-    `status=1`, tytuł `Meloradio Wrocław`, QoS 0 i `Retain=true`. READY,
-    `bootId=3cb6512e`, OTA app1 VALID, stacja #2, volume100=10, MUTE OFF i
-    balance 0 pozostały niezmienione. MQTT obserwowano ręcznie w panelu HA,
-    nie bezpośrednio z DEV; timestamps panelu mają dokładność do minuty.
-    Jest to logiczny zdalny HIL, bez fizycznego AUDIO PASS. Aktywna
-    publikacja `status` jest zamknięta, lecz reconnect/re-subscription,
-    aktywna ponowna publikacja `playlist`, availability/LWT i regresja po
-    restarcie pozostają PENDING; bramka MQTT/HA pozostaje **OPEN / PARTIAL**.
-    Raport:
-    `reports/VOXONE-RC1-L0-MQTT-STATUS-TRANSITION-EVIDENCE-1.md`.
 Kontrakt opisuje aktywne
-  profile, API, MQTT/HA, SourceManager, VoxOneBT, TTS, update/recovery, OTA,
+  profile, API/HA, SourceManager, VoxOneBT, TTS, update/recovery, OTA,
   Config v7 i granicę Technical Stable/Commercial Release. Obowiązkowy
   release-gating obejmuje S0 i L0; W0/M0/DIN0 pozostają targetami buildowymi.
   S0+BT jest capability bieżącej implementacji. Końcowe fizyczne HIL S0 i L0
@@ -850,7 +736,7 @@ Obecna sekcja AUDIO jest zaakceptowana i nie wymaga zmian w kategorii A.
 - [POST-STABLE] Przebudować PLAYER: podnieść PLAY/PAUSE/STOP oraz bitrate/audio info, a niżej dodać czytelną ramkę faktycznego trybu wyjścia 2.0/2.1/2.2 pochodzącego z konfiguracji audio/DSP.
 - [POST-STABLE] Ustalić wspólną lub jawnie przypisaną szybkość przewijania dla stacji, artysty, utworu i list; usunąć przypadkowo różne timingi rendererów.
 - [POST-STABLE] Dodać source-aware PLAYER, ekran TTS, przyszłą przeglądarkę DLNA oraz konfigurację DSP.
-- [HARDWARE][M0 NON-BLOCKING] Opcjonalnie domknąć na M0 stabilność OLED, input i audio po zmianie tożsamości buildów. Wcześniejszy PHYSICAL PASS SSD1306 i SSD1309 pozostaje historycznym baseline'em M0; dalszy HIL PCM5102A, SSD1306/SSD1309/NONE oraz EC11/Buttons3/NONE nie blokuje Stable. VoxOneBT i MQTT/HA nie są capability M0.
+- [HARDWARE][M0 NON-BLOCKING] Opcjonalnie domknąć na M0 stabilność OLED, input i audio po zmianie tożsamości buildów. Wcześniejszy PHYSICAL PASS SSD1306 i SSD1309 pozostaje historycznym baseline'em M0; dalszy HIL PCM5102A, SSD1306/SSD1309/NONE oraz EC11/Buttons3/NONE nie blokuje Stable. VoxOneBT nie jest capability M0.
 - [STABLE][S0 BASELINE HARDWARE HIL PENDING][DIN0 NON-BLOCKING] Na właściwym
   S0 domknąć obowiązkową macierz z `docs/STABLE_CONTRACT.md`, bez fizycznej
   kwalifikacji wariantów optional. MAX98357A MONO, SSD1306 128×32 i EC11 mają
@@ -880,7 +766,7 @@ Obecna sekcja AUDIO jest zaakceptowana i nie wymaga zmian w kategorii A.
 - [POST-STABLE] Zintegrować DSPmini z WWW i LCD. W profilu DSP rozbudowane ustawienia mają należeć do AUDIO i nie mogą dublować globalnej głośności.
 - [DECISION] Po przygotowaniu integracji sprzętowej zdecydować, które elementy obecnej zakładki/demo DSP i `DSP_CUSTOM` zachować, zastąpić lub usunąć.
 
-## Home Assistant i MQTT
+## Home Assistant
 
 - [POST-STABLE] HA-1 — dla całej rodziny L/M/S/DIN/W ustalić wersjonowany kontrakt integracji na bazie istniejącego `/ws`, `webStatus`, CommandHandler i SourceManager: stabilne pola snapshotu i synchronizację po reconnect, błędy/wynik komendy oraz jawne source-aware transport commands. Nie tworzyć osobnego WebSocket ani dodawać REST API wyłącznie dla HA.
 - [POST-STABLE] HA-2 — dodać config flow wykorzystujący istniejące mDNS/Zeroconf `_voxone._tcp`, z potwierdzeniem urządzenia, pełnym MAC MAIN jako unique ID oraz ręcznym host fallback; hostname i IP nie są unique ID.
@@ -889,10 +775,7 @@ Obecna sekcja AUDIO jest zaakceptowana i nie wymaga zmian w kategorii A.
 - [POST-STABLE] HA-5 — dodać stabilne wywołanie URL przez WS dla TTS/announce; VoxOne zarządza temporary override i restore, HA nie implementuje przywracania audio. Reklamować `MEDIA_ANNOUNCE` dopiero po fizycznej weryfikacji.
 - [POST-STABLE] HA-6 — dodać tylko minimalne dodatkowe encje: RSSI, uptime, restart i Max Volume; TTS Volume Mode/Fixed po wdrożeniu polityki TTS, standby później.
 - [POST-STABLE] HA-7 — przetestować restart HA i VoxOne, zmianę IP, utratę/reconnect WebSocket, partial snapshot i duplikat komendy.
-- [POST-STABLE] HA-8 — uruchomić native HA równolegle z MQTT i przeprowadzić audyt parytetu oraz fizyczne testy.
-- [POST-STABLE] HA-9 — rozważyć wycofanie MQTT dopiero po potwierdzeniu fizycznego parytetu i stabilnego działania native HA.
 - [DECISION] Przed dystrybucją native HA ustalić wymagania tokenu/auth i zabezpieczenia mutujących komend; istniejące mDNS `_voxone._tcp` nie jest autoryzacją.
-- [DECISION] Zweryfikować znaczenie `status.on = config.store.dspon` w obecnym `ha_yoradio` i nie zmieniać kontraktu MQTT bez fizycznej regresji.
 
 ## Network
 
@@ -908,7 +791,7 @@ Obecna sekcja AUDIO jest zaakceptowana i nie wymaga zmian w kategorii A.
 - [STABLE][SOFTWARE PASS][S0/L0 PHYSICAL HIL PENDING][W0 EVIDENCE RETAINED] Fizycznie zweryfikować eksport/import między S0 i L0 przez rzeczywiste WWW i SPIFFS, odświeżenie listy, trwałość po restarcie oraz backup/restore przez Web Update. `VOXONE-STABLE-PLAYLIST-IMPORT-EXPORT-SOFTWARE-1` ma zachowany izolowany dwukierunkowy PASS W0 → L0 i L0 → W0: eksport, import i ponowny odczyt po symulowanym restarcie są bajtowo identyczne oraz zachowują ID, nazwy i URL-e, kolejność, OVOL −30…30, A↔T (`normal`/`swap`) i polski UTF-8. Błędny nagłówek/wersja, duplikat ID, brakujące lub ucięte pola, niepoprawny UTF-8, OVOL/tryb poza kontraktem i pole ponad 169 B są odrzucane bez zmiany wcześniejszej playlisty; limit uploadu 192 KiB jest spójnie egzekwowany w WWW i firmware. Testy obu historycznych profili oraz ASan/UBSan mają PASS bez zmian kodu produkcyjnego, ale nie zastępują fizycznego HIL S0/L0.
 - [STABLE][SOFTWARE PASS][L0 REMOTE SEARCH HIL PASS][S0/L0 EXTENDED HIL PENDING][W0 NON-BLOCKING] Fizycznie przetestować Radio Directory na S0 i L0: rzeczywiste zapytania do Radio Browser, dodanie, odtwarzanie, trwałość po restarcie, zużycie pamięci i brak zakłóceń audio. `VOXONE-STABLE-RADIO-DIRECTORY-SOFTWARE-1` ma izolowany PASS W0/L0 dla rozłącznych tras snapshot/search, asynchronicznego start/poll i blokady równoległego zadania, walidacji zapytania/kraju/limitu, kodowania polskiego UTF-8, mapowania poprawnej odpowiedzi, wyboru `url_resolved` z bezpiecznym fallbackiem do `url`, filtrowania niedziałających stacji oraz odrzucania danych niepełnych, niepoprawnych, z błędnym UTF-8 i przekraczających limity. Deterministyczny błąd timeout zachowuje status zadania, a audyt ścieżek offline/connection/HTTP/timeout/oversize/invalid JSON potwierdza brak wywołania mutacji playlisty; wybór wyniku używa istniejącego transakcyjnego `/api/stations/add`, tworzy własne stabilne ID VoxOne i ustawia OVOL 0 bez zmiany aktywnej stacji. Ukierunkowane testy zoptymalizowane i ASan/UBSan mają PASS bez zmian kodu produkcyjnego.
   - `VOXONE-STABLE-RADIO-DIRECTORY-L0-REMOTE-HIL-1` 2026-10-23 ma PASS niedestrukcyjnego zakresu rzeczywistego wyszukiwania na fizycznym L0 `0.8.0-dev`/`739e4a2`, bez aktualizacji urządzenia. Trasa produkcyjna istnieje i dwa sekwencyjne zapytania do Radio Browser zakończyły asynchroniczne `202`/polling odpowiedzią HTTP 200: `Polskie Radio`, kraj PL, limit 7 dało 6 wyników po 2916 ms, a `Łódź`, kraj PL, limit 5 dało 5 wyników po 2170 ms. Limity były zachowane, wszystkie rekordy miały poprawne pola i publiczne URL-e HTTP/HTTPS, a nazwy z polskim UTF-8, m.in. `Czwórka`, `Eska Łódź` i `RADIO ŁÓDŹ`, zostały poprawnie odwzorowane. Snapshot `/api/stations` przed i po był bitowo identyczny (SHA-256 `b4d363429c8ad51db2946aa0b99d7927f709fb6242fb3457694f5aaef1c88ad2`), z rewizją `97031F42`, 19 wpisami i aktywną stacją 10; runtime pozostał RADIO/PLAY, volume 9%, MUTE OFF. `bootId=<L0_REMOTE_HIL_SESSION_ID>` pozostał stały, uptime wzrósł monotonicznie z 257548 do 257668 s, `/api/ready` pozostało zdrowe, WWW zwracało 200, a wszystkie kontrolne WebSocket handshake/odczyty i zamknięcia 101/1000 działały. Po dwóch połączeniach TLS free heap ustabilizował się na 165764/165764/165716 B, minimum heap na 101028 B, a free PSRAM na 7740955 B w trzech próbkach przez 20 s; nie jest to długotrwały test pamięci. Zastany stary SPIFFS pozostaje używalny, ale bez manifestu ma `CONTRACT_UNVERIFIABLE`. Nie dodawano stacji ani nie zmieniano playlisty, odtwarzania, źródła, MUTE, głośności lub konfiguracji. Nadal PENDING są na L0 dodanie wyniku, rzeczywiste odtwarzanie, trwałość po restarcie, dłuższa obserwacja pamięci i odsłuch braku zakłóceń audio oraz cały fizyczny HIL S0; dalszy HIL W0 jest nieblokujący.
-- [POST-STABLE] Sprawdzić prezentację A↔T na LCD/WWW/MQTT oraz zachowanie po reorder i usunięciu stacji.
+- [POST-STABLE] Sprawdzić prezentację A↔T na LCD/WWW/HA oraz zachowanie po reorder i usunięciu stacji.
 
 ## Hardware targets
 
@@ -991,10 +874,6 @@ Obecny baseline: dane i widoki display są rozdzielone; `HardwareCapabilities` j
 
 Nazwy wariantów display: `STEROWNIK_ROZDZIELCZOŚĆ`, np. `SSD1306_128X32`, `SSD1306_128X64`, `SSD1309_128X64`, `CH1116_128X64`, `SH1106_128X64`, `ST7789V_320X240`, `ST7789_284X76`, `SSD1322_256X64`, `ST7796S_480X320`, `GC9A01_240X240`. Dla modułu opisanego `ST7290_128X64` lub ST7920-compatible trzeba potwierdzić fizyczny kontroler i protokół przed nazwaniem backendu.
 
-## Backlog 1.1.0
-
-- [POST-STABLE][1.1.0][ARCHITECTURE] Zastąpić hardkodowaną listę profili produkcyjnych w warstwie SECURITY wspólnym, fail-closed kontraktem build/security, aby nowe profile nie wymagały ręcznego dopisywania do allowlisty.
-- [POST-STABLE][1.1.0][ARCHITECTURE] Usunąć politykę UI z plików profili (`VOXONE_BT_TRANSPORT_UI_ENABLED`); dostępność widoku wyprowadzać ze wspólnych capabilities i stanu UI bez logiki interfejsu zależnej od konkretnego profilu.
 ## Installer, first boot i release
 
 - [POST-STABLE] Przygotować VoxOne Installer dla Windows jako portable EXE dla VoxOne: wybór rodziny L/M/S/DIN/W i właściwej rewizji PCB, embedded stable factory binaries, install, erase/install, auto COM, auto chip i brak ręcznych offsetów.

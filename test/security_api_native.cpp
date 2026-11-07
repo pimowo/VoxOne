@@ -298,7 +298,6 @@ void testStorageAndRandomFailures() {
 void testProductionIntegrationContract() {
   const std::string network = readFile("src/core/network.cpp");
   const std::string server = readFile("src/core/netserver.cpp");
-  const std::string mqtt = readFile("src/core/mqtt.cpp");
 
   const size_t settings = network.find("initializeDeviceSecurity(");
   const size_t sessions = network.find("deviceSecuritySessionService()");
@@ -318,7 +317,6 @@ void testProductionIntegrationContract() {
   assert(server.find("webserver.on(\"/api/ready\", HTTP_GET") !=
          std::string::npos);
   assert(server.find("request->url()==\"/update\"") != std::string::npos);
-  assert(mqtt.find("security_api.h") == std::string::npos);
 }
 
 }  // namespace

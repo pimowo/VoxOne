@@ -168,39 +168,6 @@ bool validStations(ByteReader& value, std::size_t& rows) {
   return true;
 }
 
-void writePadded(uint8_t*& cursor, const char* text, std::size_t capacity) {
-  const std::size_t length = std::strlen(text);
-  std::memset(cursor, 0, capacity);
-  std::memcpy(cursor, text, length);
-  cursor += capacity;
-}
-
-void encodeMqtt(const MqttSettings& value, uint8_t* output) {
-  uint8_t* cursor = output;
-  *cursor++ = 1;
-  *cursor++ = value.enabled;
-  write16(cursor, value.port);
-  writePadded(cursor, value.host, sizeof(value.host));
-  writePadded(cursor, value.username, sizeof(value.username));
-  writePadded(cursor, value.password, sizeof(value.password));
-  writePadded(cursor, value.rootTopic, sizeof(value.rootTopic));
-}
-
-bool decodeMqtt(const uint8_t* input, MqttSettings& output) {
-  if (input[0] != 1) return false;
-  MqttSettings decoded{};
-  decoded.enabled = input[1];
-  const uint8_t* cursor = input + 2;
-  decoded.port = read16(cursor);
-  std::memcpy(decoded.host, cursor, sizeof(decoded.host)); cursor += sizeof(decoded.host);
-  std::memcpy(decoded.username, cursor, sizeof(decoded.username)); cursor += sizeof(decoded.username);
-  std::memcpy(decoded.password, cursor, sizeof(decoded.password)); cursor += sizeof(decoded.password);
-  std::memcpy(decoded.rootTopic, cursor, sizeof(decoded.rootTopic));
-  if (!mqttValidSettings(decoded)) return false;
-  output = decoded;
-  return true;
-}
-
 Status validateFixed(const Data& data,
                      const hardware::HardwareCapabilities& capabilities) {
   if (!validConfig(data.config)) return Status::InvalidConfig;
@@ -210,7 +177,6 @@ Status validateFixed(const Data& data,
     return Status::UnsupportedHardware;
   if (hardwareStatus != hardware::RuntimeHardwareValidation::Valid)
     return Status::InvalidHardware;
-  if (!mqttValidSettings(data.mqtt)) return Status::InvalidMqtt;
   if (!validUi(data.ui)) return Status::InvalidUi;
   if (!validScroll(data)) return Status::InvalidScroll;
   if (data.config.btEnabled && !capabilities.supportsVoxOneBt)
@@ -258,7 +224,6 @@ const char* statusName(Status status) {
     case Status::InvalidConfig: return "INVALID_CONFIG";
     case Status::InvalidHardware: return "INVALID_HARDWARE";
     case Status::UnsupportedHardware: return "UNSUPPORTED_HARDWARE";
-    case Status::InvalidMqtt: return "INVALID_MQTT";
     case Status::InvalidUi: return "INVALID_UI";
     case Status::InvalidScroll: return "INVALID_SCROLL";
     case Status::InvalidWifi: return "INVALID_WIFI";
@@ -381,7 +346,7 @@ Status encodePrefix(const Data& data,
   write32(cursor, static_cast<uint32_t>(total));
   write32(cursor, config_format::kConfigV7SerializedSize);
   write32(cursor, hardware::kRuntimeHardwareConfigSerializedSize);
-  write32(cursor, kMqttWireSize);
+  write32(cursor, kRetiredIntegrationWireSize);
   write32(cursor, kUiWireSize);
   write32(cursor, static_cast<uint32_t>(data.wifi.size));
   write32(cursor, static_cast<uint32_t>(data.stations.size));
@@ -393,7 +358,8 @@ Status encodePrefix(const Data& data,
           data.hardware, cursor, hardware::kRuntimeHardwareConfigSerializedSize))
     return Status::InvalidHardware;
   cursor += hardware::kRuntimeHardwareConfigSerializedSize;
-  encodeMqtt(data.mqtt, cursor); cursor += kMqttWireSize;
+  std::memset(cursor, 0, kRetiredIntegrationWireSize);
+  cursor += kRetiredIntegrationWireSize;
   *cursor++ = 1;
   *cursor++ = data.ui.stationListSeconds;
   *cursor++ = data.ui.btTransportSeconds;
@@ -427,14 +393,15 @@ Status decodePrefix(const uint8_t* input, std::size_t size,
   const uint32_t total = read32(cursor);
   const uint32_t configSize = read32(cursor);
   const uint32_t hardwareSize = read32(cursor);
-  const uint32_t mqttSize = read32(cursor);
+  const uint32_t retiredIntegrationSize = read32(cursor);
   const uint32_t uiSize = read32(cursor);
   const uint32_t wifiSize = read32(cursor);
   const uint32_t stationsSize = read32(cursor);
   if (total > artifactSize) return Status::Truncated;
   if (total < artifactSize || configSize != config_format::kConfigV7SerializedSize ||
       hardwareSize != hardware::kRuntimeHardwareConfigSerializedSize ||
-      mqttSize != kMqttWireSize || uiSize != kUiWireSize) return Status::InvalidLength;
+      retiredIntegrationSize != kRetiredIntegrationWireSize ||
+      uiSize != kUiWireSize) return Status::InvalidLength;
   const uint64_t expected = static_cast<uint64_t>(fixedOverhead) +
                             wifiSize + stationsSize;
   if (expected != artifactSize)
@@ -449,8 +416,9 @@ Status decodePrefix(const uint8_t* input, std::size_t size,
   if (hardwareDecode != hardware::RuntimeHardwareDecodeStatus::Valid)
     return Status::InvalidHardware;
   cursor += hardwareSize;
-  if (!decodeMqtt(cursor, candidate.mqtt)) return Status::InvalidMqtt;
-  cursor += mqttSize;
+  std::memcpy(candidate.retiredIntegration, cursor,
+              kRetiredIntegrationWireSize);
+  cursor += retiredIntegrationSize;
   if (cursor[0] != 1) return Status::InvalidUi;
   candidate.ui.stationListSeconds = cursor[1];
   candidate.ui.btTransportSeconds = cursor[2];
@@ -536,14 +504,15 @@ Status parse(const uint8_t* input, std::size_t size,
   const uint32_t total = read32(header);
   const uint32_t configSize = read32(header);
   const uint32_t hardwareSize = read32(header);
-  const uint32_t mqttSize = read32(header);
+  const uint32_t retiredIntegrationSize = read32(header);
   const uint32_t uiSize = read32(header);
   const uint32_t wifiSize = read32(header);
   const uint32_t stationsSize = read32(header);
   if (total > size) return Status::Truncated;
   if (total < size || configSize != config_format::kConfigV7SerializedSize ||
       hardwareSize != hardware::kRuntimeHardwareConfigSerializedSize ||
-      mqttSize != kMqttWireSize || uiSize != kUiWireSize) return Status::InvalidLength;
+      retiredIntegrationSize != kRetiredIntegrationWireSize ||
+      uiSize != kUiWireSize) return Status::InvalidLength;
   const uint64_t expected = static_cast<uint64_t>(fixedOverhead) +
                             wifiSize + stationsSize;
   if (expected != size) return expected > size ? Status::Truncated : Status::InvalidLength;

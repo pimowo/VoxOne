@@ -11,8 +11,8 @@
 
 #include "../audioI2S/AudioEx.h"
 
-#ifndef MQTT_BURL_SIZE
-  #define MQTT_BURL_SIZE  512
+#ifndef TEMPORARY_AUDIO_URL_SIZE
+  #define TEMPORARY_AUDIO_URL_SIZE  512
 #endif
 
 #ifndef PLQ_SEND_DELAY

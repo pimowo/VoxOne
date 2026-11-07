@@ -67,7 +67,7 @@ kontrakt opiera się na SECURITY i cookie.
 | `GET` | `/voxone-logo.svg` | brak | Publiczny asset marki, potrzebny również w AP pierwszego uruchomienia. |
 | `GET` | `/favicon.ico` | brak | Publiczne przekierowanie do `/voxone-symbol.svg`. |
 | `GET` | `/variables.js` | query ignorowane | Trasa chroniona. Zwraca JavaScript z `voxOneVersion`, `voxOneChannel`, `voxOneBuild`, `yoRadioVersion`, `voxOneProfile` i `playMode`. |
-| `GET` | `/data/stations.tsv` | brak | Trasa chroniona. Surowa playlista ze SPIFFS (`application/octet-stream`); to także URL publikowany przez MQTT. |
+| `GET` | `/data/stations.tsv` | brak | Trasa chroniona. Surowa playlista ze SPIFFS (`application/octet-stream`). |
 | `GET` Upgrade | `/ws` | handshake WebSocket v13 | Chroniony handshake opisany szczegółowo w sekcji „WebSocket”. Nie jest zwykłym endpointem REST. |
 | `GET` | `/emergency` | brak | Strona awaryjnego uploadu osadzona w firmware; dostęp zależy od polityki update/recovery danego stanu SECURITY. |
 | `GET` | `/update.html` | brak | Gdy WWW działa, przekierowuje do `/#update`; bez WWW zwraca wbudowaną stronę awaryjną. |
@@ -122,13 +122,6 @@ Nie udostępnia normalnego REST, statycznego WWW ani WebSocket.
 | `GET` | `/api/time` | brak | Chroniony JSON: `rtcSupported`, `rtcFound`, `systemTime`, `rtcTime`, `timeSyncInterval`, `timeSyncIntervalRTC`, `syncCount`. |
 | `POST` | `/api/time/sync` | pusty body | Chronione wymuszenie synchronizacji czasu; tylko profil z RTC i połączeniem sieciowym. Zwraca 202 oraz licznik sprzed próby. |
 | `GET` | `/api/wifi/scan` | opcjonalnie `refresh=1` | Tylko provisioning. Asynchroniczny scan: 202 `scanning`, 200 `ready` z maks. 32 unikalnymi rekordami `{ssid,rssi,secure}`, albo 504 timeout. |
-
-### MQTT
-
-| Metoda | Ścieżka | Parametry | Odpowiedź / działanie |
-|---|---|---|---|
-| `GET` | `/api/mqtt` | brak | Chroniony odczyt: `enabled`, `host`, `port`, `username`, `passwordSet`, `rootTopic`, `effectiveRoot`, `autoRoot`. Hasło nie jest ujawniane. |
-| `POST` | `/api/mqtt` | wymagane: `enabled`, `host`, `port`, `username`, `rootTopic`; opcjonalne `password`, `clearPassword=true|false` | Chroniony zapis. Port 1–65535; host do 127 B, username 63 B, root 63 B, hasło 127 B. Sukces zwraca `rebooting:true` i planuje restart. |
 
 ### Stacje i katalog internetowy
 
@@ -460,8 +453,6 @@ Niezależnie od trwałego stanu istnieje tryb kompilacji:
 | `test` | Wyłącznie `m0-security-test`; uruchamia ten sam gate, ale nie może być przedstawiane jako ochrona produkcyjna. | `true` |
 | `disabled` | Niestandardowy/non-standard build bez obu flag. Centralny gate przepuszcza żądania; nie wymusza Host/Origin/cookie ani whitelisty WS. Oznacza to również osiągalność legacy komend `format`, `clearspiffs` i `reset`, jeżeli pozostają w `CommandHandler`. Stan SECURITY może nadal być raportowany, ale nie chroni transportu. | `false` |
 
-MQTT ma osobną autoryzację brokera i nie używa cookie SECURITY.
-
 ## Stan urządzenia: co jest eksponowane i gdzie żyje
 
 ### Stan już eksponowany
@@ -483,8 +474,6 @@ MQTT ma osobną autoryzację brokera i nie używa cookie SECURITY.
 | Zapełnienie bufora audio | WS `getrssi` jako historyczne ID `heap` | `Player::inBufferFilled()` względem `NetServer::playerBufMax`. Nazwa pola jest myląca. |
 | Display, brightness, contrast, flip, screensaver, VU enabled, timeouty i scroll | WS `getscreen`/`getsystem`, REST `/api/hardware` | Config v7 + runtime snapshot; hardware w osobnym runtime hardware NVS; timeouty UI i scroll w ich własnych adapterach NVS. |
 | Stan SECURITY i sesji bieżącego requestu | `/api/security/state` | Rekord NVS w `SecurityService`; sesje RAM w `SecuritySessionService`. Token ani verifier nie są ujawniane. |
-| MQTT config bez hasła | `/api/mqtt` | `MqttSettings` w NVS; API zwraca tylko `passwordSet`. |
-| Stan publikowany przez MQTT | Retained `<root>/status`, `<root>/volume`, `<root>/playlist` | `status` zawiera `status`, `station`, `name`, `title`, `on`; `volume` to historyczna skala 0..254; `playlist` to URL `/data/stations.tsv`. Dane pochodzą z `Config::station`, snapshotu Config i `Player`. Root jest ustawiony albo wyliczony z MAC. |
 | Czas systemowy/RTC i licznik sync | `/api/time` | libc/system clock, `rtc`, atomowy `TimeKeeper::successfulSyncCount`; interwały w Config v7. |
 | Slot OTA, health, rollback, poprzedni błąd | `/api/ready` | atomowe pola `ota_boot_runtime.cpp`; `lastFailure` w namespace NVS `vox_ota`. |
 | WWW integrity/contract/asset-set | `/api/ready` | `Config::wwwAssetIntegrity`, wyliczone przy starcie z manifestu i plików SPIFFS. |
@@ -512,28 +501,29 @@ jednak ustabilizowania kontraktu, synchronizacji i polityki prywatności.
 | Stan local UI: aktywna strona, idle/saver, lokalny focus | `ui_state.*`, `Display`, runtime widgetów | Częściowo pośrednio w `getscreen`, bez bieżącej strony/focus. |
 | Stan NVS/storage: mode v7, dirty/read-only, status migracji | `ConfigPersistence`, `Config::storageMode()`, `startupStatus()` | Widoczny w logach i backupie, nie w normalnym API. |
 
-Nie należy wystawiać: haseł Wi-Fi/MQTT, verifiera/salt SECURITY, tokenów sesji,
+Nie należy wystawiać: haseł Wi-Fi, verifiera/salt SECURITY, tokenów sesji,
 kluczy Bluetooth ani surowych prywatnych śladów diagnostycznych.
 
 ## Discovery w sieci
 
 ### mDNS
 
-Mechanizm mDNS istnieje, ale w ograniczonej formie:
+Mechanizm mDNS zapewnia rozwiązywanie hosta i opcjonalne discovery HA:
 
 1. Przed połączeniem STA kod ustawia `WiFi.setHostname(runtime.mdnsName)`.
 2. Po uzyskaniu gotowego połączenia wywołuje
    `MDNS.begin(runtime.mdnsName)` (`src/core/network.cpp`). Dzięki temu
    urządzenie może odpowiadać jako `<hostname>.local`.
-3. W trybie AP ustawiany jest `WiFi.softAPsetHostname`, ale kod nie uruchamia
+3. Gdy `haDiscoveryEnabled=true`, publikuje `_http._tcp` i `_voxone._tcp` na
+   porcie 80. TXT usługi VoxOne zawiera `mac`, `version`, `model`, `host`,
+   `name`, `security` i `manufacturer`.
+4. Gdy opcja jest wyłączona, host `.local` nadal działa, ale usługi discovery
+   nie są rozgłaszane.
+5. W trybie AP ustawiany jest `WiFi.softAPsetHostname`, ale kod nie uruchamia
    tam osobnego `MDNS.begin`.
-4. Nie ma żadnego `MDNS.addService`, w szczególności nie ma
-   `_voxone._tcp`, `_http._tcp` ani rekordu TXT opisującego API/capabilities.
 
-Wniosek: jest rozwiązywanie nazwy hosta mDNS w normalnym STA, ale nie ma
-Zeroconf service discovery wystarczającego do automatycznego wykrywania
-integracji Home Assistant. HA musiałby znać hostname/IP albo projekt musi
-dodać dedykowaną usługę, np. `_voxone._tcp`.
+Integracja Home Assistant używa MAC z TXT jako `unique_id`, a sterowanie i TTS
+realizuje przez chroniony WebSocket, bez brokera MQTT.
 
 ### SSDP/UPnP i inne broadcasty
 

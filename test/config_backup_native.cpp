@@ -18,9 +18,10 @@ namespace {
 
 constexpr std::size_t kConfigOffset = 34;
 constexpr std::size_t kHardwareOffset = kConfigOffset + kConfigV7SerializedSize;
-constexpr std::size_t kMqttOffset =
+constexpr std::size_t kRetiredIntegrationOffset =
     kHardwareOffset + kRuntimeHardwareConfigSerializedSize;
-constexpr std::size_t kUiOffset = kMqttOffset + kMqttWireSize;
+constexpr std::size_t kUiOffset =
+    kRetiredIntegrationOffset + kRetiredIntegrationWireSize;
 constexpr std::size_t kScrollOffset = kUiOffset + kUiWireSize;
 
 void write16(uint8_t* output, uint16_t value) {
@@ -92,12 +93,6 @@ Data knownData() {
   Data data{};
   data.config = knownConfig();
   data.hardware = defaultRuntimeHardwareConfig(currentHardware());
-  data.mqtt = mqttDefaultSettings();
-  data.mqtt.enabled = 1;
-  std::strcpy(data.mqtt.host, "mqtt.local");
-  std::strcpy(data.mqtt.username, "voxone");
-  std::strcpy(data.mqtt.password, "mqtt-secret");
-  std::strcpy(data.mqtt.rootTopic, "home/voxone");
   data.ui.stationListSeconds = 12;
   data.ui.btTransportSeconds = 21;
   data.wifi = {wifi, sizeof(wifi) - 1};
@@ -267,7 +262,8 @@ void assertDataEqual(const Data& expected, const Data& actual) {
   assert(serializeConfigV7(actual.config, right, sizeof(right)));
   assert(std::memcmp(left, right, sizeof(left)) == 0);
   assert(expected.hardware == actual.hardware);
-  assert(std::memcmp(&expected.mqtt, &actual.mqtt, sizeof(expected.mqtt)) == 0);
+  assert(std::memcmp(expected.retiredIntegration, actual.retiredIntegration,
+                     sizeof(expected.retiredIntegration)) == 0);
   assert(expected.ui.stationListSeconds == actual.ui.stationListSeconds);
   assert(expected.ui.btTransportSeconds == actual.ui.btTransportSeconds);
   assert(expected.scrollMode == actual.scrollMode);
@@ -557,11 +553,15 @@ int main() {
   assert(parse(unsupported.data(), unsupported.size(), hardwareCapabilities(), unchanged) ==
          Status::UnsupportedHardware);
 
-  std::vector<uint8_t> invalidMqtt = bytes;
-  invalidMqtt[kMqttOffset + 1] = 2;
-  repairBackupCrc(invalidMqtt);
-  assert(parse(invalidMqtt.data(), invalidMqtt.size(), hardwareCapabilities(), unchanged) ==
-         Status::InvalidMqtt);
+  // Credentials from the retired integration remain opaque for schema
+  // compatibility and are never interpreted or restored.
+  std::vector<uint8_t> legacyIntegration = bytes;
+  legacyIntegration[kRetiredIntegrationOffset + 1] = 2;
+  repairBackupCrc(legacyIntegration);
+  Data retiredIntegrationParsed{};
+  assert(parse(legacyIntegration.data(), legacyIntegration.size(),
+               hardwareCapabilities(), retiredIntegrationParsed) == Status::Ok);
+  assert(retiredIntegrationParsed.retiredIntegration[1] == 2);
 
   std::vector<uint8_t> invalidUi = bytes;
   invalidUi[kUiOffset + 1] = 121;
@@ -823,7 +823,6 @@ int main() {
                         Status::StorageReadFailed}) {
     const char* diagnostic = statusName(status);
     assert(std::strstr(diagnostic, "secret-password") == nullptr);
-    assert(std::strstr(diagnostic, "mqtt-secret") == nullptr);
   }
   return 0;
 }

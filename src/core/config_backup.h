@@ -6,7 +6,6 @@
 
 #include "config_format.h"
 #include "display_scroll_persistence.h"
-#include "mqtt_config.h"
 #include "ui_timeout_config.h"
 #include "../hardware/runtime_hardware_config.h"
 
@@ -15,14 +14,17 @@ namespace config_backup {
 
 constexpr uint16_t kLegacyBackupSchemaVersion = 1;
 constexpr uint16_t kBackupSchemaVersion = 2;
-constexpr std::size_t kMqttWireSize = 388;
+// Schemas 1 and 2 carried a 388-byte integration record here. Keep the wire
+// slot opaque so old VXCF backups remain parseable without restoring retired
+// credentials or changing the frozen backup offsets.
+constexpr std::size_t kRetiredIntegrationWireSize = 388;
 constexpr std::size_t kUiWireSize = 3;
 constexpr std::size_t kBackupHeaderSize = 34;
 constexpr std::size_t kScrollWireSize =
     1 + display_scroll::kScrollSettingsRecordSize;
 constexpr std::size_t kLegacyBackupFixedOverhead =
     kBackupHeaderSize + config_format::kConfigV7SerializedSize +
-    hardware::kRuntimeHardwareConfigSerializedSize + kMqttWireSize +
+    hardware::kRuntimeHardwareConfigSerializedSize + kRetiredIntegrationWireSize +
     kUiWireSize + 4;
 constexpr std::size_t kLegacyBackupVariableOffset =
     kLegacyBackupFixedOverhead - 4;
@@ -56,7 +58,7 @@ struct Bytes {
 struct Data {
   config_format::config_v7_t config;
   hardware::RuntimeHardwareConfig hardware;
-  MqttSettings mqtt;
+  uint8_t retiredIntegration[kRetiredIntegrationWireSize]{};
   UiTimeoutSettings ui;
   ScrollBackupMode scrollMode = ScrollBackupMode::RendererDefaults;
   display_scroll::ScrollSettings scrollSettings =
@@ -95,7 +97,6 @@ enum class Status : uint8_t {
   InvalidConfig,
   InvalidHardware,
   UnsupportedHardware,
-  InvalidMqtt,
   InvalidUi,
   InvalidScroll,
   InvalidWifi,

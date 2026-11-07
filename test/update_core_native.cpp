@@ -2,7 +2,6 @@
 #include "../src/core/update_runtime_guard.h"
 #include "../src/core/bt_update_progress.h"
 #include "../src/core/update_restart_coordinator.h"
-#include "../src/core/mqtt_update_shutdown_state.h"
 
 #include <assert.h>
 #include <fstream>
@@ -45,25 +44,6 @@ static void testRestartForTarget(UpdateTarget target) {
 }
 
 int main() {
-  MqttUpdateShutdownState disabledMqtt;
-  assert(!disabledMqtt.complete(false));
-  assert(disabledMqtt.begin());
-  assert(disabledMqtt.complete(false));
-  assert(!disabledMqtt.reconnectAllowed());
-
-  MqttUpdateShutdownState disconnectedMqtt;
-  assert(disconnectedMqtt.begin());
-  assert(disconnectedMqtt.complete(false));
-
-  MqttUpdateShutdownState connectedMqtt;
-  unsigned disconnectRequests = 0;
-  if (connectedMqtt.begin()) ++disconnectRequests;
-  if (connectedMqtt.begin()) ++disconnectRequests;
-  assert(disconnectRequests == 1);
-  assert(!connectedMqtt.reconnectAllowed());  // Timer and Wi-Fi callbacks stay gated.
-  assert(!connectedMqtt.complete(true));
-  assert(connectedMqtt.complete(false));
-
   testRestartForTarget(UpdateTarget::VoxOneFirmware);
   testRestartForTarget(UpdateTarget::Filesystem);
   testRestartForTarget(UpdateTarget::VoxOneBtFirmware);
@@ -115,31 +95,6 @@ int main() {
   assert(intermittentRestart.tick(intermittent.snapshot(), 1450, false) == RestartAction::None);
   assert(intermittentRestart.tick(intermittent.snapshot(), 1600, true) == RestartAction::None);
   assert(intermittentRestart.tick(intermittent.snapshot(), 1700, true) == RestartAction::Restart);
-
-  UpdateProgressState mqttWaiting;
-  UpdateRestartCoordinator mqttWaitingRestart;
-  assert(mqttWaiting.begin(UpdateTarget::Filesystem, UpdatePhase::Writing));
-  mqttWaiting.terminal(UpdatePhase::Success);
-  assert(mqttWaitingRestart.tick(mqttWaiting.snapshot(), 100) == RestartAction::None);
-  assert(mqttWaitingRestart.tick(mqttWaiting.snapshot(), 1300) == RestartAction::BeginNetworkQuiesce);
-  mqttWaiting.restarting();
-  const bool webReady = true;
-  assert(mqttWaitingRestart.tick(mqttWaiting.snapshot(), 1800,
-                                 webReady && connectedMqtt.complete(true)) == RestartAction::None);
-  assert(mqttWaitingRestart.tick(mqttWaiting.snapshot(), 1801,
-                                 webReady && connectedMqtt.complete(false)) == RestartAction::None);
-  assert(mqttWaitingRestart.tick(mqttWaiting.snapshot(), 1901,
-                                 webReady && connectedMqtt.complete(false)) == RestartAction::Restart);
-
-  UpdateProgressState mqttStalled;
-  UpdateRestartCoordinator mqttStalledRestart;
-  assert(mqttStalled.begin(UpdateTarget::Filesystem, UpdatePhase::Writing));
-  mqttStalled.terminal(UpdatePhase::Success);
-  assert(mqttStalledRestart.tick(mqttStalled.snapshot(), 100) == RestartAction::None);
-  assert(mqttStalledRestart.tick(mqttStalled.snapshot(), 1300) == RestartAction::BeginNetworkQuiesce);
-  mqttStalled.restarting();
-  assert(mqttStalledRestart.tick(mqttStalled.snapshot(), 6300,
-                                 webReady && connectedMqtt.complete(true)) == RestartAction::RestartAfterTimeout);
 
   UpdateProgressState wrapping;
   UpdateRestartCoordinator wrapRestart;
@@ -326,9 +281,5 @@ int main() {
   assert(server.find("webserver.end();") != std::string::npos);
   assert(server.find("websocket.closeAll(1001") != std::string::npos);
   assert(server.find("webserver.activeRequestCount()") != std::string::npos);
-  assert(server.find("mqttBeginUpdateShutdown();") != std::string::npos);
-  assert(server.find("mqttReady && webReady") != std::string::npos);
-  const std::string mqttSource = readSource("src/core/mqtt.cpp");
-  assert(mqttSource.find("mqttClient.disconnect(true);") != std::string::npos);
-  assert(mqttSource.find("updateShutdown.reconnectAllowed()") != std::string::npos);
+  assert(server.find("const bool networkReady = webReady;") != std::string::npos);
 }

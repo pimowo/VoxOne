@@ -10,19 +10,19 @@ using namespace voxone::config_restore;
 namespace {
 
 struct State {
-  int values[7];
+  int values[6];
 };
 
 bool same(const State& a, const State& b) {
-  for (unsigned i = 0; i < 7; ++i)
+  for (unsigned i = 0; i < 6; ++i)
     if (a.values[i] != b.values[i]) return false;
   return true;
 }
 
 struct DurableDevice {
-  State active{{1, 1, 1, 1, 1, 1, 1}};
+  State active{{1, 1, 1, 1, 1, 1}};
   State rollback{};
-  State candidate{{2, 2, 2, 2, 2, 2, 2}};
+  State candidate{{2, 2, 2, 2, 2, 2}};
   bool snapshot = false;
   bool staged = false;
   bool marker = false;
@@ -192,7 +192,7 @@ int main() {
     assert(transaction.begin());
     assert(!transaction.stage(dummyCandidate()));
     assert(transaction.rollback());
-    const State oldState{{1, 1, 1, 1, 1, 1, 1}};
+    const State oldState{{1, 1, 1, 1, 1, 1}};
     assert(same(device.active, oldState));
     assert(!device.marker && !device.staged && !device.snapshot);
   }
@@ -200,7 +200,7 @@ int main() {
   // Simulated process death at every durable operation. Before the marker the
   // old generation is untouched; with a marker, a new instance rolls it back.
   for (int oldScroll : {0, 1}) {
-    for (int cut = 1; cut <= 25; ++cut) {
+    for (int cut = 1; cut <= 24; ++cut) {
       DurableDevice device;
       device.active.values[static_cast<unsigned>(Component::Scroll)] = oldScroll;
       const State oldState = device.active;
@@ -228,7 +228,7 @@ int main() {
 
   // Every explicit failure after PREPARE is rolled back; failed recovery keeps
   // the marker so the next boot retries instead of accepting a mixed state.
-  for (int failure = 1; failure <= 25; ++failure) {
+  for (int failure = 1; failure <= 24; ++failure) {
     DurableDevice device;
     FakeBackend backend(device);
     backend.failAt = failure;
@@ -239,9 +239,9 @@ int main() {
       const bool committed = transaction.commit();
       if (!committed) transaction.rollback();
     } else if (began) transaction.rollback();
-    const State oldState{{1, 1, 1, 1, 1, 1, 1}};
+    const State oldState{{1, 1, 1, 1, 1, 1}};
     if (device.marker) recoverAfterCut(device, oldState);
-    if (failure == 25)
+    if (failure == 24)
       assert(same(device.active, device.candidate) && !device.marker);
     else
       assert(same(device.active, oldState));
@@ -265,7 +265,7 @@ int main() {
     assert(!firstBoot.recover());
     assert(device.marker);
 
-    const State oldState{{1, 1, 1, 1, 1, 1, 1}};
+    const State oldState{{1, 1, 1, 1, 1, 1}};
     recoverAfterCut(device, oldState);
   }
 

@@ -12,8 +12,6 @@
 #include "netserver.h"
 #include "system_operation_state.h"
 #include "player.h"
-#include "mqtt.h"
-#include "mqtt_config.h"
 #include "source_manager.h"
 #include "radio_source_policy.h"
 #include "network_diagnostics.h"
@@ -212,7 +210,6 @@ void MyNetwork::WiFiReconnected(WiFiEvent_t event, WiFiEventInfo_t info){
     network.beginReconnect = false;
     network.lostPlaying = false;
     Serial.println("##[WIFI-READY]# ready=1 updateBlocked=1");
-    mqttWifiConnected();
     return;
   }
   network.beginReconnect = false;
@@ -232,7 +229,6 @@ void MyNetwork::WiFiReconnected(WiFiEvent_t event, WiFiEventInfo_t info){
 #endif
   network.lostPlaying = false;
   Serial.println("##[WIFI-READY]# ready=1");
-  mqttWifiConnected();
 }
 
 void MyNetwork::WiFiLostConnection(WiFiEvent_t event, WiFiEventInfo_t info){
@@ -269,7 +265,6 @@ void MyNetwork::WiFiLostConnection(WiFiEvent_t event, WiFiEventInfo_t info){
   if (systemUpdateAudioBlocked()) {
     network.lostPlaying = false;
     network.beginReconnect = true;
-    mqttWifiDisconnected();
     return;
   }
   if(!network.beginReconnect){
@@ -291,7 +286,6 @@ void MyNetwork::WiFiLostConnection(WiFiEvent_t event, WiFiEventInfo_t info){
     transitionUiMode(LOST);
   }
   network.beginReconnect = true;
-  mqttWifiDisconnected();
 }
 
 void MyNetwork::activateStaAttempt(uint8_t profileIndex, uint8_t attempt,
@@ -570,8 +564,6 @@ void MyNetwork::begin() {
       MDNS.addServiceTxt("voxone", "tcp", "manufacturer", "VoxOne");
     }
   }
-  mqttInit();
-  
   Serial.println("##[BOOT]#\tdone");
   if(REAL_LEDBUILTIN!=255) digitalWrite(REAL_LEDBUILTIN, LOW);
   
@@ -614,9 +606,12 @@ void MyNetwork::raiseSoftAP() {
   deactivateStaAttempt();
   staReconnectEnabled = false;
   resetWifiReassociation();
-  char autoRoot[14];
-  if (mqttAutoRoot(autoRoot)) {
-    std::memcpy(apSsid + 7, autoRoot + 7, 7); // MAC6 plus terminator.
+  const String mac = WiFi.macAddress();
+  if (mac.length() == 17) {
+    unsigned output = 7;
+    for (unsigned input = 9; input < 17 && output < sizeof(apSsid) - 1; ++input)
+      if (mac[input] != ':') apSsid[output++] = mac[input];
+    apSsid[output] = '\0';
   } else {
     BOOTLOG("AP MAC read failed; using fallback SSID");
   }

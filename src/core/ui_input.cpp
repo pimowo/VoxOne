@@ -24,7 +24,7 @@ UiInputContext currentUiInputContext() {
   return {uiState.mode(), network.status == CONNECTED,
           capabilities.hasLocalDisplay(), capabilities.supportsVoxOneBt,
           bluetoothSelected, bluetoothConnected,
-          VOXONE_BT_TRANSPORT_UI_ENABLED != 0 &&
+          capabilities.supportsBtTransportUi &&
               display.supportsBluetoothTransportView()};
 }
 

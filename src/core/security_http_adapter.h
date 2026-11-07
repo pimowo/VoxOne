@@ -2,6 +2,7 @@
 #define VOXONE_SECURITY_HTTP_ADAPTER_H
 
 #include "security_access_policy.h"
+#include "build_capabilities.h"
 
 #include <stddef.h>
 #include <stdint.h>
@@ -10,19 +11,11 @@
 #define VOXONE_SECURITY_HTTP_ENFORCEMENT_TEST 0
 #endif
 
-#if defined(VOXONE_PROFILE_W0) || defined(VOXONE_PROFILE_M0) || \
-    defined(VOXONE_PROFILE_L0) || defined(VOXONE_PROFILE_S0) || \
-    defined(VOXONE_PROFILE_DIN0)
-#define VOXONE_SECURITY_STANDARD_PROFILE 1
-#else
-#define VOXONE_SECURITY_STANDARD_PROFILE 0
-#endif
-
 #ifndef VOXONE_SECURITY_HTTP_ENFORCEMENT
-// Every standard firmware profile enforces the reviewed HTTP/API/WebSocket
-// policy. The dedicated M0 HIL profile selects TEST first, which keeps the
-// production bit clear while exercising the same runtime gate.
-#if VOXONE_SECURITY_STANDARD_PROFILE && \
+// The build capability is profile-independent: new hardware profiles inherit
+// production enforcement automatically. A dedicated HIL build must opt out
+// explicitly while enabling the test gate.
+#if VOXONE_BUILD_IS_PRODUCTION_FIRMWARE && \
     !VOXONE_SECURITY_HTTP_ENFORCEMENT_TEST
 #define VOXONE_SECURITY_HTTP_ENFORCEMENT 1
 #else
@@ -42,10 +35,15 @@
 #error "Security HTTP enforcement cannot be both production and test"
 #endif
 
-#if VOXONE_SECURITY_STANDARD_PROFILE && \
+#if VOXONE_BUILD_IS_PRODUCTION_FIRMWARE && \
     !VOXONE_SECURITY_HTTP_ENFORCEMENT_TEST && \
     !VOXONE_SECURITY_HTTP_ENFORCEMENT
-#error "Standard VoxOne profiles require production HTTP enforcement"
+#error "Production firmware requires HTTP enforcement"
+#endif
+
+#if VOXONE_SECURITY_HTTP_ENFORCEMENT_TEST && \
+    VOXONE_BUILD_IS_PRODUCTION_FIRMWARE
+#error "Security test firmware must opt out of the production build capability"
 #endif
 
 namespace voxone {
@@ -58,7 +56,8 @@ enum class SecurityHttpEnforcementMode : uint8_t {
 };
 
 constexpr bool securityHttpProductionEnforcementEnabled() {
-  return VOXONE_SECURITY_HTTP_ENFORCEMENT != 0;
+  return voxone::build::buildCapabilities().isProductionFirmware &&
+         VOXONE_SECURITY_HTTP_ENFORCEMENT != 0;
 }
 
 constexpr bool securityHttpTestEnforcementEnabled() {

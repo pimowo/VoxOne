@@ -109,10 +109,6 @@ const SecurityRouteRule kRouteRules[] = {
     {SecurityAccessMethod::Post, "/api/stations/metadata",
      SecurityEndpoint::StationsMetadata, SecurityRouteClass::ProtectedRest,
      true, false},
-    {SecurityAccessMethod::Get, "/api/mqtt", SecurityEndpoint::MqttRead,
-     SecurityRouteClass::ProtectedRest, false, false},
-    {SecurityAccessMethod::Post, "/api/mqtt", SecurityEndpoint::MqttWrite,
-     SecurityRouteClass::ProtectedRest, true, false},
     {SecurityAccessMethod::Get, "/api/hardware", SecurityEndpoint::HardwareRead,
      SecurityRouteClass::ProtectedRest, false, false},
     {SecurityAccessMethod::Post, "/api/hardware",
@@ -334,8 +330,6 @@ const char* securityEndpointName(SecurityEndpoint endpoint) {
     case SecurityEndpoint::StationsDelete: return "stations-delete";
     case SecurityEndpoint::StationsReorder: return "stations-reorder";
     case SecurityEndpoint::StationsMetadata: return "stations-metadata";
-    case SecurityEndpoint::MqttRead: return "mqtt-read";
-    case SecurityEndpoint::MqttWrite: return "mqtt-write";
     case SecurityEndpoint::HardwareRead: return "hardware-read";
     case SecurityEndpoint::HardwareWrite: return "hardware-write";
     case SecurityEndpoint::ConfigBackup: return "config-backup";

@@ -91,10 +91,6 @@ const EndpointCase kEndpoints[] = {
      SecurityRouteClass::ProtectedRest, true, false},
     {SecurityAccessMethod::Post, "/api/stations/metadata", SecurityEndpoint::StationsMetadata,
      SecurityRouteClass::ProtectedRest, true, false},
-    {SecurityAccessMethod::Get, "/api/mqtt", SecurityEndpoint::MqttRead,
-     SecurityRouteClass::ProtectedRest, false, false},
-    {SecurityAccessMethod::Post, "/api/mqtt", SecurityEndpoint::MqttWrite,
-     SecurityRouteClass::ProtectedRest, true, false},
     {SecurityAccessMethod::Get, "/api/hardware", SecurityEndpoint::HardwareRead,
      SecurityRouteClass::ProtectedRest, false, false},
     {SecurityAccessMethod::Post, "/api/hardware", SecurityEndpoint::HardwareWrite,
@@ -252,11 +248,11 @@ void testCompleteEndpointInventory() {
     assert(std::strcmp(securityEndpointName(actual.endpoint), "unknown") != 0);
     assert(std::strcmp(securityRouteClassName(actual.routeClass), "unknown") != 0);
   }
-  assert(sizeof(kEndpoints) / sizeof(kEndpoints[0]) == 51);
+  assert(sizeof(kEndpoints) / sizeof(kEndpoints[0]) == 49);
 
   size_t ruleCount = 0;
   const SecurityRouteRule* rules = securityAccessRouteRules(ruleCount);
-  assert(rules != nullptr && ruleCount == 51);
+  assert(rules != nullptr && ruleCount == 49);
   for (size_t index = 0; index < ruleCount; ++index) {
     const SecurityRouteRule& rule = rules[index];
     assert(rule.path && rule.path[0] == '/');
@@ -448,7 +444,7 @@ void testProtectedOpenAndLockedPolicy() {
        SecurityRouteClass::ProtectedWeb, false, false},
       {SecurityAccessMethod::Get, "/api/stations", SecurityEndpoint::StationsSnapshot,
        SecurityRouteClass::ProtectedRest, false, false},
-      {SecurityAccessMethod::Post, "/api/mqtt", SecurityEndpoint::MqttWrite,
+      {SecurityAccessMethod::Post, "/api/hardware", SecurityEndpoint::HardwareWrite,
        SecurityRouteClass::ProtectedRest, true, false},
       {SecurityAccessMethod::WebSocketHandshake, "/ws", SecurityEndpoint::WebSocket,
        SecurityRouteClass::ProtectedWebSocket, false, false},
@@ -582,7 +578,7 @@ void testFailClosedUnknownAndMethodMismatch() {
       SecurityState::Open, SecurityAccessMethod::Get, "/api/new-read");
   assert(evaluateSecurityAccess(unknownRead) == SecurityAccessStatus::UnknownRoute);
   SecurityAccessRequest methodMismatch = request(
-      SecurityState::Open, SecurityAccessMethod::Get, "/api/mqtt");
+      SecurityState::Open, SecurityAccessMethod::Get, "/api/hardware");
   assert(evaluateSecurityAccess(methodMismatch) == SecurityAccessStatus::Allowed);
   methodMismatch.method = SecurityAccessMethod::Delete;
   methodMismatch.originPresent = true;
@@ -624,7 +620,7 @@ void testProductionInventoryAndHttpOnlyIntegration() {
       "webserver.on(\"/\", HTTP_ANY", "/api/stations/export",
       "/api/stations/import", "kStationsSnapshotRoute", "kDirectorySearchRoute",
       "/api/stations/add", "/api/stations/edit", "/api/stations/delete",
-      "/api/stations/reorder", "/api/stations/metadata", "/api/mqtt",
+      "/api/stations/reorder", "/api/stations/metadata",
       "/api/hardware", "kBackupRoute", "kRestoreRoute", "/api/time",
       "/api/time/sync", "kSecurityStateRoute", "kSecuritySetupRoute",
       "kSecurityLoginRoute", "kSecurityLogoutRoute", "kSecurityManageRoute",

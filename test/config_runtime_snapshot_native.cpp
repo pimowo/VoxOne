@@ -203,7 +203,6 @@ void testProductionBindings() {
   const std::string player = readFile("src/core/player.cpp");
   const std::string sourceManager = readFile("src/core/source_manager.cpp");
   const std::string netserver = readFile("src/core/netserver.cpp");
-  const std::string mqtt = readFile("src/core/mqtt.cpp");
   const std::string display = readFile("src/core/display.cpp");
   const std::string dsp = readFile("src/core/dsp_transport_runtime.cpp");
   const std::string audio = readFile("src/audioI2S/Audio.cpp");
@@ -236,8 +235,6 @@ void testProductionBindings() {
   assert(netserver.find("player.runtimeVolumeSnapshot()") !=
          std::string::npos);
   assert(netserver.find("const auto runtime = config.runtimeSnapshot();") !=
-         std::string::npos);
-  assert(mqtt.find("mqttUserToWire(player.outputSnapshot().userVolume)") !=
          std::string::npos);
   assert(display.find("const MuteOutputSnapshot output = player.outputSnapshot()") !=
          std::string::npos);

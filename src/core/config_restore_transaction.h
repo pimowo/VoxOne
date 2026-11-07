@@ -12,7 +12,7 @@ enum class Phase : uint8_t {
   Prepared = 1,
   ConfigWritten,
   HardwareWritten,
-  MqttWritten,
+  RetiredIntegrationWritten,
   UiWritten,
   WifiWritten,
   StationsWritten,
@@ -25,7 +25,6 @@ enum class Phase : uint8_t {
 enum class Component : uint8_t {
   Config,
   Hardware,
-  Mqtt,
   Ui,
   Scroll,
   Wifi,

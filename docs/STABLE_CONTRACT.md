@@ -86,7 +86,6 @@ trasy i metody; nieznana trasa kończy się `404`, znana trasa ze złą metodą
 | `POST /api/security/setup`, `/login`, `/logout`, `/manage` | Formularze security setup/login/logout oraz zarządzania ochroną; Host i same-origin są walidowane. Setup jest dozwolony tylko dla `legacy-unclaimed`; `manage` włącza hasło w OPEN, a jego zmiana lub wyłączenie w PROTECTED wymaga ważnej sesji. |
 | `GET /api/stations`, `/api/directory/search`, `/api/stations/export` | Odczyt stacji, Radio Directory i eksport. |
 | `POST /api/stations/import`, `/add`, `/edit`, `/delete`, `/reorder`, `/metadata` | Mutacje listy stacji. Import jest uploadem multipart i ma osobną walidację formatu. |
-| `GET/POST /api/mqtt` | Odczyt i zapis bieżącej konfiguracji MQTT. API nigdy nie zwraca zapisanego hasła; raportuje jedynie, czy hasło istnieje. |
 | `GET/POST /api/hardware` | Bieżąca konfiguracja runtime oraz zapis wspieranych wartości. Element `planned` w katalogu roadmapy nie staje się przez to selectable ani obsługiwany. Zapis wymagający zastosowania zwraca informację o restarcie. |
 | `GET /api/config/backup`, `POST /api/config/restore` | Strumieniowy backup `.vxcf` oraz transakcyjny restore z walidacją CRC, capability i kontrolowanym restartem dopiero po commit. |
 | `GET /api/time`, `POST /api/time/sync` | Lokalny czas systemu/RTC, interwały synchronizacji i ręczne żądanie NTP. Na profilu z RTC sync zwraca `202`, a zakończenie potwierdza wzrost `syncCount`; bez capability RTC żądanie zwraca `404 rtc_unsupported`. |
@@ -146,7 +145,8 @@ odpowiednio otwarte lub chronione. Starsze urządzenie z Wi-Fi, ale bez rekordu
 SECURITY, przechodzi do `legacy-unclaimed`: publiczny bootstrap WWW pozwala
 jawnie wybrać OPEN albo ustawić hasło, a dotychczasowa trasa Web Update
 pozostaje dostępna; chronione API i WebSocket nie są w tym stanie otwierane.
-MQTT zachowuje osobną politykę i nie korzysta z cookie HTTP.
+Discovery mDNS nie stanowi kanału sterowania ani autoryzacji. Integracja Home
+Assistant używa chronionego WebSocketu i tej samej polityki SECURITY co WWW.
 
 ## WebSocket
 
@@ -176,26 +176,18 @@ na dostarczenie i handshake, a potem dopuszcza wymuszone zamknięcie TCP jako
 fail-safe. Ma SOFTWARE PASS, lecz fizyczny HIL musi jeszcze potwierdzić odbiór
 i odpowiedź peer dla tej nowej ramki; sam fallback TCP nie jest 1013 PASS.
 
-## MQTT i Home Assistant
+## Home Assistant
 
-MQTT jest opcjonalnym bieżącym kontraktem pierwszego Stable. Konfiguracja
-obejmuje enabled, host, port, username, hasło oraz root topic. Root może być
-ustawiony jawnie albo automatycznie na podstawie pełnego MAC. Po uruchomieniu
-klient używa czterech tematów:
+Integracja Home Assistant używa WebSocketu `GET /ws` do sterowania i TTS oraz
+Zeroconf `_voxone._tcp.local.` do wykrywania. Po włączeniu
+`haDiscoveryEnabled` urządzenie publikuje usługi `_http._tcp` i
+`_voxone._tcp` na porcie 80. TXT zawiera `mac`, `name`, `model`, `version`,
+`host`, `security` i `manufacturer`. Wyłączenie flagi zachowuje rozwiązywanie
+hosta `<hostname>.local`, ale nie publikuje usług discovery.
 
-| Sufiks | Kierunek i dane |
-|---|---|
-| `command` | Subscribe QoS 2. Przyjmuje krótkie komendy sterujące, `volm`, `volp`, `turnon`, `turnoff`, `vol <n>`, `play <n>` oraz dłuższy URL jako temporary audio/TTS. |
-| `status` | Retained JSON: `status=1` wyłącznie dla rzeczywistego `PLAYING`, poza nim `status=0`; numer/nazwa stacji, metadata title oraz niezależne legacy `on=config.store.dspon`. `on` nie jest synonimem odtwarzania. |
-| `volume` | Retained poziom w kompatybilnej skali MQTT. |
-| `playlist` | Retained URL HTTP do `/data/stations.tsv`. |
-
-MQTT przestaje reconnectować i zamyka TCP przed restartem po update. Bieżąca
-integracja Home Assistant to odziedziczony kontrakt MQTT `ha_yoradio`; native
-HA, `_voxone._tcp`, config flow i wersjonowany model encji pozostają
-POST-STABLE. Legacy `turnoff` nadal wyłącza DSP/display, zatrzymuje player i
-zachowuje `smartstart`; `turnon` włącza DSP/display i uruchamia PLAY tylko przy
-`smartstart=1`. Fizyczna regresja MQTT/HA pozostaje wymagana przed Stable.
+Firmware nie zawiera klienta MQTT, konfiguracji brokera ani API MQTT. Stare
+dane w historycznym namespace `voxmqtt` nie są odczytywane; factory reset
+usuwa je wyłącznie jako bezpieczne czyszczenie po aktualizacji.
 
 ## RADIO, SourceManager i Bluetooth
 
@@ -263,7 +255,7 @@ kandydacie oraz pełny HIL TTS S0+BT pozostają otwarte.
 
 `POST /update` rozróżnia MAIN i SPIFFS, sprawdza nagłówek, deklarowany rozmiar,
 limit partycji i pełny rozmiar SPIFFS. Podczas update obowiązuje jeden globalny
-lock, audio jest zatrzymywane, a MQTT/HTTP/WS są wygaszane przed restartem.
+lock, audio jest zatrzymywane, a HTTP/WS są wygaszane przed restartem.
 Błąd lub abort wykonuje cleanup, nie uruchamia automatycznie audio i próbuje
 odzyskać filesystem. `update.html` przekierowuje do normalnego WWW, gdy jest
 ono dostępne; w przeciwnym razie używa osadzonego formularza emergency.
@@ -288,7 +280,7 @@ panelu, a jego awaria nie blokuje AP.
 przełączając OPEN → PROTECTED, używa istniejącego hashowanego rekordu i
 unieważnia sesje; po trwałym zapisie urządzenie automatycznie się restartuje.
 `POST /factory-reset` kasuje dane użytkownika z namespaces `eeprom`,
-`nvs.net80211`, `voxhw`, `voxmqtt`, `voxui`, `voxscroll`, `voxsecurity`,
+`nvs.net80211`, `voxhw`, legacy `voxmqtt`, `voxui`, `voxscroll`, `voxsecurity`,
 `voxrestore`, `voxfirstboot` i `voxupdate` oraz pliki Wi-Fi, playlist/stacji i
 stagingu restore w SPIFFS.
 Weryfikacja wymaga pustych danych użytkownika i zachowanego
@@ -329,13 +321,16 @@ layout, normalizują dane w RAM i zapisują v7 kontrolowanie. `lastUserVolume`,
 maximum/startup volume oraz `btEnabled` należą do v7. Runtime hardware ma
 osobny 10-bajtowy rekord z wersją i CRC. SECURITY używa osobnego rekordu NVS.
 
-Bieżący backup `.vxcf` schema 2 obejmuje Config v7, runtime hardware, MQTT,
+Bieżący backup `.vxcf` schema 2 obejmuje Config v7, runtime hardware,
 timeouty UI, ustawienia przewijania, `/data/wifi.csv` i
 `/data/stations.tsv`; restore zachowuje zgodność ze starszym schema 1. Restore
 najpierw waliduje całość, staging i marker transakcji, następnie commit,
 weryfikację i dopiero wtedy restart. Backup nie zawiera aktywnych sesji,
 transient MUTE, chwilowego źródła i playback, pełnego NVS, slotów aplikacji,
 `otadata`, eFuse ani firmware. Rekord SECURITY nie jest częścią `.vxcf`.
+Historyczny 388-bajtowy slot integracji pozostaje w formacie wyłącznie dla
+zgodności offsetów: nowy backup zapisuje w nim zera, a restore ignoruje jego
+zawartość i nie odtwarza poświadczeń MQTT.
 
 ## Kontrakt strefy czasowej — stan i propozycja
 

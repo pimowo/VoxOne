@@ -131,7 +131,7 @@ void testStrictHandshakeAndFakeUpgradeCannotBypassHttp() {
   const char* protectedPosts[] = {
       "/update", "/update/bt", "/api/config/restore",
       "/api/stations/import", "/api/time/sync", "/api/hardware",
-      "/api/mqtt", "/api/stations/add"};
+      "/api/stations/add"};
   unsigned writes = 0;
   for (const char* path : protectedPosts) {
     const std::string raw = std::string("POST ") + path +
@@ -480,8 +480,8 @@ void testProtectedRecoveryLoginSelection() {
 
 void testBuildSwitchIsMonotonic() {
 #if VOXONE_SECURITY_HTTP_ENFORCEMENT_TEST
-  static_assert(VOXONE_SECURITY_STANDARD_PROFILE,
-                "the dedicated test variant must retain an M0 profile");
+  static_assert(!voxone::build::buildCapabilities().isProductionFirmware,
+                "the dedicated test variant must opt out of production");
   static_assert(!securityHttpProductionEnforcementEnabled(),
                 "test variant must not advertise production enforcement");
   static_assert(securityHttpTestEnforcementEnabled(),
@@ -491,7 +491,9 @@ void testBuildSwitchIsMonotonic() {
   static_assert(securityHttpEnforcementMode() ==
                     SecurityHttpEnforcementMode::Test,
                 "test variant must report test enforcement");
-#elif VOXONE_SECURITY_STANDARD_PROFILE
+#else
+  static_assert(voxone::build::buildCapabilities().isProductionFirmware,
+                "ordinary builds must fail closed as production firmware");
   static_assert(securityHttpProductionEnforcementEnabled(),
                 "standard profiles must enable production enforcement");
   static_assert(!securityHttpTestEnforcementEnabled(),
@@ -501,12 +503,6 @@ void testBuildSwitchIsMonotonic() {
   static_assert(securityHttpEnforcementMode() ==
                     SecurityHttpEnforcementMode::Production,
                 "standard profiles must report production enforcement");
-#else
-  static_assert(!securityHttpEnforcementEnabled(),
-                "non-profile native builds must remain disabled");
-  static_assert(securityHttpEnforcementMode() ==
-                    SecurityHttpEnforcementMode::Disabled,
-                "non-profile native builds must report disabled enforcement");
 #endif
   static_assert(!securityHttpProductionEnforcementEnabled() ||
                     securityHttpEnforcementEnabled(),
@@ -514,6 +510,8 @@ void testBuildSwitchIsMonotonic() {
   const std::string platform = readFile("platformio.ini");
   assert(platform.find("[env:m0-security-test]") != std::string::npos);
   assert(platform.find("-DVOXONE_SECURITY_HTTP_ENFORCEMENT_TEST=1") !=
+         std::string::npos);
+  assert(platform.find("-DVOXONE_BUILD_IS_PRODUCTION_FIRMWARE=0") !=
          std::string::npos);
 }
 

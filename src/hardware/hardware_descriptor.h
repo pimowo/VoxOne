@@ -78,6 +78,7 @@ struct HardwareCapabilities {
   InputSupportMask supportedInputs;
   bool supportsLocalUi;
   bool supportsVoxOneBt;
+  bool supportsBtTransportUi;
   bool supportsBtAudioRx;
   bool supportsBtFirmwareUpdate;
   bool supportsRtc;

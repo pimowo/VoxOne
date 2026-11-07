@@ -31,10 +31,11 @@ Step TransactionStorage::commitStep() {
                      backend_.writeMarker(Phase::HardwareWritten)
                  ? Step::InProgress : Step::Failed;
     case Phase::HardwareWritten:
-      return backend_.apply(Component::Mqtt) &&
-                     backend_.writeMarker(Phase::MqttWritten)
+      // Marker schema 1 used this numeric checkpoint for a retired
+      // integration. Advance through it without touching legacy NVS data.
+      return backend_.writeMarker(Phase::RetiredIntegrationWritten)
                  ? Step::InProgress : Step::Failed;
-    case Phase::MqttWritten:
+    case Phase::RetiredIntegrationWritten:
       return backend_.apply(Component::Ui) &&
                      backend_.writeMarker(Phase::UiWritten)
                  ? Step::InProgress : Step::Failed;

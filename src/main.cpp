@@ -10,7 +10,6 @@
 #include "core/network.h"
 #include "core/netserver.h"
 #include "core/controls.h"
-//#include "core/mqtt.h"
 #include "core/optionschecker.h"
 #include "core/timekeeper.h"
 #include "core/bt_link.h"

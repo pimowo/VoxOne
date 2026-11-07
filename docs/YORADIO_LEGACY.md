@@ -35,7 +35,7 @@ Aktywne profile i capabilities opisuje teraz
 | src/IRremoteESP8266/ | Duża biblioteka IR odziedziczona z yoRadio | Źródła wyklucza build_src_filter; controls.cpp nadal ma warunkowe include dla IR_PIN | Sprawdzić plan obsługi IR, zależności i licencję przed decyzją o usunięciu | UNKNOWN |
 | src/GT911_Touchscreen/ i src/core/touchscreen.* | Opcjonalny dotyk | Nie w obecnych profilach: TS_MODEL_UNDEFINED | Ustalić przyszłe LCD/touch przed decyzją | UNKNOWN |
 | src/pluginsManager/, src/plugins/ | Hooki rozszerzeń setup/runtime | Tak: main.cpp wywołuje pm.on_setup/on_end_setup | Zachować hooki; później ocenić API i potrzebne pluginy | REFACTOR |
-| src/async-mqtt-client/ | Klient MQTT używany przez mqtt.cpp | Tak | Zachować do czasu osobnego audytu zależności | KEEP |
+| src/async-mqtt-client/ i mqtt.cpp | Historyczny klient MQTT | Nie: usunięty po przejściu integracji HA na mDNS i WebSocket | Brak kodu runtime; stary namespace NVS jest wyłącznie czyszczony przez factory reset | RETIRED |
 | Nazwy e2002/yoRadio w komentarzach i docs | Atrybucja i ślady pochodzenia kodu | Tak, dokumentacyjne | Zachować atrybucję; nie traktować komentarzy jako zbędnego kodu | KEEP |
 
 Dowody użycia: platformio.ini definiuje pięć aktywnych profili i wyklucza IRremoteESP8266; src/core/player.cpp wybiera AudioI2S, gdy VS1053_CS=255; src/core/display.cpp, src/displays/dspcore.h i widgets używają DSP_MODEL; src/core/controls.cpp używa enkodera; src/main.cpp wywołuje pluginsManager; src/core/netserver.cpp i security_access_policy.cpp definiują bieżący HTTP/API; src/core/options.h zawiera YOVERSION. Żadna pozycja UNKNOWN ani REMOVE_LATER nie jest zgodą na usunięcie w tym etapie.

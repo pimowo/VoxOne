@@ -74,9 +74,9 @@ int main() {
                   "SecurityHttpEnforcementMode::Production"));
   assert(contains(securityAdapter,
                   "SecurityHttpEnforcementMode::Test"));
-  assert(contains(securityAdapter, "VOXONE_SECURITY_STANDARD_PROFILE"));
+  assert(contains(securityAdapter, "VOXONE_BUILD_IS_PRODUCTION_FIRMWARE"));
   assert(contains(securityAdapter,
-                  "Standard VoxOne profiles require production HTTP enforcement"));
+                  "Production firmware requires HTTP enforcement"));
   assert(contains(platform,
                   "-DVOXONE_SECURITY_HTTP_ENFORCEMENT_TEST=1"));
 

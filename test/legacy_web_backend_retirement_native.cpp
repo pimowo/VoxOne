@@ -25,7 +25,6 @@ int main() {
   const auto server = readFile("src/core/netserver.cpp");
   const auto serverHeader = readFile("src/core/netserver.h");
   const auto commands = readFile("src/core/commandhandler.cpp");
-  const auto mqtt = readFile("src/core/mqtt.cpp");
   const auto config = readFile("src/core/config.cpp");
   const auto configHeader = readFile("src/core/config.h");
   const auto currentWeb = readFile("web-src/voxone.js");
@@ -62,14 +61,14 @@ int main() {
   assert(contains(server, "{SSIDS_PATH, \"wifi\"}"));
   assert(contains(server, "{INDEX_PATH, \"stidx\"}"));
 
-  // Current WWW, WebSocket, station API, MQTT, time and recovery remain.
+  // Current WWW, WebSocket, station API, time and recovery remain.
   assert(contains(server, "webserver.on(\"/\", HTTP_ANY, handleIndex)"));
   assert(contains(server, "serveStatic(\"/voxone.html\""));
   assert(contains(server, "AsyncWebSocket websocket(\"/ws\")"));
   assert(contains(server, "/api/stations/import"));
   assert(contains(server, "/api/stations/export"));
   assert(contains(server, "/api/stations/add"));
-  assert(contains(server, "/api/mqtt"));
+  assert(!contains(server, "/api/mqtt"));
   assert(contains(server, "/api/time"));
   assert(contains(server, "request->url()==\"/update\""));
   assert(contains(server, "request->url()==\"/emergency\""));
@@ -77,9 +76,8 @@ int main() {
   assert(contains(configHeader, "PLAYLIST_PATH"));
   assert(contains(currentWeb, "new WebSocket"));
 
-  // CommandHandler is shared by current WebSocket and MQTT, not retired.
+  // CommandHandler remains the current WebSocket command dispatcher.
   assert(contains(server, "cmd.exec(_wscmd, _wsval, clientId)"));
-  assert(contains(mqtt, "cmd.exec(buf, \"\")"));
   for (const char* command : {"\"start\"", "\"stop\"", "\"prev\"",
                               "\"next\"", "\"volume\""})
     assert(contains(commands, command));

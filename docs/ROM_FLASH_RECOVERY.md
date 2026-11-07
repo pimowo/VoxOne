@@ -56,7 +56,7 @@ bootloadera, tablicy i `otadata`, ale są one osadzone i zahashowane w
 są substytutem dokładnych komponentów wcześniej wdrożonego obrazu.
 
 NVS nie jest artefaktem release. Jedynym dokładnym źródłem NVS, konfiguracji,
-SECURITY, Wi-Fi/MQTT i stanu OTA konkretnego urządzenia jest jego pełny raw
+SECURITY, Wi-Fi i stanu OTA konkretnego urządzenia jest jego pełny raw
 backup. VXCF pozostaje obowiązkowym logicznym zabezpieczeniem, ale nie zawiera
 SECURITY, sesji, slotów aplikacji ani `otadata`.
 

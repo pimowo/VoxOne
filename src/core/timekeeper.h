@@ -8,7 +8,6 @@ void _syncTask(void * pvParameters);
 enum class DelayedActionSlot : uint8_t {
   REBOOT,
   SLEEP,
-  MQTT,
   COUNT
 };
 

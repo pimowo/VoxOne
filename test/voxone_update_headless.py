@@ -116,9 +116,6 @@ window.btTransportRequests = [];
 window.btUpdateResponses = [];
 window.hardwareRequests = [];
 window.hardwarePostResponses = [];
-window.mqttRequests = [];
-window.mqttSnapshot = {enabled:true,host:'mqtt.local',port:1883,username:'voxone',
-  passwordSet:true,rootTopic:'',effectiveRoot:'voxone/l0'};
 window.timeRequests = 0;
 window.configBackupRequests = 0;
 window.configDownloadedName = '';
@@ -299,12 +296,6 @@ window.fetch = (url, options = {}) => {
     const result = {ok:true, changed:true, restartRequired:true,
       config:{display:request.display,input:request.input,audio:request.audio}};
     return Promise.resolve({ok:true,status:200,json:() => Promise.resolve(result)});
-  }
-  if (url === '/api/mqtt') {
-    window.mqttRequests.push(options);
-    if ((options.method || 'GET') === 'GET')
-      return Promise.resolve({ok:true,status:200,json:() => Promise.resolve({...window.mqttSnapshot})});
-    return Promise.resolve({ok:true,status:200,json:() => Promise.resolve({ok:true,restartRequired:true})});
   }
   if (url === '/api/time') {
     window.timeRequests++;
@@ -800,7 +791,7 @@ setTimeout(async () => {
     check([...get('system').querySelectorAll('h3')].some(node => node.textContent === 'VoxOneBT'), 'VoxOneBT system card');
     check([...get('system').querySelectorAll('h3')].some(node => node.textContent === 'Backup konfiguracji'),
       'backup card visible');
-    check(get('system').textContent.includes('hasła Wi-Fi/MQTT'), 'backup secrets warning');
+    check(get('system').textContent.includes('hasła Wi-Fi'), 'backup secrets warning');
     get('config-backup-button').click();
     await new Promise(resolve => setTimeout(resolve, 0));
     check(configBackupRequests === 1 && configDownloadedName === 'VoxOne-0.8.0-backup.vxcf' &&
@@ -874,20 +865,8 @@ setTimeout(async () => {
     window.dispatchEvent(new Event('hashchange'));
     await settleSecurity();
     check(btTestSocket.sent.some(item => item === 'getsystem=1'), 'network snapshot requested on Settings');
-    check(get('mqtt-enabled').checked && get('mqtt-host').value === 'mqtt.local' &&
-      get('mqtt-port').value === '1883' && get('mqtt-username').value === 'voxone',
-      'existing MQTT form loads its current configuration');
-    check(get('mqtt-password').value === '' &&
-      get('mqtt-password-state').textContent.includes('Hasło zapisane'),
-      'MQTT password remains write-only');
-    get('mqtt-form').requestSubmit();
-    await settleSecurity();
-    const mqttPost = mqttRequests.find(request => request.method === 'POST');
-    const mqttBody = new URLSearchParams(mqttPost?.body || '');
-    check(!!mqttPost && mqttBody.get('host') === 'mqtt.local' &&
-      !mqttBody.has('password') && !mqttBody.has('clearPassword') &&
-      get('mqtt-feedback').textContent.includes('Konfiguracja zapisana'),
-      'existing MQTT save preserves an undisclosed password');
+    check(!get('mqtt-form') && !get('mqtt-enabled'),
+      'retired MQTT configuration is absent from Settings');
     check(timeRequests > 0 && get('rtc-card').hidden,
       'RTC card follows the unsupported capability response');
     location.hash = '#update';
@@ -1958,15 +1937,13 @@ def main():
            "websocketHandshake" in http_adapter_header and \
            "validateBinding" in route, \
         "SECURITY-ENFORCE-1C must enforce handshake and live WS bindings"
-    for profile in ("W0", "M0", "L0", "S0", "DIN0"):
-        assert f"defined(VOXONE_PROFILE_{profile})" in http_adapter_header, \
-            f"production enforcement must cover {profile}"
-    assert "VOXONE_SECURITY_STANDARD_PROFILE" in http_adapter_header and \
+    assert "VOXONE_BUILD_IS_PRODUCTION_FIRMWARE" in http_adapter_header and \
            "!VOXONE_SECURITY_HTTP_ENFORCEMENT_TEST" in http_adapter_header and \
-           "Standard VoxOne profiles require production HTTP enforcement" \
+           "Production firmware requires HTTP enforcement" \
            in http_adapter_header, \
-        "standard profile enforcement must be mandatory and distinct from test"
+        "production capability enforcement must be mandatory and distinct from test"
     assert "[env:m0-security-test]" in platformio and \
+           "-DVOXONE_BUILD_IS_PRODUCTION_FIRMWARE=0" in platformio and \
            "-DVOXONE_SECURITY_HTTP_ENFORCEMENT_TEST=1" in platformio, \
         "dedicated M0 enforcement test profile is missing"
     recovery_match = re.search(

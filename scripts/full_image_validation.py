@@ -203,10 +203,14 @@ def context_from_environment(
     test_security = _value_enabled(
         definitions.get("VOXONE_SECURITY_HTTP_ENFORCEMENT_TEST", 0)
     )
+    production_capability = _value_enabled(
+        definitions.get("VOXONE_BUILD_IS_PRODUCTION_FIRMWARE", 1)
+    )
     explicit_production = definitions.get("VOXONE_SECURITY_HTTP_ENFORCEMENT")
-    production_security = not test_security
+    production_security = production_capability and not test_security
     if explicit_production is not None:
-        production_security = _value_enabled(explicit_production)
+        production_security = (production_capability and
+                               _value_enabled(explicit_production))
     if production_security and test_security:
         raise ValidationError("SECURITY cannot be production and test")
     build_identity = environment.get("VOXONE_BUILD_SHA_VALUE")

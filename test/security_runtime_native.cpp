@@ -132,7 +132,6 @@ void testProductionStartupOrderAndIsolation() {
   const std::string mainSource = readFile("src/main.cpp");
   const std::string networkSource = readFile("src/core/network.cpp");
   const std::string serverSource = readFile("src/core/netserver.cpp");
-  const std::string mqttSource = readFile("src/core/mqtt.cpp");
 
   const size_t configInit = mainSource.find("config.init();");
   const size_t networkBegin = mainSource.find("network.begin();");
@@ -145,17 +144,13 @@ void testProductionStartupOrderAndIsolation() {
   const size_t sessionInit =
       networkSource.find("deviceSecuritySessionService()");
   const size_t wifiStart = networkSource.find("setWifiParams();");
-  const size_t mqttStart = networkSource.find("mqttInit();");
   assert(wifiInventory != std::string::npos &&
          securityInit != std::string::npos &&
-         sessionInit != std::string::npos && wifiStart != std::string::npos &&
-         mqttStart != std::string::npos);
+         sessionInit != std::string::npos && wifiStart != std::string::npos);
   assert(wifiInventory < securityInit && securityInit < sessionInit &&
-         sessionInit < wifiStart &&
-         securityInit < mqttStart);
+         sessionInit < wifiStart);
 
   assert(serverSource.find("security_runtime.h") == std::string::npos);
-  assert(mqttSource.find("security_runtime.h") == std::string::npos);
   assert(networkSource.find("enforcement=%s") != std::string::npos);
   assert(networkSource.find("securityHttpEnforcementModeName(") !=
          std::string::npos);
