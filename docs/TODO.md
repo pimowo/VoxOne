@@ -4,7 +4,7 @@ Ten plik jest jedyną kanoniczną listą otwartych prac w projekcie. Zawiera wy�
 zadania niewykonane albo wymagające fizycznej weryfikacji. Historia zakończonych
 checkpointów pozostaje w historii Git i w istniejących raportach.
 
-## 1. HIL PENDING (1.1.x — do fizycznego przetestowania przez użytkownika)
+## 1. HIL PENDING (do fizycznego przetestowania przez użytkownika)
 
 - [ ] Zweryfikować przycisk zasilania na L0 (GPIO42) i S0 (GPIO3): krótki
   klik (Wakeup/Mute, wejście w podmenu lub wybór pozycji), dwuklik (otwarcie
@@ -19,13 +19,45 @@ checkpointów pozostaje w historii Git i w istniejących raportach.
 - [ ] Zweryfikować mapowanie pinów na nowym profilu DIN0 po zmianie `I2S_LRC`
   na GPIO9.
 - [ ] Fizycznie podłączyć i przetestować przekaźnik dla trybu Hard Power.
+- [ ] Po implementacji LINE OUT sprawdzić na L0 i S0: stały poziom wyjścia,
+  oddzielne zapamiętywanie nastawy, napis `LINE`, konfigurację w WWW i menu
+  oraz automatyczny AVRCP Absolute Volume z rzeczywistym źródłem Bluetooth.
+- [ ] Po implementacji Local Files podłączyć kartę microSD i sprawdzić
+  stabilność odtwarzania przy współdzieleniu SPI z wyświetlaczem i osobnym CS.
+- [ ] Po implementacji przeglądarki DLNA sprawdzić na `minidlna` gesty: długi
+  klik — wejście, klik — folder lub utwór, dwuklik — katalog nadrzędny.
+- [ ] Po implementacji DSPmini przetestować posiadany moduł ADAU1701, w tym
+  crossover, Parametric EQ, subwoofer i Loudness.
+- [ ] Po implementacji AUX przetestować posiadany moduł PCM1808 i przełączanie
+  źródła analogowego.
+- [ ] Po implementacji W5500 sprawdzić Ethernet na SPI3 profilu L0 pod
+  obciążeniem audio.
+- [ ] Po dodaniu wyjścia klasy D zweryfikować poziomy i mute z rzeczywistą
+  zewnętrzną końcówką mocy.
+- [ ] Po implementacji VoxOnePilot sprawdzić ESP32-C3 z WebSocket i odbiornikiem
+  IR.
+- [ ] Po implementacji VoxOneBT sprawdzić naprzemienne tryby A2DP RX/TX.
+- [ ] Po dodaniu LCD ST7920 sprawdzić renderowanie i obsługę urządzenia na tym
+  ekranie.
+- [ ] Po wdrożeniu Snapcast sprawdzić słyszalną synchronizację kilku urządzeń z
+  serwerem OMV.
+
 ## 2. Wersja 1.2.0 (UI / UX / Sterowanie)
 
+- [ ] Zaimplementować tryb LINE OUT: stały poziom wyjścia, oddzielną zapisaną
+  nastawę, blokadę zwykłej regulacji, ekran `LINE`, ustawienia WWW/menu i AVRCP
+  Absolute Volume dla Bluetooth.
+- [ ] Dodać trzy tryby enkodera: Normalny (głośność), Odwrócony (stacje) oraz
+  Tylko stacje (bez regulacji głośności), z poprawnym zachowaniem LINE OUT.
+- [ ] Ujednolicić gesty: w Menu obrót/klik/dwuklik/długi klik odpowiadają za
+  nawigację/wybór/wstecz/wyjście, a dwuklik w Playerze przełącza źródła.
 - [ ] Rozbudować działający szkielet Menu na TFT i OLED o pełne ekrany
   konfiguracji oraz odczyt i zapis ustawień; zachować obsługę enkoderem.
+- [ ] Dodać docelowe widoki `HOME`, `STATIONS`, `SETTINGS`, `UPDATE` i
+  `STANDBY`, zachowując kontekstową górną belkę i układy TFT/OLED.
 - [ ] Dodać lokalną konfigurację Wi-Fi za pomocą enkodera i ekranu urządzenia.
-- [ ] Zintegrować VoxOnePilot: obsłużyć zewnętrzny pilot przez WebSocket i dodać
-  odbiornik IR w radiu.
+- [ ] Zintegrować VoxOnePilot na ESP32-C3: obsłużyć sterowanie przez WebSocket
+  oraz odbiór poleceń z pilota IR.
 - [ ] Przekształcić obecny interfejs WWW w Progressive Web App, z możliwością
   instalacji i ikoną na telefonie.
 - [ ] Dodać opcjonalną obsługę ekranu LCD ST7920 w późniejszym etapie rozwoju.
@@ -33,16 +65,26 @@ checkpointów pozostaje w historii Git i w istniejących raportach.
 ## 3. Wersja 1.3.0+ (Audio / Sprzęt / Sieć)
 
 - [ ] DSPmini: obsłużyć ADAU1701 przez I2C, dodać konfigurację do WWW oraz
-  Parametric EQ, Crossover, wyjście subwoofera, Loudness i AutoEQ.
+  Parametric EQ, Crossover, wyjście subwoofera, Loudness i AutoEQ; wykorzystać
+  posiadany moduł do testów HIL.
 - [ ] W5500 Ethernet: dodać obsługę przewodowego internetu na profilu L0 przez
-  SPI.
+  dedykowaną magistralę SPI3.
 - [ ] DLNA / UPnP: rozbudować PoC SSDP + ContentDirectory Browse o nawigację
-  w UI, wybór źródła i odtwarzanie plików z telefonu lub NAS przez `minidlna`.
+  w UI, wybór źródła, odtwarzanie przez `minidlna` oraz gesty długi klik —
+  wejście, klik — folder/utwór i dwuklik — powrót wyżej.
 - [ ] AUX: dodać wejście analogowe oparte na PCM1808 i zintegrować je z wyborem
-  źródła.
+  źródła; wykorzystać posiadany moduł do testów HIL.
+- [ ] Local Files: dodać odtwarzanie z karty microSD na SPI współdzielonym z
+  wyświetlaczem, z osobnym pinem CS i bez zakłócania renderowania.
+- [ ] Ujednolicić docelową matrycę źródeł w SourceManagerze i UI: WEB Radio,
+  Bluetooth, Home Assistant `SOURCE_HA` z metadanymi, DLNA, AUX i Local Files;
+  Spotify zachować jako późniejsze rozszerzenie.
 - [ ] A2DP Transmitter: dodać naprzemienne tryby RX/TX w VoxOneBT, bez ich
   jednoczesnej pracy.
-- [ ] Multiroom: dodać zsynchronizowane odtwarzanie na wielu urządzeniach.
+- [ ] Dodać wyjście do zewnętrznej końcówki mocy klasy D i opisać wymagania
+  profili sprzętowych.
+- [ ] Multiroom: dodać klienta Snapcast i zsynchronizowane odtwarzanie na wielu
+  urządzeniach z wykorzystaniem serwera OMV.
 - [ ] Zaprojektować przyszłe rewizje sprzętowe L1, M1, S1 i DIN1.
 - [ ] Ocenić i opisać zakres większego wariantu VoxOne XL.
 - [ ] FLAC Optimization: przeprowadzić test HIL strumieni FLAC o wysokim
