@@ -6,9 +6,10 @@ checkpointów pozostaje w historii Git i w istniejących raportach.
 
 ## 1. HIL PENDING (1.1.x — do fizycznego przetestowania przez użytkownika)
 
-- [ ] Zweryfikować przycisk zasilania na L0 (GPIO42) i S0 (GPIO3): długie
-  naciśnięcie, sekwencję wyłączania „Do widzenia!”, zatrzymanie normalnego
-  odświeżania oraz wygaszenie ekranu z ochroną OLED.
+- [ ] Zweryfikować przycisk zasilania na L0 (GPIO42) i S0 (GPIO3): krótki
+  klik (Wakeup/Mute), dwuklik (log placeholdera Menu), długie naciśnięcie,
+  sekwencję wyłączania „Do widzenia!”, zatrzymanie normalnego odświeżania
+  oraz wygaszenie ekranu z ochroną OLED.
 - [ ] Fizycznie przetestować TTS z Home Assistant i wybór źródła, w tym powrót
   do wcześniej używanego źródła po zakończeniu komunikatu.
 - [ ] Zweryfikować mapowanie pinów na nowym profilu DIN0 po zmianie `I2S_LRC`
@@ -17,8 +18,6 @@ checkpointów pozostaje w historii Git i w istniejących raportach.
 
 ## 2. Wersja 1.2.0 (UI / UX / Sterowanie)
 
-- [ ] Rozbudować obsługę przycisku zasilania: krótki klik — Mute, dwuklik —
-  Menu, długi klik — On/Off.
 - [ ] Stworzyć pełne menu konfiguracji na urządzeniu dla TFT i OLED, obsługiwane
   enkoderem.
 - [ ] Zintegrować VoxOnePilot: obsłużyć zewnętrzny pilot przez WebSocket i dodać

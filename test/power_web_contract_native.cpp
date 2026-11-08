@@ -39,5 +39,14 @@ int main() {
   assert(manager.find("config.setDspOn(false, false)") == std::string::npos);
   assert(manager.find("if (!standby() && !shutdownNotice_) return;") !=
          std::string::npos);
+  assert(manager.find("ButtonEvent::BUTTON_CLICK") != std::string::npos);
+  assert(manager.find("if (standby()) wakeup();") != std::string::npos);
+  assert(manager.find("else player.toggleMute();") != std::string::npos);
+  assert(manager.find("ButtonEvent::BUTTON_DOUBLE_CLICK") !=
+         std::string::npos);
+  assert(manager.find("Double click - Menu placeholder") !=
+         std::string::npos);
+  assert(manager.find("ButtonEvent::BUTTON_LONG_PRESS") != std::string::npos);
+  assert(manager.find("beginShutdown();") != std::string::npos);
   return 0;
 }

@@ -131,6 +131,7 @@ function Assert-WebAssets {
  Write-Host '  seven gzip assets and manifest match web-src'
 }
 $nativeSources=@{
+ button_handler_native=@('src/core/button_handler.cpp')
  bt_a2dp_transport_contract_native=@('src/core/bt_link_protocol.cpp')
  bt_link_native=@('src/core/bt_link_protocol.cpp')
  bt_loss_audio_safety_native=@('src/core/bt_link_protocol.cpp')

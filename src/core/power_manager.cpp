@@ -1,6 +1,7 @@
 #include "power_manager.h"
 
 #include <Arduino.h>
+#include <esp_log.h>
 
 #include "options.h"
 #include "config.h"
@@ -10,6 +11,8 @@
 #include "update_progress.h"
 
 namespace {
+constexpr char kTag[] = "PowerManager";
+
 bool powerButtonPressed() {
   return POWER_BUTTON_PIN >= 0 && digitalRead(POWER_BUTTON_PIN) == LOW;
 }
@@ -36,12 +39,14 @@ void PowerManager::loop() {
   if (wakeRequested_.exchange(false, std::memory_order_acq_rel)) wakeup();
 
   if (POWER_BUTTON_PIN >= 0) {
-    const auto gesture = button_.update(powerButtonPressed(), nowMs);
+    const auto event = button_.update(powerButtonPressed(), nowMs);
     if (!updateLockActive() && !shutdownNotice_) {
-      if (gesture == voxone::power::ButtonGesture::ShortPress) {
+      if (event == voxone::power::ButtonEvent::BUTTON_CLICK) {
         if (standby()) wakeup();
         else player.toggleMute();
-      } else if (gesture == voxone::power::ButtonGesture::LongPress &&
+      } else if (event == voxone::power::ButtonEvent::BUTTON_DOUBLE_CLICK) {
+        ESP_LOGI(kTag, "Double click - Menu placeholder");
+      } else if (event == voxone::power::ButtonEvent::BUTTON_LONG_PRESS &&
                  !standby()) {
         beginShutdown();
       }
