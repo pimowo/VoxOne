@@ -19,6 +19,9 @@ checkpointów pozostaje w historii Git i w istniejących raportach.
 - [ ] Zweryfikować mapowanie pinów na nowym profilu DIN0 po zmianie `I2S_LRC`
   na GPIO9.
 - [ ] Fizycznie podłączyć i przetestować przekaźnik dla trybu Hard Power.
+- [ ] Zweryfikować PoC DLNA z rzeczywistym serwerem `minidlna`: wykrywanie
+  SSDP oraz wynik głównego katalogu przez `/api/dlna/browse?parent=0` i
+  odpytywanie zwróconego identyfikatora zadania.
 
 ## 2. Wersja 1.2.0 (UI / UX / Sterowanie)
 
@@ -37,8 +40,8 @@ checkpointów pozostaje w historii Git i w istniejących raportach.
   Parametric EQ, Crossover, wyjście subwoofera, Loudness i AutoEQ.
 - [ ] W5500 Ethernet: dodać obsługę przewodowego internetu na profilu L0 przez
   SPI.
-- [ ] DLNA / UPnP: umożliwić odtwarzanie z sieci lokalnej, między innymi
-  z telefonu i NAS, z wykorzystaniem `minidlna`.
+- [ ] DLNA / UPnP: rozbudować PoC SSDP + ContentDirectory Browse o nawigację
+  w UI, wybór źródła i odtwarzanie plików z telefonu lub NAS przez `minidlna`.
 - [ ] AUX: dodać wejście analogowe oparte na PCM1808 i zintegrować je z wyborem
   źródła.
 - [ ] A2DP Transmitter: dodać naprzemienne tryby RX/TX w VoxOneBT, bez ich

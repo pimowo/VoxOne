@@ -56,6 +56,7 @@
 #include "station_directory.h"
 #include "station_directory_format.h"
 #include "station_directory_routes.h"
+#include "../network/dlna_client.h"
 #include "netserver.h"
 #include "netserver_backpressure.h"
 #include "player.h"
@@ -245,6 +246,7 @@ void handleUpload(AsyncWebServerRequest *request, String filename, size_t index,
 void handleStationsRead(AsyncWebServerRequest *request);
 void handleStationsReadSnapshot(AsyncWebServerRequest *request);
 void handleStationDirectorySearch(AsyncWebServerRequest *request);
+void handleDlnaBrowse(AsyncWebServerRequest *request);
 void handleStationsMutation(AsyncWebServerRequest *request);
 void handleStationMetadata(AsyncWebServerRequest *request);
 void handleStationsExport(AsyncWebServerRequest *request);
@@ -1078,6 +1080,7 @@ bool NetServer::begin(bool quiet) {
                handleStationsImportUpload);
   webserver.on(stationDirectory::kStationsSnapshotRoute, HTTP_GET, handleStationsReadSnapshot);
   webserver.on(stationDirectory::kDirectorySearchRoute, HTTP_GET, handleStationDirectorySearch);
+  webserver.on(voxone::dlna::kBrowseRoute, HTTP_GET, handleDlnaBrowse);
   webserver.on("/api/stations/add", HTTP_POST, handleStationsMutation);
   webserver.on("/api/stations/edit", HTTP_POST, handleStationsMutation);
   webserver.on("/api/stations/delete", HTTP_POST, handleStationsMutation);
@@ -1713,6 +1716,58 @@ void handleStationDirectorySearch(AsyncWebServerRequest* request) {
                   query.c_str(), country.c_str(), limit);
     stationsReply(request, 202,
                   String(R"({"status":"pending","job":)") + job + "}");
+  }
+}
+
+void handleDlnaBrowse(AsyncWebServerRequest* request) {
+  if (request->hasParam("job")) {
+    const String jobText = request->getParam("job")->value();
+    char* end = nullptr;
+    const unsigned long parsed = strtoul(jobText.c_str(), &end, 10);
+    if (!jobText.length() || !end || *end || !parsed || parsed > UINT32_MAX) {
+      stationsReply(request, 400, R"({"error":"bad_job"})");
+      return;
+    }
+    int status = 0;
+    String body;
+    bool ready = false;
+    if (!voxone::dlna::pollBrowse(static_cast<uint32_t>(parsed), status,
+                                 body, ready)) {
+      stationsReply(request, 404, R"({"error":"job_not_found"})");
+      return;
+    }
+    stationsReply(request, status, body);
+    return;
+  }
+
+  const String parent = request->hasParam("parent")
+                            ? request->getParam("parent")->value()
+                            : String("0");
+  if (!voxone::dlna::validObjectId(parent.c_str())) {
+    stationsReply(request, 400, R"({"error":"bad_parent"})");
+    return;
+  }
+  uint32_t job = 0;
+  const voxone::dlna::StartResult result =
+      voxone::dlna::startBrowse(parent.c_str(), job);
+  switch (result) {
+    case voxone::dlna::StartResult::Busy:
+      stationsReply(request, 429, R"({"error":"dlna_busy"})");
+      break;
+    case voxone::dlna::StartResult::Offline:
+      stationsReply(request, 503, R"({"error":"offline"})");
+      break;
+    case voxone::dlna::StartResult::NoMemory:
+      stationsReply(request, 503, R"({"error":"insufficient_memory"})");
+      break;
+    case voxone::dlna::StartResult::Started:
+      Serial.printf("##[DLNA]# browse parent=%s job=%lu\n", parent.c_str(),
+                    static_cast<unsigned long>(job));
+      stationsReply(request, 202,
+                    String(R"({"status":"pending","job":)") + job +
+                        R"(,"poll":"/api/dlna/browse?job=)" + job +
+                        R"("})");
+      break;
   }
 }
 namespace {
