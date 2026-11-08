@@ -9,7 +9,7 @@ namespace yamaha_tft {
 constexpr int16_t kWidth = 480;
 constexpr int16_t kHeight = 320;
 constexpr uint16_t kBackground = 0x0000;  // #000000
-constexpr uint16_t kCyan = 0x073f;        // #00E5FF in RGB565
+constexpr uint16_t kAmber = 0xfd80;        // #FFB000 in RGB565
 constexpr int16_t kTopBarBottom = 54;
 constexpr int16_t kContentTop = 70;
 constexpr int16_t kVolumeTop = 244;

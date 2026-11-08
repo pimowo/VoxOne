@@ -38,8 +38,8 @@ int main() {
   static_assert(voxone::yamaha_tft::kHeight == 320, "TFT height changed");
   static_assert(voxone::yamaha_tft::kBackground == 0x0000,
                 "Yamaha background must be pure black");
-  static_assert(voxone::yamaha_tft::kCyan == 0x073f,
-                "Yamaha cyan must encode #00E5FF");
+  static_assert(voxone::yamaha_tft::kAmber == 0xfd80,
+                "Yamaha amber must encode #FFB000");
   assert(voxone::yamaha_tft::boundedSignalLevel(9) == 4);
   return 0;
 }

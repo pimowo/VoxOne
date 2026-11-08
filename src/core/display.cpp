@@ -1940,33 +1940,46 @@ void Display::_start() {
     return;
   }
   _buildPager();
+  _bootStep = 2;
+  _renderedMode = PLAYER;
+  const bool yamahaPlayer =
+#if VOXONE_DISPLAY_COMPILES_ST7796
+      _yamahaTftActive();
+#else
+      false;
+#endif
 #if VOXONE_DISPLAY_PROFILE == VOXONE_DISPLAY_PROFILE_ST7796_480X320
-  if (!smallOledActive() && !_playerScrollCoreEnabled())
+  if (!yamahaPlayer && !smallOledActive() && !_playerScrollCoreEnabled())
     _st7796ScrollMode(true);
 #endif
-  _renderedMode = PLAYER;
   config.setTitle(LANG::const_PlReady);
 
-  if(_vuwidget) _vuwidget->lock();
-  if(_rssi)     _setRSSI(WiFi.RSSI());
-  #ifndef HIDE_IP
+  if (!yamahaPlayer) {
+    if(_vuwidget) _vuwidget->lock();
+    if(_rssi)     _setRSSI(WiFi.RSSI());
+#ifndef HIDE_IP
     if(_volip) {
       if (smallOledActive()) _volip->setText(config.ipToStr(WiFi.localIP()));
       else _volip->setText(config.ipToStr(WiFi.localIP()), iptxtFmt);
     }
-  #endif
+#endif
 #if VOXONE_DISPLAY_PROFILE == VOXONE_DISPLAY_PROFILE_ST7789_284X76
-  if(_volip) _volip->lock();
+    if(_volip) _volip->lock();
 #endif
-  _pager->setPage(pages[PG_PLAYER]);
-  _playerScrollEnter(millis());
-  _volume();
-  _station();
+    _pager->setPage(pages[PG_PLAYER]);
+    _playerScrollEnter(millis());
+    _volume();
+    _station();
 #if VOXONE_DISPLAY_PROFILE == VOXONE_DISPLAY_PROFILE_ST7796_480X320
-  if (!smallOledActive()) _updatePlaybackStatus();
+    if (!smallOledActive()) _updatePlaybackStatus();
 #endif
-  _time(false);
-  _bootStep = 2;
+    _time(false);
+  }
+#if VOXONE_DISPLAY_COMPILES_ST7796
+  else {
+    _yamahaDrawn = false;
+  }
+#endif
 }
 
 void Display::_showDialog(const char *title){
@@ -2043,16 +2056,25 @@ void Display::_updateUpdateScreen(const UpdateProgressSnapshot& snapshot) {
 
 void Display::_renderMode(displayMode_e newmode) {
   if (newmode == _renderedMode) return;
+  const displayMode_e previousMode = _renderedMode;
   if (_playerScrollCoreEnabled() && _renderedMode == PLAYER &&
       newmode != PLAYER)
     _playerScrollLeave();
+  _renderedMode = newmode;
+  const bool yamahaPlayer =
+#if VOXONE_DISPLAY_COMPILES_ST7796
+      _yamahaTftActive();
+#else
+      false;
+#endif
 #if VOXONE_DISPLAY_PROFILE == VOXONE_DISPLAY_PROFILE_ST7796_480X320
   if (!smallOledActive() && !_playerScrollCoreEnabled()) {
-    if (_renderedMode == PLAYER && newmode != PLAYER) _st7796ScrollMode(false);
-    else if (_renderedMode != PLAYER && newmode == PLAYER) _st7796ScrollMode(true);
+    if (previousMode == PLAYER && newmode != PLAYER)
+      _st7796ScrollMode(false);
+    else if (!yamahaPlayer && previousMode != PLAYER && newmode == PLAYER)
+      _st7796ScrollMode(true);
   }
 #endif
-  _renderedMode = newmode;
 #if VOXONE_DISPLAY_PROFILE == VOXONE_DISPLAY_PROFILE_ST7789_284X76
   if(_volip) _volip->lock(newmode == PLAYER);
   if(_rssi) _rssi->lock(newmode == VOL);
@@ -2062,25 +2084,32 @@ void Display::_renderMode(displayMode_e newmode) {
 #endif
   dsp.setScrollId(NULL);
   if (newmode == PLAYER) {
-    if(activeSourceVuVisible())
-      if(clockMove.width<0) _clock->moveBack(); else _clock->moveTo(clockMove);
-    else
-      _clock->moveBack();
+    if (!yamahaPlayer) {
+      if(activeSourceVuVisible())
+        if(clockMove.width<0) _clock->moveBack(); else _clock->moveTo(clockMove);
+      else
+        _clock->moveBack();
     #ifdef META_MOVE
-      _meta->moveBack();
+        _meta->moveBack();
     #endif
-    _meta->setAlign(metaConf.widget.align);
-    _station();
+      _meta->setAlign(metaConf.widget.align);
+      _station();
 #if VOXONE_DISPLAY_PROFILE == VOXONE_DISPLAY_PROFILE_ST7789_284X76
-    _st7789Station->setText(config.station.name);
+      _st7789Station->setText(config.station.name);
 #endif
-    _nums->setText("");
-    config.isScreensaver = false;
-    _pager->setPage(pages[PG_PLAYER]);
-    _playerScrollEnter(millis());
+      _nums->setText("");
+      _pager->setPage(pages[PG_PLAYER]);
+      _playerScrollEnter(millis());
 #if VOXONE_DISPLAY_PROFILE == VOXONE_DISPLAY_PROFILE_ST7796_480X320
-    if (!smallOledActive()) _updatePlaybackStatus();
+      if (!smallOledActive()) _updatePlaybackStatus();
 #endif
+    }
+#if VOXONE_DISPLAY_COMPILES_ST7796
+    else {
+      _yamahaDrawn = false;
+    }
+#endif
+    config.isScreensaver = false;
     config.setDspOn(config.runtimeSnapshot().dspOn, false);
   }
   if (newmode == SCREENSAVER || newmode == SCREENBLANK) {
@@ -2176,7 +2205,7 @@ void Display::_renderMode(displayMode_e newmode) {
 
 #if VOXONE_DISPLAY_COMPILES_ST7796
 bool Display::_yamahaTftActive() const {
-  return _renderedMode == PLAYER && !smallOledActive() &&
+  return _bootStep == 2 && _renderedMode == PLAYER && !smallOledActive() &&
          config.runtimeSnapshot().tftTheme == THEME_YAMAHA;
 }
 
@@ -2212,11 +2241,13 @@ void Display::render_yamaha_tft() {
   if (_yamahaDrawn && signature == _yamahaSignature) return;
 
   using namespace voxone::yamaha_tft;
+  // Yamaha owns the whole physical frame. The signature gate above prevents
+  // unchanged frames from being cleared and redrawn on every display tick.
   dsp.clearClipping();
   dsp.fillScreen(kBackground);
   dsp.setFont();
   dsp.setTextWrap(false);
-  dsp.setTextColor(kCyan, kBackground);
+  dsp.setTextColor(kAmber, kBackground);
 
   auto printLine = [](const char* text, int16_t left, int16_t top,
                       int16_t width, int16_t height, uint8_t size) {
@@ -2229,7 +2260,7 @@ void Display::render_yamaha_tft() {
     dsp.clearClipping();
   };
 
-  dsp.drawFastHLine(0, kTopBarBottom, kWidth, kCyan);
+  dsp.drawFastHLine(0, kTopBarBottom, kWidth, kAmber);
   dsp.setTextSize(3);
   dsp.setCursor(14, 16);
   dsp.print(view.source == DisplaySourceKind::Bluetooth ? "BT" : "RADIO");
@@ -2242,9 +2273,9 @@ void Display::render_yamaha_tft() {
     const int16_t left = 402 + index * 17;
     const int16_t top = 45 - barHeight;
     if (index < signal)
-      dsp.fillRect(left, top, 11, barHeight, kCyan);
+      dsp.fillRect(left, top, 11, barHeight, kAmber);
     else
-      dsp.drawRect(left, top, 11, barHeight, kCyan);
+      dsp.drawRect(left, top, 11, barHeight, kAmber);
   }
 
   printLine(view.station, 16, kContentTop, 448, 42, 4);
@@ -2254,7 +2285,7 @@ void Display::render_yamaha_tft() {
   if (view.artist[0] && view.title[0])
     printLine(view.artist, 18, 202, 444, 28, 2);
 
-  dsp.drawRect(0, kVolumeTop, kWidth, kHeight - kVolumeTop, kCyan);
+  dsp.drawRect(0, kVolumeTop, kWidth, kHeight - kVolumeTop, kAmber);
   dsp.setTextSize(5);
   dsp.setCursor(18, 262);
   if (view.muted) {
@@ -2511,10 +2542,19 @@ void Display::loop() {
       false;
 #endif
 #if VOXONE_DISPLAY_COMPILES_ST7796
+  if (!_yamahaWasActive && yamahaTft) _yamahaDrawn = false;
   if (_yamahaWasActive && !yamahaTft) {
     _yamahaDrawn = false;
     if (_renderedMode == PLAYER) {
       dsp.fillScreen(config.theme.background);
+      _station();
+      _title(false);
+      _volume();
+      _layoutChange(activeSourceVuVisible());
+#if VOXONE_DISPLAY_PROFILE == VOXONE_DISPLAY_PROFILE_ST7796_480X320
+      if (!smallOledActive()) _updatePlaybackStatus();
+#endif
+      _time(false);
       _pager->setPage(pages[PG_PLAYER], true);
     }
   }
@@ -2533,7 +2573,7 @@ void Display::loop() {
   }
   if (!yamahaTft) _pager->loop();
 #if VOXONE_DISPLAY_PROFILE == VOXONE_DISPLAY_PROFILE_ST7796_480X320
-  if (_bootStep == 2) {
+  if (!yamahaTft && _bootStep == 2) {
     PlayerDisplayView view{};
     capturePlayerDisplayView(view, WiFi.RSSI());
     if (_st7796Volume) _st7796Volume->setDacMuted(dacMute.logicalMuted());
@@ -2547,9 +2587,6 @@ void Display::loop() {
 #endif
   requestParams_t request;
   if(xQueueReceive(displayQueue, &request, DSP_QUEUE_TICKS)){
-#if VOXONE_DISPLAY_COMPILES_ST7796
-    if (yamahaTft) _yamahaDrawn = false;
-#endif
     switch (request.type){
         case NEWMODE: {
           _renderMode((displayMode_e)request.payload);
@@ -2563,22 +2600,41 @@ void Display::loop() {
         case RESETIDLE: break;
         case CLOSEPLAYLIST: player.sendCommand({PR_PLAY, request.payload}); break;
         case CLOCK: 
-          if(_renderedMode==PLAYER || _renderedMode==SCREENSAVER) _time(request.payload==1);
+          if(!yamahaTft && (_renderedMode==PLAYER || _renderedMode==SCREENSAVER))
+            _time(request.payload==1);
           break;
         case NEWTITLE:
-          if (!systemUpdateAudioBlocked()) { _title(); _layoutChange(activeSourceVuVisible()); }
+          if (!systemUpdateAudioBlocked()) {
+            if (!yamahaTft) {
+              _title();
+              _layoutChange(activeSourceVuVisible());
+            } else {
+              PlayerDisplayView view{};
+              capturePlayerDisplayView(view, WiFi.RSSI());
+              if (view.source != DisplaySourceKind::Bluetooth &&
+                  player_on_track_change)
+                player_on_track_change();
+            }
+          }
           break;
         case NEWSTATION:
           if (systemUpdateAudioBlocked()) break;
-          _station();
+          if (!yamahaTft) _station();
 #if VOXONE_DISPLAY_PROFILE == VOXONE_DISPLAY_PROFILE_ST7789_284X76 || VOXONE_DISPLAY_PROFILE == VOXONE_DISPLAY_PROFILE_ST7796_480X320 || VOXONE_DISPLAY_PROFILE_IS_SMALL_OLED
           if(_renderedMode==STATIONS && _plplaying) _plplaying->setText(player.isRunning() && uiState.selectedStation() == config.lastStation() ? "GRA" : "");
 #endif
           break;
-        case NEXTSTATION: _drawNextStationNum(request.payload); break;
-        case DRAWPLAYLIST: _drawPlaylist(); break;
-        case DRAWVOL: _volume(); break;
+        case NEXTSTATION:
+          if (!yamahaTft) _drawNextStationNum(request.payload);
+          break;
+        case DRAWPLAYLIST:
+          if (!yamahaTft) _drawPlaylist();
+          break;
+        case DRAWVOL:
+          if (!yamahaTft) _volume();
+          break;
         case DBITRATE: {
+          if (yamahaTft) break;
 #if VOXONE_DISPLAY_PROFILE == VOXONE_DISPLAY_PROFILE_ST7789_284X76 || VOXONE_DISPLAY_PROFILE == VOXONE_DISPLAY_PROFILE_ST7796_480X320 || VOXONE_DISPLAY_PROFILE_IS_SMALL_OLED
             PlayerDisplayView view{};
             capturePlayerDisplayView(view, WiFi.RSSI());
@@ -2608,7 +2664,7 @@ void Display::loop() {
           }
           break;
         case SHOWVUMETER: {
-          if(_vuwidget){
+          if(!yamahaTft && _vuwidget){
             _layoutChange(activeSourceVuVisible());
           }
           break;
@@ -2636,33 +2692,37 @@ void Display::loop() {
           break;
         }
         case DSPRSSI:
-          if(_rssi) _setRSSI(request.payload);
+          if(!yamahaTft && _rssi) _setRSSI(request.payload);
 #if VOXONE_DISPLAY_COMPILES_SMALL_OLED
           if(smallOledActive() && oled128x32PlayerStatus)
             oled128x32PlayerStatus->setWifiRssi(request.payload);
 #endif
           break;
         case PSTART:
-          _layoutChange(activeSourceVuVisible());
+          if (!yamahaTft) _layoutChange(activeSourceVuVisible());
 #if VOXONE_DISPLAY_PROFILE_IS_SMALL_OLED
           if (_renderedMode == PLAYER) _station();
 #endif
 #if VOXONE_DISPLAY_PROFILE == VOXONE_DISPLAY_PROFILE_ST7796_480X320
-          _station();
-          if (!smallOledActive()) _updatePlaybackStatus();
+          if (!yamahaTft) {
+            _station();
+            if (!smallOledActive()) _updatePlaybackStatus();
+          }
 #endif
 #if VOXONE_DISPLAY_PROFILE == VOXONE_DISPLAY_PROFILE_ST7789_284X76 || VOXONE_DISPLAY_PROFILE == VOXONE_DISPLAY_PROFILE_ST7796_480X320 || VOXONE_DISPLAY_PROFILE_IS_SMALL_OLED
           if(_renderedMode==STATIONS && _plplaying) _plplaying->setText(uiState.selectedStation() == config.lastStation() ? "GRA" : "");
 #endif
           break;
         case PSTOP:
-          _layoutChange(activeSourceVuVisible());
+          if (!yamahaTft) _layoutChange(activeSourceVuVisible());
 #if VOXONE_DISPLAY_PROFILE_IS_SMALL_OLED
           if (_renderedMode == PLAYER) _station();
 #endif
 #if VOXONE_DISPLAY_PROFILE == VOXONE_DISPLAY_PROFILE_ST7796_480X320
-          _station();
-          if (!smallOledActive()) _updatePlaybackStatus();
+          if (!yamahaTft) {
+            _station();
+            if (!smallOledActive()) _updatePlaybackStatus();
+          }
 #endif
 #if VOXONE_DISPLAY_PROFILE == VOXONE_DISPLAY_PROFILE_ST7789_284X76 || VOXONE_DISPLAY_PROFILE == VOXONE_DISPLAY_PROFILE_ST7796_480X320 || VOXONE_DISPLAY_PROFILE_IS_SMALL_OLED
           if(_renderedMode==STATIONS && _plplaying) _plplaying->setText("");
@@ -2671,7 +2731,7 @@ void Display::loop() {
         case DSP_START: _start();  break;
         case NEWIP: {
           #ifndef HIDE_IP
-            if(_volip) {
+            if(!yamahaTft && _volip) {
               if (smallOledActive())
                 _volip->setText(config.ipToStr(WiFi.localIP()));
               else
@@ -2700,12 +2760,19 @@ void Display::loop() {
     portEXIT_CRITICAL(&displayVolumeMux);
     if(drawVolume){
       _lastVolumeDraw = now;
+#if VOXONE_DISPLAY_COMPILES_ST7796
+      if (!_yamahaTftActive()) _volume();
+#else
       _volume();
+#endif
     }
   }
 
 #if VOXONE_DISPLAY_COMPILES_ST7796
-  if (_yamahaTftActive()) render_yamaha_tft();
+  if (_yamahaTftActive()) {
+    render_yamaha_tft();
+    _yamahaWasActive = true;
+  }
 #endif
   dsp.loop();
 /*
@@ -2759,7 +2826,7 @@ char *split(char *str, const char *delim) {
   return dmp + strlen(delim);
 }
 
-void Display::_title() {
+void Display::_title(bool notifyTrackChange) {
 #if VOXONE_DISPLAY_PROFILE == VOXONE_DISPLAY_PROFILE_ST7789_284X76 || VOXONE_DISPLAY_PROFILE == VOXONE_DISPLAY_PROFILE_ST7796_480X320 || VOXONE_DISPLAY_PROFILE_IS_SMALL_OLED
 #if VOXONE_DISPLAY_PROFILE == VOXONE_DISPLAY_PROFILE_ST7796_480X320
   if (!smallOledActive()) _updatePlaybackStatus();
@@ -2806,7 +2873,8 @@ void Display::_title() {
     }
   }
 #endif
-  if (view.source != DisplaySourceKind::Bluetooth && player_on_track_change)
+  if (notifyTrackChange && view.source != DisplaySourceKind::Bluetooth &&
+      player_on_track_change)
     player_on_track_change();
 #else
   if (strlen(config.station.title) > 0) {
@@ -2830,7 +2898,7 @@ void Display::_title() {
     _title1->setText("");
     if (_title2) _title2->setText("");
   }
-  if (player_on_track_change) player_on_track_change();
+  if (notifyTrackChange && player_on_track_change) player_on_track_change();
 #endif
 }
 

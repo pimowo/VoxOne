@@ -229,7 +229,7 @@ class Display {
     void _renderMode(displayMode_e newmode);
     void _drawPlaylist();
     void _volume();
-    void _title();
+    void _title(bool notifyTrackChange = true);
     void _station();
     void _drawNextStationNum(uint16_t num);
     void _createDspTask();

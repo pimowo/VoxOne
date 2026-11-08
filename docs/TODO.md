@@ -745,7 +745,6 @@ Obecna sekcja AUDIO jest zaakceptowana i nie wymaga zmian w kategorii A.
   buildy i historię, ale jego fizyczny HIL nie blokuje Stable 1.0.0.
 - [HARDWARE][SOFTWARE PASS][S0/L0 HIL PENDING] Fizycznie zweryfikować oficjalne logo startowe na obowiązkowych S0 i L0, odpowiednio na baseline'owym SSD1306 oraz ST7796. Software baseline z `assets/branding` zachowuje pasek postępu i SSID, nie dodaje opóźnienia ani alokacji dynamicznych, używa 1-bitowej bitmapy OLED oraz RGB565-RLE dla TFT i ma pełny gate PASS. Historyczne lub przyszłe próby SSD1309 128×64 i ST7789 284×76 na M0/W0 pozostają nieblokujące.
 - [POST-STABLE] Zastosować wspólny `assets/branding` później w README/GitHub.
-- [POST-STABLE] Rozważyć opcjonalną skórkę YAMAHA AMBER: czarne tło i jeden bursztynowy kolor, punkt startowy `#FF9A1F` / RGB565 `0xFCC3`.
 - [DECISION] Rozstrzygnąć zakres dalszego wsparcia ST7789 284×76 na rodzinie Wx.
 - [POST-STABLE] Uporządkować duplikację `_charSize` w widgetach tylko przy pracy nad rendererem; nie robić osobnego refaktoru bez korzyści testowej.
 - [HARDWARE] Ocenić opcjonalny czujnik światła dopiero po ustaleniu docelowych PCB i display.
