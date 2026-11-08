@@ -7,6 +7,7 @@
 #include "config.h"
 #include "display.h"
 #include "player.h"
+#include "ui_menu.h"
 #include "ui_state.h"
 #include "update_progress.h"
 
@@ -42,13 +43,26 @@ void PowerManager::loop() {
     const auto event = button_.update(powerButtonPressed(), nowMs);
     if (!updateLockActive() && !shutdownNotice_) {
       if (event == voxone::power::ButtonEvent::BUTTON_CLICK) {
-        if (standby()) wakeup();
-        else player.toggleMute();
+        if (uiMenu.visible()) {
+          uiMenu.handle(voxone::ui_menu::MenuCommand::SELECT);
+          ESP_LOGI(kTag, "Selected: %s", uiMenu.selectedLabel());
+        } else if (standby()) {
+          wakeup();
+        } else {
+          player.toggleMute();
+        }
       } else if (event == voxone::power::ButtonEvent::BUTTON_DOUBLE_CLICK) {
-        ESP_LOGI(kTag, "Double click - Menu placeholder");
-      } else if (event == voxone::power::ButtonEvent::BUTTON_LONG_PRESS &&
-                 !standby()) {
-        beginShutdown();
+        if (uiMenu.open()) {
+          if (!transitionUiMode(MENU)) uiMenu.close();
+          else ESP_LOGI(kTag, "Menu opened");
+        }
+      } else if (event == voxone::power::ButtonEvent::BUTTON_LONG_PRESS) {
+        if (uiMenu.visible()) {
+          uiMenu.handle(voxone::ui_menu::MenuCommand::CLOSE);
+          transitionUiMode(PLAYER);
+        } else if (!standby()) {
+          beginShutdown();
+        }
       }
     }
   }

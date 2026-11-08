@@ -21,6 +21,7 @@
 #include "update_bar_render_state.h"
 #include "station_selection_view.h"
 #include "timekeeper.h"
+#include "ui_menu.h"
 #include "../displays/dspcore.h"
 #include "../displays/widgets/widgets.h"
 #include "../displays/widgets/pages.h"
@@ -166,6 +167,81 @@ static const char* runtimeEqPresetLabel() {
 }
 
 DspCore dsp;
+
+class UiMenuWidget : public Widget {
+ public:
+  UiMenuWidget() { Widget::init({0, 0, 1, WA_LEFT}, 0xFFFF, 0x0000); }
+
+  void loop() override {
+    if (!_active) return;
+    const auto menu = uiMenu.snapshot();
+    if (menu.revision != revision_) render(menu);
+  }
+
+ private:
+  uint32_t revision_ = UINT32_MAX;
+
+  void _draw() override {
+    if (!_active) return;
+    render(uiMenu.snapshot());
+  }
+
+  void _clear() override {
+    dsp.fillScreen(config.theme.background);
+  }
+
+  void render(const voxone::ui_menu::MenuSnapshot& menu) {
+    const uint16_t width = dsp.width();
+    const uint16_t height = dsp.height();
+    const bool oled = width <= 128 && height <= 64;
+    const uint16_t background = oled ? 0x0000 : config.theme.background;
+    const uint16_t foreground = oled ? 0xFFFF : config.theme.meta;
+    const bool compact = height <= 76;
+    const uint8_t titleSize = compact ? 1 : (width >= 400 ? 3 : 2);
+    const uint8_t itemSize = compact ? 1 : (height >= 200 ? 2 : 1);
+    const uint16_t contentTop = height <= 32 ? 0 : (compact ? 12 : 68);
+    const uint16_t rowHeight =
+        (height - contentTop) / voxone::ui_menu::UiMenu::kItemCount;
+    const uint16_t horizontalMargin = oled ? 0 : (width >= 300 ? 36 : 8);
+    const uint16_t rowWidth = width - horizontalMargin * 2;
+
+    dsp.fillScreen(background);
+    dsp.setFont();
+    if (contentTop != 0) {
+      const char* title = menu.state == voxone::ui_menu::MenuState::EDITING
+                              ? "MENU *"
+                              : "MENU";
+      const uint16_t titleWidth =
+          static_cast<uint16_t>(strlen(title) * CHARWIDTH * titleSize);
+      dsp.setTextSize(titleSize);
+      dsp.setTextColor(foreground, background);
+      dsp.setCursor((width - titleWidth) / 2, compact ? 1 : 20);
+      dsp.print(title);
+    }
+
+    for (uint8_t index = 0;
+         index < voxone::ui_menu::UiMenu::kItemCount; ++index) {
+      const bool selected = index == menu.selectedIndex;
+      const uint16_t top = contentTop + index * rowHeight;
+      const uint16_t selectedBackground = foreground;
+      const uint16_t selectedForeground = background;
+      if (selected) {
+        dsp.fillRect(horizontalMargin, top, rowWidth, rowHeight,
+                     selectedBackground);
+        dsp.drawRect(horizontalMargin, top, rowWidth, rowHeight, foreground);
+      }
+      dsp.setTextSize(itemSize);
+      dsp.setTextColor(selected ? selectedForeground : foreground,
+                       selected ? selectedBackground : background);
+      const uint16_t textHeight = itemSize * CHARHEIGHT;
+      const uint16_t textTop =
+          top + (rowHeight > textHeight ? (rowHeight - textHeight) / 2 : 0);
+      dsp.setCursor(horizontalMargin + (oled ? 4 : 12), textTop);
+      dsp.print(voxone::ui_menu::itemLabel(index));
+    }
+    revision_ = menu.revision;
+  }
+};
 
 #if VOXONE_DISPLAY_COMPILES_SMALL_OLED
 static bool oled128x32Active() { return dsp.height() == 32; }
@@ -1712,6 +1788,10 @@ void Display::_buildPager(){
   }
 #endif
   for(const auto& p: pages) _pager->addPage(p);
+  _menuPage = new Page();
+  _menuWidget = new UiMenuWidget();
+  _menuPage->addWidget(_menuWidget);
+  _pager->addPage(_menuPage);
   #if VOXONE_DISPLAY_PROFILE == VOXONE_DISPLAY_PROFILE_ST7796_480X320
   if (!smallOledActive()) {
     _pager->addPage(_btTransportPage);
@@ -2298,6 +2378,9 @@ void Display::_renderMode(displayMode_e newmode) {
     _pager->setPage( pages[PG_PLAYLIST]);
     _plcurrent->setText("");
     _drawPlaylist();
+  }
+  if (newmode == MENU && _menuPage) {
+    _pager->setPage(_menuPage, true);
   }
 #if VOXONE_DISPLAY_PROFILE == VOXONE_DISPLAY_PROFILE_ST7796_480X320
   if (!smallOledActive() && newmode == BT_TRANSPORT) {

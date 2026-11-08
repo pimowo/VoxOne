@@ -7,6 +7,7 @@
 #include "display.h"
 #include "network.h"
 #include "source_manager.h"
+#include "ui_menu.h"
 #include "ui_timeout_config.h"
 #include "update_display_view.h"
 #include "../hardware/hardware_descriptor.h"
@@ -65,6 +66,7 @@ bool requestUiMode(displayMode_e requested) {
 
 bool transitionUiMode(displayMode_e requested) {
   if (!requestUiMode(requested)) return false;
+  if (requested != MENU && uiMenu.visible()) uiMenu.close();
   display.queueModeRender(requested);
   return true;
 }

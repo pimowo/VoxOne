@@ -6,10 +6,38 @@
 #include "network.h"
 #include "player.h"
 #include "source_manager.h"
+#include "ui_menu.h"
 #include "ui_state.h"
 #include "../hardware/hardware_descriptor.h"
 
+#include <esp_log.h>
+
 namespace {
+
+constexpr char kUiInputTag[] = "UiInput";
+
+bool dispatchMenuInput(UiInputEvent event, int8_t steps) {
+  if (!uiMenu.visible()) return false;
+
+  using voxone::ui_menu::MenuAction;
+  using voxone::ui_menu::MenuCommand;
+  MenuAction action = MenuAction::NONE;
+  if (event == UiInputEvent::Left) {
+    action = uiMenu.handle(MenuCommand::PREVIOUS, steps);
+  } else if (event == UiInputEvent::Right) {
+    action = uiMenu.handle(MenuCommand::NEXT, steps);
+  } else if (event == UiInputEvent::Ok) {
+    action = uiMenu.handle(MenuCommand::SELECT);
+  } else if (event == UiInputEvent::Long ||
+             event == UiInputEvent::VeryLong) {
+    action = uiMenu.handle(MenuCommand::CLOSE);
+  }
+
+  if (action == MenuAction::SELECTED)
+    ESP_LOGI(kUiInputTag, "Selected: %s", uiMenu.selectedLabel());
+  if (action == MenuAction::CLOSED) transitionUiMode(PLAYER);
+  return true;
+}
 
 UiInputContext currentUiInputContext() {
   const auto& capabilities = voxone::hardware::hardwareCapabilities();
@@ -72,6 +100,7 @@ void moveStation(bool next) {
 }  // namespace
 
 void dispatchUiInput(UiInputEvent event, int8_t steps) {
+  if (dispatchMenuInput(event, steps)) return;
   const UiInputDecision decision = resolveUiInput(currentUiInputContext(), event);
   if (decision.cancelNumberEntry) {
     uiState.clearPendingStationNumber();

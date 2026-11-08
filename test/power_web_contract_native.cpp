@@ -40,12 +40,12 @@ int main() {
   assert(manager.find("if (!standby() && !shutdownNotice_) return;") !=
          std::string::npos);
   assert(manager.find("ButtonEvent::BUTTON_CLICK") != std::string::npos);
-  assert(manager.find("if (standby()) wakeup();") != std::string::npos);
-  assert(manager.find("else player.toggleMute();") != std::string::npos);
+  assert(manager.find("else if (standby())") != std::string::npos);
+  assert(manager.find("player.toggleMute();") != std::string::npos);
   assert(manager.find("ButtonEvent::BUTTON_DOUBLE_CLICK") !=
          std::string::npos);
-  assert(manager.find("Double click - Menu placeholder") !=
-         std::string::npos);
+  assert(manager.find("uiMenu.open()") != std::string::npos);
+  assert(manager.find("transitionUiMode(MENU)") != std::string::npos);
   assert(manager.find("ButtonEvent::BUTTON_LONG_PRESS") != std::string::npos);
   assert(manager.find("beginShutdown();") != std::string::npos);
   return 0;

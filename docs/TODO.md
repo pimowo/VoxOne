@@ -7,9 +7,10 @@ checkpointów pozostaje w historii Git i w istniejących raportach.
 ## 1. HIL PENDING (1.1.x — do fizycznego przetestowania przez użytkownika)
 
 - [ ] Zweryfikować przycisk zasilania na L0 (GPIO42) i S0 (GPIO3): krótki
-  klik (Wakeup/Mute), dwuklik (log placeholdera Menu), długie naciśnięcie,
-  sekwencję wyłączania „Do widzenia!”, zatrzymanie normalnego odświeżania
-  oraz wygaszenie ekranu z ochroną OLED.
+  klik (Wakeup/Mute lub wybór w Menu), dwuklik (otwarcie Menu), długie
+  naciśnięcie (zamknięcie Menu albo shutdown), nawigację enkoderem bez zmiany
+  głośności przy otwartym Menu, renderowanie na TFT/OLED, sekwencję wyłączania
+  „Do widzenia!” oraz wygaszenie ekranu z ochroną OLED.
 - [ ] Fizycznie przetestować TTS z Home Assistant i wybór źródła, w tym powrót
   do wcześniej używanego źródła po zakończeniu komunikatu.
 - [ ] Zweryfikować mapowanie pinów na nowym profilu DIN0 po zmianie `I2S_LRC`
@@ -18,8 +19,8 @@ checkpointów pozostaje w historii Git i w istniejących raportach.
 
 ## 2. Wersja 1.2.0 (UI / UX / Sterowanie)
 
-- [ ] Stworzyć pełne menu konfiguracji na urządzeniu dla TFT i OLED, obsługiwane
-  enkoderem.
+- [ ] Rozbudować działający szkielet Menu na TFT i OLED o pełne ekrany
+  konfiguracji oraz odczyt i zapis ustawień; zachować obsługę enkoderem.
 - [ ] Zintegrować VoxOnePilot: obsłużyć zewnętrzny pilot przez WebSocket i dodać
   odbiornik IR w radiu.
 - [ ] Przekształcić obecny interfejs WWW w Progressive Web App, z możliwością

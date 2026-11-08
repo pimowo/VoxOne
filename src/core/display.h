@@ -120,6 +120,7 @@ class VuWidget;
 class NumWidget;
 class ClockWidget;
 class TextWidget;
+class UiMenuWidget;
 #if VOXONE_DISPLAY_COMPILES_ST7796
 class St7796VolumeWidget;
 class St7796UpdateProgressWidget;
@@ -181,6 +182,8 @@ class Display {
     ClockWidget *_clock;
     Page *_boot;
     Page *_shutdownPage = nullptr;
+    Page *_menuPage = nullptr;
+    UiMenuWidget *_menuWidget = nullptr;
     TextWidget *_bootstring, *_volip, *_voltxt, *_rssi, *_bitrate;
 #if VOXONE_DISPLAY_COMPILES_ST7796
     TextWidget *_btTransportPlayback;
