@@ -97,8 +97,9 @@ inline void makePlayerDisplayView(PlayerDisplayView& out,
   out.wifiLevel = playerWifiLevel(rssi);
   out.sampleRate = source.sampleRate;
   out.audioInfo = selectDisplayAudioInfo(source, radioBitrate, radioFormat);
-  out.audioCodecLabel = out.audioInfo.bluetooth ? out.audioInfo.top
-                                                : displayRadioFormatLabel(out.audioInfo.radioFormat);
+  out.audioCodecLabel = source.kind == DisplaySourceKind::Radio
+                            ? displayRadioFormatLabel(out.audioInfo.radioFormat)
+                            : out.audioInfo.top;
   formatDisplayAudioInfo(out.audioText, sizeof(out.audioText), source,
                          radioBitrate, radioFormat);
 
@@ -106,7 +107,8 @@ inline void makePlayerDisplayView(PlayerDisplayView& out,
   const char* title = "";
   char radioArtist[170]{};
   char radioTitle[170]{};
-  if (source.kind == DisplaySourceKind::Bluetooth) {
+  if (source.kind == DisplaySourceKind::Bluetooth ||
+      source.kind == DisplaySourceKind::HomeAssistant) {
     artist = source.artist;
     title = source.title;
   } else if (rawRadioMetadata && rawRadioMetadata[0]) {

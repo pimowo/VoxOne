@@ -1,5 +1,6 @@
 #include "../src/core/temporary_audio_state.h"
 #include "../src/core/temporary_audio_url.h"
+#include "../src/core/temporary_audio_request.h"
 #include "../src/core/temporary_transport_watchdog.h"
 #include "../src/core/source_manager_state.h"
 #include "../src/core/bt_audio_route_state.h"
@@ -92,10 +93,14 @@ void auditTransport() {
          std::string::npos);
   assert(player.find("transport disconnected before EOF") !=
          std::string::npos);
-  assert(player.find("const bool connected = connecttohost(url);") !=
+  assert(player.find("const bool connected = connecttohost(request.url);") !=
          std::string::npos);
   assert(player.find("_temporary.signal(token);") != std::string::npos);
-  assert(player.find("xQueueOverwrite(_temporaryUrls, request);") !=
+  assert(player.find("xQueueOverwrite(_temporaryUrls, &request);") !=
+         std::string::npos);
+  assert(player.find("request.type == PR_STOP && temporaryBusy()") !=
+         std::string::npos);
+  assert(player.find("request.type == PR_STOP && !stopsTemporary") !=
          std::string::npos);
   assert(player.find("if (temporaryActive()) {") !=
          std::string::npos);
@@ -105,7 +110,7 @@ void auditTransport() {
   const auto browseBody = player.substr(browse, browseEnd - browse);
   assert(browseBody.find("config.setTitle(") == std::string::npos);
   const auto progressBegin = browseBody.find("_temporaryProgress.begin(");
-  const auto connectionBegin = browseBody.find("connecttohost(url)");
+  const auto connectionBegin = browseBody.find("connecttohost(request.url)");
   assert(progressBegin != std::string::npos &&
          connectionBegin != std::string::npos &&
          progressBegin < connectionBegin);
@@ -118,6 +123,10 @@ void auditTransport() {
   assert(finishBody.find("display.putRequest(NEWSTATION)") != std::string::npos);
   assert(finishBody.find("display.putRequest(NEWTITLE)") != std::string::npos);
   assert(finishBody.find("_temporaryProgress.finish(token)") !=
+         std::string::npos);
+  assert(finishBody.find("sourceManagerEndHomeAssistant()") !=
+         std::string::npos);
+  assert(browseBody.find("sourceManagerBeginHomeAssistant(") !=
          std::string::npos);
 
   // Every HTTP consumer reports real bytes through one Audio-owned counter.
@@ -166,9 +175,10 @@ void auditTransport() {
   const auto commands = readFile("src/core/commandhandler.cpp");
   assert(commands.find("strEquals(command, \"playurl\")") !=
          std::string::npos);
-  assert(commands.find("player.requestTemporaryUrl(value, length);") !=
+  assert(commands.find("player.requestTemporaryUrl(request);") !=
          std::string::npos);
-  assert(commands.find("isSafeUrl(value, length)") != std::string::npos);
+  assert(commands.find("parseRequest(value, length, request)") !=
+         std::string::npos);
 }
 
 void validateTemporaryUrls() {
@@ -192,6 +202,26 @@ void validateTemporaryUrls() {
   assert(!isSafeUrl(crlf, std::strlen(crlf)));
   const std::string tooLong(kUrlCapacity, 'a');
   assert(!isSafeUrl(tooLong.c_str(), tooLong.size()));
+
+  voxone::temporary_audio::Request request{};
+  const char* withMetadata =
+      "http://ha.local/api/tts.mp3?token=a=b&title=Home%20Assistant"
+      "&artist=Drzwi%20s%C4%85%20otwarte";
+  assert(voxone::temporary_audio::parseRequest(
+      withMetadata, std::strlen(withMetadata), request));
+  assert(std::strcmp(request.url,
+                     "http://ha.local/api/tts.mp3?token=a=b") == 0);
+  assert(std::strcmp(request.title, "Home Assistant") == 0);
+  assert(std::strcmp(request.artist, "Drzwi są otwarte") == 0);
+  assert(voxone::temporary_audio::parseRequest(
+      http, std::strlen(http), request));
+  assert(std::strcmp(request.url, http) == 0);
+  assert(std::strcmp(request.title, "Home Assistant") == 0);
+  assert(request.artist[0] == '\0');
+  const char* malformed =
+      "http://ha.local/a.mp3&title=Home%2&artist=TTS";
+  assert(!voxone::temporary_audio::parseRequest(
+      malformed, std::strlen(malformed), request));
 }
 
 struct Scenario {
@@ -949,6 +979,8 @@ int main() {
   assert(manual.source.active() == ActiveSource::Radio && manual.resumes == 1);
 
   // Explicit RADIO STOP/PLAY changes current intent, including station choice.
+  // Player treats STOP received during SOURCE_HA as ending only the temporary
+  // stream, so it does not call radio(false) in that path.
   Scenario commands;
   commands.radio(true);
   token = commands.temporary.begin();

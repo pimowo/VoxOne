@@ -13,8 +13,9 @@ checkpointów pozostaje w historii Git i w istniejących raportach.
   renderowanie hierarchii i wskaźników `>` na TFT/OLED, sekwencję wyłączania
   „Do widzenia!” z natychmiastowym zatrzymaniem audio, płynne odświeżanie Menu,
   kontekstową belkę Menu na TFT oraz wygaszenie ekranu z ochroną OLED.
-- [ ] Fizycznie przetestować TTS z Home Assistant i wybór źródła, w tym powrót
-  do wcześniej używanego źródła po zakończeniu komunikatu.
+- [ ] Fizycznie przetestować TTS/media z Home Assistant: źródło `SOURCE_HA`,
+  metadane title/artist i `N/A` zamiast bitrate na TFT/OLED oraz powrót do
+  wcześniej używanego źródła i jego stanu po EOF albo komendzie Stop.
 - [ ] Zweryfikować mapowanie pinów na nowym profilu DIN0 po zmianie `I2S_LRC`
   na GPIO9.
 - [ ] Fizycznie podłączyć i przetestować przekaźnik dla trybu Hard Power.

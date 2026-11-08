@@ -2,6 +2,7 @@
 #define VOXONE_SOURCE_MANAGER_H
 
 #include "options.h"
+#include "display.h"
 #include <stdint.h>
 
 // Radio intent also exists on targets without Bluetooth (temporary URL restore).
@@ -11,6 +12,9 @@ void sourceManagerRadioStopConsumed();
 void sourceManagerPlaylistSelectionCleared();
 bool sourceManagerRadioResumeAllowed();
 bool sourceManagerRadioPlayIntent();
+void sourceManagerBeginHomeAssistant(const char* title, const char* artist);
+void sourceManagerEndHomeAssistant();
+bool sourceManagerHomeAssistantActive();
 class TemporaryAudioState;
 enum class ActiveSource : uint8_t;
 bool sourceManagerSelectSource(ActiveSource source);
@@ -18,19 +22,21 @@ bool sourceManagerTakeTemporaryRestore(TemporaryAudioState& temporary,
                                       bool networkReady, bool blocked,
                                       uint16_t& station);
 
-#if VOXONE_HAS_BT && VOXONE_PIN_MAP_COMPLETE
-#include "bt_transport.h"
-#include "bt_link_protocol.h"
-
 struct SourceWebSnapshot {
   DisplaySourceKind kind = DisplaySourceKind::Radio;
   bool connected = false;
   DisplayPlaybackState playback = DisplayPlaybackState::Stopped;
   uint32_t sampleRate = 0;
-  char peerName[sizeof(BtLinkState::peerName)]{};
-  char artist[sizeof(BtLinkState::artist)]{};
-  char title[sizeof(BtLinkState::title)]{};
+  char peerName[97]{};
+  char artist[193]{};
+  char title[193]{};
 };
+
+void sourceManagerWebSnapshot(SourceWebSnapshot& snapshot);
+
+#if VOXONE_HAS_BT && VOXONE_PIN_MAP_COMPLETE
+#include "bt_transport.h"
+#include "bt_link_protocol.h"
 
 void sourceManagerBegin();
 void sourceManagerLoop();
@@ -47,7 +53,6 @@ bool bluetoothTransportAvailable();
 bool sourceManagerStepBluetoothVolume(int8_t delta);
 bool sourceManagerSetBluetoothVolume(uint8_t user);
 void sourceManagerTransport(BtTransportInput input);
-void sourceManagerWebSnapshot(SourceWebSnapshot& snapshot);
 #endif
 
 #endif

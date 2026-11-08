@@ -45,6 +45,13 @@ inline WebStatusView selectWebStatusView(const DisplaySourceView& source,
             source.connected ? webTransportState(source.playback) : "unavailable",
             0, source.connected ? source.sampleRate : 0, source.connected};
   }
+  if (source.kind == DisplaySourceKind::HomeAssistant) {
+    return {"HA", "ha",
+            source.title && source.title[0] ? source.title : "Home Assistant", "",
+            source.artist ? source.artist : "", source.title ? source.title : "",
+            "", displayPlaybackLabel(source.playback),
+            webTransportState(source.playback), 0, 0, false};
+  }
   return {"WEB", "radio", radioStation, radioMetadata, radioArtist, radioTitle,
           strcmp(radioCodec, "bitrate") == 0 ? "" : radioCodec,
           displayPlaybackLabel(source.playback), webTransportState(source.playback),

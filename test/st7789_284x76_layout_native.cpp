@@ -33,6 +33,7 @@ int main() {
 
   const DisplaySourceKind sources[] = {
       DisplaySourceKind::Radio, DisplaySourceKind::Bluetooth,
+      DisplaySourceKind::HomeAssistant,
       DisplaySourceKind::Dlna, DisplaySourceKind::Aux,
       DisplaySourceKind::Spdif, DisplaySourceKind::Tts};
   for (const auto kind : sources) {
@@ -68,6 +69,10 @@ int main() {
   bluetoothSource.sampleRate = 0;
   formatDisplayAudioInfo(audioText, sizeof(audioText), bluetoothSource, 0, BF_UNKNOWN);
   assert(audioText[0] == '\0');
+  bluetoothSource.kind = DisplaySourceKind::HomeAssistant;
+  formatDisplayAudioInfo(audioText, sizeof(audioText), bluetoothSource, 0,
+                         BF_UNKNOWN);
+  assert(std::strcmp(audioText, "N/A") == 0 && textFits(audio, audioText));
 
   assert(playerWifiLevel(-49) == 4);
   assert(playerWifiLevel(-50) == 4);

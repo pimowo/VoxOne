@@ -2525,7 +2525,7 @@ void Display::render_yamaha_tft() {
   dsp.drawFastHLine(0, kTopBarBottom, kWidth, kAmber);
   dsp.setTextSize(3);
   dsp.setCursor(14, 16);
-  dsp.print(view.source == DisplaySourceKind::Bluetooth ? "BT" : "RADIO");
+  dsp.print(displaySourceLabel(view.source));
   dsp.setCursor(190, 16);
   dsp.print(displayPlaybackLabel(view.playback));
 
@@ -2881,7 +2881,7 @@ void Display::loop() {
             } else {
               PlayerDisplayView view{};
               capturePlayerDisplayView(view, WiFi.RSSI());
-              if (view.source != DisplaySourceKind::Bluetooth &&
+              if (view.source == DisplaySourceKind::Radio &&
                   player_on_track_change)
                 player_on_track_change();
             }
@@ -2916,7 +2916,7 @@ void Display::loop() {
                 source, config.station.bitrate, config.configFmt);
 #endif
             if (_fullbitrate) {
-              if (info.bluetooth)
+              if (info.custom)
                 _fullbitrate->setCustomText(info.top, info.bottom);
               else {
                 _fullbitrate->setBitrate(info.radioBitrate);
@@ -3060,7 +3060,7 @@ void Display::_setRSSI(int rssi) {
 #endif
   char rssiG[3];
   uint8_t level = playerWifiLevel(rssi);
-#if VOXONE_DISPLAY_PROFILE_IS_SMALL_OLED || VOXONE_DISPLAY_PROFILE == VOXONE_DISPLAY_PROFILE_ST7796_480X320
+#if VOXONE_DISPLAY_PROFILE_IS_SMALL_OLED || VOXONE_DISPLAY_PROFILE == VOXONE_DISPLAY_PROFILE_ST7796_480X320 || VOXONE_DISPLAY_PROFILE == VOXONE_DISPLAY_PROFILE_ST7789_284X76
   PlayerDisplayView view{};
   capturePlayerDisplayView(view, rssi);
   level = view.wifiLevel;
@@ -3077,7 +3077,7 @@ void Display::_setRSSI(int rssi) {
 
 void Display::_station() {
   _meta->setAlign(metaConf.widget.align);
-#if VOXONE_DISPLAY_PROFILE_IS_SMALL_OLED || VOXONE_DISPLAY_PROFILE == VOXONE_DISPLAY_PROFILE_ST7796_480X320
+#if VOXONE_DISPLAY_PROFILE_IS_SMALL_OLED || VOXONE_DISPLAY_PROFILE == VOXONE_DISPLAY_PROFILE_ST7796_480X320 || VOXONE_DISPLAY_PROFILE == VOXONE_DISPLAY_PROFILE_ST7789_284X76
   PlayerDisplayView view{};
   capturePlayerDisplayView(view, WiFi.RSSI());
   _meta->setText(view.station);
@@ -3085,7 +3085,7 @@ void Display::_station() {
   _meta->setText(config.station.name);
 #endif
 #if VOXONE_DISPLAY_PROFILE == VOXONE_DISPLAY_PROFILE_ST7789_284X76
-  if(_st7789Station) _st7789Station->setText(config.station.name);
+  if(_st7789Station) _st7789Station->setText(view.station);
 #endif
 }
 
@@ -3143,7 +3143,7 @@ void Display::_title(bool notifyTrackChange) {
     }
   }
 #endif
-  if (notifyTrackChange && view.source != DisplaySourceKind::Bluetooth &&
+  if (notifyTrackChange && view.source == DisplaySourceKind::Radio &&
       player_on_track_change)
     player_on_track_change();
 #else

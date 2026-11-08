@@ -14,11 +14,14 @@
 #include "st7796_player_scroll.h"
 #endif
 
-enum class DisplaySourceKind : uint8_t { Radio, Bluetooth, Dlna, Aux, Spdif, Tts };
+enum class DisplaySourceKind : uint8_t {
+    Radio, Bluetooth, HomeAssistant, Dlna, Aux, Spdif, Tts
+};
 inline const char* displaySourceLabel(DisplaySourceKind kind) {
     switch (kind) {
         case DisplaySourceKind::Radio: return "WEB";
         case DisplaySourceKind::Bluetooth: return "BT";
+        case DisplaySourceKind::HomeAssistant: return "HA";
         case DisplaySourceKind::Dlna: return "DLNA";
         case DisplaySourceKind::Aux: return "AUX";
         case DisplaySourceKind::Spdif: return "SPDIF";
@@ -90,6 +93,8 @@ inline const char* displayPlayerStationText(const DisplaySourceView& source,
         return source.playback == DisplayPlaybackState::Playing &&
                        radioStationName && radioStationName[0]
                    ? radioStationName : "WEB Radio";
+    if (source.kind == DisplaySourceKind::HomeAssistant)
+        return source.title && source.title[0] ? source.title : "Home Assistant";
     return displaySourceLabel(source.kind);
 }
 inline bool displaySourceVuVisible(const DisplaySourceView& source) {

@@ -56,7 +56,7 @@ void Player::init() {
   playerQueue = xQueueCreate( 5, sizeof( playerRequestParams_t ) );
   setOutputPins(false);
   delay(50);
-  _temporaryUrls = xQueueCreate(1, voxone::temporary_audio::kUrlCapacity);
+  _temporaryUrls = xQueueCreate(1, sizeof(voxone::temporary_audio::Request));
   if(MUTE_PIN!=255) pinMode(MUTE_PIN, OUTPUT);
   #if I2S_DOUT!=255
     if (audioPlan.initializeSerialI2s &&
@@ -107,6 +107,9 @@ void Player::sendCommand(playerRequestParams_t request){
     _pendingStationRefresh.publishRefresh();
     return;
   }
+  // STOP while a one-shot HA stream is active only ends that stream. Keep the
+  // base RADIO intent so cleanup can restore the source that was interrupted.
+  const bool stopsTemporary = request.type == PR_STOP && temporaryBusy();
   if(xQueueSend(playerQueue, &request, PLQ_SEND_DELAY) != pdPASS) return;
   switch (request.type) {
     case PR_PLAY:
@@ -121,7 +124,8 @@ void Player::sendCommand(playerRequestParams_t request){
     default:
       break;
   }
-  if(request.type == PR_PLAY || request.type == PR_STOP)
+  if(request.type == PR_PLAY ||
+     (request.type == PR_STOP && !stopsTemporary))
     sourceManagerRadioCommandQueued(request.type == PR_PLAY,
                                    request.type == PR_PLAY && request.payload > 0
                                        ? static_cast<uint16_t>(request.payload) : 0);
@@ -453,9 +457,10 @@ void Player::loop() {
   }
   if (uxQueueMessagesWaiting(playerQueue) == 0)
     _servicePendingStationRefresh();
-  char url[voxone::temporary_audio::kUrlCapacity];
-  if (_temporaryUrls && xQueueReceive(_temporaryUrls, url, 0) == pdTRUE &&
-      !systemUpdateAudioBlocked()) browseUrl(url);
+  voxone::temporary_audio::Request temporaryRequest{};
+  if (_temporaryUrls &&
+      xQueueReceive(_temporaryUrls, &temporaryRequest, 0) == pdTRUE &&
+      !systemUpdateAudioBlocked()) browseUrl(temporaryRequest);
   // Backend EOF/error callbacks run synchronously inside these calls. They
   // signal this invocation's token; never reconnect from a decoder callback.
   _callbackToken = _temporary.token();
@@ -614,15 +619,15 @@ void Player::serviceRadioReconnect() {
   _play(config.lastStation(), true);
 }
 
-void Player::requestTemporaryUrl(const char* url, size_t length) {
+void Player::requestTemporaryUrl(
+    const voxone::temporary_audio::Request& request) {
+  const size_t length = strlen(request.url);
   if (!_temporaryUrls ||
-      !voxone::temporary_audio::isSafeUrl(url, length) ||
+      !voxone::temporary_audio::isSafeUrl(request.url, length) ||
       systemUpdateAudioBlocked() || !_localAudioAvailable) return;
-  char request[voxone::temporary_audio::kUrlCapacity]{};
-  memcpy(request, url, length);
   // Network commands run on another task. Replace the pending URL atomically, never a
   // buffer currently used by connecttohost(). Latest pending request wins.
-  xQueueOverwrite(_temporaryUrls, request);
+  xQueueOverwrite(_temporaryUrls, &request);
   sendCommand({PR_BURL, 0});
 }
 
@@ -662,6 +667,7 @@ void Player::finishTemporary() {
   _stop(false, RadioStopReason::SourceSwitch, true);
   remoteStationName = false;
   if (!_temporary.finish(token)) return;
+  sourceManagerEndHomeAssistant();
 #if defined(VOXONE_TTS_HIL_DIAGNOSTICS)
   voxone::tts_hil::diagnostics().cleanup(
       token, millis(), transportProgressBytes(), httpBodyProgressBytes(),
@@ -687,7 +693,7 @@ void Player::restoreTemporaryBase() {
   _play(station, true);
 }
 
-void Player::browseUrl(const char* url){
+void Player::browseUrl(const voxone::temporary_audio::Request& request){
 #if VOXONE_HAS_BT && VOXONE_PIN_MAP_COMPLETE && VOXONE_BT_I2S_RX_ENABLED
   if (!btAudioInput.acquirePlayerOutput()) {
     serialCli.printf("##ERROR#:\tTemporary URL cannot acquire I2S0\n");
@@ -705,6 +711,7 @@ void Player::browseUrl(const char* url){
   }
 #endif
   const uint32_t token = _temporary.begin();
+  sourceManagerBeginHomeAssistant(request.title, request.artist);
   _temporaryProgress.begin(token, millis(), transportProgressBytes());
 #if defined(VOXONE_TTS_HIL_DIAGNOSTICS)
   voxone::tts_hil::diagnostics().start(
@@ -718,7 +725,7 @@ void Player::browseUrl(const char* url){
   display.putRequest(PSTOP);
   setOutputPins(false);
   _callbackToken = token;
-  const bool connected = connecttohost(url);
+  const bool connected = connecttohost(request.url);
   _callbackToken = 0;
   if (connected){
     _status = PLAYING;
@@ -727,8 +734,9 @@ void Player::browseUrl(const char* url){
     display.putRequest(PSTART);
     if (player_on_start_play) player_on_start_play();
   }else{
-    serialCli.printf("##ERROR#:\tError connecting to %.128s\n", url);
-    snprintf(config.tmpBuf, sizeof(config.tmpBuf), "Error connecting to %.128s", url); setError();
+    serialCli.printf("##ERROR#:\tError connecting to %.128s\n", request.url);
+    snprintf(config.tmpBuf, sizeof(config.tmpBuf),
+             "Error connecting to %.128s", request.url); setError();
     const bool accepted = _temporary.signal(token);
 #if defined(VOXONE_TTS_HIL_DIAGNOSTICS)
     voxone::tts_hil::diagnostics().connectFailed(

@@ -7,6 +7,7 @@
 #include "radio_source_policy.h"
 #include "temporary_audio_state.h"
 #include "temporary_audio_url.h"
+#include "temporary_audio_request.h"
 #include "temporary_transport_watchdog.h"
 #include "player_pending_refresh.h"
 
@@ -84,7 +85,7 @@ class Player: public Audio {
     void _clearStation(bool resetOvol);
     void _loadVol(uint8_t volume);
     bool _hasError;
-    void browseUrl(const char* url);
+    void browseUrl(const voxone::temporary_audio::Request& request);
     void finishTemporary();
     void restoreTemporaryBase();
     void scheduleRadioReconnect();
@@ -115,7 +116,7 @@ class Player: public Audio {
       _pendingStationRefresh.publish(resetOvolIfEmpty);
     }
     void resetQueue();
-    void requestTemporaryUrl(const char* url, size_t length);
+    void requestTemporaryUrl(const voxone::temporary_audio::Request& request);
     bool temporaryActive() const { return _temporary.active(); }
     bool temporaryBusy() const { return _temporary.busy(); }
     bool suppressTemporaryRadioRestore() {

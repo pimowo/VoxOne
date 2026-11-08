@@ -29,6 +29,7 @@ inline const char* displayRadioFormatLabel(BitrateFormat format) {
 
 struct DisplayAudioInfo {
   bool bluetooth;
+  bool custom;
   uint16_t radioBitrate;
   BitrateFormat radioFormat;
   const char* top;
@@ -41,12 +42,17 @@ inline DisplayAudioInfo selectDisplayAudioInfo(const DisplaySourceView& source,
   DisplayAudioInfo info{};
   info.bluetooth = source.kind == DisplaySourceKind::Bluetooth;
   if (info.bluetooth) {
+    info.custom = true;
     info.top = bluetoothSampleRateTop(source.sampleRate);
     info.bottom = info.top[0] ? "kHz" : "";
   } else if (source.kind == DisplaySourceKind::Radio) {
     info.radioBitrate = radioBitrate;
     info.radioFormat = radioFormat;
     info.top = "";
+    info.bottom = "";
+  } else if (source.kind == DisplaySourceKind::HomeAssistant) {
+    info.custom = true;
+    info.top = "N/A";
     info.bottom = "";
   }
   return info;
@@ -66,6 +72,10 @@ inline void formatDisplayAudioInfo(char* output, size_t capacity,
   if (!output || capacity == 0) return;
   if (source.kind == DisplaySourceKind::Bluetooth) {
     snprintf(output, capacity, "%s", bluetoothSampleRateLabel(source.sampleRate));
+    return;
+  }
+  if (source.kind == DisplaySourceKind::HomeAssistant) {
+    snprintf(output, capacity, "N/A");
     return;
   }
   if (source.kind != DisplaySourceKind::Radio) {

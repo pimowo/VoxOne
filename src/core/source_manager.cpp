@@ -3,10 +3,33 @@
 #include "source_manager_state.h"
 #include "temporary_audio_state.h"
 #include "ui_state.h"
+#include "display.h"
+#include "netserver.h"
+#include "player.h"
+#include "serialcli.h"
 
 namespace {
 SourceManagerState sourceState;
 portMUX_TYPE sourceMux = portMUX_INITIALIZER_UNLOCKED;
+
+struct DisplayText {
+  char peerName[97];
+  char artist[193];
+  char title[193];
+};
+DisplayText displayText{};
+
+void refreshDisplay(const SourceUpdate& update) {
+#if VOXONE_HAS_DISPLAY
+  if (update.activeChanged || update.audioInfoChanged)
+    display.putRequest(DBITRATE);
+  if (update.stationChanged) display.putRequest(NEWSTATION);
+  if (update.titleChanged) display.putRequest(NEWTITLE);
+  if (update.activeChanged || update.volumeChanged) display.putRequest(DRAWVOL);
+#else
+  (void)update;
+#endif
+}
 }
 
 void sourceManagerRadioCommandQueued(bool play, uint16_t station) {
@@ -63,17 +86,42 @@ bool sourceManagerTakeTemporaryRestore(TemporaryAudioState& temporary,
   return play;
 }
 
+void sourceManagerBeginHomeAssistant(const char* title, const char* artist) {
+  portENTER_CRITICAL(&sourceMux);
+  const SourceUpdate update = sourceState.beginHomeAssistant(title, artist);
+  portEXIT_CRITICAL(&sourceMux);
+  refreshDisplay(update);
+  netserver.requestOnChange(WEBSTATUS, 0);
+  serialCli.printf("##[SOURCE]# active=HA title=%.96s artist=%.96s\n",
+                   title ? title : "", artist ? artist : "");
+}
+
+void sourceManagerEndHomeAssistant() {
+  portENTER_CRITICAL(&sourceMux);
+  const SourceUpdate update = sourceState.endHomeAssistant();
+  const ActiveSource active = sourceState.active();
+  portEXIT_CRITICAL(&sourceMux);
+  if (!update.activeChanged) return;
+  refreshDisplay(update);
+  netserver.requestOnChange(WEBSTATUS, 0);
+  serialCli.printf("##[SOURCE]# active=%s reason=ha-finished\n",
+                   active == ActiveSource::Bluetooth ? "BT" : "RADIO");
+}
+
+bool sourceManagerHomeAssistantActive() {
+  portENTER_CRITICAL(&sourceMux);
+  const bool active = sourceState.homeAssistantActive();
+  portEXIT_CRITICAL(&sourceMux);
+  return active;
+}
+
 #if VOXONE_HAS_BT && VOXONE_PIN_MAP_COMPLETE
 
 #include "bt_link.h"
 #include "bt_audio_input.h"
 #include "bt_volume.h"
 #include "config.h"
-#include "display.h"
 #include "network.h"
-#include "netserver.h"
-#include "player.h"
-#include "serialcli.h"
 #include "source_manager_state.h"
 #include "source_vu_state.h"
 #include "system_operation_state.h"
@@ -81,16 +129,10 @@ bool sourceManagerTakeTemporaryRestore(TemporaryAudioState& temporary,
 namespace {
 BtVolumeSessionGate volumeSessionGate;
 
-// Only the display task writes this copy. Widgets copy its text in setText().
-struct DisplayText {
-  char peerName[sizeof(BtLinkState::peerName)];
-  char artist[sizeof(BtLinkState::artist)];
-  char title[sizeof(BtLinkState::title)];
-};
-DisplayText displayText{};
-
 const char* sourceName(ActiveSource source) {
-  return source == ActiveSource::Bluetooth ? "BT" : "RADIO";
+  if (source == ActiveSource::Bluetooth) return "BT";
+  if (source == ActiveSource::SOURCE_HA) return "HA";
+  return "RADIO";
 }
 
 const char* sourceReason(SourceChangeReason reason) {
@@ -101,18 +143,6 @@ const char* sourceReason(SourceChangeReason reason) {
     case SourceChangeReason::BtOffline: return "bt-offline";
     default: return "unknown";
   }
-}
-
-void refreshDisplay(const SourceUpdate& update) {
-#if VOXONE_HAS_DISPLAY
-  if (update.activeChanged || update.audioInfoChanged)
-    display.putRequest(DBITRATE);
-  if (update.stationChanged) display.putRequest(NEWSTATION);
-  if (update.titleChanged) display.putRequest(NEWTITLE);
-  if (update.activeChanged || update.volumeChanged) display.putRequest(DRAWVOL);
-#else
-  (void)update;
-#endif
 }
 
 void stopOnSourceChange(const SourceUpdate& update, bool temporaryAtChange) {
@@ -361,37 +391,39 @@ bool sourceManagerSelectSource(ActiveSource source) {
   return update.activeChanged;
 }
 
+#else
+bool sourceManagerSelectSource(ActiveSource) { return false; }
+#endif
+
 void sourceManagerWebSnapshot(SourceWebSnapshot& snapshot) {
-  const bool radioPlaying = player.isRunning();
+  const bool playing = player.isRunning();
   portENTER_CRITICAL(&sourceMux);
   DisplaySourceView view{};
-  sourceState.displayView(view, radioPlaying, player.localAudioAvailable());
+  sourceState.displayView(view, playing, player.localAudioAvailable());
   snapshot.kind = view.kind;
   snapshot.connected = view.connected;
   snapshot.playback = view.playback;
   snapshot.sampleRate = view.sampleRate;
-  strlcpy(snapshot.peerName, view.peerName, sizeof(snapshot.peerName));
-  strlcpy(snapshot.artist, view.artist, sizeof(snapshot.artist));
-  strlcpy(snapshot.title, view.title, sizeof(snapshot.title));
+  strlcpy(snapshot.peerName, view.peerName ? view.peerName : "",
+          sizeof(snapshot.peerName));
+  strlcpy(snapshot.artist, view.artist ? view.artist : "", sizeof(snapshot.artist));
+  strlcpy(snapshot.title, view.title ? view.title : "", sizeof(snapshot.title));
   portEXIT_CRITICAL(&sourceMux);
 }
 
 bool getDisplaySourceView(DisplaySourceView& view) {
-  const bool radioPlaying = player.isRunning();
+  const bool playing = player.isRunning();
   portENTER_CRITICAL(&sourceMux);
-  sourceState.displayView(view, radioPlaying, player.localAudioAvailable());
-  if (view.kind == DisplaySourceKind::Bluetooth) {
-    memcpy(displayText.peerName, view.peerName, sizeof(displayText.peerName));
-    memcpy(displayText.artist, view.artist, sizeof(displayText.artist));
-    memcpy(displayText.title, view.title, sizeof(displayText.title));
-    view.peerName = displayText.peerName;
-    view.artist = displayText.artist;
-    view.title = displayText.title;
-  }
+  sourceState.displayView(view, playing, player.localAudioAvailable());
+  strlcpy(displayText.peerName, view.peerName ? view.peerName : "",
+          sizeof(displayText.peerName));
+  strlcpy(displayText.artist, view.artist ? view.artist : "",
+          sizeof(displayText.artist));
+  strlcpy(displayText.title, view.title ? view.title : "",
+          sizeof(displayText.title));
+  view.peerName = displayText.peerName;
+  view.artist = displayText.artist;
+  view.title = displayText.title;
   portEXIT_CRITICAL(&sourceMux);
   return true;
 }
-
-#else
-bool sourceManagerSelectSource(ActiveSource) { return false; }
-#endif

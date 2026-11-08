@@ -7,7 +7,7 @@
 #include "bt_link_protocol.h"
 #include "display.h"
 
-enum class ActiveSource : uint8_t { Radio, Bluetooth };
+enum class ActiveSource : uint8_t { Radio, Bluetooth, SOURCE_HA };
 enum class SourceChangeReason : uint8_t {
   None, Manual, BtConnect, BtDisconnect, BtOffline
 };
@@ -56,7 +56,9 @@ struct RadioSourceActions {
 // remains with Player; a source change must not overwrite this intent.
 class SourceManagerState {
  public:
-  ActiveSource active() const { return active_; }
+  ActiveSource active() const {
+    return homeAssistantActive_ ? ActiveSource::SOURCE_HA : active_;
+  }
   bool radioPlayIntent() const { return radioPlayIntent_; }
   void recordRadioCommand(bool play, uint16_t station = 0) {
     radioPlayIntent_ = play;
@@ -76,6 +78,34 @@ class SourceManagerState {
   bool radioResumeAllowed() const {
     return active_ == ActiveSource::Radio && radioPlayIntent_;
   }
+  SourceUpdate beginHomeAssistant(const char* title, const char* artist) {
+    SourceUpdate update;
+    update.activeChanged = !homeAssistantActive_;
+    update.stationChanged = update.activeChanged ||
+                            strcmp(homeAssistantTitle_, title ? title : "") != 0;
+    update.titleChanged = update.activeChanged ||
+                          strcmp(homeAssistantArtist_, artist ? artist : "") != 0 ||
+                          update.stationChanged;
+    update.audioInfoChanged = update.activeChanged;
+    homeAssistantActive_ = true;
+    copyText(homeAssistantTitle_, sizeof(homeAssistantTitle_),
+             title && title[0] ? title : "Home Assistant");
+    copyText(homeAssistantArtist_, sizeof(homeAssistantArtist_), artist);
+    return update;
+  }
+  SourceUpdate endHomeAssistant() {
+    if (!homeAssistantActive_) return {};
+    homeAssistantActive_ = false;
+    homeAssistantTitle_[0] = '\0';
+    homeAssistantArtist_[0] = '\0';
+    SourceUpdate update;
+    update.activeChanged = true;
+    update.stationChanged = true;
+    update.titleChanged = true;
+    update.audioInfoChanged = true;
+    return update;
+  }
+  bool homeAssistantActive() const { return homeAssistantActive_; }
   RadioSourceActions radioActions(const SourceUpdate& update,
                                   bool radioPhysicallyActive) const {
     if (!update.activeChanged) return {};
@@ -121,7 +151,7 @@ class SourceManagerState {
   }
 
   SourceUpdate select(ActiveSource source, const BtLinkState& bt) {
-    if (active_ == source ||
+    if (source == ActiveSource::SOURCE_HA || active_ == source ||
         (source == ActiveSource::Bluetooth && !bt.runtimeAvailable)) return {};
     return cycle(bt);
   }
@@ -190,6 +220,17 @@ class SourceManagerState {
 
   void displayView(DisplaySourceView& view, bool radioPlaying = false,
                    bool localPlaybackAvailable = true) const {
+    if (homeAssistantActive_) {
+      view.kind = DisplaySourceKind::HomeAssistant;
+      view.connected = true;
+      view.playback = radioPlaying ? DisplayPlaybackState::Playing
+                                   : DisplayPlaybackState::Stopped;
+      view.peerName = "Home Assistant";
+      view.artist = homeAssistantArtist_;
+      view.title = homeAssistantTitle_;
+      view.sampleRate = 0;
+      return;
+    }
     view.kind = active_ == ActiveSource::Bluetooth
                     ? DisplaySourceKind::Bluetooth : DisplaySourceKind::Radio;
     view.connected = active_ == ActiveSource::Bluetooth && connected_;
@@ -226,6 +267,9 @@ class SourceManagerState {
   }
 
   void stopForUpdate(const BtLinkState& bt) {
+    homeAssistantActive_ = false;
+    homeAssistantTitle_[0] = '\0';
+    homeAssistantArtist_[0] = '\0';
     active_ = ActiveSource::Radio;
     radioPlayIntent_ = false;
     pendingRadioStation_ = 0;
@@ -237,6 +281,14 @@ class SourceManagerState {
   }
 
  private:
+  static void copyText(char* destination, size_t capacity, const char* source) {
+    if (!capacity) return;
+    if (!source) source = "";
+    const size_t length = strlen(source) < capacity - 1
+                              ? strlen(source) : capacity - 1;
+    memcpy(destination, source, length);
+    destination[length] = '\0';
+  }
   void remember(const BtLinkState& bt) {
     connected_ = bt.connected;
     playback_ = bt.playback;
@@ -247,6 +299,9 @@ class SourceManagerState {
   }
 
   ActiveSource active_ = ActiveSource::Radio;
+  bool homeAssistantActive_ = false;
+  char homeAssistantTitle_[128]{};
+  char homeAssistantArtist_[128]{};
   bool radioPlayIntent_ = false;
   uint16_t pendingRadioStation_ = 0;
   bool pendingRadioStop_ = false;

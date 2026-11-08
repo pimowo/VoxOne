@@ -1346,20 +1346,15 @@ static void formatWebStatus(char* output, size_t capacity) {
     stationMetaCopy(radioTitle, sizeof(radioTitle), radioParts.title, radioParts.titleLength);
   }
   DisplaySourceView sourceView{};
-  sourceView.kind = DisplaySourceKind::Radio;
-  sourceView.playback = player.isRunning() ? DisplayPlaybackState::Playing
-                                            : DisplayPlaybackState::Stopped;
-#if VOXONE_HAS_BT && VOXONE_PIN_MAP_COMPLETE
-  SourceWebSnapshot bt{};
-  sourceManagerWebSnapshot(bt);
-  sourceView.kind = bt.kind;
-  sourceView.connected = bt.connected;
-  sourceView.playback = bt.playback;
-  sourceView.sampleRate = bt.sampleRate;
-  sourceView.peerName = bt.peerName;
-  sourceView.artist = bt.artist;
-  sourceView.title = bt.title;
-#endif
+  SourceWebSnapshot source{};
+  sourceManagerWebSnapshot(source);
+  sourceView.kind = source.kind;
+  sourceView.connected = source.connected;
+  sourceView.playback = source.playback;
+  sourceView.sampleRate = source.sampleRate;
+  sourceView.peerName = source.peerName;
+  sourceView.artist = source.artist;
+  sourceView.title = source.title;
   bool btOnline = false;
   bool btPhoneConnected = false;
   unsigned btProtocol = 0;

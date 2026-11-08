@@ -48,6 +48,12 @@ int main() {
   assert(!unimplemented.bluetooth && unimplemented.radioBitrate == 0);
   formatDisplayAudioInfo(emptyInfo, sizeof(emptyInfo), view, 128, BF_AAC);
   assert(emptyInfo[0] == '\0');
+  view.kind = DisplaySourceKind::HomeAssistant;
+  unimplemented = selectDisplayAudioInfo(view, 128, BF_AAC);
+  assert(unimplemented.custom && !unimplemented.bluetooth &&
+         std::strcmp(unimplemented.top, "N/A") == 0);
+  formatDisplayAudioInfo(emptyInfo, sizeof(emptyInfo), view, 128, BF_AAC);
+  assert(std::strcmp(emptyInfo, "N/A") == 0);
   sources.displayView(view);
   expectRadio(view, 999, BF_FLAC, "FLAC 999");
   expectRadio(view, 1000, BF_FLAC, "FLAC 1000");

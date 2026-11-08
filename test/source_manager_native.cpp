@@ -127,10 +127,47 @@ int main() {
   sources.displayView(view);
   assert(std::strcmp(displaySourceLabel(view.kind), "WEB") == 0);
   assert(std::strcmp(displaySourceLabel(DisplaySourceKind::Bluetooth), "BT") == 0);
+  assert(std::strcmp(displaySourceLabel(DisplaySourceKind::HomeAssistant), "HA") == 0);
   assert(std::strcmp(displaySourceLabel(DisplaySourceKind::Dlna), "DLNA") == 0);
   assert(std::strcmp(displaySourceLabel(DisplaySourceKind::Aux), "AUX") == 0);
   assert(std::strcmp(displaySourceLabel(DisplaySourceKind::Spdif), "SPDIF") == 0);
   assert(std::strcmp(displaySourceLabel(DisplaySourceKind::Tts), "TTS") == 0);
+
+  // Home Assistant is a temporary presentation source. The selected base and
+  // RADIO intent remain available for the one-shot restore after EOF/STOP.
+  SourceManagerState homeAssistant;
+  homeAssistant.recordRadioCommand(true, 7);
+  SourceUpdate haUpdate = homeAssistant.beginHomeAssistant(
+      "Home Assistant", "Drzwi są otwarte");
+  assert(haUpdate.activeChanged && haUpdate.stationChanged &&
+         haUpdate.titleChanged && haUpdate.audioInfoChanged);
+  assert(homeAssistant.active() == ActiveSource::SOURCE_HA);
+  assert(homeAssistant.radioResumeAllowed());
+  homeAssistant.displayView(view, true);
+  assert(view.kind == DisplaySourceKind::HomeAssistant);
+  assert(view.playback == DisplayPlaybackState::Playing);
+  assert(std::strcmp(view.title, "Home Assistant") == 0);
+  assert(std::strcmp(view.artist, "Drzwi są otwarte") == 0);
+  makePlayerDisplayView(playerView, view, "Radio One", "Radio metadata", false,
+                        37, false, false, -55, 320, BF_MP3);
+  assert(std::strcmp(playerView.station, "Home Assistant") == 0);
+  assert(std::strcmp(playerView.artist, "Drzwi są otwarte") == 0);
+  assert(std::strcmp(playerView.title, "Home Assistant") == 0);
+  assert(std::strcmp(playerView.audioText, "N/A") == 0);
+  haUpdate = homeAssistant.endHomeAssistant();
+  assert(haUpdate.activeChanged);
+  assert(homeAssistant.active() == ActiveSource::Radio);
+  assert(homeAssistant.radioResumeAllowed());
+
+  BtLinkState haBt{};
+  haBt.runtimeAvailable = haBt.connected = true;
+  haBt.playback = BtPlayback::Playing;
+  homeAssistant.observe(haBt);
+  assert(homeAssistant.active() == ActiveSource::Bluetooth);
+  homeAssistant.beginHomeAssistant("HA", "Plik");
+  assert(homeAssistant.active() == ActiveSource::SOURCE_HA);
+  homeAssistant.endHomeAssistant();
+  assert(homeAssistant.active() == ActiveSource::Bluetooth);
   assert(!displayVolumeMuted(0));
   assert(!displayVolumeMuted(1));
   assert(displayVolumeMuted(50, true));
@@ -172,6 +209,7 @@ int main() {
   assert(vuLeft == 0 && vuRight == 0 && vuTime == 0);
   assert(!updating.observe(connected).activeChanged);
   assert(updating.active() == ActiveSource::Radio);
+  sources.displayView(view);
   assert(view.playback == DisplayPlaybackState::Stopped);
   assert(!displaySourceVuVisible(view));
   assert(!displayVuUnlocked(true, displaySourceVuVisible(view), 50));
