@@ -24,10 +24,10 @@ checkpointów pozostaje w historii Git i w istniejących raportach.
   oraz automatyczny AVRCP Absolute Volume z rzeczywistym źródłem Bluetooth.
 - [ ] Po implementacji Local Files podłączyć kartę microSD i sprawdzić
   stabilność odtwarzania przy współdzieleniu SPI z wyświetlaczem i osobnym CS.
-- [ ] Fizycznie przetestować przeglądarkę i odtwarzanie DLNA na `minidlna`:
-  panel WWW, aktywację `SOURCE_DLNA` i powrót do poprzedniego źródła po EOF lub
-  Stop; na urządzeniu sprawdzić nawigację enkoderem, klik folderu lub utworu,
-  dwuklik do katalogu nadrzędnego oraz płynność renderowania na TFT i OLED.
+- [ ] Dokończyć fizyczny test DLNA na `minidlna`: sprawdzić przeglądarkę w
+  panelu WWW i powrót do poprzedniego źródła po naturalnym EOF; na urządzeniu
+  sprawdzić nawigację enkoderem, klik folderu lub utworu, dwuklik do katalogu
+  nadrzędnego oraz płynność renderowania na TFT i OLED.
 - [ ] Po implementacji DSPmini przetestować posiadany moduł ADAU1701, w tym
   crossover, Parametric EQ, subwoofer i Loudness.
 - [ ] Po implementacji AUX przetestować posiadany moduł PCM1808 i przełączanie
@@ -62,6 +62,9 @@ checkpointów pozostaje w historii Git i w istniejących raportach.
   oraz odbiór poleceń z pilota IR.
 - [ ] Przekształcić obecny interfejs WWW w Progressive Web App, z możliwością
   instalacji i ikoną na telefonie.
+- [ ] Rozszerzyć walidację `webStatus` w panelu WWW o źródła `HA` i `DLNA`
+  oraz wartości `activeSource` `ha` i `dlna`, aby panel przyjmował status
+  wysyłany już poprawnie przez WebSocket.
 - [ ] Dodać opcjonalną obsługę ekranu LCD ST7920 w późniejszym etapie rozwoju.
 
 ## 3. Wersja 1.3.0+ (Audio / Sprzęt / Sieć)
@@ -71,6 +74,9 @@ checkpointów pozostaje w historii Git i w istniejących raportach.
   posiadany moduł do testów HIL.
 - [ ] W5500 Ethernet: dodać obsługę przewodowego internetu na profilu L0 przez
   dedykowaną magistralę SPI3.
+- [ ] Rozszerzyć klienta DLNA do obsługi maksymalnie trzech serwerów
+  równocześnie: automatycznego wykrywania przez SSDP, opcjonalnych ręcznych
+  adresów IP oraz wyboru serwera w WWW i menu urządzenia.
 - [ ] AUX: dodać wejście analogowe oparte na PCM1808 i zintegrować je z wyborem
   źródła; wykorzystać posiadany moduł do testów HIL.
 - [ ] Local Files: dodać odtwarzanie z karty microSD na SPI współdzielonym z
