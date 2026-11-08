@@ -29,9 +29,12 @@
 // External VoxOneBT UART protocol 2 on UART1. GPIO43/44 are the default
 // UART0 pins, so the S0 build routes application Serial diagnostics through
 // native USB CDC instead. GPIO3 remains reserved for POWER/MENU and GPIO10
-// for a future BT TX audio path; neither reservation is implemented here.
+// for a future BT TX audio path.
 #define VOXONE_BT_UART_RX_PIN 44
 #define VOXONE_BT_UART_TX_PIN 43
+
+#define POWER_BUTTON_PIN 3
+#define POWER_RELAY_PIN -1
 
 // VoxOneBT is the I2S master; S0 receives stereo S16 PCM on I2S1.
 #define VOXONE_BT_I2S_RX_ENABLED 1

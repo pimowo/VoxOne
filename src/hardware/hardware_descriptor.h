@@ -72,6 +72,7 @@ struct LocalInputPins {
   uint8_t ec11StepsPerDetent;
 };
 struct DisplayPins { Pin cs, dc, rst, backlight; BusKind bus; };
+struct PowerPins { Pin button, relay; };
 struct HardwareCapabilities {
   DisplaySupportMask supportedDisplays;
   AudioOutputSupportMask supportedAudioOutputs;
@@ -118,6 +119,7 @@ struct HardwareDescriptor {
   LocalInputPins localInput;
   DisplayPins display;
   Pin dacXsmt;
+  PowerPins power;
   HardwareCapabilities capabilities;
 };
 

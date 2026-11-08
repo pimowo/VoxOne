@@ -29,7 +29,10 @@ class UiState {
   bool requestMode(displayMode_e requested, const UiModeContext& context) {
     const displayMode_e current = mode();
     if (context.updateLocked && requested != UPDATING) return false;
-    if (requested != UPDATING && !context.networkConnected) return false;
+    if (requested != UPDATING && requested != SHUTTING_DOWN &&
+        !(current == SHUTTING_DOWN && requested == PLAYER) &&
+        !context.networkConnected)
+      return false;
     if (requested == BT_TRANSPORT && !context.bluetoothTransportAvailable)
       return false;
     if (requested == current) return false;

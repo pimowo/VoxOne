@@ -60,6 +60,12 @@
 #ifndef ENC_HALFQUARD
 #define ENC_HALFQUARD false
 #endif
+#ifndef POWER_BUTTON_PIN
+#define POWER_BUTTON_PIN -1
+#endif
+#ifndef POWER_RELAY_PIN
+#define POWER_RELAY_PIN -1
+#endif
 #ifndef VOXONE_EC11_REVERSE_DIRECTION
 #define VOXONE_EC11_REVERSE_DIRECTION 0
 #endif

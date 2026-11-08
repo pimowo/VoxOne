@@ -163,6 +163,7 @@ constexpr HardwareDescriptor kCurrent = {
     kDisplayKind == DisplayKind::Ch1116g_128x64) ? BusKind::I2c :
      (kCapabilities.hasLocalDisplay() ? BusKind::Spi : BusKind::None)},
   kDacXsmt,
+  {fromLegacyPin(POWER_BUTTON_PIN), fromLegacyPin(POWER_RELAY_PIN)},
   kCapabilities
 };
 
@@ -235,7 +236,7 @@ bool hasPinConflicts(const HardwareDescriptor& d) {
     d.btUart.rx, d.btUart.tx,
     d.localInput.a, d.localInput.b, d.localInput.key,
     d.display.cs, d.display.dc, d.display.rst, d.display.backlight,
-    d.dacXsmt
+    d.dacXsmt, d.power.button, d.power.relay
   };
   for (unsigned i = 0; i < sizeof(claims) / sizeof(claims[0]); ++i) {
     if (!hasPin(claims[i])) continue;
@@ -297,7 +298,8 @@ bool validateDescriptor(const HardwareDescriptor& d) {
     d.btAudioIn.bclk, d.btAudioIn.ws, d.btAudioIn.dout, d.btAudioIn.din,
     d.btUart.rx, d.btUart.tx,
     d.localInput.a, d.localInput.b, d.localInput.key,
-    d.display.cs, d.display.dc, d.display.rst, d.display.backlight, d.dacXsmt
+    d.display.cs, d.display.dc, d.display.rst, d.display.backlight, d.dacXsmt,
+    d.power.button, d.power.relay
   };
   for (unsigned i = 0; i < sizeof(pins) / sizeof(pins[0]); ++i)
     if (!validPin(pins[i], d.board.mcu)) return false;

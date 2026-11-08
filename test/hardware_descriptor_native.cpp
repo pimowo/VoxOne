@@ -115,6 +115,14 @@ int main() {
 #endif
   assert(fromLegacyPin(255) == kNoPin && fromLegacyPin(-1) == kNoPin);
   assert(!hasPin(kNoPin));
+#if defined(VOXONE_PROFILE_L0)
+  assert(d.power.button == 42);
+#elif defined(VOXONE_PROFILE_S0) || defined(VOXONE_PROFILE_DIN0)
+  assert(d.power.button == 3);
+#else
+  assert(d.power.button == kNoPin);
+#endif
+  assert(d.power.relay == kNoPin);
   assert(validateDescriptor(d));
   assert(!hasPinConflicts(d));
 
@@ -320,7 +328,7 @@ int main() {
   assert(caps.supportsDisplay(DisplayKind::Ch1116g_128x64));
   assert(d.i2c.sda == 7 && d.i2c.scl == 8);
   assert(d.display.cs == kNoPin && d.display.dc == kNoPin);
-  assert(d.audioOut.bclk == 1 && d.audioOut.ws == 3 && d.audioOut.dout == 2);
+  assert(d.audioOut.bclk == 1 && d.audioOut.ws == 9 && d.audioOut.dout == 2);
   assert(d.localInput.a == 5 && d.localInput.b == 6 && d.localInput.key == 4);
   assert(!bool(ENC_INTERNALPULLUP));
   assert(!bool(ENC_BUTTON_INTERNALPULLUP));

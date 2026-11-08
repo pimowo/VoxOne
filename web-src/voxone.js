@@ -607,6 +607,10 @@ window.VoxOneRestartWaiter = Object.freeze({
   const tftThemeSelect = document.getElementById("tft-theme");
   const tftThemeStatus = document.getElementById("tft-theme-status");
   const tftThemeSave = document.getElementById("tft-theme-save");
+  const powerModeForm = document.getElementById("power-mode-form");
+  const powerModeSelect = document.getElementById("power-mode");
+  const powerModeStatus = document.getElementById("power-mode-status");
+  const powerModeSave = document.getElementById("power-mode-save");
   const autoReturnControl = document.getElementById("auto-return-control");
   const stationListTimeoutInput = document.getElementById("station-list-timeout");
   const btTimeoutControl = document.getElementById("bt-timeout-control");
@@ -690,6 +694,8 @@ window.VoxOneRestartWaiter = Object.freeze({
   let haSettingsSaving = false;
   let tftThemeLoading = false;
   let tftThemeSaving = false;
+  let powerModeLoading = false;
+  let powerModeSaving = false;
   let savedHardwareConfig = null;
   const state = {
     connection: "connecting",
@@ -714,6 +720,7 @@ window.VoxOneRestartWaiter = Object.freeze({
     canBrightness: false,
     canTftTheme: false,
     tftTheme: null,
+    powerMode: null,
     stationListTimeout: null,
     btTransportTimeout: null,
     canBtTransport: false,
@@ -971,6 +978,13 @@ window.VoxOneRestartWaiter = Object.freeze({
     tftThemeSelect.disabled = !ready || tftThemeLoading || tftThemeSaving;
     tftThemeSave.disabled = tftThemeSelect.disabled ||
       tftThemeSelect.value === state.tftTheme;
+  }
+
+  function renderPowerMode() {
+    const ready = state.connection === "connected" && state.powerMode !== null;
+    powerModeSelect.disabled = !ready || powerModeLoading || powerModeSaving;
+    powerModeSave.disabled = powerModeSelect.disabled ||
+      powerModeSelect.value === state.powerMode;
   }
 
   function scheduleSystemInfoRefresh() {
@@ -1423,6 +1437,7 @@ window.VoxOneRestartWaiter = Object.freeze({
       loadHaSettings();
       loadTftTheme();
     }
+    if (selected === "system") loadPowerMode();
     if (selected === "hardware" && !hardwareConfigLoaded) loadHardwareConfig();
     if (selected === "update") send("getwebstatus", 1);
     if (selected === "dsp") {
@@ -1552,6 +1567,59 @@ window.VoxOneRestartWaiter = Object.freeze({
     } finally {
       tftThemeSaving = false;
       renderTftTheme();
+    }
+  }
+
+  async function loadPowerMode() {
+    if (powerModeLoading || powerModeSaving ||
+        state.connection !== "connected") return;
+    powerModeLoading = true;
+    renderPowerMode();
+    try {
+      const response = await fetch("/api/power", {cache: "no-store"});
+      if (!response.ok) throw new Error("HTTP " + response.status);
+      const settings = await response.json();
+      if (!["soft_standby", "hard_power", "mute_only"].includes(settings.mode))
+        throw new Error("invalid power settings response");
+      state.powerMode = settings.mode;
+      powerModeSelect.value = settings.mode;
+      powerModeStatus.textContent = "";
+    } catch (_) {
+      state.powerMode = null;
+      powerModeStatus.dataset.kind = "error";
+      powerModeStatus.textContent = "Nie udało się odczytać trybu zasilania.";
+    } finally {
+      powerModeLoading = false;
+      renderPowerMode();
+    }
+  }
+
+  async function savePowerMode(event) {
+    event.preventDefault();
+    const mode = powerModeSelect.value;
+    if (powerModeSaving ||
+        !["soft_standby", "hard_power", "mute_only"].includes(mode)) return;
+    powerModeSaving = true;
+    powerModeStatus.textContent = "Zapisywanie…";
+    renderPowerMode();
+    try {
+      const response = await fetch("/api/power", {
+        method: "POST",
+        headers: {"Content-Type": "application/x-www-form-urlencoded;charset=UTF-8"},
+        body: new URLSearchParams({mode})
+      });
+      const result = await response.json();
+      if (!response.ok || result.ok !== true || result.mode !== mode)
+        throw new Error(result.error || ("HTTP " + response.status));
+      state.powerMode = result.mode;
+      powerModeStatus.dataset.kind = "notice";
+      powerModeStatus.textContent = "Zapisano tryb zasilania.";
+    } catch (_) {
+      powerModeStatus.dataset.kind = "error";
+      powerModeStatus.textContent = "Nie zapisano trybu zasilania.";
+    } finally {
+      powerModeSaving = false;
+      renderPowerMode();
     }
   }
 
@@ -2531,6 +2599,7 @@ window.VoxOneRestartWaiter = Object.freeze({
     state.webStatus = null;
     state.systemInfo = null;
     state.networkInfo = null;
+    state.powerMode = null;
     renderBtModule();
     renderSystemInfo();
     renderNetworkInfo();
@@ -2893,6 +2962,7 @@ window.VoxOneRestartWaiter = Object.freeze({
       send("getscreen", 1);
       extraSyncTimer = setTimeout(requestExtraSync, 1500);
       scheduleSystemInfoRefresh();
+      if (location.hash.slice(1) === "system") loadPowerMode();
     };
     ws.onmessage = event => {
       if (socket === ws) receive(event.data);
@@ -2911,6 +2981,7 @@ window.VoxOneRestartWaiter = Object.freeze({
       renderBtModule();
       renderSystemInfo();
       renderNetworkInfo();
+      renderPowerMode();
       renderFooter();
       for (const control of Object.values(audioControls)) {
         control.dragging = false;
@@ -3196,6 +3267,8 @@ window.VoxOneRestartWaiter = Object.freeze({
   haNameInput.addEventListener("input", () => setHaNameFeedback(""));
   tftThemeForm.addEventListener("submit", saveTftTheme);
   tftThemeSelect.addEventListener("change", renderTftTheme);
+  powerModeForm.addEventListener("submit", savePowerMode);
+  powerModeSelect.addEventListener("change", renderPowerMode);
 
   function sendPendingBrightness() {
     clearTimeout(brightnessTimer);

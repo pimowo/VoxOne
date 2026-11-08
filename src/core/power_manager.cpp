@@ -1,0 +1,91 @@
+#include "power_manager.h"
+
+#include <Arduino.h>
+
+#include "options.h"
+#include "config.h"
+#include "display.h"
+#include "player.h"
+#include "ui_state.h"
+#include "update_progress.h"
+
+namespace {
+constexpr uint32_t kShutdownNoticeMs = 750;
+
+bool powerButtonPressed() {
+  return POWER_BUTTON_PIN >= 0 && digitalRead(POWER_BUTTON_PIN) == LOW;
+}
+
+void setPowerRelay(bool enabled) {
+  if (POWER_RELAY_PIN >= 0)
+    digitalWrite(POWER_RELAY_PIN, enabled ? HIGH : LOW);
+}
+}  // namespace
+
+PowerManager powerManager;
+
+void PowerManager::begin() {
+  if (POWER_RELAY_PIN >= 0) {
+    pinMode(POWER_RELAY_PIN, OUTPUT);
+    setPowerRelay(true);
+  }
+  if (POWER_BUTTON_PIN >= 0) pinMode(POWER_BUTTON_PIN, INPUT_PULLUP);
+  button_.reset(powerButtonPressed(), millis());
+}
+
+void PowerManager::loop() {
+  const uint32_t nowMs = millis();
+  if (wakeRequested_.exchange(false, std::memory_order_acq_rel)) wakeup();
+
+  if (POWER_BUTTON_PIN >= 0) {
+    const auto gesture = button_.update(powerButtonPressed(), nowMs);
+    if (!updateLockActive() && !shutdownNotice_) {
+      if (gesture == voxone::power::ButtonGesture::ShortPress) {
+        if (standby()) wakeup();
+        else player.toggleMute();
+      } else if (gesture == voxone::power::ButtonGesture::LongPress &&
+                 !standby()) {
+        beginShutdown(nowMs);
+      }
+    }
+  }
+
+  if (shutdownNotice_ &&
+      static_cast<int32_t>(nowMs - shutdownAtMs_) >= 0)
+    enterStandby();
+}
+
+void PowerManager::requestWakeup() {
+  wakeRequested_.store(true, std::memory_order_release);
+}
+
+void PowerManager::beginShutdown(uint32_t nowMs) {
+  shutdownNotice_ = true;
+  shutdownAtMs_ = nowMs + kShutdownNoticeMs;
+  transitionUiMode(SHUTTING_DOWN);
+  if (!config.persistV7())
+    Serial.println("##[WARN]# POWER config persistence failed");
+}
+
+void PowerManager::enterStandby() {
+  shutdownNotice_ = false;
+  player.setMuted(true);
+  config.setDspOn(false, false);
+  const PowerMode mode = static_cast<PowerMode>(
+      config.runtimeSnapshot().powerMode);
+  if (mode == MODE_HARD_POWER) setPowerRelay(false);
+  standby_.store(true, std::memory_order_release);
+  Serial.printf("##[POWER]# standby mode=%s relay=%d\n",
+                voxone::power_mode::apiName(mode), POWER_RELAY_PIN);
+}
+
+void PowerManager::wakeup() {
+  if (!standby() && !shutdownNotice_) return;
+  if (shutdownNotice_) shutdownNotice_ = false;
+  setPowerRelay(true);
+  config.setDspOn(true, false);
+  player.setMuted(false);
+  standby_.store(false, std::memory_order_release);
+  transitionUiMode(PLAYER);
+  Serial.println("##[POWER]# awake");
+}

@@ -222,6 +222,7 @@ void testSubprotocolAndCommandContract() {
   assert(securityWebSocketCommandAllowed("vol100"));
   assert(securityWebSocketCommandAllowed("scrollsettings"));
   assert(securityWebSocketCommandAllowed("playurl"));
+  assert(securityWebSocketCommandAllowed("wakeup"));
   assert(!securityWebSocketCommandAllowed("format"));
   assert(!securityWebSocketCommandAllowed("clearspiffs"));
   assert(!securityWebSocketCommandAllowed("reset"));

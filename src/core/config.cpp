@@ -228,6 +228,10 @@ void Config::init() {
           store.reservedWeather, sizeof(store.reservedWeather),
           store.tftTheme))
     store.tftTheme = THEME_DEFAULT;
+  if (!voxone::power_mode::decode(
+          store.reservedWeather, sizeof(store.reservedWeather),
+          store.powerMode))
+    store.powerMode = MODE_SOFT_STANDBY;
   _startupStatus = loaded.status;
   _storage.begin(loaded.status, loaded.storedBtEnabled);
   const bool needsBtIntroductionMigration =
@@ -592,6 +596,9 @@ void Config::_applyDefaults() {
   store.tftTheme = THEME_DEFAULT;
   voxone::tft_theme::encode(
       store.tftTheme, store.reservedWeather, sizeof(store.reservedWeather));
+  store.powerMode = MODE_SOFT_STANDBY;
+  voxone::power_mode::encode(
+      store.powerMode, store.reservedWeather, sizeof(store.reservedWeather));
 }
 
 bool Config::persistV7() {
@@ -630,6 +637,19 @@ bool Config::setTftTheme(TftTheme theme) {
           theme, store.reservedWeather, sizeof(store.reservedWeather)))
     return false;
   store.tftTheme = theme;
+  _storage.markDirty();
+  _publishRuntimeLocked();
+  return !_startupReadOnly && persistV7();
+}
+
+bool Config::setPowerMode(PowerMode mode) {
+  if (!voxone::power_mode::valid(mode)) return false;
+  WriteLock lock(_persistMutex);
+  if (store.powerMode == mode) return true;
+  if (!voxone::power_mode::encode(
+          mode, store.reservedWeather, sizeof(store.reservedWeather)))
+    return false;
+  store.powerMode = mode;
   _storage.markDirty();
   _publishRuntimeLocked();
   return !_startupReadOnly && persistV7();
@@ -1169,6 +1189,7 @@ void Config::_publishRuntimeLocked() {
   runtime.volumeSteps = store.volsteps;
   runtime.haDiscoveryEnabled = store.haDiscoveryEnabled;
   runtime.tftTheme = static_cast<uint8_t>(store.tftTheme);
+  runtime.powerMode = static_cast<uint8_t>(store.powerMode);
   strlcpy(runtime.mdnsName, store.mdnsname, sizeof(runtime.mdnsName));
   strlcpy(runtime.haName, store.haName, sizeof(runtime.haName));
   _runtime.publish(runtime);

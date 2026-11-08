@@ -13,6 +13,7 @@ enum class Owner : uint8_t {
   HardwareApi,
   HaSettingsApi,
   DisplayThemeApi,
+  PowerSettingsApi,
   ConfigRestore,
   WifiRecovery,
   SerialHardware,

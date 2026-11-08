@@ -74,6 +74,8 @@ Snapshot makeSnapshot(uint8_t id) {
   value.timezoneMinute = static_cast<int8_t>(id * 10);
   value.encoderAcceleration = static_cast<uint16_t>(100 + id);
   value.volumeSteps = id;
+  value.tftTheme = id;
+  value.powerMode = static_cast<uint8_t>(id - 1);
   std::snprintf(value.mdnsName, sizeof(value.mdnsName), "voxone-%u",
                 static_cast<unsigned>(id));
   return value;
@@ -117,6 +119,8 @@ bool samePayload(const Snapshot& left, const Snapshot& right) {
       left.timezoneMinute == right.timezoneMinute &&
       left.encoderAcceleration == right.encoderAcceleration &&
       left.volumeSteps == right.volumeSteps &&
+      left.tftTheme == right.tftTheme &&
+      left.powerMode == right.powerMode &&
       std::strcmp(left.mdnsName, right.mdnsName) == 0;
 }
 

@@ -63,12 +63,16 @@
 #define VOXONE_BT_UART_RX_PIN 15
 #define VOXONE_BT_UART_TX_PIN 16
 
-// VoxOneBT I2S RX: GPIO1 BCLK, GPIO2 WS, GPIO17 DATA IN; GPIO42 free.
+// VoxOneBT I2S RX: GPIO1 BCLK, GPIO2 WS, GPIO17 DATA IN.
 // VoxOneBT TX BCLK/WS/DATA use 22-ohm series resistors at the transmitter.
 #define VOXONE_BT_I2S_RX_ENABLED 1
 #define VOXONE_BT_I2S_BCLK_PIN 1
 #define VOXONE_BT_I2S_WS_PIN 2
 #define VOXONE_BT_I2S_DATA_PIN 17
+
+// GPIO42 is unclaimed on the current L0 PCB/profile.
+#define POWER_BUTTON_PIN 42
+#define POWER_RELAY_PIN -1
 // Future TDA7719 shares the RTC I2C pins: SCL 7, SDA 8.
 
 #endif

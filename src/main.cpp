@@ -27,6 +27,7 @@
 #include "core/security_recovery_ap_runtime.h"
 #include "core/security_recovery_session_runtime.h"
 #include "core/factory_reset.h"
+#include "core/power_manager.h"
 #include "hardware/runtime_hardware_config.h"
 #include "displays/display_backend_selection.h"
 #include <esp_heap_caps.h>
@@ -277,6 +278,7 @@ void setup() {
   if(REAL_LEDBUILTIN!=255) pinMode(REAL_LEDBUILTIN, OUTPUT);
   if (yoradio_on_setup) yoradio_on_setup();
   config.init();
+  powerManager.begin();
   (void)voxone::display_scroll::initializeScrollSettingsRuntimePersistent();
   btRuntime.start();
 #if defined(VOXONE_PROFILE_L0)
@@ -378,6 +380,7 @@ void loop() {
   dacMute.update(dacPlayback, systemUpdateAudioBlocked());
 #endif
   loopControls();
+  powerManager.loop();
   #ifdef NETSERVER_LOOP1
   netserver.loop();
   #endif

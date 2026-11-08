@@ -17,6 +17,7 @@
 #include "update_progress.h"
 #include "ui_state.h"
 #include "audio_balance.h"
+#include "power_manager.h"
 
 #if DSP_MODEL==DSP_DUMMY
 #define DUMMYDISPLAY
@@ -134,6 +135,11 @@ bool CommandHandler::exec(const char *command, const char *value, uint32_t cid) 
   if (strEquals(command, "mute")) {
     if (value && (strcmp(value, "0") == 0 || strcmp(value, "1") == 0))
       player.setMuted(value[0] == '1');
+    return true;
+  }
+  if (strEquals(command, "wakeup")) {
+    if (!value || strcmp(value, "1") != 0) return false;
+    powerManager.requestWakeup();
     return true;
   }
   if (strEquals(command, "maximumvolume")) {

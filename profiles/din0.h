@@ -23,7 +23,12 @@
 
 #define I2S_BCLK 1
 #define I2S_DOUT 2
-#define I2S_LRC 3
+// GPIO3 is the dedicated POWER input. Move the provisional DIN0 I2S word
+// select to free GPIO9; the current test wiring must follow this profile.
+#define I2S_LRC 9
+
+#define POWER_BUTTON_PIN 3
+#define POWER_RELAY_PIN -1
 
 #define ENC_BTNB 4
 #define ENC_BTNR 6

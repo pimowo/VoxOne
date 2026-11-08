@@ -76,6 +76,7 @@
 #endif
 #include "websocket_command.h"
 #include "display_scroll_api.h"
+#include "power_manager.h"
 #include "../displays/dspcore.h"
 #include "../displays/widgets/widgetsconfig.h" //BitrateFormat
 
@@ -256,6 +257,9 @@ void handleHaSettingsRead(AsyncWebServerRequest *request);
 void handleHaSettingsSave(AsyncWebServerRequest *request);
 void handleDisplayThemeRead(AsyncWebServerRequest *request);
 void handleDisplayThemeSave(AsyncWebServerRequest *request);
+void handlePowerSettingsRead(AsyncWebServerRequest *request);
+void handlePowerSettingsSave(AsyncWebServerRequest *request);
+void handlePowerWakeup(AsyncWebServerRequest *request);
 void handleConfigBackup(AsyncWebServerRequest *request);
 void handleConfigRestore(AsyncWebServerRequest *request);
 void handleConfigRestoreBody(AsyncWebServerRequest *request, uint8_t *data,
@@ -1085,6 +1089,9 @@ bool NetServer::begin(bool quiet) {
   webserver.on("/api/ha", HTTP_POST, handleHaSettingsSave);
   webserver.on("/api/display/theme", HTTP_GET, handleDisplayThemeRead);
   webserver.on("/api/display/theme", HTTP_POST, handleDisplayThemeSave);
+  webserver.on("/api/power", HTTP_GET, handlePowerSettingsRead);
+  webserver.on("/api/power", HTTP_POST, handlePowerSettingsSave);
+  webserver.on("/api/power/wakeup", HTTP_POST, handlePowerWakeup);
   webserver.on(voxone::config_backup_web::kBackupRoute, HTTP_GET,
                handleConfigBackup);
   webserver.on(voxone::config_backup_web::kRestoreRoute, HTTP_POST,
@@ -2477,6 +2484,59 @@ void handleDisplayThemeSave(AsyncWebServerRequest* request) {
            "{\"ok\":true,\"theme\":\"%s\"}",
            voxone::tft_theme::apiName(theme));
   stationsReply(request, 200, body);
+}
+
+void handlePowerSettingsRead(AsyncWebServerRequest* request) {
+  if (!deviceApiAuthorized(request)) return;
+  const PowerMode mode = static_cast<PowerMode>(
+      config.runtimeSnapshot().powerMode);
+  char body[176];
+  snprintf(body, sizeof(body),
+           "{\"mode\":\"%s\",\"standby\":%s,\"buttonPin\":%d,"
+           "\"relayAvailable\":%s}",
+           voxone::power_mode::apiName(mode),
+           powerManager.standby() ? "true" : "false", POWER_BUTTON_PIN,
+           POWER_RELAY_PIN >= 0 ? "true" : "false");
+  stationsReply(request, 200, body);
+}
+
+void handlePowerSettingsSave(AsyncWebServerRequest* request) {
+  if (!deviceApiAuthorized(request)) return;
+  if (systemRestartPending()) {
+    stationsReply(request, 409, R"({"error":"reboot_pending"})");
+    return;
+  }
+  voxone::configuration_mutation::Lease mutation(
+      voxone::configuration_mutation::deviceCoordinator(),
+      voxone::configuration_mutation::Owner::PowerSettingsApi);
+  if (!mutation.acquired()) {
+    stationsReply(request, 409, R"({"error":"configuration_busy"})");
+    return;
+  }
+  if (!request->hasParam("mode", true)) {
+    stationsReply(request, 400, R"({"error":"missing_mode"})");
+    return;
+  }
+  const String requested = request->getParam("mode", true)->value();
+  PowerMode mode = MODE_SOFT_STANDBY;
+  if (!voxone::power_mode::parseApiName(requested.c_str(), mode)) {
+    stationsReply(request, 400, R"({"error":"invalid_mode"})");
+    return;
+  }
+  if (!config.setPowerMode(mode)) {
+    stationsReply(request, 500, R"({"error":"storage_failed"})");
+    return;
+  }
+  char body[96];
+  snprintf(body, sizeof(body), "{\"ok\":true,\"mode\":\"%s\"}",
+           voxone::power_mode::apiName(mode));
+  stationsReply(request, 200, body);
+}
+
+void handlePowerWakeup(AsyncWebServerRequest* request) {
+  if (!deviceApiAuthorized(request)) return;
+  powerManager.requestWakeup();
+  stationsReply(request, 202, R"({"ok":true,"state":"waking"})");
 }
 
 void handleHardwareConfigRead(AsyncWebServerRequest* request) {

@@ -379,6 +379,20 @@
             <div><dt>Możliwości</dt><dd id="system-bt-capabilities">—</dd></div>
           </dl></article>
         </div>
+        <article class="card" aria-labelledby="power-mode-title">
+          <h3 id="power-mode-title">Zasilanie</h3>
+          <form id="power-mode-form">
+            <label for="power-mode">Tryb zasilania</label>
+            <select id="power-mode" class="setting-select" disabled>
+              <option value="soft_standby">Soft Standby</option>
+              <option value="hard_power">Hard Power</option>
+              <option value="mute_only">Tylko Mute</option>
+            </select>
+            <p class="hint">Hard Power steruje przekaźnikiem tylko na profilach z przypisanym pinem.</p>
+            <p id="power-mode-status" class="scroll-settings-status" role="status" aria-live="polite"></p>
+            <button id="power-mode-save" type="submit" disabled>Zapisz tryb zasilania</button>
+          </form>
+        </article>
         <article class="card security-management-card" aria-labelledby="security-management-title">
           <h3 id="security-management-title">Ochrona panelu WWW</h3>
           <p id="security-management-summary" class="muted">Odczytywanie stanu ochrony…</p>

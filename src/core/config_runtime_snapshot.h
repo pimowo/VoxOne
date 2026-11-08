@@ -61,6 +61,7 @@ struct Snapshot {
   uint8_t volumeSteps;
   bool haDiscoveryEnabled;
   uint8_t tftTheme;
+  uint8_t powerMode;
   char mdnsName[kMdnsNameCapacity];
   char haName[kHaNameCapacity];
 };

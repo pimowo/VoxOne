@@ -2182,6 +2182,7 @@ void Display::_renderMode(displayMode_e newmode) {
 #endif
   }
   if (newmode == SLEEPING)  _showDialog("SLEEPING");
+  if (newmode == SHUTTING_DOWN) _showDialog("Zamykanie...");
   if (newmode == NUMBERS) _showDialog("");
   if (newmode == STATIONS) {
     _pager->setPage( pages[PG_PLAYLIST]);
