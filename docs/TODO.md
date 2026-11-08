@@ -11,7 +11,8 @@ checkpointów pozostaje w historii Git i w istniejących raportach.
   Menu albo powrót z podmenu), długie naciśnięcie (zamknięcie Menu albo
   shutdown), nawigację enkoderem bez zmiany głośności przy otwartym Menu,
   renderowanie hierarchii i wskaźników `>` na TFT/OLED, sekwencję wyłączania
-  „Do widzenia!” oraz wygaszenie ekranu z ochroną OLED.
+  „Do widzenia!” z natychmiastowym zatrzymaniem audio, płynne odświeżanie Menu,
+  kontekstową belkę Menu na TFT oraz wygaszenie ekranu z ochroną OLED.
 - [ ] Fizycznie przetestować TTS z Home Assistant i wybór źródła, w tym powrót
   do wcześniej używanego źródła po zakończeniu komunikatu.
 - [ ] Zweryfikować mapowanie pinów na nowym profilu DIN0 po zmianie `I2S_LRC`

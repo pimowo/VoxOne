@@ -168,6 +168,7 @@ public:
       return InBuff.bufferFilled() >= InBuff.getMaxBlockSize();
     }
     bool startAudioTask();
+    void stopAudioTask();
     bool audioTaskRunning() const { return m_audioTaskRunning; }
     void loop();
     uint32_t stopSong();
@@ -223,7 +224,6 @@ private:
     void performAudioTask();
     static void audioTaskEntry(void* context);
     void audioTaskLoop();
-    void stopAudioTask();
     void resetAudioBufferStats();
     bool tuneAudioSocket(WiFiClient& client);
     bool readPlayListData();

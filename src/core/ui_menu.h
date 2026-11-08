@@ -45,6 +45,14 @@ struct MenuSnapshot {
   uint32_t revision;
 };
 
+enum class MenuRenderKind : uint8_t { NONE, FULL, SELECTION };
+
+struct MenuRenderPlan {
+  MenuRenderKind kind;
+  uint8_t previousIndex;
+  uint8_t selectedIndex;
+};
+
 class UiMenu {
  public:
   static constexpr uint8_t kMainItemCount = 4;
@@ -73,9 +81,13 @@ class UiMenu {
 
 MenuLevel menuLevel(MenuId menuId);
 const char* menuTitle(MenuId menuId);
+const char* menuContextHeader(MenuId menuId);
 uint8_t itemCount(MenuId menuId);
 const char* itemLabel(MenuId menuId, uint8_t index);
 bool itemHasSubmenu(MenuId menuId, uint8_t index);
+MenuRenderPlan menuRenderPlan(const MenuSnapshot& previous,
+                              const MenuSnapshot& current,
+                              bool previousRendered);
 
 inline const char* menuTitle(const MenuSnapshot& snapshot) {
   return menuTitle(snapshot.menuId);

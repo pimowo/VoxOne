@@ -70,6 +70,8 @@ class Player: public Audio {
     uint32_t _callbackToken = 0;
     QueueHandle_t _temporaryUrls = nullptr;
     bool _localAudioAvailable = false;
+    bool _shutdownSuspended = false;
+    bool _shutdownResumeRadio = false;
     //char        _plError[PLERR_LN];
   private:
     void _stop(bool alreadyStopped = false,
@@ -139,6 +141,9 @@ class Player: public Audio {
     bool outputSilent() const;
     void setMuted(bool muted);
     void toggleMute() { setMuted(!isMuted()); }
+    void stopForShutdown();
+    void resumeAfterShutdown();
+    bool shutdownSuspended() const { return _shutdownSuspended; }
     void applyCurrentVolume();
     uint8_t pendingRawAtMax(uint8_t maximum);
     uint8_t rawNotLouderThan(uint8_t candidate, uint8_t maximum, uint8_t output);

@@ -33,6 +33,11 @@ int main() {
   assert(manager.find("config.persistV7()") != std::string::npos);
   assert(manager.find("display.beginShutdownSequence()") !=
          std::string::npos);
+  const size_t shutdownAudio = manager.find("player.stopForShutdown()");
+  const size_t shutdownScreen = manager.find("display.beginShutdownSequence()");
+  assert(shutdownAudio != std::string::npos);
+  assert(shutdownScreen != std::string::npos);
+  assert(shutdownAudio < shutdownScreen);
   assert(manager.find("display.shutdownSequenceComplete()") !=
          std::string::npos);
   assert(manager.find("player.setMuted(true)") != std::string::npos);
@@ -48,5 +53,13 @@ int main() {
   assert(manager.find("transitionUiMode(MENU)") != std::string::npos);
   assert(manager.find("ButtonEvent::BUTTON_LONG_PRESS") != std::string::npos);
   assert(manager.find("beginShutdown();") != std::string::npos);
+
+  const std::string player = readFile("src/core/player.cpp");
+  assert(player.find("void Player::stopForShutdown()") != std::string::npos);
+  assert(player.find("Audio::setVolume(0)") != std::string::npos);
+  assert(player.find("stopAudioTask();") != std::string::npos);
+  assert(player.find("void Player::resumeAfterShutdown()") !=
+         std::string::npos);
+  assert(player.find("startAudioTask()") != std::string::npos);
   return 0;
 }

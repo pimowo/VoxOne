@@ -353,6 +353,7 @@ void Player::loop() {
     Audio::setVolume(_mute.outputVolume(
         volToI2S(config.runtimeSnapshot().volume)));
   }
+  if (_shutdownSuspended) return;
   playerRequestParams_t requestP;
   if(xQueueReceive(playerQueue, &requestP, isRunning()?PL_QUEUE_TICKS:PL_QUEUE_TICKS_ST)){
     if (systemUpdateAudioBlocked() && requestP.type != PR_UPDATE_STOP) return;
@@ -516,6 +517,43 @@ void Player::loop() {
       _volTimer=false;
     }
   }
+}
+
+void Player::stopForShutdown() {
+  if (_shutdownSuspended) return;
+  _shutdownResumeRadio = sourceManagerRadioResumeAllowed();
+  _shutdownSuspended = true;
+  _radioReconnect.cancel();
+  cancelPendingConnection();
+  resetQueue();
+  if (_temporaryUrls) xQueueReset(_temporaryUrls);
+  if (temporaryBusy()) {
+    suppressTemporaryRadioRestore();
+    finishTemporary();
+  }
+
+  // Silence the DAC synchronously before the display task can begin the
+  // goodbye animation. The normal pending-volume path keeps mute state and
+  // Web/API reporting consistent on the following loop iteration.
+  setMuted(true);
+  Audio::setVolume(0);
+  _stop(false, RadioStopReason::SourceSwitch, true);
+  stopAudioTask();
+#if I2S_DOUT!=255
+  i2s_zero_dma_buffer(I2S_NUM_0);
+#endif
+  Serial.println("##[POWER]# audio stopped before shutdown screen");
+}
+
+void Player::resumeAfterShutdown() {
+  if (!_shutdownSuspended) return;
+  const bool resumeRadio = _shutdownResumeRadio;
+  _shutdownResumeRadio = false;
+  _shutdownSuspended = false;
+  if (!startAudioTask())
+    Serial.println("##[WARN]# AudioTask resume failed; using loop fallback");
+  if (resumeRadio && sourceManagerRadioResumeAllowed())
+    sendCommand({PR_RADIO_RESUME, config.lastStation()});
 }
 
 void Player::setOutputPins(bool isPlaying) {

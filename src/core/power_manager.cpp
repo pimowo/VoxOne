@@ -84,6 +84,7 @@ void PowerManager::requestWakeup() {
 
 void PowerManager::beginShutdown() {
   shutdownNotice_ = true;
+  player.stopForShutdown();
   transitionUiMode(SHUTTING_DOWN);
   display.beginShutdownSequence();
   if (!config.persistV7())
@@ -108,6 +109,7 @@ void PowerManager::wakeup() {
   setPowerRelay(true);
   config.setDspOn(true, false);
   player.setMuted(false);
+  player.resumeAfterShutdown();
   standby_.store(false, std::memory_order_release);
   transitionUiMode(PLAYER);
   Serial.println("##[POWER]# awake");

@@ -95,6 +95,18 @@ const char* menuTitle(MenuId menuId) {
   return "";
 }
 
+const char* menuContextHeader(MenuId menuId) {
+  switch (menuId) {
+    case MenuId::MAIN: return "MENU";
+    case MenuId::AUDIO: return "AUDIO";
+    case MenuId::SCREEN: return "WYŚWIETLACZ";
+    case MenuId::NETWORK: return "SIEĆ";
+    case MenuId::SYSTEM: return "SYSTEM";
+    case MenuId::NONE: return "";
+  }
+  return "";
+}
+
 uint8_t itemCount(MenuId menuId) {
   return menuDefinition(menuId).count;
 }
@@ -107,6 +119,19 @@ const char* itemLabel(MenuId menuId, uint8_t index) {
 bool itemHasSubmenu(MenuId menuId, uint8_t index) {
   const auto menu = menuDefinition(menuId);
   return index < menu.count && menu.items[index].submenu != MenuId::NONE;
+}
+
+MenuRenderPlan menuRenderPlan(const MenuSnapshot& previous,
+                              const MenuSnapshot& current,
+                              bool previousRendered) {
+  if (!previousRendered || previous.menuId != current.menuId)
+    return {MenuRenderKind::FULL, previous.selectedIndex,
+            current.selectedIndex};
+  if (previous.selectedIndex != current.selectedIndex)
+    return {MenuRenderKind::SELECTION, previous.selectedIndex,
+            current.selectedIndex};
+  return {MenuRenderKind::NONE, previous.selectedIndex,
+          current.selectedIndex};
 }
 
 bool UiMenu::open() {

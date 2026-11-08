@@ -9,6 +9,7 @@ using voxone::ui_menu::MenuAction;
 using voxone::ui_menu::MenuCommand;
 using voxone::ui_menu::MenuId;
 using voxone::ui_menu::MenuLevel;
+using voxone::ui_menu::MenuRenderKind;
 using voxone::ui_menu::MenuState;
 using voxone::ui_menu::UiMenu;
 
@@ -58,6 +59,12 @@ int main() {
   assert(std::string(voxone::ui_menu::itemLabel(MenuId::MAIN, 4)).empty());
   for (uint8_t index = 0; index < UiMenu::kMainItemCount; ++index)
     assert(voxone::ui_menu::itemHasSubmenu(MenuId::MAIN, index));
+  assert(std::string(voxone::ui_menu::menuContextHeader(MenuId::MAIN)) ==
+         "MENU");
+  assert(std::string(voxone::ui_menu::menuContextHeader(MenuId::AUDIO)) ==
+         "AUDIO");
+  assert(std::string(voxone::ui_menu::menuContextHeader(MenuId::SCREEN)) ==
+         "WYŚWIETLACZ");
 
   assert(menu.open());
   assert(!menu.open());
@@ -89,6 +96,27 @@ int main() {
   assert(menu.menuId() == MenuId::MAIN);
   assert(menu.selectedIndex() == 0);
   assert(menu.snapshot().revision > openedRevision);
+
+  // Encoder navigation repaints only the old and new selection. Entering a
+  // different branch requires a complete menu-layout refresh.
+  const voxone::ui_menu::MenuSnapshot firstPaint{
+      MenuState::OPEN, MenuLevel::MAIN, MenuId::MAIN, 0, 1};
+  const voxone::ui_menu::MenuSnapshot nextSelection{
+      MenuState::OPEN, MenuLevel::MAIN, MenuId::MAIN, 1, 2};
+  auto renderPlan = voxone::ui_menu::menuRenderPlan(
+      firstPaint, nextSelection, true);
+  assert(renderPlan.kind == MenuRenderKind::SELECTION);
+  assert(renderPlan.previousIndex == 0);
+  assert(renderPlan.selectedIndex == 1);
+  renderPlan = voxone::ui_menu::menuRenderPlan(
+      nextSelection, nextSelection, true);
+  assert(renderPlan.kind == MenuRenderKind::NONE);
+  const voxone::ui_menu::MenuSnapshot audioMenu{
+      MenuState::OPEN, MenuLevel::SUBMENU, MenuId::AUDIO, 0, 3};
+  assert(voxone::ui_menu::menuRenderPlan(
+             nextSelection, audioMenu, true).kind == MenuRenderKind::FULL);
+  assert(voxone::ui_menu::menuRenderPlan(
+             firstPaint, firstPaint, false).kind == MenuRenderKind::FULL);
 
   // Every root item is a real branch, and Back restores its parent selection.
   assert(menu.handle(MenuCommand::NEXT) == MenuAction::NAVIGATED);
@@ -135,5 +163,17 @@ int main() {
          std::string::npos);
   assert(display.find("itemHasSubmenu(menu, index)") != std::string::npos);
   assert(display.find("dsp.print(\">") != std::string::npos);
+  const size_t menuWidgetStart = display.find("class UiMenuWidget");
+  const size_t menuWidgetEnd = display.find(
+      "#if VOXONE_DISPLAY_COMPILES_SMALL_OLED", menuWidgetStart);
+  assert(menuWidgetStart != std::string::npos);
+  assert(menuWidgetEnd != std::string::npos);
+  const std::string menuRenderer = display.substr(
+      menuWidgetStart, menuWidgetEnd - menuWidgetStart);
+  assert(menuRenderer.find("dsp.fillScreen") == std::string::npos);
+  assert(menuRenderer.find("MenuRenderKind::SELECTION") !=
+         std::string::npos);
+  assert(menuRenderer.find("menuContextHeader(menu.menuId)") !=
+         std::string::npos);
   return 0;
 }
