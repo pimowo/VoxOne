@@ -11,6 +11,8 @@
 #include <vector>
 #include "../core/radio_url_resolution.h"
 #include "../core/flac_bitrate_meter.h"
+#include "../core/audio_runtime_config.h"
+#include "../core/audio_buffer_metrics.h"
 #include "../core/radio_connect_lifetime.h"
 #include "../core/radio_reconnect_policy.h"
 #include "wav_header_parser.h"
@@ -101,9 +103,12 @@ public:
     uint32_t getReadPos();                      // read position relative to the beginning
     void     resetBuffer();                     // restore defaults
     bool     havePSRAM() { return m_f_psram; };
+    void     lock();
+    void     unlock();
 
 protected:
-    size_t   m_buffSizePSRAM    = 300000;   // most webstreams limit the advance to 100...300Kbytes
+    size_t   m_buffSizePSRAM    =
+        voxone::audio_runtime::kPsramInputBufferBytes;
     //size_t   m_buffSizeRAM      = 1600 * 5;
     size_t   m_buffSizeRAM      = 1600;
     size_t   m_buffSize         = 0;
@@ -111,7 +116,9 @@ protected:
     size_t   m_writeSpace       = 0;
     size_t   m_dataLength       = 0;
     size_t   m_resBuffSizeRAM   = 1600;     // reserved buffspace, >= one mp3  frame
-    size_t   m_resBuffSizePSRAM = 4096 * 4; // reserved buffspace, >= one flac frame
+    size_t   m_resBuffSizePSRAM =
+        voxone::audio_runtime::kFlacFrameReserveBytes;
+    size_t   m_resBuffSizeActive = 1600;
     size_t   m_maxBlockSize     = 1600;
     uint8_t* m_buffer           = NULL;
     uint8_t* m_writePtr         = NULL;
@@ -120,6 +127,7 @@ protected:
     bool     m_f_start          = true;
     bool     m_f_init           = false;
     bool     m_f_psram          = false;    // PSRAM is available (and used...)
+    SemaphoreHandle_t m_mutex   = nullptr;
 };
 //----------------------------------------------------------------------------------------------------------------------
 
@@ -159,6 +167,8 @@ public:
     bool transportBufferedFrameAvailable() {
       return InBuff.bufferFilled() >= InBuff.getMaxBlockSize();
     }
+    bool startAudioTask();
+    bool audioTaskRunning() const { return m_audioTaskRunning; }
     void loop();
     uint32_t stopSong();
     void forceMono(bool m);
@@ -209,6 +219,13 @@ private:
     void processWebStreamTS(bool monitorTransport);
     void processWebStreamHLS(bool monitorTransport);
     void playAudioData();
+    void requestAudioDecode();
+    void performAudioTask();
+    static void audioTaskEntry(void* context);
+    void audioTaskLoop();
+    void stopAudioTask();
+    void resetAudioBufferStats();
+    bool tuneAudioSocket(WiFiClient& client);
     bool readPlayListData();
     const char* parsePlaylist_M3U();
     const char* parsePlaylist_PLS();
@@ -462,6 +479,11 @@ private:
     WiFiClient            client;       // @suppress("Abstract class cannot be instantiated")
     WiFiClientSecure      clientsecure; // @suppress("Abstract class cannot be instantiated")
     WiFiClient*           _client = nullptr;
+    int                   m_tunedSocketFd = -1;
+    TaskHandle_t          m_audioTaskHandle = nullptr;
+    SemaphoreHandle_t     m_audioTaskMutex = nullptr;
+    volatile bool         m_audioTaskRunning = false;
+    volatile bool         m_audioDecodeReady = false;
     i2s_config_t          m_i2s_config = {}; // stores values for I2S driver
     i2s_pin_config_t      m_pin_config = {};
     std::vector<char*>    m_playlistContent; // m3u8 playlist buffer
@@ -486,7 +508,8 @@ private:
     const size_t    m_frameSizeWav  = 1024 * 8;
     const size_t    m_frameSizeMP3  = 1600;
     const size_t    m_frameSizeAAC  = 1600;
-    const size_t    m_frameSizeFLAC = 4096 * 4;
+    const size_t    m_frameSizeFLAC =
+        voxone::audio_runtime::kFlacFrameReserveBytes;
 
     static const uint8_t m_tsPacketSize  = 188;
     static const uint8_t m_tsHeaderSize  = 4;
@@ -537,6 +560,7 @@ private:
     uint32_t        m_t0 = 0;                       // store millis(), is needed for a small delay
     uint32_t        m_contentlength = 0;            // Stores the length if the stream comes from fileserver
     uint32_t        m_bytesNotDecoded = 0;          // pictures or something else that comes with the stream
+    voxone::audio::AudioBufferMetrics m_audioBufferMetrics;
     uint64_t        m_transportProgressBytes = 0;   // bytes consumed from the active HTTP transport
 #if defined(VOXONE_TTS_HIL_DIAGNOSTICS)
     uint64_t        m_hilHttpBodyProgressBytes = 0; // cumulative web-file body bytes

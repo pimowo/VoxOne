@@ -11,6 +11,7 @@
  *
  */
 #include "flac_decoder.h"
+#include <esp_heap_caps.h>
 #include "vector"
 using namespace std;
 
@@ -37,18 +38,25 @@ bool     m_f_OggS_found = false;
 //----------------------------------------------------------------------------------------------------------------------
 //          FLAC INI SECTION
 //----------------------------------------------------------------------------------------------------------------------
+namespace {
+
+template <typename T>
+T* allocateFlacBuffer() {
+    void* memory = nullptr;
+    if (psramFound()) {
+        memory = heap_caps_calloc(1, sizeof(T),
+                                  MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
+    }
+    if (!memory) memory = calloc(1, sizeof(T));
+    return static_cast<T*>(memory);
+}
+
+}  // namespace
+
 bool FLACDecoder_AllocateBuffers(void){
-    if(psramFound()) {
-        // PSRAM found, Buffer will be allocated in PSRAM
-        if(!FLACFrameHeader)    {FLACFrameHeader   = (FLACFrameHeader_t*)    ps_malloc(sizeof(FLACFrameHeader_t));}
-        if(!FLACMetadataBlock)  {FLACMetadataBlock = (FLACMetadataBlock_t*)  ps_malloc(sizeof(FLACMetadataBlock_t));}
-        if(!FLACsubFramesBuff)  {FLACsubFramesBuff = (FLACsubFramesBuff_t*)  ps_malloc(sizeof(FLACsubFramesBuff_t));}
-    }
-    else {
-        if(!FLACFrameHeader)    {FLACFrameHeader   = (FLACFrameHeader_t*)    malloc(sizeof(FLACFrameHeader_t));}
-        if(!FLACMetadataBlock)  {FLACMetadataBlock = (FLACMetadataBlock_t*)  malloc(sizeof(FLACMetadataBlock_t));}
-        if(!FLACsubFramesBuff)  {FLACsubFramesBuff = (FLACsubFramesBuff_t*)  malloc(sizeof(FLACsubFramesBuff_t));}
-    }
+    if(!FLACFrameHeader)   FLACFrameHeader = allocateFlacBuffer<FLACFrameHeader_t>();
+    if(!FLACMetadataBlock) FLACMetadataBlock = allocateFlacBuffer<FLACMetadataBlock_t>();
+    if(!FLACsubFramesBuff) FLACsubFramesBuff = allocateFlacBuffer<FLACsubFramesBuff_t>();
     if(!FLACFrameHeader || !FLACMetadataBlock || !FLACsubFramesBuff ){
         log_e("not enough memory to allocate flacdecoder buffers");
         return false;

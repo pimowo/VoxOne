@@ -44,8 +44,10 @@ checkpointów pozostaje w historii Git i w istniejących raportach.
 - [ ] Multiroom: dodać zsynchronizowane odtwarzanie na wielu urządzeniach.
 - [ ] Zaprojektować przyszłe rewizje sprzętowe L1, M1, S1 i DIN1.
 - [ ] Ocenić i opisać zakres większego wariantu VoxOne XL.
-- [ ] FLAC Optimization: zoptymalizować dekoder audio przez przypisanie do
-  rdzenia i użycie buforów w PSRAM oraz porównać rozwiązanie z projektem vtom.
+- [ ] FLAC Optimization: przeprowadzić test HIL strumieni FLAC o wysokim
+  bitrate i ocenić liczniki underflow/minimum zapełnienia; przy migracji na
+  framework budowany ze źródeł ustawić kompilacyjne `TCP_WND=32768` i
+  `TCP_RECVMBOX_SIZE=32` (obecny Arduino Core 2 używa prekompilowanego lwIP).
 
 ## 4. Backlog / Inne
 

@@ -81,7 +81,15 @@ void Player::init() {
   #endif
   _loadVol(runtime.volume);
   setConnectionTimeout(CONNECTION_TIMEOUT, CONNECTION_TIMEOUT_SSL);
-  Serial.println("done");
+  const bool taskStarted = startAudioTask();
+  Serial.printf("done (decode task: %s, core=%u, priority=%u, buffer=%u+%u KiB)\n",
+                taskStarted ? "started" : "main-loop fallback",
+                static_cast<unsigned>(voxone::audio_runtime::kTaskCore),
+                static_cast<unsigned>(voxone::audio_runtime::kTaskPriority),
+                static_cast<unsigned>(
+                    voxone::audio_runtime::kPsramInputBufferBytes / 1024U),
+                static_cast<unsigned>(
+                    voxone::audio_runtime::kFlacFrameReserveBytes / 1024U));
 }
 
 bool Player::ready() const {

@@ -21,6 +21,7 @@
 #include "../core/system_operation_state.h"
 #include "web_file_bounds.h"
 #include <new>
+#include <lwip/sockets.h>
 #if VOXONE_HAS_BT && VOXONE_PIN_MAP_COMPLETE && VOXONE_BT_I2S_RX_ENABLED
 #include "../core/source_manager.h"
 static inline bool radioCanUseI2S() { return radioI2SOutputEnabled(); }
@@ -43,59 +44,94 @@ static inline bool radioCanUseI2S() { return !systemUpdateAudioBlocked(); }
 #endif
 //---------------------------------------------------------------------------------------------------------------------
 AudioBuffer::AudioBuffer(size_t maxBlockSize) {
+    m_mutex = xSemaphoreCreateRecursiveMutex();
     // if maxBlockSize isn't set use defaultspace (1600 bytes) is enough for aac and mp3 player
     if(maxBlockSize) m_resBuffSizeRAM  = maxBlockSize;
     if(maxBlockSize) m_maxBlockSize = maxBlockSize;
 }
 
 AudioBuffer::~AudioBuffer() {
+    lock();
     if(m_buffer)
         free(m_buffer);
     m_buffer = NULL;
+    unlock();
+    if(m_mutex) vSemaphoreDelete(m_mutex);
+    m_mutex = nullptr;
+}
+
+void AudioBuffer::lock() {
+    if(m_mutex) xSemaphoreTakeRecursive(m_mutex, portMAX_DELAY);
+}
+
+void AudioBuffer::unlock() {
+    if(m_mutex) xSemaphoreGiveRecursive(m_mutex);
 }
 
 void AudioBuffer::setBufsize(int ram, int psram) {
+    lock();
     if (ram > -1) // -1 == default / no change
         m_buffSizeRAM = ram;
     if (psram > -1)
         m_buffSizePSRAM = psram;
+    unlock();
 }
 
 size_t AudioBuffer::init() {
+    lock();
     if(m_buffer) free(m_buffer);
     m_buffer = NULL;
+    m_f_init = false;
+    const size_t psramAllocation = m_buffSizePSRAM + m_resBuffSizePSRAM;
     if(psramInit() && m_buffSizePSRAM > 0) {
-        // PSRAM found, AudioBuffer will be allocated in PSRAM
-        m_f_psram = true;
+        // Allocate the 512 KiB ring and the complete FLAC frame reserve in PSRAM.
         m_buffSize = m_buffSizePSRAM;
-        m_buffer = (uint8_t*) ps_calloc(m_buffSize, sizeof(uint8_t));
-        m_buffSize = m_buffSizePSRAM - m_resBuffSizePSRAM;
+        m_buffer = (uint8_t*) ps_calloc(psramAllocation, sizeof(uint8_t));
+        m_f_psram = m_buffer != nullptr;
+        if(m_buffer) m_resBuffSizeActive = m_resBuffSizePSRAM;
     }
     if(m_buffer == NULL) {
-        // PSRAM not found, not configured or not enough available
+        // Try the same capacity in DRAM before using the legacy reduced buffer.
         m_f_psram = false;
-        const uint16_t audioBuffer = config.runtimeSnapshot().audioBuffer;
-        m_buffSize = m_buffSizeRAM * audioBuffer;
-        m_buffer = (uint8_t*) calloc(m_buffSize, sizeof(uint8_t));
-        m_buffSize = m_buffSizeRAM * audioBuffer - m_resBuffSizeRAM;
+        m_buffSize = m_buffSizePSRAM;
+        m_buffer = (uint8_t*) calloc(psramAllocation, sizeof(uint8_t));
+        if(m_buffer) m_resBuffSizeActive = m_resBuffSizePSRAM;
     }
-    if(!m_buffer)
+    if(m_buffer == NULL) {
+        const uint16_t audioBuffer = config.runtimeSnapshot().audioBuffer;
+        const size_t reducedMain = m_buffSizeRAM * audioBuffer;
+        m_buffer = (uint8_t*) calloc(reducedMain + m_resBuffSizeRAM,
+                                     sizeof(uint8_t));
+        m_buffSize = reducedMain;
+        if(m_buffer) m_resBuffSizeActive = m_resBuffSizeRAM;
+    }
+    if(!m_buffer) {
+        unlock();
         return 0;
+    }
     m_f_init = true;
     resetBuffer();
-    return m_buffSize;
+    const size_t result = m_buffSize;
+    unlock();
+    return result;
 }
 
 void AudioBuffer::changeMaxBlockSize(uint16_t mbs){
-    m_maxBlockSize = mbs;
+    lock();
+    m_maxBlockSize = min(static_cast<size_t>(mbs), m_resBuffSizeActive);
+    unlock();
     return;
 }
 
 uint16_t AudioBuffer::getMaxBlockSize(){
-    return m_maxBlockSize;
+    lock();
+    const uint16_t result = m_maxBlockSize;
+    unlock();
+    return result;
 }
 
 size_t AudioBuffer::freeSpace() {
+    lock();
     if(m_readPtr >= m_writePtr) {
         m_freeSpace = (m_readPtr - m_writePtr);
     } else {
@@ -103,10 +139,13 @@ size_t AudioBuffer::freeSpace() {
     }
     if(m_f_start)
         m_freeSpace = m_buffSize;
-    return m_freeSpace - 1;
+    const size_t result = m_freeSpace - 1;
+    unlock();
+    return result;
 }
 
 size_t AudioBuffer::writeSpace() {
+    lock();
     if(m_readPtr >= m_writePtr) {
         m_writeSpace = (m_readPtr - m_writePtr - 1); // readPtr must not be overtaken
     } else {
@@ -117,66 +156,91 @@ size_t AudioBuffer::writeSpace() {
     }
     if(m_f_start)
         m_writeSpace = m_buffSize - 1;
-    return m_writeSpace;
+    const size_t result = m_writeSpace;
+    unlock();
+    return result;
 }
 
 size_t AudioBuffer::bufferFilled() {
+    lock();
     if(m_writePtr >= m_readPtr) {
         m_dataLength = (m_writePtr - m_readPtr);
     } else {
         m_dataLength = (m_endPtr - m_readPtr) + (m_writePtr - m_buffer);
     }
-    return m_dataLength;
+    const size_t result = m_dataLength;
+    unlock();
+    return result;
 }
 
 void AudioBuffer::bytesWritten(size_t bw) {
+    lock();
     m_writePtr += bw;
     if(m_writePtr == m_endPtr) {
         m_writePtr = m_buffer;
     }
     if(bw && m_f_start)
         m_f_start = false;
+    unlock();
 }
 
 void AudioBuffer::bytesWasRead(size_t br) {
+    lock();
     m_readPtr += br;
     if(m_readPtr >= m_endPtr) {
         size_t tmp = m_readPtr - m_endPtr;
         m_readPtr = m_buffer + tmp;
     }
+    unlock();
 }
 
 uint8_t* AudioBuffer::getWritePtr() {
-    return m_writePtr;
+    lock();
+    uint8_t* result = m_writePtr;
+    unlock();
+    return result;
 }
 
 uint8_t* AudioBuffer::getReadPtr() {
+    lock();
     size_t len = m_endPtr - m_readPtr;
     if(len < m_maxBlockSize) { // be sure the last frame is completed
         memcpy(m_endPtr, m_buffer, m_maxBlockSize - len);  // cpy from m_buffer to m_endPtr with len
     }
-    return m_readPtr;
+    uint8_t* result = m_readPtr;
+    unlock();
+    return result;
 }
 
 void AudioBuffer::resetBuffer() {
+    lock();
     m_writePtr = m_buffer;
     m_readPtr = m_buffer;
     m_endPtr = m_buffer + m_buffSize;
     m_f_start = true;
     // memset(m_buffer, 0, m_buffSize); //Clear Inputbuffer
+    unlock();
 }
 
 uint32_t AudioBuffer::getWritePos() {
-    return m_writePtr - m_buffer;
+    lock();
+    const uint32_t result = m_writePtr - m_buffer;
+    unlock();
+    return result;
 }
 
 uint32_t AudioBuffer::getReadPos() {
-    return m_readPtr - m_buffer;
+    lock();
+    const uint32_t result = m_readPtr - m_buffer;
+    unlock();
+    return result;
 }
 //---------------------------------------------------------------------------------------------------------------------
 Audio::Audio(bool internalDAC /* = false */,
              uint8_t channelEnabled /* = I2S_DAC_CHANNEL_BOTH_EN */,
              uint8_t i2sPort, bool initializeI2s) {
+
+    m_audioTaskMutex = xSemaphoreCreateRecursiveMutex();
 
     //    build-in-DAC works only with ESP32 (ESP32-S3 has no build-in-DAC)
     //    build-in-DAC last working Arduino Version: 2.0.0-RC2
@@ -286,6 +350,88 @@ void Audio::initInBuff() {
     changeMaxBlockSize(1600); // default size mp3 or aac
 }
 
+bool Audio::startAudioTask() {
+    if(m_audioTaskRunning || m_audioTaskHandle) return true;
+    m_audioTaskRunning = true;
+    const BaseType_t created = xTaskCreatePinnedToCore(
+        audioTaskEntry, "AudioTask", voxone::audio_runtime::kTaskStackBytes,
+        this, voxone::audio_runtime::kTaskPriority, &m_audioTaskHandle,
+        voxone::audio_runtime::kTaskCore);
+    if(created != pdPASS) {
+        m_audioTaskRunning = false;
+        m_audioTaskHandle = nullptr;
+        return false;
+    }
+    return true;
+}
+
+void Audio::stopAudioTask() {
+    if(!m_audioTaskHandle) {
+        m_audioTaskRunning = false;
+        return;
+    }
+    m_audioTaskRunning = false;
+    xTaskNotifyGive(m_audioTaskHandle);
+    for(uint8_t i = 0; i < 100 && m_audioTaskHandle; ++i) vTaskDelay(1);
+    if(m_audioTaskHandle) {
+        vTaskDelete(m_audioTaskHandle);
+        m_audioTaskHandle = nullptr;
+    }
+}
+
+void Audio::audioTaskEntry(void* context) {
+    static_cast<Audio*>(context)->audioTaskLoop();
+}
+
+void Audio::audioTaskLoop() {
+    while(m_audioTaskRunning) {
+        ulTaskNotifyTake(pdTRUE, pdMS_TO_TICKS(1));
+        if(m_audioTaskRunning && m_audioDecodeReady) performAudioTask();
+    }
+    m_audioTaskHandle = nullptr;
+    vTaskDelete(nullptr);
+}
+
+void Audio::requestAudioDecode() {
+    m_audioDecodeReady = true;
+    if(m_audioTaskRunning && m_audioTaskHandle) {
+        xTaskNotifyGive(m_audioTaskHandle);
+        return;
+    }
+    performAudioTask();
+}
+
+void Audio::performAudioTask() {
+    if(m_audioTaskMutex) xSemaphoreTakeRecursive(m_audioTaskMutex, portMAX_DELAY);
+    playAudioData();
+    if(m_audioTaskMutex) xSemaphoreGiveRecursive(m_audioTaskMutex);
+}
+
+void Audio::resetAudioBufferStats() {
+    const auto stats = m_audioBufferMetrics.snapshot();
+    if(stats.observed) {
+        AUDIO_INFO("audio buffer stats: underflows=%lu, min_fill=%u bytes",
+                   static_cast<unsigned long>(stats.underflows),
+                   static_cast<unsigned>(stats.minimumFillBytes));
+    }
+    m_audioBufferMetrics.reset();
+}
+
+bool Audio::tuneAudioSocket(WiFiClient& socketClient) {
+    const int fd = socketClient.fd();
+    if(fd < 0) return false;
+    if(fd == m_tunedSocketFd) return true;
+    const int receiveBytes =
+        voxone::audio_runtime::kAudioSocketReceiveBufferBytes;
+    if(socketClient.setSocketOption(SOL_SOCKET, SO_RCVBUF, &receiveBytes,
+                                    sizeof(receiveBytes)) < 0) {
+        return false;
+    }
+    m_tunedSocketFd = fd;
+    AUDIO_INFO("audio TCP receive buffer: %d bytes", receiveBytes);
+    return true;
+}
+
 //---------------------------------------------------------------------------------------------------------------------
 esp_err_t Audio::I2Sstart(uint8_t i2s_num) {
     // It is not necessary to call this function after i2s_driver_install() (it is started automatically),
@@ -328,6 +474,7 @@ esp_err_t Audio::i2s_mclk_pin_select(const uint8_t pin) {
 }
 //---------------------------------------------------------------------------------------------------------------------
 Audio::~Audio() {
+    stopAudioTask();
     cancelPendingConnection();
     while(m_connectAttempt.active()) vTaskDelay(1);
     //I2Sstop(m_i2s_num);
@@ -336,9 +483,14 @@ Audio::~Audio() {
     if(m_playlistBuff) {free(m_playlistBuff); m_playlistBuff = NULL;}
     if (m_f_i2sInstalled)
         i2s_driver_uninstall((i2s_port_t)m_i2s_num); // #215 free I2S buffer
+    if(m_audioTaskMutex) vSemaphoreDelete(m_audioTaskMutex);
+    m_audioTaskMutex = nullptr;
 }
 //---------------------------------------------------------------------------------------------------------------------
 void Audio::setDefaults() {
+    if(m_audioTaskMutex) xSemaphoreTakeRecursive(m_audioTaskMutex, portMAX_DELAY);
+    resetAudioBufferStats();
+    m_audioDecodeReady = false;
     stopSong();
     initInBuff(); // initialize InputBuffer if not already done
     InBuff.resetBuffer();
@@ -397,6 +549,8 @@ void Audio::setDefaults() {
     m_channels = 2;                                         // assume stereo #209
     m_streamTitleHash = 0;
     m_ID3Size = 0;
+    m_tunedSocketFd = -1;
+    if(m_audioTaskMutex) xSemaphoreGiveRecursive(m_audioTaskMutex);
 }
 
 //---------------------------------------------------------------------------------------------------------------------
@@ -406,18 +560,21 @@ void Audio::setConnectionTimeout(uint16_t timeout_ms, uint16_t timeout_ms_ssl){
 }
 
 int Audio::readClient() {
+    if(_client) tuneAudioSocket(*_client);
     const int value = _client ? _client->read() : -1;
     if(value >= 0) ++m_transportProgressBytes;
     return value;
 }
 
 int Audio::readClient(uint8_t* buffer, size_t length) {
+    if(_client) tuneAudioSocket(*_client);
     const int bytes = _client ? _client->read(buffer, length) : -1;
     if(bytes > 0) m_transportProgressBytes += static_cast<uint32_t>(bytes);
     return bytes;
 }
 
 size_t Audio::readClientBytes(char* buffer, size_t length) {
+    if(_client) tuneAudioSocket(*_client);
     const size_t bytes = _client ? _client->readBytes(buffer, length) : 0;
     m_transportProgressBytes += bytes;
     return bytes;
@@ -2167,10 +2324,13 @@ size_t Audio::process_m3u8_ID3_Header(uint8_t* packet){
 }
 //---------------------------------------------------------------------------------------------------------------------
 uint32_t Audio::stopSong() {
+    if(m_audioTaskMutex) xSemaphoreTakeRecursive(m_audioTaskMutex, portMAX_DELAY);
     cancelPendingConnection();
     m_f_running = false;
+    m_audioDecodeReady = false;
     memset(m_outBuff, 0, sizeof(m_outBuff));     //Clear OutputBuffer
     if (radioCanUseI2S()) i2s_zero_dma_buffer((i2s_port_t) m_i2s_num);
+    if(m_audioTaskMutex) xSemaphoreGiveRecursive(m_audioTaskMutex);
     return 0;
 }
 //---------------------------------------------------------------------------------------------------------------------
@@ -2394,7 +2554,6 @@ void Audio::loop() {
 
         switch(getDatamode()){
             case HTTP_RESPONSE_HEADER:
-                playAudioData(); // fill I2S DMA buffer
                 parseHttpResponseHeader();
                 m_codec = CODEC_AAC;
                 break;
@@ -2876,6 +3035,7 @@ void Audio::processWebStream() {
     }
     // buffer fill routine - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
     if(availableBytes) {
+        InBuff.lock();
         availableBytes = min(availableBytes, (uint32_t)InBuff.writeSpace());
         int16_t bytesAddedToBuffer = readClient(InBuff.getWritePtr(), availableBytes);
 
@@ -2885,6 +3045,7 @@ void Audio::processWebStream() {
             if(m_f_chunked)             m_chunkcount -= bytesAddedToBuffer;
             InBuff.bytesWritten(bytesAddedToBuffer);
         }
+        InBuff.unlock();
 
         if(InBuff.bufferFilled() > maxFrameSize && !f_stream) {  // waiting for buffer filled
             f_stream = true;  // ready to play the audio data
@@ -2897,7 +3058,7 @@ void Audio::processWebStream() {
     if(f_stream){
         static uint8_t cnt = 0;
         cnt++;
-        if(cnt == 3){playAudioData(); cnt = 0;}
+        if(cnt == 3){requestAudioDecode(); cnt = 0;}
     }
 }
 //---------------------------------------------------------------------------------------------------------------------
@@ -2934,6 +3095,7 @@ void Audio::processWebFile() {
         slowStreamDetection(InBuff.bufferFilled(), maxFrameSize);
     }
 
+    InBuff.lock();
     availableBytes = min((uint32_t)InBuff.writeSpace(), availableBytes);
     availableBytes = min(
         voxone::audio::webFileReadLimit(
@@ -2951,6 +3113,7 @@ void Audio::processWebFile() {
         if(m_controlCounter == 100) audioDataCount += bytesAddedToBuffer;
         InBuff.bytesWritten(bytesAddedToBuffer);
     }
+    InBuff.unlock();
 
     if(voxone::audio::webFileDataComplete(
            m_contentlength, byteCounter, m_audioDataStart, m_audioDataSize)) {
@@ -2978,8 +3141,8 @@ void Audio::processWebFile() {
     if(m_webFileDataComplete && InBuff.bufferFilled() < InBuff.getMaxBlockSize()){
         if(InBuff.bufferFilled()){
             if(!readID3V1Tag()){
-                int bytesDecoded = sendBytes(InBuff.getReadPtr(), InBuff.bufferFilled());
-                if(bytesDecoded > 2){InBuff.bytesWasRead(bytesDecoded); return;}
+                requestAudioDecode();
+                return;
             }
         }
         playI2Sremains();
@@ -3003,7 +3166,7 @@ void Audio::processWebFile() {
         if(m_codec == CODEC_FLAC) compression = 2;
         else compression = 6;
         cnt++;
-        if(cnt == compression){playAudioData(); cnt = 0;}
+        if(cnt == compression){requestAudioDecode(); cnt = 0;}
     }
     return;
 }
@@ -3040,7 +3203,7 @@ void Audio::processWebStreamTS(bool monitorTransport) {
 
     if(getDatamode() != AUDIO_DATA) return;        // guard
 
-    if(InBuff.freeSpace() < maxFrameSize && f_stream){playAudioData(); return;}
+    if(InBuff.freeSpace() < maxFrameSize && f_stream){requestAudioDecode(); return;}
 
     availableBytes = _client->available();
     if(availableBytes){
@@ -3077,6 +3240,7 @@ void Audio::processWebStreamTS(bool monitorTransport) {
             ts_parsePacket(&ts_packet[0], &ts_packetStart, &ts_packetLength);
 
             if(ts_packetLength) {
+                InBuff.lock();
                 size_t ws = InBuff.writeSpace();
                 if(ws >= ts_packetLength){
                     memcpy(InBuff.getWritePtr(), ts_packet + ts_packetStart, ts_packetLength);
@@ -3088,6 +3252,7 @@ void Audio::processWebStreamTS(bool monitorTransport) {
                     memcpy(InBuff.getWritePtr(), &ts_packet[ws + ts_packetStart], ts_packetLength -ws);
                     InBuff.bytesWritten(ts_packetLength -ws);
                 }
+                InBuff.unlock();
             }
             if(m_contentlength && byteCounter == m_contentlength){
                 byteCounter = 0;
@@ -3143,7 +3308,7 @@ void Audio::processWebStreamTS(bool monitorTransport) {
     if(f_stream){
         static uint8_t cnt = 0;
         cnt++;
-        if(cnt == 6){playAudioData(); cnt = 0;}
+        if(cnt == 6){requestAudioDecode(); cnt = 0;}
     }
     return;
 }
@@ -3181,6 +3346,7 @@ void Audio::processWebStreamHLS(bool monitorTransport) {
             availableBytes = min((uint32_t)_client->available(), m_chunkcount);
         }
         int bytesWasWritten = 0;
+        InBuff.lock();
         if(InBuff.writeSpace() >= availableBytes){
             bytesWasWritten = readClient(InBuff.getWritePtr(), availableBytes);
         }
@@ -3197,6 +3363,7 @@ void Audio::processWebStreamHLS(bool monitorTransport) {
                 m_f_continue = true;
             }
         }
+        InBuff.unlock();
     }
 
     // timer, triggers every second - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
@@ -3237,15 +3404,24 @@ void Audio::processWebStreamHLS(bool monitorTransport) {
     }
 
     // play audio data - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
-    if(f_stream) playAudioData();
+    if(f_stream) requestAudioDecode();
     return;
 }
 //---------------------------------------------------------------------------------------------------------------------
 void Audio::playAudioData(){
 
-    if(InBuff.bufferFilled() < InBuff.getMaxBlockSize()) return; // guard
+    InBuff.lock();
+    const size_t filled = InBuff.bufferFilled();
+    const size_t frameBytes = InBuff.getMaxBlockSize();
+    const bool finalWebFileBytes = m_webFileDataComplete && filled > 0;
+    m_audioBufferMetrics.observe(filled, frameBytes, finalWebFileBytes);
+    if(filled < frameBytes && !finalWebFileBytes) {
+        InBuff.unlock();
+        return;
+    }
 
-    int bytesDecoded = sendBytes(InBuff.getReadPtr(), InBuff.getMaxBlockSize());
+    const size_t bytesToDecode = min(filled, frameBytes);
+    int bytesDecoded = sendBytes(InBuff.getReadPtr(), bytesToDecode);
 
     if(bytesDecoded < 0) {  // no syncword found or decode error, try next chunk
         log_i("err bytesDecoded %i", bytesDecoded);
@@ -3255,10 +3431,18 @@ void Audio::playAudioData(){
         m_bytesNotDecoded += next;
     }
     else {
-        if(bytesDecoded > 0) {InBuff.bytesWasRead(bytesDecoded); return;}
-        if(bytesDecoded == 0) return; // syncword at pos0 found
+        if(bytesDecoded > 0) {
+            InBuff.bytesWasRead(bytesDecoded);
+            InBuff.unlock();
+            return;
+        }
+        if(bytesDecoded == 0) {
+            InBuff.unlock();
+            return; // syncword at pos0 found
+        }
     }
 
+    InBuff.unlock();
     return;
 }
 //---------------------------------------------------------------------------------------------------------------------

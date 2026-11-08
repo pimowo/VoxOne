@@ -129,6 +129,8 @@ struct FakeBuffer {
   size_t writeSpace() const { return storage.size() - filled; }
   uint8_t* getWritePtr() { return storage.data() + filled; }
   void bytesWritten(size_t count) { filled += count; }
+  void lock() {}
+  void unlock() {}
   std::string text() const {
     return std::string(reinterpret_cast<const char*>(storage.data()), filled);
   }
@@ -148,6 +150,8 @@ struct Audio {
   uint16_t readMetadata(uint16_t maxBytes, bool first = false);
   size_t chunkedDataTransfer(uint8_t* bytes);
   void processWebStream();
+  bool tuneAudioSocket(FakeClient&) { return true; }
+  void requestAudioDecode() {}
 
   uint8_t getDatamode() const { return m_datamode; }
   void setDatamode(uint8_t mode) { m_datamode = mode; }
