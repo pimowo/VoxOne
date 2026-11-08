@@ -44,15 +44,22 @@ void PowerManager::loop() {
     if (!updateLockActive() && !shutdownNotice_) {
       if (event == voxone::power::ButtonEvent::BUTTON_CLICK) {
         if (uiMenu.visible()) {
-          uiMenu.handle(voxone::ui_menu::MenuCommand::SELECT);
-          ESP_LOGI(kTag, "Selected: %s", uiMenu.selectedLabel());
+          const char* selectedLabel = uiMenu.selectedLabel();
+          const auto action =
+              uiMenu.handle(voxone::ui_menu::MenuCommand::SELECT);
+          if (action == voxone::ui_menu::MenuAction::ENTERED_SUBMENU)
+            ESP_LOGI(kTag, "Opened submenu: %s", selectedLabel);
+          else if (action == voxone::ui_menu::MenuAction::SELECTED)
+            ESP_LOGI(kTag, "Selected: %s", selectedLabel);
         } else if (standby()) {
           wakeup();
         } else {
           player.toggleMute();
         }
       } else if (event == voxone::power::ButtonEvent::BUTTON_DOUBLE_CLICK) {
-        if (uiMenu.open()) {
+        if (uiMenu.visible()) {
+          uiMenu.handle(voxone::ui_menu::MenuCommand::BACK);
+        } else if (uiMenu.open()) {
           if (!transitionUiMode(MENU)) uiMenu.close();
           else ESP_LOGI(kTag, "Menu opened");
         }

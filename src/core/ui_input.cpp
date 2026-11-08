@@ -21,6 +21,7 @@ bool dispatchMenuInput(UiInputEvent event, int8_t steps) {
 
   using voxone::ui_menu::MenuAction;
   using voxone::ui_menu::MenuCommand;
+  const char* selectedLabel = uiMenu.selectedLabel();
   MenuAction action = MenuAction::NONE;
   if (event == UiInputEvent::Left) {
     action = uiMenu.handle(MenuCommand::PREVIOUS, steps);
@@ -28,13 +29,19 @@ bool dispatchMenuInput(UiInputEvent event, int8_t steps) {
     action = uiMenu.handle(MenuCommand::NEXT, steps);
   } else if (event == UiInputEvent::Ok) {
     action = uiMenu.handle(MenuCommand::SELECT);
+  } else if (event == UiInputEvent::Double) {
+    action = uiMenu.handle(MenuCommand::BACK);
   } else if (event == UiInputEvent::Long ||
              event == UiInputEvent::VeryLong) {
     action = uiMenu.handle(MenuCommand::CLOSE);
   }
 
   if (action == MenuAction::SELECTED)
-    ESP_LOGI(kUiInputTag, "Selected: %s", uiMenu.selectedLabel());
+    ESP_LOGI(kUiInputTag, "Selected: %s", selectedLabel);
+  if (action == MenuAction::ENTERED_SUBMENU)
+    ESP_LOGI(kUiInputTag, "Opened submenu: %s", selectedLabel);
+  if (action == MenuAction::BACKED)
+    ESP_LOGI(kUiInputTag, "Back to main menu");
   if (action == MenuAction::CLOSED) transitionUiMode(PLAYER);
   return true;
 }

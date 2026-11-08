@@ -200,27 +200,25 @@ class UiMenuWidget : public Widget {
     const uint8_t titleSize = compact ? 1 : (width >= 400 ? 3 : 2);
     const uint8_t itemSize = compact ? 1 : (height >= 200 ? 2 : 1);
     const uint16_t contentTop = height <= 32 ? 0 : (compact ? 12 : 68);
-    const uint16_t rowHeight =
-        (height - contentTop) / voxone::ui_menu::UiMenu::kItemCount;
+    const uint8_t itemCount = voxone::ui_menu::itemCount(menu);
+    if (itemCount == 0) return;
+    const uint16_t rowHeight = (height - contentTop) / itemCount;
     const uint16_t horizontalMargin = oled ? 0 : (width >= 300 ? 36 : 8);
     const uint16_t rowWidth = width - horizontalMargin * 2;
 
     dsp.fillScreen(background);
     dsp.setFont();
     if (contentTop != 0) {
-      const char* title = menu.state == voxone::ui_menu::MenuState::EDITING
-                              ? "MENU *"
-                              : "MENU";
+      const char* title = voxone::ui_menu::menuTitle(menu);
       const uint16_t titleWidth =
-          static_cast<uint16_t>(strlen(title) * CHARWIDTH * titleSize);
+          static_cast<uint16_t>(strlen_utf8(title) * CHARWIDTH * titleSize);
       dsp.setTextSize(titleSize);
       dsp.setTextColor(foreground, background);
       dsp.setCursor((width - titleWidth) / 2, compact ? 1 : 20);
-      dsp.print(title);
+      dsp.print(utf8Rus(title));
     }
 
-    for (uint8_t index = 0;
-         index < voxone::ui_menu::UiMenu::kItemCount; ++index) {
+    for (uint8_t index = 0; index < itemCount; ++index) {
       const bool selected = index == menu.selectedIndex;
       const uint16_t top = contentTop + index * rowHeight;
       const uint16_t selectedBackground = foreground;
@@ -237,7 +235,14 @@ class UiMenuWidget : public Widget {
       const uint16_t textTop =
           top + (rowHeight > textHeight ? (rowHeight - textHeight) / 2 : 0);
       dsp.setCursor(horizontalMargin + (oled ? 4 : 12), textTop);
-      dsp.print(voxone::ui_menu::itemLabel(index));
+      dsp.print(utf8Rus(voxone::ui_menu::itemLabel(menu, index)));
+      if (voxone::ui_menu::itemHasSubmenu(menu, index)) {
+        const uint16_t arrowWidth = CHARWIDTH * itemSize;
+        const uint16_t arrowMargin = oled ? 3 : 10;
+        dsp.setCursor(horizontalMargin + rowWidth - arrowWidth - arrowMargin,
+                      textTop);
+        dsp.print(">");
+      }
     }
     revision_ = menu.revision;
   }

@@ -7,9 +7,10 @@ checkpointów pozostaje w historii Git i w istniejących raportach.
 ## 1. HIL PENDING (1.1.x — do fizycznego przetestowania przez użytkownika)
 
 - [ ] Zweryfikować przycisk zasilania na L0 (GPIO42) i S0 (GPIO3): krótki
-  klik (Wakeup/Mute lub wybór w Menu), dwuklik (otwarcie Menu), długie
-  naciśnięcie (zamknięcie Menu albo shutdown), nawigację enkoderem bez zmiany
-  głośności przy otwartym Menu, renderowanie na TFT/OLED, sekwencję wyłączania
+  klik (Wakeup/Mute, wejście w podmenu lub wybór pozycji), dwuklik (otwarcie
+  Menu albo powrót z podmenu), długie naciśnięcie (zamknięcie Menu albo
+  shutdown), nawigację enkoderem bez zmiany głośności przy otwartym Menu,
+  renderowanie hierarchii i wskaźników `>` na TFT/OLED, sekwencję wyłączania
   „Do widzenia!” oraz wygaszenie ekranu z ochroną OLED.
 - [ ] Fizycznie przetestować TTS z Home Assistant i wybór źródła, w tym powrót
   do wcześniej używanego źródła po zakończeniu komunikatu.
@@ -21,19 +22,28 @@ checkpointów pozostaje w historii Git i w istniejących raportach.
 
 - [ ] Rozbudować działający szkielet Menu na TFT i OLED o pełne ekrany
   konfiguracji oraz odczyt i zapis ustawień; zachować obsługę enkoderem.
+- [ ] Dodać lokalną konfigurację Wi-Fi za pomocą enkodera i ekranu urządzenia.
 - [ ] Zintegrować VoxOnePilot: obsłużyć zewnętrzny pilot przez WebSocket i dodać
   odbiornik IR w radiu.
 - [ ] Przekształcić obecny interfejs WWW w Progressive Web App, z możliwością
   instalacji i ikoną na telefonie.
+- [ ] Dodać opcjonalną obsługę ekranu LCD ST7920 w późniejszym etapie rozwoju.
 
 ## 3. Wersja 1.3.0+ (Audio / Sprzęt / Sieć)
 
-- [ ] DSP Mini: obsłużyć zewnętrzne procesory DSP, na przykład ADAU1701, przez
-  I2C i dodać ich konfigurację do interfejsu WWW.
+- [ ] DSPmini: obsłużyć ADAU1701 przez I2C, dodać konfigurację do WWW oraz
+  Parametric EQ, Crossover, wyjście subwoofera, Loudness i AutoEQ.
 - [ ] W5500 Ethernet: dodać obsługę przewodowego internetu na profilu L0 przez
   SPI.
-- [ ] DLNA / UPnP: umożliwić wysyłanie muzyki z sieci lokalnej, między innymi
-  z telefonu i NAS.
+- [ ] DLNA / UPnP: umożliwić odtwarzanie z sieci lokalnej, między innymi
+  z telefonu i NAS, z wykorzystaniem `minidlna`.
+- [ ] AUX: dodać wejście analogowe oparte na PCM1808 i zintegrować je z wyborem
+  źródła.
+- [ ] A2DP Transmitter: dodać naprzemienne tryby RX/TX w VoxOneBT, bez ich
+  jednoczesnej pracy.
+- [ ] Multiroom: dodać zsynchronizowane odtwarzanie na wielu urządzeniach.
+- [ ] Zaprojektować przyszłe rewizje sprzętowe L1, M1, S1 i DIN1.
+- [ ] Ocenić i opisać zakres większego wariantu VoxOne XL.
 - [ ] FLAC Optimization: zoptymalizować dekoder audio przez przypisanie do
   rdzenia i użycie buforów w PSRAM oraz porównać rozwiązanie z projektem vtom.
 
