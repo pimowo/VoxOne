@@ -62,9 +62,6 @@ checkpointów pozostaje w historii Git i w istniejących raportach.
   oraz odbiór poleceń z pilota IR.
 - [ ] Przekształcić obecny interfejs WWW w Progressive Web App, z możliwością
   instalacji i ikoną na telefonie.
-- [ ] Rozszerzyć walidację `webStatus` w panelu WWW o źródła `HA` i `DLNA`
-  oraz wartości `activeSource` `ha` i `dlna`, aby panel przyjmował status
-  wysyłany już poprawnie przez WebSocket.
 - [ ] Dodać opcjonalną obsługę ekranu LCD ST7920 w późniejszym etapie rozwoju.
 
 ## 3. Wersja 1.3.0+ (Audio / Sprzęt / Sieć)

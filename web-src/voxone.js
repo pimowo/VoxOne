@@ -2012,7 +2012,7 @@ window.VoxOneRestartWaiter = Object.freeze({
 
   function renderStation() {
     const status = state.webStatus;
-    const external = ["BT", "HA", "DLNA"].includes(status?.source);
+    const external = ["BT", "HA", "DLNA", "AUX"].includes(status?.source);
     text("status-name-label", external ? "ŹRÓDŁO" : "STACJA");
     text("current-station-name", status?.name || "—");
   }
@@ -2940,10 +2940,10 @@ window.VoxOneRestartWaiter = Object.freeze({
       return;
     }
     const status = message.webStatus;
-    if (status && (status.source === "WEB" || status.source === "BT") &&
+    if (status && ["WEB", "BT", "HA", "DLNA", "AUX"].includes(status.source) &&
         ["name", "metadata", "artist", "title", "codec", "playback", "activeSource", "transport"]
           .every(key => typeof status[key] === "string") &&
-        ["radio", "bt"].includes(status.activeSource) &&
+        ["radio", "bt", "ha", "dlna", "aux"].includes(status.activeSource) &&
         ["playing", "paused", "stopped", "unavailable"].includes(status.transport) &&
         Number.isInteger(status.bitrate) && Number.isInteger(status.sampleRate) &&
         typeof status.btConnected === "boolean" &&

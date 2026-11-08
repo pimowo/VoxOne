@@ -721,8 +721,9 @@ setTimeout(async () => {
     btTestSocket.receiveVolume(27, true);
     check(muteButtons[0].getAttribute('aria-pressed') === 'true', 'external mute update');
     check(!btTestSocket.sent.some(item => /^(stop|webtransport|source)=/.test(item)), 'mute does not stop or switch source');
+    const activeSourceFor = {WEB:'radio', BT:'bt', HA:'ha', DLNA:'dlna', AUX:'aux'};
     const sourceSnapshot = (source, availableSources, online, fields = {}) => ({
-      source, activeSource:source === 'WEB' ? 'radio' : 'bt', availableSources,
+      source, activeSource:activeSourceFor[source], availableSources,
       name:'Radio', metadata:'', artist:'', title:'',
       codec:'MP3', playback:'PLAY', transport:'playing', bitrate:128, sampleRate:0,
       btConnected:false, volume100:27, muted:true,
@@ -737,6 +738,35 @@ setTimeout(async () => {
     check(get('current-station-name').textContent === 'Radio A', 'RADIO station from snapshot');
     check(get('metadata').textContent === 'Artysta - Utwór', 'RADIO ICY metadata from snapshot');
     check(get('playback-state').textContent === 'STOP', 'RADIO stopped snapshot');
+    btTestSocket.receive(sourceSnapshot('DLNA', ['radio','bt'], true, {
+      name:'DLNA', artist:'DLNA Artysta', title:'DLNA Utwór', codec:'MP3',
+      playback:'PLAY', transport:'playing', bitrate:320
+    }));
+    check(get('status-name-label').textContent === 'ŹRÓDŁO' &&
+      get('current-station-name').textContent === 'DLNA' &&
+      get('bt-artist').textContent === 'DLNA Artysta' &&
+      get('bt-title').textContent === 'DLNA Utwór' &&
+      get('source').textContent === 'DLNA' &&
+      get('playback-state').textContent === 'PLAY',
+      'DLNA snapshot shows source metadata and playback');
+    btTestSocket.receive(sourceSnapshot('HA', ['radio','bt'], true, {
+      name:'Home Assistant', artist:'TTS', title:'Powiadomienie',
+      playback:'PLAY', transport:'playing', codec:'', bitrate:0
+    }));
+    check(get('current-station-name').textContent === 'Home Assistant' &&
+      get('bt-artist').textContent === 'TTS' &&
+      get('bt-title').textContent === 'Powiadomienie' &&
+      get('source').textContent === 'HA', 'HA snapshot is accepted');
+    btTestSocket.receive(sourceSnapshot('AUX', ['radio','bt'], true, {
+      name:'AUX', playback:'PLAY', transport:'playing', codec:'', bitrate:0
+    }));
+    check(get('status-name-label').textContent === 'ŹRÓDŁO' &&
+      get('current-station-name').textContent === 'AUX' &&
+      get('source').textContent === 'AUX', 'future AUX snapshot is accepted');
+    btTestSocket.receive(sourceSnapshot('WEB', ['radio','bt'], true, {
+      name:'Radio A', metadata:'Artysta - Utwór', artist:'Artysta', title:'Utwór',
+      playback:'STOP', transport:'stopped', volume100:41, muted:false
+    }));
     check(get('volume').textContent === '41' && muteButtons.every(button => button.getAttribute('aria-pressed') === 'false'),
       'volume and mute from one snapshot');
     const sourceButton = source => selector.querySelector('button[data-source="' + source + '"]');
