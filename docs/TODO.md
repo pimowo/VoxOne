@@ -19,10 +19,6 @@ checkpointów pozostaje w historii Git i w istniejących raportach.
 - [ ] Zweryfikować mapowanie pinów na nowym profilu DIN0 po zmianie `I2S_LRC`
   na GPIO9.
 - [ ] Fizycznie podłączyć i przetestować przekaźnik dla trybu Hard Power.
-- [ ] Zweryfikować PoC DLNA z rzeczywistym serwerem `minidlna`: wykrywanie
-  SSDP oraz wynik głównego katalogu przez `/api/dlna/browse?parent=0` i
-  odpytywanie zwróconego identyfikatora zadania.
-
 ## 2. Wersja 1.2.0 (UI / UX / Sterowanie)
 
 - [ ] Rozbudować działający szkielet Menu na TFT i OLED o pełne ekrany
