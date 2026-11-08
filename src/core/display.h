@@ -1,5 +1,6 @@
 #ifndef display_h
 #define display_h
+#include <atomic>
 #include <stdint.h>
 #include <stdio.h>
 #include "common.h"
@@ -7,6 +8,7 @@
 #include "update_display_view.h"
 #include "player_scroll_runtime.h"
 #include "display_scroll_runtime_config.h"
+#include "shutdown_sequence.h"
 #include "../displays/display_profile.h"
 #if VOXONE_DISPLAY_COMPILES_ST7796
 #include "st7796_player_scroll.h"
@@ -155,6 +157,9 @@ class Display {
     void invert();
     bool deepsleep();
     void wakeup();
+    void beginShutdownSequence();
+    void cancelShutdownSequence();
+    bool shutdownSequenceComplete() const;
     void setContrast();
     void lock()   { _locked=true; }
     void unlock() { _locked=false; }
@@ -175,6 +180,7 @@ class Display {
     NumWidget *_nums;
     ClockWidget *_clock;
     Page *_boot;
+    Page *_shutdownPage = nullptr;
     TextWidget *_bootstring, *_volip, *_voltxt, *_rssi, *_bitrate;
 #if VOXONE_DISPLAY_COMPILES_ST7796
     TextWidget *_btTransportPlayback;
@@ -220,6 +226,16 @@ class Display {
     uint32_t _lastVolumeDraw = 0;
     uint8_t _bootStep;
     displayMode_e _renderedMode = PLAYER;
+    enum class ShutdownVisualState : uint8_t {
+      Idle,
+      Requested,
+      Showing,
+      Complete,
+      CancelRequested
+    };
+    std::atomic<ShutdownVisualState> _shutdownVisual{
+        ShutdownVisualState::Idle};
+    voxone::shutdown_sequence::Timeline _shutdownTimeline;
     UpdateDisplayProgressState _updateDisplayProgress;
     uint32_t _updateDisplayRevision = 0;
     uint32_t _updateDisplayAcquisition = 0;
@@ -236,6 +252,9 @@ class Display {
     void _showDialog(const char *title);
     void _buildPager();
     void _bootScreen();
+    void _startShutdownSequence(uint32_t nowMs);
+    void _serviceShutdownSequence(uint32_t nowMs);
+    void _removeShutdownPage();
     void _layoutChange(bool played);
     void _setVuVisibility(bool sourceVisible);
     void _setRSSI(int rssi);
@@ -289,6 +308,9 @@ class Display {
     void setContrast(){}
     bool deepsleep(){return true;}
     void wakeup(){}
+    void beginShutdownSequence() {}
+    void cancelShutdownSequence() {}
+    bool shutdownSequenceComplete() const { return true; }
     void printPLitem(uint8_t pos, const char* item){}
     void lock()   {}
     void unlock() {}

@@ -10,8 +10,6 @@
 #include "update_progress.h"
 
 namespace {
-constexpr uint32_t kShutdownNoticeMs = 750;
-
 bool powerButtonPressed() {
   return POWER_BUTTON_PIN >= 0 && digitalRead(POWER_BUTTON_PIN) == LOW;
 }
@@ -45,13 +43,12 @@ void PowerManager::loop() {
         else player.toggleMute();
       } else if (gesture == voxone::power::ButtonGesture::LongPress &&
                  !standby()) {
-        beginShutdown(nowMs);
+        beginShutdown();
       }
     }
   }
 
-  if (shutdownNotice_ &&
-      static_cast<int32_t>(nowMs - shutdownAtMs_) >= 0)
+  if (shutdownNotice_ && display.shutdownSequenceComplete())
     enterStandby();
 }
 
@@ -59,10 +56,10 @@ void PowerManager::requestWakeup() {
   wakeRequested_.store(true, std::memory_order_release);
 }
 
-void PowerManager::beginShutdown(uint32_t nowMs) {
+void PowerManager::beginShutdown() {
   shutdownNotice_ = true;
-  shutdownAtMs_ = nowMs + kShutdownNoticeMs;
   transitionUiMode(SHUTTING_DOWN);
+  display.beginShutdownSequence();
   if (!config.persistV7())
     Serial.println("##[WARN]# POWER config persistence failed");
 }
@@ -70,7 +67,6 @@ void PowerManager::beginShutdown(uint32_t nowMs) {
 void PowerManager::enterStandby() {
   shutdownNotice_ = false;
   player.setMuted(true);
-  config.setDspOn(false, false);
   const PowerMode mode = static_cast<PowerMode>(
       config.runtimeSnapshot().powerMode);
   if (mode == MODE_HARD_POWER) setPowerRelay(false);
@@ -82,6 +78,7 @@ void PowerManager::enterStandby() {
 void PowerManager::wakeup() {
   if (!standby() && !shutdownNotice_) return;
   if (shutdownNotice_) shutdownNotice_ = false;
+  display.cancelShutdownSequence();
   setPowerRelay(true);
   config.setDspOn(true, false);
   player.setMuted(false);

@@ -67,7 +67,7 @@ class PowerManager {
   bool standby() const { return standby_.load(std::memory_order_acquire); }
 
  private:
-  void beginShutdown(uint32_t nowMs);
+  void beginShutdown();
   void enterStandby();
   void wakeup();
 
@@ -75,7 +75,6 @@ class PowerManager {
   std::atomic<bool> wakeRequested_{false};
   std::atomic<bool> standby_{false};
   bool shutdownNotice_ = false;
-  uint32_t shutdownAtMs_ = 0;
 };
 
 extern PowerManager powerManager;

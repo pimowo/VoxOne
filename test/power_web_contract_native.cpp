@@ -31,8 +31,12 @@ int main() {
   assert(javascript.find("fetch(\"/api/power\"") != std::string::npos);
   assert(manager.find("if (POWER_RELAY_PIN >= 0)") != std::string::npos);
   assert(manager.find("config.persistV7()") != std::string::npos);
+  assert(manager.find("display.beginShutdownSequence()") !=
+         std::string::npos);
+  assert(manager.find("display.shutdownSequenceComplete()") !=
+         std::string::npos);
   assert(manager.find("player.setMuted(true)") != std::string::npos);
-  assert(manager.find("config.setDspOn(false, false)") != std::string::npos);
+  assert(manager.find("config.setDspOn(false, false)") == std::string::npos);
   assert(manager.find("if (!standby() && !shutdownNotice_) return;") !=
          std::string::npos);
   return 0;

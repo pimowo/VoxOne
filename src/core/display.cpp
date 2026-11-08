@@ -1251,6 +1251,117 @@ void Display::_bootScreen(){
   _bootStep = 1;
 }
 
+void Display::beginShutdownSequence() {
+  if (!_runtimeEnabled) {
+    _shutdownVisual.store(ShutdownVisualState::Complete,
+                          std::memory_order_release);
+    return;
+  }
+  _shutdownVisual.store(ShutdownVisualState::Requested,
+                        std::memory_order_release);
+}
+
+void Display::cancelShutdownSequence() {
+  if (!_runtimeEnabled) return;
+  const ShutdownVisualState state =
+      _shutdownVisual.load(std::memory_order_acquire);
+  if (state != ShutdownVisualState::Idle)
+    _shutdownVisual.store(ShutdownVisualState::CancelRequested,
+                          std::memory_order_release);
+}
+
+bool Display::shutdownSequenceComplete() const {
+  return !_runtimeEnabled ||
+         _shutdownVisual.load(std::memory_order_acquire) ==
+             ShutdownVisualState::Complete;
+}
+
+void Display::_removeShutdownPage() {
+  if (_shutdownPage && _pager) {
+    _pager->removePage(_shutdownPage);
+    _shutdownPage = nullptr;
+  }
+}
+
+void Display::_startShutdownSequence(uint32_t nowMs) {
+  resetQueue();
+  _removeShutdownPage();
+  _renderMode(SHUTTING_DOWN);
+
+  _shutdownPage = new Page();
+#if VOXONE_DISPLAY_COMPILES_SMALL_OLED
+  if (smallOledActive() && oled128x32Active()) {
+    _shutdownPage->addWidget(new ProgressWidget(
+        startup128x32::progress, bootPrgConf, WHITE, BLACK));
+    _shutdownPage->addWidget(new Oled128x32StartupLogoWidget());
+    TextWidget* goodbye = static_cast<TextWidget*>(&_shutdownPage->addWidget(
+        new TextWidget(startup128x32::ssid,
+                       startup128x32::ssidBufferSize, WHITE, BLACK)));
+    goodbye->setText("Do widzenia!");
+  } else if (smallOledActive()) {
+    _shutdownPage->addWidget(new Oled128x64StartupLogoWidget());
+    _shutdownPage->addWidget(new ProgressWidget(
+        startup128x64::progress, bootPrgConf, WHITE, BLACK));
+    TextWidget* goodbye = static_cast<TextWidget*>(&_shutdownPage->addWidget(
+        new TextWidget(startup128x64::ssid,
+                       startup128x64::ssidBufferSize, WHITE, BLACK)));
+    goodbye->setText("Do widzenia!");
+  } else
+#endif
+  {
+    _shutdownPage->addWidget(new ProgressWidget(
+        bootWdtConf, bootPrgConf, config.theme.title2,
+        config.theme.background));
+    WidgetConfig goodbyeConfig = bootstrConf;
+    if (dsp.width() >= 400) goodbyeConfig.textsize = 4;
+    else if (dsp.height() >= 200) goodbyeConfig.textsize = 2;
+    TextWidget* goodbye = static_cast<TextWidget*>(&_shutdownPage->addWidget(
+        new TextWidget(goodbyeConfig, 20, config.theme.meta,
+                       config.theme.background)));
+    goodbye->setText("Do widzenia!");
+  }
+
+  _pager->addPage(_shutdownPage);
+  _pager->setPage(_shutdownPage, true);
+#if VOXONE_DISPLAY_COMPILES_SMALL_OLED
+  if (!smallOledActive()) dsp.drawLogo(bootLogoTop);
+#else
+  dsp.drawLogo(bootLogoTop);
+#endif
+  _shutdownTimeline.begin(nowMs);
+  _shutdownVisual.store(ShutdownVisualState::Showing,
+                        std::memory_order_release);
+}
+
+void Display::_serviceShutdownSequence(uint32_t nowMs) {
+  const ShutdownVisualState state =
+      _shutdownVisual.load(std::memory_order_acquire);
+  if (state == ShutdownVisualState::CancelRequested) {
+    _shutdownTimeline.cancel();
+    _removeShutdownPage();
+    _shutdownVisual.store(ShutdownVisualState::Idle,
+                          std::memory_order_release);
+    return;
+  }
+  if (state == ShutdownVisualState::Requested) {
+    _startShutdownSequence(nowMs);
+    return;
+  }
+  if (state != ShutdownVisualState::Showing) return;
+
+  if (!_shutdownTimeline.screenOffDue(nowMs)) {
+    _pager->loop();
+    dsp.loop();
+    return;
+  }
+
+  _shutdownTimeline.cancel();
+  _removeShutdownPage();
+  deepsleep();
+  _shutdownVisual.store(ShutdownVisualState::Complete,
+                        std::memory_order_release);
+}
+
 void Display::_buildPager(){
 #if VOXONE_DISPLAY_COMPILES_SMALL_OLED
   if (smallOledActive() && oled128x32Active()) {
@@ -2182,7 +2293,6 @@ void Display::_renderMode(displayMode_e newmode) {
 #endif
   }
   if (newmode == SLEEPING)  _showDialog("SLEEPING");
-  if (newmode == SHUTTING_DOWN) _showDialog("Zamykanie...");
   if (newmode == NUMBERS) _showDialog("");
   if (newmode == STATIONS) {
     _pager->setPage( pages[PG_PLAYLIST]);
@@ -2521,6 +2631,14 @@ void Display::loop() {
     _pager->begin();
     _bootScreen();
     return;
+  }
+  const ShutdownVisualState shutdownState =
+      _shutdownVisual.load(std::memory_order_acquire);
+  if (shutdownState != ShutdownVisualState::Idle) {
+    _serviceShutdownSequence(millis());
+    if (_shutdownVisual.load(std::memory_order_acquire) !=
+        ShutdownVisualState::Idle)
+      return;
   }
   if(displayQueue==NULL || (_locked && !updateLockActive())) return;
   const UpdateProgressSnapshot update = updateProgress();
@@ -2998,6 +3116,17 @@ void  Display::setContrast(){}
 bool Display::deepsleep(){
   if (!_runtimeEnabled) return true;
 #if defined(DSP_OLED) || BRIGHTNESS_PIN!=255
+  dsp.clearDsp(true);
+  dsp.loop(true);
+#if BRIGHTNESS_PIN!=255
+  bool backlightActive = true;
+#if defined(VOXONE_RUNTIME_L0_DISPLAY_BACKENDS)
+  backlightActive =
+      dsp.activeProfile() ==
+      voxone::display_profile::ProfileId::St7796_480x320;
+#endif
+  if (backlightActive) analogWrite(BRIGHTNESS_PIN, 0);
+#endif
   dsp.sleep();
   return true;
 #endif
