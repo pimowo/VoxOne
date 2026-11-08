@@ -3,6 +3,7 @@
 #include "options.h"
 #include "config.h"
 #include "display.h"
+#include "dlna_menu_controller.h"
 #include "network.h"
 #include "player.h"
 #include "source_manager.h"
@@ -30,16 +31,24 @@ bool dispatchMenuInput(UiInputEvent event, int8_t steps) {
   } else if (event == UiInputEvent::Ok) {
     action = uiMenu.handle(MenuCommand::SELECT);
   } else if (event == UiInputEvent::Double) {
+    if (voxone::dlna_menu::back()) return true;
     action = uiMenu.handle(MenuCommand::BACK);
   } else if (event == UiInputEvent::Long ||
              event == UiInputEvent::VeryLong) {
     action = uiMenu.handle(MenuCommand::CLOSE);
   }
 
-  if (action == MenuAction::SELECTED)
-    ESP_LOGI(kUiInputTag, "Selected: %s", selectedLabel);
-  if (action == MenuAction::ENTERED_SUBMENU)
+  if (action == MenuAction::SELECTED) {
+    if (uiMenu.menuId() == voxone::ui_menu::MenuId::DLNA)
+      voxone::dlna_menu::select();
+    else
+      ESP_LOGI(kUiInputTag, "Selected: %s", selectedLabel);
+  }
+  if (action == MenuAction::ENTERED_SUBMENU) {
     ESP_LOGI(kUiInputTag, "Opened submenu: %s", selectedLabel);
+    if (uiMenu.menuId() == voxone::ui_menu::MenuId::DLNA)
+      voxone::dlna_menu::entered();
+  }
   if (action == MenuAction::BACKED)
     ESP_LOGI(kUiInputTag, "Back to main menu");
   if (action == MenuAction::CLOSED) transitionUiMode(PLAYER);

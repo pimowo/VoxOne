@@ -45,6 +45,18 @@ int main() {
   assert(std::strcmp(status.transport, "playing") == 0);
   assert(status.bitrate == 0 && status.codec[0] == '\0');
 
+  SourceManagerState dlna;
+  dlna.beginDlna("Koncert.flac", "audio/flac");
+  dlna.displayView(display, true);
+  status = selectWebStatusView(display, "Radio A", "", "", "", "MP3", 320);
+  assert(std::strcmp(status.source, "DLNA") == 0);
+  assert(std::strcmp(status.activeSource, "dlna") == 0);
+  assert(std::strcmp(status.name, "DLNA") == 0);
+  assert(std::strcmp(status.artist, "audio/flac") == 0);
+  assert(std::strcmp(status.title, "Koncert.flac") == 0);
+  assert(std::strcmp(status.transport, "playing") == 0);
+  assert(status.bitrate == 0 && status.codec[0] == '\0');
+
   bt.runtimeAvailable = true;
   bt.connected = true;
   bt.playback = BtPlayback::Playing;

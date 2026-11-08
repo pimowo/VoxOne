@@ -7,7 +7,12 @@
 #include "bt_link_protocol.h"
 #include "display.h"
 
-enum class ActiveSource : uint8_t { Radio, Bluetooth, SOURCE_HA };
+enum class ActiveSource : uint8_t {
+  Radio,
+  Bluetooth,
+  SOURCE_HA,
+  SOURCE_DLNA,
+};
 enum class SourceChangeReason : uint8_t {
   None, Manual, BtConnect, BtDisconnect, BtOffline
 };
@@ -57,7 +62,7 @@ struct RadioSourceActions {
 class SourceManagerState {
  public:
   ActiveSource active() const {
-    return homeAssistantActive_ ? ActiveSource::SOURCE_HA : active_;
+    return temporaryActive_ ? temporarySource_ : active_;
   }
   bool radioPlayIntent() const { return radioPlayIntent_; }
   void recordRadioCommand(bool play, uint16_t station = 0) {
@@ -78,26 +83,40 @@ class SourceManagerState {
   bool radioResumeAllowed() const {
     return active_ == ActiveSource::Radio && radioPlayIntent_;
   }
-  SourceUpdate beginHomeAssistant(const char* title, const char* artist) {
+  SourceUpdate beginTemporary(ActiveSource source, const char* title,
+                              const char* artist) {
     SourceUpdate update;
-    update.activeChanged = !homeAssistantActive_;
+    if (source != ActiveSource::SOURCE_HA &&
+        source != ActiveSource::SOURCE_DLNA) return update;
+    update.activeChanged = !temporaryActive_ || temporarySource_ != source;
     update.stationChanged = update.activeChanged ||
-                            strcmp(homeAssistantTitle_, title ? title : "") != 0;
+                            strcmp(temporaryTitle_, title ? title : "") != 0;
     update.titleChanged = update.activeChanged ||
-                          strcmp(homeAssistantArtist_, artist ? artist : "") != 0 ||
+                          strcmp(temporaryArtist_, artist ? artist : "") != 0 ||
                           update.stationChanged;
     update.audioInfoChanged = update.activeChanged;
-    homeAssistantActive_ = true;
-    copyText(homeAssistantTitle_, sizeof(homeAssistantTitle_),
-             title && title[0] ? title : "Home Assistant");
-    copyText(homeAssistantArtist_, sizeof(homeAssistantArtist_), artist);
+    temporaryActive_ = true;
+    temporarySource_ = source;
+    copyText(temporaryTitle_, sizeof(temporaryTitle_),
+             title && title[0]
+                 ? title
+                 : (source == ActiveSource::SOURCE_DLNA ? "DLNA"
+                                                        : "Home Assistant"));
+    copyText(temporaryArtist_, sizeof(temporaryArtist_), artist);
     return update;
   }
-  SourceUpdate endHomeAssistant() {
-    if (!homeAssistantActive_) return {};
-    homeAssistantActive_ = false;
-    homeAssistantTitle_[0] = '\0';
-    homeAssistantArtist_[0] = '\0';
+  SourceUpdate beginHomeAssistant(const char* title, const char* artist) {
+    return beginTemporary(ActiveSource::SOURCE_HA, title, artist);
+  }
+  SourceUpdate beginDlna(const char* title, const char* artist) {
+    return beginTemporary(ActiveSource::SOURCE_DLNA, title, artist);
+  }
+  SourceUpdate endTemporary() {
+    if (!temporaryActive_) return {};
+    temporaryActive_ = false;
+    temporarySource_ = ActiveSource::Radio;
+    temporaryTitle_[0] = '\0';
+    temporaryArtist_[0] = '\0';
     SourceUpdate update;
     update.activeChanged = true;
     update.stationChanged = true;
@@ -105,7 +124,16 @@ class SourceManagerState {
     update.audioInfoChanged = true;
     return update;
   }
-  bool homeAssistantActive() const { return homeAssistantActive_; }
+  SourceUpdate endHomeAssistant() {
+    return temporarySource_ == ActiveSource::SOURCE_HA ? endTemporary()
+                                                       : SourceUpdate{};
+  }
+  bool homeAssistantActive() const {
+    return temporaryActive_ && temporarySource_ == ActiveSource::SOURCE_HA;
+  }
+  bool dlnaActive() const {
+    return temporaryActive_ && temporarySource_ == ActiveSource::SOURCE_DLNA;
+  }
   RadioSourceActions radioActions(const SourceUpdate& update,
                                   bool radioPhysicallyActive) const {
     if (!update.activeChanged) return {};
@@ -151,7 +179,8 @@ class SourceManagerState {
   }
 
   SourceUpdate select(ActiveSource source, const BtLinkState& bt) {
-    if (source == ActiveSource::SOURCE_HA || active_ == source ||
+    if (source == ActiveSource::SOURCE_HA ||
+        source == ActiveSource::SOURCE_DLNA || active_ == source ||
         (source == ActiveSource::Bluetooth && !bt.runtimeAvailable)) return {};
     return cycle(bt);
   }
@@ -220,14 +249,17 @@ class SourceManagerState {
 
   void displayView(DisplaySourceView& view, bool radioPlaying = false,
                    bool localPlaybackAvailable = true) const {
-    if (homeAssistantActive_) {
-      view.kind = DisplaySourceKind::HomeAssistant;
+    if (temporaryActive_) {
+      view.kind = temporarySource_ == ActiveSource::SOURCE_DLNA
+                      ? DisplaySourceKind::Dlna
+                      : DisplaySourceKind::HomeAssistant;
       view.connected = true;
       view.playback = radioPlaying ? DisplayPlaybackState::Playing
                                    : DisplayPlaybackState::Stopped;
-      view.peerName = "Home Assistant";
-      view.artist = homeAssistantArtist_;
-      view.title = homeAssistantTitle_;
+      view.peerName = temporarySource_ == ActiveSource::SOURCE_DLNA
+                          ? "DLNA" : "Home Assistant";
+      view.artist = temporaryArtist_;
+      view.title = temporaryTitle_;
       view.sampleRate = 0;
       return;
     }
@@ -267,9 +299,10 @@ class SourceManagerState {
   }
 
   void stopForUpdate(const BtLinkState& bt) {
-    homeAssistantActive_ = false;
-    homeAssistantTitle_[0] = '\0';
-    homeAssistantArtist_[0] = '\0';
+    temporaryActive_ = false;
+    temporarySource_ = ActiveSource::Radio;
+    temporaryTitle_[0] = '\0';
+    temporaryArtist_[0] = '\0';
     active_ = ActiveSource::Radio;
     radioPlayIntent_ = false;
     pendingRadioStation_ = 0;
@@ -299,9 +332,10 @@ class SourceManagerState {
   }
 
   ActiveSource active_ = ActiveSource::Radio;
-  bool homeAssistantActive_ = false;
-  char homeAssistantTitle_[128]{};
-  char homeAssistantArtist_[128]{};
+  bool temporaryActive_ = false;
+  ActiveSource temporarySource_ = ActiveSource::Radio;
+  char temporaryTitle_[128]{};
+  char temporaryArtist_[128]{};
   bool radioPlayIntent_ = false;
   uint16_t pendingRadioStation_ = 0;
   bool pendingRadioStop_ = false;

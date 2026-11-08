@@ -108,7 +108,8 @@ inline void makePlayerDisplayView(PlayerDisplayView& out,
   char radioArtist[170]{};
   char radioTitle[170]{};
   if (source.kind == DisplaySourceKind::Bluetooth ||
-      source.kind == DisplaySourceKind::HomeAssistant) {
+      source.kind == DisplaySourceKind::HomeAssistant ||
+      source.kind == DisplaySourceKind::Dlna) {
     artist = source.artist;
     title = source.title;
   } else if (rawRadioMetadata && rawRadioMetadata[0]) {

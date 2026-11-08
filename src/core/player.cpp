@@ -667,7 +667,7 @@ void Player::finishTemporary() {
   _stop(false, RadioStopReason::SourceSwitch, true);
   remoteStationName = false;
   if (!_temporary.finish(token)) return;
-  sourceManagerEndHomeAssistant();
+  sourceManagerEndTemporary();
 #if defined(VOXONE_TTS_HIL_DIAGNOSTICS)
   voxone::tts_hil::diagnostics().cleanup(
       token, millis(), transportProgressBytes(), httpBodyProgressBytes(),
@@ -711,7 +711,10 @@ void Player::browseUrl(const voxone::temporary_audio::Request& request){
   }
 #endif
   const uint32_t token = _temporary.begin();
-  sourceManagerBeginHomeAssistant(request.title, request.artist);
+  if (request.source == voxone::temporary_audio::Source::Dlna)
+    sourceManagerBeginDlna(request.title, request.artist);
+  else
+    sourceManagerBeginHomeAssistant(request.title, request.artist);
   _temporaryProgress.begin(token, millis(), transportProgressBytes());
 #if defined(VOXONE_TTS_HIL_DIAGNOSTICS)
   voxone::tts_hil::diagnostics().start(

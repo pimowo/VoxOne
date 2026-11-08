@@ -1,6 +1,7 @@
 #include "../src/core/ui_menu.h"
 
 #include <cassert>
+#include <cstring>
 #include <fstream>
 #include <iterator>
 #include <string>
@@ -56,7 +57,7 @@ int main() {
          "Sieć");
   assert(std::string(voxone::ui_menu::itemLabel(MenuId::MAIN, 3)) ==
          "System");
-  assert(std::string(voxone::ui_menu::itemLabel(MenuId::MAIN, 4)).empty());
+  assert(std::string(voxone::ui_menu::itemLabel(MenuId::MAIN, 4)) == "DLNA");
   for (uint8_t index = 0; index < UiMenu::kMainItemCount; ++index)
     assert(voxone::ui_menu::itemHasSubmenu(MenuId::MAIN, index));
   assert(std::string(voxone::ui_menu::menuContextHeader(MenuId::MAIN)) ==
@@ -100,9 +101,9 @@ int main() {
   // Encoder navigation repaints only the old and new selection. Entering a
   // different branch requires a complete menu-layout refresh.
   const voxone::ui_menu::MenuSnapshot firstPaint{
-      MenuState::OPEN, MenuLevel::MAIN, MenuId::MAIN, 0, 1};
+      MenuState::OPEN, MenuLevel::MAIN, MenuId::MAIN, 0, 1, 0};
   const voxone::ui_menu::MenuSnapshot nextSelection{
-      MenuState::OPEN, MenuLevel::MAIN, MenuId::MAIN, 1, 2};
+      MenuState::OPEN, MenuLevel::MAIN, MenuId::MAIN, 1, 2, 0};
   auto renderPlan = voxone::ui_menu::menuRenderPlan(
       firstPaint, nextSelection, true);
   assert(renderPlan.kind == MenuRenderKind::SELECTION);
@@ -112,7 +113,7 @@ int main() {
       nextSelection, nextSelection, true);
   assert(renderPlan.kind == MenuRenderKind::NONE);
   const voxone::ui_menu::MenuSnapshot audioMenu{
-      MenuState::OPEN, MenuLevel::SUBMENU, MenuId::AUDIO, 0, 3};
+      MenuState::OPEN, MenuLevel::SUBMENU, MenuId::AUDIO, 0, 3, 0};
   assert(voxone::ui_menu::menuRenderPlan(
              nextSelection, audioMenu, true).kind == MenuRenderKind::FULL);
   assert(voxone::ui_menu::menuRenderPlan(
@@ -125,6 +126,32 @@ int main() {
   expectSubmenu(menu, MenuId::NETWORK, "Sieć", 2);
   assert(menu.handle(MenuCommand::NEXT) == MenuAction::NAVIGATED);
   expectSubmenu(menu, MenuId::SYSTEM, "System", 3);
+  assert(menu.handle(MenuCommand::NEXT) == MenuAction::NAVIGATED);
+  assert(menu.selectedIndex() == 4);
+  assert(menu.handle(MenuCommand::SELECT) == MenuAction::ENTERED_SUBMENU);
+  assert(menu.menuId() == MenuId::DLNA);
+  voxone::ui_menu::DlnaMenuEntry dlnaItems[3]{};
+  std::strcpy(dlnaItems[0].label, "Albumy");
+  dlnaItems[0].folder = true;
+  std::strcpy(dlnaItems[1].label, "Koncert.flac");
+  dlnaItems[1].playable = true;
+  std::strcpy(dlnaItems[2].label, "Brak URL");
+  menu.setDlnaItems(dlnaItems, 3);
+  assert(menu.itemCount() == 3);
+  assert(std::string(menu.selectedLabel()) == "Albumy");
+  assert(menu.selectedDlnaFolder() && !menu.selectedDlnaPlayable());
+  assert(menu.handle(MenuCommand::SELECT) == MenuAction::SELECTED);
+  assert(menu.handle(MenuCommand::NEXT) == MenuAction::NAVIGATED);
+  assert(!menu.selectedDlnaFolder() && menu.selectedDlnaPlayable());
+  assert(menu.handle(MenuCommand::SELECT) == MenuAction::SELECTED);
+  assert(menu.handle(MenuCommand::NEXT) == MenuAction::NAVIGATED);
+  assert(menu.handle(MenuCommand::SELECT) == MenuAction::NONE);
+  const auto dlnaSnapshot = menu.snapshot();
+  assert(voxone::ui_menu::itemCount(dlnaSnapshot) == 3);
+  assert(std::string(voxone::ui_menu::itemLabel(dlnaSnapshot, 0)) == "Albumy");
+  assert(voxone::ui_menu::itemHasSubmenu(dlnaSnapshot, 0));
+  assert(menu.handle(MenuCommand::BACK) == MenuAction::BACKED);
+  assert(menu.menuId() == MenuId::MAIN && menu.selectedIndex() == 4);
   assert(menu.handle(MenuCommand::BACK) == MenuAction::NONE);
 
   assert(menu.handle(MenuCommand::CLOSE) == MenuAction::CLOSED);

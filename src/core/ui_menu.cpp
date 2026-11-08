@@ -1,6 +1,7 @@
 #include "ui_menu.h"
 
 #include <stddef.h>
+#include <string.h>
 
 namespace {
 using voxone::ui_menu::MenuId;
@@ -15,6 +16,7 @@ constexpr MenuItemDefinition kMainItems[] = {
     {"Wyświetlacz", MenuId::SCREEN},
     {"Sieć", MenuId::NETWORK},
     {"System", MenuId::SYSTEM},
+    {"DLNA", MenuId::DLNA},
 };
 
 constexpr MenuItemDefinition kAudioItems[] = {
@@ -41,6 +43,15 @@ constexpr MenuItemDefinition kSystemItems[] = {
     {"Restart", MenuId::NONE},
 };
 
+struct DlnaMenuPage {
+  voxone::ui_menu::DlnaMenuEntry
+      entries[voxone::ui_menu::kMaxDlnaMenuItems];
+  uint8_t count = 0;
+};
+
+DlnaMenuPage dlnaPages[2];
+std::atomic<uint8_t> activeDlnaPage{0};
+
 struct MenuDefinition {
   const MenuItemDefinition* items;
   uint8_t count;
@@ -58,6 +69,7 @@ MenuDefinition menuDefinition(MenuId menuId) {
     case MenuId::SCREEN: return definition(kDisplayItems);
     case MenuId::NETWORK: return definition(kNetworkItems);
     case MenuId::SYSTEM: return definition(kSystemItems);
+    case MenuId::DLNA: break;
     case MenuId::NONE: break;
   }
   return {nullptr, 0};
@@ -69,6 +81,7 @@ uint8_t parentIndex(MenuId menuId) {
     case MenuId::SCREEN: return 1;
     case MenuId::NETWORK: return 2;
     case MenuId::SYSTEM: return 3;
+    case MenuId::DLNA: return 4;
     case MenuId::NONE:
     case MenuId::MAIN: return 0;
   }
@@ -90,6 +103,7 @@ const char* menuTitle(MenuId menuId) {
     case MenuId::SCREEN: return "Wyświetlacz";
     case MenuId::NETWORK: return "Sieć";
     case MenuId::SYSTEM: return "System";
+    case MenuId::DLNA: return "DLNA";
     case MenuId::NONE: return "";
   }
   return "";
@@ -102,21 +116,34 @@ const char* menuContextHeader(MenuId menuId) {
     case MenuId::SCREEN: return "WYŚWIETLACZ";
     case MenuId::NETWORK: return "SIEĆ";
     case MenuId::SYSTEM: return "SYSTEM";
+    case MenuId::DLNA: return "DLNA";
     case MenuId::NONE: return "";
   }
   return "";
 }
 
 uint8_t itemCount(MenuId menuId) {
+  if (menuId == MenuId::DLNA)
+    return dlnaPages[activeDlnaPage.load(std::memory_order_acquire)].count;
   return menuDefinition(menuId).count;
 }
 
 const char* itemLabel(MenuId menuId, uint8_t index) {
+  if (menuId == MenuId::DLNA) {
+    const DlnaMenuPage& page =
+        dlnaPages[activeDlnaPage.load(std::memory_order_acquire)];
+    return index < page.count ? page.entries[index].label : "";
+  }
   const auto menu = menuDefinition(menuId);
   return index < menu.count ? menu.items[index].label : "";
 }
 
 bool itemHasSubmenu(MenuId menuId, uint8_t index) {
+  if (menuId == MenuId::DLNA) {
+    const DlnaMenuPage& page =
+        dlnaPages[activeDlnaPage.load(std::memory_order_acquire)];
+    return index < page.count && page.entries[index].folder;
+  }
   const auto menu = menuDefinition(menuId);
   return index < menu.count && menu.items[index].submenu != MenuId::NONE;
 }
@@ -124,7 +151,9 @@ bool itemHasSubmenu(MenuId menuId, uint8_t index) {
 MenuRenderPlan menuRenderPlan(const MenuSnapshot& previous,
                               const MenuSnapshot& current,
                               bool previousRendered) {
-  if (!previousRendered || previous.menuId != current.menuId)
+  if (!previousRendered || previous.menuId != current.menuId ||
+      (current.menuId == MenuId::DLNA &&
+       previous.dynamicBank != current.dynamicBank))
     return {MenuRenderKind::FULL, previous.selectedIndex,
             current.selectedIndex};
   if (previous.selectedIndex != current.selectedIndex)
@@ -182,6 +211,48 @@ bool UiMenu::selectedHasSubmenu() const {
   return itemHasSubmenu(menuId(), selectedIndex());
 }
 
+bool UiMenu::selectedDlnaFolder() const {
+  if (menuId() != MenuId::DLNA) return false;
+  const DlnaMenuPage& page =
+      dlnaPages[activeDlnaPage.load(std::memory_order_acquire)];
+  const uint8_t selected = selectedIndex();
+  return selected < page.count && page.entries[selected].folder;
+}
+
+bool UiMenu::selectedDlnaPlayable() const {
+  if (menuId() != MenuId::DLNA) return false;
+  const DlnaMenuPage& page =
+      dlnaPages[activeDlnaPage.load(std::memory_order_acquire)];
+  const uint8_t selected = selectedIndex();
+  return selected < page.count && page.entries[selected].playable;
+}
+
+void UiMenu::setDlnaStatus(const char* label) {
+  DlnaMenuEntry entry{};
+  const char* text = label && label[0] ? label : "DLNA";
+  const size_t length = strlen(text) < sizeof(entry.label) - 1
+                            ? strlen(text) : sizeof(entry.label) - 1;
+  memcpy(entry.label, text, length);
+  entry.label[length] = '\0';
+  setDlnaItems(&entry, 1);
+}
+
+void UiMenu::setDlnaItems(const DlnaMenuEntry* entries, uint8_t count) {
+  const uint8_t current = activeDlnaPage.load(std::memory_order_acquire);
+  const uint8_t next = current ^ 1U;
+  DlnaMenuPage& page = dlnaPages[next];
+  page = DlnaMenuPage{};
+  if (count > kMaxDlnaMenuItems) count = kMaxDlnaMenuItems;
+  if (entries && count) {
+    for (uint8_t index = 0; index < count; ++index)
+      page.entries[index] = entries[index];
+    page.count = count;
+  }
+  selectedIndex_.store(0, std::memory_order_relaxed);
+  activeDlnaPage.store(next, std::memory_order_release);
+  markChanged();
+}
+
 MenuSnapshot UiMenu::snapshot() const {
   MenuSnapshot result{};
   uint32_t before = 0;
@@ -191,6 +262,7 @@ MenuSnapshot UiMenu::snapshot() const {
     result.menuId = menuId_.load(std::memory_order_acquire);
     result.level = menuLevel(result.menuId);
     result.selectedIndex = selectedIndex_.load(std::memory_order_acquire);
+    result.dynamicBank = activeDlnaPage.load(std::memory_order_acquire);
     result.revision = revision_.load(std::memory_order_acquire);
   } while (before != result.revision);
   return result;
@@ -216,6 +288,16 @@ MenuAction UiMenu::handle(MenuCommand command, int8_t steps) {
 
   if (command == MenuCommand::SELECT) {
     const MenuId current = menuId();
+    if (current == MenuId::DLNA) {
+      const DlnaMenuPage& page =
+          dlnaPages[activeDlnaPage.load(std::memory_order_acquire)];
+      const uint8_t selected = selectedIndex();
+      if (selected >= page.count ||
+          (!page.entries[selected].folder && !page.entries[selected].playable))
+        return MenuAction::NONE;
+      state_.store(MenuState::OPEN, std::memory_order_release);
+      return MenuAction::SELECTED;
+    }
     const auto menu = menuDefinition(current);
     const uint8_t selected = selectedIndex();
     if (selected >= menu.count) return MenuAction::NONE;
@@ -254,6 +336,20 @@ MenuAction UiMenu::handle(MenuCommand command, int8_t steps) {
 
 void UiMenu::markChanged() {
   revision_.fetch_add(1, std::memory_order_release);
+}
+
+uint8_t dlnaItemCount(uint8_t bank) {
+  return dlnaPages[bank & 1U].count;
+}
+
+const char* dlnaItemLabel(uint8_t bank, uint8_t index) {
+  const DlnaMenuPage& page = dlnaPages[bank & 1U];
+  return index < page.count ? page.entries[index].label : "";
+}
+
+bool dlnaItemFolder(uint8_t bank, uint8_t index) {
+  const DlnaMenuPage& page = dlnaPages[bank & 1U];
+  return index < page.count && page.entries[index].folder;
 }
 
 }  // namespace ui_menu

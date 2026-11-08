@@ -2,6 +2,7 @@
 #define VOXONE_TEMPORARY_AUDIO_REQUEST_H
 
 #include <stddef.h>
+#include <stdint.h>
 #include <string.h>
 
 #include "temporary_audio_url.h"
@@ -14,10 +15,13 @@ constexpr size_t kMetadataCapacity = 128;
 // bytes per decoded byte, plus both field names and separators.
 constexpr size_t kPlayUrlCommandCapacity = 1536;
 
+enum class Source : uint8_t { HomeAssistant, Dlna };
+
 struct Request {
   char url[kUrlCapacity]{};
   char title[kMetadataCapacity]{};
   char artist[kMetadataCapacity]{};
+  Source source = Source::HomeAssistant;
 };
 
 inline const char* findLastField(const char* value, size_t length,

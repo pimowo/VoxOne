@@ -124,9 +124,11 @@ void auditTransport() {
   assert(finishBody.find("display.putRequest(NEWTITLE)") != std::string::npos);
   assert(finishBody.find("_temporaryProgress.finish(token)") !=
          std::string::npos);
-  assert(finishBody.find("sourceManagerEndHomeAssistant()") !=
+  assert(finishBody.find("sourceManagerEndTemporary()") !=
          std::string::npos);
   assert(browseBody.find("sourceManagerBeginHomeAssistant(") !=
+         std::string::npos);
+  assert(browseBody.find("sourceManagerBeginDlna(") !=
          std::string::npos);
 
   // Every HTTP consumer reports real bytes through one Audio-owned counter.
@@ -168,10 +170,13 @@ void auditTransport() {
   assert(handlers.find("config.setStation(p?info:config.station.name)") ==
          std::string::npos);
 
-  // Temporary audio is exposed only as the authenticated WebSocket command;
-  // there is no parallel diagnostic HTTP endpoint or station mutation path.
+  // HA keeps the authenticated WebSocket command. DLNA additionally exposes
+  // one protected REST playback endpoint carrying an explicit DLNA source.
   const auto server = readFile("src/core/netserver.cpp");
-  assert(server.find("requestTemporaryUrl") == std::string::npos);
+  assert(server.find("dlna::kPlayRoute") != std::string::npos);
+  assert(server.find("Source::Dlna") != std::string::npos);
+  assert(server.find("player.requestTemporaryUrl(playback)") !=
+         std::string::npos);
   const auto commands = readFile("src/core/commandhandler.cpp");
   assert(commands.find("strEquals(command, \"playurl\")") !=
          std::string::npos);
@@ -213,6 +218,7 @@ void validateTemporaryUrls() {
                      "http://ha.local/api/tts.mp3?token=a=b") == 0);
   assert(std::strcmp(request.title, "Home Assistant") == 0);
   assert(std::strcmp(request.artist, "Drzwi są otwarte") == 0);
+  assert(request.source == voxone::temporary_audio::Source::HomeAssistant);
   assert(voxone::temporary_audio::parseRequest(
       http, std::strlen(http), request));
   assert(std::strcmp(request.url, http) == 0);

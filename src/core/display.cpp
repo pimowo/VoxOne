@@ -188,6 +188,8 @@ class UiMenuWidget : public Widget {
     uint16_t rowHeight;
     uint16_t horizontalMargin;
     uint16_t rowWidth;
+    uint8_t firstIndex;
+    uint8_t visibleCount;
     uint8_t titleSize;
     uint8_t itemSize;
     bool oled;
@@ -223,13 +225,21 @@ class UiMenuWidget : public Widget {
     const uint8_t itemSize = compact ? 1 : (height >= 200 ? 2 : 1);
     const uint16_t contentTop = height <= 32 ? 0 : (compact ? 12 : 68);
     const uint8_t itemCount = voxone::ui_menu::itemCount(menu);
+    const uint8_t maximumRows = oled ? (height <= 32 ? 2 : 4)
+                                     : (compact ? 4 : 6);
+    const uint8_t visibleCount = itemCount < maximumRows
+                                     ? itemCount : maximumRows;
+    const uint8_t firstIndex =
+        itemCount <= visibleCount || menu.selectedIndex < visibleCount
+            ? 0
+            : static_cast<uint8_t>(menu.selectedIndex - visibleCount + 1);
     const uint16_t rowHeight =
-        itemCount == 0 ? 0 : (height - contentTop) / itemCount;
+        visibleCount == 0 ? 0 : (height - contentTop) / visibleCount;
     const uint16_t horizontalMargin = oled ? 0 : (width >= 300 ? 36 : 8);
     const uint16_t rowWidth = width - horizontalMargin * 2;
     return {width, height, background, foreground, contentTop, rowHeight,
-            horizontalMargin, rowWidth, titleSize, itemSize, oled, compact,
-            contextualTft};
+            horizontalMargin, rowWidth, firstIndex, visibleCount, titleSize,
+            itemSize, oled, compact, contextualTft};
   }
 
   void drawHeader(const voxone::ui_menu::MenuSnapshot& menu,
@@ -256,9 +266,12 @@ class UiMenuWidget : public Widget {
 
   void drawRow(const voxone::ui_menu::MenuSnapshot& menu, uint8_t index,
                bool selected, const Layout& view) {
-    if (index >= voxone::ui_menu::itemCount(menu) || view.rowHeight == 0)
+    if (index >= voxone::ui_menu::itemCount(menu) || view.rowHeight == 0 ||
+        index < view.firstIndex ||
+        index >= view.firstIndex + view.visibleCount)
       return;
-    const uint16_t top = view.contentTop + index * view.rowHeight;
+    const uint16_t top = view.contentTop +
+                         (index - view.firstIndex) * view.rowHeight;
     const uint16_t rowBackground = selected ? view.foreground : view.background;
     const uint16_t rowForeground = selected ? view.background : view.foreground;
     dsp.fillRect(view.horizontalMargin, top, view.rowWidth, view.rowHeight,
@@ -289,8 +302,8 @@ class UiMenuWidget : public Widget {
     drawHeader(menu, view);
     dsp.fillRect(0, view.contentTop, view.width,
                  view.height - view.contentTop, view.background);
-    const uint8_t count = voxone::ui_menu::itemCount(menu);
-    for (uint8_t index = 0; index < count; ++index)
+    const uint8_t end = view.firstIndex + view.visibleCount;
+    for (uint8_t index = view.firstIndex; index < end; ++index)
       drawRow(menu, index, index == menu.selectedIndex, view);
   }
 
@@ -299,7 +312,9 @@ class UiMenuWidget : public Widget {
     if (voxone::ui_menu::itemCount(menu) == 0) return;
     const auto plan = voxone::ui_menu::menuRenderPlan(
         renderedMenu_, menu, rendered_);
-    if (plan.kind == voxone::ui_menu::MenuRenderKind::FULL) {
+    const bool windowChanged = rendered_ &&
+        layout(renderedMenu_).firstIndex != view.firstIndex;
+    if (plan.kind == voxone::ui_menu::MenuRenderKind::FULL || windowChanged) {
       drawFull(menu, view);
     } else if (plan.kind == voxone::ui_menu::MenuRenderKind::SELECTION) {
       drawRow(menu, plan.previousIndex, false, view);

@@ -21,6 +21,7 @@
 #include "core/system_operation_state.h"
 #include "core/nvs_diagnostics.h"
 #include "core/dsp_runtime.h"
+#include "core/dlna_menu_controller.h"
 #include "core/ui_state.h"
 #include "core/ota_boot_runtime.h"
 #include "core/security_recovery_key_runtime.h"
@@ -335,6 +336,7 @@ void loop() {
   timekeeper.loop1();
   serialCli.loop();
   network.loop();
+  voxone::dlna_menu::service();
   voxone::ota::serviceBootHealth(
       currentBootControlPlaneReady(netserver.started()));
   #if VOXONE_HAS_BT && VOXONE_PIN_MAP_COMPLETE

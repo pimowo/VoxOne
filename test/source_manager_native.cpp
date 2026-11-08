@@ -159,6 +159,22 @@ int main() {
   assert(homeAssistant.active() == ActiveSource::Radio);
   assert(homeAssistant.radioResumeAllowed());
 
+  SourceUpdate dlnaUpdate = homeAssistant.beginDlna("Koncert.flac", "audio/flac");
+  assert(dlnaUpdate.activeChanged && homeAssistant.dlnaActive());
+  assert(homeAssistant.active() == ActiveSource::SOURCE_DLNA);
+  homeAssistant.displayView(view, true);
+  assert(view.kind == DisplaySourceKind::Dlna);
+  assert(std::strcmp(view.peerName, "DLNA") == 0);
+  assert(std::strcmp(view.title, "Koncert.flac") == 0);
+  assert(std::strcmp(view.artist, "audio/flac") == 0);
+  makePlayerDisplayView(playerView, view, "Radio One", "Radio metadata", false,
+                        37, false, false, -55, 320, BF_MP3);
+  assert(std::strcmp(playerView.station, "DLNA") == 0);
+  assert(std::strcmp(playerView.artist, "audio/flac") == 0);
+  assert(std::strcmp(playerView.title, "Koncert.flac") == 0);
+  assert(homeAssistant.endTemporary().activeChanged);
+  assert(homeAssistant.active() == ActiveSource::Radio);
+
   BtLinkState haBt{};
   haBt.runtimeAvailable = haBt.connected = true;
   haBt.playback = BtPlayback::Playing;

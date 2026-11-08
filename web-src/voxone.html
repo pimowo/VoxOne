@@ -83,6 +83,7 @@
     <nav class="tabs" aria-label="Główna nawigacja">
       <a href="#status" data-tab="status" aria-current="page">Status</a>
       <a href="#stations" data-tab="stations">Stacje</a>
+      <a href="#dlna" data-tab="dlna">DLNA</a>
       <a href="#audio" data-tab="audio">Audio</a>
       <a href="#dsp" data-tab="dsp">DSP</a>
       <a href="#settings" data-tab="settings">Ustawienia</a>
@@ -171,6 +172,19 @@
           <p id="station-import-warning"></p>
           <div class="station-form-actions"><button id="station-import-cancel" type="button">Anuluj</button><button id="station-import-confirm" type="button">Importuj</button></div>
         </dialog>
+      </section>
+
+      <section id="dlna" data-panel aria-labelledby="dlna-title" hidden>
+        <div class="section-heading"><div><p class="eyebrow">BIBLIOTEKA SIECIOWA</p><h2 id="dlna-title">DLNA</h2></div><span class="badge" id="dlna-server">MediaServer</span></div>
+        <article class="card dlna-browser">
+          <div class="dlna-toolbar">
+            <button id="dlna-back" type="button" disabled>← Wstecz</button>
+            <strong id="dlna-path">Główne</strong>
+            <button id="dlna-refresh" type="button">Odśwież</button>
+          </div>
+          <p id="dlna-status" class="stations-message" role="status" aria-live="polite">Otwórz zakładkę, aby wyszukać serwer DLNA.</p>
+          <ul id="dlna-items" class="dlna-items" aria-label="Foldery i utwory DLNA"></ul>
+        </article>
       </section>
 
       <section id="audio" data-panel aria-labelledby="audio-title" hidden>

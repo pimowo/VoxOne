@@ -517,7 +517,18 @@ window.VoxOneRestartWaiter = Object.freeze({
     passwordInfo: securityPasswordInfo
   });
 
-  const tabs = ["status", "stations", "audio", "dsp", "settings", "hardware", "system", "update"];
+  const tabs = ["status", "stations", "dlna", "audio", "dsp", "settings", "hardware", "system", "update"];
+  const dlnaServer = document.getElementById("dlna-server");
+  const dlnaPath = document.getElementById("dlna-path");
+  const dlnaStatus = document.getElementById("dlna-status");
+  const dlnaItemsElement = document.getElementById("dlna-items");
+  const dlnaBack = document.getElementById("dlna-back");
+  const dlnaRefresh = document.getElementById("dlna-refresh");
+  let dlnaItems = [];
+  let dlnaPathStack = [{id: "0", title: "Główne"}];
+  let dlnaRequestGeneration = 0;
+  let dlnaLoaded = false;
+  let dlnaBusy = false;
   const updateImages = {
     firmware: {
       file: document.getElementById("update-firmware-file"),
@@ -1422,6 +1433,119 @@ window.VoxOneRestartWaiter = Object.freeze({
     }
   }
 
+  function renderDlnaBrowser() {
+    dlnaPath.textContent = dlnaPathStack.map(part => part.title).join(" / ");
+    dlnaBack.disabled = dlnaBusy || dlnaPathStack.length <= 1;
+    dlnaRefresh.disabled = dlnaBusy;
+    const rows = dlnaItems.map((item, index) => {
+      const row = document.createElement("li");
+      const button = document.createElement("button");
+      button.type = "button";
+      button.dataset.dlnaIndex = String(index);
+      button.disabled = dlnaBusy || (item.type !== "folder" && !item.url);
+      const kind = document.createElement("span");
+      kind.className = "dlna-kind";
+      kind.textContent = item.type === "folder" ? "DIR" : "PLAY";
+      const title = document.createElement("span");
+      title.textContent = item.title || (item.type === "folder" ? "Folder" : "Utwór");
+      const mime = document.createElement("span");
+      mime.className = "dlna-mime";
+      mime.textContent = item.type === "folder" ? ">" : (item.mime || "audio");
+      button.append(kind, title, mime);
+      row.append(button);
+      return row;
+    });
+    if (!rows.length && dlnaLoaded && !dlnaBusy) {
+      const empty = document.createElement("li");
+      empty.className = "dlna-empty";
+      empty.textContent = "Ten folder jest pusty.";
+      rows.push(empty);
+    }
+    dlnaItemsElement.replaceChildren(...rows);
+  }
+
+  async function dlnaError(response, fallback) {
+    try {
+      const payload = await response.json();
+      if (payload?.error) return fallback + " (" + payload.error + ")";
+    } catch (_) {}
+    return fallback + " (HTTP " + response.status + ")";
+  }
+
+  async function browseDlna(parent, pathAction = null) {
+    if (dlnaBusy) return false;
+    const generation = ++dlnaRequestGeneration;
+    dlnaBusy = true;
+    dlnaStatus.textContent = "Wyszukiwanie serwera i pobieranie folderu…";
+    renderDlnaBrowser();
+    try {
+      let response = await securityFetch("/api/dlna/browse?parent=" +
+        encodeURIComponent(parent), {cache: "no-store", credentials: "same-origin"}, 7000);
+      if (response.status !== 202)
+        throw new Error(await dlnaError(response, "Nie udało się rozpocząć przeglądania"));
+      const accepted = await response.json();
+      if (!Number.isInteger(accepted?.job) || accepted.job <= 0)
+        throw new Error("Urządzenie zwróciło nieprawidłowy identyfikator zadania DLNA.");
+      let payload = null;
+      for (let attempt = 0; attempt < 30 && generation === dlnaRequestGeneration; ++attempt) {
+        await new Promise(resolve => setTimeout(resolve, 400));
+        response = await securityFetch("/api/dlna/browse?job=" + accepted.job,
+          {cache: "no-store", credentials: "same-origin"}, 7000);
+        if (response.status === 202) continue;
+        if (!response.ok)
+          throw new Error(await dlnaError(response, "Przeglądanie DLNA nie powiodło się"));
+        payload = await response.json();
+        break;
+      }
+      if (generation !== dlnaRequestGeneration) return false;
+      if (!payload || payload.status !== "ok" || !Array.isArray(payload.items))
+        throw new Error("Serwer DLNA nie odpowiedział w wymaganym czasie.");
+      dlnaItems = payload.items.filter(item => item &&
+        (item.type === "folder" || item.type === "file") &&
+        typeof item.id === "string" && typeof item.title === "string");
+      if (pathAction?.push) dlnaPathStack.push(pathAction.push);
+      if (pathAction?.pop) dlnaPathStack.pop();
+      dlnaServer.textContent = payload.server?.name || "MediaServer";
+      dlnaLoaded = true;
+      dlnaStatus.textContent = "Elementy: " + dlnaItems.length +
+        (payload.truncated ? " (lista skrócona)" : "");
+      return true;
+    } catch (error) {
+      if (generation === dlnaRequestGeneration)
+        dlnaStatus.textContent = error?.message || "Błąd komunikacji z DLNA.";
+      return false;
+    } finally {
+      if (generation === dlnaRequestGeneration) {
+        dlnaBusy = false;
+        renderDlnaBrowser();
+      }
+    }
+  }
+
+  async function playDlnaItem(item) {
+    if (dlnaBusy || !item?.url) return;
+    dlnaBusy = true;
+    dlnaStatus.textContent = "Uruchamianie: " + (item.title || "utwór") + "…";
+    renderDlnaBrowser();
+    try {
+      const body = new URLSearchParams({url: item.url,
+        title: item.title || "DLNA"});
+      const response = await securityFetch("/api/dlna/play", {
+        method: "POST", credentials: "same-origin", cache: "no-store",
+        headers: {"Content-Type": "application/x-www-form-urlencoded"},
+        body: body.toString()
+      });
+      if (!response.ok)
+        throw new Error(await dlnaError(response, "Nie udało się uruchomić utworu"));
+      dlnaStatus.textContent = "Odtwarzanie: " + (item.title || "utwór");
+    } catch (error) {
+      dlnaStatus.textContent = error?.message || "Błąd uruchamiania utworu.";
+    } finally {
+      dlnaBusy = false;
+      renderDlnaBrowser();
+    }
+  }
+
   function showTab() {
     const requested = location.hash.slice(1);
     const selected = tabs.includes(requested) ? requested : "status";
@@ -1432,6 +1556,7 @@ window.VoxOneRestartWaiter = Object.freeze({
       else link.removeAttribute("aria-current");
     }
     if (selected === "stations" && state.stationsStatus === "idle") loadStations();
+    if (selected === "dlna" && !dlnaLoaded && !dlnaBusy) browseDlna("0");
     if (selected === "settings") {
       loadTimeStatus();
       loadHaSettings();
@@ -1887,20 +2012,23 @@ window.VoxOneRestartWaiter = Object.freeze({
 
   function renderStation() {
     const status = state.webStatus;
-    text("status-name-label", status?.source === "BT" ? "URZĄDZENIE" : "STACJA");
+    const external = ["BT", "HA", "DLNA"].includes(status?.source);
+    text("status-name-label", external ? "ŹRÓDŁO" : "STACJA");
     text("current-station-name", status?.name || "—");
   }
 
   function renderMetadata() {
     const status = state.webStatus;
     const bt = status?.source === "BT";
-    document.getElementById("metadata").hidden = bt;
-    document.getElementById("metadata-hint").hidden = bt;
-    document.getElementById("bt-metadata").hidden = !bt || !status.btConnected;
+    const detailed = bt || status?.source === "HA" || status?.source === "DLNA";
+    const connected = !bt || status.btConnected;
+    document.getElementById("metadata").hidden = detailed;
+    document.getElementById("metadata-hint").hidden = detailed;
+    document.getElementById("bt-metadata").hidden = !detailed || !connected;
     document.getElementById("bt-disconnected").hidden = !bt || status.btConnected;
     text("metadata", status?.metadata || "—");
-    text("bt-artist", bt && status.btConnected && status.artist ? status.artist : "—");
-    text("bt-title", bt && status.btConnected && status.title ? status.title : "—");
+    text("bt-artist", detailed && connected && status.artist ? status.artist : "—");
+    text("bt-title", detailed && connected && status.title ? status.title : "—");
   }
 
   function renderStream() {
@@ -3445,6 +3573,25 @@ window.VoxOneRestartWaiter = Object.freeze({
       if (values) send("tone", values.join(","));
     });
   }
+
+  dlnaItemsElement.addEventListener("click", event => {
+    const button = event.target.closest("button[data-dlna-index]");
+    if (!button || button.disabled) return;
+    const item = dlnaItems[Number(button.dataset.dlnaIndex)];
+    if (!item) return;
+    if (item.type === "folder")
+      browseDlna(item.id, {push: {id: item.id, title: item.title || "Folder"}});
+    else
+      playDlnaItem(item);
+  });
+  dlnaBack.addEventListener("click", () => {
+    if (dlnaBusy || dlnaPathStack.length <= 1) return;
+    browseDlna(dlnaPathStack[dlnaPathStack.length - 2].id, {pop: true});
+  });
+  dlnaRefresh.addEventListener("click", () => {
+    if (!dlnaBusy)
+      browseDlna(dlnaPathStack[dlnaPathStack.length - 1].id);
+  });
 
   window.addEventListener("hashchange", showTab);
   window.addEventListener("pageshow", event => {

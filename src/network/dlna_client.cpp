@@ -511,7 +511,8 @@ void BrowseResponseParser::DidlCallbacks::xmlOpen(const char* name) {
   } else if (owner_.inItem_ && equalsIgnoreCase(local, "title")) {
     owner_.current_.title[0] = '\0';
     owner_.didlCapture_ = DidlCapture::Title;
-  } else if (owner_.inItem_ && equalsIgnoreCase(local, "res")) {
+  } else if (owner_.inItem_ && !owner_.current_.container &&
+             equalsIgnoreCase(local, "res")) {
     owner_.current_.resourceUrl[0] = '\0';
     owner_.didlCapture_ = DidlCapture::Resource;
   }
@@ -642,6 +643,7 @@ bool running = false;
 bool completed = false;
 int completedStatus = 0;
 std::string completedBody;
+BrowseListing* completedListing = nullptr;
 
 struct BrowseParams {
   char parent[96];
@@ -667,6 +669,12 @@ RuntimeObject<T> makeRuntimeObject() {
     memory = heap_caps_malloc(sizeof(T), MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
   if (!memory) memory = heap_caps_malloc(sizeof(T), MALLOC_CAP_8BIT);
   return RuntimeObject<T>(memory ? new (memory) T() : nullptr);
+}
+
+void destroyBrowseListing(BrowseListing* listing) {
+  if (!listing) return;
+  listing->~BrowseListing();
+  heap_caps_free(listing);
 }
 
 template <typename Parser>
@@ -924,15 +932,20 @@ std::string formatBrowseJson(const BrowseParams& params, const SsdpServer& serve
   return output;
 }
 
-void finishJob(uint32_t job, int status, std::string&& body) {
+void finishJob(uint32_t job, int status, std::string&& body,
+               BrowseListing* listing) {
   xSemaphoreTake(stateMutex, portMAX_DELAY);
   if (running && activeJob == job) {
+    destroyBrowseListing(completedListing);
+    completedListing = listing;
+    listing = nullptr;
     completedStatus = status;
     completedBody = std::move(body);
     running = false;
     completed = true;
   }
   xSemaphoreGive(stateMutex);
+  destroyBrowseListing(listing);
 }
 
 void browseWorker(void* context) {
@@ -980,7 +993,8 @@ void browseWorker(void* context) {
                     listing->truncated ? " truncated" : "");
     }
   }
-  finishJob(params->job, status, std::move(body));
+  BrowseListing* completedItems = status == 200 ? listing.release() : nullptr;
+  finishJob(params->job, status, std::move(body), completedItems);
   Serial.println("##[DLNA]# browse task done");
   vTaskDelete(nullptr);
 }
@@ -1011,6 +1025,8 @@ StartResult startBrowse(const char* parent, uint32_t& job) {
   job = activeJob;
   running = true;
   completed = false;
+  destroyBrowseListing(completedListing);
+  completedListing = nullptr;
   std::string().swap(completedBody);
   xSemaphoreGive(stateMutex);
   if (xTaskCreatePinnedToCore(browseWorker, "DlnaBrowse", kWorkerStackBytes,
@@ -1040,6 +1056,29 @@ bool pollBrowse(uint32_t job, int& status, String& body, bool& ready) {
       body = "{\"error\":\"insufficient_memory\"}";
     }
   }
+  xSemaphoreGive(stateMutex);
+  return found;
+}
+
+bool pollBrowseItems(uint32_t job, int& status, bool& ready, size_t& count) {
+  if (!stateMutex || !job) return false;
+  xSemaphoreTake(stateMutex, portMAX_DELAY);
+  const bool found = activeJob == job && (running || completed);
+  if (found) {
+    ready = completed;
+    status = ready ? completedStatus : 202;
+    count = ready && completedListing ? completedListing->count : 0;
+  }
+  xSemaphoreGive(stateMutex);
+  return found;
+}
+
+bool copyBrowseItem(uint32_t job, size_t index, BrowseItem& item) {
+  if (!stateMutex || !job) return false;
+  xSemaphoreTake(stateMutex, portMAX_DELAY);
+  const bool found = activeJob == job && completed && completedStatus == 200 &&
+                     completedListing && index < completedListing->count;
+  if (found) item = completedListing->items[index];
   xSemaphoreGive(stateMutex);
   return found;
 }

@@ -12,6 +12,7 @@ namespace voxone {
 namespace dlna {
 
 constexpr char kBrowseRoute[] = "/api/dlna/browse";
+constexpr char kPlayRoute[] = "/api/dlna/play";
 constexpr size_t kMaxBrowseItems = 24;
 
 struct SsdpServer {
@@ -169,6 +170,8 @@ enum class StartResult : uint8_t { Started, Busy, Offline, NoMemory };
 bool init();
 StartResult startBrowse(const char* parent, uint32_t& job);
 bool pollBrowse(uint32_t job, int& status, String& body, bool& ready);
+bool pollBrowseItems(uint32_t job, int& status, bool& ready, size_t& count);
+bool copyBrowseItem(uint32_t job, size_t index, BrowseItem& item);
 #endif
 
 }  // namespace dlna

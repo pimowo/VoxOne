@@ -39,6 +39,7 @@ enum class SecurityEndpoint : uint8_t {
   StationsSnapshot,
   DirectorySearch,
   DlnaBrowse,
+  DlnaPlay,
   StationsExport,
   StationsImport,
   StationsAdd,

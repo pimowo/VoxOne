@@ -6,6 +6,7 @@
 #include "options.h"
 #include "config.h"
 #include "display.h"
+#include "dlna_menu_controller.h"
 #include "player.h"
 #include "ui_menu.h"
 #include "ui_state.h"
@@ -47,10 +48,16 @@ void PowerManager::loop() {
           const char* selectedLabel = uiMenu.selectedLabel();
           const auto action =
               uiMenu.handle(voxone::ui_menu::MenuCommand::SELECT);
-          if (action == voxone::ui_menu::MenuAction::ENTERED_SUBMENU)
+          if (action == voxone::ui_menu::MenuAction::ENTERED_SUBMENU) {
             ESP_LOGI(kTag, "Opened submenu: %s", selectedLabel);
-          else if (action == voxone::ui_menu::MenuAction::SELECTED)
-            ESP_LOGI(kTag, "Selected: %s", selectedLabel);
+            if (uiMenu.menuId() == voxone::ui_menu::MenuId::DLNA)
+              voxone::dlna_menu::entered();
+          } else if (action == voxone::ui_menu::MenuAction::SELECTED) {
+            if (uiMenu.menuId() == voxone::ui_menu::MenuId::DLNA)
+              voxone::dlna_menu::select();
+            else
+              ESP_LOGI(kTag, "Selected: %s", selectedLabel);
+          }
         } else if (standby()) {
           wakeup();
         } else {
@@ -58,7 +65,8 @@ void PowerManager::loop() {
         }
       } else if (event == voxone::power::ButtonEvent::BUTTON_DOUBLE_CLICK) {
         if (uiMenu.visible()) {
-          uiMenu.handle(voxone::ui_menu::MenuCommand::BACK);
+          if (!voxone::dlna_menu::back())
+            uiMenu.handle(voxone::ui_menu::MenuCommand::BACK);
         } else if (uiMenu.open()) {
           if (!transitionUiMode(MENU)) uiMenu.close();
           else ESP_LOGI(kTag, "Menu opened");

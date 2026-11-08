@@ -24,8 +24,10 @@ checkpointów pozostaje w historii Git i w istniejących raportach.
   oraz automatyczny AVRCP Absolute Volume z rzeczywistym źródłem Bluetooth.
 - [ ] Po implementacji Local Files podłączyć kartę microSD i sprawdzić
   stabilność odtwarzania przy współdzieleniu SPI z wyświetlaczem i osobnym CS.
-- [ ] Po implementacji przeglądarki DLNA sprawdzić na `minidlna` gesty: długi
-  klik — wejście, klik — folder lub utwór, dwuklik — katalog nadrzędny.
+- [ ] Fizycznie przetestować przeglądarkę i odtwarzanie DLNA na `minidlna`:
+  panel WWW, aktywację `SOURCE_DLNA` i powrót do poprzedniego źródła po EOF lub
+  Stop; na urządzeniu sprawdzić nawigację enkoderem, klik folderu lub utworu,
+  dwuklik do katalogu nadrzędnego oraz płynność renderowania na TFT i OLED.
 - [ ] Po implementacji DSPmini przetestować posiadany moduł ADAU1701, w tym
   crossover, Parametric EQ, subwoofer i Loudness.
 - [ ] Po implementacji AUX przetestować posiadany moduł PCM1808 i przełączanie
@@ -69,9 +71,6 @@ checkpointów pozostaje w historii Git i w istniejących raportach.
   posiadany moduł do testów HIL.
 - [ ] W5500 Ethernet: dodać obsługę przewodowego internetu na profilu L0 przez
   dedykowaną magistralę SPI3.
-- [ ] DLNA / UPnP: rozbudować PoC SSDP + ContentDirectory Browse o nawigację
-  w UI, wybór źródła, odtwarzanie przez `minidlna` oraz gesty długi klik —
-  wejście, klik — folder/utwór i dwuklik — powrót wyżej.
 - [ ] AUX: dodać wejście analogowe oparte na PCM1808 i zintegrować je z wyborem
   źródła; wykorzystać posiadany moduł do testów HIL.
 - [ ] Local Files: dodać odtwarzanie z karty microSD na SPI współdzielonym z

@@ -115,6 +115,37 @@ bool sourceManagerHomeAssistantActive() {
   return active;
 }
 
+void sourceManagerBeginDlna(const char* title, const char* artist) {
+  portENTER_CRITICAL(&sourceMux);
+  const SourceUpdate update = sourceState.beginDlna(title, artist);
+  portEXIT_CRITICAL(&sourceMux);
+  refreshDisplay(update);
+  netserver.requestOnChange(WEBSTATUS, 0);
+  serialCli.printf("##[SOURCE]# active=DLNA title=%.96s artist=%.96s\n",
+                   title ? title : "", artist ? artist : "");
+}
+
+void sourceManagerEndTemporary() {
+  portENTER_CRITICAL(&sourceMux);
+  const ActiveSource finished = sourceState.active();
+  const SourceUpdate update = sourceState.endTemporary();
+  const ActiveSource active = sourceState.active();
+  portEXIT_CRITICAL(&sourceMux);
+  if (!update.activeChanged) return;
+  refreshDisplay(update);
+  netserver.requestOnChange(WEBSTATUS, 0);
+  serialCli.printf("##[SOURCE]# active=%s reason=%s-finished\n",
+                   active == ActiveSource::Bluetooth ? "BT" : "RADIO",
+                   finished == ActiveSource::SOURCE_DLNA ? "dlna" : "ha");
+}
+
+bool sourceManagerDlnaActive() {
+  portENTER_CRITICAL(&sourceMux);
+  const bool active = sourceState.dlnaActive();
+  portEXIT_CRITICAL(&sourceMux);
+  return active;
+}
+
 #if VOXONE_HAS_BT && VOXONE_PIN_MAP_COMPLETE
 
 #include "bt_link.h"
@@ -132,6 +163,7 @@ BtVolumeSessionGate volumeSessionGate;
 const char* sourceName(ActiveSource source) {
   if (source == ActiveSource::Bluetooth) return "BT";
   if (source == ActiveSource::SOURCE_HA) return "HA";
+  if (source == ActiveSource::SOURCE_DLNA) return "DLNA";
   return "RADIO";
 }
 

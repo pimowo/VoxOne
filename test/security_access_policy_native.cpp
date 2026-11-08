@@ -79,6 +79,8 @@ const EndpointCase kEndpoints[] = {
      SecurityEndpoint::DirectorySearch, SecurityRouteClass::ProtectedRest, false, false},
     {SecurityAccessMethod::Get, "/api/dlna/browse?parent=0",
      SecurityEndpoint::DlnaBrowse, SecurityRouteClass::ProtectedRest, false, false},
+    {SecurityAccessMethod::Post, "/api/dlna/play",
+     SecurityEndpoint::DlnaPlay, SecurityRouteClass::ProtectedRest, true, false},
     {SecurityAccessMethod::Get, "/api/stations/export", SecurityEndpoint::StationsExport,
      SecurityRouteClass::ProtectedRest, false, false},
     {SecurityAccessMethod::Post, "/api/stations/import", SecurityEndpoint::StationsImport,
@@ -258,11 +260,11 @@ void testCompleteEndpointInventory() {
     assert(std::strcmp(securityEndpointName(actual.endpoint), "unknown") != 0);
     assert(std::strcmp(securityRouteClassName(actual.routeClass), "unknown") != 0);
   }
-  assert(sizeof(kEndpoints) / sizeof(kEndpoints[0]) == 54);
+  assert(sizeof(kEndpoints) / sizeof(kEndpoints[0]) == 55);
 
   size_t ruleCount = 0;
   const SecurityRouteRule* rules = securityAccessRouteRules(ruleCount);
-  assert(rules != nullptr && ruleCount == 54);
+  assert(rules != nullptr && ruleCount == 55);
   for (size_t index = 0; index < ruleCount; ++index) {
     const SecurityRouteRule& rule = rules[index];
     assert(rule.path && rule.path[0] == '/');
@@ -633,7 +635,7 @@ void testProductionInventoryAndHttpOnlyIntegration() {
   const char* registrations[] = {
       "webserver.on(\"/\", HTTP_ANY", "/api/stations/export",
       "/api/stations/import", "kStationsSnapshotRoute", "kDirectorySearchRoute",
-      "dlna::kBrowseRoute",
+      "dlna::kBrowseRoute", "dlna::kPlayRoute",
       "/api/stations/add", "/api/stations/edit", "/api/stations/delete",
       "/api/stations/reorder", "/api/stations/metadata",
       "/api/hardware", "/api/ha", "/api/display/theme", "kBackupRoute", "kRestoreRoute", "/api/time",

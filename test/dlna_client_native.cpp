@@ -2,6 +2,8 @@
 
 #include <cassert>
 #include <cstring>
+#include <fstream>
+#include <iterator>
 #include <string>
 
 namespace {
@@ -15,6 +17,13 @@ bool writeChunks(Parser& parser, const std::string& input, size_t chunk) {
     if (!parser.write(input.data() + offset, length)) return false;
   }
   return true;
+}
+
+std::string readFile(const char* path) {
+  std::ifstream input(path, std::ios::binary);
+  assert(input.good());
+  return {std::istreambuf_iterator<char>(input),
+          std::istreambuf_iterator<char>()};
 }
 
 }  // namespace
@@ -67,7 +76,9 @@ int main() {
       "<s:Body><u:BrowseResponse xmlns:u=\"urn:schemas-upnp-org:service:ContentDirectory:1\">"
       "<Result>&lt;DIDL-Lite xmlns:dc=&quot;http://purl.org/dc/elements/1.1/&quot;&gt;"
       "&lt;container id=&quot;1&quot; parentID=&quot;0&quot;&gt;"
-      "&lt;dc:title&gt;Muzyka &amp;amp; podcasty&lt;/dc:title&gt;&lt;/container&gt;"
+      "&lt;dc:title&gt;Muzyka &amp;amp; podcasty&lt;/dc:title&gt;"
+      "&lt;res protocolInfo=&quot;http-get:*:image/jpeg:*&quot;&gt;"
+      "http://192.168.1.20:8200/folder.jpg&lt;/res&gt;&lt;/container&gt;"
       "&lt;item id=&quot;2$15&quot; parentID=&quot;0&quot;&gt;"
       "&lt;dc:title&gt;Koncert.flac&lt;/dc:title&gt;"
       "&lt;res protocolInfo=&quot;http-get:*:audio/flac:*&quot;&gt;"
@@ -84,6 +95,7 @@ int main() {
   assert(listing.items[0].container);
   assert(std::string(listing.items[0].id) == "1");
   assert(std::string(listing.items[0].title) == "Muzyka & podcasty");
+  assert(listing.items[0].resourceUrl[0] == '\0');
   assert(!listing.items[1].container);
   assert(std::string(listing.items[1].title) == "Koncert.flac");
   assert(std::string(listing.items[1].mime) == "audio/flac");
@@ -118,5 +130,18 @@ int main() {
   const char* emptySoap = "<Envelope><Body/></Envelope>";
   assert(missingResult.write(emptySoap, std::strlen(emptySoap)));
   assert(!missingResult.finish(listing));
+
+  const std::string serverSource = readFile("src/core/netserver.cpp");
+  assert(serverSource.find("dlna::kPlayRoute") != std::string::npos);
+  assert(serverSource.find("Source::Dlna") != std::string::npos);
+  const std::string menuSource = readFile("src/core/dlna_menu_controller.cpp");
+  assert(menuSource.find("copyBrowseItem") != std::string::npos);
+  assert(menuSource.find("request.source = temporary_audio::Source::Dlna") !=
+         std::string::npos);
+  assert(menuSource.find("parentHistory") != std::string::npos);
+  const std::string web = readFile("web-src/voxone.js");
+  assert(web.find("/api/dlna/browse?parent=") != std::string::npos);
+  assert(web.find("/api/dlna/play") != std::string::npos);
+  assert(web.find("data-dlna-index") != std::string::npos);
   return 0;
 }

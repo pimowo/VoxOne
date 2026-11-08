@@ -60,6 +60,7 @@
 #include "netserver.h"
 #include "netserver_backpressure.h"
 #include "player.h"
+#include "temporary_audio_request.h"
 #include "serialcli.h"
 #include "display.h"
 #include "network.h"
@@ -247,6 +248,7 @@ void handleStationsRead(AsyncWebServerRequest *request);
 void handleStationsReadSnapshot(AsyncWebServerRequest *request);
 void handleStationDirectorySearch(AsyncWebServerRequest *request);
 void handleDlnaBrowse(AsyncWebServerRequest *request);
+void handleDlnaPlay(AsyncWebServerRequest *request);
 void handleStationsMutation(AsyncWebServerRequest *request);
 void handleStationMetadata(AsyncWebServerRequest *request);
 void handleStationsExport(AsyncWebServerRequest *request);
@@ -1081,6 +1083,7 @@ bool NetServer::begin(bool quiet) {
   webserver.on(stationDirectory::kStationsSnapshotRoute, HTTP_GET, handleStationsReadSnapshot);
   webserver.on(stationDirectory::kDirectorySearchRoute, HTTP_GET, handleStationDirectorySearch);
   webserver.on(voxone::dlna::kBrowseRoute, HTTP_GET, handleDlnaBrowse);
+  webserver.on(voxone::dlna::kPlayRoute, HTTP_POST, handleDlnaPlay);
   webserver.on("/api/stations/add", HTTP_POST, handleStationsMutation);
   webserver.on("/api/stations/edit", HTTP_POST, handleStationsMutation);
   webserver.on("/api/stations/delete", HTTP_POST, handleStationsMutation);
@@ -1769,6 +1772,29 @@ void handleDlnaBrowse(AsyncWebServerRequest* request) {
                         R"("})");
       break;
   }
+}
+
+void handleDlnaPlay(AsyncWebServerRequest* request) {
+  if (!request->hasParam("url", true)) {
+    stationsReply(request, 400, R"({"error":"missing_url"})");
+    return;
+  }
+  const String url = request->getParam("url", true)->value();
+  const String title = request->hasParam("title", true)
+                           ? request->getParam("title", true)->value()
+                           : String("DLNA");
+  voxone::temporary_audio::Request playback{};
+  if (!voxone::temporary_audio::isSafeUrl(url.c_str(), url.length()) ||
+      title.length() >= sizeof(playback.title)) {
+    stationsReply(request, 400, R"({"error":"invalid_dlna_item"})");
+    return;
+  }
+  strlcpy(playback.url, url.c_str(), sizeof(playback.url));
+  strlcpy(playback.title, title.length() ? title.c_str() : "DLNA",
+          sizeof(playback.title));
+  playback.source = voxone::temporary_audio::Source::Dlna;
+  player.requestTemporaryUrl(playback);
+  stationsReply(request, 202, R"({"status":"starting","source":"dlna"})");
 }
 namespace {
 

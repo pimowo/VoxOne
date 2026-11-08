@@ -18,6 +18,7 @@ enum class MenuId : uint8_t {
   SCREEN,
   NETWORK,
   SYSTEM,
+  DLNA,
 };
 
 enum class MenuCommand : uint8_t {
@@ -43,7 +44,16 @@ struct MenuSnapshot {
   MenuId menuId;
   uint8_t selectedIndex;
   uint32_t revision;
+  uint8_t dynamicBank;
 };
+
+struct DlnaMenuEntry {
+  char label[96]{};
+  bool folder = false;
+  bool playable = false;
+};
+
+constexpr uint8_t kMaxDlnaMenuItems = 24;
 
 enum class MenuRenderKind : uint8_t { NONE, FULL, SELECTION };
 
@@ -55,7 +65,7 @@ struct MenuRenderPlan {
 
 class UiMenu {
  public:
-  static constexpr uint8_t kMainItemCount = 4;
+  static constexpr uint8_t kMainItemCount = 5;
 
   bool open();
   bool close();
@@ -67,6 +77,10 @@ class UiMenu {
   uint8_t selectedIndex() const;
   const char* selectedLabel() const;
   bool selectedHasSubmenu() const;
+  bool selectedDlnaFolder() const;
+  bool selectedDlnaPlayable() const;
+  void setDlnaStatus(const char* label);
+  void setDlnaItems(const DlnaMenuEntry* entries, uint8_t count);
   MenuSnapshot snapshot() const;
   MenuAction handle(MenuCommand command, int8_t steps = 1);
 
@@ -94,15 +108,22 @@ inline const char* menuTitle(const MenuSnapshot& snapshot) {
 }
 
 inline uint8_t itemCount(const MenuSnapshot& snapshot) {
-  return itemCount(snapshot.menuId);
+  if (snapshot.menuId != MenuId::DLNA) return itemCount(snapshot.menuId);
+  extern uint8_t dlnaItemCount(uint8_t bank);
+  return dlnaItemCount(snapshot.dynamicBank);
 }
 
 inline const char* itemLabel(const MenuSnapshot& snapshot, uint8_t index) {
-  return itemLabel(snapshot.menuId, index);
+  if (snapshot.menuId != MenuId::DLNA) return itemLabel(snapshot.menuId, index);
+  extern const char* dlnaItemLabel(uint8_t bank, uint8_t index);
+  return dlnaItemLabel(snapshot.dynamicBank, index);
 }
 
 inline bool itemHasSubmenu(const MenuSnapshot& snapshot, uint8_t index) {
-  return itemHasSubmenu(snapshot.menuId, index);
+  if (snapshot.menuId != MenuId::DLNA)
+    return itemHasSubmenu(snapshot.menuId, index);
+  extern bool dlnaItemFolder(uint8_t bank, uint8_t index);
+  return dlnaItemFolder(snapshot.dynamicBank, index);
 }
 
 }  // namespace ui_menu
