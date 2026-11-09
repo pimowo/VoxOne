@@ -20,6 +20,7 @@
 #include <new>
 
 #include "../core/version.h"
+#include "../hardware/hardware_descriptor.h"
 #endif
 
 namespace voxone {
@@ -665,7 +666,7 @@ using RuntimeObject = std::unique_ptr<T, RuntimeObjectDeleter<T>>;
 template <typename T>
 RuntimeObject<T> makeRuntimeObject() {
   void* memory = nullptr;
-  if (psramFound())
+  if (voxone::hardware::hardwareCapabilities().supportsPsram && psramFound())
     memory = heap_caps_malloc(sizeof(T), MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
   if (!memory) memory = heap_caps_malloc(sizeof(T), MALLOC_CAP_8BIT);
   return RuntimeObject<T>(memory ? new (memory) T() : nullptr);

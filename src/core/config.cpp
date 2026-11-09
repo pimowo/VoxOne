@@ -29,9 +29,7 @@
 #include <algorithm>
 #include <cstddef>
 #include <esp_sntp.h>
-#if defined(VOXONE_RUNTIME_OLED_128X64_BACKENDS)
 #include <esp_system.h>
-#endif
 
 namespace {
 static_assert(CONFIG_VERSION == voxone::config_format::kConfigV7,
@@ -56,13 +54,13 @@ bool localDisplayInstalled() {
 }
 
 bool localBacklightInstalled() {
-#if defined(VOXONE_RUNTIME_L0_DISPLAY_BACKENDS)
+  const auto& hardware = voxone::hardware::currentHardware();
+  voxone::hardware::DisplayKind selected = voxone::hardware::DisplayKind::None;
   return localDisplayInstalled() &&
-         voxone::hardware::runtimeHardwareConfig().display ==
-             voxone::hardware::RuntimeDisplay::St7796s_480x320;
-#else
-  return localDisplayInstalled();
-#endif
+         voxone::hardware::hasPin(hardware.display.backlight) &&
+         voxone::hardware::runtimeDisplayKind(
+             voxone::hardware::runtimeHardwareConfig().display, selected) &&
+         selected == hardware.display.backlightDisplay;
 }
 
 class WifiConfigSpiffsStorage {
@@ -194,16 +192,17 @@ void Config::init() {
   isScreensaver = false;
   memset(tmpBuf, 0, BUFLEN);
   //bootInfo();
-#if RTCSUPPORTED
   _rtcFound = false;
-  BOOTLOG("RTC begin(SDA=%d,SCL=%d)", RTC_SDA, RTC_SCL);
-  if(rtc.init()){
-    BOOTLOG("done");
-    _rtcFound = true;
-  }else{
-    BOOTLOG("[ERROR] - Couldn't find RTC");
+  if (voxone::hardware::hardwareCapabilities().supportsRtc) {
+    const auto& i2c = voxone::hardware::currentHardware().i2c;
+    BOOTLOG("RTC begin(SDA=%d,SCL=%d)", i2c.sda, i2c.scl);
+    if (rtc.init()) {
+      BOOTLOG("done");
+      _rtcFound = true;
+    } else {
+      BOOTLOG("[ERROR] - Couldn't find RTC");
+    }
   }
-#endif
   spiffsMounted = false;
   webUpdateDataReady = false;
   wifiConfigReady = false;
@@ -337,9 +336,8 @@ bool Config::spiffsCleanup(){
 }
 
 void Config::waitConnection(){
-#if I2S_DOUT==255
-  return;
-#endif
+  if (!voxone::hardware::hasPin(
+          voxone::hardware::currentHardware().audioOut.dout)) return;
   while(!player.connproc) vTaskDelay(50);
   vTaskDelay(500);
 }
@@ -398,12 +396,11 @@ void Config::initRadioPlaylist(){
 
 void Config::_initHW(){
   loadTheme();
-  #if BRIGHTNESS_PIN!=255
-    if (localBacklightInstalled()) {
-      pinMode(BRIGHTNESS_PIN, OUTPUT);
-      setBrightness(false);
-    }
-  #endif
+  const auto backlight = voxone::hardware::currentHardware().display.backlight;
+  if (localBacklightInstalled()) {
+    pinMode(backlight, OUTPUT);
+    setBrightness(false);
+  }
 }
 
 uint16_t Config::color565(uint8_t r, uint8_t g, uint8_t b)
@@ -1115,7 +1112,6 @@ bool Config::initNetwork() {
 }
 
 void Config::setBrightness(bool dosave){
-#if BRIGHTNESS_PIN!=255
   if (!localBacklightInstalled()) return;
   bool wake = false;
   uint8_t brightness = 0;
@@ -1132,11 +1128,9 @@ void Config::setBrightness(bool dosave){
     if (dosave && !_startupReadOnly) persistV7();
   }
   if(wake) display.wakeup();
-  analogWrite(BRIGHTNESS_PIN, map(brightness, 0, 100, 0, 255));
-#endif
-#if BRIGHTNESS_PIN != 255
+  analogWrite(voxone::hardware::currentHardware().display.backlight,
+              map(brightness, 0, 100, 0, 255));
   if (dosave) netserver.requestOnChange(GETSCREEN, 0);
-#endif
 }
 
 void Config::setRuntimeBrightness(uint8_t value) {
@@ -1204,22 +1198,20 @@ void Config::setDspOn(bool dspon, bool saveval){
   }
   if (!localDisplayInstalled()) return;
   if(!dspon){
-#if BRIGHTNESS_PIN!=255
-  if (localBacklightInstalled()) analogWrite(BRIGHTNESS_PIN, 0);
-#endif
+    if (localBacklightInstalled())
+      analogWrite(voxone::hardware::currentHardware().display.backlight, 0);
     display.deepsleep();
   }else{
     display.wakeup();
-#if BRIGHTNESS_PIN!=255
     if (localBacklightInstalled())
-      analogWrite(BRIGHTNESS_PIN, map(
+      analogWrite(voxone::hardware::currentHardware().display.backlight, map(
           runtimeSnapshot().brightness, 0, 100, 0, 255));
-#endif
   }
 }
 
 void Config::doSleep(){
-  if(BRIGHTNESS_PIN!=255 && localBacklightInstalled()) analogWrite(BRIGHTNESS_PIN, 0);
+  if (localBacklightInstalled())
+    analogWrite(voxone::hardware::currentHardware().display.backlight, 0);
   display.deepsleep();
 #if !defined(ARDUINO_ESP32C3_DEV)
   if(WAKE_PIN!=255) esp_sleep_enable_ext0_wakeup((gpio_num_t)WAKE_PIN, LOW);
@@ -1229,7 +1221,8 @@ void Config::doSleep(){
 }
 
 void Config::doSleepW(){
-  if(BRIGHTNESS_PIN!=255 && localBacklightInstalled()) analogWrite(BRIGHTNESS_PIN, 0);
+  if (localBacklightInstalled())
+    analogWrite(voxone::hardware::currentHardware().display.backlight, 0);
   display.deepsleep();
 #if !defined(ARDUINO_ESP32C3_DEV)
   if(WAKE_PIN!=255) esp_sleep_enable_ext0_wakeup((gpio_num_t)WAKE_PIN, LOW);
@@ -1245,9 +1238,7 @@ void Config::sleepForAfter(uint16_t sf, uint16_t sa){
 
 void Config::bootInfo() {
   BOOTLOG("************************************************");
-#if defined(VOXONE_RUNTIME_OLED_128X64_BACKENDS)
   BOOTLOG("reset reason:\t%d", static_cast<int>(esp_reset_reason()));
-#endif
   BOOTLOG("VoxOne v%s-%s", VOXONE_VERSION, VOXONE_BUILD_CHANNEL);
   BOOTLOG("build: %s", VOXONE_BUILD_SHA);
   BOOTLOG("profile: %s", VOXONE_BUILD_PROFILE);
@@ -1263,7 +1254,9 @@ void Config::bootInfo() {
   }
   BOOTLOG("chip:\t\tmodel: %s | rev: %d | id: %lu | cores: %d | psram: %lu", ESP.getChipModel(), ESP.getChipRevision(), chipId, ESP.getChipCores(), ESP.getPsramSize());
   BOOTLOG("display:\t%d", DSP_MODEL);
-  BOOTLOG("audio:\t\t%s (%d, %d, %d)", "I2S", I2S_DOUT, I2S_BCLK, I2S_LRC);
+  const auto& audioPins = voxone::hardware::currentHardware().audioOut;
+  BOOTLOG("audio:\t\t%s (%d, %d, %d)", "I2S", audioPins.dout,
+          audioPins.bclk, audioPins.ws);
   BOOTLOG("audioinfo:\t%s", store.audioinfo?"true":"false");
   BOOTLOG("smartstart:\t%d", store.smartstart);
   BOOTLOG("vumeter:\t%s", store.vumeter?"true":"false");

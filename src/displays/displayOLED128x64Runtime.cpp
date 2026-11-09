@@ -1,47 +1,31 @@
 #include "../core/options.h"
 
-#if defined(VOXONE_RUNTIME_OLED_128X64_BACKENDS) || \
-    defined(VOXONE_RUNTIME_L0_DISPLAY_BACKENDS)
+#if VOXONE_MULTI_DISPLAY_RUNTIME
 
 #include "dspcore.h"
 #include "../core/config.h"
+#include "../hardware/hardware_descriptor.h"
+#include "../hardware/i2c_runtime.h"
 #include "../hardware/runtime_hardware_config.h"
 #include <new>
-#if defined(VOXONE_RUNTIME_L0_DISPLAY_BACKENDS)
-  #include "../core/rtcsupport.h"
-#endif
-
-#ifndef SCREEN_ADDRESS
-  #define SCREEN_ADDRESS 0x3C
-#endif
-
-#ifndef I2CFREQ_HZ
-  #define I2CFREQ_HZ 4000000UL
-#endif
-#ifndef SH1106_I2CFREQ_HZ
-  // Adafruit SH110X documents 400 kHz as the safe SH1106 I2C rate.
-  #define SH1106_I2CFREQ_HZ 400000UL
-#endif
 
 using voxone::display_profile::ControllerId;
 
-#if defined(VOXONE_RUNTIME_L0_DISPLAY_BACKENDS)
 RuntimeOled128x64Display::RuntimeOled128x64Display(TwoWire& sharedWire)
     : Adafruit_GFX(128, 64),
       wire_(sharedWire),
-      ssd1306_128x32_(128, 32, &wire_, I2C_RST, I2CFREQ_HZ),
-      ssd1306_128x64_(128, 64, &wire_, I2C_RST, I2CFREQ_HZ),
-      ssd1309_(128, 64, &wire_, I2C_RST),
-      sh1106_(128, 64, &wire_, I2C_RST, SH1106_I2CFREQ_HZ) {}
-#else
-RuntimeOled128x64Display::RuntimeOled128x64Display()
-    : Adafruit_GFX(128, 64),
-      wire_(0),
-      ssd1306_128x32_(128, 32, &wire_, I2C_RST, I2CFREQ_HZ),
-      ssd1306_128x64_(128, 64, &wire_, I2C_RST, I2CFREQ_HZ),
-      ssd1309_(128, 64, &wire_, I2C_RST),
-      sh1106_(128, 64, &wire_, I2C_RST, SH1106_I2CFREQ_HZ) {}
-#endif
+      ssd1306_128x32_(
+          128, 32, &wire_,
+          voxone::hardware::currentHardware().display.rst,
+          voxone::hardware::currentHardware().i2c.frequencyHz),
+      ssd1306_128x64_(
+          128, 64, &wire_,
+          voxone::hardware::currentHardware().display.rst,
+          voxone::hardware::currentHardware().i2c.frequencyHz),
+      ssd1309_(128, 64, &wire_,
+               voxone::hardware::currentHardware().display.rst),
+      sh1106_(128, 64, &wire_,
+              voxone::hardware::currentHardware().display.rst, 400000UL) {}
 
 RuntimeOled128x64Display::~RuntimeOled128x64Display() { delete ch1116g_; }
 
@@ -74,30 +58,24 @@ bool RuntimeOled128x64Display::begin(
   activeController_ = controller;
   activeProfile_ = profile;
   ready_ = false;
-#if defined(VOXONE_RUNTIME_L0_DISPLAY_BACKENDS)
-  // Normal boot initializes RTCWire through Config before Display::init();
-  // SECURITY recovery reaches the display earlier.  The idempotent helper
-  // covers both paths without reinitializing an active DS3231 bus.
-  if (!initRTCWire()) return false;
-  wire_.setClock(I2CFREQ_HZ);
-#else
-  wire_.begin(I2C_SDA, I2C_SCL);
-#endif
+  const auto& i2c = voxone::hardware::currentHardware().i2c;
+  if (!voxone::hardware::initHardwareI2c()) return false;
+  wire_.setClock(i2c.frequencyHz);
   switch (activeController_) {
     case ControllerId::Ssd1306:
-      ready_ = activeSsd1306()->begin(SSD1306_SWITCHCAPVCC, SCREEN_ADDRESS,
+      ready_ = activeSsd1306()->begin(SSD1306_SWITCHCAPVCC, i2c.displayAddress,
                                      true, false);
       break;
     case ControllerId::Ssd1309:
-      ready_ = ssd1309_.begin(SCREEN_ADDRESS);
+      ready_ = ssd1309_.begin(i2c.displayAddress);
       break;
     case ControllerId::Sh1106:
-      ready_ = sh1106_.begin(SCREEN_ADDRESS, true);
+      ready_ = sh1106_.begin(i2c.displayAddress, true);
       break;
     case ControllerId::Ch1116g:
       wire_.setClock(400000UL);
       ch1116g_ = new (std::nothrow) DisplayCH1116G(wire_);
-      ready_ = ch1116g_ && ch1116g_->begin(SCREEN_ADDRESS);
+      ready_ = ch1116g_ && ch1116g_->begin(i2c.displayAddress);
       break;
     default:
       break;
@@ -208,14 +186,16 @@ void RuntimeOled128x64Display::fillScreen(uint16_t color) {
   if (ready_) active()->fillScreen(color);
 }
 
-#if !defined(VOXONE_RUNTIME_L0_DISPLAY_BACKENDS)
-DspCore::DspCore() : RuntimeOled128x64Display() {}
+#if !VOXONE_MULTI_DISPLAY_HAS_ST7796
+DspCore::DspCore()
+    : RuntimeOled128x64Display(voxone::hardware::hardwareI2cBus()) {}
 
 void DspCore::initDisplay() {
   const auto selection = voxone::display_backend::select(
       voxone::hardware::runtimeHardwareConfig(),
       voxone::hardware::currentHardware(),
-      voxone::display_backend::compiledBackends());
+      voxone::display_backend::compiledBackends(
+          voxone::hardware::currentHardware()));
   if (!begin(selection.controller, selection.profile))
     Serial.println(F("Runtime OLED backend initialization failed; display disabled"));
 #include "tools/oledcolorfix.h"

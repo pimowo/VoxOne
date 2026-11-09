@@ -51,13 +51,11 @@ ButtonBinding buttons[] {
 constexpr uint8_t nrOfButtons = sizeof(buttons) / sizeof(buttons[0]);
 #endif
 
-#if ENC_BTNL!=255 && ENC_BTNR!=255
-  #include "../yoEncoder/yoEncoder.h"
-  yoEncoder encoder = yoEncoder(
-      voxone::hardware::currentHardware().localInput.a,
-      voxone::hardware::currentHardware().localInput.b,
-      voxone::hardware::currentHardware().localInput.ec11StepsPerDetent);
-#endif
+#include "../yoEncoder/yoEncoder.h"
+yoEncoder encoder = yoEncoder(
+    voxone::hardware::currentHardware().localInput.a,
+    voxone::hardware::currentHardware().localInput.b,
+    voxone::hardware::currentHardware().localInput.ec11StepsPerDetent);
 
 namespace {
 voxone::input::Activation activeLocalInput =
@@ -94,19 +92,16 @@ void configureOkButton(OneButton& button, voxone::hardware::Pin pin) {
 }
 }  // namespace
 
-#if ENC_BTNL!=255
 void IRAM_ATTR readEncoderISR()
 {
   encoder.readEncoder_ISR();
 }
-#endif
 void initControls() {
   const auto& hardware = voxone::hardware::currentHardware();
   const auto selected = voxone::hardware::effectiveRuntimeInput(
       voxone::hardware::runtimeHardwareConfig(), hardware);
   activeLocalInput = voxone::input::activationFor(selected);
 
-#if ENC_BTNL!=255
   if (activeLocalInput.ec11) {
     encoder.begin();
     encoder.setup(readEncoderISR);
@@ -114,7 +109,6 @@ void initControls() {
     encoder.setAcceleration(config.runtimeSnapshot().encoderAcceleration);
     configureOkButton(localInputButtons[2], hardware.localInput.key);
   }
-#endif
   if (activeLocalInput.buttons3) {
     configureDirectionButton(localInputButtons[0], hardware.localInput.a,
                              localInputEvents[0]);
@@ -148,23 +142,19 @@ void initControls() {
 
 void loopControls() {
   if(updateLockActive() || uiState.mode()==UPDATING || uiState.mode()==LOST) {
-#if ENC_BTNL!=255
     if (activeLocalInput.ec11) {
       // The ISR is hardware-only. Drain accumulated motion while core input is
       // locked so it cannot become a delayed UI event after the lock ends.
       (void)encoder.encoderChanged();
     }
-#endif
     return;
   }
   if(ctrls_on_loop) ctrls_on_loop();
-#if ENC_BTNL!=255
   if (activeLocalInput.ec11) {
     encoder1Loop();
     if (voxone::security_recovery::runtimeKeyInputReady())
       localInputButtons[2].tick();
   }
-#endif
   if (activeLocalInput.buttons3) {
     localInputButtons[0].tick();
     localInputButtons[1].tick();
@@ -182,11 +172,10 @@ void loopControls() {
   }
 #endif
 }
-#if ENC_BTNL!=255
 void encoder1Loop() {
   const int8_t encoderDelta = voxone::input::normalizeEc11Delta(
       static_cast<int8_t>(encoder.encoderChanged()),
-      VOXONE_EC11_REVERSE_DIRECTION != 0);
+      voxone::hardware::currentHardware().localInput.reverseDirection);
   if (encoderDelta!=0)
   {
     dispatchUiInput(uiInputEvent(encoderDelta > 0
@@ -195,7 +184,6 @@ void encoder1Loop() {
                     encoderDelta);
   }
 }
-#endif
 
 void onBtnLongPressStart(int id) {
   switch ((controlEvt_e)id) {

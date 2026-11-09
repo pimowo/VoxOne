@@ -14,6 +14,19 @@ Selection buildDefault(const hardware::HardwareDescriptor& hardware) {
 
 }  // namespace
 
+CompiledBackends compiledBackends(
+    const hardware::HardwareDescriptor& hardware) {
+  ControllerMask controllers = 0;
+  for (uint8_t value = static_cast<uint8_t>(hardware::DisplayKind::Ssd1306_128x64);
+       value <= static_cast<uint8_t>(hardware::DisplayKind::Ch1116g_128x64);
+       ++value) {
+    const auto kind = static_cast<hardware::DisplayKind>(value);
+    if (hardware.capabilities.supportsDisplay(kind))
+      controllers |= controllerSupport(display_profile::controllerFor(kind));
+  }
+  return CompiledBackends{controllers, true};
+}
+
 Selection select(const hardware::RuntimeHardwareConfig& requested,
                  const hardware::HardwareDescriptor& hardware,
                  CompiledBackends compiled) {

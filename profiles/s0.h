@@ -4,7 +4,6 @@
 // Current user-wired ESP32-S3 Zero prototype. S1 remains a separate future PCB.
 #define VOXONE_PROFILE_NAME "S0"
 #define VOXONE_PROFILE_MCU voxone::Mcu::Esp32S3
-#define VOXONE_RUNTIME_OLED_128X64_BACKENDS 1
 #define VOXONE_PROFILE_DISPLAY voxone::Display::Ssd1306_128x32
 #define VOXONE_DISPLAY_CONTROLLER VOXONE_DISPLAY_CONTROLLER_SSD1306
 #define DSP_MODEL DSP_SSD1306

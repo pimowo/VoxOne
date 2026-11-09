@@ -2,12 +2,12 @@
 #define dspcore_h
 #pragma once
 
-#if defined(VOXONE_RUNTIME_L0_DISPLAY_BACKENDS)
+#if VOXONE_MULTI_DISPLAY_HAS_ST7796
   #define TIME_SIZE           70
   #define PSFBUFFER
-  #include "displayL0Runtime.h"
+  #include "displayMultiRuntime.h"
 
-#elif defined(VOXONE_RUNTIME_OLED_128X64_BACKENDS)
+#elif VOXONE_MULTI_DISPLAY_RUNTIME
   #define TIME_SIZE           2
   #define DSP_OLED
   #include "displayOLED128x64Runtime.h"

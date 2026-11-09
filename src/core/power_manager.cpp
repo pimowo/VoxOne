@@ -12,28 +12,33 @@
 #include "ui_menu.h"
 #include "ui_state.h"
 #include "update_progress.h"
+#include "../hardware/hardware_descriptor.h"
 
 namespace {
 constexpr char kTag[] = "PowerManager";
 
 bool powerButtonPressed() {
-  return POWER_BUTTON_PIN >= 0 && digitalRead(POWER_BUTTON_PIN) == LOW;
+  const auto pin = voxone::hardware::currentHardware().power.button;
+  return voxone::hardware::hasPin(pin) && digitalRead(pin) == LOW;
 }
 
 void setPowerRelay(bool enabled) {
-  if (POWER_RELAY_PIN >= 0)
-    digitalWrite(POWER_RELAY_PIN, enabled ? HIGH : LOW);
+  const auto pin = voxone::hardware::currentHardware().power.relay;
+  if (voxone::hardware::hasPin(pin))
+    digitalWrite(pin, enabled ? HIGH : LOW);
 }
 }  // namespace
 
 PowerManager powerManager;
 
 void PowerManager::begin() {
-  if (POWER_RELAY_PIN >= 0) {
-    pinMode(POWER_RELAY_PIN, OUTPUT);
+  const auto& pins = voxone::hardware::currentHardware().power;
+  if (voxone::hardware::hasPin(pins.relay)) {
+    pinMode(pins.relay, OUTPUT);
     setPowerRelay(true);
   }
-  if (POWER_BUTTON_PIN >= 0) pinMode(POWER_BUTTON_PIN, INPUT_PULLUP);
+  if (voxone::hardware::hasPin(pins.button))
+    pinMode(pins.button, INPUT_PULLUP);
   button_.reset(powerButtonPressed(), millis());
 }
 
@@ -41,7 +46,8 @@ void PowerManager::loop() {
   const uint32_t nowMs = millis();
   if (wakeRequested_.exchange(false, std::memory_order_acq_rel)) wakeup();
 
-  if (POWER_BUTTON_PIN >= 0) {
+  if (voxone::hardware::hasPin(
+          voxone::hardware::currentHardware().power.button)) {
     const auto event = button_.update(powerButtonPressed(), nowMs);
     if (!updateLockActive() && !shutdownNotice_) {
       if (event == voxone::power::ButtonEvent::BUTTON_CLICK) {
@@ -112,7 +118,8 @@ void PowerManager::enterStandby() {
   if (mode == MODE_HARD_POWER) setPowerRelay(false);
   standby_.store(true, std::memory_order_release);
   Serial.printf("##[POWER]# standby mode=%s relay=%d\n",
-                voxone::power_mode::apiName(mode), POWER_RELAY_PIN);
+                voxone::power_mode::apiName(mode),
+                voxone::hardware::currentHardware().power.relay);
 }
 
 void PowerManager::wakeup() {

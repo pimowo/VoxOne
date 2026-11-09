@@ -70,6 +70,7 @@ int main() {
   assert(d.audioOut.bclk == fromLegacyPin(I2S_BCLK));
   assert(d.audioOut.ws == fromLegacyPin(I2S_LRC));
   assert(d.audioOut.dout == fromLegacyPin(I2S_DOUT));
+  assert(d.audioOutInternal == bool(I2S_INTERNAL));
   assert(d.display.cs == fromLegacyPin(TFT_CS));
   assert(d.display.dc == fromLegacyPin(TFT_DC));
   assert(d.display.rst == fromLegacyPin(TFT_RST));
@@ -92,6 +93,8 @@ int main() {
   assert(!bool(ENC_BUTTON_INTERNALPULLUP));
   assert(d.localInput.ec11StepsPerDetent ==
          (ENC_HALFQUARD == 255 ? 1 : (ENC_HALFQUARD ? 2 : 4)));
+  assert(d.localInput.reverseDirection ==
+         bool(VOXONE_EC11_REVERSE_DIRECTION));
   assert(d.btAudioIn.bclk == fromLegacyPin(VOXONE_BT_I2S_BCLK_PIN));
   assert(d.btAudioIn.ws == fromLegacyPin(VOXONE_BT_I2S_WS_PIN));
   assert(d.btAudioIn.din == fromLegacyPin(VOXONE_BT_I2S_DATA_PIN));
@@ -100,8 +103,7 @@ int main() {
   assert(!d.btAudioRxEnabled ||
          (hasPin(d.btAudioIn.bclk) && hasPin(d.btAudioIn.ws) &&
           hasPin(d.btAudioIn.din)));
-#if defined(VOXONE_RUNTIME_OLED_128X64_BACKENDS) || \
-    defined(VOXONE_RUNTIME_L0_DISPLAY_BACKENDS)
+#if VOXONE_MULTI_DISPLAY_RUNTIME
   assert(d.i2c.sda == fromLegacyPin(I2C_SDA));
   assert(d.i2c.scl == fromLegacyPin(I2C_SCL));
 #else
@@ -110,8 +112,10 @@ int main() {
 #endif
 #if defined(VOXONE_PROFILE_L0)
   assert(caps.supportsRtc);
+  assert(d.rtcKind == RtcKind::Ds3231);
 #else
   assert(!caps.supportsRtc);
+  assert(d.rtcKind == RtcKind::None);
 #endif
   assert(fromLegacyPin(255) == kNoPin && fromLegacyPin(-1) == kNoPin);
   assert(!hasPin(kNoPin));
@@ -130,8 +134,9 @@ int main() {
   // introducing a product profile for a board that is no longer supported.
   HardwareDescriptor noDisplay = d;
   noDisplay.displayKind = DisplayKind::None;
-  noDisplay.display = {kNoPin, kNoPin, kNoPin, kNoPin, BusKind::None};
-  noDisplay.localInput = {kNoPin, kNoPin, kNoPin, 1};
+  noDisplay.display = {kNoPin, kNoPin, kNoPin, kNoPin, BusKind::None,
+                       DisplayKind::None};
+  noDisplay.localInput = {kNoPin, kNoPin, kNoPin, 1, false};
   noDisplay.capabilities.supportedDisplays = 0;
   noDisplay.capabilities.supportedInputs = 0;
   noDisplay.capabilities.supportsLocalUi = false;

@@ -43,5 +43,6 @@ int main() {
 
   // Shared display bus options remain active and are unrelated to SD.
   hasAll(options, {"DSP_HSPI", "TFT_CS", "TFT_DC", "TFT_RST"});
-  hasAll(config, {"RTC_SDA", "RTC_SCL"});
+  hasAll(config, {"currentHardware().i2c"});
+  hasNone(config, {"RTC_SDA", "RTC_SCL"});
 }

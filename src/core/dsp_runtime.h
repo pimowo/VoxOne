@@ -1,7 +1,6 @@
 #ifndef VOXONE_DSP_RUNTIME_H
 #define VOXONE_DSP_RUNTIME_H
 
-#if defined(VOXONE_PROFILE_L0)
 #include "dsp_service.h"
 
 namespace voxone {
@@ -15,6 +14,4 @@ DspService& activeDspService();
 
 }  // namespace dsp
 }  // namespace voxone
-#endif
-
 #endif

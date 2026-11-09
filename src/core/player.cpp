@@ -19,19 +19,14 @@
 #endif
 #include "../hardware/runtime_audio_output.h"
 #include "../hardware/runtime_hardware_config.h"
-#if I2S_DOUT!=255
 #include <driver/i2s.h>
-#endif
 #include "../displays/tools/l10n.h"
 Player player;
 QueueHandle_t playerQueue;
 portMUX_TYPE playerVolumeMux = portMUX_INITIALIZER_UNLOCKED;
 
-#if !I2S_INTERNAL
-Player::Player(): Audio(false, 3, I2S_NUM_0, false) {}
-#else
-Player::Player(): Audio(true, 3, I2S_NUM_0, false) {}
-#endif
+Player::Player(): Audio(voxone::hardware::currentHardware().audioOutInternal,
+                        3, I2S_NUM_0, false) {}
 
 
 void Player::init() {
@@ -58,17 +53,14 @@ void Player::init() {
   delay(50);
   _temporaryUrls = xQueueCreate(1, sizeof(voxone::temporary_audio::Request));
   if(MUTE_PIN!=255) pinMode(MUTE_PIN, OUTPUT);
-  #if I2S_DOUT!=255
-    if (audioPlan.initializeSerialI2s &&
-        (!initializeI2S()
-         #if !I2S_INTERNAL
-          || !setPinout(I2S_BCLK, I2S_LRC, I2S_DOUT)
-         #endif
-        )) {
+  const auto& audioPins = voxone::hardware::currentHardware().audioOut;
+  if (audioPlan.initializeSerialI2s &&
+      (!voxone::hardware::hasPin(audioPins.dout) || !initializeI2S() ||
+       (!voxone::hardware::currentHardware().audioOutInternal &&
+        !setPinout(audioPins.bclk, audioPins.ws, audioPins.dout)))) {
       _localAudioAvailable = false;
       Serial.println("failed: local I2S unavailable");
-    }
-  #endif
+  }
   setBalance(runtime.balance);
   setTone(runtime.bass, runtime.middle, runtime.treble);
   setVolume(0);
@@ -178,9 +170,9 @@ void Player::_stop(bool alreadyStopped, RadioStopReason reason,
   setDefaults();
   if(!alreadyStopped) stopSong();
   if (systemUpdateAudioBlocked()) {
-#if I2S_DOUT!=255
-    i2s_zero_dma_buffer(I2S_NUM_0);
-#endif
+    if (voxone::hardware::hasPin(
+            voxone::hardware::currentHardware().audioOut.dout))
+      i2s_zero_dma_buffer(I2S_NUM_0);
     systemUpdateRadioStopped();
   }
   if (!preserveRadioPresentation) {
@@ -544,9 +536,9 @@ void Player::stopForShutdown() {
   Audio::setVolume(0);
   _stop(false, RadioStopReason::SourceSwitch, true);
   stopAudioTask();
-#if I2S_DOUT!=255
-  i2s_zero_dma_buffer(I2S_NUM_0);
-#endif
+  if (voxone::hardware::hasPin(
+          voxone::hardware::currentHardware().audioOut.dout))
+    i2s_zero_dma_buffer(I2S_NUM_0);
   Serial.println("##[POWER]# audio stopped before shutdown screen");
 }
 

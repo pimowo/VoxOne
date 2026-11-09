@@ -1,39 +1,39 @@
 #include "../core/options.h"
 
-#if defined(VOXONE_RUNTIME_L0_DISPLAY_BACKENDS)
+#if VOXONE_MULTI_DISPLAY_HAS_ST7796
 
 #include "dspcore.h"
 #include "../core/config.h"
-#include "../core/rtcsupport.h"
 #include "../hardware/hardware_descriptor.h"
+#include "../hardware/i2c_runtime.h"
 #include "../hardware/runtime_hardware_config.h"
 #include <new>
 
 using voxone::display_profile::ControllerId;
 using voxone::display_profile::ProfileId;
 
-RuntimeL0Display::RuntimeL0Display() : Adafruit_GFX(480, 320) {}
+MultiDisplayRuntime::MultiDisplayRuntime() : Adafruit_GFX(480, 320) {}
 
-RuntimeL0Display::~RuntimeL0Display() {
+MultiDisplayRuntime::~MultiDisplayRuntime() {
   delete st7796_;
   delete oled_;
 }
 
-bool RuntimeL0Display::oledActive() const {
+bool MultiDisplayRuntime::oledActive() const {
   return selection_.profile == ProfileId::Oled128x32 ||
          selection_.profile == ProfileId::Oled128x64;
 }
 
-uint16_t RuntimeL0Display::backendColor(uint16_t color) const {
+uint16_t MultiDisplayRuntime::backendColor(uint16_t color) const {
   return oledActive() ? (color == 0 ? 0 : 1) : color;
 }
 
-Adafruit_GFX* RuntimeL0Display::active() {
+Adafruit_GFX* MultiDisplayRuntime::active() {
   if (st7796_) return st7796_;
   return oled_;
 }
 
-bool RuntimeL0Display::begin(
+bool MultiDisplayRuntime::begin(
     const voxone::display_backend::Selection& selection) {
   selection_ = selection;
   ready_ = false;
@@ -45,9 +45,8 @@ bool RuntimeL0Display::begin(
     st7796_->begin();
     ready_ = true;
   } else if (oledActive()) {
-    // RTC and OLED share the documented L0 I2C bus, including its lock and
-    // controller instance.  No second TwoWire(0) owner is created.
-    oled_ = new (std::nothrow) RuntimeOled128x64Display(RTCWire);
+    oled_ = new (std::nothrow) RuntimeOled128x64Display(
+        voxone::hardware::hardwareI2cBus());
     if (!oled_) return false;
     ready_ = oled_->begin(selection_.controller, selection_.profile);
   }
@@ -57,11 +56,11 @@ bool RuntimeL0Display::begin(
   return ready_;
 }
 
-void RuntimeL0Display::flushSelected() {
+void MultiDisplayRuntime::flushSelected() {
   if (ready_ && oled_) oled_->display();
 }
 
-void RuntimeL0Display::sleepSelected() {
+void MultiDisplayRuntime::sleepSelected() {
   if (!ready_) return;
   if (oled_) oled_->sleep();
   else {
@@ -72,7 +71,7 @@ void RuntimeL0Display::sleepSelected() {
   }
 }
 
-void RuntimeL0Display::wakeSelected() {
+void MultiDisplayRuntime::wakeSelected() {
   if (!ready_) return;
   if (oled_) oled_->wake();
   else {
@@ -83,27 +82,27 @@ void RuntimeL0Display::wakeSelected() {
   }
 }
 
-void RuntimeL0Display::drawPixel(int16_t x, int16_t y, uint16_t color) {
+void MultiDisplayRuntime::drawPixel(int16_t x, int16_t y, uint16_t color) {
   if (ready_) active()->drawPixel(x, y, backendColor(color));
 }
-void RuntimeL0Display::startWrite() { if (ready_) active()->startWrite(); }
-void RuntimeL0Display::writePixel(int16_t x, int16_t y, uint16_t color) {
+void MultiDisplayRuntime::startWrite() { if (ready_) active()->startWrite(); }
+void MultiDisplayRuntime::writePixel(int16_t x, int16_t y, uint16_t color) {
   if (ready_) active()->writePixel(x, y, backendColor(color));
 }
-void RuntimeL0Display::writeFillRect(int16_t x, int16_t y, int16_t w,
+void MultiDisplayRuntime::writeFillRect(int16_t x, int16_t y, int16_t w,
                                      int16_t h, uint16_t color) {
   if (ready_) active()->writeFillRect(x, y, w, h, backendColor(color));
 }
-void RuntimeL0Display::writeFastVLine(int16_t x, int16_t y, int16_t h,
+void MultiDisplayRuntime::writeFastVLine(int16_t x, int16_t y, int16_t h,
                                       uint16_t color) {
   if (ready_) active()->writeFastVLine(x, y, h, backendColor(color));
 }
-void RuntimeL0Display::writeFastHLine(int16_t x, int16_t y, int16_t w,
+void MultiDisplayRuntime::writeFastHLine(int16_t x, int16_t y, int16_t w,
                                       uint16_t color) {
   if (ready_) active()->writeFastHLine(x, y, w, backendColor(color));
 }
-void RuntimeL0Display::endWrite() { if (ready_) active()->endWrite(); }
-void RuntimeL0Display::setRotation(uint8_t rotation) {
+void MultiDisplayRuntime::endWrite() { if (ready_) active()->endWrite(); }
+void MultiDisplayRuntime::setRotation(uint8_t rotation) {
   Adafruit_GFX::setRotation(rotation);
   if (ready_) {
     active()->setRotation(rotation);
@@ -111,41 +110,42 @@ void RuntimeL0Display::setRotation(uint8_t rotation) {
     _height = active()->height();
   }
 }
-void RuntimeL0Display::invertDisplay(bool inverted) {
+void MultiDisplayRuntime::invertDisplay(bool inverted) {
   if (ready_) active()->invertDisplay(inverted);
 }
-void RuntimeL0Display::drawFastVLine(int16_t x, int16_t y, int16_t h,
+void MultiDisplayRuntime::drawFastVLine(int16_t x, int16_t y, int16_t h,
                                      uint16_t color) {
   if (ready_) active()->drawFastVLine(x, y, h, backendColor(color));
 }
-void RuntimeL0Display::drawFastHLine(int16_t x, int16_t y, int16_t w,
+void MultiDisplayRuntime::drawFastHLine(int16_t x, int16_t y, int16_t w,
                                      uint16_t color) {
   if (ready_) active()->drawFastHLine(x, y, w, backendColor(color));
 }
-void RuntimeL0Display::fillRect(int16_t x, int16_t y, int16_t w, int16_t h,
+void MultiDisplayRuntime::fillRect(int16_t x, int16_t y, int16_t w, int16_t h,
                                 uint16_t color) {
   if (ready_) active()->fillRect(x, y, w, h, backendColor(color));
 }
-void RuntimeL0Display::fillScreen(uint16_t color) {
+void MultiDisplayRuntime::fillScreen(uint16_t color) {
   if (ready_) active()->fillScreen(backendColor(color));
 }
-void RuntimeL0Display::setAddrWindow(uint16_t x, uint16_t y, uint16_t w,
+void MultiDisplayRuntime::setAddrWindow(uint16_t x, uint16_t y, uint16_t w,
                                      uint16_t h) {
   if (ready_ && st7796_) st7796_->setAddrWindow(x, y, w, h);
 }
-void RuntimeL0Display::writePixels(uint16_t* colors, uint32_t len) {
+void MultiDisplayRuntime::writePixels(uint16_t* colors, uint32_t len) {
   if (ready_ && st7796_) st7796_->writePixels(colors, len);
 }
 
-DspCore::DspCore() : RuntimeL0Display() {}
+DspCore::DspCore() : MultiDisplayRuntime() {}
 
 void DspCore::initDisplay() {
   const auto selection = voxone::display_backend::select(
       voxone::hardware::runtimeHardwareConfig(),
       voxone::hardware::currentHardware(),
-      voxone::display_backend::compiledBackends());
+      voxone::display_backend::compiledBackends(
+          voxone::hardware::currentHardware()));
   if (!begin(selection)) {
-    Serial.println(F("Runtime L0 display backend initialization failed"));
+    Serial.println(F("Runtime display backend initialization failed"));
     return;
   }
   if (activeProfile() != ProfileId::St7796_480x320) {

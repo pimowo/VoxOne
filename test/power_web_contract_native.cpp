@@ -29,7 +29,9 @@ int main() {
     assert(javascript.find(mode) != std::string::npos);
   }
   assert(javascript.find("fetch(\"/api/power\"") != std::string::npos);
-  assert(manager.find("if (POWER_RELAY_PIN >= 0)") != std::string::npos);
+  assert(manager.find("currentHardware().power") != std::string::npos);
+  assert(manager.find("hasPin(pins.relay)") != std::string::npos);
+  assert(manager.find("POWER_RELAY_PIN") == std::string::npos);
   assert(manager.find("config.persistV7()") != std::string::npos);
   assert(manager.find("display.beginShutdownSequence()") !=
          std::string::npos);

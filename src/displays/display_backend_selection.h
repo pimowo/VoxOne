@@ -67,31 +67,8 @@ constexpr ActivationPlan activationPlan(const Selection& selection) {
              : ActivationPlan{true, true, true, true};
 }
 
-constexpr CompiledBackends compiledBackends() {
-#if defined(VOXONE_RUNTIME_L0_DISPLAY_BACKENDS)
-  return CompiledBackends{
-      controllerSupport(display_profile::ControllerId::Ssd1306) |
-          controllerSupport(display_profile::ControllerId::Ssd1309) |
-          controllerSupport(display_profile::ControllerId::St7796) |
-          controllerSupport(display_profile::ControllerId::Sh1106) |
-          controllerSupport(display_profile::ControllerId::Ch1116g),
-      true};
-#elif defined(VOXONE_RUNTIME_OLED_128X64_BACKENDS)
-  return CompiledBackends{
-      controllerSupport(display_profile::ControllerId::Ssd1306) |
-          controllerSupport(display_profile::ControllerId::Ssd1309) |
-          controllerSupport(display_profile::ControllerId::Sh1106) |
-          controllerSupport(display_profile::ControllerId::Ch1116g),
-      true};
-#elif defined(VOXONE_DISPLAY_CONTROLLER)
-  return CompiledBackends{
-      controllerSupport(static_cast<display_profile::ControllerId>(
-          VOXONE_DISPLAY_CONTROLLER)),
-      false};
-#else
-  return CompiledBackends{0u, false};
-#endif
-}
+CompiledBackends compiledBackends(
+    const hardware::HardwareDescriptor& hardware);
 
 Selection select(const hardware::RuntimeHardwareConfig& requested,
                  const hardware::HardwareDescriptor& hardware,

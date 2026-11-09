@@ -1,6 +1,5 @@
 #include "dsp_runtime.h"
 
-#if defined(VOXONE_PROFILE_L0)
 #include <Arduino.h>
 
 namespace voxone {
@@ -30,4 +29,3 @@ DspService& activeDspService() { return service; }
 
 }  // namespace dsp
 }  // namespace voxone
-#endif

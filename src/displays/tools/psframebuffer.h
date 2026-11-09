@@ -35,7 +35,7 @@ class  psFrameBuffer : public Adafruit_GFX {
     }
     void display(){
       if(!buffer) return;
-#if defined(VOXONE_RUNTIME_L0_DISPLAY_BACKENDS)
+#if VOXONE_MULTI_DISPLAY_HAS_ST7796
       if (_dspl->activeProfile() !=
           voxone::display_profile::ProfileId::St7796_480x320) {
         _dspl->drawRGBBitmap(_ll, _tt, buffer, _ww, _hh);

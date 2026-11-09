@@ -3,7 +3,7 @@
 #include "../widgets/widgetsconfig.h" // displayXXXDDDDconf.h
 #include "utf8Rus.h"
 
-#if defined(VOXONE_RUNTIME_L0_DISPLAY_BACKENDS)
+#if VOXONE_MULTI_DISPLAY_HAS_ST7796
   #include "boot_branding_codec.h"
   #include "../fonts/voxone_boot_logo_oled_128x64.h"
   #include "../fonts/voxone_boot_logo_st7796_480x320.h"
@@ -32,7 +32,7 @@ class DspCore: public yoDisplay {
     void initDisplay();
     void clearDsp(bool black=false);
     void printClock(){}
-    #if defined(VOXONE_RUNTIME_L0_DISPLAY_BACKENDS)
+    #if VOXONE_MULTI_DISPLAY_HAS_ST7796
     inline void loop(bool force=false){
       (void)force;
       flushSelected();
@@ -92,7 +92,7 @@ class DspCore: public yoDisplay {
       }
     #endif
 #if VOXONE_DISPLAY_PROFILE == VOXONE_DISPLAY_PROFILE_ST7796_480X320 || \
-    defined(VOXONE_RUNTIME_L0_DISPLAY_BACKENDS)
+    VOXONE_MULTI_DISPLAY_HAS_ST7796
     inline void drawFirstBootLogo(uint16_t top) {
       using namespace voxone::display_boot_branding::st7796;
       _drawBootLogoRle(kBootLogoRle565, kBootLogoRle565Size,
@@ -129,7 +129,7 @@ class DspCore: public yoDisplay {
   private:
 #if VOXONE_DISPLAY_PROFILE == VOXONE_DISPLAY_PROFILE_ST7789_284X76 || \
     VOXONE_DISPLAY_PROFILE == VOXONE_DISPLAY_PROFILE_ST7796_480X320 || \
-    defined(VOXONE_RUNTIME_L0_DISPLAY_BACKENDS)
+    VOXONE_MULTI_DISPLAY_HAS_ST7796
     inline void _drawBootLogoRle(const uint8_t* encoded, size_t encodedSize,
                                  int16_t left, int16_t top, uint16_t logoWidth,
                                  uint32_t expectedPixels) {

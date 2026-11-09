@@ -506,14 +506,6 @@ void VuWidget::init(WidgetConfig wconf, VUBandsConfig bands, uint16_t vumaxcolor
 
 void VuWidget::_draw(){
   if(!_active || _locked) return;
-#if I2S_DOUT==255
-/*  static uint8_t cc = 0;
-  cc++;
-  if(cc>0){
-    player.getVUlevel();
-    cc=0;
-  }*/
-#endif
   static uint16_t measL, measR;
   uint16_t bandColor;
   uint16_t dimension = _config.align?_bands.width:_bands.height;
@@ -608,7 +600,7 @@ void VuWidget::_clear(){ }
 /************************
       NUM & CLOCK
  ************************/
-#if defined(VOXONE_RUNTIME_L0_DISPLAY_BACKENDS)
+#if VOXONE_MULTI_DISPLAY_HAS_ST7796
   static bool runtimeSmallOled() {
     return dsp.activeProfile() ==
                voxone::display_profile::ProfileId::Oled128x32 ||
@@ -673,7 +665,7 @@ void NumWidget::init(WidgetConfig wconf, uint16_t buffsize, uint16_t fgcolor, ui
   if (!available()) return;
   _textwidth = _oldtextwidth = _oldleft = 0;
   _textheight =
-#if defined(VOXONE_RUNTIME_L0_DISPLAY_BACKENDS)
+#if VOXONE_MULTI_DISPLAY_HAS_ST7796
       runtimeTimeSize();
 #else
       TIME_SIZE;
@@ -687,15 +679,15 @@ void NumWidget::setText(const char* txt) {
   if (strcmp(_oldtext, _text) == 0) return;
   uint16_t realth = _textheight;
 #if (defined(DSP_OLED) && DSP_MODEL!=DSP_SSD1322) || \
-    defined(VOXONE_RUNTIME_L0_DISPLAY_BACKENDS)
-#if defined(VOXONE_RUNTIME_L0_DISPLAY_BACKENDS)
+    VOXONE_MULTI_DISPLAY_HAS_ST7796
+#if VOXONE_MULTI_DISPLAY_HAS_ST7796
   if(runtimeSmallOled()) realth = _textheight * 8;
 #else
   if(Clock_GFXfontPtr==nullptr) realth = _textheight * 8; //CHARHEIGHT
 #endif
 #endif
   if (_active)
-#if defined(VOXONE_RUNTIME_L0_DISPLAY_BACKENDS)
+#if VOXONE_MULTI_DISPLAY_HAS_ST7796
     if (runtimeSmallOled())
       dsp.fillRect(_oldleft == 0 ? _realLeft() : min(_oldleft, _realLeft()),
                    _config.top, max(_oldtextwidth, _textwidth), realth,
@@ -728,7 +720,7 @@ void NumWidget::_getBounds() {
 #if VOXONE_DISPLAY_PROFILE == VOXONE_DISPLAY_PROFILE_ST7796_480X320 || \
     VOXONE_DISPLAY_PROFILE == VOXONE_DISPLAY_PROFILE_ST7789_284X76
   if (strcmp(_text, "MUTE") == 0) {
-#if defined(VOXONE_RUNTIME_L0_DISPLAY_BACKENDS)
+#if VOXONE_MULTI_DISPLAY_HAS_ST7796
     if (runtimeSmallOled()) {
       _textwidth = _textWidth(_text);
       return;
@@ -750,7 +742,7 @@ void NumWidget::_draw() {
 #if VOXONE_DISPLAY_PROFILE == VOXONE_DISPLAY_PROFILE_ST7796_480X320 || \
     VOXONE_DISPLAY_PROFILE == VOXONE_DISPLAY_PROFILE_ST7789_284X76
   if (strcmp(_text, "MUTE") == 0) {
-#if defined(VOXONE_RUNTIME_L0_DISPLAY_BACKENDS)
+#if VOXONE_MULTI_DISPLAY_HAS_ST7796
     if (!runtimeSmallOled()) {
 #endif
     if (!_active) return;
@@ -766,13 +758,13 @@ void NumWidget::_draw() {
     strlcpy(_oldtext, _text, _buffsize);
     dsp.setTextSize(1);
     return;
-#if defined(VOXONE_RUNTIME_L0_DISPLAY_BACKENDS)
+#if VOXONE_MULTI_DISPLAY_HAS_ST7796
     }
 #endif
   }
 #endif
   const uint8_t timeSize =
-#if defined(VOXONE_RUNTIME_L0_DISPLAY_BACKENDS)
+#if VOXONE_MULTI_DISPLAY_HAS_ST7796
       runtimeTimeSize();
   const GFXfont* clockFont = runtimeClockFont();
 #else
@@ -822,7 +814,7 @@ void ClockWidget::init(WidgetConfig wconf, uint16_t fgcolor, uint16_t bgcolor){
   Widget::init(wconf, fgcolor, bgcolor);
   _timeheight = _textHeight();
   const uint8_t timeSize =
-#if defined(VOXONE_RUNTIME_L0_DISPLAY_BACKENDS)
+#if VOXONE_MULTI_DISPLAY_HAS_ST7796
       runtimeTimeSize();
 #else
       TIME_SIZE;
@@ -876,7 +868,7 @@ bool ClockWidget::_frameBufferReady() const {
 void ClockWidget::_getTimeBounds() {
   _timewidth = _textWidth(_timebuffer);
   const uint8_t timeSize =
-#if defined(VOXONE_RUNTIME_L0_DISPLAY_BACKENDS)
+#if VOXONE_MULTI_DISPLAY_HAS_ST7796
       runtimeTimeSize();
 #else
       TIME_SIZE;
@@ -914,7 +906,7 @@ Adafruit_GFX& ClockWidget::getRealDsp(){
 void ClockWidget::_printClock(bool force){
   auto& gfx = getRealDsp();
   const uint8_t timeSize =
-#if defined(VOXONE_RUNTIME_L0_DISPLAY_BACKENDS)
+#if VOXONE_MULTI_DISPLAY_HAS_ST7796
       runtimeTimeSize();
   const GFXfont* clockFont = runtimeClockFont();
 #else
@@ -965,7 +957,7 @@ void ClockWidget::_printClock(bool force){
     gfx.setFont();
     gfx.setTextSize(_superfont);
     if(!_fullclock){
-#if defined(VOXONE_RUNTIME_L0_DISPLAY_BACKENDS)
+#if VOXONE_MULTI_DISPLAY_HAS_ST7796
       if (!runtimeSmallOled())
         gfx.setCursor(_left()+_timewidth+_space,
                       _top()-_timeheight+_space);
@@ -1007,7 +999,7 @@ void ClockWidget::_clearClock(){
   if(_frameBufferReady()) _fb->clear();
   else
 #endif
-#if defined(VOXONE_RUNTIME_L0_DISPLAY_BACKENDS)
+#if VOXONE_MULTI_DISPLAY_HAS_ST7796
   if (!runtimeSmallOled())
     dsp.fillRect(_left(), _top()-_timeheight, _clockwidth,
                  _clockheight+1, config.theme.background);

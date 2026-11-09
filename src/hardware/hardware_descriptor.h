@@ -38,6 +38,7 @@ enum class AudioOutputKind {
 };
 enum class LocalInputKind { None, Ec11, Buttons3 };
 enum class BusKind { None, Spi, I2c };
+enum class RtcKind { None, Ds3231, Ds1307 };
 
 using DisplaySupportMask = uint32_t;
 using AudioOutputSupportMask = uint32_t;
@@ -65,13 +66,22 @@ struct BoardIdentity {
 };
 struct I2sPins { Pin bclk, ws, dout, din; };
 struct SpiBusPins { Pin sck, mosi, miso; };
-struct I2cBusPins { Pin sda, scl; };
+struct I2cBusConfig {
+  Pin sda, scl;
+  uint32_t frequencyHz;
+  uint8_t displayAddress;
+};
 struct UartPins { Pin rx, tx; };
 struct LocalInputPins {
   Pin a, b, key;
   uint8_t ec11StepsPerDetent;
+  bool reverseDirection;
 };
-struct DisplayPins { Pin cs, dc, rst, backlight; BusKind bus; };
+struct DisplayPins {
+  Pin cs, dc, rst, backlight;
+  BusKind bus;
+  DisplayKind backlightDisplay;
+};
 struct PowerPins { Pin button, relay; };
 struct HardwareCapabilities {
   DisplaySupportMask supportedDisplays;
@@ -111,13 +121,15 @@ struct HardwareDescriptor {
   DisplayKind displayKind;
   AudioOutputKind audioOutputKind;
   SpiBusPins spi;
-  I2cBusPins i2c;
+  I2cBusConfig i2c;
   I2sPins audioOut;
+  bool audioOutInternal;
   I2sPins btAudioIn;  // May be physically reserved even when runtime RX is disabled.
   bool btAudioRxEnabled;
   UartPins btUart;
   LocalInputPins localInput;
   DisplayPins display;
+  RtcKind rtcKind;
   Pin dacXsmt;
   PowerPins power;
   HardwareCapabilities capabilities;

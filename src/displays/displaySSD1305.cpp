@@ -1,6 +1,5 @@
 #include "../core/options.h"
-#if (DSP_MODEL==DSP_SSD1305 || DSP_MODEL==DSP_SSD1305I2C) && \
-    !defined(VOXONE_RUNTIME_OLED_128X64_BACKENDS)
+#if DSP_MODEL==DSP_SSD1305 || DSP_MODEL==DSP_SSD1305I2C
 #include "dspcore.h"
 #include "../core/config.h"
 

@@ -1,5 +1,5 @@
-#ifndef VOXONE_DISPLAY_L0_RUNTIME_H
-#define VOXONE_DISPLAY_L0_RUNTIME_H
+#ifndef VOXONE_DISPLAY_MULTI_RUNTIME_H
+#define VOXONE_DISPLAY_MULTI_RUNTIME_H
 
 #include "Arduino.h"
 #include <Adafruit_GFX.h>
@@ -10,14 +10,14 @@
 #undef VOXONE_OLED_BACKEND_ONLY
 #include "display_backend_selection.h"
 
-// The widget layer keeps its existing RGB565 canvas on L0.  OLED output is
+// The widget layer keeps its existing RGB565 canvas on color displays. OLED output is
 // reduced to BLACK/WHITE only at the selected backend boundary.
 typedef GFXcanvas16 Canvas;
 
-class RuntimeL0Display : public Adafruit_GFX {
+class MultiDisplayRuntime : public Adafruit_GFX {
  public:
-  RuntimeL0Display();
-  ~RuntimeL0Display();
+  MultiDisplayRuntime();
+  ~MultiDisplayRuntime();
 
   bool begin(const voxone::display_backend::Selection& selection);
   bool ready() const { return ready_; }
@@ -66,7 +66,7 @@ class RuntimeL0Display : public Adafruit_GFX {
   bool ready_ = false;
 };
 
-typedef RuntimeL0Display yoDisplay;
+typedef MultiDisplayRuntime yoDisplay;
 
 #include "tools/commongfx.h"
 

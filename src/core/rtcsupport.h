@@ -1,30 +1,23 @@
-#ifndef rtcsupport_h
-#define rtcsupport_h
+#ifndef VOXONE_RTC_SUPPORT_H
+#define VOXONE_RTC_SUPPORT_H
 
-// Keep the RTC library choice at compile time. GPIO comes from HardwareDescriptor.
-#define RTCSUPPORTED (RTC_MODULE==DS3231 || RTC_MODULE==DS1307)
-
-#if RTCSUPPORTED
 #include "RTClib.h"
+#include "../hardware/hardware_descriptor.h"
 
-#if RTC_MODULE==DS3231
-	class RTC: public RTC_DS3231 {
-#elif RTC_MODULE==DS1307
-	class RTC: public RTC_DS1307 {
-#else
-	#  error ONLY DS3231 OR DS1307 MODULE SUPPORTED
-#endif
-	public:
-		bool init();
-		bool isRunning();
-		void getTime(struct tm* tinfo);
-		void setTime(struct tm* tinfo);
-	};
+class RTC {
+ public:
+  bool init();
+  bool isRunning();
+  void getTime(struct tm* tinfo);
+  void setTime(struct tm* tinfo);
+
+ private:
+  DateTime now();
+  voxone::hardware::RtcKind kind_ = voxone::hardware::RtcKind::None;
+  RTC_DS3231 ds3231_;
+  RTC_DS1307 ds1307_;
+};
+
 extern RTC rtc;
-// L0 OLED backends share the already initialized RTC bus.  Exposing the bus
-// object prevents a second TwoWire(0) owner from reconfiguring the peripheral.
-extern TwoWire RTCWire;
-bool initRTCWire();
-#endif
 
 #endif

@@ -27,6 +27,7 @@
 #include "../displays/widgets/pages.h"
 #include "../displays/tools/l10n.h"
 #include "../hardware/hardware_descriptor.h"
+#include "../hardware/runtime_hardware_config.h"
 #include <new>
 #if VOXONE_DISPLAY_COMPILES_SMALL_OLED
 #include "../displays/conf/player128x64conf.h"
@@ -135,7 +136,7 @@ bool renderPlayerScrollOffset(void* context, uint16_t offsetPixels) {
 }
 
 ScrollRendererProfile activePlayerScrollProfile() {
-#if defined(VOXONE_RUNTIME_L0_DISPLAY_BACKENDS)
+#if VOXONE_MULTI_DISPLAY_HAS_ST7796
   return dsp.activeProfile() ==
                  voxone::display_profile::ProfileId::St7796_480x320
              ? ScrollRendererProfile::St7796_480x320
@@ -1253,7 +1254,7 @@ void Display::init() {
   _volumeModePending = false;
   _lastVolumeDraw = millis() - DISPLAY_VOLUME_INTERVAL_MS;
   dsp.initDisplay();
-#if defined(VOXONE_RUNTIME_L0_DISPLAY_BACKENDS)
+#if VOXONE_MULTI_DISPLAY_HAS_ST7796
   if (!dsp.ready()) {
     _runtimeEnabled = false;
     _bootStep = 2;
@@ -1311,7 +1312,7 @@ bool Display::initSecurityRecovery() {
   const auto backlight =
       voxone::hardware::currentHardware().display.backlight;
   bool enableBacklight = voxone::hardware::hasPin(backlight);
-#if defined(VOXONE_RUNTIME_L0_DISPLAY_BACKENDS)
+#if VOXONE_MULTI_DISPLAY_HAS_ST7796
   enableBacklight = enableBacklight &&
       voxone::hardware::runtimeHardwareConfig().display ==
           voxone::hardware::RuntimeDisplay::St7796s_480x320;
@@ -1321,8 +1322,7 @@ bool Display::initSecurityRecovery() {
     analogWrite(backlight, 255);
   }
   dsp.initDisplay();
-#if defined(VOXONE_RUNTIME_OLED_128X64_BACKENDS) || \
-    defined(VOXONE_RUNTIME_L0_DISPLAY_BACKENDS)
+#if VOXONE_MULTI_DISPLAY_RUNTIME
   if (!dsp.ready()) {
     _runtimeEnabled = false;
     Serial.println("##[WARN]# SECURITY Recovery display backend unavailable");
@@ -1989,7 +1989,7 @@ void Display::_apScreen() {
       return;
     }
 #endif
-#if defined(VOXONE_RUNTIME_L0_DISPLAY_BACKENDS)
+#if VOXONE_MULTI_DISPLAY_HAS_ST7796
     if (smallOledActive()) {
       ScrollWidget* title = (ScrollWidget*) &_boot->addWidget(
           new ScrollWidget("*", setup128x64::title, WHITE, BLACK));
@@ -3061,11 +3061,6 @@ void Display::loop() {
   }
 #endif
   dsp.loop();
-/*
-  #if I2S_DOUT==255
-  player.computeVUlevel();
-  #endif
-*/
 }
 
 void Display::_setRSSI(int rssi) {
@@ -3197,7 +3192,7 @@ void Display::_time(bool redraw) {
   }
 #endif
   if(config.isScreensaver && network.timeinfo.tm_sec % 60 == 0){
-#if defined(VOXONE_RUNTIME_L0_DISPLAY_BACKENDS)
+#if VOXONE_MULTI_DISPLAY_HAS_ST7796
     if (smallOledActive()) {
       const uint16_t clockHeight = 2 * CHARHEIGHT;
       const uint16_t maxTop = dsp.height() > clockHeight + 2
@@ -3218,7 +3213,7 @@ void Display::_time(bool redraw) {
     if(clockConf.align==WA_CENTER) lt-=(dsp.width()-_clock->clockWidth())/2;
     //_clock->moveTo({clockConf.left, ft, 0});
     _clock->moveTo({lt, ft, 0});
-#if defined(VOXONE_RUNTIME_L0_DISPLAY_BACKENDS)
+#if VOXONE_MULTI_DISPLAY_HAS_ST7796
     }
 #endif
   }
@@ -3282,29 +3277,23 @@ void  Display::setContrast(){}
 
 bool Display::deepsleep(){
   if (!_runtimeEnabled) return true;
-#if defined(DSP_OLED) || BRIGHTNESS_PIN!=255
   dsp.clearDsp(true);
   dsp.loop(true);
-#if BRIGHTNESS_PIN!=255
-  bool backlightActive = true;
-#if defined(VOXONE_RUNTIME_L0_DISPLAY_BACKENDS)
-  backlightActive =
-      dsp.activeProfile() ==
-      voxone::display_profile::ProfileId::St7796_480x320;
-#endif
-  if (backlightActive) analogWrite(BRIGHTNESS_PIN, 0);
-#endif
+  const auto& hardware = voxone::hardware::currentHardware();
+  voxone::hardware::DisplayKind activeKind = voxone::hardware::DisplayKind::None;
+  const bool backlightActive = voxone::hardware::hasPin(
+      hardware.display.backlight) &&
+      voxone::hardware::runtimeDisplayKind(
+          voxone::hardware::runtimeHardwareConfig().display, activeKind) &&
+      activeKind == hardware.display.backlightDisplay;
+  if (backlightActive) analogWrite(hardware.display.backlight, 0);
   dsp.sleep();
   return true;
-#endif
-  return false;
 }
 
 void Display::wakeup(){
   if (!_runtimeEnabled) return;
-#if defined(DSP_OLED) || BRIGHTNESS_PIN!=255
   dsp.wake();
-#endif
 }
 //============================================================================================================================
 #else // !DUMMYDISPLAY

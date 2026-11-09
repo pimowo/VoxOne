@@ -137,7 +137,8 @@ void startSecurityRecoveryDisplay() {
   const auto selection = voxone::display_backend::select(
       voxone::hardware::runtimeHardwareConfig(),
       voxone::hardware::currentHardware(),
-      voxone::display_backend::compiledBackends());
+      voxone::display_backend::compiledBackends(
+          voxone::hardware::currentHardware()));
   const auto plan = voxone::display_backend::activationPlan(selection);
   display.configureRuntime(plan.runRenderer);
   Serial.printf("##[BOOT]# SECURITY Recovery display hardware=%s backend=%s\n",
@@ -258,7 +259,8 @@ void setup() {
   const auto displaySelection = voxone::display_backend::select(
       voxone::hardware::runtimeHardwareConfig(),
       voxone::hardware::currentHardware(),
-      voxone::display_backend::compiledBackends());
+      voxone::display_backend::compiledBackends(
+          voxone::hardware::currentHardware()));
   Serial.printf("##[BOOT]#\tRuntime HW display: %s\n",
                 voxone::display_backend::runtimeDisplayName(
                     displaySelection.display));
@@ -269,10 +271,9 @@ void setup() {
                 voxone::display_backend::profileName(displaySelection.profile));
   display.configureRuntime(
       voxone::display_backend::activationPlan(displaySelection).runRenderer);
-#if defined(VOXONE_PROFILE_L0)
-  dacMute.begin();
-#endif
-#if defined(VOXONE_PROFILE_L0) && defined(RGB_BUILTIN) && \
+  if (voxone::hardware::hardwareCapabilities().supportsDacHardwareMute)
+    dacMute.begin();
+#if defined(RGB_BUILTIN) && \
     defined(PIN_NEOPIXEL) && PIN_NEOPIXEL == 48
   neopixelWrite(RGB_BUILTIN, 0, 0, 0);
 #endif
@@ -282,11 +283,11 @@ void setup() {
   powerManager.begin();
   (void)voxone::display_scroll::initializeScrollSettingsRuntimePersistent();
   btRuntime.start();
-#if defined(VOXONE_PROFILE_L0)
-  const auto dspConfig = config.runtimeSnapshot();
-  voxone::dsp::initDspRuntime(
-      {dspConfig.bass, dspConfig.middle, dspConfig.treble});
-#endif
+  if (voxone::hardware::hardwareCapabilities().supportsDsp) {
+    const auto dspConfig = config.runtimeSnapshot();
+    voxone::dsp::initDspRuntime(
+        {dspConfig.bass, dspConfig.middle, dspConfig.treble});
+  }
   display.init();
   player.init();
   network.begin();
@@ -367,19 +368,21 @@ void loop() {
     ArduinoOTA.handle();
 #endif
   }
-#if defined(VOXONE_PROFILE_L0)
-  const BtLinkState& bt = btLink.state();
-  const BtRuntimeStatus btStatus = btRuntime.status(bt.runtimeAvailable,
-                                                    bt.connected);
-  const DacPlaybackState dacPlayback = dacPlaybackForSource(
-      player.localAudioAvailable() &&
-          bluetoothOwnsAudio(bluetoothSourceSelected(), player.temporaryActive()),
-      player.isRunning(),
-      bluetoothAudioOutputAllowed() &&
-          !btLink.hasIncompleteOnlineSnapshot() && btStatus.btOnline &&
-          btStatus.btConnected && btAudioDesiredRate(bt) != 0,
-      bt.playback);
-  dacMute.update(dacPlayback, systemUpdateAudioBlocked());
+#if VOXONE_HAS_BT && VOXONE_PIN_MAP_COMPLETE
+  if (voxone::hardware::hardwareCapabilities().supportsDacHardwareMute) {
+    const BtLinkState& bt = btLink.state();
+    const BtRuntimeStatus btStatus = btRuntime.status(bt.runtimeAvailable,
+                                                      bt.connected);
+    const DacPlaybackState dacPlayback = dacPlaybackForSource(
+        player.localAudioAvailable() &&
+            bluetoothOwnsAudio(bluetoothSourceSelected(), player.temporaryActive()),
+        player.isRunning(),
+        bluetoothAudioOutputAllowed() &&
+            !btLink.hasIncompleteOnlineSnapshot() && btStatus.btOnline &&
+            btStatus.btConnected && btAudioDesiredRate(bt) != 0,
+        bt.playback);
+    dacMute.update(dacPlayback, systemUpdateAudioBlocked());
+  }
 #endif
   loopControls();
   powerManager.loop();

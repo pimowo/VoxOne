@@ -66,7 +66,8 @@ int main() {
       std::string::npos);
   assert(source.find(
       "const String model_string = \"VoxOne-\" + "
-      "String(VOXONE_PROFILE_NAME);") != std::string::npos);
+      "String(\n        voxone::hardware::currentHardware().board.name);") !=
+      std::string::npos);
   assert(source.find(
       "const String firmware_version =\n"
       "        String(VOXONE_VERSION) + \"-\" + VOXONE_BUILD_CHANNEL;") !=

@@ -1,6 +1,5 @@
 #include "dsp_transport_runtime.h"
 
-#if defined(VOXONE_PROFILE_L0)
 #include "dsp_runtime.h"
 #include "dsp_state_json.h"
 #include "dsp_transport_protocol.h"
@@ -327,20 +326,3 @@ void handleDspState(AsyncWebServerRequest* request) {
 
 }  // namespace dsp
 }  // namespace voxone
-#else
-namespace voxone {
-namespace dsp {
-
-bool beginDspTransport() { return false; }
-void handleDspState(AsyncWebServerRequest*) {}
-bool handleDspWsFrame(const uint8_t*, size_t, uint32_t, bool) {
-  return false;
-}
-void processDspTransportQueue() {}
-void dspTransportToneChanged(const ToneSnapshot&) {}
-bool lockDspToneMutation() { return false; }
-void unlockDspToneMutation() {}
-
-}  // namespace dsp
-}  // namespace voxone
-#endif

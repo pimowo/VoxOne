@@ -76,7 +76,8 @@ void testUnsupportedDisplayDoesNotOwnRecovery() {
 
   RuntimeHardwareConfig none = defaults;
   none.display = RuntimeDisplay::None;
-  const Selection noDisplay = select(none, hardware, compiledBackends());
+  const Selection noDisplay = select(none, hardware,
+                                     compiledBackends(hardware));
   const ActivationPlan noDisplayPlan = activationPlan(noDisplay);
   assert(!noDisplayPlan.initializeBackend && !noDisplayPlan.runRenderer);
 
@@ -88,7 +89,8 @@ void testUnsupportedDisplayDoesNotOwnRecovery() {
 #endif
   assert(validateRuntimeHardwareConfig(unsupported, hardware.capabilities) !=
          RuntimeHardwareValidation::Valid);
-  const Selection safe = select(unsupported, hardware, compiledBackends());
+  const Selection safe = select(unsupported, hardware,
+                                compiledBackends(hardware));
   assert(safe.usedBuildDefault);
   DisplayKind safeKind = DisplayKind::None;
   assert(runtimeDisplayKind(safe.display, safeKind));

@@ -93,11 +93,7 @@ TimeKeeper::TimeKeeper(){
 }
 
 bool TimeKeeper::loop0(){ // core0 (display)
-  if (network.status != CONNECTED
-#if RTCSUPPORTED
-      && !config.isRTCFound()
-#endif
-      ) return true;
+  if (network.status != CONNECTED && !config.isRTCFound()) return true;
   uint32_t currentTime = millis();
   static uint32_t _last1s = 0;
   static uint32_t _last2s = 0;
@@ -197,18 +193,11 @@ void TimeKeeper::_doAfterWait(){
 }
 
 void TimeKeeper::_upClock(){
-#if RTCSUPPORTED
   if(config.isRTCFound() && rtc.isRunning()) rtc.getTime(&network.timeinfo);
   else if(network.timeinfo.tm_year>100) {
     network.timeinfo.tm_sec++;
     mktime(&network.timeinfo);
   }
-#else
-  if(network.timeinfo.tm_year>100) {
-    network.timeinfo.tm_sec++;
-    mktime(&network.timeinfo);
-  }
-#endif
   if(display.ready()) display.putRequest(CLOCK);
 }
 
@@ -250,9 +239,7 @@ void TimeKeeper::_upRSSI(){
 
 void TimeKeeper::timeTask(){
   static uint32_t handledSyncCount = 0;
-#if RTCSUPPORTED
   static uint32_t lastRtcSyncAt = 0;
-#endif
   config.waitConnection();
   if (restartNtp) {
     restartNtp = false;
@@ -272,16 +259,16 @@ void TimeKeeper::timeTask(){
     forceTimeSync = false;
     mktime(&network.timeinfo);
     display.putRequest(CLOCK, 1);
-    #if RTCSUPPORTED
-      const uint32_t rtcInterval = static_cast<uint32_t>(constrain(
-          config.runtimeSnapshot().timeSyncIntervalRtc, 1, 1000)) *
-          3600000UL;
-      if (config.isRTCFound() && (forceRtcSync || lastRtcSyncAt == 0 || millis() - lastRtcSyncAt >= rtcInterval)) {
-        rtc.setTime(&network.timeinfo);
-        lastRtcSyncAt = millis();
-        forceRtcSync = false;
-      }
-    #endif
+    const uint32_t rtcInterval = static_cast<uint32_t>(constrain(
+        config.runtimeSnapshot().timeSyncIntervalRtc, 1, 1000)) *
+        3600000UL;
+    if (config.isRTCFound() &&
+        (forceRtcSync || lastRtcSyncAt == 0 ||
+         millis() - lastRtcSyncAt >= rtcInterval)) {
+      rtc.setTime(&network.timeinfo);
+      lastRtcSyncAt = millis();
+      forceRtcSync = false;
+    }
     ++successfulSyncCount;
     network.requestTimeSync(true);
   }else{

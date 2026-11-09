@@ -16,11 +16,7 @@
 
 class RuntimeOled128x64Display : public Adafruit_GFX {
  public:
-#if defined(VOXONE_RUNTIME_L0_DISPLAY_BACKENDS)
   explicit RuntimeOled128x64Display(TwoWire& sharedWire);
-#else
-  RuntimeOled128x64Display();
-#endif
   ~RuntimeOled128x64Display();
 
   bool begin(voxone::display_profile::ControllerId controller,
@@ -61,13 +57,7 @@ class RuntimeOled128x64Display : public Adafruit_GFX {
   const Adafruit_GFX* active() const;
   Adafruit_SSD1306* activeSsd1306();
 
-#if defined(VOXONE_RUNTIME_L0_DISPLAY_BACKENDS)
-  // L0 already owns bus 0 through the RTC path.  Sharing the same TwoWire
-  // object avoids two independent owners reconfiguring one I2C peripheral.
   TwoWire& wire_;
-#else
-  TwoWire wire_;
-#endif
   Adafruit_SSD1306 ssd1306_128x32_;
   Adafruit_SSD1306 ssd1306_128x64_;
   // The existing, physically verified SSD1309 path uses Adafruit's

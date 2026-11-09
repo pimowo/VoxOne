@@ -2578,13 +2578,14 @@ void handlePowerSettingsRead(AsyncWebServerRequest* request) {
   if (!deviceApiAuthorized(request)) return;
   const PowerMode mode = static_cast<PowerMode>(
       config.runtimeSnapshot().powerMode);
+  const auto& powerPins = voxone::hardware::currentHardware().power;
   char body[176];
   snprintf(body, sizeof(body),
            "{\"mode\":\"%s\",\"standby\":%s,\"buttonPin\":%d,"
            "\"relayAvailable\":%s}",
            voxone::power_mode::apiName(mode),
-           powerManager.standby() ? "true" : "false", POWER_BUTTON_PIN,
-           POWER_RELAY_PIN >= 0 ? "true" : "false");
+           powerManager.standby() ? "true" : "false", powerPins.button,
+           voxone::hardware::hasPin(powerPins.relay) ? "true" : "false");
   stationsReply(request, 200, body);
 }
 
@@ -2747,25 +2748,19 @@ void handleTimeStatus(AsyncWebServerRequest* request) {
   if (localtime_r(&now, &localTime) && localTime.tm_year >= 120)
     strftime(systemTime, sizeof(systemTime), "%Y-%m-%d %H:%M:%S", &localTime);
   if (systemTime[0]) snprintf(systemJson, sizeof(systemJson), "\"%s\"", systemTime);
-#if RTCSUPPORTED
   if (config.isRTCFound() && rtc.isRunning()) {
     tm rtcLocalTime = {};
     rtc.getTime(&rtcLocalTime);
     strftime(rtcTime, sizeof(rtcTime), "%Y-%m-%d %H:%M:%S", &rtcLocalTime);
     if (rtcTime[0]) snprintf(rtcJson, sizeof(rtcJson), "\"%s\"", rtcTime);
   }
-#endif
   const auto runtime = config.runtimeSnapshot();
   char body[256];
   const int length = snprintf(body, sizeof(body),
       "{\"rtcSupported\":%s,\"rtcFound\":%s,\"systemTime\":%s,\"rtcTime\":%s,"
       "\"timeSyncInterval\":%u,\"timeSyncIntervalRTC\":%u,\"syncCount\":%lu}",
-      RTCSUPPORTED ? "true" : "false",
-#if RTCSUPPORTED
+      voxone::hardware::hardwareCapabilities().supportsRtc ? "true" : "false",
       config.isRTCFound() ? "true" : "false",
-#else
-      "false",
-#endif
       systemJson, rtcJson,
       runtime.timeSyncInterval, runtime.timeSyncIntervalRtc,
       static_cast<unsigned long>(timekeeper.successfulSyncCount));
@@ -2778,7 +2773,9 @@ void handleTimeStatus(AsyncWebServerRequest* request) {
 
 void handleTimeSync(AsyncWebServerRequest* request) {
   if (!deviceApiAuthorized(request)) return;
-  if (!RTCSUPPORTED) { apiError(request, 404, "rtc_unsupported"); return; }
+  if (!voxone::hardware::hardwareCapabilities().supportsRtc) {
+    apiError(request, 404, "rtc_unsupported"); return;
+  }
   if (network.status != CONNECTED) { apiError(request, 503, "network_unavailable"); return; }
   const uint32_t beforeSync = timekeeper.successfulSyncCount;
   network.requestTimeSync(false);
@@ -3471,7 +3468,9 @@ void NetServer::processQueue(){
         snprintf (wsBuf, sizeof(wsBuf), "{\"flip\":%d,\"canFlip\":%d,\"canBrightness\":%d,\"br\":%d,\"nump\":%d,\"dspon\":%d,\"con\":%d,\"scre\":%d,\"scrt\":%d,\"scrb\":%d,\"scrpe\":%d,\"scrpt\":%d,\"scrpb\":%d,\"stationListTimeout\":%u,\"btTransportTimeout\":%u,\"canBtTransport\":%d,\"canScrollSettings\":%s,\"scrollEnabled\":%s,\"scrollSpeed\":\"%s\",\"scrollPauseMs\":%u,\"scrollSettingsSource\":\"%s\",\"scrollCoreActive\":%s}",
                                   runtime.flipScreen,
                                   voxone::hardware::hardwareCapabilities().hasLocalDisplay(),
-                                  BRIGHTNESS_PIN != 255,
+                                  voxone::hardware::hasPin(
+                                      voxone::hardware::currentHardware()
+                                          .display.backlight),
                                   runtime.brightness,
                                   runtime.numPlaylist,
                                   runtime.dspOn,

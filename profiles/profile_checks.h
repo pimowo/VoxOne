@@ -32,21 +32,8 @@ static_assert(bool(VOXONE_HAS_DISPLAY) == (VOXONE_PROFILE_DISPLAY != Display::No
               "Display compile gate must match selected display backend");
 static_assert(bool(VOXONE_HAS_DISPLAY) == (DSP_MODEL != DSP_DUMMY),
               "Display compile gate must match legacy DSP_MODEL");
-#if defined(VOXONE_RUNTIME_L0_DISPLAY_BACKENDS)
-static_assert(DSP_MODEL == DSP_ST7796,
-              "Runtime L0 display keeps ST7796 as the legacy/default gate");
-static_assert(display_profile::activeProfile() ==
-                  display_profile::ProfileId::St7796_480x320,
-              "Runtime L0 display must preserve the ST7796 build default");
-#elif defined(VOXONE_RUNTIME_OLED_128X64_BACKENDS)
-static_assert(DSP_MODEL == DSP_SSD1306,
-              "Runtime OLED builds use SSD1306 only as the legacy OLED compile gate");
-static_assert(VOXONE_DISPLAY_PROFILE_IS_SMALL_OLED,
-              "Runtime OLED backends require an OLED layout profile");
-#else
 static_assert(displayMatchesLegacy(VOXONE_PROFILE_DISPLAY, DSP_MODEL),
               "Selected display backend does not match legacy DSP_MODEL");
-#endif
 
 static_assert(!VOXONE_PIN_MAP_COMPLETE ||
               (VOXONE_PROFILE_DISPLAY != Display::St7789_284x76 &&

@@ -12,8 +12,7 @@ using namespace voxone::display_profile;
 using namespace voxone::hardware;
 
 namespace {
-#if defined(VOXONE_RUNTIME_OLED_128X64_BACKENDS) || \
-    defined(VOXONE_RUNTIME_L0_DISPLAY_BACKENDS)
+#if VOXONE_MULTI_DISPLAY_RUNTIME
 std::string readFile(const char* path) {
   std::ifstream input(path);
   return std::string(std::istreambuf_iterator<char>(input),
@@ -25,7 +24,8 @@ std::string readFile(const char* path) {
 int main() {
   const HardwareDescriptor& hardware = currentHardware();
   const RuntimeHardwareConfig defaults = defaultRuntimeHardwareConfig();
-  const CompiledBackends compiled = compiledBackends();
+  const CompiledBackends compiled = compiledBackends(hardware);
+  assert(compiled.runtimeSelection);
 
   Selection selected = select(defaults, hardware, compiled);
   assert(selected.display == defaults.display);
@@ -74,10 +74,8 @@ int main() {
                                        hardware.capabilities) ==
          RuntimeHardwareValidation::Valid);
 
-#if defined(VOXONE_RUNTIME_OLED_128X64_BACKENDS) || \
-    defined(VOXONE_RUNTIME_L0_DISPLAY_BACKENDS)
+#if VOXONE_MULTI_DISPLAY_RUNTIME
   selected = select(defaults, hardware, compiled);
-  assert(compiled.runtimeSelection);
   assert(compiled.contains(ControllerId::Ssd1306));
   assert(compiled.contains(ControllerId::Ssd1309));
   assert(compiled.contains(ControllerId::Sh1106));
@@ -170,7 +168,7 @@ int main() {
   assert(facade.find("sh1106_.begin") != std::string::npos);
   assert(facade.find("ch1116g_->begin") != std::string::npos);
   assert(facade.find("ControllerId::Ch1116g") != std::string::npos);
-  assert(facade.find("SH1106_I2CFREQ_HZ 400000UL") != std::string::npos);
+  assert(facade.find("currentHardware().i2c") != std::string::npos);
   assert(facade.find("tools/oledcolorfix.h") != std::string::npos);
   assert(widgets.find("_scrolldelay = millis();") != std::string::npos);
   assert(renderer.find("VOXONE_PROFILE_M0") == std::string::npos);
@@ -186,40 +184,40 @@ int main() {
   assert(noneGuard < backendInit && backendInit < rendererAllocation);
   assert(rendererAllocation < rendererAllocationFailure);
   assert(controls.find("activationFor(selected)") != std::string::npos);
-  assert(m0Profile.find("#define VOXONE_RUNTIME_OLED_128X64_BACKENDS 1") !=
-         std::string::npos);
+  assert(m0Profile.find("VOXONE_RUNTIME_") == std::string::npos);
 #if defined(VOXONE_PROFILE_L0)
-  const std::string l0Facade = readFile("src/displays/displayL0Runtime.cpp");
-  const std::string l0Header = readFile("src/displays/displayL0Runtime.h");
+  const std::string multiFacade =
+      readFile("src/displays/displayMultiRuntime.cpp");
+  const std::string multiHeader =
+      readFile("src/displays/displayMultiRuntime.h");
   const std::string l0Profile = readFile("profiles/l0.h");
-  const std::string rtcSupport = readFile("src/core/rtcsupport.cpp");
-  assert(l0Facade.find("selection_.controller == ControllerId::St7796") !=
+  const std::string i2cRuntime = readFile("src/hardware/i2c_runtime.cpp");
+  assert(multiFacade.find("selection_.controller == ControllerId::St7796") !=
          std::string::npos);
-  assert(l0Facade.find("else if (oledActive())") != std::string::npos);
-  assert(l0Facade.find("RuntimeOled128x64Display(RTCWire)") !=
+  assert(multiFacade.find("else if (oledActive())") != std::string::npos);
+  assert(multiFacade.find("hardwareI2cBus()") !=
          std::string::npos);
-  assert(l0Facade.find("../core/rtcsupport.h") != std::string::npos);
-  assert(facade.find("if (!initRTCWire()) return false") !=
+  assert(multiFacade.find("rtcsupport.h") == std::string::npos);
+  assert(facade.find("initHardwareI2c()") !=
          std::string::npos);
-  assert(rtcSupport.find("if(rtcWireInitialized) return true") !=
+  assert(i2cRuntime.find("if (initialized) return true") !=
          std::string::npos);
-  assert(rtcSupport.find("rtcWireInitialized = RTCWire.begin") !=
+  assert(i2cRuntime.find("initialized = bus.begin") !=
          std::string::npos);
-  assert(l0Header.find("Adafruit_ST7796S_kbv* st7796_ = nullptr") !=
+  assert(multiHeader.find("Adafruit_ST7796S_kbv* st7796_ = nullptr") !=
          std::string::npos);
-  assert(l0Header.find("RuntimeOled128x64Display* oled_ = nullptr") !=
+  assert(multiHeader.find("RuntimeOled128x64Display* oled_ = nullptr") !=
          std::string::npos);
   assert(l0Profile.find("#define I2CFREQ_HZ 400000UL") !=
          std::string::npos);
   assert(renderer.find("_st7796PlayerReady = !smallOledActive()") !=
          std::string::npos);
   assert(config.find("bool localBacklightInstalled()") != std::string::npos);
-  assert(config.find("RuntimeDisplay::St7796s_480x320") !=
+  assert(config.find("hardware.display.backlightDisplay") !=
          std::string::npos);
   assert(renderer.find("bool enableBacklight") != std::string::npos);
 #endif
 #else
-  assert(!compiled.runtimeSelection);
   RuntimeHardwareConfig ignored = defaults;
   ignored.display = RuntimeDisplay::Ssd1306_128x64;
   selected = select(ignored, hardware, compiled);
@@ -227,14 +225,13 @@ int main() {
   assert(selected.display == defaults.display);
 #if defined(VOXONE_PROFILE_W0)
   assert(selected.controller == ControllerId::St7789);
-#elif defined(VOXONE_PROFILE_L0)
-  assert(selected.controller == ControllerId::St7796);
 #endif
 #endif
 
   HardwareDescriptor noDisplay = hardware;
   noDisplay.displayKind = DisplayKind::None;
-  noDisplay.display = {kNoPin, kNoPin, kNoPin, kNoPin, BusKind::None};
+  noDisplay.display = {kNoPin, kNoPin, kNoPin, kNoPin, BusKind::None,
+                       DisplayKind::None};
   noDisplay.capabilities.supportedDisplays = 0;
   noDisplay.capabilities.supportedInputs = 0;
   noDisplay.capabilities.supportsLocalUi = false;

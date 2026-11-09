@@ -104,7 +104,7 @@ int main() {
 #elif defined(VOXONE_PROFILE_S0)
   assert(defaults.display == RuntimeDisplay::Ssd1306_128x32);
   assert(defaults.input == RuntimeInput::Ec11);
-#elif defined(VOXONE_RUNTIME_OLED_128X64_BACKENDS)
+#elif defined(VOXONE_PROFILE_M0) || defined(VOXONE_PROFILE_DIN0)
   assert(defaults.display == RuntimeDisplay::Ssd1306_128x64);
   assert(defaults.input == RuntimeInput::Ec11);
 #elif defined(VOXONE_PROFILE_L0)
@@ -114,8 +114,9 @@ int main() {
 
   HardwareDescriptor noDisplay = hardware;
   noDisplay.displayKind = DisplayKind::None;
-  noDisplay.display = {kNoPin, kNoPin, kNoPin, kNoPin, BusKind::None};
-  noDisplay.localInput = {kNoPin, kNoPin, kNoPin, 1};
+  noDisplay.display = {kNoPin, kNoPin, kNoPin, kNoPin, BusKind::None,
+                       DisplayKind::None};
+  noDisplay.localInput = {kNoPin, kNoPin, kNoPin, 1, false};
   noDisplay.capabilities.supportedDisplays = 0;
   noDisplay.capabilities.supportedInputs = 0;
   noDisplay.capabilities.supportsLocalUi = false;
@@ -374,8 +375,7 @@ int main() {
   assert(loaded.validation == RuntimeHardwareValidation::Unsupported);
   assert(loaded.config == defaults);
 
-#if defined(VOXONE_RUNTIME_OLED_128X64_BACKENDS) || \
-    defined(VOXONE_RUNTIME_L0_DISPLAY_BACKENDS)
+#if VOXONE_MULTI_DISPLAY_RUNTIME
   RuntimeHardwareConfig boardSupportedAlternative = defaults;
   boardSupportedAlternative.display = RuntimeDisplay::Sh1106_128x64;
   putRecord(storage, boardSupportedAlternative);

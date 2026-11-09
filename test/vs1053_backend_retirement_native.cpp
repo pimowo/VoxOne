@@ -36,13 +36,12 @@ int main() {
     absent(source, "ResetChip");
   }
   assert(playerHeader.find("../audioI2S/AudioEx.h") != std::string::npos);
-  assert(playerCode.find("Audio(false, 3, I2S_NUM_0, false)") !=
-         std::string::npos);
-  assert(playerCode.find("Audio(true, 3, I2S_NUM_0, false)") !=
+  assert(playerCode.find("currentHardware().audioOutInternal") !=
          std::string::npos);
   assert(playerCode.find("initializeI2S()") != std::string::npos);
-  assert(playerCode.find("setPinout(I2S_BCLK, I2S_LRC, I2S_DOUT)") !=
+  assert(playerCode.find("setPinout(audioPins.bclk, audioPins.ws, audioPins.dout)") !=
          std::string::npos);
+  assert(playerCode.find("I2S_DOUT") == std::string::npos);
   assert(configCode.find("mdns, 7)") != std::string::npos);
   assert(build.find("audioVS1053") == std::string::npos);
   assert(build.find("build_src_filter") == std::string::npos);

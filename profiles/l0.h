@@ -8,10 +8,6 @@
 #define VOXONE_DISPLAY_CONTROLLER VOXONE_DISPLAY_CONTROLLER_ST7796
 #define VOXONE_PROFILE_AUDIO voxone::AudioOutput::Pcm5102a
 
-// L0 keeps ST7796 as its build/runtime default, while the saved Config v7
-// hardware record may select one of the shared I2C OLED backends after reboot.
-#define VOXONE_RUNTIME_L0_DISPLAY_BACKENDS 1
-
 #define VOXONE_HAS_DISPLAY 1
 #define VOXONE_HAS_ENCODER 1
 #define VOXONE_HAS_VU 1

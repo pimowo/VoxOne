@@ -59,6 +59,7 @@ int main() {
 
   const std::string controls = readFile("src/core/controls.cpp");
   assert(controls.find("normalizeEc11Delta(") != std::string::npos);
-  assert(controls.find("VOXONE_EC11_REVERSE_DIRECTION != 0") !=
+  assert(controls.find("localInput.reverseDirection") != std::string::npos);
+  assert(controls.find("VOXONE_EC11_REVERSE_DIRECTION") ==
          std::string::npos);
 }

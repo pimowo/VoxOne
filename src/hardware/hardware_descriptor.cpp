@@ -16,7 +16,8 @@ constexpr char kBoardFamily = 'W';
 constexpr DisplayKind kDisplayKind = DisplayKind::St7789_284x76;
 // The W0 profile does not state its default SPI bus pins.
 constexpr SpiBusPins kSpi = {kNoPin, kNoPin, kNoPin};
-constexpr I2cBusPins kI2c = {kNoPin, kNoPin};
+constexpr I2cBusConfig kI2c = {kNoPin, kNoPin, 400000UL, 0x3C};
+constexpr RtcKind kRtcKind = RtcKind::None;
 constexpr UartPins kBtUart = {kNoPin, kNoPin};
 constexpr Pin kBacklight = kNoPin;
 constexpr Pin kDacXsmt = kNoPin;
@@ -34,7 +35,9 @@ constexpr BoardId kBoardId = BoardId::BoardM0;
 constexpr char kBoardFamily = 'M';
 constexpr DisplayKind kDisplayKind = DisplayKind::Ssd1306_128x64;
 constexpr SpiBusPins kSpi = {kNoPin, kNoPin, kNoPin};
-constexpr I2cBusPins kI2c = {fromLegacyPin(I2C_SDA), fromLegacyPin(I2C_SCL)};
+constexpr I2cBusConfig kI2c = {
+  fromLegacyPin(I2C_SDA), fromLegacyPin(I2C_SCL), 4000000UL, SCREEN_ADDRESS};
+constexpr RtcKind kRtcKind = RtcKind::None;
 constexpr UartPins kBtUart = {kNoPin, kNoPin};
 constexpr Pin kBacklight = kNoPin;
 constexpr Pin kDacXsmt = kNoPin;
@@ -59,7 +62,9 @@ constexpr BoardId kBoardId = BoardId::BoardS0;
 constexpr char kBoardFamily = 'S';
 constexpr DisplayKind kDisplayKind = DisplayKind::Ssd1306_128x32;
 constexpr SpiBusPins kSpi = {kNoPin, kNoPin, kNoPin};
-constexpr I2cBusPins kI2c = {fromLegacyPin(I2C_SDA), fromLegacyPin(I2C_SCL)};
+constexpr I2cBusConfig kI2c = {
+  fromLegacyPin(I2C_SDA), fromLegacyPin(I2C_SCL), I2CFREQ_HZ, SCREEN_ADDRESS};
+constexpr RtcKind kRtcKind = RtcKind::None;
 constexpr UartPins kBtUart = {fromLegacyPin(VOXONE_BT_UART_RX_PIN),
                                fromLegacyPin(VOXONE_BT_UART_TX_PIN)};
 constexpr Pin kBacklight = kNoPin;
@@ -85,7 +90,9 @@ constexpr BoardId kBoardId = BoardId::BoardDIN0;
 constexpr char kBoardFamily = 'D';
 constexpr DisplayKind kDisplayKind = DisplayKind::Ssd1306_128x64;
 constexpr SpiBusPins kSpi = {kNoPin, kNoPin, kNoPin};
-constexpr I2cBusPins kI2c = {fromLegacyPin(I2C_SDA), fromLegacyPin(I2C_SCL)};
+constexpr I2cBusConfig kI2c = {
+  fromLegacyPin(I2C_SDA), fromLegacyPin(I2C_SCL), 4000000UL, SCREEN_ADDRESS};
+constexpr RtcKind kRtcKind = RtcKind::None;
 constexpr UartPins kBtUart = {kNoPin, kNoPin};
 constexpr Pin kBacklight = kNoPin;
 constexpr Pin kDacXsmt = kNoPin;
@@ -108,7 +115,9 @@ constexpr char kBoardFamily = 'L';
 constexpr DisplayKind kDisplayKind = DisplayKind::St7796_480x320;
 // SPI defaults are stated in l0.h; MISO belongs to the bus, not to LCD.
 constexpr SpiBusPins kSpi = {12, 11, 13};
-constexpr I2cBusPins kI2c = {fromLegacyPin(RTC_SDA), fromLegacyPin(RTC_SCL)};
+constexpr I2cBusConfig kI2c = {
+  fromLegacyPin(RTC_SDA), fromLegacyPin(RTC_SCL), I2CFREQ_HZ, 0x3C};
+constexpr RtcKind kRtcKind = RtcKind::Ds3231;
 constexpr UartPins kBtUart = {fromLegacyPin(VOXONE_BT_UART_RX_PIN),
                                fromLegacyPin(VOXONE_BT_UART_TX_PIN)};
 constexpr Pin kBacklight = fromLegacyPin(BRIGHTNESS_PIN);
@@ -146,6 +155,7 @@ constexpr HardwareDescriptor kCurrent = {
   kI2c,
   {fromLegacyPin(I2S_BCLK), fromLegacyPin(I2S_LRC),
    fromLegacyPin(I2S_DOUT), kNoPin},
+  I2S_INTERNAL,
   {fromLegacyPin(VOXONE_BT_I2S_BCLK_PIN),
    fromLegacyPin(VOXONE_BT_I2S_WS_PIN), kNoPin,
    fromLegacyPin(VOXONE_BT_I2S_DATA_PIN)},
@@ -153,7 +163,12 @@ constexpr HardwareDescriptor kCurrent = {
   kBtUart,
   {fromLegacyPin(ENC_BTNL), fromLegacyPin(ENC_BTNR),
    fromLegacyPin(ENC_BTNB),
-   ENC_HALFQUARD == 255 ? 1 : (ENC_HALFQUARD ? 2 : 4)},
+   ENC_HALFQUARD == 255 ? 1 : (ENC_HALFQUARD ? 2 : 4),
+#if defined(VOXONE_EC11_REVERSE_DIRECTION)
+   VOXONE_EC11_REVERSE_DIRECTION != 0},
+#else
+   false},
+#endif
   {fromLegacyPin(TFT_CS), fromLegacyPin(TFT_DC),
    fromLegacyPin(TFT_RST), kBacklight,
    (kDisplayKind == DisplayKind::Ssd1306_128x32 ||
@@ -161,7 +176,9 @@ constexpr HardwareDescriptor kCurrent = {
     kDisplayKind == DisplayKind::Ssd1309_128x64 ||
     kDisplayKind == DisplayKind::Sh1106_128x64 ||
     kDisplayKind == DisplayKind::Ch1116g_128x64) ? BusKind::I2c :
-     (kCapabilities.hasLocalDisplay() ? BusKind::Spi : BusKind::None)},
+     (kCapabilities.hasLocalDisplay() ? BusKind::Spi : BusKind::None),
+   hasPin(kBacklight) ? DisplayKind::St7796_480x320 : DisplayKind::None},
+  kRtcKind,
   kDacXsmt,
   {fromLegacyPin(POWER_BUTTON_PIN), fromLegacyPin(POWER_RELAY_PIN)},
   kCapabilities
@@ -255,6 +272,7 @@ bool validateDescriptor(const HardwareDescriptor& d) {
   if ((display && !d.capabilities.supportsDisplay(d.displayKind)) ||
       (!display && d.capabilities.hasLocalDisplay()) ||
       !d.capabilities.supportsAudioOutput(d.audioOutputKind) ||
+      d.capabilities.supportsRtc != (d.rtcKind != RtcKind::None) ||
       (d.capabilities.supportsRtc &&
        (!hasPin(d.i2c.sda) || !hasPin(d.i2c.scl))) ||
       d.capabilities.supportsVoxOneBt !=
@@ -272,6 +290,12 @@ bool validateDescriptor(const HardwareDescriptor& d) {
        (!d.capabilities.hasLocalDisplay() ||
         !d.capabilities.hasLocalInput())))
     return false;
+  if ((hasPin(d.i2c.sda) || hasPin(d.i2c.scl)) && d.i2c.frequencyHz == 0)
+    return false;
+  if (hasPin(d.display.backlight) !=
+      (d.display.backlightDisplay != DisplayKind::None)) return false;
+  if (d.display.backlightDisplay != DisplayKind::None &&
+      !d.capabilities.supportsDisplay(d.display.backlightDisplay)) return false;
   if (d.displayKind == DisplayKind::Ssd1306_128x32 ||
       d.displayKind == DisplayKind::Ssd1306_128x64 ||
       d.displayKind == DisplayKind::Ssd1309_128x64 ||

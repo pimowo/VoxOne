@@ -47,7 +47,7 @@ ScrollSettingsRuntimeSnapshot productionSnapshot(void*) {
 ScrollSettingsWebView currentScrollSettingsWebView() {
   const display_backend::Selection selected = display_backend::select(
       hardware::runtimeHardwareConfig(), hardware::currentHardware(),
-      display_backend::compiledBackends());
+      display_backend::compiledBackends(hardware::currentHardware()));
   return makeScrollSettingsWebView(
       scrollProfile(selected.profile), scrollSettingsRuntimeConfig().snapshot(),
       playerScrollCoreBuildEnabled());

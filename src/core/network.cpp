@@ -20,6 +20,7 @@
 #include "security_api.h"
 #include "timekeeper.h"
 #include "ui_state.h"
+#include "../hardware/hardware_descriptor.h"
 #include <esp_netif.h>
 #include <sys/time.h>
 #include <atomic>
@@ -487,7 +488,6 @@ bool MyNetwork::wifiBegin(bool silent){
 
 void MyNetwork::begin() {
   BOOTLOG("network.begin");
-#if RTCSUPPORTED
   if (config.isRTCFound() && rtc.isRunning()) {
     rtc.getTime(&timeinfo);
     timeinfo.tm_isdst = -1;
@@ -500,7 +500,6 @@ void MyNetwork::begin() {
       }
     }
   }
-#endif
   const bool wifiInventoryReady = config.initNetwork();
   presentationState.initialize(config.ssidsCount);
   const auto security = voxone::security::initializeDeviceSecurity(
@@ -542,7 +541,8 @@ void MyNetwork::begin() {
   const auto runtime = config.runtimeSnapshot();
   if (strlen(runtime.mdnsName) > 0 && MDNS.begin(runtime.mdnsName)) {
     const String mac_address_string = WiFi.macAddress();
-    const String model_string = "VoxOne-" + String(VOXONE_PROFILE_NAME);
+    const String model_string = "VoxOne-" + String(
+        voxone::hardware::currentHardware().board.name);
     const String firmware_version =
         String(VOXONE_VERSION) + "-" + VOXONE_BUILD_CHANNEL;
     const String friendly_name = runtime.haName[0]
