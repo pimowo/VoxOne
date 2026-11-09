@@ -77,6 +77,16 @@ int main() {
   assert(menu.menuId() == MenuId::MAIN);
   assert(menu.visible());
   assert(menu.selectedIndex() == 0);
+  voxone::ui_menu::MenuSettings persisted{};
+  persisted.balance = -2;
+  persisted.bass = 0;
+  persisted.treble = 3;
+  persisted.brightness = 75;
+  persisted.tftTheme = 0;
+  persisted.screensaverEnabled = true;
+  persisted.encoderUiReversed = false;
+  menu.beginSettingsTransaction(persisted);
+  assert(!menu.settingsDirty());
   const uint32_t openedRevision = menu.snapshot().revision;
 
   // Source entries are capability-filtered and open on the active source.
@@ -112,8 +122,13 @@ int main() {
   assert(std::string(menu.selectedLabel()) == "Balans");
   assert(menu.handle(MenuCommand::NEXT) == MenuAction::NAVIGATED);
   assert(std::string(menu.selectedLabel()) == "Bass");
-  assert(menu.handle(MenuCommand::SELECT) == MenuAction::SELECTED);
+  assert(menu.handle(MenuCommand::SELECT) == MenuAction::EDITING_STARTED);
   assert(menu.state() == MenuState::EDITING);
+  assert(menu.handle(MenuCommand::NEXT) == MenuAction::SETTING_CHANGED);
+  assert(menu.state() == MenuState::EDITING);
+  assert(menu.settings().bass == 1);
+  assert(menu.settingsDirty());
+  assert(menu.handle(MenuCommand::SELECT) == MenuAction::EDITING_FINISHED);
   assert(menu.handle(MenuCommand::NEXT) == MenuAction::NAVIGATED);
   assert(menu.state() == MenuState::OPEN);
   assert(std::string(menu.selectedLabel()) == "Treble");
@@ -182,14 +197,32 @@ int main() {
   assert(menu.menuId() == MenuId::MAIN && menu.selectedIndex() == 5);
   assert(menu.handle(MenuCommand::BACK) == MenuAction::NONE);
 
-  assert(menu.handle(MenuCommand::CLOSE) == MenuAction::CLOSED);
+  // A modified draft cannot close directly. The centered decision screen
+  // defaults to TAK, allows encoder selection and reports the requested
+  // transaction outcome without closing before persistence is resolved.
+  assert(menu.handle(MenuCommand::CLOSE) ==
+         MenuAction::CONFIRMATION_REQUIRED);
+  assert(menu.state() == MenuState::CONFIRM_SAVE);
+  assert(menu.menuId() == MenuId::SAVE_CONFIRM);
+  assert(std::string(voxone::ui_menu::menuTitle(menu.snapshot())) ==
+         "Zapisać zmiany?");
+  assert(menu.itemCount() == 2);
+  assert(menu.selectedIndex() == 0);
+  assert(menu.handle(MenuCommand::SELECT) == MenuAction::SAVE_REQUESTED);
+  assert(menu.visible());
+  assert(menu.handle(MenuCommand::NEXT) == MenuAction::NAVIGATED);
+  assert(menu.selectedIndex() == 1);
+  assert(menu.handle(MenuCommand::SELECT) == MenuAction::DISCARD_REQUESTED);
+  assert(menu.finishTransaction());
   assert(menu.state() == MenuState::CLOSED);
   assert(!menu.close());
   assert(menu.open());
+  menu.beginSettingsTransaction(persisted);
   assert(menu.menuId() == MenuId::MAIN);
   assert(menu.selectedIndex() == 0);
   assert(menu.handle(MenuCommand::CLOSE) == MenuAction::CLOSED);
   assert(menu.open(MenuId::SYSTEM));
+  menu.beginSettingsTransaction(persisted);
   assert(menu.menuId() == MenuId::SYSTEM);
   assert(menu.handle(MenuCommand::PREVIOUS) == MenuAction::NAVIGATED);
   assert(menu.selectedSetting() ==
@@ -197,6 +230,14 @@ int main() {
   assert(!voxone::ui_menu::itemIsActive(menu.snapshot(), 3));
   menu.configureEncoderUiReversed(true);
   assert(voxone::ui_menu::itemIsActive(menu.snapshot(), 3));
+
+  // Values are exposed to both TFT and OLED renderers without changing the
+  // static labels used for navigation.
+  char value[16];
+  const auto systemSnapshot = menu.snapshot();
+  assert(voxone::ui_menu::formatItemValue(
+      systemSnapshot, 3, value, sizeof(value)));
+  assert(std::string(value) == "TAK");
 
   // Menu input is consumed before normal volume/source actions. Double click
   // navigates to the parent; long press closes the menu.
@@ -217,9 +258,10 @@ int main() {
   const std::string power = readFile("src/core/power_manager.cpp");
   assert(power.find("ButtonEvent::BUTTON_DOUBLE_CLICK") != std::string::npos);
   assert(power.find("uiMenu.open()") != std::string::npos);
-  assert(power.find("MenuCommand::BACK") != std::string::npos);
+  assert(power.find("dispatchUiInput(UiInputEvent::Double)") !=
+         std::string::npos);
+  assert(power.find("config.beginMenuTransaction()") != std::string::npos);
   assert(power.find("transitionUiMode(MENU)") != std::string::npos);
-  assert(power.find("Selected: %s") != std::string::npos);
 
   const std::string display = readFile("src/core/display.cpp");
   assert(display.find("class UiMenuWidget") != std::string::npos);
@@ -240,5 +282,13 @@ int main() {
          std::string::npos);
   assert(menuRenderer.find("menuContextHeader(menu.menuId)") !=
          std::string::npos);
+  assert(menuRenderer.find("drawConfirmation") != std::string::npos);
+  assert(menuRenderer.find("Zapisać zmiany?") != std::string::npos);
+  assert(menuRenderer.find("formatItemValue") != std::string::npos);
+
+  assert(input.find("config.previewMenuSettings(uiMenu.settings())") !=
+         std::string::npos);
+  assert(input.find("config.commitMenuTransaction()") != std::string::npos);
+  assert(input.find("config.discardMenuTransaction()") != std::string::npos);
   return 0;
 }

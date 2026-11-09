@@ -9,7 +9,7 @@
 namespace voxone {
 namespace ui_menu {
 
-enum class MenuState : uint8_t { CLOSED, OPEN, EDITING };
+enum class MenuState : uint8_t { CLOSED, OPEN, EDITING, CONFIRM_SAVE };
 
 enum class MenuLevel : uint8_t { MAIN, SUBMENU };
 
@@ -22,6 +22,7 @@ enum class MenuId : uint8_t {
   SYSTEM,
   SOURCE,
   DLNA,
+  SAVE_CONFIRM,
 };
 
 enum class MenuCommand : uint8_t {
@@ -39,12 +40,47 @@ enum class MenuAction : uint8_t {
   SELECTED,
   BACKED,
   CLOSED,
+  EDITING_STARTED,
+  EDITING_FINISHED,
+  SETTING_CHANGED,
+  CONFIRMATION_REQUIRED,
+  SAVE_REQUESTED,
+  DISCARD_REQUESTED,
 };
 
 enum class MenuSetting : uint8_t {
   NONE,
+  AUDIO_BALANCE,
+  AUDIO_BASS,
+  AUDIO_TREBLE,
+  DISPLAY_BRIGHTNESS,
+  DISPLAY_THEME,
+  SCREENSAVER_ENABLED,
   ENCODER_UI_REVERSED,
 };
+
+struct MenuSettings {
+  int8_t balance = 0;
+  int8_t bass = 0;
+  int8_t treble = 0;
+  uint8_t brightness = 100;
+  uint8_t tftTheme = 0;
+  bool screensaverEnabled = false;
+  bool encoderUiReversed = false;
+};
+
+inline bool operator==(const MenuSettings& left, const MenuSettings& right) {
+  return left.balance == right.balance && left.bass == right.bass &&
+         left.treble == right.treble &&
+         left.brightness == right.brightness &&
+         left.tftTheme == right.tftTheme &&
+         left.screensaverEnabled == right.screensaverEnabled &&
+         left.encoderUiReversed == right.encoderUiReversed;
+}
+
+inline bool operator!=(const MenuSettings& left, const MenuSettings& right) {
+  return !(left == right);
+}
 
 struct MenuSnapshot {
   MenuState state;
@@ -55,19 +91,22 @@ struct MenuSnapshot {
   uint8_t dynamicBank;
   uint8_t sourceMask;
   SourceId activeSource;
-  bool encoderUiReversed;
+  MenuSettings settings;
+  bool settingsDirty;
 
-  constexpr MenuSnapshot(MenuState menuState = MenuState::CLOSED,
-                         MenuLevel menuLevel = MenuLevel::MAIN,
-                         MenuId id = MenuId::MAIN, uint8_t selected = 0,
-                         uint32_t menuRevision = 0, uint8_t bank = 0,
-                         uint8_t sources = kCoreSourceMask,
-                         SourceId active = SourceId::Web,
-                         bool encoderReversed = false)
+  MenuSnapshot(MenuState menuState = MenuState::CLOSED,
+               MenuLevel menuLevel = MenuLevel::MAIN,
+               MenuId id = MenuId::MAIN, uint8_t selected = 0,
+               uint32_t menuRevision = 0, uint8_t bank = 0,
+               uint8_t sources = kCoreSourceMask,
+               SourceId active = SourceId::Web,
+               bool encoderReversed = false)
       : state(menuState), level(menuLevel), menuId(id),
         selectedIndex(selected), revision(menuRevision), dynamicBank(bank),
-        sourceMask(sources), activeSource(active),
-        encoderUiReversed(encoderReversed) {}
+        sourceMask(sources), activeSource(active), settings{},
+        settingsDirty(false) {
+    settings.encoderUiReversed = encoderReversed;
+  }
 };
 
 struct DlnaMenuEntry {
@@ -106,6 +145,10 @@ class UiMenu {
   MenuSetting selectedSetting() const;
   void configureSources(uint8_t availableMask, SourceId activeSource);
   void configureEncoderUiReversed(bool reversed);
+  void beginSettingsTransaction(const MenuSettings& persisted);
+  MenuSettings settings() const;
+  bool settingsDirty() const;
+  bool finishTransaction();
   void setDlnaStatus(const char* label);
   void setDlnaItems(const DlnaMenuEntry* entries, uint8_t count);
   MenuSnapshot snapshot() const;
@@ -119,6 +162,13 @@ class UiMenu {
   std::atomic<uint8_t> selectedIndex_{0};
   std::atomic<uint32_t> revision_{0};
   std::atomic<bool> encoderUiReversed_{false};
+  MenuSettings persistedSettings_{};
+  std::atomic<int8_t> draftBalance_{0};
+  std::atomic<int8_t> draftBass_{0};
+  std::atomic<int8_t> draftTreble_{0};
+  std::atomic<uint8_t> draftBrightness_{100};
+  std::atomic<uint8_t> draftTftTheme_{0};
+  std::atomic<bool> draftScreensaverEnabled_{false};
 };
 
 MenuLevel menuLevel(MenuId menuId);
@@ -127,6 +177,9 @@ const char* menuContextHeader(MenuId menuId);
 uint8_t itemCount(MenuId menuId);
 const char* itemLabel(MenuId menuId, uint8_t index);
 bool itemHasSubmenu(MenuId menuId, uint8_t index);
+MenuSetting itemSetting(MenuId menuId, uint8_t index);
+bool formatItemValue(const MenuSnapshot& snapshot, uint8_t index,
+                     char* output, size_t outputSize);
 uint8_t sourceItemCount(uint8_t mask);
 SourceId sourceItemAt(uint8_t mask, uint8_t index);
 MenuRenderPlan menuRenderPlan(const MenuSnapshot& previous,
@@ -159,7 +212,7 @@ inline bool itemIsActive(const MenuSnapshot& snapshot, uint8_t index) {
   if (snapshot.menuId == MenuId::SOURCE)
     return sourceItemAt(snapshot.sourceMask, index) == snapshot.activeSource;
   return snapshot.menuId == MenuId::SYSTEM && index == 3 &&
-         snapshot.encoderUiReversed;
+         snapshot.settings.encoderUiReversed;
 }
 
 inline bool itemHasSubmenu(const MenuSnapshot& snapshot, uint8_t index) {

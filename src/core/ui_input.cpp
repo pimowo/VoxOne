@@ -44,13 +44,11 @@ bool dispatchMenuInput(UiInputEvent event, int8_t steps) {
       voxone::dlna_menu::select();
     else if (uiMenu.menuId() == voxone::ui_menu::MenuId::SOURCE)
       voxone::source_menu::select();
-    else if (uiMenu.selectedSetting() ==
-             voxone::ui_menu::MenuSetting::ENCODER_UI_REVERSED)
-      config.setEncoderUiReversed(
-          !config.runtimeSnapshot().encoderUiReversed);
     else
       ESP_LOGI(kUiInputTag, "Selected: %s", selectedLabel);
   }
+  if (action == MenuAction::SETTING_CHANGED)
+    config.previewMenuSettings(uiMenu.settings());
   if (action == MenuAction::ENTERED_SUBMENU) {
     ESP_LOGI(kUiInputTag, "Opened submenu: %s", selectedLabel);
     if (uiMenu.menuId() == voxone::ui_menu::MenuId::DLNA)
@@ -60,7 +58,23 @@ bool dispatchMenuInput(UiInputEvent event, int8_t steps) {
   }
   if (action == MenuAction::BACKED)
     ESP_LOGI(kUiInputTag, "Back to main menu");
-  if (action == MenuAction::CLOSED) transitionUiMode(PLAYER);
+  if (action == MenuAction::CLOSED) {
+    config.discardMenuTransaction();
+    transitionUiMode(PLAYER);
+  }
+  if (action == MenuAction::SAVE_REQUESTED) {
+    if (config.commitMenuTransaction()) {
+      uiMenu.finishTransaction();
+      transitionUiMode(PLAYER);
+    } else {
+      ESP_LOGE(kUiInputTag, "Menu settings persistence failed");
+    }
+  }
+  if (action == MenuAction::DISCARD_REQUESTED) {
+    config.discardMenuTransaction();
+    uiMenu.finishTransaction();
+    transitionUiMode(PLAYER);
+  }
   return true;
 }
 
@@ -134,8 +148,12 @@ void navigateCurrentSource(SourceId source, bool next) {
   }
   if (source == SourceId::Dlna) {
     if (uiMenu.open(voxone::ui_menu::MenuId::DLNA)) {
+      config.beginMenuTransaction();
       voxone::dlna_menu::entered();
-      if (!transitionUiMode(MENU)) uiMenu.close();
+      if (!transitionUiMode(MENU)) {
+        config.discardMenuTransaction();
+        uiMenu.close();
+      }
     }
     return;
   }

@@ -14,7 +14,9 @@ checkpointów pozostaje w historii Git i w istniejących raportach.
   „Do widzenia!” z natychmiastowym zatrzymaniem audio, płynne odświeżanie Menu,
   kontekstową belkę Menu na TFT, wygaszenie ekranu z ochroną OLED oraz tryby
   enkodera NORMAL/REVERSED (w tym obrót z wciśniętym przyciskiem i
-  synchronizację ustawienia pomiędzy WWW a Menu).
+  synchronizację ustawienia pomiędzy WWW a Menu), a także transakcyjny ekran
+  „Zapisać zmiany?” na TFT/OLED: zapis przez TAK, pełne przywrócenie wyglądu i
+  ustawień przez NIE oraz natychmiastowe wyjście, gdy nie ma zmian.
 - [ ] Fizycznie przetestować TTS/media z Home Assistant: źródło `SOURCE_HA`,
   metadane title/artist i `N/A` zamiast bitrate na TFT/OLED oraz powrót do
   wcześniej używanego źródła i jego stanu po EOF albo komendzie Stop.

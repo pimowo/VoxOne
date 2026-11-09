@@ -289,6 +289,17 @@ class UiMenuWidget : public Widget {
     dsp.setCursor(view.horizontalMargin + (view.oled ? 4 : 12), textTop);
     if (voxone::ui_menu::itemIsActive(menu, index)) dsp.print("* ");
     dsp.print(utf8Rus(voxone::ui_menu::itemLabel(menu, index)));
+    char value[16];
+    if (voxone::ui_menu::formatItemValue(
+            menu, index, value, sizeof(value))) {
+      const uint16_t valueWidth = static_cast<uint16_t>(
+          strlen_utf8(value) * CHARWIDTH * view.itemSize);
+      const uint16_t valueMargin = view.oled ? 3 : 10;
+      dsp.setCursor(view.horizontalMargin + view.rowWidth - valueWidth -
+                        valueMargin,
+                    textTop);
+      dsp.print(utf8Rus(value));
+    }
     if (voxone::ui_menu::itemHasSubmenu(menu, index)) {
       const uint16_t arrowWidth = CHARWIDTH * view.itemSize;
       const uint16_t arrowMargin = view.oled ? 3 : 10;
@@ -296,6 +307,49 @@ class UiMenuWidget : public Widget {
                         arrowMargin,
                     textTop);
       dsp.print(">");
+    }
+  }
+
+  void drawConfirmation(const voxone::ui_menu::MenuSnapshot& menu,
+                        const Layout& view) {
+    dsp.fillRect(0, 0, view.width, view.height, view.background);
+    const uint8_t titleSize = view.oled ? 1 : (view.width >= 400 ? 3 : 2);
+    const char* title = "Zapisać zmiany?";
+    const uint16_t titleWidth = static_cast<uint16_t>(
+        strlen_utf8(title) * CHARWIDTH * titleSize);
+    const uint16_t titleTop = view.height <= 32 ? 1 :
+        (view.oled ? 10 : view.height / 4);
+    dsp.setFont();
+    dsp.setTextSize(titleSize);
+    dsp.setTextColor(view.foreground, view.background);
+    dsp.setCursor((view.width - titleWidth) / 2, titleTop);
+    dsp.print(utf8Rus(title));
+
+    const uint8_t optionSize = view.oled ? 1 : 2;
+    const uint16_t boxWidth = view.oled ? 44 : 112;
+    const uint16_t boxHeight = view.height <= 32 ? 14 :
+        (view.oled ? 20 : 48);
+    const uint16_t gap = view.oled ? 8 : 24;
+    const uint16_t boxesWidth = boxWidth * 2 + gap;
+    const uint16_t left = (view.width - boxesWidth) / 2;
+    const uint16_t top = view.height <= 32 ? 17 :
+        (view.oled ? 38 : view.height * 3 / 5);
+    const char* options[] = {"TAK", "NIE"};
+    for (uint8_t index = 0; index < 2; ++index) {
+      const bool selected = menu.selectedIndex == index;
+      const uint16_t boxLeft = left + index * (boxWidth + gap);
+      const uint16_t background = selected ? view.foreground : view.background;
+      const uint16_t foreground = selected ? view.background : view.foreground;
+      dsp.fillRect(boxLeft, top, boxWidth, boxHeight, background);
+      dsp.drawRect(boxLeft, top, boxWidth, boxHeight, view.foreground);
+      const uint16_t textWidth =
+          strlen(options[index]) * CHARWIDTH * optionSize;
+      const uint16_t textHeight = CHARHEIGHT * optionSize;
+      dsp.setTextSize(optionSize);
+      dsp.setTextColor(foreground, background);
+      dsp.setCursor(boxLeft + (boxWidth - textWidth) / 2,
+                    top + (boxHeight - textHeight) / 2);
+      dsp.print(options[index]);
     }
   }
 
@@ -314,6 +368,14 @@ class UiMenuWidget : public Widget {
     if (voxone::ui_menu::itemCount(menu) == 0) return;
     const auto plan = voxone::ui_menu::menuRenderPlan(
         renderedMenu_, menu, rendered_);
+    if (menu.state == voxone::ui_menu::MenuState::CONFIRM_SAVE) {
+      if (plan.kind != voxone::ui_menu::MenuRenderKind::NONE)
+        drawConfirmation(menu, view);
+      renderedMenu_ = menu;
+      rendered_ = true;
+      revision_ = menu.revision;
+      return;
+    }
     const bool windowChanged = rendered_ &&
         layout(renderedMenu_).firstIndex != view.firstIndex;
     if (plan.kind == voxone::ui_menu::MenuRenderKind::FULL || windowChanged) {

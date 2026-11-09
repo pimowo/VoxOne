@@ -10,6 +10,7 @@
 #include "player.h"
 #include "source_menu_controller.h"
 #include "ui_menu.h"
+#include "ui_input.h"
 #include "ui_state.h"
 #include "update_progress.h"
 #include "../hardware/hardware_descriptor.h"
@@ -52,27 +53,7 @@ void PowerManager::loop() {
     if (!updateLockActive() && !shutdownNotice_) {
       if (event == voxone::power::ButtonEvent::BUTTON_CLICK) {
         if (uiMenu.visible()) {
-          const char* selectedLabel = uiMenu.selectedLabel();
-          const auto action =
-              uiMenu.handle(voxone::ui_menu::MenuCommand::SELECT);
-          if (action == voxone::ui_menu::MenuAction::ENTERED_SUBMENU) {
-            ESP_LOGI(kTag, "Opened submenu: %s", selectedLabel);
-            if (uiMenu.menuId() == voxone::ui_menu::MenuId::DLNA)
-              voxone::dlna_menu::entered();
-            else if (uiMenu.menuId() == voxone::ui_menu::MenuId::SOURCE)
-              voxone::source_menu::entered();
-          } else if (action == voxone::ui_menu::MenuAction::SELECTED) {
-            if (uiMenu.menuId() == voxone::ui_menu::MenuId::DLNA)
-              voxone::dlna_menu::select();
-            else if (uiMenu.menuId() == voxone::ui_menu::MenuId::SOURCE)
-              voxone::source_menu::select();
-            else if (uiMenu.selectedSetting() ==
-                     voxone::ui_menu::MenuSetting::ENCODER_UI_REVERSED)
-              config.setEncoderUiReversed(
-                  !config.runtimeSnapshot().encoderUiReversed);
-            else
-              ESP_LOGI(kTag, "Selected: %s", selectedLabel);
-          }
+          dispatchUiInput(UiInputEvent::Ok);
         } else if (standby()) {
           wakeup();
         } else {
@@ -80,16 +61,18 @@ void PowerManager::loop() {
         }
       } else if (event == voxone::power::ButtonEvent::BUTTON_DOUBLE_CLICK) {
         if (uiMenu.visible()) {
-          if (!voxone::dlna_menu::back())
-            uiMenu.handle(voxone::ui_menu::MenuCommand::BACK);
+          dispatchUiInput(UiInputEvent::Double);
         } else if (uiMenu.open()) {
-          if (!transitionUiMode(MENU)) uiMenu.close();
+          config.beginMenuTransaction();
+          if (!transitionUiMode(MENU)) {
+            config.discardMenuTransaction();
+            uiMenu.close();
+          }
           else ESP_LOGI(kTag, "Menu opened");
         }
       } else if (event == voxone::power::ButtonEvent::BUTTON_LONG_PRESS) {
         if (uiMenu.visible()) {
-          uiMenu.handle(voxone::ui_menu::MenuCommand::CLOSE);
-          transitionUiMode(PLAYER);
+          dispatchUiInput(UiInputEvent::Long);
         } else if (!standby()) {
           beginShutdown();
         }

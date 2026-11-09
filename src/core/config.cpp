@@ -621,6 +621,134 @@ bool Config::setEncoderUiReversed(bool reversed) {
   return persisted;
 }
 
+void Config::beginMenuTransaction() {
+  voxone::ui_menu::MenuSettings settings{};
+  {
+    WriteLock lock(_persistMutex);
+    settings.balance = store.balance;
+    settings.bass = store.bass;
+    settings.treble = store.trebble;
+    settings.brightness = store.brightness;
+    settings.tftTheme = static_cast<uint8_t>(store.tftTheme);
+    settings.screensaverEnabled = store.screensaverEnabled;
+    settings.encoderUiReversed = store.encoderUiReversed;
+    _menuPersistedSettings = settings;
+    _menuDraftSettings = settings;
+    _menuTransactionActive = true;
+    _publishRuntimeLocked();
+  }
+  uiMenu.beginSettingsTransaction(settings);
+}
+
+void Config::_applyMenuSettingsLive(
+    const voxone::ui_menu::MenuSettings& settings) {
+  player.setBalance(settings.balance);
+  player.setTone(settings.bass, store.middle, settings.treble);
+  if (localBacklightInstalled() && runtimeSnapshot().dspOn) {
+    analogWrite(voxone::hardware::currentHardware().display.backlight,
+                map(settings.brightness, 0, 100, 0, 255));
+  }
+}
+
+void Config::previewMenuSettings(
+    const voxone::ui_menu::MenuSettings& requested) {
+  voxone::ui_menu::MenuSettings settings = requested;
+  settings.balance = clampBalance(settings.balance);
+  settings.bass = clampTone(settings.bass);
+  settings.treble = clampTone(settings.treble);
+  if (settings.brightness > 100) settings.brightness = 100;
+  if (!voxone::tft_theme::valid(static_cast<TftTheme>(settings.tftTheme)))
+    settings.tftTheme = static_cast<uint8_t>(THEME_DEFAULT);
+  {
+    WriteLock lock(_persistMutex);
+    if (!_menuTransactionActive) return;
+    _menuDraftSettings = settings;
+    _publishRuntimeLocked();
+  }
+  _applyMenuSettingsLive(settings);
+}
+
+bool Config::commitMenuTransaction() {
+  bool persisted = false;
+  voxone::ui_menu::MenuSettings draft{};
+  {
+    WriteLock lock(_persistMutex);
+    if (!_menuTransactionActive) return true;
+    draft = _menuDraftSettings;
+    _storage.update(store.balance, draft.balance);
+    _storage.update(store.bass, draft.bass);
+    _storage.update(store.trebble, draft.treble);
+    _storage.update(store.brightness, draft.brightness);
+    _storage.update(store.screensaverEnabled, draft.screensaverEnabled);
+
+    const TftTheme theme = static_cast<TftTheme>(draft.tftTheme);
+    if (store.tftTheme != theme) {
+      if (!voxone::tft_theme::encode(
+              theme, store.reservedWeather, sizeof(store.reservedWeather)))
+        return false;
+      store.tftTheme = theme;
+      _storage.markDirty();
+    }
+    if (store.encoderUiReversed != draft.encoderUiReversed) {
+      if (!voxone::encoder_ui::encode(
+              draft.encoderUiReversed, store.reservedWeather,
+              sizeof(store.reservedWeather)))
+        return false;
+      store.encoderUiReversed = draft.encoderUiReversed;
+      _storage.markDirty();
+    }
+
+    _menuTransactionActive = false;
+    _publishRuntimeLocked();
+    persisted = !_startupReadOnly && persistV7();
+    if (!persisted) {
+      store.balance = _menuPersistedSettings.balance;
+      store.bass = _menuPersistedSettings.bass;
+      store.trebble = _menuPersistedSettings.treble;
+      store.brightness = _menuPersistedSettings.brightness;
+      store.screensaverEnabled =
+          _menuPersistedSettings.screensaverEnabled;
+      store.tftTheme =
+          static_cast<TftTheme>(_menuPersistedSettings.tftTheme);
+      store.encoderUiReversed =
+          _menuPersistedSettings.encoderUiReversed;
+      voxone::tft_theme::encode(
+          store.tftTheme, store.reservedWeather,
+          sizeof(store.reservedWeather));
+      voxone::encoder_ui::encode(
+          store.encoderUiReversed, store.reservedWeather,
+          sizeof(store.reservedWeather));
+      _menuTransactionActive = true;
+      _publishRuntimeLocked();
+    }
+  }
+  if (!persisted) return false;
+  uiMenu.configureEncoderUiReversed(draft.encoderUiReversed);
+  netserver.requestOnChange(BALANCE, 0);
+  netserver.requestOnChange(EQUALIZER, 0);
+  netserver.requestOnChange(GETSCREEN, 0);
+  return true;
+}
+
+void Config::discardMenuTransaction() {
+  voxone::ui_menu::MenuSettings restored{};
+  {
+    WriteLock lock(_persistMutex);
+    if (!_menuTransactionActive) return;
+    _menuTransactionActive = false;
+    restored.balance = store.balance;
+    restored.bass = store.bass;
+    restored.treble = store.trebble;
+    restored.brightness = store.brightness;
+    restored.tftTheme = static_cast<uint8_t>(store.tftTheme);
+    restored.screensaverEnabled = store.screensaverEnabled;
+    restored.encoderUiReversed = store.encoderUiReversed;
+    _publishRuntimeLocked();
+  }
+  uiMenu.configureEncoderUiReversed(restored.encoderUiReversed);
+  _applyMenuSettingsLive(restored);
+}
+
 bool Config::setBtEnabled(bool enabled) {
   WriteLock lock(_persistMutex);
   _storage.setStoredBtEnabled(enabled);
@@ -1075,6 +1203,17 @@ void Config::_publishRuntimeLocked() {
   runtime.tftTheme = static_cast<uint8_t>(store.tftTheme);
   runtime.powerMode = static_cast<uint8_t>(store.powerMode);
   runtime.encoderUiReversed = store.encoderUiReversed;
+  if (_menuTransactionActive) {
+    runtime.balance = _menuDraftSettings.balance;
+    runtime.bass = _menuDraftSettings.bass;
+    runtime.treble = _menuDraftSettings.treble;
+    runtime.brightness = _menuDraftSettings.brightness;
+    runtime.screensaverEnabled =
+        _menuDraftSettings.screensaverEnabled;
+    runtime.tftTheme = _menuDraftSettings.tftTheme;
+    runtime.encoderUiReversed =
+        _menuDraftSettings.encoderUiReversed;
+  }
   strlcpy(runtime.mdnsName, store.mdnsname, sizeof(runtime.mdnsName));
   strlcpy(runtime.haName, store.haName, sizeof(runtime.haName));
   _runtime.publish(runtime);

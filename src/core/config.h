@@ -14,6 +14,7 @@
 #include "sntp_server_lifetime.h"
 #include "www_asset_integrity.h"
 #include "wifi_config_parser.h"
+#include "ui_menu.h"
 #include <freertos/semphr.h>
 #include "../displays/widgets/widgetsconfig.h" //BitrateFormat
 
@@ -187,6 +188,10 @@ class Config {
     bool setTftTheme(TftTheme theme);
     bool setPowerMode(PowerMode mode);
     bool setEncoderUiReversed(bool reversed);
+    void beginMenuTransaction();
+    void previewMenuSettings(const voxone::ui_menu::MenuSettings& settings);
+    bool commitMenuTransaction();
+    void discardMenuTransaction();
     bool setBtEnabled(bool enabled);
     voxone::config_format::ConfigStorageMode storageMode() const { return _storage.mode(); }
     voxone::config_format::ConfigRecordStatus startupStatus() const { return _startupStatus; }
@@ -291,6 +296,9 @@ class Config {
     voxone::config_runtime::VuThresholdRuntime _vuThreshold;
     voxone::config_format::ConfigPersistence _storage;
     bool _startupReadOnly = false;
+    bool _menuTransactionActive = false;
+    voxone::ui_menu::MenuSettings _menuPersistedSettings{};
+    voxone::ui_menu::MenuSettings _menuDraftSettings{};
     bool _rtcFound;
     bool setDefaults();
     void _applyDefaults();
@@ -300,6 +308,8 @@ class Config {
     void _normalizeProductConfig();
     void _normalizeAudioConfig();
     void _publishRuntimeLocked();
+    void _applyMenuSettingsLive(
+        const voxone::ui_menu::MenuSettings& settings);
     void _initHW();
 };
 
