@@ -12,7 +12,9 @@ checkpointów pozostaje w historii Git i w istniejących raportach.
   shutdown), nawigację enkoderem bez zmiany głośności przy otwartym Menu,
   renderowanie hierarchii i wskaźników `>` na TFT/OLED, sekwencję wyłączania
   „Do widzenia!” z natychmiastowym zatrzymaniem audio, płynne odświeżanie Menu,
-  kontekstową belkę Menu na TFT oraz wygaszenie ekranu z ochroną OLED.
+  kontekstową belkę Menu na TFT, wygaszenie ekranu z ochroną OLED oraz tryby
+  enkodera NORMAL/REVERSED (w tym obrót z wciśniętym przyciskiem i
+  synchronizację ustawienia pomiędzy WWW a Menu).
 - [ ] Fizycznie przetestować TTS/media z Home Assistant: źródło `SOURCE_HA`,
   metadane title/artist i `N/A` zamiast bitrate na TFT/OLED oraz powrót do
   wcześniej używanego źródła i jego stanu po EOF albo komendzie Stop.
@@ -49,8 +51,9 @@ checkpointów pozostaje w historii Git i w istniejących raportach.
 - [ ] Zaimplementować tryb LINE OUT: stały poziom wyjścia, oddzielną zapisaną
   nastawę, blokadę zwykłej regulacji, ekran `LINE`, ustawienia WWW/menu i AVRCP
   Absolute Volume dla Bluetooth.
-- [ ] Dodać trzy tryby enkodera: Normalny (głośność), Odwrócony (stacje) oraz
-  Tylko stacje (bez regulacji głośności), z poprawnym zachowaniem LINE OUT.
+- [ ] Dodać trzeci tryb enkodera „Tylko stacje” (bez regulacji głośności) oraz
+  po implementacji LINE OUT zapewnić jego poprawne zachowanie dla wszystkich
+  trybów enkodera.
 - [ ] Ujednolicić gesty: w Menu obrót/klik/dwuklik/długi klik odpowiadają za
   nawigację/wybór/wstecz/wyjście, a dwuklik w Playerze przełącza źródła.
 - [ ] Rozbudować działający szkielet Menu na TFT i OLED o pełne ekrany

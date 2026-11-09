@@ -10,12 +10,14 @@
 namespace {
 
 UiInputContext radio(displayMode_e mode = PLAYER) {
-  return {mode, true, true, true, false, false, true};
+  return {mode, true, true, true, false, false, true,
+          SourceId::Web, false};
 }
 
 UiInputContext bluetooth(displayMode_e mode = PLAYER,
                          bool connected = true) {
-  return {mode, true, true, true, true, connected, true};
+  return {mode, true, true, true, true, connected, true,
+          SourceId::Bluetooth, false};
 }
 
 UiInputAction action(const UiInputContext& context, UiInputEvent event) {
@@ -68,11 +70,35 @@ int main() {
   assert(action(radio(), UiInputEvent::Ok) == UiInputAction::TogglePlayback);
   assert(action(radio(), UiInputEvent::Long) == UiInputAction::OpenStations);
 
+  UiInputContext reversedRadio = radio();
+  reversedRadio.encoderUiReversed = true;
+  assert(resolveUiInput(reversedRadio, UiInputEvent::Right,
+                        UiInputControl::EncoderRotation).action ==
+         UiInputAction::SourceNext);
+  assert(resolveUiInput(reversedRadio, UiInputEvent::Left,
+                        UiInputControl::EncoderGesture).action ==
+         UiInputAction::VolumeDown);
+  assert(resolveUiInput(radio(), UiInputEvent::Right,
+                        UiInputControl::DirectionButtons).action ==
+         UiInputAction::SourceNext);
+  UiInputContext offlineNormal = radio();
+  offlineNormal.networkConnected = false;
+  assert(resolveUiInput(offlineNormal, UiInputEvent::Right,
+                        UiInputControl::EncoderRotation).action ==
+         UiInputAction::VolumeUp);
+  assert(resolveUiInput(offlineNormal, UiInputEvent::Right,
+                        UiInputControl::DirectionButtons).action ==
+         UiInputAction::None);
+
   // VOL and STATIONS.
   assert(action(radio(VOL), UiInputEvent::Ok) == UiInputAction::ToggleMute);
   assert(action(radio(STATIONS), UiInputEvent::Right) ==
+         UiInputAction::VolumeUp);
+  assert(resolveUiInput(radio(STATIONS), UiInputEvent::Right,
+                        UiInputControl::DirectionButtons).action ==
          UiInputAction::StationNext);
-  assert(action(radio(STATIONS), UiInputEvent::Left) ==
+  assert(resolveUiInput(radio(STATIONS), UiInputEvent::Left,
+                        UiInputControl::DirectionButtons).action ==
          UiInputAction::StationPrevious);
   assert(action(radio(STATIONS), UiInputEvent::Ok) ==
          UiInputAction::StationSelect);
@@ -89,8 +115,12 @@ int main() {
   assert(action(bluetooth(), UiInputEvent::Long) ==
          UiInputAction::OpenBluetoothTransport);
   assert(action(bluetooth(BT_TRANSPORT), UiInputEvent::Left) ==
+         UiInputAction::VolumeDown);
+  assert(resolveUiInput(bluetooth(BT_TRANSPORT), UiInputEvent::Left,
+                        UiInputControl::EncoderGesture).action ==
          UiInputAction::BluetoothPrevious);
-  assert(action(bluetooth(BT_TRANSPORT), UiInputEvent::Right) ==
+  assert(resolveUiInput(bluetooth(BT_TRANSPORT), UiInputEvent::Right,
+                        UiInputControl::EncoderGesture).action ==
          UiInputAction::BluetoothNext);
   assert(action(bluetooth(BT_TRANSPORT), UiInputEvent::Ok) ==
          UiInputAction::BluetoothToggle);

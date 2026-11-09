@@ -8,8 +8,10 @@
 #include <string>
 
 namespace {
-UiInputAction action(displayMode_e mode, UiInputEvent event) {
-  const UiInputContext context{mode, true, true, false, false, false, false};
+UiInputAction action(displayMode_e mode, UiInputEvent event,
+                     bool uiReversed = false) {
+  const UiInputContext context{mode, true, true, false, false, false, false,
+                               SourceId::Web, uiReversed};
   return resolveUiInput(context, event).action;
 }
 
@@ -52,9 +54,9 @@ int main() {
   assert(action(PLAYER, eventForDelta(clockwise)) == UiInputAction::VolumeUp);
   assert(action(PLAYER, eventForDelta(counterClockwise)) ==
          UiInputAction::VolumeDown);
-  assert(action(STATIONS, eventForDelta(clockwise)) ==
+  assert(action(STATIONS, eventForDelta(clockwise), true) ==
          UiInputAction::StationNext);
-  assert(action(STATIONS, eventForDelta(counterClockwise)) ==
+  assert(action(STATIONS, eventForDelta(counterClockwise), true) ==
          UiInputAction::StationPrevious);
 
   const std::string controls = readFile("src/core/controls.cpp");

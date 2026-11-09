@@ -69,10 +69,15 @@ void dispatchLocalInputEvent(void* event) {
   dispatchUiInput(*static_cast<UiInputEvent*>(event));
 }
 
+void dispatchDirectionButtonEvent(void* event) {
+  dispatchUiInput(*static_cast<UiInputEvent*>(event), 1,
+                  UiInputControl::DirectionButtons);
+}
+
 void configureDirectionButton(OneButton& button, voxone::hardware::Pin pin,
                               UiInputEvent& event) {
   button.setup(pin, true, false);
-  button.attachClick(dispatchLocalInputEvent, &event);
+  button.attachClick(dispatchDirectionButtonEvent, &event);
   button.setClickTicks(BTN_CLICK_TICKS);
   button.setPressTicks(BTN_PRESS_TICKS);
 }
@@ -178,10 +183,15 @@ void encoder1Loop() {
       voxone::hardware::currentHardware().localInput.reverseDirection);
   if (encoderDelta!=0)
   {
+    const auto key = voxone::hardware::currentHardware().localInput.key;
+    const UiInputControl control =
+        voxone::hardware::hasPin(key) && digitalRead(key) == LOW
+            ? UiInputControl::EncoderGesture
+            : UiInputControl::EncoderRotation;
     dispatchUiInput(uiInputEvent(encoderDelta > 0
                                      ? EncoderInput::Clockwise
                                      : EncoderInput::CounterClockwise),
-                    encoderDelta);
+                    encoderDelta, control);
   }
 }
 
@@ -253,12 +263,7 @@ void onBtnDuringLongPress(int id) {
         }
       case EVT_BTNUP:
       case EVT_BTNDOWN: {
-          if (uiState.mode() == PLAYER) {
-            transitionUiMode(STATIONS);
-          }
-          if (uiState.mode() == STATIONS) {
-            controlsEvent(id == EVT_BTNDOWN);
-          }
+          controlsEvent(id == EVT_BTNDOWN);
           break;
         }
       default:
@@ -270,14 +275,16 @@ void onBtnDuringLongPress(int id) {
 void controlsEvent(bool toRight, int8_t volDelta) {
   const bool right = volDelta != 0 ? volDelta > 0 : toRight;
   dispatchUiInput(right ? UiInputEvent::Right : UiInputEvent::Left,
-                  volDelta == 0 ? 1 : volDelta);
+                  volDelta == 0 ? 1 : volDelta,
+                  UiInputControl::DirectionButtons);
 }
 
 void onBtnClick(int id) {
   controlEvt_e btnid = static_cast<controlEvt_e>(id);
   switch (btnid) {
     case EVT_BTNLEFT: {
-        dispatchUiInput(uiInputEvent(Buttons3Input::Left));
+        dispatchUiInput(uiInputEvent(Buttons3Input::Left), 1,
+                        UiInputControl::DirectionButtons);
         break;
       }
     case EVT_BTNCENTER: {
@@ -289,34 +296,14 @@ void onBtnClick(int id) {
         break;
       }
     case EVT_BTNRIGHT: {
-        dispatchUiInput(uiInputEvent(Buttons3Input::Right));
+        dispatchUiInput(uiInputEvent(Buttons3Input::Right), 1,
+                        UiInputControl::DirectionButtons);
         break;
       }
     case EVT_BTNUP:
     case EVT_BTNDOWN: {
         if (network.status != CONNECTED) return;
-        if (DSP_MODEL == DSP_DUMMY) {
-          if (id == EVT_BTNUP) {
-            player.next();
-          } else {
-            player.prev();
-          }
-        } else {
-          if (uiState.mode() == PLAYER) {
-            if(config.runtimeSnapshot().skipPlaylistUpDown){
-              if (id == EVT_BTNUP) {
-                player.prev();
-              } else {
-                player.next();
-              }
-            }else{
-              transitionUiMode(STATIONS);
-            }
-          }
-          if (uiState.mode() == STATIONS) {
-            controlsEvent(id == EVT_BTNDOWN);
-          }
-        }
+        controlsEvent(id == EVT_BTNDOWN);
         break;
       }
     default: break;
@@ -330,9 +317,7 @@ void onBtnDoubleClick(int id) {
           transitionUiMode(PLAYER);
           return;
         }
-        if (uiState.mode() != PLAYER) return;
-        if (network.status != CONNECTED) return;
-        player.prev();
+        controlsEvent(false);
         break;
       }
     case EVT_BTNCENTER: {
@@ -348,9 +333,7 @@ void onBtnDoubleClick(int id) {
           transitionUiMode(PLAYER);
           return;
         }
-        if (uiState.mode() != PLAYER) return;
-        if (network.status != CONNECTED) return;
-        player.next();
+        controlsEvent(true);
         break;
       }
     default:

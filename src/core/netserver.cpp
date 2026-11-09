@@ -3465,7 +3465,7 @@ void NetServer::processQueue(){
       case GETSCREEN: {
         const auto scroll =
             voxone::display_scroll::currentScrollSettingsWebView();
-        snprintf (wsBuf, sizeof(wsBuf), "{\"flip\":%d,\"canFlip\":%d,\"canBrightness\":%d,\"br\":%d,\"nump\":%d,\"dspon\":%d,\"con\":%d,\"scre\":%d,\"scrt\":%d,\"scrb\":%d,\"scrpe\":%d,\"scrpt\":%d,\"scrpb\":%d,\"stationListTimeout\":%u,\"btTransportTimeout\":%u,\"canBtTransport\":%d,\"canScrollSettings\":%s,\"scrollEnabled\":%s,\"scrollSpeed\":\"%s\",\"scrollPauseMs\":%u,\"scrollSettingsSource\":\"%s\",\"scrollCoreActive\":%s}",
+        snprintf (wsBuf, sizeof(wsBuf), "{\"flip\":%d,\"canFlip\":%d,\"canBrightness\":%d,\"br\":%d,\"nump\":%d,\"dspon\":%d,\"con\":%d,\"scre\":%d,\"scrt\":%d,\"scrb\":%d,\"scrpe\":%d,\"scrpt\":%d,\"scrpb\":%d,\"stationListTimeout\":%u,\"btTransportTimeout\":%u,\"canBtTransport\":%d,\"canScrollSettings\":%s,\"scrollEnabled\":%s,\"scrollSpeed\":\"%s\",\"scrollPauseMs\":%u,\"scrollSettingsSource\":\"%s\",\"scrollCoreActive\":%s,\"encoderUiReversed\":%s}",
                                   runtime.flipScreen,
                                   voxone::hardware::hardwareCapabilities().hasLocalDisplay(),
                                   voxone::hardware::hasPin(
@@ -3492,7 +3492,8 @@ void NetServer::processQueue(){
                                   scroll.settings.pauseMs,
                                   voxone::display_scroll::scrollSettingsSourceApiName(
                                       scroll.source),
-                                  scroll.scrollCoreActive ? "true" : "false");
+                                  scroll.scrollCoreActive ? "true" : "false",
+                                  runtime.encoderUiReversed ? "true" : "false");
         break;
       }
       case STATION:       requestOnChange(STATIONNAME, clientId); requestOnChange(ITEM, clientId); break;

@@ -66,6 +66,10 @@ void PowerManager::loop() {
               voxone::dlna_menu::select();
             else if (uiMenu.menuId() == voxone::ui_menu::MenuId::SOURCE)
               voxone::source_menu::select();
+            else if (uiMenu.selectedSetting() ==
+                     voxone::ui_menu::MenuSetting::ENCODER_UI_REVERSED)
+              config.setEncoderUiReversed(
+                  !config.runtimeSnapshot().encoderUiReversed);
             else
               ESP_LOGI(kTag, "Selected: %s", selectedLabel);
           }

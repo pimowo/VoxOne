@@ -42,6 +42,7 @@ constexpr MenuItemDefinition kSystemItems[] = {
     {"Informacje", MenuId::NONE},
     {"Zasilanie", MenuId::NONE},
     {"Restart", MenuId::NONE},
+    {"Odwrócony enkoder", MenuId::NONE},
 };
 
 struct DlnaMenuPage {
@@ -169,7 +170,9 @@ MenuRenderPlan menuRenderPlan(const MenuSnapshot& previous,
        previous.dynamicBank != current.dynamicBank) ||
       (current.menuId == MenuId::SOURCE &&
        (previous.sourceMask != current.sourceMask ||
-        previous.activeSource != current.activeSource)))
+        previous.activeSource != current.activeSource)) ||
+      (current.menuId == MenuId::SYSTEM &&
+       previous.encoderUiReversed != current.encoderUiReversed))
     return {MenuRenderKind::FULL, previous.selectedIndex,
             current.selectedIndex};
   if (previous.selectedIndex != current.selectedIndex)
@@ -179,9 +182,10 @@ MenuRenderPlan menuRenderPlan(const MenuSnapshot& previous,
           current.selectedIndex};
 }
 
-bool UiMenu::open() {
+bool UiMenu::open(MenuId initialMenu) {
   if (visible()) return false;
-  menuId_.store(MenuId::MAIN, std::memory_order_relaxed);
+  if (initialMenu == MenuId::NONE) initialMenu = MenuId::MAIN;
+  menuId_.store(initialMenu, std::memory_order_relaxed);
   selectedIndex_.store(0, std::memory_order_relaxed);
   state_.store(MenuState::OPEN, std::memory_order_release);
   markChanged();
@@ -248,6 +252,12 @@ SourceId UiMenu::selectedSource() const {
                       selectedIndex());
 }
 
+MenuSetting UiMenu::selectedSetting() const {
+  return menuId() == MenuId::SYSTEM && selectedIndex() == 3
+             ? MenuSetting::ENCODER_UI_REVERSED
+             : MenuSetting::NONE;
+}
+
 void UiMenu::configureSources(uint8_t availableMask, SourceId activeSource) {
   availableMask |= sourceBit(SourceId::Web);
   const uint8_t previous =
@@ -267,6 +277,12 @@ void UiMenu::configureSources(uint8_t availableMask, SourceId activeSource) {
   }
   if (previous != availableMask || previousActive != activeSource)
     markChanged();
+}
+
+void UiMenu::configureEncoderUiReversed(bool reversed) {
+  const bool previous =
+      encoderUiReversed_.exchange(reversed, std::memory_order_acq_rel);
+  if (previous != reversed) markChanged();
 }
 
 void UiMenu::setDlnaStatus(const char* label) {
@@ -308,6 +324,8 @@ MenuSnapshot UiMenu::snapshot() const {
     result.sourceMask =
         availableSourceMask.load(std::memory_order_acquire);
     result.activeSource = activeMenuSource.load(std::memory_order_acquire);
+    result.encoderUiReversed =
+        encoderUiReversed_.load(std::memory_order_acquire);
     result.revision = revision_.load(std::memory_order_acquire);
   } while (before != result.revision);
   return result;

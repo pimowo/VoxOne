@@ -275,6 +275,7 @@ kodem 1008. Nieprawidłowa wartość często jest tylko ignorowana.
 | `timeintrtc` | 1..1000 h | Interwał synchronizacji RTC. |
 | `volsteps` | liczba rzutowana do `uint8_t` | Liczba/kroków głośności konfiguracji legacy. |
 | `encacc` | liczba rzutowana do `uint16_t` | Akceleracja enkodera. |
+| `encoderuireversed` | `0` albo `1` | Trwale przełącza funkcjonalny tryb NORMAL/REVERSED i rozsyła nowy `getscreen`; nie zmienia sprzętowej inwersji A/B. |
 | `oneclickswitching` | `0`/niezero | Przełączanie playlisty jednym kliknięciem. |
 | `softap` | liczba rzutowana do `uint8_t` | Opóźnienie/polityka SoftAP. |
 | `mdnsname` | tekst do 23 B + NUL | Trwała nazwa hosta; zmiana wymaga ponownego uruchomienia usług sieciowych. |
@@ -405,7 +406,7 @@ i `aux`; bez aktywnego strumienia ich transport ma stan `stopped`.
 `con`, ustawienia screensavera (`scre`, `scrt`, `scrb`, `scrpe`, `scrpt`,
 `scrpb`), `stationListTimeout`, `btTransportTimeout`, `canBtTransport` oraz
 `canScrollSettings`, `scrollEnabled`, `scrollSpeed`, `scrollPauseMs`,
-`scrollSettingsSource`, `scrollCoreActive`.
+`scrollSettingsSource`, `scrollCoreActive` oraz `encoderUiReversed`.
 
 Zmiana wspólnego tonu poza komendą DSP ma skrócony, nieskorelowany wariant
 zdarzenia DSP (bez `operation`, `index`, `value` i `activePresetId`):

@@ -171,6 +171,11 @@ bool CommandHandler::exec(const char *command, const char *value, uint32_t cid) 
   if (strEquals(command, "getsystem"))  { netserver.requestOnChange(GETSYSTEM, cid); return true; }
   if (strEquals(command, "getwebstatus")) { netserver.requestOnChange(WEBSTATUS, cid); return true; }
   if (strEquals(command, "getscreen"))  { netserver.requestOnChange(GETSCREEN, cid); return true; }
+  if (strEquals(command, "encoderuireversed")) {
+    if (!value || (strcmp(value, "0") != 0 && strcmp(value, "1") != 0))
+      return false;
+    return config.setEncoderUiReversed(value[0] == '1');
+  }
   if (strEquals(command, "stationlisttimeout") || strEquals(command, "bttransporttimeout")) {
     uint8_t seconds;
     if (!parseUiTimeout(value, seconds)) return false;

@@ -76,6 +76,7 @@ Snapshot makeSnapshot(uint8_t id) {
   value.volumeSteps = id;
   value.tftTheme = id;
   value.powerMode = static_cast<uint8_t>(id - 1);
+  value.encoderUiReversed = id == 2;
   std::snprintf(value.mdnsName, sizeof(value.mdnsName), "voxone-%u",
                 static_cast<unsigned>(id));
   return value;
@@ -121,6 +122,7 @@ bool samePayload(const Snapshot& left, const Snapshot& right) {
       left.volumeSteps == right.volumeSteps &&
       left.tftTheme == right.tftTheme &&
       left.powerMode == right.powerMode &&
+      left.encoderUiReversed == right.encoderUiReversed &&
       std::strcmp(left.mdnsName, right.mdnsName) == 0;
 }
 

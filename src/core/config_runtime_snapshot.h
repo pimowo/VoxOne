@@ -62,6 +62,7 @@ struct Snapshot {
   bool haDiscoveryEnabled;
   uint8_t tftTheme;
   uint8_t powerMode;
+  bool encoderUiReversed;
   char mdnsName[kMdnsNameCapacity];
   char haName[kHaNameCapacity];
 };

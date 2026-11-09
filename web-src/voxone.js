@@ -622,6 +622,8 @@ window.VoxOneRestartWaiter = Object.freeze({
   const powerModeSelect = document.getElementById("power-mode");
   const powerModeStatus = document.getElementById("power-mode-status");
   const powerModeSave = document.getElementById("power-mode-save");
+  const encoderUiReversedToggle = document.getElementById("encoder-ui-reversed-toggle");
+  const encoderUiReversedValue = document.getElementById("encoder-ui-reversed-value");
   const autoReturnControl = document.getElementById("auto-return-control");
   const stationListTimeoutInput = document.getElementById("station-list-timeout");
   const btTimeoutControl = document.getElementById("bt-timeout-control");
@@ -707,6 +709,8 @@ window.VoxOneRestartWaiter = Object.freeze({
   let tftThemeSaving = false;
   let powerModeLoading = false;
   let powerModeSaving = false;
+  let encoderUiReversedPending = null;
+  let encoderUiReversedTimer = 0;
   let savedHardwareConfig = null;
   const state = {
     connection: "connecting",
@@ -732,6 +736,7 @@ window.VoxOneRestartWaiter = Object.freeze({
     canTftTheme: false,
     tftTheme: null,
     powerMode: null,
+    encoderUiReversed: null,
     stationListTimeout: null,
     btTransportTimeout: null,
     canBtTransport: false,
@@ -922,6 +927,15 @@ window.VoxOneRestartWaiter = Object.freeze({
     text("system-capabilities", info?.capabilities || "—");
     renderBtModule();
     renderUpdateFiles();
+  }
+
+  function renderEncoderUiMode() {
+    const shown = encoderUiReversedPending ?? state.encoderUiReversed;
+    encoderUiReversedToggle.disabled = state.connection !== "connected" ||
+      state.encoderUiReversed === null || encoderUiReversedPending !== null;
+    if (shown !== null) encoderUiReversedToggle.checked = shown;
+    encoderUiReversedValue.textContent = shown === null ? "—" :
+      shown ? "ODWRÓCONY" : "NORMALNY";
   }
 
   function renderFooter() {
@@ -2730,8 +2744,12 @@ window.VoxOneRestartWaiter = Object.freeze({
     state.systemInfo = null;
     state.networkInfo = null;
     state.powerMode = null;
+    state.encoderUiReversed = null;
+    encoderUiReversedPending = null;
+    clearTimeout(encoderUiReversedTimer);
     renderBtModule();
     renderSystemInfo();
+    renderEncoderUiMode();
     renderNetworkInfo();
     state.canBrightness = false;
     state.canBtTransport = false;
@@ -3009,6 +3027,12 @@ window.VoxOneRestartWaiter = Object.freeze({
     }
     if (message.canFlip === 0 || message.canFlip === 1) {
       state.canFlip = message.canFlip === 1;
+    }
+    if (typeof message.encoderUiReversed === "boolean") {
+      state.encoderUiReversed = message.encoderUiReversed;
+      encoderUiReversedPending = null;
+      clearTimeout(encoderUiReversedTimer);
+      renderEncoderUiMode();
     }
     if (message.canBrightness === 0 || message.canBrightness === 1) {
       state.canBrightness = message.canBrightness === 1;
@@ -3399,6 +3423,22 @@ window.VoxOneRestartWaiter = Object.freeze({
   tftThemeSelect.addEventListener("change", renderTftTheme);
   powerModeForm.addEventListener("submit", savePowerMode);
   powerModeSelect.addEventListener("change", renderPowerMode);
+  encoderUiReversedToggle.addEventListener("change", () => {
+    const requested = encoderUiReversedToggle.checked;
+    if (state.encoderUiReversed === null ||
+        !send("encoderuireversed", requested ? 1 : 0)) {
+      renderEncoderUiMode();
+      return;
+    }
+    encoderUiReversedPending = requested;
+    clearTimeout(encoderUiReversedTimer);
+    encoderUiReversedTimer = setTimeout(() => {
+      encoderUiReversedPending = null;
+      renderEncoderUiMode();
+      send("getscreen", 1);
+    }, 2000);
+    renderEncoderUiMode();
+  });
 
   function sendPendingBrightness() {
     clearTimeout(brightnessTimer);

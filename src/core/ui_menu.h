@@ -41,6 +41,11 @@ enum class MenuAction : uint8_t {
   CLOSED,
 };
 
+enum class MenuSetting : uint8_t {
+  NONE,
+  ENCODER_UI_REVERSED,
+};
+
 struct MenuSnapshot {
   MenuState state;
   MenuLevel level;
@@ -50,16 +55,19 @@ struct MenuSnapshot {
   uint8_t dynamicBank;
   uint8_t sourceMask;
   SourceId activeSource;
+  bool encoderUiReversed;
 
   constexpr MenuSnapshot(MenuState menuState = MenuState::CLOSED,
                          MenuLevel menuLevel = MenuLevel::MAIN,
                          MenuId id = MenuId::MAIN, uint8_t selected = 0,
                          uint32_t menuRevision = 0, uint8_t bank = 0,
                          uint8_t sources = kCoreSourceMask,
-                         SourceId active = SourceId::Web)
+                         SourceId active = SourceId::Web,
+                         bool encoderReversed = false)
       : state(menuState), level(menuLevel), menuId(id),
         selectedIndex(selected), revision(menuRevision), dynamicBank(bank),
-        sourceMask(sources), activeSource(active) {}
+        sourceMask(sources), activeSource(active),
+        encoderUiReversed(encoderReversed) {}
 };
 
 struct DlnaMenuEntry {
@@ -82,7 +90,7 @@ class UiMenu {
  public:
   static constexpr uint8_t kMainItemCount = 6;
 
-  bool open();
+  bool open(MenuId initialMenu = MenuId::MAIN);
   bool close();
   bool visible() const;
   MenuState state() const;
@@ -95,7 +103,9 @@ class UiMenu {
   bool selectedDlnaFolder() const;
   bool selectedDlnaPlayable() const;
   SourceId selectedSource() const;
+  MenuSetting selectedSetting() const;
   void configureSources(uint8_t availableMask, SourceId activeSource);
+  void configureEncoderUiReversed(bool reversed);
   void setDlnaStatus(const char* label);
   void setDlnaItems(const DlnaMenuEntry* entries, uint8_t count);
   MenuSnapshot snapshot() const;
@@ -108,6 +118,7 @@ class UiMenu {
   std::atomic<MenuId> menuId_{MenuId::MAIN};
   std::atomic<uint8_t> selectedIndex_{0};
   std::atomic<uint32_t> revision_{0};
+  std::atomic<bool> encoderUiReversed_{false};
 };
 
 MenuLevel menuLevel(MenuId menuId);
@@ -145,8 +156,10 @@ inline const char* itemLabel(const MenuSnapshot& snapshot, uint8_t index) {
 }
 
 inline bool itemIsActive(const MenuSnapshot& snapshot, uint8_t index) {
-  if (snapshot.menuId != MenuId::SOURCE) return false;
-  return sourceItemAt(snapshot.sourceMask, index) == snapshot.activeSource;
+  if (snapshot.menuId == MenuId::SOURCE)
+    return sourceItemAt(snapshot.sourceMask, index) == snapshot.activeSource;
+  return snapshot.menuId == MenuId::SYSTEM && index == 3 &&
+         snapshot.encoderUiReversed;
 }
 
 inline bool itemHasSubmenu(const MenuSnapshot& snapshot, uint8_t index) {

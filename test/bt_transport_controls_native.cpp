@@ -11,7 +11,10 @@ static UiInputContext context(displayMode_e mode,
   return {mode, true, true, true,
           sources.active() == ActiveSource::Bluetooth,
           view.kind == DisplaySourceKind::Bluetooth && view.connected,
-          true};
+          true,
+          sources.active() == ActiveSource::Bluetooth
+              ? SourceId::Bluetooth : SourceId::Web,
+          false};
 }
 
 static displayMode_e longPress(displayMode_e mode,
@@ -93,9 +96,11 @@ int main() {
   DisplaySourceView view{};
   sources.displayView(view);
   assert(view.playback == DisplayPlaybackState::Playing);
-  assert(resolveUiInput(context(BT_TRANSPORT, sources), UiInputEvent::Left).action ==
+  assert(resolveUiInput(context(BT_TRANSPORT, sources), UiInputEvent::Left,
+                        UiInputControl::EncoderGesture).action ==
          UiInputAction::BluetoothPrevious);
-  assert(resolveUiInput(context(BT_TRANSPORT, sources), UiInputEvent::Right).action ==
+  assert(resolveUiInput(context(BT_TRANSPORT, sources), UiInputEvent::Right,
+                        UiInputControl::EncoderGesture).action ==
          UiInputAction::BluetoothNext);
   assert(btTransportAction(BtTransportInput::Previous, view) == BtTransportAction::Previous);
   assert(btTransportAction(BtTransportInput::Next, view) == BtTransportAction::Next);
@@ -158,7 +163,8 @@ int main() {
   const SourceUpdate disconnected = sources.observe(bt);
   assert(disconnected.reason == SourceChangeReason::BtDisconnect);
   assert(sources.active() == ActiveSource::Radio);
-  assert(resolveUiInput(context(BT_TRANSPORT, sources), UiInputEvent::Left).action ==
+  assert(resolveUiInput(context(BT_TRANSPORT, sources), UiInputEvent::Left,
+                        UiInputControl::EncoderGesture).action ==
          UiInputAction::None);
   assert(resolveUiInput(context(BT_TRANSPORT, sources), UiInputEvent::Long).action ==
          UiInputAction::ShowPlayer);

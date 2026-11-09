@@ -44,6 +44,10 @@ bool dispatchMenuInput(UiInputEvent event, int8_t steps) {
       voxone::dlna_menu::select();
     else if (uiMenu.menuId() == voxone::ui_menu::MenuId::SOURCE)
       voxone::source_menu::select();
+    else if (uiMenu.selectedSetting() ==
+             voxone::ui_menu::MenuSetting::ENCODER_UI_REVERSED)
+      config.setEncoderUiReversed(
+          !config.runtimeSnapshot().encoderUiReversed);
     else
       ESP_LOGI(kUiInputTag, "Selected: %s", selectedLabel);
   }
@@ -74,7 +78,9 @@ UiInputContext currentUiInputContext() {
           capabilities.hasLocalDisplay(), capabilities.supportsVoxOneBt,
           bluetoothSelected, bluetoothConnected,
           capabilities.supportsBtTransportUi &&
-              display.supportsBluetoothTransportView()};
+              display.supportsBluetoothTransportView(),
+          sourceManagerActiveSource(),
+          config.runtimeSnapshot().encoderUiReversed};
 }
 
 int8_t signedSteps(UiInputAction action, int8_t steps) {
@@ -118,11 +124,36 @@ void moveStation(bool next) {
   display.putRequest(DRAWPLAYLIST, item);
 }
 
+void navigateCurrentSource(SourceId source, bool next) {
+  if (source == SourceId::Bluetooth) {
+#if VOXONE_HAS_BT && VOXONE_PIN_MAP_COMPLETE
+    sourceManagerTransport(next ? BtTransportInput::Next
+                                : BtTransportInput::Previous);
+#endif
+    return;
+  }
+  if (source == SourceId::Dlna) {
+    if (uiMenu.open(voxone::ui_menu::MenuId::DLNA)) {
+      voxone::dlna_menu::entered();
+      if (!transitionUiMode(MENU)) uiMenu.close();
+    }
+    return;
+  }
+  if (source == SourceId::Aux) return;
+  // WEB and HA share Player's ordered-media navigation. HA is temporary
+  // audio, so an explicit next/previous gesture hands control back to the
+  // selected WEB station in that direction.
+  if (next) player.next();
+  else player.prev();
+}
+
 }  // namespace
 
-void dispatchUiInput(UiInputEvent event, int8_t steps) {
+void dispatchUiInput(UiInputEvent event, int8_t steps,
+                     UiInputControl control) {
   if (dispatchMenuInput(event, steps)) return;
-  const UiInputDecision decision = resolveUiInput(currentUiInputContext(), event);
+  const UiInputDecision decision =
+      resolveUiInput(currentUiInputContext(), event, control);
   if (decision.cancelNumberEntry) {
     uiState.clearPendingStationNumber();
     transitionUiMode(PLAYER);
@@ -171,6 +202,12 @@ void dispatchUiInput(UiInputEvent event, int8_t steps) {
       if (uiState.mode() == BT_TRANSPORT) display.putRequest(RESETIDLE);
       sourceManagerTransport(BtTransportInput::Toggle);
 #endif
+      break;
+    case UiInputAction::SourcePrevious:
+      navigateCurrentSource(sourceManagerActiveSource(), false);
+      break;
+    case UiInputAction::SourceNext:
+      navigateCurrentSource(sourceManagerActiveSource(), true);
       break;
     case UiInputAction::CycleSource:
 #if VOXONE_HAS_BT && VOXONE_PIN_MAP_COMPLETE

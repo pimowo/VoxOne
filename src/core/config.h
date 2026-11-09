@@ -10,6 +10,7 @@
 #include "ha_name_config.h"
 #include "tft_theme_config.h"
 #include "power_mode_config.h"
+#include "encoder_ui_config.h"
 #include "sntp_server_lifetime.h"
 #include "www_asset_integrity.h"
 #include "wifi_config_parser.h"
@@ -126,6 +127,7 @@ struct config_t
   char      haName[voxone::ha_name::kRuntimeCapacity];
   TftTheme  tftTheme;
   PowerMode powerMode;
+  bool      encoderUiReversed;
   bool      watchdog; // legacy/reserved: runtime always forces audio watchdog on
   uint16_t  timeSyncInterval;
   uint16_t  timeSyncIntervalRTC;
@@ -184,6 +186,7 @@ class Config {
     bool setHaName(const char* value);
     bool setTftTheme(TftTheme theme);
     bool setPowerMode(PowerMode mode);
+    bool setEncoderUiReversed(bool reversed);
     bool setBtEnabled(bool enabled);
     voxone::config_format::ConfigStorageMode storageMode() const { return _storage.mode(); }
     voxone::config_format::ConfigRecordStatus startupStatus() const { return _startupStatus; }

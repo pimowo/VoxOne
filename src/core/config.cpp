@@ -20,6 +20,7 @@
 #include "volume_map.h"
 #include "ui_timeout_config.h"
 #include "ui_state.h"
+#include "ui_menu.h"
 #include "www_readiness.h"
 #include "www_asset_integrity.h"
 #include "ap_wifi_recovery.h"
@@ -231,6 +232,11 @@ void Config::init() {
           store.reservedWeather, sizeof(store.reservedWeather),
           store.powerMode))
     store.powerMode = MODE_SOFT_STANDBY;
+  if (loaded.status != voxone::config_format::ConfigRecordStatus::LOADED_V7 ||
+      !voxone::encoder_ui::decode(
+          store.reservedWeather, sizeof(store.reservedWeather),
+          store.encoderUiReversed))
+    store.encoderUiReversed = false;
   _startupStatus = loaded.status;
   _storage.begin(loaded.status, loaded.storedBtEnabled);
   const bool needsBtIntroductionMigration =
@@ -289,6 +295,7 @@ void Config::init() {
     Serial.println("##[ERROR]# S0 VoxOneBT migration marker unavailable; stored setting preserved");
   }
   _publishRuntimeLocked();
+  uiMenu.configureEncoderUiReversed(store.encoderUiReversed);
   BOOTLOG("CONFIG_VERSION\t%d", store.version);
   _initHW();
   // Never format shared data automatically while a MAIN image may still be
@@ -528,6 +535,7 @@ void Config::resetSystem(const char *val, uint8_t clientId){
   if (strcmp(val, "controls") == 0) {
     saveValue(&store.volsteps, (uint8_t)1, false);
     saveValue(&store.skipPlaylistUpDown, false);
+    setEncoderUiReversed(false);
     setEncAcceleration(200);
     return;
   }
@@ -596,6 +604,10 @@ void Config::_applyDefaults() {
   store.powerMode = MODE_SOFT_STANDBY;
   voxone::power_mode::encode(
       store.powerMode, store.reservedWeather, sizeof(store.reservedWeather));
+  store.encoderUiReversed = false;
+  voxone::encoder_ui::encode(
+      store.encoderUiReversed, store.reservedWeather,
+      sizeof(store.reservedWeather));
 }
 
 bool Config::persistV7() {
@@ -650,6 +662,25 @@ bool Config::setPowerMode(PowerMode mode) {
   _storage.markDirty();
   _publishRuntimeLocked();
   return !_startupReadOnly && persistV7();
+}
+
+bool Config::setEncoderUiReversed(bool reversed) {
+  WriteLock lock(_persistMutex);
+  if (store.encoderUiReversed == reversed) {
+    uiMenu.configureEncoderUiReversed(reversed);
+    netserver.requestOnChange(GETSCREEN, 0);
+    return true;
+  }
+  if (!voxone::encoder_ui::encode(
+          reversed, store.reservedWeather, sizeof(store.reservedWeather)))
+    return false;
+  store.encoderUiReversed = reversed;
+  _storage.markDirty();
+  _publishRuntimeLocked();
+  uiMenu.configureEncoderUiReversed(reversed);
+  const bool persisted = !_startupReadOnly && persistV7();
+  if (persisted) netserver.requestOnChange(GETSCREEN, 0);
+  return persisted;
 }
 
 bool Config::setBtEnabled(bool enabled) {
@@ -1184,6 +1215,7 @@ void Config::_publishRuntimeLocked() {
   runtime.haDiscoveryEnabled = store.haDiscoveryEnabled;
   runtime.tftTheme = static_cast<uint8_t>(store.tftTheme);
   runtime.powerMode = static_cast<uint8_t>(store.powerMode);
+  runtime.encoderUiReversed = store.encoderUiReversed;
   strlcpy(runtime.mdnsName, store.mdnsname, sizeof(runtime.mdnsName));
   strlcpy(runtime.haName, store.haName, sizeof(runtime.haName));
   _runtime.publish(runtime);

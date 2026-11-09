@@ -4,6 +4,7 @@
 #include <stdint.h>
 
 #include "common.h"
+#include "source_catalog.h"
 
 // Physical input vocabulary. These events deliberately describe direction
 // and gestures, not Player, SourceManager or display actions.
@@ -32,6 +33,12 @@ enum class Buttons3Input : uint8_t {
   OkDoubleClick,
   OkLongPress,
   OkVeryLongPress
+};
+
+enum class UiInputControl : uint8_t {
+  EncoderRotation,
+  EncoderGesture,
+  DirectionButtons,
 };
 
 inline UiInputEvent uiInputEvent(EncoderInput input) {
@@ -70,6 +77,8 @@ enum class UiInputAction : uint8_t {
   BluetoothPrevious,
   BluetoothNext,
   BluetoothToggle,
+  SourcePrevious,
+  SourceNext,
   CycleSource,
   OpenStations,
   OpenBluetoothTransport,
@@ -85,6 +94,8 @@ struct UiInputContext {
   bool bluetoothSelected;
   bool bluetoothConnected;
   bool supportsBluetoothTransportView;
+  SourceId activeSource;
+  bool encoderUiReversed;
 };
 
 struct UiInputDecision {
@@ -98,11 +109,22 @@ constexpr UiInputDecision uiInputDecision(UiInputAction action,
 }
 
 inline UiInputDecision resolveUiInput(const UiInputContext& context,
-                                      UiInputEvent event) {
+                                      UiInputEvent event,
+                                      UiInputControl control =
+                                          UiInputControl::EncoderRotation) {
   if (context.mode == LOST || context.mode == UPDATING)
     return uiInputDecision(UiInputAction::None);
 
   if (event == UiInputEvent::Left || event == UiInputEvent::Right) {
+    const bool encoderRotation =
+        control == UiInputControl::EncoderRotation;
+    const bool navigationControl =
+        context.encoderUiReversed == encoderRotation;
+    if (!navigationControl)
+      return uiInputDecision(event == UiInputEvent::Left
+                                 ? UiInputAction::VolumeDown
+                                 : UiInputAction::VolumeUp,
+                             context.mode == NUMBERS);
     if (!context.networkConnected)
       return uiInputDecision(UiInputAction::None);
     if (context.mode == BT_TRANSPORT) {
@@ -118,8 +140,8 @@ inline UiInputDecision resolveUiInput(const UiInputContext& context,
                                  ? UiInputAction::StationPrevious
                                  : UiInputAction::StationNext);
     return uiInputDecision(event == UiInputEvent::Left
-                               ? UiInputAction::VolumeDown
-                               : UiInputAction::VolumeUp,
+                               ? UiInputAction::SourcePrevious
+                               : UiInputAction::SourceNext,
                            context.mode == NUMBERS);
   }
 
@@ -176,6 +198,8 @@ inline UiInputDecision resolveUiInput(const UiInputContext& context,
   return uiInputDecision(UiInputAction::None);
 }
 
-void dispatchUiInput(UiInputEvent event, int8_t steps = 1);
+void dispatchUiInput(UiInputEvent event, int8_t steps = 1,
+                     UiInputControl control =
+                         UiInputControl::EncoderRotation);
 
 #endif

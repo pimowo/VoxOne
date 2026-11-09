@@ -23,7 +23,8 @@ std::string readFile(const char* path) {
 }
 
 void expectSubmenu(UiMenu& menu, MenuId expectedId,
-                   const char* expectedTitle, uint8_t parentIndex) {
+                   const char* expectedTitle, uint8_t parentIndex,
+                   uint8_t expectedItems = 3) {
   assert(menu.selectedIndex() == parentIndex);
   assert(menu.selectedHasSubmenu());
   assert(menu.handle(MenuCommand::SELECT) == MenuAction::ENTERED_SUBMENU);
@@ -31,7 +32,7 @@ void expectSubmenu(UiMenu& menu, MenuId expectedId,
   assert(menu.menuId() == expectedId);
   assert(std::string(voxone::ui_menu::menuTitle(menu.menuId())) ==
          expectedTitle);
-  assert(menu.itemCount() == 3);
+  assert(menu.itemCount() == expectedItems);
   assert(menu.selectedIndex() == 0);
   assert(!menu.selectedHasSubmenu());
   assert(menu.handle(MenuCommand::BACK) == MenuAction::BACKED);
@@ -149,7 +150,7 @@ int main() {
   assert(menu.handle(MenuCommand::NEXT) == MenuAction::NAVIGATED);
   expectSubmenu(menu, MenuId::NETWORK, "Sieć", 3);
   assert(menu.handle(MenuCommand::NEXT) == MenuAction::NAVIGATED);
-  expectSubmenu(menu, MenuId::SYSTEM, "System", 4);
+  expectSubmenu(menu, MenuId::SYSTEM, "System", 4, 4);
   assert(menu.handle(MenuCommand::NEXT) == MenuAction::NAVIGATED);
   assert(menu.selectedIndex() == 5);
   assert(menu.handle(MenuCommand::SELECT) == MenuAction::ENTERED_SUBMENU);
@@ -184,13 +185,22 @@ int main() {
   assert(menu.open());
   assert(menu.menuId() == MenuId::MAIN);
   assert(menu.selectedIndex() == 0);
+  assert(menu.handle(MenuCommand::CLOSE) == MenuAction::CLOSED);
+  assert(menu.open(MenuId::SYSTEM));
+  assert(menu.menuId() == MenuId::SYSTEM);
+  assert(menu.handle(MenuCommand::PREVIOUS) == MenuAction::NAVIGATED);
+  assert(menu.selectedSetting() ==
+         voxone::ui_menu::MenuSetting::ENCODER_UI_REVERSED);
+  assert(!voxone::ui_menu::itemIsActive(menu.snapshot(), 3));
+  menu.configureEncoderUiReversed(true);
+  assert(voxone::ui_menu::itemIsActive(menu.snapshot(), 3));
 
   // Menu input is consumed before normal volume/source actions. Double click
   // navigates to the parent; long press closes the menu.
   const std::string input = readFile("src/core/ui_input.cpp");
   const size_t menuDispatch = input.find("dispatchMenuInput(event, steps)");
   const size_t normalDispatch = input.find(
-      "resolveUiInput(currentUiInputContext(), event)");
+      "resolveUiInput(currentUiInputContext(), event, control)");
   assert(menuDispatch != std::string::npos);
   assert(normalDispatch != std::string::npos);
   assert(menuDispatch < normalDispatch);

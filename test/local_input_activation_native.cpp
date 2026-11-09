@@ -18,7 +18,8 @@ std::string readFile(const char* path) {
 }
 
 UiInputContext radio() {
-  return {PLAYER, true, true, false, false, false, false};
+  return {PLAYER, true, true, false, false, false, false,
+          SourceId::Web, false};
 }
 }  // namespace
 
@@ -67,9 +68,17 @@ int main() {
   for (unsigned i = 0; i < sizeof(events) / sizeof(events[0]); ++i) {
     assert(uiInputEvent(encoderEvents[i]) == events[i]);
     assert(uiInputEvent(buttonEvents[i]) == events[i]);
-    assert(resolveUiInput(radio(), uiInputEvent(encoderEvents[i])).action ==
-           resolveUiInput(radio(), uiInputEvent(buttonEvents[i])).action);
+    if (i >= 2) {
+      assert(resolveUiInput(radio(), uiInputEvent(encoderEvents[i])).action ==
+             resolveUiInput(radio(), uiInputEvent(buttonEvents[i])).action);
+    }
   }
+  assert(resolveUiInput(radio(), UiInputEvent::Right,
+                        UiInputControl::EncoderRotation).action ==
+         UiInputAction::VolumeUp);
+  assert(resolveUiInput(radio(), UiInputEvent::Right,
+                        UiInputControl::DirectionButtons).action ==
+         UiInputAction::SourceNext);
 
   const std::string controls = readFile("src/core/controls.cpp");
   assert(controls.find("effectiveRuntimeInput(") != std::string::npos);
