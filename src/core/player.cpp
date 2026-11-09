@@ -74,14 +74,13 @@ void Player::init() {
   _loadVol(runtime.volume);
   setConnectionTimeout(CONNECTION_TIMEOUT, CONNECTION_TIMEOUT_SSL);
   const bool taskStarted = startAudioTask();
+  const auto inputBuffer = voxone::audio_runtime::currentInputBufferPlan();
   Serial.printf("done (decode task: %s, core=%u, priority=%u, buffer=%u+%u KiB)\n",
                 taskStarted ? "started" : "main-loop fallback",
                 static_cast<unsigned>(voxone::audio_runtime::kTaskCore),
                 static_cast<unsigned>(voxone::audio_runtime::kTaskPriority),
-                static_cast<unsigned>(
-                    voxone::audio_runtime::kPsramInputBufferBytes / 1024U),
-                static_cast<unsigned>(
-                    voxone::audio_runtime::kFlacFrameReserveBytes / 1024U));
+                static_cast<unsigned>(inputBuffer.inputBytes / 1024U),
+                static_cast<unsigned>(inputBuffer.reserveBytes / 1024U));
 }
 
 bool Player::ready() const {
@@ -614,8 +613,13 @@ void Player::serviceRadioReconnect() {
 void Player::requestTemporaryUrl(
     const voxone::temporary_audio::Request& request) {
   const size_t length = strlen(request.url);
+  const SourceId requestedSource =
+      request.source == voxone::temporary_audio::Source::Dlna
+          ? SourceId::Dlna
+          : SourceId::HomeAssistant;
   if (!_temporaryUrls ||
       !voxone::temporary_audio::isSafeUrl(request.url, length) ||
+      !sourceManagerSourceAvailable(requestedSource) ||
       systemUpdateAudioBlocked() || !_localAudioAvailable) return;
   // Network commands run on another task. Replace the pending URL atomically, never a
   // buffer currently used by connecttohost(). Latest pending request wins.

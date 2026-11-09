@@ -92,10 +92,9 @@ void applyManualSourceChange(const SourceUpdate& update, ActiveSource active,
 
 uint8_t sourceManagerSourceMask() {
   const auto& capabilities = voxone::hardware::hardwareCapabilities();
-  uint8_t mask = kCoreSourceMask;
-  if (capabilities.supportsVoxOneBt) mask |= sourceBit(SourceId::Bluetooth);
-  if (capabilities.supportsAux) mask |= sourceBit(SourceId::Aux);
-  return mask;
+  return sourceMaskForCapabilities(
+      capabilities.supportsVoxOneBt, capabilities.supportsHa,
+      capabilities.supportsDlna, capabilities.supportsAux);
 }
 
 bool sourceManagerSourceAvailable(SourceId source) {

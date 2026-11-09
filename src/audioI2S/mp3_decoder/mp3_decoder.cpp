@@ -1528,7 +1528,11 @@ void MP3Decoder_ClearBuffer(void) {
  *
  **********************************************************************************************************************/
 
-#ifdef CONFIG_IDF_TARGET_ESP32S3
+#if !defined(BOARD_HAS_PSRAM)
+    // Non-PSRAM profiles must never ask the allocator for SPIRAM.
+    #define __malloc_heap_psram(size) \
+        heap_caps_malloc(size, MALLOC_CAP_DEFAULT|MALLOC_CAP_INTERNAL)
+#elif defined(CONFIG_IDF_TARGET_ESP32S3)
     // ESP32-S3: If there is PSRAM, prefer it
     #define __malloc_heap_psram(size) \
         heap_caps_malloc_prefer(size, 2, MALLOC_CAP_DEFAULT|MALLOC_CAP_SPIRAM, MALLOC_CAP_DEFAULT|MALLOC_CAP_INTERNAL)

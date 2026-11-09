@@ -3,6 +3,7 @@
 
 #ifdef PSFBUFFER
 #include <Adafruit_GFX.h>
+#include "../../hardware/hardware_descriptor.h"
 
 class  psFrameBuffer : public Adafruit_GFX {
   public:
@@ -61,7 +62,8 @@ class  psFrameBuffer : public Adafruit_GFX {
     uint16_t _bgcolor;
     void _createBuffer(){
       if(USE_FBUFFER){
-        if(psramInit())
+        if(voxone::hardware::hardwareCapabilities().supportsPsram &&
+           psramInit())
           buffer = (uint16_t*) ps_calloc(_hh * _ww, sizeof(uint16_t));
         #ifdef SFBUFFER
         else

@@ -11,8 +11,18 @@ constexpr uint8_t sourceBit(SourceId source) {
 }
 
 constexpr uint8_t kCoreSourceMask =
-    sourceBit(SourceId::Web) | sourceBit(SourceId::HomeAssistant) |
-    sourceBit(SourceId::Dlna);
+    sourceBit(SourceId::Web);
+
+constexpr uint8_t sourceMaskForCapabilities(bool supportsBluetooth,
+                                            bool supportsHa,
+                                            bool supportsDlna,
+                                            bool supportsAux) {
+  return kCoreSourceMask |
+      (supportsBluetooth ? sourceBit(SourceId::Bluetooth) : 0U) |
+      (supportsHa ? sourceBit(SourceId::HomeAssistant) : 0U) |
+      (supportsDlna ? sourceBit(SourceId::Dlna) : 0U) |
+      (supportsAux ? sourceBit(SourceId::Aux) : 0U);
+}
 
 constexpr bool sourceIncluded(uint8_t mask, SourceId source) {
   return (mask & sourceBit(source)) != 0;

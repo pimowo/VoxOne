@@ -81,7 +81,8 @@ int main() {
 
   // Source entries are capability-filtered and open on the active source.
   const uint8_t allSources = kCoreSourceMask |
-      sourceBit(SourceId::Bluetooth) | sourceBit(SourceId::Aux);
+      sourceBit(SourceId::Bluetooth) | sourceBit(SourceId::HomeAssistant) |
+      sourceBit(SourceId::Dlna) | sourceBit(SourceId::Aux);
   menu.configureSources(allSources, SourceId::Dlna);
   assert(menu.handle(MenuCommand::SELECT) == MenuAction::ENTERED_SUBMENU);
   assert(menu.menuId() == MenuId::SOURCE);
@@ -92,7 +93,9 @@ int main() {
   assert(menu.handle(MenuCommand::BACK) == MenuAction::BACKED);
   assert(menu.menuId() == MenuId::MAIN && menu.selectedIndex() == 0);
 
-  menu.configureSources(kCoreSourceMask, SourceId::Web);
+  menu.configureSources(kCoreSourceMask | sourceBit(SourceId::HomeAssistant) |
+                            sourceBit(SourceId::Dlna),
+                        SourceId::Web);
   assert(menu.handle(MenuCommand::SELECT) == MenuAction::ENTERED_SUBMENU);
   assert(menu.itemCount() == 3);
   assert(std::string(voxone::ui_menu::itemLabel(menu.snapshot(), 0)) == "WEB");

@@ -41,6 +41,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include "config.h"
+#include "audio_runtime_config.h"
 #include "config_backup_web.h"
 #include "config_restore_adapter.h"
 #include "configuration_mutation.h"
@@ -613,7 +614,8 @@ void handleBtUpload(AsyncWebServerRequest* request, const String& filename,
     if (!session->image) { session->error = "Could not allocate staging metadata"; return; }
     const auto error = session->image->prepare(
         expected, heap_caps_get_free_size(MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT),
-        true, ESP.getPsramSize() != 0 && psramFound());
+        true, voxone::hardware::hardwareCapabilities().supportsPsram &&
+                  ESP.getPsramSize() != 0 && psramFound());
     if (error != BtFirmwareStaging::Error::None) {
       session->error = btUploadError(error);
       delete session->image;
@@ -1053,7 +1055,8 @@ bool NetServer::begin(bool quiet) {
     return false;
   }
   if(!quiet) Serial.print("##[BOOT]#\tnetserver.begin\t");
-  playerBufMax = psramInit()?300000:1600 * config.runtimeSnapshot().audioBuffer;
+  playerBufMax = static_cast<uint32_t>(
+      voxone::audio_runtime::currentInputBufferPlan().inputBytes);
   _volumeUpdatePending = false;
   _lastVolumeUpdate = millis() - NS_VOLUME_INTERVAL_MS;
   _lastQueueOverloadReport = millis() - kQueueOverloadReportIntervalMs;
@@ -1086,8 +1089,10 @@ bool NetServer::begin(bool quiet) {
                handleStationsImportUpload);
   webserver.on(stationDirectory::kStationsSnapshotRoute, HTTP_GET, handleStationsReadSnapshot);
   webserver.on(stationDirectory::kDirectorySearchRoute, HTTP_GET, handleStationDirectorySearch);
-  webserver.on(voxone::dlna::kBrowseRoute, HTTP_GET, handleDlnaBrowse);
-  webserver.on(voxone::dlna::kPlayRoute, HTTP_POST, handleDlnaPlay);
+  if (voxone::hardware::hardwareCapabilities().supportsDlna) {
+    webserver.on(voxone::dlna::kBrowseRoute, HTTP_GET, handleDlnaBrowse);
+    webserver.on(voxone::dlna::kPlayRoute, HTTP_POST, handleDlnaPlay);
+  }
   webserver.on("/api/stations/add", HTTP_POST, handleStationsMutation);
   webserver.on("/api/stations/edit", HTTP_POST, handleStationsMutation);
   webserver.on("/api/stations/delete", HTTP_POST, handleStationsMutation);
@@ -1390,8 +1395,10 @@ static void formatWebStatus(char* output, size_t capacity) {
   char availableSources[64];
   const int availableLength = snprintf(
       availableSources, sizeof(availableSources),
-      "\"radio\"%s,\"ha\",\"dlna\"%s",
+      "\"radio\"%s%s%s%s",
       sourceIncluded(sourceMask, SourceId::Bluetooth) ? ",\"bt\"" : "",
+      sourceIncluded(sourceMask, SourceId::HomeAssistant) ? ",\"ha\"" : "",
+      sourceIncluded(sourceMask, SourceId::Dlna) ? ",\"dlna\"" : "",
       sourceIncluded(sourceMask, SourceId::Aux) ? ",\"aux\"" : "");
   if (availableLength < 0 ||
       static_cast<size_t>(availableLength) >= sizeof(availableSources)) {
@@ -3422,6 +3429,8 @@ void NetServer::processQueue(){
           {boardCapabilities.supportsPsram, "PSRAM"},
           {boardCapabilities.supportsDacHardwareMute, "DAC_XSMT"},
           {boardCapabilities.supportsDsp, "DSP"},
+          {boardCapabilities.supportsHa, "HA"},
+          {boardCapabilities.supportsDlna, "DLNA"},
           {boardCapabilities.supportsAux, "AUX"},
           {boardCapabilities.supportsSpdif, "SPDIF"},
           {boardCapabilities.supportsTda7719, "TDA7719"}

@@ -83,6 +83,11 @@ bool CommandHandler::exec(const char *command, const char *value, uint32_t cid) 
     voxone::temporary_audio::Request request{};
     if (!voxone::temporary_audio::parseRequest(value, length, request))
       return false;
+    const SourceId requestedSource =
+        request.source == voxone::temporary_audio::Source::Dlna
+            ? SourceId::Dlna
+            : SourceId::HomeAssistant;
+    if (!sourceManagerSourceAvailable(requestedSource)) return false;
     player.requestTemporaryUrl(request);
     return true;
   }

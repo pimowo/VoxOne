@@ -7,6 +7,7 @@
 #include "temporary_audio_request.h"
 #include "ui_menu.h"
 #include "ui_state.h"
+#include "source_manager.h"
 #include "../network/dlna_client.h"
 
 namespace voxone {
@@ -45,6 +46,10 @@ bool beginBrowse(const char* parent) {
 }  // namespace
 
 void entered() {
+  if (!sourceManagerSourceAvailable(SourceId::Dlna)) {
+    uiMenu.setDlnaStatus("DLNA niedostępne");
+    return;
+  }
   parentDepth = 0;
   currentParent[0] = '0';
   currentParent[1] = '\0';

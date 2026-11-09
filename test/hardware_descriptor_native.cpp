@@ -1,4 +1,5 @@
 #include "../src/hardware/hardware_descriptor.h"
+#include "../src/core/source_catalog.h"
 #include "../profiles/profile.h"
 
 #include <cassert>
@@ -57,6 +58,15 @@ int main() {
 #else
   assert(!caps.supportsDsp);
 #endif
+  const uint8_t sourceMask = sourceMaskForCapabilities(
+      caps.supportsVoxOneBt, caps.supportsHa, caps.supportsDlna,
+      caps.supportsAux);
+  assert(sourceIncluded(sourceMask, SourceId::Web));
+  assert(sourceIncluded(sourceMask, SourceId::Bluetooth) ==
+         caps.supportsVoxOneBt);
+  assert(sourceIncluded(sourceMask, SourceId::HomeAssistant) ==
+         caps.supportsHa);
+  assert(sourceIncluded(sourceMask, SourceId::Dlna) == caps.supportsDlna);
   assert(!caps.supportsAux && !caps.supportsSpdif);
   assert(!caps.supportsTda7719);
 #if defined(VOXONE_PROFILE_S0)
@@ -177,6 +187,9 @@ int main() {
   assert(!caps.supportsVoxOneBt);
   assert(!caps.supportsBtFirmwareUpdate);
   assert(!caps.supportsPsram);
+  assert(!caps.supportsDsp);
+  assert(!caps.supportsHa);
+  assert(!caps.supportsDlna);
   assert(d.btUart.rx == kNoPin && d.btUart.tx == kNoPin);
   assert(d.btAudioIn.bclk == kNoPin && d.btAudioIn.ws == kNoPin &&
          d.btAudioIn.din == kNoPin && !d.btAudioRxEnabled);
@@ -226,6 +239,7 @@ int main() {
   assert(caps.supportsBtFirmwareUpdate);
   assert(caps.supportsRtc && caps.supportsVu && caps.supportsLocalUi);
   assert(caps.supportsPsram);
+  assert(caps.supportsHa && caps.supportsDlna);
   assert(d.btAudioIn.bclk == 1 && d.btAudioIn.ws == 2 && d.btAudioIn.din == 17);
   assert(d.dacXsmt == kNoPin);
   assert(d.dacXsmt == fromLegacyPin(VOXONE_DAC_XSMT_PIN));

@@ -28,7 +28,7 @@ constexpr HardwareCapabilities kCapabilities = {
   audioOutputSupport(AudioOutputKind::Pcm5102a),
   inputSupport(LocalInputKind::Ec11) | inputSupport(LocalInputKind::Buttons3),
   true, false, false, false, false, false, false, false, false,
-  bool(VOXONE_INCLUDE_DSP), false, false, false, false
+  bool(VOXONE_INCLUDE_DSP), false, false, false, false, false, false
 };
 #elif defined(VOXONE_PROFILE_M0)
 constexpr BoardId kBoardId = BoardId::BoardM0;
@@ -55,7 +55,7 @@ constexpr HardwareCapabilities kCapabilities = {
       audioOutputSupport(AudioOutputKind::None),
   inputSupport(LocalInputKind::Ec11) | inputSupport(LocalInputKind::Buttons3),
   true, false, false, false, false, false, false, true, false,
-  bool(VOXONE_INCLUDE_DSP), false, false, false, false
+  bool(VOXONE_INCLUDE_DSP), true, true, false, false, false, false
 };
 #elif defined(VOXONE_PROFILE_S0)
 constexpr BoardId kBoardId = BoardId::BoardS0;
@@ -83,7 +83,7 @@ constexpr HardwareCapabilities kCapabilities = {
       audioOutputSupport(AudioOutputKind::None),
   inputSupport(LocalInputKind::Ec11) | inputSupport(LocalInputKind::Buttons3),
   true, true, true, true, false, false, false, true, false,
-  bool(VOXONE_INCLUDE_DSP), false, false, false, true
+  bool(VOXONE_INCLUDE_DSP), true, true, false, false, false, true
 };
 #elif defined(VOXONE_PROFILE_DIN0)
 constexpr BoardId kBoardId = BoardId::BoardDIN0;
@@ -107,7 +107,7 @@ constexpr HardwareCapabilities kCapabilities = {
   audioOutputSupport(AudioOutputKind::Pcm5102a),
   inputSupport(LocalInputKind::Ec11) | inputSupport(LocalInputKind::Buttons3),
   true, false, false, false, false, false, false, true, false,
-  bool(VOXONE_INCLUDE_DSP), false, false, false, false
+  bool(VOXONE_INCLUDE_DSP), true, true, false, false, false, false
 };
 #elif defined(VOXONE_PROFILE_L0)
 constexpr BoardId kBoardId = BoardId::BoardL0;
@@ -135,7 +135,7 @@ constexpr HardwareCapabilities kCapabilities = {
       audioOutputSupport(AudioOutputKind::None),
   inputSupport(LocalInputKind::Ec11) | inputSupport(LocalInputKind::Buttons3),
   true, true, true, true, true, true, true, true, false,
-  bool(VOXONE_INCLUDE_DSP), false, false, false, false
+  bool(VOXONE_INCLUDE_DSP), true, true, false, false, false, false
 };
 #else
 // No matching hardware profile.

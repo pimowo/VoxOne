@@ -97,6 +97,8 @@ struct HardwareCapabilities {
   bool supportsPsram;
   bool supportsDacHardwareMute;
   bool supportsDsp;
+  bool supportsHa;
+  bool supportsDlna;
   bool supportsAux;
   bool supportsSpdif;
   bool supportsTda7719;

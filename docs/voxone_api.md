@@ -264,7 +264,7 @@ kodem 1008. Nieprawidłowa wartość często jest tylko ignorowana.
 | `screensaverplayingenabled` | `0`/niezero | Osobna polityka podczas PLAY. |
 | `screensaverplayingtimeout` | liczba rzutowana do `uint16_t` | Timeout podczas PLAY. |
 | `screensaverplayingblank` | `0`/niezero | Blank podczas PLAY. |
-| `abuff` | liczba rzutowana do `uint16_t` | Trwałe ustawienie rozmiaru bufora audio; skutek pełny po restarcie. |
+| `abuff` | liczba rzutowana do `uint16_t` | Pole zgodności legacy. Bieżący plan pamięci dobiera stały bufor z capability PSRAM: 512 KiB w PSRAM albo 48 KiB w DRAM. |
 
 #### Czas, sieć, wejście i system
 

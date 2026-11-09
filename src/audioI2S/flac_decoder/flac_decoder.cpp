@@ -11,6 +11,7 @@
  *
  */
 #include "flac_decoder.h"
+#include "../../hardware/hardware_descriptor.h"
 #include <esp_heap_caps.h>
 #include "vector"
 using namespace std;
@@ -43,7 +44,8 @@ namespace {
 template <typename T>
 T* allocateFlacBuffer() {
     void* memory = nullptr;
-    if (psramFound()) {
+    if (voxone::hardware::hardwareCapabilities().supportsPsram &&
+        psramFound()) {
         memory = heap_caps_calloc(1, sizeof(T),
                                   MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
     }

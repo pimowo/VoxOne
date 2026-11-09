@@ -58,8 +58,8 @@ extern __attribute__((weak)) void audio_error(const char*);
 //----------------------------------------------------------------------------------------------------------------------
 
 class AudioBuffer {
-// AudioBuffer will be allocated in PSRAM, If PSRAM not available or has not enough space AudioBuffer will be
-// allocated in FlashRAM with reduced size
+// AudioBuffer follows HardwareDescriptor: PSRAM profiles use the large ring;
+// non-PSRAM profiles use a bounded DRAM ring.
 //
 //  m_buffer            m_readPtr                 m_writePtr                 m_endPtr
 //   |                       |<------dataLength------->|<------ writeSpace ----->|
@@ -109,16 +109,18 @@ public:
 protected:
     size_t   m_buffSizePSRAM    =
         voxone::audio_runtime::kPsramInputBufferBytes;
-    //size_t   m_buffSizeRAM      = 1600 * 5;
-    size_t   m_buffSizeRAM      = 1600;
+    size_t   m_buffSizeRAM      =
+        voxone::audio_runtime::kDramInputBufferBytes;
     size_t   m_buffSize         = 0;
     size_t   m_freeSpace        = 0;
     size_t   m_writeSpace       = 0;
     size_t   m_dataLength       = 0;
-    size_t   m_resBuffSizeRAM   = 1600;     // reserved buffspace, >= one mp3  frame
+    size_t   m_resBuffSizeRAM   =
+        voxone::audio_runtime::kCompressedFrameReserveBytes;
     size_t   m_resBuffSizePSRAM =
         voxone::audio_runtime::kFlacFrameReserveBytes;
-    size_t   m_resBuffSizeActive = 1600;
+    size_t   m_resBuffSizeActive =
+        voxone::audio_runtime::kCompressedFrameReserveBytes;
     size_t   m_maxBlockSize     = 1600;
     uint8_t* m_buffer           = NULL;
     uint8_t* m_writePtr         = NULL;

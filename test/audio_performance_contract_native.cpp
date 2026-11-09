@@ -21,8 +21,16 @@ int main() {
 
   static_assert(kPsramInputBufferBytes >= 512U * 1024U,
                 "FLAC/HTTP input buffer must provide VBR headroom");
+  static_assert(kDramInputBufferBytes == 48U * 1024U,
+                "Non-PSRAM MP3/AAC input buffer must remain bounded");
   static_assert(kFlacFrameReserveBytes == 65535U,
                 "FLAC reserve must hold the maximum frame");
+  static_assert(inputBufferPlan(true).usePsram &&
+                    inputBufferPlan(true).inputBytes == 512U * 1024U,
+                "PSRAM capability must select the large ring");
+  static_assert(!inputBufferPlan(false).usePsram &&
+                    inputBufferPlan(false).inputBytes == 48U * 1024U,
+                "Non-PSRAM capability must select the DRAM ring");
   static_assert(kTaskCore == 1, "Audio must run on Core 1");
   static_assert(kTaskPriority == 4, "Audio task priority must be 4");
   static_assert(kAudioSocketReceiveBufferBytes == 32768,

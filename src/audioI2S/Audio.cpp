@@ -29,6 +29,20 @@ static inline bool radioCanUseI2S() { return radioI2SOutputEnabled(); }
 static inline bool radioCanUseI2S() { return !systemUpdateAudioBlocked(); }
 #endif
 
+namespace {
+
+bool audioPsramInit() {
+    return voxone::hardware::hardwareCapabilities().supportsPsram &&
+           psramInit();
+}
+
+bool audioPsramFound() {
+    return voxone::hardware::hardwareCapabilities().supportsPsram &&
+           psramFound();
+}
+
+}  // namespace
+
 #ifndef DMA_BUFCOUNT
   #define DMA_BUFCOUNT  8
 #endif
@@ -82,8 +96,11 @@ size_t AudioBuffer::init() {
     if(m_buffer) free(m_buffer);
     m_buffer = NULL;
     m_f_init = false;
+    m_f_psram = false;
+    m_resBuffSizeActive = m_resBuffSizeRAM;
     const size_t psramAllocation = m_buffSizePSRAM + m_resBuffSizePSRAM;
-    if(psramInit() && m_buffSizePSRAM > 0) {
+    const auto plan = voxone::audio_runtime::currentInputBufferPlan();
+    if(plan.usePsram && audioPsramInit() && m_buffSizePSRAM > 0) {
         // Allocate the 512 KiB ring and the complete FLAC frame reserve in PSRAM.
         m_buffSize = m_buffSizePSRAM;
         m_buffer = (uint8_t*) ps_calloc(psramAllocation, sizeof(uint8_t));
@@ -91,18 +108,12 @@ size_t AudioBuffer::init() {
         if(m_buffer) m_resBuffSizeActive = m_resBuffSizePSRAM;
     }
     if(m_buffer == NULL) {
-        // Try the same capacity in DRAM before using the legacy reduced buffer.
+        // A missing/failed PSRAM path falls back directly to the bounded DRAM
+        // profile; never request the 512 KiB ring from internal heap.
         m_f_psram = false;
-        m_buffSize = m_buffSizePSRAM;
-        m_buffer = (uint8_t*) calloc(psramAllocation, sizeof(uint8_t));
-        if(m_buffer) m_resBuffSizeActive = m_resBuffSizePSRAM;
-    }
-    if(m_buffer == NULL) {
-        const uint16_t audioBuffer = config.runtimeSnapshot().audioBuffer;
-        const size_t reducedMain = m_buffSizeRAM * audioBuffer;
-        m_buffer = (uint8_t*) calloc(reducedMain + m_resBuffSizeRAM,
+        m_buffSize = m_buffSizeRAM;
+        m_buffer = (uint8_t*) calloc(m_buffSizeRAM + m_resBuffSizeRAM,
                                      sizeof(uint8_t));
-        m_buffSize = reducedMain;
         if(m_buffer) m_resBuffSizeActive = m_resBuffSizeRAM;
     }
     if(!m_buffer) {
@@ -265,9 +276,15 @@ Audio::Audio(bool internalDAC /* = false */,
 #ifdef OLD_DMABUF_PARAMS
     m_i2s_config.dma_buf_count        = 16;    // 4×512×16=32768
 #else
-    m_i2s_config.dma_buf_count        = psramInit()?16:DMA_BUFCOUNT;
+    const bool psramReady             = audioPsramInit();
+    m_i2s_config.dma_buf_count        = psramReady ? 16 : DMA_BUFCOUNT;
 #endif
-    m_i2s_config.dma_buf_len          = psramInit()?512:DMA_BUFLEN;
+    m_i2s_config.dma_buf_len          =
+#ifdef OLD_DMABUF_PARAMS
+        audioPsramInit() ? 512 : DMA_BUFLEN;
+#else
+        psramReady ? 512 : DMA_BUFLEN;
+#endif
     m_i2s_config.use_apll             = APLL_DISABLE; // must be disabled in V2.0.1-RC1
     m_i2s_config.tx_desc_auto_clear   = true;   // new in V1.0.1
     m_i2s_config.fixed_mclk           = I2S_PIN_NO_CHANGE;
@@ -2258,7 +2275,7 @@ int Audio::read_OGG_Header(uint8_t *data, size_t len){
         return 0;
     }
     if(m_controlCounter == OGG_AMRDY){ // ogg almost ready
-        if(!psramFound()){
+        if(!audioPsramFound()){
             AUDIO_INFO("FLAC works only with PSRAM!");
             m_f_running = false; stopSong();
             return -1;
@@ -2611,7 +2628,7 @@ bool Audio::readPlayListData() {
     uint32_t ctl  = 0;
     int lines = 0;
     // delete all memory in m_playlistContent
-    if(!psramFound()){log_e("m3u8 playlists requires PSRAM enabled!");}
+    if(!audioPsramFound()){log_e("m3u8 playlists requires PSRAM enabled!");}
     vector_clear_and_shrink(m_playlistContent);
     while(true){  // outer while
 
@@ -3706,7 +3723,7 @@ bool Audio:: initializeDecoder(){
             }
             break;
         case CODEC_FLAC:
-            if(!psramFound()){
+            if(!audioPsramFound()){
                 AUDIO_INFO("FLAC works only with PSRAM!");
                 goto exit;
             }
