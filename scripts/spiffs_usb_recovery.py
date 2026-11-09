@@ -275,17 +275,50 @@ def spiffs_partition(partitions: list[dict[str, object]]) -> dict[str, int | str
     return candidates[0]
 
 
-def required_asset_paths() -> list[str]:
+def required_asset_paths(profile: str = "L0") -> list[str]:
+    profile = canonical_profile(profile)
+    include_dsp: bool | None = None
+    for profile_header in (ROOT / "profiles").glob("*.h"):
+        profile_text = profile_header.read_text(encoding="utf-8")
+        name = re.search(
+            r'^\s*#define\s+VOXONE_PROFILE_NAME\s+"([A-Z0-9]+)"\s*$',
+            profile_text,
+            re.MULTILINE,
+        )
+        if not name or name.group(1) != profile:
+            continue
+        capability = re.search(
+            r"^\s*#define\s+VOXONE_INCLUDE_DSP\s+([01])\s*$",
+            profile_text,
+            re.MULTILINE,
+        )
+        if not capability:
+            raise RecoveryError(
+                f"profile {profile} has no VOXONE_INCLUDE_DSP capability"
+            )
+        include_dsp = capability.group(1) == "1"
+        break
+    if include_dsp is None:
+        raise RecoveryError(f"profile capability definition is missing: {profile}")
     header = ROOT / "src" / "core" / "www_readiness.h"
     if not header.is_file():
         raise RecoveryError(f"WWW readiness contract is missing: {header}")
-    paths = re.findall(r'"(/www/[^"\n]+\.gz)"', header.read_text(encoding="utf-8"))
+    contract = header.read_text(encoding="utf-8")
+    contract = re.sub(
+        r"#if\s+VOXONE_INCLUDE_DSP\s*(.*?)\s*#endif",
+        lambda match: match.group(1) if include_dsp else "",
+        contract,
+        flags=re.DOTALL,
+    )
+    paths = re.findall(r'"(/www/[^"\n]+\.gz)"', contract)
     if not paths or len(paths) != len(set(paths)):
         raise RecoveryError("WWW readiness contract has no unique required assets")
     return paths
 
 
-def validate_spiffs_source(image: Path, expected_size: int) -> dict[str, object]:
+def validate_spiffs_source(
+    image: Path, expected_size: int, profile: str = "L0"
+) -> dict[str, object]:
     try:
         data = image.read_bytes()
     except OSError as error:
@@ -324,7 +357,7 @@ def validate_spiffs_source(image: Path, expected_size: int) -> dict[str, object]
             "/" + path.relative_to(destination).as_posix(): path
             for path in destination.rglob("*") if path.is_file()
         }
-        required = required_asset_paths()
+        required = required_asset_paths(profile)
         missing = sorted(set(required) - set(extracted))
         if missing:
             raise RecoveryError(
@@ -380,7 +413,7 @@ def manifest_for_image(
     build = canonical_build(www_build)
     partitions = expected_partitions(profile)
     spiffs = spiffs_partition(partitions)
-    validation = validate_spiffs_source(image, int(spiffs["size"]))
+    validation = validate_spiffs_source(image, int(spiffs["size"]), profile)
     if validation["sha256"] != expected_hash:
         raise RecoveryError("SPIFFS image SHA256 does not match the operator value")
     return {
@@ -470,7 +503,7 @@ def validate_image_manifest(
         raise RecoveryError("image manifest has no image record")
     if image_record.get("sha256") != expected_hash:
         raise RecoveryError("manifest SHA256 differs from the operator value")
-    validation = validate_spiffs_source(image, int(spiffs["size"]))
+    validation = validate_spiffs_source(image, int(spiffs["size"]), profile)
     if validation["sha256"] != expected_hash:
         raise RecoveryError("source image SHA256 mismatch")
     if image_record.get("size") != validation["size"]:

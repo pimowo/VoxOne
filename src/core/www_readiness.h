@@ -3,6 +3,8 @@
 #include <cstddef>
 #include <cstdint>
 
+#include "dsp_build_config.h"
+
 namespace voxone {
 
 constexpr uint16_t kWwwManifestSchema = 1;
@@ -16,8 +18,10 @@ static const char* const kCurrentWwwAssetPaths[] = {
     "/www/voxone.html.gz",
     "/www/voxone.css.gz",
     "/www/voxone.js.gz",
+#if VOXONE_INCLUDE_DSP
     "/www/advanced-audio.js.gz",
     "/www/dsp-client.js.gz",
+#endif
     "/www/voxone-logo.svg.gz",
     "/www/voxone-symbol.svg.gz",
 };

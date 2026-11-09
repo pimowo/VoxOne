@@ -47,7 +47,10 @@
 #include "first_boot_captive.h"
 #include "first_boot_transaction_runtime.h"
 #include "version.h"
+#include "dsp_build_config.h"
+#if VOXONE_INCLUDE_DSP
 #include "dsp_transport_runtime.h"
+#endif
 #include "ap_wifi_recovery.h"
 #include "ap_ui_www_binding.h"
 #include "playlist_store.h"
@@ -1063,11 +1066,12 @@ bool NetServer::begin(bool quiet) {
     Serial.println("##[ERROR]# netserver queue unavailable");
     return false;
   }
-  if (voxone::hardware::hardwareCapabilities().supportsDsp &&
-      !voxone::dsp::beginDspTransport()) {
+#if VOXONE_INCLUDE_DSP
+  if (!voxone::dsp::beginDspTransport()) {
     Serial.println("[DSP] transport queue unavailable");
     return false;
   }
+#endif
 
   // Must precede static handlers: their canHandle() opens files in SPIFFS.
   // The access gate must be first: AsyncWebServer attaches a handler after
@@ -1147,8 +1151,9 @@ bool NetServer::begin(bool quiet) {
   webserver.on("/favicon.ico", HTTP_GET, [](AsyncWebServerRequest* request) {
     request->redirect("/voxone-symbol.svg");
   });
-  if (voxone::hardware::hardwareCapabilities().supportsDsp)
-    webserver.on("/api/dsp/state", HTTP_GET, voxone::dsp::handleDspState);
+#if VOXONE_INCLUDE_DSP
+  webserver.on("/api/dsp/state", HTTP_GET, voxone::dsp::handleDspState);
+#endif
   webserver.onNotFound(handleNotFound);
   webserver.onFileUpload(handleUpload);
 
@@ -3633,8 +3638,9 @@ void NetServer::loop() {
   processQueue();
   processDeferredRequest();
   processOverloadRejection();
-  if (voxone::hardware::hardwareCapabilities().supportsDsp)
-    voxone::dsp::processDspTransportQueue();
+#if VOXONE_INCLUDE_DSP
+  voxone::dsp::processDspTransportQueue();
+#endif
   processVolumeUpdate();
   websocket.cleanupClients();
   portENTER_CRITICAL(&netserverLoopMux);
@@ -3788,10 +3794,11 @@ void NetServer::serviceScrollSettings() {
 void NetServer::onWsMessage(void *arg, const uint8_t *data, size_t len,
                             uint32_t clientId) {
   AwsFrameInfo *info = (AwsFrameInfo*)arg;
-  if (voxone::hardware::hardwareCapabilities().supportsDsp &&
-      info->index == 0 &&
+#if VOXONE_INCLUDE_DSP
+  if (info->index == 0 &&
       voxone::dsp::handleDspWsFrame(data, len, clientId,
           info->final && info->len == len && info->opcode == WS_TEXT)) return;
+#endif
   if (info->final && info->index == 0 && info->len == len && info->opcode == WS_TEXT) {
     const auto parsed = voxone::websocket::parseCommand(
         data, len, _wscmd, sizeof(_wscmd), _wsval, sizeof(_wsval));

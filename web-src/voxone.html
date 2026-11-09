@@ -8,8 +8,10 @@
   <link rel="icon" type="image/svg+xml" href="/voxone-symbol.svg?v={voxone-symbol.svg-hash}">
   <link rel="stylesheet" href="/voxone.css?v={voxone.css-hash}">
   <script src="/variables.js"></script>
+  <!-- VOXONE_DSP_BEGIN -->
   <script src="/advanced-audio.js?v={advanced-audio.js-hash}" defer></script>
   <script src="/dsp-client.js?v={dsp-client.js-hash}" defer></script>
+  <!-- VOXONE_DSP_END -->
   <script src="/voxone.js?v={voxone.js-hash}" defer></script>
 </head>
 <body>
@@ -85,7 +87,9 @@
       <a href="#stations" data-tab="stations">Stacje</a>
       <a href="#dlna" data-tab="dlna">DLNA</a>
       <a href="#audio" data-tab="audio">Audio</a>
+      <!-- VOXONE_DSP_BEGIN -->
       <a href="#dsp" data-tab="dsp">DSP</a>
+      <!-- VOXONE_DSP_END -->
       <a href="#settings" data-tab="settings">Ustawienia</a>
       <a href="#hardware" data-tab="hardware">Sprzęt</a>
       <a href="#system" data-tab="system">System</a>
@@ -229,9 +233,11 @@
         </article>
       </section>
 
+      <!-- VOXONE_DSP_BEGIN -->
       <section id="dsp" data-panel aria-labelledby="dsp-title" hidden>
         <div id="advanced-audio-root"></div>
       </section>
+      <!-- VOXONE_DSP_END -->
 
       <section id="settings" data-panel aria-labelledby="settings-title" hidden>
         <div class="section-heading"><div><p class="eyebrow">KONFIGURACJA</p><h2 id="settings-title">Ustawienia</h2></div><span class="badge">Urządzenie</span></div>

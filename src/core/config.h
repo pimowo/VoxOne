@@ -209,12 +209,9 @@ class Config {
     void setBalance(int8_t balance);
     uint8_t setLastStation(uint16_t val);
     bool setLastStationChecked(uint16_t val, bool intentionalZero=true);
-    uint8_t setCountStation(uint16_t val);
     uint8_t setLastSSID(uint8_t val);
     void setTitle(const char* title);
     void setStation(const char* station);
-    void escapeQuotes(const char* input, char* output, size_t maxLen);
-    bool parseJSON(const char* line, char* name, char* url, int &ovol);
     bool parseSsid(const char* line, char* ssid, char* pass);
     bool loadStation(uint16_t station);
     bool initNetwork();
@@ -223,7 +220,6 @@ class Config {
     void setSmartStart(uint8_t ss);
     void setBitrateFormat(BitrateFormat fmt) { configFmt = fmt; }
     void initPlaylist();
-    void indexPlaylist();
     uint16_t playlistLength();
     uint16_t lastStation(){
       return runtimeSnapshot().lastStation;
@@ -234,8 +230,6 @@ class Config {
     void lastStation(uint16_t newstation);
     char * stationByNum(uint16_t num);
     void setTimezone(int8_t tzh, int8_t tzm);
-    void setTimezoneOffset(uint16_t tzo);
-    uint16_t getTimezoneOffset();
     void setBrightness(bool dosave=false);
     void setRuntimeBrightness(uint8_t value);
     void setDspOn(bool dspon, bool saveval = true);
@@ -251,8 +245,6 @@ class Config {
     void setScreensaverPlayingTimeout(uint16_t val);
     void setScreensaverPlayingBlank(bool val);
     void setSntpOne(const char *val);
-    void resetSystem(const char *val, uint8_t clientId);
-    bool spiffsCleanup();
     void waitConnection();
     char * ipToStr(IPAddress ip);
     bool prepareForPlaying(uint16_t stationId, bool sourceResume = false);

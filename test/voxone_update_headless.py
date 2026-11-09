@@ -1965,6 +1965,13 @@ def main():
         for asset in compressed_assets
     }
     generated_html = expected_assets["voxone.html"].decode("utf-8")
+    generated_html = re.sub(
+        r"[ \t]*<!-- VOXONE_DSP_BEGIN -->\s*(.*?)\s*"
+        r"<!-- VOXONE_DSP_END -->[ \t]*",
+        lambda match: match.group(1),
+        generated_html,
+        flags=re.DOTALL,
+    )
     for asset in compressed_assets:
         if asset == "voxone.html":
             continue

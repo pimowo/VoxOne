@@ -126,7 +126,7 @@ class FullImageValidationIntegrationTest(unittest.TestCase):
             overrides.get("firmware_elf", build / "firmware.elf"),
             overrides.get("firmware_manifest", build / "firmware.validation.json"),
             ROOT / "partitions_yoradio.csv",
-            ROOT / "data",
+            build / "spiffs-data",
             temporary,
         )
         return validate_full_image(

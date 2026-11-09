@@ -89,8 +89,8 @@ bool securityWebSocketSubprotocolRequested(
 bool securityWebSocketCommandAllowed(const char* command) {
   if (!command || !*command) return false;
   // Keep the browser transport explicit and fail closed. Destructive legacy
-  // maintenance commands (format, clearspiffs, reset) intentionally do not
-  // appear here; they have dedicated recovery/configuration workflows.
+  // maintenance commands were retired; recovery/configuration use dedicated
+  // workflows instead of the general WebSocket dispatcher.
   static const char* const allowed[] = {
       "ping", "tone", "trebble", "middle", "bass", "source",
       "webtransport", "start", "stop", "playurl", "toggle", "prev", "next",

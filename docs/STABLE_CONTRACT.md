@@ -163,7 +163,7 @@ pojedyncze wymagane nagłówki, poprawny klucz, dozwolony Host/Origin i ważną
 sesję w trybie `protected`. Subprotocol może być pominięty; jeśli klient go
 wysyła, jedyną dopuszczalną wartością jest `voxone.v1`. Komendy przechodzą
 przez jawną allowlistę. Legacy komendy destrukcyjne `format`, `clearspiffs` i
-`reset` nie należą do allowlisty chronionego WS.
+`reset` zostały usunięte z ogólnego dispatchera WS.
 
 Kryterium P1 dla AsyncTCP OOM akceptuje deterministyczną iniekcję wszystkich
 ścieżek alokacji w testach offline pod ASan/UBSan oraz nieinwazyjny HIL L0.
@@ -344,14 +344,11 @@ Stan bieżący:
 - `tzHour`, `tzMin` i `timezoneOffset` pozostają w Config v7 wyłącznie dla
   zgodności layoutu; stare komendy CLI/WS mogą je zapisać, ale nie zmieniają
   aktywnej strefy;
-- `Config::getTimezoneOffset()` zwraca obecnie stałe `0` bez opisanego znaczenia.
 
 Proponowana zasada do zatwierdzenia: w 1.0.0 jedyną aktywną strefą jest
 `Europe/Warsaw`; pola legacy są opaque/reserved i nigdy nie sterują zegarem.
-`getTimezoneOffset()` powinno po późniejszej, osobnej zmianie oznaczać bieżący
-lokalny offset UTC w minutach, liczony z reguł CET/CEST, a API powinno jawnie
-publikować `timezone="Europe/Warsaw"` oraz ten offset. Do chwili wdrożenia kod
-nie powinien być używany jako źródło offsetu. Propozycja nie zmienia
+Przyszłe API może jawnie publikować `timezone="Europe/Warsaw"` oraz bieżący
+lokalny offset UTC w minutach, liczony z reguł CET/CEST. Propozycja nie zmienia
 serialized layout ani bieżącego firmware.
 
 ## Macierz kwalifikacji i zachowanych profili buildowych

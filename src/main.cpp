@@ -20,7 +20,10 @@
 #include "core/dac_mute.h"
 #include "core/system_operation_state.h"
 #include "core/nvs_diagnostics.h"
+#include "core/dsp_build_config.h"
+#if VOXONE_INCLUDE_DSP
 #include "core/dsp_runtime.h"
+#endif
 #include "core/dlna_menu_controller.h"
 #include "core/ui_state.h"
 #include "core/ota_boot_runtime.h"
@@ -283,11 +286,11 @@ void setup() {
   powerManager.begin();
   (void)voxone::display_scroll::initializeScrollSettingsRuntimePersistent();
   btRuntime.start();
-  if (voxone::hardware::hardwareCapabilities().supportsDsp) {
-    const auto dspConfig = config.runtimeSnapshot();
-    voxone::dsp::initDspRuntime(
-        {dspConfig.bass, dspConfig.middle, dspConfig.treble});
-  }
+#if VOXONE_INCLUDE_DSP
+  const auto dspConfig = config.runtimeSnapshot();
+  voxone::dsp::initDspRuntime(
+      {dspConfig.bass, dspConfig.middle, dspConfig.treble});
+#endif
   display.init();
   player.init();
   network.begin();

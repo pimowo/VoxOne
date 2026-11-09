@@ -63,7 +63,8 @@ kontrakt opiera się na SECURITY i cookie.
 | `GET` | `/` | brak | Publiczny bootstrap. W normalnym trybie przekierowuje do `/voxone.html`; w pierwszym uruchomieniu lub Wi-Fi recovery AP zwraca wbudowany formularz Wi-Fi; przy niedostępnym SPIFFS i `protected` zwraca wbudowany formularz logowania awaryjnego. Nie należy go mylić z osobnym SECURITY Recovery AP opisanym niżej. |
 | `POST` | `/` | Formularz: `ssid`, `pass`; na pierwszym uruchomieniu także `display`, `input`, `audio`. W recovery AP alternatywnie `retry=saved`. | Tylko tryb provisioningu. Zapisuje Wi-Fi, a przy pierwszym uruchomieniu również wybór sprzętu, po czym planuje restart. SSID ma maks. 29 B UTF-8, hasło 39 B; znaki NUL/TAB/CR/LF są odrzucane. |
 | `GET` | `/voxone.html` | brak | Publiczny asset bootstrap/logowania; właściwe API pozostaje chronione. Zasób z SPIFFS, bez cache. |
-| `GET` | `/voxone.css`, `/voxone.js`, `/advanced-audio.js`, `/dsp-client.js`, `/voxone-symbol.svg` | brak | Publiczne zasoby bootstrap panelu, serwowane ze SPIFFS. |
+| `GET` | `/voxone.css`, `/voxone.js`, `/voxone-symbol.svg` | brak | Publiczne zasoby bootstrap panelu, serwowane ze SPIFFS. |
+| `GET` | `/advanced-audio.js`, `/dsp-client.js` | brak | Publiczne zasoby panelu DSP, obecne w SPIFFS wyłącznie w profilach z capability DSP. |
 | `GET` | `/voxone-logo.svg` | brak | Publiczny asset marki, potrzebny również w AP pierwszego uruchomienia. |
 | `GET` | `/favicon.ico` | brak | Publiczne przekierowanie do `/voxone-symbol.svg`. |
 | `GET` | `/variables.js` | query ignorowane | Trasa chroniona. Zwraca JavaScript z `voxOneVersion`, `voxOneChannel`, `voxOneBuild`, `yoRadioVersion`, `voxOneProfile` i `playMode`. |
@@ -282,9 +283,8 @@ kodem 1008. Nieprawidłowa wartość często jest tylko ignorowana.
 | `smartstart` | `1` albo inna wartość | `1` zapisuje intencję PLAY tylko gdy player aktualnie działa; pozostałe wartości mapują się na tryb 2. |
 | `reboot`, `boot` | ignorowana | Planowany restart urządzenia. |
 
-Kod `CommandHandler` nadal zawiera destrukcyjne komendy legacy `format`,
-`clearspiffs` i `reset`, ale centralna whitelist SECURITY ich nie dopuszcza;
-nie są częścią publicznego protokołu WS standardowych buildów.
+Destrukcyjne komendy legacy `format`, `clearspiffs` i `reset` zostały usunięte
+z `CommandHandler`; nie są częścią protokołu WS.
 
 ### Komendy DSP klient → serwer (tylko L0)
 
@@ -457,7 +457,7 @@ Niezależnie od trwałego stanu istnieje tryb kompilacji:
 |---|---|---:|
 | `production` | Wszystkie standardowe profile W0/M0/S0/DIN0/L0. Wyłączenie production w takim profilu jest błędem kompilacji. | `true` |
 | `test` | Wyłącznie `m0-security-test`; uruchamia ten sam gate, ale nie może być przedstawiane jako ochrona produkcyjna. | `true` |
-| `disabled` | Niestandardowy/non-standard build bez obu flag. Centralny gate przepuszcza żądania; nie wymusza Host/Origin/cookie ani whitelisty WS. Oznacza to również osiągalność legacy komend `format`, `clearspiffs` i `reset`, jeżeli pozostają w `CommandHandler`. Stan SECURITY może nadal być raportowany, ale nie chroni transportu. | `false` |
+| `disabled` | Niestandardowy/non-standard build bez obu flag. Centralny gate przepuszcza żądania; nie wymusza Host/Origin/cookie ani whitelisty WS. Usunięte komendy destrukcyjne nie wracają w tym trybie. Stan SECURITY może nadal być raportowany, ale nie chroni transportu. | `false` |
 
 ## Stan urządzenia: co jest eksponowane i gdzie żyje
 

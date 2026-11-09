@@ -197,6 +197,11 @@ class SpiffsUsbRecoveryTest(unittest.TestCase):
             self.assertLessEqual(spiffs["offset"] + spiffs["size"], spec.flash_size)
         self.assertEqual(MODULE.PROFILE_SPECS["W0"].chip, "esp32")
         self.assertEqual(MODULE.PROFILE_SPECS["L0"].flash_size, 16 * 1024 * 1024)
+        self.assertEqual(len(MODULE.required_asset_paths("L0")), 7)
+        self.assertEqual(len(MODULE.required_asset_paths("S0")), 5)
+        self.assertNotIn(
+            "/www/dsp-client.js.gz", MODULE.required_asset_paths("S0")
+        )
 
     def test_valid_image_manifest_checks_assets_gzip_and_hash(self):
         manifest = MODULE.validate_image_manifest(

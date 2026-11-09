@@ -21,6 +21,7 @@ from www_asset_manifest import (  # noqa: E402
     build_manifest,
     contract_from_header,
     parse_manifest,
+    profile_includes_dsp,
     verify_assets,
 )
 
@@ -49,6 +50,17 @@ class WwwAssetManifestTest(unittest.TestCase):
             self.assertEqual(len(parsed["assets"]), 7)
             self.assertEqual(parsed["trust"],
                              "integrity metadata generated with the assets; not a signature")
+
+    def test_dsp_capability_selects_exact_asset_contract(self) -> None:
+        slim = contract_from_header(
+            ROOT / "src/core/www_readiness.h", include_dsp=False
+        )
+        self.assertEqual(len(self.contract["paths"]), 7)
+        self.assertEqual(len(slim["paths"]), 5)
+        self.assertNotIn("/www/advanced-audio.js.gz", slim["paths"])
+        self.assertNotIn("/www/dsp-client.js.gz", slim["paths"])
+        self.assertTrue(profile_includes_dsp(ROOT, "L0"))
+        self.assertFalse(profile_includes_dsp(ROOT, "S0"))
 
     def test_missing_and_invalid_gzip_fail_generation(self) -> None:
         with tempfile.TemporaryDirectory() as folder:

@@ -1,3 +1,7 @@
+#include "dsp_build_config.h"
+
+#if VOXONE_INCLUDE_DSP
+
 #include "dsp_transport_protocol.h"
 
 #include <cerrno>
@@ -230,3 +234,5 @@ DspServiceError applyDspSet(DspService& service, const DspCommand& command) {
 
 }  // namespace dsp
 }  // namespace voxone
+
+#endif

@@ -22,6 +22,10 @@ ENTRY_SIZE = ENTRY.size
 COMPRESSION_GZIP = 1
 ASSET_SET_PREFIX = b"VXASSET\0"
 MANIFEST_NAME = "assets.vxwm"
+DSP_CONDITIONAL = re.compile(
+    r"#if\s+VOXONE_INCLUDE_DSP\s*(.*?)\s*#endif",
+    re.DOTALL,
+)
 
 
 class ManifestError(RuntimeError):
@@ -38,8 +42,13 @@ def _constant(header: str, name: str) -> int:
     return int(match.group(1))
 
 
-def contract_from_header(header_path: Path) -> dict[str, object]:
+def contract_from_header(
+    header_path: Path, include_dsp: bool = True
+) -> dict[str, object]:
     text = header_path.read_text(encoding="utf-8")
+    text = DSP_CONDITIONAL.sub(
+        lambda match: match.group(1) if include_dsp else "", text
+    )
     paths = re.findall(r'"(/www/[^"\n]+\.gz)"', text)
     if not paths or len(paths) != len(set(paths)):
         raise ManifestError("WWW readiness header has no unique gzip asset list")
@@ -54,6 +63,30 @@ def contract_from_header(header_path: Path) -> dict[str, object]:
         ),
         "paths": paths,
     }
+
+
+def profile_includes_dsp(project_dir: Path, profile: str) -> bool:
+    normalized = profile.strip().upper()
+    for header in (project_dir / "profiles").glob("*.h"):
+        text = header.read_text(encoding="utf-8")
+        name = re.search(
+            r'^\s*#define\s+VOXONE_PROFILE_NAME\s+"([A-Z0-9]+)"\s*$',
+            text,
+            re.MULTILINE,
+        )
+        if not name or name.group(1) != normalized:
+            continue
+        flag = re.search(
+            r"^\s*#define\s+VOXONE_INCLUDE_DSP\s+([01])\s*$",
+            text,
+            re.MULTILINE,
+        )
+        if not flag:
+            raise ManifestError(
+                f"profile {normalized} has no VOXONE_INCLUDE_DSP capability"
+            )
+        return flag.group(1) == "1"
+    raise ManifestError(f"unknown hardware profile: {normalized}")
 
 
 def _asset_set_id(schema: int, www_contract: int, firmware_min: int,

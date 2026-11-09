@@ -107,6 +107,10 @@ function Assert-WebAssets {
   $source=[System.IO.File]::ReadAllBytes((Join-Path $root "web-src/$name"))
   if($name -eq 'voxone.html') {
    $html=[System.Text.Encoding]::UTF8.GetString($source)
+   $html=[regex]::Replace(
+     $html,
+     '(?s)[ \t]*<!-- VOXONE_DSP_BEGIN -->\s*(.*?)\s*<!-- VOXONE_DSP_END -->[ \t]*',
+     '$1')
    foreach($other in $assetNames | Where-Object { $_ -ne 'voxone.html' }) {
     $bytes=[System.IO.File]::ReadAllBytes((Join-Path $root "web-src/$other"))
     $sha=[System.Security.Cryptography.SHA256]::Create()

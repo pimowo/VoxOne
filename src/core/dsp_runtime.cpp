@@ -1,3 +1,7 @@
+#include "dsp_build_config.h"
+
+#if VOXONE_INCLUDE_DSP
+
 #include "dsp_runtime.h"
 
 #include <Arduino.h>
@@ -29,3 +33,5 @@ DspService& activeDspService() { return service; }
 
 }  // namespace dsp
 }  // namespace voxone
+
+#endif

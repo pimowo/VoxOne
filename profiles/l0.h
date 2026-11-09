@@ -17,6 +17,7 @@
 #define VOXONE_HAS_SPDIF 0
 #define VOXONE_HAS_TDA7719 false
 #define VOXONE_HAS_LOCAL_UI 1
+#define VOXONE_INCLUDE_DSP 1
 #define VOXONE_PIN_MAP_COMPLETE 1
 
 // L0 ST7796S uses the default ESP32-S3 SPI bus: MOSI 11, SCK 12, SS 10.

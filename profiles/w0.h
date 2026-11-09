@@ -16,6 +16,7 @@
 #define VOXONE_HAS_SPDIF 0
 #define VOXONE_HAS_TDA7719 false
 #define VOXONE_HAS_LOCAL_UI 1
+#define VOXONE_INCLUDE_DSP 0
 #define VOXONE_PIN_MAP_COMPLETE 1
 
 // Existing, physically verified W0 pin map.

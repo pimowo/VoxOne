@@ -52,6 +52,16 @@ int main() {
   assert(!contains(commands, "\"getactive\""));
   assert(!contains(commands, "\"gettimezone\""));
   assert(!contains(commands, "\"submitplaylist\""));
+  assert(!contains(commands, "\"format\""));
+  assert(!contains(commands, "\"clearspiffs\""));
+  assert(!contains(commands, "\"reset\""));
+  for (const char* retired : {"resetSystem", "spiffsCleanup", "parseJSON",
+                              "setTimezoneOffset", "getTimezoneOffset",
+                              "setCountStation", "indexPlaylist",
+                              "escapeQuotes"}) {
+    assert(!contains(config, retired));
+    assert(!contains(configHeader, retired));
+  }
 
   // Internal Wi-Fi and station index storage remain, without public routes.
   assert(contains(configHeader, "SSIDS_PATH"));

@@ -12,7 +12,10 @@
 #include "player.h"
 #include "network.h"
 #include "netserver.h"
+#include "dsp_build_config.h"
+#if VOXONE_INCLUDE_DSP
 #include "dsp_transport_runtime.h"
+#endif
 #include "controls.h"
 #include "timekeeper.h"
 #include "serialcli.h"
@@ -336,12 +339,6 @@ void Config::init() {
   setTimeConf();
 }
 
-bool Config::spiffsCleanup(){
-  bool ret = SPIFFS.exists(INDEX_PATH);
-  if(SPIFFS.exists(INDEX_PATH)) SPIFFS.remove(INDEX_PATH);
-  return ret;
-}
-
 void Config::waitConnection(){
   if (!voxone::hardware::hasPin(
           voxone::hardware::currentHardware().audioOut.dout)) return;
@@ -488,65 +485,6 @@ void Config::setSntpOne(const char *val){
   setTimeConf();
   timekeeper.forceTimeSync = true;
 }
-void Config::resetSystem(const char *val, uint8_t clientId){
-  if (strcmp(val, "system") == 0) {
-    saveValue(&store.smartstart, (uint8_t)2, false);
-    saveValue(&store.audioinfo, false, false);
-    saveValue(&store.vumeter, false, false);
-    saveValue(&store.softapdelay, (uint8_t)0, false);
-    saveValue(&store.abuff, (uint16_t)7, false);
-    saveValue(&store.haDiscoveryEnabled, true, false);
-    saveValue(&store.watchdog, true);
-    _makeDefaultMdnsName(tmpBuf, sizeof(tmpBuf));
-    saveValue(store.mdnsname, tmpBuf, MDNS_LENGTH, true, true);
-    transitionUiMode(CLEAR); transitionUiMode(PLAYER);
-    netserver.requestOnChange(GETSYSTEM, clientId);
-    return;
-  }
-  if (strcmp(val, "screen") == 0) {
-    saveValue(&store.flipscreen, false, false);
-    display.flip();
-    saveValue(&store.dspon, true, false);
-    saveValue(&store.brightness, static_cast<uint8_t>(100), false);
-    setBrightness(false);
-    saveValue(&store.contrast, (uint8_t)55, false);
-    display.setContrast();
-    saveValue(&store.numplaylist, false);
-    saveValue(&store.screensaverEnabled, false);
-    saveValue(&store.screensaverTimeout, (uint16_t)20);
-    saveValue(&store.screensaverBlank, false);
-    saveValue(&store.screensaverPlayingEnabled, false);
-    saveValue(&store.screensaverPlayingTimeout, (uint16_t)5);
-    saveValue(&store.screensaverPlayingBlank, false);
-    transitionUiMode(CLEAR); transitionUiMode(PLAYER);
-    uiTimeoutReset();
-    netserver.requestOnChange(GETSCREEN, clientId);
-    return;
-  }
-  if (strcmp(val, "timezone") == 0) {
-    saveValue(store.sntp1, DEFAULT_NTP_1, sizeof(store.sntp1), false);
-    saveValue(store.sntp2, DEFAULT_NTP_2, sizeof(store.sntp2));
-    saveValue(&store.timeSyncInterval, (uint16_t)60);
-    saveValue(&store.timeSyncIntervalRTC, (uint16_t)24);
-    setTimeConf();
-    timekeeper.forceTimeSync = true;
-    return;
-  }
-  if (strcmp(val, "controls") == 0) {
-    saveValue(&store.volsteps, (uint8_t)1, false);
-    saveValue(&store.skipPlaylistUpDown, false);
-    setEncoderUiReversed(false);
-    setEncAcceleration(200);
-    return;
-  }
-  if (strcmp(val, "1") == 0) {
-    config.reset();
-    return;
-  }
-}
-
-
-
 void Config::_makeDefaultMdnsName(char *buffer, size_t size) {
   const uint32_t macSuffix = static_cast<uint32_t>(ESP.getEfuseMac() & 0xFFFFFFULL);
   snprintf(buffer, size, "VoxOne-%06X", (unsigned int)macSuffix);
@@ -721,15 +659,6 @@ void Config::setTimezone(int8_t tzh, int8_t tzm) {
   if (_storage.dirty() && !_startupReadOnly) persistV7();
 }
 
-void Config::setTimezoneOffset(uint16_t tzo) {
-  saveValue(&store.timezoneOffset, tzo);
-}
-
-uint16_t Config::getTimezoneOffset() {
-  // Reserved compatibility API; the active timezone decision is tracked in docs/TODO.md.
-  return 0;
-}
-
 void Config::saveVolume(){
   // The player's existing volume timer still controls when this is called.
   persistV7();
@@ -786,8 +715,9 @@ void Config::setStartupFixedVolume(uint8_t user) {
 }
 
 bool Config::setTone(int8_t bass, int8_t middle, int8_t trebble) {
-  const bool hasDsp = voxone::hardware::hardwareCapabilities().supportsDsp;
-  const bool toneLocked = hasDsp && voxone::dsp::lockDspToneMutation();
+#if VOXONE_INCLUDE_DSP
+  const bool toneLocked = voxone::dsp::lockDspToneMutation();
+#endif
   WriteLock lock(_persistMutex);
   bass = clampTone(bass);
   middle = clampTone(middle);
@@ -803,10 +733,11 @@ bool Config::setTone(int8_t bass, int8_t middle, int8_t trebble) {
   }
   player.setTone(store.bass, store.middle, store.trebble);
   netserver.requestOnChange(EQUALIZER, 0);
-  if (hasDsp)
-    voxone::dsp::dspTransportToneChanged(
-        {store.bass, store.middle, store.trebble});
+#if VOXONE_INCLUDE_DSP
+  voxone::dsp::dspTransportToneChanged(
+      {store.bass, store.middle, store.trebble});
   if (toneLocked) voxone::dsp::unlockDspToneMutation();
+#endif
   return persisted;
 }
 
@@ -859,11 +790,6 @@ bool Config::setLastStationChecked(uint16_t val, bool intentionalZero) {
   return false;
 }
 
-uint8_t Config::setCountStation(uint16_t val) {
-  saveValue(&store.countStation, val);
-  return static_cast<uint8_t>(runtimeSnapshot().countStation);
-}
-
 uint8_t Config::setLastSSID(uint8_t val) {
   saveValue(&store.lastSSID, val);
   return runtimeSnapshot().lastSsid;
@@ -882,11 +808,6 @@ void Config::setStation(const char* station) {
   memset(config.station.name, 0, BUFLEN);
   strlcpy(config.station.name, station, BUFLEN);
   u8fix(config.station.title);
-}
-
-void Config::indexPlaylist() {
-  if (!playlistStore.rebuildIndex())
-    Serial.println("##[ERROR]# Station index rebuild failed");
 }
 
 void Config::initPlaylist() {
@@ -989,68 +910,6 @@ char * Config::stationByNum(uint16_t num){
   strncpy(_stationBuf, playlist.readStringUntil('\t').c_str(), sizeof(_stationBuf));
   playlist.close();
   return _stationBuf;
-}
-
-void Config::escapeQuotes(const char* input, char* output, size_t maxLen) {
-  size_t j = 0;
-  for (size_t i = 0; input[i] != '\0' && j < maxLen - 1; ++i) {
-    if (input[i] == '"' && j < maxLen - 2) {
-      output[j++] = '\\';
-      output[j++] = '"';
-    } else {
-      output[j++] = input[i];
-    }
-  }
-  output[j] = '\0';
-}
-
-bool Config::parseJSON(const char* line, char* name, char* url, int &ovol) {
-  char* tmps, *tmpe;
-  const char* cursor = line;
-  char port[8], host[246], file[254];
-  tmps = strstr(cursor, "\":\"");
-  if (tmps == NULL) return false;
-  tmpe = strstr(tmps, "\",\"");
-  if (tmpe == NULL) return false;
-  strlcpy(name, tmps + 3, tmpe - tmps - 3 + 1);
-  if (strlen(name) == 0) return false;
-  cursor = tmpe + 3;
-  tmps = strstr(cursor, "\":\"");
-  if (tmps == NULL) return false;
-  tmpe = strstr(tmps, "\",\"");
-  if (tmpe == NULL) return false;
-  strlcpy(host, tmps + 3, tmpe - tmps - 3 + 1);
-  if (strlen(host) == 0) return false;
-  if (strstr(host, "http://") == NULL && strstr(host, "https://") == NULL) {
-    sprintf(file, "http://%s", host);
-    strlcpy(host, file, strlen(file) + 1);
-  }
-  cursor = tmpe + 3;
-  tmps = strstr(cursor, "\":\"");
-  if (tmps == NULL) return false;
-  tmpe = strstr(tmps, "\",\"");
-  if (tmpe == NULL) return false;
-  strlcpy(file, tmps + 3, tmpe - tmps - 3 + 1);
-  cursor = tmpe + 3;
-  tmps = strstr(cursor, "\":\"");
-  if (tmps == NULL) return false;
-  tmpe = strstr(tmps, "\",\"");
-  if (tmpe == NULL) return false;
-  strlcpy(port, tmps + 3, tmpe - tmps - 3 + 1);
-  int p = atoi(port);
-  if (p > 0) {
-    sprintf(url, "%s:%d%s", host, p, file);
-  } else {
-    sprintf(url, "%s%s", host, file);
-  }
-  cursor = tmpe + 3;
-  tmps = strstr(cursor, "\":\"");
-  if (tmps == NULL) return false;
-  tmpe = strstr(tmps, "\"}");
-  if (tmpe == NULL) return false;
-  strlcpy(port, tmps + 3, tmpe - tmps - 3 + 1);
-  ovol = atoi(port);
-  return true;
 }
 
 bool Config::parseSsid(const char* line, char* ssid, char* pass) {

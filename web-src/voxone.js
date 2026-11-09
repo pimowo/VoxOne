@@ -517,7 +517,7 @@ window.VoxOneRestartWaiter = Object.freeze({
     passwordInfo: securityPasswordInfo
   });
 
-  const tabs = ["status", "stations", "dlna", "audio", "dsp", "settings", "hardware", "system", "update"];
+  const tabs = Array.from(document.querySelectorAll("[data-tab]"), link => link.dataset.tab);
   const dlnaServer = document.getElementById("dlna-server");
   const dlnaPath = document.getElementById("dlna-path");
   const dlnaStatus = document.getElementById("dlna-status");
@@ -775,10 +775,15 @@ window.VoxOneRestartWaiter = Object.freeze({
     build: typeof voxOneBuild === "string" ? voxOneBuild : null,
     baseVersion: typeof yoRadioVersion === "string" ? yoRadioVersion : null
   };
-  const advancedAudio = window.createAdvancedAudioLive(
-    document.getElementById("advanced-audio-root"),
-    { getShared: () => state, send: (command, value) => send(command, value) }
-  );
+  const advancedAudio = typeof window.createAdvancedAudioLive === "function"
+    ? window.createAdvancedAudioLive(
+        document.getElementById("advanced-audio-root"),
+        { getShared: () => state, send: (command, value) => send(command, value) }
+      )
+    : Object.freeze({
+        enter() {}, render() {}, leave() {}, syncShared() {},
+        connected() {}, disconnected() {}, handleWsMessage() { return false; }
+      });
   let dspTabActive = false;
 
   let socket = null;

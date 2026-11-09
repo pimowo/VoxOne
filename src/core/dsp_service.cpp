@@ -1,3 +1,7 @@
+#include "dsp_build_config.h"
+
+#if VOXONE_INCLUDE_DSP
+
 #include "dsp_service.h"
 
 #include <cmath>
@@ -313,3 +317,5 @@ DspServiceError DspService::renameUserPreset(PresetId id, const char* name) {
 
 }  // namespace dsp
 }  // namespace voxone
+
+#endif

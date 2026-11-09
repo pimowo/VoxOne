@@ -1,3 +1,7 @@
+#include "dsp_build_config.h"
+
+#if VOXONE_INCLUDE_DSP
+
 #include "dsp_state_json.h"
 
 #include <cstdarg>
@@ -165,3 +169,5 @@ size_t formatDspStateJson(char* buffer, size_t capacity,
 
 }  // namespace dsp
 }  // namespace voxone
+
+#endif

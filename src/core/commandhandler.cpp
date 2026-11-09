@@ -91,7 +91,6 @@ bool CommandHandler::exec(const char *command, const char *value, uint32_t cid) 
   if (strEquals(command, "next"))     { player.next(); return true; }
   if (strEquals(command, "volm"))     { player.stepVol(false); return true; }
   if (strEquals(command, "volp"))     { player.stepVol(true); return true; }
-  if (strEquals(command, "reset") && cid==0)    { config.reset(); return true; }
   if (voxone::audio_balance::isBalanceCommand(command)) {
     int8_t balance;
     if (!voxone::audio_balance::parseValue(value, balance)) return false;
@@ -161,7 +160,6 @@ bool CommandHandler::exec(const char *command, const char *value, uint32_t cid) 
   }
   if (strEquals(command, "dspon"))     { config.setDspOn(atoi(value)!=0); return true; }
   if (strEquals(command, "dim"))       { int d=atoi(value); config.setRuntimeBrightness((uint8_t)(d < 0 ? 0 : (d > 100 ? 100 : d))); config.setBrightness(true); return true; }
-  if (strEquals(command, "clearspiffs")){ config.spiffsCleanup(); return true; }
   /*********************************************/
   /****************** WEBSOCKET ****************/
   /*********************************************/
@@ -221,9 +219,6 @@ bool CommandHandler::exec(const char *command, const char *value, uint32_t cid) 
   
   if (strEquals(command, "reboot"))  { requestSystemRestart(); return true; }
   if (strEquals(command, "boot"))    { requestSystemRestart(); return true; }
-  if (strEquals(command, "format"))  { SPIFFS.format(); ESP.restart(); return true; }
-  if (strEquals(command, "reset"))  { config.resetSystem(value, cid); return true; }
-
   if (strEquals(command, "smartstart")){ uint8_t ss = atoi(value) == 1 ? 1 : 2; if (!player.isRunning() && ss == 1) ss = 0; config.setSmartStart(ss); return true; }
 
   if (strEquals(command, "vumeter"))   { config.saveValue(&config.store.vumeter, static_cast<bool>(atoi(value))); display.putRequest(SHOWVUMETER); netserver.requestOnChange(GETSYSTEM, 0); return true; }

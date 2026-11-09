@@ -1,3 +1,7 @@
+#include "dsp_build_config.h"
+
+#if VOXONE_INCLUDE_DSP
+
 #include "dsp_transport_runtime.h"
 
 #include "dsp_runtime.h"
@@ -326,3 +330,5 @@ void handleDspState(AsyncWebServerRequest* request) {
 
 }  // namespace dsp
 }  // namespace voxone
+
+#endif

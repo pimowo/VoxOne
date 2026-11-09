@@ -1,3 +1,7 @@
+#include "dsp_build_config.h"
+
+#if VOXONE_INCLUDE_DSP
+
 #include "dsp_storage_format.h"
 
 #include <cmath>
@@ -373,3 +377,5 @@ bool decodePending(const uint8_t* buffer, size_t length, Pending& out) {
 }  // namespace storage_format
 }  // namespace dsp
 }  // namespace voxone
+
+#endif

@@ -1,3 +1,7 @@
+#include "dsp_build_config.h"
+
+#if VOXONE_INCLUDE_DSP
+
 #include "dsp_model.h"
 
 #include <cmath>
@@ -357,3 +361,5 @@ bool DspModel::saveUserPreset(PresetId id, const ToneSnapshot& currentTone) {
 
 }  // namespace dsp
 }  // namespace voxone
+
+#endif
