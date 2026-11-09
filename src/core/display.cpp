@@ -2697,7 +2697,8 @@ void Display::putRequest(displayRequestType_e type, int payload){
     resetUiReturnTimeout();
   if (type == NEXTSTATION) armUiReturnTimeout(30);
   if(displayQueue==NULL) return;
-  if (updateLockActive()) return;
+  const bool bootStart = type == DSP_START;
+  if (!bootStart && updateLockActive()) return;
   requestParams_t request;
   request.type = type;
   request.payload = payload;
@@ -2705,6 +2706,15 @@ void Display::putRequest(displayRequestType_e type, int payload){
     portENTER_CRITICAL(&displayVolumeMux);
     _volumePending = true;
     portEXIT_CRITICAL(&displayVolumeMux);
+    return;
+  }
+  if (bootStart) {
+    // DSP_START is a one-shot boot handshake.  Losing it leaves setup() in
+    // display.ready() forever while the last boot-logo frame stays visible.
+    // Earlier draw requests are stale once the player page is constructed.
+    resetQueue();
+    if (xQueueSend(displayQueue, &request, portMAX_DELAY) != pdPASS)
+      Serial.println("##[ERROR]# display boot-start enqueue failed");
     return;
   }
   xQueueSend(displayQueue, &request, DSQ_SEND_DELAY);

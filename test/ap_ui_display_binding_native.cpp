@@ -26,6 +26,13 @@ std::string apScreenSource(const std::string& display) {
   return display.substr(begin, end - begin);
 }
 
+std::string displayRequestSource(const std::string& display) {
+  const std::size_t begin = display.find("void Display::putRequest(");
+  const std::size_t end = display.find("void Display::queueModeRender(", begin);
+  assert(begin != std::string::npos && end != std::string::npos);
+  return display.substr(begin, end - begin);
+}
+
 std::size_t count(const std::string& text, const std::string& value) {
   std::size_t result = 0;
   for (std::size_t position = text.find(value);
@@ -93,6 +100,7 @@ void testSnapshotTransitions() {
 void testDisplayBindingContract() {
   const std::string display = readFile("src/core/display.cpp");
   const std::string apScreen = apScreenSource(display);
+  const std::string displayRequest = displayRequestSource(display);
   const std::string main = readFile("src/main.cpp");
   const std::string core = readFile("src/core/first_boot_core.h");
   const std::string runtime =
@@ -138,6 +146,21 @@ void testDisplayBindingContract() {
       main.find("securityRecoveryApOwnsRuntime()");
   assert(securityExclusive != std::string::npos &&
          securityExclusive < displayInit);
+
+  // The one-shot transition away from the boot logo must never be dropped
+  // behind ordinary display updates or suppressed by an update-screen lock.
+  const std::size_t bootStart =
+      displayRequest.find("const bool bootStart = type == DSP_START;");
+  const std::size_t updateLock =
+      displayRequest.find("if (!bootStart && updateLockActive()) return;");
+  const std::size_t resetQueue =
+      displayRequest.find("resetQueue();", updateLock);
+  const std::size_t reliableSend = displayRequest.find(
+      "xQueueSend(displayQueue, &request, portMAX_DELAY)", resetQueue);
+  assert(bootStart != std::string::npos && updateLock > bootStart);
+  assert(resetQueue > updateLock && reliableSend > resetQueue);
+  assert(displayRequest.find("display boot-start enqueue failed", reliableSend) !=
+         std::string::npos);
 }
 
 void testProfileLayoutContract() {
