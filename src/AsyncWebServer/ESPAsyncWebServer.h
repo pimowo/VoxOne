@@ -470,6 +470,5 @@ public:
 #include "WebResponseImpl.h"
 #include "WebHandlerImpl.h"
 #include "AsyncWebSocket.h"
-#include "AsyncEventSource.h"
 
 #endif /* _AsyncWebServer_H_ */

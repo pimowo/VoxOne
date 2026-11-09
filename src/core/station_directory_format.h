@@ -13,7 +13,9 @@ constexpr size_t kMaxResponseBytes = 32768;
 constexpr size_t kMaxOutputBytes = 16384;
 
 bool validQuery(const std::string& query);
+bool validQuery(const char* query);
 bool validCountry(const std::string& country);
+bool validCountry(const char* country);
 bool validLimit(unsigned limit);
 std::string urlEncode(const std::string& text);
 std::string searchPath(const std::string& query, const std::string& country, unsigned limit);

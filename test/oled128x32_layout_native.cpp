@@ -201,12 +201,6 @@ int main() {
   assert(std::strcmp(btTransportPlaybackLabel(PlaybackIcon::Stop), "STOP") == 0);
   assert(std::strcmp(btTransportPlaybackLabel(PlaybackIcon::None), "") == 0);
 
-  const std::string smallFont = readFile("src/displays/fonts/yofont5x7.c");
-  assert(smallFont.find("0x05, 0x08, 0x14, 0x22, 0x41, 0x00") !=
-         std::string::npos);
-  assert(smallFont.find("0x05, 0x00, 0x41, 0x22, 0x14, 0x08") !=
-         std::string::npos);
-
   assertVolume(0, false, "0");
   assertVolume(1, false, "1");
   assertVolume(20, false, "20");

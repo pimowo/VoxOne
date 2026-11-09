@@ -1627,14 +1627,28 @@ void handleStationsReadSnapshot(AsyncWebServerRequest *request) {
     request->send(error);
     return;
   }
-  body = "{\"revision\":\"" + revision + "\",\"current\":" + String(current) +
-         ",\"count\":" + String(rows.size()) + ",\"stations\":[";
+  char fragment[160];
+  int written = snprintf(fragment, sizeof(fragment),
+      "{\"revision\":\"%s\",\"current\":%u,\"count\":%u,\"stations\":[",
+      revision.c_str(), static_cast<unsigned>(current),
+      static_cast<unsigned>(rows.size()));
+  if (written <= 0 || static_cast<size_t>(written) >= sizeof(fragment)) {
+    stationsError(request, 500, "playlist_response_failed");
+    return;
+  }
+  body = fragment;
   char encoded[BUFLEN * 6 + 1];
   for (size_t i = 0; i < rows.size(); ++i) {
     char id[17];
     stationFormatId(rows[i].id, id);
-    body += (i ? "," : "") + String("{\"number\":") + String(i + 1) +
-            ",\"id\":\"" + id + "\",\"name\":\"";
+    written = snprintf(fragment, sizeof(fragment),
+        "%s{\"number\":%u,\"id\":\"%s\",\"name\":\"",
+        i ? "," : "", static_cast<unsigned>(i + 1), id);
+    if (written <= 0 || static_cast<size_t>(written) >= sizeof(fragment)) {
+      stationsError(request, 500, "playlist_response_failed");
+      return;
+    }
+    body += fragment;
     size_t used = 0;
     if (!appendJsonEscaped(encoded, sizeof(encoded), used, rows[i].name.c_str())) {
       stationsError(request, 500, "playlist_response_failed");
@@ -1648,11 +1662,16 @@ void handleStationsReadSnapshot(AsyncWebServerRequest *request) {
       return;
     }
     body += encoded;
-    body += "\",\"ovol\":" + String(rows[i].ovol) +
-            ",\"metadataMode\":\"" +
-            (rows[i].metadataMode == STATION_META_SWAP ? "swap" : "normal") +
-            "\",\"swapArtistTitle\":" +
-            (rows[i].metadataMode == STATION_META_SWAP ? "true" : "false") + "}";
+    written = snprintf(fragment, sizeof(fragment),
+        "\",\"ovol\":%d,\"metadataMode\":\"%s\",\"swapArtistTitle\":%s}",
+        rows[i].ovol,
+        rows[i].metadataMode == STATION_META_SWAP ? "swap" : "normal",
+        rows[i].metadataMode == STATION_META_SWAP ? "true" : "false");
+    if (written <= 0 || static_cast<size_t>(written) >= sizeof(fragment)) {
+      stationsError(request, 500, "playlist_response_failed");
+      return;
+    }
+    body += fragment;
   }
   body += "]}";
   AsyncWebServerResponse* response = request->beginResponse(
@@ -1724,8 +1743,8 @@ void handleStationDirectorySearch(AsyncWebServerRequest* request) {
     }
     limit = static_cast<unsigned>(parsed);
   }
-  if (!stationDirectory::validQuery(std::string(query.c_str())) ||
-      !stationDirectory::validCountry(std::string(country.c_str())) ||
+  if (!stationDirectory::validQuery(query.c_str()) ||
+      !stationDirectory::validCountry(country.c_str()) ||
       !stationDirectory::validLimit(limit)) {
     stationsReply(request, 400, R"({"error":"bad_search_parameter"})");
     return;
@@ -4559,12 +4578,13 @@ void handleWifiScan(AsyncWebServerRequest* request) {
   bool first = true;
   const int count = result < 0 ? 0 : result;
   int emitted = 0;
+  char emittedSsids[kWifiScanResultLimit][33]{};
   for (int index = 0; index < count; ++index) {
     const String ssid = WiFi.SSID(index);
     if (!ssid.length()) continue;
     bool duplicate = false;
-    for (int earlier = 0; earlier < index; ++earlier) {
-      if (WiFi.SSID(earlier) == ssid) {
+    for (int earlier = 0; earlier < emitted; ++earlier) {
+      if (strcmp(emittedSsids[earlier], ssid.c_str()) == 0) {
         duplicate = true;
         break;
       }
@@ -4573,6 +4593,7 @@ void handleWifiScan(AsyncWebServerRequest* request) {
     if (emitted >= kWifiScanResultLimit) break;
     if (!first) response->print(',');
     first = false;
+    strlcpy(emittedSsids[emitted], ssid.c_str(), sizeof(emittedSsids[emitted]));
     ++emitted;
     response->print("{\"ssid\":");
     writeJsonString(response, ssid);

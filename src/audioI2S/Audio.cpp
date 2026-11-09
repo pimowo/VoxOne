@@ -3863,43 +3863,54 @@ void Audio::showstreamtitle(const char* ml) {
     // StreamTitle='Oliver Frank - Mega Hitmix';StreamUrl='www.radio-welle-woerthersee.at';
     // or adw_ad='true';durationMilliseconds='10135';adId='34254';insertionType='preroll';
 
+    if(!ml) return;
     int16_t idx1, idx2;
-    uint16_t i = 0, hash = 0;
+    char field[sizeof(chbuf)]{};
+    auto copyField = [&](int16_t start, int16_t end) -> size_t {
+        if(start < 0) {field[0] = '\0'; return 0;}
+        const size_t available = strlen(ml + start);
+        const size_t requested = end > start
+            ? min(static_cast<size_t>(end - start), available)
+            : available;
+        const size_t length = min(requested, sizeof(field) - 1);
+        memcpy(field, ml + start, length);
+        field[length] = '\0';
+        return length;
+    };
+    auto fieldHash = [](const char* value) -> uint16_t {
+        uint16_t hash = 0;
+        for(size_t i = 0; value[i]; ++i) hash += value[i] * (i + 1);
+        return hash;
+    };
 
     idx1 = indexOf(ml, "StreamTitle=", 0);
     if(idx1 >= 0){                                                              // Streamtitle found
         idx2 = indexOf(ml, ";", idx1);
-        char *sTit;
-        if(idx2 >= 0){sTit = strndup(ml + idx1, idx2 + 1); sTit[idx2] = '\0';}
-        else          sTit =  strdup(ml);
-
-        while(i < strlen(sTit)){hash += sTit[i] * i+1; i++;}
+        size_t length = copyField(idx1, idx2);
+        const uint16_t hash = fieldHash(field);
 
         if(m_streamTitleHash != hash){
             m_streamTitleHash = hash;
-            if(audio_info) audio_info(sTit);
+            if(audio_info) audio_info(field);
             uint8_t pos = 12;                                                   // remove "StreamTitle="
-            if(sTit[pos] == '\'') pos++;                                        // remove leading  \'
-            if(sTit[strlen(sTit) - 1] == '\'') sTit[strlen(sTit) -1] = '\0';    // remove trailing \'
-            if(sTit[pos]==0xEF && sTit[pos+1] == 0xBB && sTit[pos+2] == 0xBF) pos+=3; // remove ZERO WIDTH NO-BREAK SPACE
-            if(audio_showstreamtitle) audio_showstreamtitle(sTit + pos);
+            if(pos < length && field[pos] == '\'') pos++;                       // remove leading  \'
+            if(length && field[length - 1] == '\'') field[--length] = '\0';     // remove trailing \'
+            if(pos + 2 < length && static_cast<uint8_t>(field[pos]) == 0xEF &&
+               static_cast<uint8_t>(field[pos+1]) == 0xBB &&
+               static_cast<uint8_t>(field[pos+2]) == 0xBF) pos+=3;               // remove ZERO WIDTH NO-BREAK SPACE
+            if(audio_showstreamtitle) audio_showstreamtitle(field + (pos < length ? pos : length));
         }
-        if(sTit) {free(sTit); sTit = NULL;}
     }
     m_streamTitleHash = 0;
     idx1 = indexOf(ml, "StreamUrl=", 0);
     idx2 = indexOf(ml, ";", idx1);
     if(idx1 >= 0 && idx2 > idx1){                                               // StreamURL found
-        uint16_t len = idx2 - idx1;
-        char *sUrl;
-        sUrl = strndup(ml + idx1, len + 1); sUrl[len] = '\0';
-
-        while(i < strlen(sUrl)){hash += sUrl[i] * i+1; i++;}
+        copyField(idx1, idx2);
+        const uint16_t hash = fieldHash(field);
         if(m_streamTitleHash != hash){
             m_streamTitleHash = hash;
-            if(audio_info) audio_info(sUrl);
+            if(audio_info) audio_info(field);
         }
-        if(sUrl) {free(sUrl); sUrl = NULL;}
     }
 
     idx1 = indexOf(ml, "adw_ad=", 0);
@@ -3907,15 +3918,12 @@ void Audio::showstreamtitle(const char* ml) {
         idx1 = indexOf(ml, "durationMilliseconds=", 0);
         idx2 = indexOf(ml, ";", idx1);
         if(idx1 >= 0 && idx2 > idx1){
-            uint16_t len = idx2 - idx1;
-            char *sAdv;
-            sAdv = strndup(ml + idx1, len + 1); sAdv[len] = '\0';
-            if(audio_info) audio_info(sAdv);
+            size_t length = copyField(idx1, idx2);
+            if(audio_info) audio_info(field);
             uint8_t pos = 21;                                                   // remove "StreamTitle="
-            if(sAdv[pos] == '\'') pos++;                                        // remove leading  \'
-            if(sAdv[strlen(sAdv) - 1] == '\'') sAdv[strlen(sAdv) -1] = '\0';    // remove trailing \'
-            if(audio_commercial) audio_commercial(sAdv + pos);
-            if(sAdv){free(sAdv); sAdv = NULL;}
+            if(pos < length && field[pos] == '\'') pos++;                       // remove leading  \'
+            if(length && field[length - 1] == '\'') field[--length] = '\0';     // remove trailing \'
+            if(audio_commercial) audio_commercial(field + (pos < length ? pos : length));
         }
     }
 }

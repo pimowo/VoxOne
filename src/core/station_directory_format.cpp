@@ -256,9 +256,18 @@ void appendStation(std::string& output, const Station& station) {
 }  // namespace
 
 bool validQuery(const std::string& query) {
-  if (query.empty() || query.size() > kMaxQueryBytes) return false;
+  return validQuery(query.c_str());
+}
+
+bool validQuery(const char* query) {
+  if (!query) return false;
+  const size_t length = std::strlen(query);
+  if (!length || length > kMaxQueryBytes) return false;
   bool visible = false;
-  for (unsigned char ch : query) {
+  for (const unsigned char* cursor =
+           reinterpret_cast<const unsigned char*>(query);
+       *cursor; ++cursor) {
+    const unsigned char ch = *cursor;
     if (ch < 0x20 || ch == 0x7f) return false;
     if (ch != ' ') visible = true;
   }
@@ -266,7 +275,12 @@ bool validQuery(const std::string& query) {
 }
 
 bool validCountry(const std::string& country) {
-  return country == "PL" || country == "ALL";
+  return validCountry(country.c_str());
+}
+
+bool validCountry(const char* country) {
+  return country && (std::strcmp(country, "PL") == 0 ||
+                     std::strcmp(country, "ALL") == 0);
 }
 
 bool validLimit(unsigned limit) {

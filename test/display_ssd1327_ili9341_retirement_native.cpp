@@ -54,9 +54,11 @@ int main() {
                            "src/displays/fonts/dsfont35.h",
                            "src/displays/fonts/dsfont52.h",
                            "src/displays/fonts/dsfont70.h",
-                           "src/displays/fonts/yofont5x7.c",
-                           "src/displays/fonts/yofont10x14.c",
                            "src/Adafruit_GC9A01A/Adafruit_GC9A01A.h"}) {
     assert(std::ifstream(path).good());
+  }
+  for (const char* path : {"src/displays/fonts/yofont5x7.c",
+                           "src/displays/fonts/yofont10x14.c"}) {
+    assert(!std::ifstream(path).good());
   }
 }

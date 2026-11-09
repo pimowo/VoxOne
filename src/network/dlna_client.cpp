@@ -602,22 +602,27 @@ bool resolveUrl(const char* descriptionUrl, const char* urlBase,
   const char* slash = std::strchr(authority, '/');
   const size_t originLength = slash ? static_cast<size_t>(slash - base)
                                     : std::strlen(base);
-  std::string resolved;
+  size_t prefixLength = 0;
+  bool addSlash = false;
   if (controlUrl[0] == '/') {
-    resolved.assign(base, originLength);
-    resolved += controlUrl;
+    prefixLength = originLength;
   } else {
     const char* pathEnd = std::strrchr(base, '/');
     if (!pathEnd || pathEnd < authority) {
-      resolved.assign(base, originLength);
-      resolved += '/';
+      prefixLength = originLength;
+      addSlash = true;
     } else {
-      resolved.assign(base, static_cast<size_t>(pathEnd - base + 1));
+      prefixLength = static_cast<size_t>(pathEnd - base + 1);
     }
-    resolved += controlUrl;
   }
-  if (resolved.size() >= capacity) return false;
-  copyBounded(output, capacity, resolved.c_str());
+  const size_t controlLength = std::strlen(controlUrl);
+  const size_t required = prefixLength + (addSlash ? 1U : 0U) + controlLength;
+  if (required >= capacity) return false;
+  std::memcpy(output, base, prefixLength);
+  size_t used = prefixLength;
+  if (addSlash) output[used++] = '/';
+  std::memcpy(output + used, controlUrl, controlLength);
+  output[used + controlLength] = '\0';
   return true;
 }
 
@@ -636,6 +641,7 @@ constexpr uint32_t kConnectTimeoutMs = 2500;
 constexpr uint16_t kReadTimeoutMs = 5000;
 constexpr size_t kMaxXmlBytes = 256 * 1024;
 constexpr uint32_t kWorkerStackBytes = 12288;
+constexpr char kUserAgent[] = "VoxOne/" VOXONE_VERSION;
 
 SemaphoreHandle_t stateMutex = nullptr;
 uint32_t nextJob = 0;
@@ -761,7 +767,7 @@ bool httpGetXml(const char* url, Parser& parser, Result& result, int& status) {
   http.setTimeout(kReadTimeoutMs);
   http.setReuse(false);
   if (!http.begin(client, url)) return false;
-  http.setUserAgent(String("VoxOne/") + VOXONE_VERSION);
+  http.setUserAgent(kUserAgent);
   http.addHeader("Accept", "application/xml, text/xml");
   http.addHeader("Accept-Encoding", "identity");
   const int code = http.GET();
@@ -785,42 +791,56 @@ bool httpGetXml(const char* url, Parser& parser, Result& result, int& status) {
   return ok;
 }
 
-std::string xmlEscape(const char* value) {
-  std::string output;
-  if (!value) return output;
-  output.reserve(std::strlen(value) + 16);
+bool xmlEscape(const char* value, char* output, size_t capacity) {
+  if (!output || !capacity) return false;
+  size_t used = 0;
+  output[0] = '\0';
+  if (!value) return true;
   for (; *value; ++value) {
+    const char* escaped = nullptr;
     switch (*value) {
-      case '&': output += "&amp;"; break;
-      case '<': output += "&lt;"; break;
-      case '>': output += "&gt;"; break;
-      case '"': output += "&quot;"; break;
-      case '\'': output += "&apos;"; break;
-      default: output += *value; break;
+      case '&': escaped = "&amp;"; break;
+      case '<': escaped = "&lt;"; break;
+      case '>': escaped = "&gt;"; break;
+      case '"': escaped = "&quot;"; break;
+      case '\'': escaped = "&apos;"; break;
+      default:
+        if (used + 1 >= capacity) return false;
+        output[used++] = *value;
+        continue;
     }
+    const size_t escapedLength = std::strlen(escaped);
+    if (used + escapedLength >= capacity) return false;
+    std::memcpy(output + used, escaped, escapedLength);
+    used += escapedLength;
   }
-  return output;
+  output[used] = '\0';
+  return true;
 }
 
 bool browseContentDirectory(const char* url, const char* parent,
                             BrowseListing& listing, int& status) {
   status = 502;
   if (!url || std::strncmp(url, "http://", 7) != 0) return false;
-  const std::string escapedParent = xmlEscape(parent);
-  std::string request;
-  request.reserve(640 + escapedParent.size());
-  request =
+  char escapedParent[576]{};
+  if (!xmlEscape(parent, escapedParent, sizeof(escapedParent))) return false;
+  static constexpr char kRequestPrefix[] =
       "<?xml version=\"1.0\" encoding=\"utf-8\"?>"
       "<s:Envelope xmlns:s=\"http://schemas.xmlsoap.org/soap/envelope/\" "
       "s:encodingStyle=\"http://schemas.xmlsoap.org/soap/encoding/\">"
       "<s:Body><u:Browse xmlns:u=\"urn:schemas-upnp-org:service:ContentDirectory:1\">"
       "<ObjectID>";
-  request += escapedParent;
-  request +=
+  static constexpr char kRequestSuffix[] =
       "</ObjectID><BrowseFlag>BrowseDirectChildren</BrowseFlag>"
       "<Filter>*</Filter><StartingIndex>0</StartingIndex>"
       "<RequestedCount>0</RequestedCount><SortCriteria></SortCriteria>"
       "</u:Browse></s:Body></s:Envelope>";
+  char request[1200];
+  const int requestLength = std::snprintf(
+      request, sizeof(request), "%s%s%s", kRequestPrefix, escapedParent,
+      kRequestSuffix);
+  if (requestLength <= 0 || static_cast<size_t>(requestLength) >= sizeof(request))
+    return false;
 
   WiFiClient client;
   client.setTimeout(kReadTimeoutMs / 1000);
@@ -829,12 +849,13 @@ bool browseContentDirectory(const char* url, const char* parent,
   http.setTimeout(kReadTimeoutMs);
   http.setReuse(false);
   if (!http.begin(client, url)) return false;
-  http.setUserAgent(String("VoxOne/") + VOXONE_VERSION);
+  http.setUserAgent(kUserAgent);
   http.addHeader("Content-Type", "text/xml; charset=\"utf-8\"");
   http.addHeader("SOAPAction",
                  "\"urn:schemas-upnp-org:service:ContentDirectory:1#Browse\"");
   http.addHeader("Accept-Encoding", "identity");
-  const int code = http.POST(reinterpret_cast<uint8_t*>(&request[0]), request.size());
+  const int code = http.POST(reinterpret_cast<uint8_t*>(request),
+                             static_cast<size_t>(requestLength));
   if (code != 200) {
     status = code == HTTPC_ERROR_READ_TIMEOUT ? 504 : 502;
     http.end();
@@ -887,16 +908,47 @@ void appendJsonString(std::string& output, const char* value) {
   output += '"';
 }
 
+size_t jsonEscapedSize(const char* value) {
+  size_t size = 0;
+  for (const unsigned char* cursor =
+           reinterpret_cast<const unsigned char*>(value ? value : "");
+       *cursor; ++cursor) {
+    if (*cursor == '"' || *cursor == '\\' || *cursor == '\b' ||
+        *cursor == '\f' || *cursor == '\n' || *cursor == '\r' ||
+        *cursor == '\t')
+      size += 2;
+    else
+      size += *cursor < 0x20 ? 6 : 1;
+  }
+  return size;
+}
+
+void appendUnsigned(std::string& output, uint32_t value) {
+  char number[11];
+  const int length = std::snprintf(number, sizeof(number), "%lu",
+                                   static_cast<unsigned long>(value));
+  if (length > 0) output.append(number, static_cast<size_t>(length));
+}
+
 std::string formatBrowseJson(const BrowseParams& params, const SsdpServer& server,
                              const DeviceDescription& description,
                              const char* controlUrl,
                              const BrowseListing& listing) {
   std::string output;
-  // Reserve once for the bounded fixed-width fields to avoid heap growth while
-  // the JSON envelope is assembled after the XML stream has been released.
-  output.reserve(1024 + listing.count * 900);
+  size_t capacity = 256 + jsonEscapedSize(params.parent) +
+      jsonEscapedSize(description.friendlyName) +
+      jsonEscapedSize(server.location) + jsonEscapedSize(controlUrl);
+  for (size_t index = 0; index < listing.count; ++index) {
+    const BrowseItem& item = listing.items[index];
+    capacity += 128 + jsonEscapedSize(item.id) +
+        jsonEscapedSize(item.parentId) + jsonEscapedSize(item.title) +
+        jsonEscapedSize(item.resourceUrl) + jsonEscapedSize(item.mime);
+  }
+  // One accurately bounded allocation replaces geometric growth while the
+  // response is assembled after streaming XML parsing has completed.
+  output.reserve(capacity);
   output = "{\"status\":\"ok\",\"job\":";
-  output += std::to_string(params.job);
+  appendUnsigned(output, params.job);
   output += ",\"parent\":";
   appendJsonString(output, params.parent);
   output += ",\"server\":{\"name\":";
@@ -906,9 +958,9 @@ std::string formatBrowseJson(const BrowseParams& params, const SsdpServer& serve
   output += ",\"contentDirectory\":";
   appendJsonString(output, controlUrl);
   output += "},\"numberReturned\":";
-  output += std::to_string(listing.numberReturned);
+  appendUnsigned(output, listing.numberReturned);
   output += ",\"totalMatches\":";
-  output += std::to_string(listing.totalMatches);
+  appendUnsigned(output, listing.totalMatches);
   output += ",\"truncated\":";
   output += listing.truncated ? "true" : "false";
   output += ",\"items\":[";
@@ -1028,7 +1080,9 @@ StartResult startBrowse(const char* parent, uint32_t& job) {
   completed = false;
   destroyBrowseListing(completedListing);
   completedListing = nullptr;
-  std::string().swap(completedBody);
+  // Retain the response capacity for the next bounded browse job. Releasing
+  // and immediately reallocating this block was a recurring heap fragmenter.
+  completedBody.clear();
   xSemaphoreGive(stateMutex);
   if (xTaskCreatePinnedToCore(browseWorker, "DlnaBrowse", kWorkerStackBytes,
                               params, 1, nullptr, 0) != pdPASS) {
@@ -1051,7 +1105,13 @@ bool pollBrowse(uint32_t job, int& status, String& body, bool& ready) {
   if (found) {
     ready = completed;
     status = ready ? completedStatus : 202;
-    body = ready ? completedBody.c_str() : "{\"status\":\"pending\"}";
+    if (ready && !completedBody.empty() &&
+        !body.reserve(completedBody.size())) {
+      status = 503;
+      body = "{\"error\":\"insufficient_memory\"}";
+    } else {
+      body = ready ? completedBody.c_str() : "{\"status\":\"pending\"}";
+    }
     if (ready && body.length() != completedBody.size()) {
       status = 503;
       body = "{\"error\":\"insufficient_memory\"}";
