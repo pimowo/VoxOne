@@ -1381,6 +1381,18 @@ static void formatWebStatus(char* output, size_t capacity) {
   const WebStatusView status = selectWebStatusView(
       sourceView, config.station.name, radioMetadata, radioArtist, radioTitle,
       getFormat(config.configFmt), config.station.bitrate);
+  const uint8_t sourceMask = sourceManagerSourceMask();
+  char availableSources[64];
+  const int availableLength = snprintf(
+      availableSources, sizeof(availableSources),
+      "\"radio\"%s,\"ha\",\"dlna\"%s",
+      sourceIncluded(sourceMask, SourceId::Bluetooth) ? ",\"bt\"" : "",
+      sourceIncluded(sourceMask, SourceId::Aux) ? ",\"aux\"" : "");
+  if (availableLength < 0 ||
+      static_cast<size_t>(availableLength) >= sizeof(availableSources)) {
+    output[0] = '\0';
+    return;
+  }
   size_t used = 0;
   output[0] = '\0';
   if (!appendWebStatusLiteral(output, capacity, used, "{\"webStatus\":{") ||
@@ -1401,11 +1413,11 @@ static void formatWebStatus(char* output, size_t capacity) {
     return;
   }
   const int tail = snprintf(output + used, capacity - used,
-      ",\"online\":%s,\"protocol\":%u},\"bitrate\":%u,\"sampleRate\":%lu,\"btConnected\":%s,\"availableSources\":[\"radio\"%s],\"volume100\":%u,\"muted\":%s}}",
+      ",\"online\":%s,\"protocol\":%u},\"bitrate\":%u,\"sampleRate\":%lu,\"btConnected\":%s,\"availableSources\":[%s],\"volume100\":%u,\"muted\":%s}}",
       btOnline ? "true" : "false", btProtocol,
       status.bitrate, static_cast<unsigned long>(status.sampleRate),
       btPhoneConnected ? "true" : "false",
-      voxone::hardware::hardwareCapabilities().supportsVoxOneBt ? ",\"bt\"" : "",
+      availableSources,
       volume.userVolume, volume.muted ? "true" : "false");
   if (tail < 0 || static_cast<size_t>(tail) >= capacity - used) output[0] = '\0';
 }

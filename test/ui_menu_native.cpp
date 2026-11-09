@@ -50,14 +50,16 @@ int main() {
   assert(voxone::ui_menu::itemCount(MenuId::MAIN) ==
          UiMenu::kMainItemCount);
   assert(std::string(voxone::ui_menu::itemLabel(MenuId::MAIN, 0)) ==
-         "Audio");
+         "Źródło");
   assert(std::string(voxone::ui_menu::itemLabel(MenuId::MAIN, 1)) ==
-         "Wyświetlacz");
+         "Audio");
   assert(std::string(voxone::ui_menu::itemLabel(MenuId::MAIN, 2)) ==
-         "Sieć");
+         "Wyświetlacz");
   assert(std::string(voxone::ui_menu::itemLabel(MenuId::MAIN, 3)) ==
+         "Sieć");
+  assert(std::string(voxone::ui_menu::itemLabel(MenuId::MAIN, 4)) ==
          "System");
-  assert(std::string(voxone::ui_menu::itemLabel(MenuId::MAIN, 4)) == "DLNA");
+  assert(std::string(voxone::ui_menu::itemLabel(MenuId::MAIN, 5)) == "DLNA");
   for (uint8_t index = 0; index < UiMenu::kMainItemCount; ++index)
     assert(voxone::ui_menu::itemHasSubmenu(MenuId::MAIN, index));
   assert(std::string(voxone::ui_menu::menuContextHeader(MenuId::MAIN)) ==
@@ -76,7 +78,29 @@ int main() {
   assert(menu.selectedIndex() == 0);
   const uint32_t openedRevision = menu.snapshot().revision;
 
+  // Source entries are capability-filtered and open on the active source.
+  const uint8_t allSources = kCoreSourceMask |
+      sourceBit(SourceId::Bluetooth) | sourceBit(SourceId::Aux);
+  menu.configureSources(allSources, SourceId::Dlna);
+  assert(menu.handle(MenuCommand::SELECT) == MenuAction::ENTERED_SUBMENU);
+  assert(menu.menuId() == MenuId::SOURCE);
+  assert(menu.itemCount() == 5 && menu.selectedIndex() == 3);
+  assert(std::string(menu.selectedLabel()) == "DLNA");
+  assert(voxone::ui_menu::itemIsActive(menu.snapshot(), 3));
+  assert(menu.handle(MenuCommand::SELECT) == MenuAction::SELECTED);
+  assert(menu.handle(MenuCommand::BACK) == MenuAction::BACKED);
+  assert(menu.menuId() == MenuId::MAIN && menu.selectedIndex() == 0);
+
+  menu.configureSources(kCoreSourceMask, SourceId::Web);
+  assert(menu.handle(MenuCommand::SELECT) == MenuAction::ENTERED_SUBMENU);
+  assert(menu.itemCount() == 3);
+  assert(std::string(voxone::ui_menu::itemLabel(menu.snapshot(), 0)) == "WEB");
+  assert(std::string(voxone::ui_menu::itemLabel(menu.snapshot(), 1)) == "HA");
+  assert(std::string(voxone::ui_menu::itemLabel(menu.snapshot(), 2)) == "DLNA");
+  assert(menu.handle(MenuCommand::BACK) == MenuAction::BACKED);
+
   // Enter Audio, navigate its leaves, select one and return to the parent.
+  assert(menu.handle(MenuCommand::NEXT) == MenuAction::NAVIGATED);
   assert(menu.handle(MenuCommand::SELECT) == MenuAction::ENTERED_SUBMENU);
   assert(menu.menuId() == MenuId::AUDIO);
   assert(menu.level() == MenuLevel::SUBMENU);
@@ -95,7 +119,7 @@ int main() {
   assert(menu.selectedIndex() == 2);
   assert(menu.handle(MenuCommand::BACK) == MenuAction::BACKED);
   assert(menu.menuId() == MenuId::MAIN);
-  assert(menu.selectedIndex() == 0);
+  assert(menu.selectedIndex() == 1);
   assert(menu.snapshot().revision > openedRevision);
 
   // Encoder navigation repaints only the old and new selection. Entering a
@@ -121,13 +145,13 @@ int main() {
 
   // Every root item is a real branch, and Back restores its parent selection.
   assert(menu.handle(MenuCommand::NEXT) == MenuAction::NAVIGATED);
-  expectSubmenu(menu, MenuId::SCREEN, "Wyświetlacz", 1);
+  expectSubmenu(menu, MenuId::SCREEN, "Wyświetlacz", 2);
   assert(menu.handle(MenuCommand::NEXT) == MenuAction::NAVIGATED);
-  expectSubmenu(menu, MenuId::NETWORK, "Sieć", 2);
+  expectSubmenu(menu, MenuId::NETWORK, "Sieć", 3);
   assert(menu.handle(MenuCommand::NEXT) == MenuAction::NAVIGATED);
-  expectSubmenu(menu, MenuId::SYSTEM, "System", 3);
+  expectSubmenu(menu, MenuId::SYSTEM, "System", 4);
   assert(menu.handle(MenuCommand::NEXT) == MenuAction::NAVIGATED);
-  assert(menu.selectedIndex() == 4);
+  assert(menu.selectedIndex() == 5);
   assert(menu.handle(MenuCommand::SELECT) == MenuAction::ENTERED_SUBMENU);
   assert(menu.menuId() == MenuId::DLNA);
   voxone::ui_menu::DlnaMenuEntry dlnaItems[3]{};
@@ -151,7 +175,7 @@ int main() {
   assert(std::string(voxone::ui_menu::itemLabel(dlnaSnapshot, 0)) == "Albumy");
   assert(voxone::ui_menu::itemHasSubmenu(dlnaSnapshot, 0));
   assert(menu.handle(MenuCommand::BACK) == MenuAction::BACKED);
-  assert(menu.menuId() == MenuId::MAIN && menu.selectedIndex() == 4);
+  assert(menu.menuId() == MenuId::MAIN && menu.selectedIndex() == 5);
   assert(menu.handle(MenuCommand::BACK) == MenuAction::NONE);
 
   assert(menu.handle(MenuCommand::CLOSE) == MenuAction::CLOSED);
@@ -189,6 +213,7 @@ int main() {
   assert(display.find("_pager->setPage(_menuPage, true)") !=
          std::string::npos);
   assert(display.find("itemHasSubmenu(menu, index)") != std::string::npos);
+  assert(display.find("itemIsActive(menu, index)") != std::string::npos);
   assert(display.find("dsp.print(\">") != std::string::npos);
   const size_t menuWidgetStart = display.find("class UiMenuWidget");
   const size_t menuWidgetEnd = display.find(

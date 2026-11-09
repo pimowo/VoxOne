@@ -225,7 +225,7 @@ kodem 1008. Nieprawidłowa wartość często jest tylko ignorowana.
 
 | Komenda | Wartość | Efekt |
 |---|---|---|
-| `source` | `radio` albo `bt` | Ręczny wybór źródła; `bt` istnieje tylko na profilu z VoxOneBT i jest odrzucane, gdy moduł nie jest dostępny. |
+| `source` | `radio`, `bt`, `ha`, `dlna` albo `aux` | Ręczny wybór źródła w `SourceManager`; `bt` i `aux` są dostępne tylko wtedy, gdy profil publikuje odpowiednie capability, a offline BT jest odrzucane. |
 | `webtransport` | `prev`, `toggle`, `next` | Source-aware transport: stacja RADIO albo AVRCP BT. |
 | `start` | ignorowana | PLAY ostatniej stacji RADIO. |
 | `stop` | ignorowana | STOP RADIO. |
@@ -377,7 +377,7 @@ Pełna lista kształtów wiadomości:
     "bitrate": 256,
     "sampleRate": 0,
     "btConnected": false,
-    "availableSources": ["radio", "bt"],
+    "availableSources": ["radio", "bt", "ha", "dlna"],
     "volume100": 20,
     "muted": false
   }
@@ -388,6 +388,11 @@ Dla BT `source="BT"`, `activeSource="bt"`, `name` jest peer-em,
 `artist`/`title` pochodzą z AVRCP, `codec` i `bitrate` są puste/0,
 `sampleRate` pochodzi z VoxOneBT, a `transport` ma
 `playing|paused|stopped|unavailable`.
+
+`availableSources` jest generowane z capabilities profilu: `radio`, `ha` i
+`dlna` są źródłami bazowymi, `bt` wymaga VoxOneBT, a `aux` capability AUX.
+Dla HA, DLNA i AUX pola `activeSource` mają odpowiednio wartości `ha`, `dlna`
+i `aux`; bez aktywnego strumienia ich transport ma stan `stopped`.
 
 `getsystem` zwraca pola legacy `sst`, `vu`, `canVu`, `softr`, `vut`, `mdns`,
 `ipaddr`, `abuff`; obiekt `systemInfo` z `version`, `channel`, `build`,
@@ -461,7 +466,7 @@ Niezależnie od trwałego stanu istnieje tryb kompilacji:
 |---|---|---|
 | Aktywna stacja: numer, stabilne ID, nazwa, URL, OVOL, tryb metadata | REST `/api/stations`; WS `current`, `nameset`, `webStatus` | Trwała playlista `/data/stations.tsv` + `/data/stations.idx` zarządzana przez `PlaylistStore`; aktywny rekord RAM `Config::station`; numer trwały `Config::store.lastStation` i `config_runtime::Snapshot::lastStation`. |
 | Metadata, artysta, tytuł RADIO | WS `meta`, `webStatus` | `Config::station.title`; rozdział runtime przez `station_metadata.*`. |
-| Źródło RADIO/BT, playback/transport, dostępne źródła | WS `webStatus` | `SourceManagerState::active_` i intent RADIO; fizyczny RADIO w `Player::_status`; BT w `BtLink::publishedState_`. |
+| Źródło WEB/BT/HA/DLNA/AUX, playback/transport, dostępne źródła | WS `webStatus` | `SourceManagerState::active_`, tymczasowe HA/DLNA i intent RADIO; fizyczny WEB w `Player::_status`; BT w `BtLink::publishedState_`; dostępność BT/AUX z hardware capabilities. |
 | Peer BT, artysta, tytuł, sample rate, online/protocol/firmware/name/capabilities | WS `webStatus` | `BtLinkState`, publikowany przez `BtLink`; widok aktywnego źródła w `SourceWebSnapshot`. |
 | Głośność raw i 0–100, MUTE, max, startup mode/fixed, balance | WS `volume`, `webStatus`, `balance`; DSP REST shared audio | Trwałe pola `Config::store`, lock-free `config_runtime::Snapshot`; rzeczywisty output/mute w `Player::_mute` (`MuteState`). |
 | Bass/middle/treble | WS EQ; DSP REST | `Config::store` + `config_runtime::Snapshot`. |

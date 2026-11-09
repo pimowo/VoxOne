@@ -731,7 +731,7 @@ setTimeout(async () => {
     });
     const selector = get('source-selector');
     check(selector.querySelectorAll('button').length === 0, 'source waits for snapshot');
-    btTestSocket.receive(sourceSnapshot('WEB', ['radio','bt'], true, {
+    btTestSocket.receive(sourceSnapshot('WEB', ['radio','bt','ha','dlna','aux'], true, {
       name:'Radio A', metadata:'Artysta - Utwór', artist:'Artysta', title:'Utwór',
       playback:'STOP', transport:'stopped', volume100:41, muted:false
     }));
@@ -763,7 +763,7 @@ setTimeout(async () => {
     check(get('status-name-label').textContent === 'ŹRÓDŁO' &&
       get('current-station-name').textContent === 'AUX' &&
       get('source').textContent === 'AUX', 'future AUX snapshot is accepted');
-    btTestSocket.receive(sourceSnapshot('WEB', ['radio','bt'], true, {
+    btTestSocket.receive(sourceSnapshot('WEB', ['radio','bt','ha','dlna','aux'], true, {
       name:'Radio A', metadata:'Artysta - Utwór', artist:'Artysta', title:'Utwór',
       playback:'STOP', transport:'stopped', volume100:41, muted:false
     }));
@@ -771,6 +771,14 @@ setTimeout(async () => {
       'volume and mute from one snapshot');
     const sourceButton = source => selector.querySelector('button[data-source="' + source + '"]');
     check(sourceButton('radio').getAttribute('aria-pressed') === 'true', 'RADIO active');
+    check(sourceButton('radio').textContent === 'WEB (RADIO)' &&
+      sourceButton('ha').textContent === 'HA' && sourceButton('dlna').textContent === 'DLNA' &&
+      sourceButton('aux').textContent === 'AUX', 'all source labels are rendered');
+    for (const source of ['ha', 'dlna', 'aux']) {
+      sourceButton(source).click();
+      check(btTestSocket.sent.at(-1) === 'source=' + source,
+        'manual ' + source.toUpperCase() + ' command');
+    }
     check(!sourceButton('bt').disabled, 'BT available without phone connection');
     sourceButton('bt').click();
     check(btTestSocket.sent.at(-1) === 'source=bt', 'manual BT command');
@@ -813,8 +821,9 @@ setTimeout(async () => {
       'live volume and mute update');
     btTestSocket.receive(sourceSnapshot('WEB', ['radio','bt'], false));
     check(sourceButton('bt').disabled && sourceButton('bt').textContent.includes('offline'), 'BT offline shown');
-    btTestSocket.receive(sourceSnapshot('WEB', ['radio'], false));
-    check(selector.querySelectorAll('button').length === 1 && !sourceButton('bt'), 'target without BT');
+    btTestSocket.receive(sourceSnapshot('WEB', ['radio','ha','dlna'], false));
+    check(selector.querySelectorAll('button').length === 3 && !sourceButton('bt') &&
+      !sourceButton('aux'), 'target without BT or AUX keeps core network sources');
     check(!btTestSocket.sent.some(item => /^(webtransport|stop)=/.test(item)), 'source selection sends no transport');
     const icon = document.querySelector('link[rel="icon"]');
     const headerBrand = document.querySelector('.topbar .brand .brand-logo');

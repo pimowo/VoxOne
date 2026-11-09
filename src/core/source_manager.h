@@ -3,6 +3,7 @@
 
 #include "options.h"
 #include "display.h"
+#include "source_catalog.h"
 #include <stdint.h>
 
 // Radio intent also exists on targets without Bluetooth (temporary URL restore).
@@ -21,6 +22,10 @@ bool sourceManagerDlnaActive();
 class TemporaryAudioState;
 enum class ActiveSource : uint8_t;
 bool sourceManagerSelectSource(ActiveSource source);
+bool sourceManagerSelectSource(SourceId source);
+bool sourceManagerSourceAvailable(SourceId source);
+uint8_t sourceManagerSourceMask();
+SourceId sourceManagerActiveSource();
 bool sourceManagerTakeTemporaryRestore(TemporaryAudioState& temporary,
                                       bool networkReady, bool blocked,
                                       uint16_t& station);

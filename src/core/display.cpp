@@ -286,6 +286,7 @@ class UiMenuWidget : public Widget {
     const uint16_t textTop = top +
         (view.rowHeight > textHeight ? (view.rowHeight - textHeight) / 2 : 0);
     dsp.setCursor(view.horizontalMargin + (view.oled ? 4 : 12), textTop);
+    if (voxone::ui_menu::itemIsActive(menu, index)) dsp.print("* ");
     dsp.print(utf8Rus(voxone::ui_menu::itemLabel(menu, index)));
     if (voxone::ui_menu::itemHasSubmenu(menu, index)) {
       const uint16_t arrowWidth = CHARWIDTH * view.itemSize;

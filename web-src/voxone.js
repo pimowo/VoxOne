@@ -1981,10 +1981,11 @@ window.VoxOneRestartWaiter = Object.freeze({
     }[state.connection];
     const connected = state.connection === "connected";
     renderSourceSelector();
+    const transportSource = ["radio", "bt"].includes(state.webStatus?.activeSource);
     const btDisconnected = state.webStatus?.source === "BT" && !state.webStatus.btConnected;
-    buttons.prev.disabled = !connected || !state.webStatus || btDisconnected;
-    buttons.next.disabled = !connected || !state.webStatus || btDisconnected;
-    buttons.play.disabled = !connected || !state.webStatus || btDisconnected ||
+    buttons.prev.disabled = !connected || !state.webStatus || !transportSource || btDisconnected;
+    buttons.next.disabled = !connected || !state.webStatus || !transportSource || btDisconnected;
+    buttons.play.disabled = !connected || !state.webStatus || !transportSource || btDisconnected ||
       !state.webStatus.playback;
     for (const slider of volumeSliders) slider.disabled = !connected || state.volume100 === null;
     for (const button of muteButtons) button.disabled = !connected || state.muted === null;
@@ -2060,7 +2061,7 @@ window.VoxOneRestartWaiter = Object.freeze({
         const button = document.createElement("button");
         button.type = "button";
         button.dataset.source = source;
-        button.textContent = source.toUpperCase();
+        button.textContent = source === "radio" ? "WEB (RADIO)" : source.toUpperCase();
         return button;
       }));
       sourceSelector.dataset.sources = key;
@@ -2069,7 +2070,8 @@ window.VoxOneRestartWaiter = Object.freeze({
     for (const button of sourceSelector.querySelectorAll("button")) {
       const source = button.dataset.source;
       const offline = source === "bt" && status?.btModule?.online !== true;
-      button.textContent = offline ? "BT · offline" : source.toUpperCase();
+      button.textContent = offline ? "BT · offline" :
+        source === "radio" ? "WEB (RADIO)" : source.toUpperCase();
       button.setAttribute("aria-pressed", source === active ? "true" : "false");
       button.disabled = state.connection !== "connected" || !status ||
         source === active || offline;

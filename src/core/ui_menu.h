@@ -4,6 +4,8 @@
 #include <atomic>
 #include <stdint.h>
 
+#include "source_catalog.h"
+
 namespace voxone {
 namespace ui_menu {
 
@@ -18,6 +20,7 @@ enum class MenuId : uint8_t {
   SCREEN,
   NETWORK,
   SYSTEM,
+  SOURCE,
   DLNA,
 };
 
@@ -45,6 +48,18 @@ struct MenuSnapshot {
   uint8_t selectedIndex;
   uint32_t revision;
   uint8_t dynamicBank;
+  uint8_t sourceMask;
+  SourceId activeSource;
+
+  constexpr MenuSnapshot(MenuState menuState = MenuState::CLOSED,
+                         MenuLevel menuLevel = MenuLevel::MAIN,
+                         MenuId id = MenuId::MAIN, uint8_t selected = 0,
+                         uint32_t menuRevision = 0, uint8_t bank = 0,
+                         uint8_t sources = kCoreSourceMask,
+                         SourceId active = SourceId::Web)
+      : state(menuState), level(menuLevel), menuId(id),
+        selectedIndex(selected), revision(menuRevision), dynamicBank(bank),
+        sourceMask(sources), activeSource(active) {}
 };
 
 struct DlnaMenuEntry {
@@ -65,7 +80,7 @@ struct MenuRenderPlan {
 
 class UiMenu {
  public:
-  static constexpr uint8_t kMainItemCount = 5;
+  static constexpr uint8_t kMainItemCount = 6;
 
   bool open();
   bool close();
@@ -79,6 +94,8 @@ class UiMenu {
   bool selectedHasSubmenu() const;
   bool selectedDlnaFolder() const;
   bool selectedDlnaPlayable() const;
+  SourceId selectedSource() const;
+  void configureSources(uint8_t availableMask, SourceId activeSource);
   void setDlnaStatus(const char* label);
   void setDlnaItems(const DlnaMenuEntry* entries, uint8_t count);
   MenuSnapshot snapshot() const;
@@ -99,6 +116,8 @@ const char* menuContextHeader(MenuId menuId);
 uint8_t itemCount(MenuId menuId);
 const char* itemLabel(MenuId menuId, uint8_t index);
 bool itemHasSubmenu(MenuId menuId, uint8_t index);
+uint8_t sourceItemCount(uint8_t mask);
+SourceId sourceItemAt(uint8_t mask, uint8_t index);
 MenuRenderPlan menuRenderPlan(const MenuSnapshot& previous,
                               const MenuSnapshot& current,
                               bool previousRendered);
@@ -108,15 +127,26 @@ inline const char* menuTitle(const MenuSnapshot& snapshot) {
 }
 
 inline uint8_t itemCount(const MenuSnapshot& snapshot) {
+  if (snapshot.menuId == MenuId::SOURCE) {
+    return sourceItemCount(snapshot.sourceMask);
+  }
   if (snapshot.menuId != MenuId::DLNA) return itemCount(snapshot.menuId);
   extern uint8_t dlnaItemCount(uint8_t bank);
   return dlnaItemCount(snapshot.dynamicBank);
 }
 
 inline const char* itemLabel(const MenuSnapshot& snapshot, uint8_t index) {
+  if (snapshot.menuId == MenuId::SOURCE) {
+    return sourceMenuLabel(sourceItemAt(snapshot.sourceMask, index));
+  }
   if (snapshot.menuId != MenuId::DLNA) return itemLabel(snapshot.menuId, index);
   extern const char* dlnaItemLabel(uint8_t bank, uint8_t index);
   return dlnaItemLabel(snapshot.dynamicBank, index);
+}
+
+inline bool itemIsActive(const MenuSnapshot& snapshot, uint8_t index) {
+  if (snapshot.menuId != MenuId::SOURCE) return false;
+  return sourceItemAt(snapshot.sourceMask, index) == snapshot.activeSource;
 }
 
 inline bool itemHasSubmenu(const MenuSnapshot& snapshot, uint8_t index) {

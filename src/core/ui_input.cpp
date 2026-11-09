@@ -7,6 +7,7 @@
 #include "network.h"
 #include "player.h"
 #include "source_manager.h"
+#include "source_menu_controller.h"
 #include "ui_menu.h"
 #include "ui_state.h"
 #include "../hardware/hardware_descriptor.h"
@@ -41,6 +42,8 @@ bool dispatchMenuInput(UiInputEvent event, int8_t steps) {
   if (action == MenuAction::SELECTED) {
     if (uiMenu.menuId() == voxone::ui_menu::MenuId::DLNA)
       voxone::dlna_menu::select();
+    else if (uiMenu.menuId() == voxone::ui_menu::MenuId::SOURCE)
+      voxone::source_menu::select();
     else
       ESP_LOGI(kUiInputTag, "Selected: %s", selectedLabel);
   }
@@ -48,6 +51,8 @@ bool dispatchMenuInput(UiInputEvent event, int8_t steps) {
     ESP_LOGI(kUiInputTag, "Opened submenu: %s", selectedLabel);
     if (uiMenu.menuId() == voxone::ui_menu::MenuId::DLNA)
       voxone::dlna_menu::entered();
+    else if (uiMenu.menuId() == voxone::ui_menu::MenuId::SOURCE)
+      voxone::source_menu::entered();
   }
   if (action == MenuAction::BACKED)
     ESP_LOGI(kUiInputTag, "Back to main menu");

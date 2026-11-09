@@ -99,6 +99,19 @@ int main() {
   assert(webUpdate.activeChanged && webUpdate.reason == SourceChangeReason::Manual);
   assert(web.active() == ActiveSource::Radio);
   assert(!web.select(ActiveSource::Radio, webBt).activeChanged);
+  webUpdate = web.select(ActiveSource::SOURCE_HA, webBt);
+  assert(webUpdate.activeChanged && web.active() == ActiveSource::SOURCE_HA);
+  web.displayView(view);
+  assert(view.kind == DisplaySourceKind::HomeAssistant &&
+         view.playback == DisplayPlaybackState::Stopped);
+  webUpdate = web.select(ActiveSource::SOURCE_DLNA, webBt);
+  assert(webUpdate.activeChanged && web.active() == ActiveSource::SOURCE_DLNA);
+  webUpdate = web.select(ActiveSource::Aux, webBt);
+  assert(webUpdate.activeChanged && web.active() == ActiveSource::Aux);
+  web.displayView(view);
+  assert(view.kind == DisplaySourceKind::Aux && !web.localPlayerOutputAllowed());
+  assert(web.select(ActiveSource::Radio, webBt).activeChanged);
+  assert(web.localPlayerOutputAllowed());
   webBt.connected = true;
   assert(web.observe(webBt).reason == SourceChangeReason::BtConnect);
   assert(web.select(ActiveSource::Radio, webBt).reason == SourceChangeReason::Manual);
@@ -143,6 +156,10 @@ int main() {
          haUpdate.titleChanged && haUpdate.audioInfoChanged);
   assert(homeAssistant.active() == ActiveSource::SOURCE_HA);
   assert(homeAssistant.radioResumeAllowed());
+  // Selecting the already configured base still interrupts the visible
+  // temporary source and returns to it after cleanup.
+  assert(homeAssistant.select(ActiveSource::Radio, BtLinkState{}).activeChanged);
+  assert(homeAssistant.active() == ActiveSource::SOURCE_HA);
   homeAssistant.displayView(view, true);
   assert(view.kind == DisplaySourceKind::HomeAssistant);
   assert(view.playback == DisplayPlaybackState::Playing);

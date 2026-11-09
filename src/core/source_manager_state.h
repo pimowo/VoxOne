@@ -12,6 +12,7 @@ enum class ActiveSource : uint8_t {
   Bluetooth,
   SOURCE_HA,
   SOURCE_DLNA,
+  Aux,
 };
 enum class SourceChangeReason : uint8_t {
   None, Manual, BtConnect, BtDisconnect, BtOffline
@@ -162,27 +163,25 @@ class SourceManagerState {
   }
 
   SourceUpdate cycle(const BtLinkState& bt) {
-    SourceUpdate update;
-    if (active_ == ActiveSource::Radio) {
-      if (!bt.runtimeAvailable) return update;
-      active_ = ActiveSource::Bluetooth;
-      remember(bt);
-    } else {
-      active_ = ActiveSource::Radio;
+    return select(active_ == ActiveSource::Radio ? ActiveSource::Bluetooth
+                                                  : ActiveSource::Radio,
+                  bt);
+  }
+
+  SourceUpdate select(ActiveSource source, const BtLinkState& bt) {
+    if (source == ActiveSource::Bluetooth && !bt.runtimeAvailable) return {};
+    if (active_ == source && !temporaryActive_) return {};
+    if (active_ != source) {
+      active_ = source;
+      if (source == ActiveSource::Bluetooth) remember(bt);
     }
+    SourceUpdate update;
     update.activeChanged = true;
     update.stationChanged = true;
     update.titleChanged = true;
     update.audioInfoChanged = true;
     update.reason = SourceChangeReason::Manual;
     return update;
-  }
-
-  SourceUpdate select(ActiveSource source, const BtLinkState& bt) {
-    if (source == ActiveSource::SOURCE_HA ||
-        source == ActiveSource::SOURCE_DLNA || active_ == source ||
-        (source == ActiveSource::Bluetooth && !bt.runtimeAvailable)) return {};
-    return cycle(bt);
   }
 
   SourceUpdate observe(const BtLinkState& bt) {
@@ -264,12 +263,37 @@ class SourceManagerState {
       return;
     }
     view.kind = active_ == ActiveSource::Bluetooth
-                    ? DisplaySourceKind::Bluetooth : DisplaySourceKind::Radio;
+                    ? DisplaySourceKind::Bluetooth
+                : active_ == ActiveSource::SOURCE_HA
+                    ? DisplaySourceKind::HomeAssistant
+                : active_ == ActiveSource::SOURCE_DLNA
+                    ? DisplaySourceKind::Dlna
+                : active_ == ActiveSource::Aux
+                    ? DisplaySourceKind::Aux
+                    : DisplaySourceKind::Radio;
     view.connected = active_ == ActiveSource::Bluetooth && connected_;
     if (active_ == ActiveSource::Radio) {
       view.playback = radioPlaying ? DisplayPlaybackState::Playing
                                    : DisplayPlaybackState::Stopped;
       view.peerName = "";
+      view.artist = "";
+      view.title = "";
+    } else if (active_ == ActiveSource::SOURCE_HA) {
+      view.connected = true;
+      view.playback = DisplayPlaybackState::Stopped;
+      view.peerName = "Home Assistant";
+      view.artist = "";
+      view.title = "Home Assistant";
+    } else if (active_ == ActiveSource::SOURCE_DLNA) {
+      view.connected = true;
+      view.playback = DisplayPlaybackState::Stopped;
+      view.peerName = "DLNA";
+      view.artist = "";
+      view.title = "";
+    } else if (active_ == ActiveSource::Aux) {
+      view.connected = true;
+      view.playback = DisplayPlaybackState::Stopped;
+      view.peerName = "AUX";
       view.artist = "";
       view.title = "";
     } else if (!connected_) {
@@ -296,6 +320,10 @@ class SourceManagerState {
 
   bool canControlBluetooth() const {
     return active_ == ActiveSource::Bluetooth && connected_;
+  }
+
+  bool localPlayerOutputAllowed() const {
+    return temporaryActive_ || active_ == ActiveSource::Radio;
   }
 
   void stopForUpdate(const BtLinkState& bt) {

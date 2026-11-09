@@ -8,6 +8,7 @@
 #include "display.h"
 #include "dlna_menu_controller.h"
 #include "player.h"
+#include "source_menu_controller.h"
 #include "ui_menu.h"
 #include "ui_state.h"
 #include "update_progress.h"
@@ -52,9 +53,13 @@ void PowerManager::loop() {
             ESP_LOGI(kTag, "Opened submenu: %s", selectedLabel);
             if (uiMenu.menuId() == voxone::ui_menu::MenuId::DLNA)
               voxone::dlna_menu::entered();
+            else if (uiMenu.menuId() == voxone::ui_menu::MenuId::SOURCE)
+              voxone::source_menu::entered();
           } else if (action == voxone::ui_menu::MenuAction::SELECTED) {
             if (uiMenu.menuId() == voxone::ui_menu::MenuId::DLNA)
               voxone::dlna_menu::select();
+            else if (uiMenu.menuId() == voxone::ui_menu::MenuId::SOURCE)
+              voxone::source_menu::select();
             else
               ESP_LOGI(kTag, "Selected: %s", selectedLabel);
           }

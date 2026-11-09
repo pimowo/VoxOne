@@ -12,6 +12,7 @@ struct MenuItemDefinition {
 };
 
 constexpr MenuItemDefinition kMainItems[] = {
+    {"Źródło", MenuId::SOURCE},
     {"Audio", MenuId::AUDIO},
     {"Wyświetlacz", MenuId::SCREEN},
     {"Sieć", MenuId::NETWORK},
@@ -51,6 +52,8 @@ struct DlnaMenuPage {
 
 DlnaMenuPage dlnaPages[2];
 std::atomic<uint8_t> activeDlnaPage{0};
+std::atomic<uint8_t> availableSourceMask{kCoreSourceMask};
+std::atomic<SourceId> activeMenuSource{SourceId::Web};
 
 struct MenuDefinition {
   const MenuItemDefinition* items;
@@ -69,6 +72,7 @@ MenuDefinition menuDefinition(MenuId menuId) {
     case MenuId::SCREEN: return definition(kDisplayItems);
     case MenuId::NETWORK: return definition(kNetworkItems);
     case MenuId::SYSTEM: return definition(kSystemItems);
+    case MenuId::SOURCE: break;
     case MenuId::DLNA: break;
     case MenuId::NONE: break;
   }
@@ -77,11 +81,12 @@ MenuDefinition menuDefinition(MenuId menuId) {
 
 uint8_t parentIndex(MenuId menuId) {
   switch (menuId) {
-    case MenuId::AUDIO: return 0;
-    case MenuId::SCREEN: return 1;
-    case MenuId::NETWORK: return 2;
-    case MenuId::SYSTEM: return 3;
-    case MenuId::DLNA: return 4;
+    case MenuId::SOURCE: return 0;
+    case MenuId::AUDIO: return 1;
+    case MenuId::SCREEN: return 2;
+    case MenuId::NETWORK: return 3;
+    case MenuId::SYSTEM: return 4;
+    case MenuId::DLNA: return 5;
     case MenuId::NONE:
     case MenuId::MAIN: return 0;
   }
@@ -103,6 +108,7 @@ const char* menuTitle(MenuId menuId) {
     case MenuId::SCREEN: return "Wyświetlacz";
     case MenuId::NETWORK: return "Sieć";
     case MenuId::SYSTEM: return "System";
+    case MenuId::SOURCE: return "Źródło";
     case MenuId::DLNA: return "DLNA";
     case MenuId::NONE: return "";
   }
@@ -116,6 +122,7 @@ const char* menuContextHeader(MenuId menuId) {
     case MenuId::SCREEN: return "WYŚWIETLACZ";
     case MenuId::NETWORK: return "SIEĆ";
     case MenuId::SYSTEM: return "SYSTEM";
+    case MenuId::SOURCE: return "ŹRÓDŁO";
     case MenuId::DLNA: return "DLNA";
     case MenuId::NONE: return "";
   }
@@ -123,12 +130,17 @@ const char* menuContextHeader(MenuId menuId) {
 }
 
 uint8_t itemCount(MenuId menuId) {
+  if (menuId == MenuId::SOURCE)
+    return sourceItemCount(availableSourceMask.load(std::memory_order_acquire));
   if (menuId == MenuId::DLNA)
     return dlnaPages[activeDlnaPage.load(std::memory_order_acquire)].count;
   return menuDefinition(menuId).count;
 }
 
 const char* itemLabel(MenuId menuId, uint8_t index) {
+  if (menuId == MenuId::SOURCE)
+    return sourceMenuLabel(sourceItemAt(
+        availableSourceMask.load(std::memory_order_acquire), index));
   if (menuId == MenuId::DLNA) {
     const DlnaMenuPage& page =
         dlnaPages[activeDlnaPage.load(std::memory_order_acquire)];
@@ -139,6 +151,7 @@ const char* itemLabel(MenuId menuId, uint8_t index) {
 }
 
 bool itemHasSubmenu(MenuId menuId, uint8_t index) {
+  if (menuId == MenuId::SOURCE) return false;
   if (menuId == MenuId::DLNA) {
     const DlnaMenuPage& page =
         dlnaPages[activeDlnaPage.load(std::memory_order_acquire)];
@@ -153,7 +166,10 @@ MenuRenderPlan menuRenderPlan(const MenuSnapshot& previous,
                               bool previousRendered) {
   if (!previousRendered || previous.menuId != current.menuId ||
       (current.menuId == MenuId::DLNA &&
-       previous.dynamicBank != current.dynamicBank))
+       previous.dynamicBank != current.dynamicBank) ||
+      (current.menuId == MenuId::SOURCE &&
+       (previous.sourceMask != current.sourceMask ||
+        previous.activeSource != current.activeSource)))
     return {MenuRenderKind::FULL, previous.selectedIndex,
             current.selectedIndex};
   if (previous.selectedIndex != current.selectedIndex)
@@ -227,6 +243,32 @@ bool UiMenu::selectedDlnaPlayable() const {
   return selected < page.count && page.entries[selected].playable;
 }
 
+SourceId UiMenu::selectedSource() const {
+  return sourceItemAt(availableSourceMask.load(std::memory_order_acquire),
+                      selectedIndex());
+}
+
+void UiMenu::configureSources(uint8_t availableMask, SourceId activeSource) {
+  availableMask |= sourceBit(SourceId::Web);
+  const uint8_t previous =
+      availableSourceMask.exchange(availableMask, std::memory_order_acq_rel);
+  const SourceId previousActive =
+      activeMenuSource.exchange(activeSource, std::memory_order_acq_rel);
+  if (menuId() == MenuId::SOURCE) {
+    uint8_t activeIndex = 0;
+    const uint8_t count = sourceItemCount(availableMask);
+    for (uint8_t index = 0; index < count; ++index) {
+      if (sourceItemAt(availableMask, index) == activeSource) {
+        activeIndex = index;
+        break;
+      }
+    }
+    selectedIndex_.store(activeIndex, std::memory_order_relaxed);
+  }
+  if (previous != availableMask || previousActive != activeSource)
+    markChanged();
+}
+
 void UiMenu::setDlnaStatus(const char* label) {
   DlnaMenuEntry entry{};
   const char* text = label && label[0] ? label : "DLNA";
@@ -263,6 +305,9 @@ MenuSnapshot UiMenu::snapshot() const {
     result.level = menuLevel(result.menuId);
     result.selectedIndex = selectedIndex_.load(std::memory_order_acquire);
     result.dynamicBank = activeDlnaPage.load(std::memory_order_acquire);
+    result.sourceMask =
+        availableSourceMask.load(std::memory_order_acquire);
+    result.activeSource = activeMenuSource.load(std::memory_order_acquire);
     result.revision = revision_.load(std::memory_order_acquire);
   } while (before != result.revision);
   return result;
@@ -288,6 +333,11 @@ MenuAction UiMenu::handle(MenuCommand command, int8_t steps) {
 
   if (command == MenuCommand::SELECT) {
     const MenuId current = menuId();
+    if (current == MenuId::SOURCE) {
+      if (selectedIndex() >= itemCount()) return MenuAction::NONE;
+      state_.store(MenuState::OPEN, std::memory_order_release);
+      return MenuAction::SELECTED;
+    }
     if (current == MenuId::DLNA) {
       const DlnaMenuPage& page =
           dlnaPages[activeDlnaPage.load(std::memory_order_acquire)];
@@ -304,7 +354,21 @@ MenuAction UiMenu::handle(MenuCommand command, int8_t steps) {
     const MenuId submenu = menu.items[selected].submenu;
     if (submenu != MenuId::NONE) {
       menuId_.store(submenu, std::memory_order_relaxed);
-      selectedIndex_.store(0, std::memory_order_relaxed);
+      uint8_t initialIndex = 0;
+      if (submenu == MenuId::SOURCE) {
+        const uint8_t mask =
+            availableSourceMask.load(std::memory_order_acquire);
+        const SourceId active =
+            activeMenuSource.load(std::memory_order_acquire);
+        const uint8_t count = sourceItemCount(mask);
+        for (uint8_t index = 0; index < count; ++index) {
+          if (sourceItemAt(mask, index) == active) {
+            initialIndex = index;
+            break;
+          }
+        }
+      }
+      selectedIndex_.store(initialIndex, std::memory_order_relaxed);
       state_.store(MenuState::OPEN, std::memory_order_release);
       markChanged();
       return MenuAction::ENTERED_SUBMENU;
@@ -350,6 +414,23 @@ const char* dlnaItemLabel(uint8_t bank, uint8_t index) {
 bool dlnaItemFolder(uint8_t bank, uint8_t index) {
   const DlnaMenuPage& page = dlnaPages[bank & 1U];
   return index < page.count && page.entries[index].folder;
+}
+
+uint8_t sourceItemCount(uint8_t mask) {
+  uint8_t count = 0;
+  for (uint8_t value = 0; value <= static_cast<uint8_t>(SourceId::Aux); ++value)
+    if (sourceIncluded(mask, static_cast<SourceId>(value))) ++count;
+  return count;
+}
+
+SourceId sourceItemAt(uint8_t mask, uint8_t index) {
+  for (uint8_t value = 0; value <= static_cast<uint8_t>(SourceId::Aux); ++value) {
+    const SourceId source = static_cast<SourceId>(value);
+    if (!sourceIncluded(mask, source)) continue;
+    if (index == 0) return source;
+    --index;
+  }
+  return SourceId::Web;
 }
 
 }  // namespace ui_menu

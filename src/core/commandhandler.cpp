@@ -50,16 +50,9 @@ bool CommandHandler::exec(const char *command, const char *value, uint32_t cid) 
       !strEquals(command, "getrssi") &&
       !strEquals(command, "getscreen")) return false;
   if (cid != 0 && strEquals(command, "source")) {
-    if (!value) return false;
-    ActiveSource target;
-    if (strcmp(value, "radio") == 0) target = ActiveSource::Radio;
-    else if (strcmp(value, "bt") == 0) {
-#if VOXONE_HAS_BT && VOXONE_PIN_MAP_COMPLETE
-      target = ActiveSource::Bluetooth;
-#else
-      return false;
-#endif
-    } else return false;
+    SourceId target;
+    if (!parseSourceId(value, target) ||
+        !sourceManagerSourceAvailable(target)) return false;
     if (!sourceManagerSelectSource(target)) netserver.requestOnChange(WEBSTATUS, cid);
     return true;
   }

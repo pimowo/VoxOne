@@ -78,9 +78,9 @@ checkpointów pozostaje w historii Git i w istniejących raportach.
   źródła; wykorzystać posiadany moduł do testów HIL.
 - [ ] Local Files: dodać odtwarzanie z karty microSD na SPI współdzielonym z
   wyświetlaczem, z osobnym pinem CS i bez zakłócania renderowania.
-- [ ] Ujednolicić docelową matrycę źródeł w SourceManagerze i UI: WEB Radio,
-  Bluetooth, Home Assistant `SOURCE_HA` z metadanymi, DLNA, AUX i Local Files;
-  Spotify zachować jako późniejsze rozszerzenie.
+- [ ] Po implementacji backendów AUX i Local Files dołączyć je do wspólnej
+  matrycy źródeł SourceManagera i UI; Spotify zachować jako późniejsze
+  rozszerzenie.
 - [ ] A2DP Transmitter: dodać naprzemienne tryby RX/TX w VoxOneBT, bez ich
   jednoczesnej pracy.
 - [ ] Dodać wyjście do zewnętrznej końcówki mocy klasy D i opisać wymagania
