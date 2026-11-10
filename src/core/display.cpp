@@ -2326,6 +2326,28 @@ void Display::_start() {
 #else
       false;
 #endif
+#if VOXONE_MULTI_DISPLAY_HAS_ST7796
+  const bool tftBootHandoff =
+      dsp.activeProfile() ==
+      voxone::display_profile::ProfileId::St7796_480x320;
+  if (tftBootHandoff) {
+    // The ST7796 backend is immediate-mode: dsp.loop(true) only forces an
+    // OLED framebuffer flush and cannot evict a frame already visible on the
+    // TFT.  Clear the physical controller directly, outside all signature
+    // and partial-render gates, before activating the PLAYER page.
+    dsp.clearClipping();
+    dsp.setScrollId(nullptr);
+    _yamahaDrawn = false;
+    _yamahaWasActive = false;
+    _yamahaTopSignature = 0;
+    _yamahaStationSignature = 0;
+    _yamahaMetadataSignature = 0;
+    _yamahaVolumeSignature = 0;
+    Serial.println("##[BOOT]#\tTFT full redraw\tbegin");
+    if (!dsp.forceTftFillScreen(0x0000))
+      Serial.println("##[ERROR]#\tTFT full redraw\tbackend unavailable");
+  }
+#endif
 #if VOXONE_DISPLAY_PROFILE == VOXONE_DISPLAY_PROFILE_ST7796_480X320
   if (!yamahaPlayer && !smallOledActive() && !_playerScrollCoreEnabled())
     _st7796ScrollMode(true);
@@ -2371,6 +2393,10 @@ void Display::_start() {
     _pager->loop();
     dsp.loop(true);
   }
+#if VOXONE_MULTI_DISPLAY_HAS_ST7796
+  if (tftBootHandoff)
+    Serial.println("##[BOOT]#\tTFT full redraw\tPLAYER committed");
+#endif
   _bootStep = 2;
   Serial.println("##[BOOT]#\tdisplay handoff\tPLAYER committed");
 }

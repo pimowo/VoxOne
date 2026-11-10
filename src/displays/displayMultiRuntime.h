@@ -28,6 +28,10 @@ class MultiDisplayRuntime : public Adafruit_GFX {
     return selection_.profile;
   }
   void flushSelected(bool force = false);
+  // Boot handoff safety path for the immediate-mode ST7796 backend.  This
+  // deliberately bypasses the runtime facade and any buffered/dirty flush
+  // policy so the physical panel is known to have accepted a full frame.
+  bool forceTftFillScreen(uint16_t color);
   void sleepSelected();
   void wakeSelected();
 

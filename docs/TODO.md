@@ -19,7 +19,9 @@ checkpointów pozostaje w historii Git i w istniejących raportach.
   ustawień przez NIE oraz natychmiastowe wyjście, gdy nie ma zmian; dodatkowo
   sprawdzić polskie znaki w nazwach stacji i metadanych ICY/DLNA/ID3,
   wyśrodkowanie kontekstowej belki i wielokropki długich nazw na L0 oraz brak
-  migotania przy zmianie metadanych/Wi-Fi na TFT i przewijaniu na OLED S0.
+  migotania przy zmianie metadanych/Wi-Fi na TFT i przewijaniu na OLED S0;
+  po zimnym starcie L0 potwierdzić wzrokowo pełne przejście TFT z logo do
+  widoku Playera (zdalny most nie ma podłączonej kamery).
 - [ ] Fizycznie przetestować TTS/media z Home Assistant: źródło `SOURCE_HA`,
   metadane title/artist i `N/A` zamiast bitrate na TFT/OLED oraz powrót do
   wcześniej używanego źródła i jego stanu po EOF albo komendzie Stop.

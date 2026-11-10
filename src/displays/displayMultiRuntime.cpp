@@ -60,6 +60,15 @@ void MultiDisplayRuntime::flushSelected(bool force) {
   if (ready_ && oled_) oled_->display(force);
 }
 
+bool MultiDisplayRuntime::forceTftFillScreen(uint16_t color) {
+  if (!ready_ || !st7796_ ||
+      selection_.controller != ControllerId::St7796 ||
+      selection_.profile != ProfileId::St7796_480x320)
+    return false;
+  st7796_->fillScreen(color);
+  return true;
+}
+
 void MultiDisplayRuntime::sleepSelected() {
   if (!ready_) return;
   if (oled_) oled_->sleep();
