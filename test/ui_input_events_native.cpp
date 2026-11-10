@@ -78,6 +78,13 @@ int main() {
   assert(resolveUiInput(reversedRadio, UiInputEvent::Left,
                         UiInputControl::EncoderGesture).action ==
          UiInputAction::VolumeDown);
+  assert(action(reversedRadio, UiInputEvent::Long) ==
+         UiInputAction::OpenVolume);
+  assert(resolveUiInput(UiInputContext{VOL, true, true, true, false, false,
+                                      true, SourceId::Web, true},
+                        UiInputEvent::Right,
+                        UiInputControl::EncoderRotation).action ==
+         UiInputAction::VolumeUp);
   assert(resolveUiInput(radio(), UiInputEvent::Right,
                         UiInputControl::DirectionButtons).action ==
          UiInputAction::SourceNext);
@@ -111,7 +118,7 @@ int main() {
   assert(action(bluetooth(), UiInputEvent::Right) ==
          UiInputAction::VolumeUp);
   assert(action(bluetooth(), UiInputEvent::Double) ==
-         UiInputAction::CycleSource);
+         UiInputAction::OpenSourceSelector);
   assert(action(bluetooth(), UiInputEvent::Long) ==
          UiInputAction::OpenBluetoothTransport);
   assert(action(bluetooth(BT_TRANSPORT), UiInputEvent::Left) ==
@@ -143,12 +150,19 @@ int main() {
   assert(action(compactBluetooth, UiInputEvent::Ok) ==
          UiInputAction::BluetoothToggle);
   assert(action(compactBluetooth, UiInputEvent::Double) ==
-         UiInputAction::CycleSource);
+         UiInputAction::OpenSourceSelector);
 
-  // Source cycling is unavailable without the board capability.
+  // The quick selector is capability-filtered after opening, so it is also
+  // available on boards whose source set does not include Bluetooth.
   UiInputContext noBluetooth = radio();
   noBluetooth.supportsBluetooth = false;
-  assert(action(noBluetooth, UiInputEvent::Double) == UiInputAction::None);
+  assert(action(noBluetooth, UiInputEvent::Double) ==
+         UiInputAction::OpenSourceSelector);
+
+  UiInputContext reversedLineOut = reversedRadio;
+  reversedLineOut.lineOutEnabled = true;
+  assert(action(reversedLineOut, UiInputEvent::Long) ==
+         UiInputAction::OpenStations);
 
   // Existing user-volume limits remain 0..100.
   assert(applyVolume(0, action(radio(), UiInputEvent::Left)) == 0);

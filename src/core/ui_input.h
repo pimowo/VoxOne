@@ -79,7 +79,8 @@ enum class UiInputAction : uint8_t {
   BluetoothToggle,
   SourcePrevious,
   SourceNext,
-  CycleSource,
+  OpenSourceSelector,
+  OpenVolume,
   OpenStations,
   OpenBluetoothTransport,
   ShowPlayer,
@@ -129,6 +130,10 @@ inline UiInputDecision resolveUiInput(const UiInputContext& context,
     return uiInputDecision(UiInputAction::None);
 
   if (event == UiInputEvent::Left || event == UiInputEvent::Right) {
+    if (context.mode == VOL && !context.lineOutEnabled)
+      return uiInputDecision(event == UiInputEvent::Left
+                                 ? UiInputAction::VolumeDown
+                                 : UiInputAction::VolumeUp);
     const bool encoderRotation =
         control == UiInputControl::EncoderRotation;
     const bool navigationControl =
@@ -184,8 +189,8 @@ inline UiInputDecision resolveUiInput(const UiInputContext& context,
   if (event == UiInputEvent::Double) {
     if (context.mode == SCREENSAVER || context.mode == SCREENBLANK)
       return uiInputDecision(UiInputAction::WakePlayer);
-    if (context.mode == PLAYER && context.supportsBluetooth)
-      return uiInputDecision(UiInputAction::CycleSource);
+    if (context.mode == PLAYER && context.hasLocalDisplay)
+      return uiInputDecision(UiInputAction::OpenSourceSelector);
     return uiInputDecision(UiInputAction::None);
   }
 
@@ -195,6 +200,8 @@ inline UiInputDecision resolveUiInput(const UiInputContext& context,
     if (context.mode == BT_TRANSPORT)
       return uiInputDecision(UiInputAction::ShowPlayer);
     if (context.mode == PLAYER) {
+      if (context.encoderUiReversed && !context.lineOutEnabled)
+        return uiInputDecision(UiInputAction::OpenVolume);
       if (context.supportsBluetooth && context.bluetoothSelected) {
         if (!context.supportsBluetoothTransportView)
           return uiInputDecision(UiInputAction::None);

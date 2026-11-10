@@ -13,7 +13,6 @@ struct MenuItemDefinition {
 };
 
 constexpr MenuItemDefinition kMainItems[] = {
-    {"Źródło", MenuId::SOURCE},
     {"Audio", MenuId::AUDIO},
     {"Wyświetlacz", MenuId::SCREEN},
     {"Sieć", MenuId::NETWORK},
@@ -92,11 +91,11 @@ MenuDefinition menuDefinition(MenuId menuId) {
 uint8_t parentIndex(MenuId menuId) {
   switch (menuId) {
     case MenuId::SOURCE: return 0;
-    case MenuId::AUDIO: return 1;
-    case MenuId::SCREEN: return 2;
-    case MenuId::NETWORK: return 3;
-    case MenuId::SYSTEM: return 4;
-    case MenuId::DLNA: return 5;
+    case MenuId::AUDIO: return 0;
+    case MenuId::SCREEN: return 1;
+    case MenuId::NETWORK: return 2;
+    case MenuId::SYSTEM: return 3;
+    case MenuId::DLNA: return 4;
     case MenuId::SAVE_CONFIRM: return 0;
     case MenuId::NONE:
     case MenuId::MAIN: return 0;

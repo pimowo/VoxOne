@@ -340,6 +340,7 @@ void loop() {
   timekeeper.loop1();
   serialCli.loop();
   network.loop();
+  sourceManagerServiceRequests();
   voxone::dlna_menu::service();
   voxone::ota::serviceBootHealth(
       currentBootControlPlaneReady(netserver.started()));

@@ -133,7 +133,7 @@ struct MenuRenderPlan {
 
 class UiMenu {
  public:
-  static constexpr uint8_t kMainItemCount = 6;
+  static constexpr uint8_t kMainItemCount = 5;
 
   bool open(MenuId initialMenu = MenuId::MAIN);
   bool close();

@@ -70,7 +70,7 @@ int main() {
     assert(controls.find(token) != std::string::npos);
 
   const auto uiInput = readFile("src/core/ui_input.cpp");
-  for (const char* token : {"cycleNextSource()", "sourceManagerTransport",
+  for (const char* token : {"source_menu::entered()", "sourceManagerTransport",
                             "BT_TRANSPORT", "hardwareCapabilities()"})
     assert(uiInput.find(token) != std::string::npos);
 

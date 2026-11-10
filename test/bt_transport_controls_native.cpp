@@ -27,14 +27,10 @@ static displayMode_e longPress(displayMode_e mode,
   }
 }
 
-static displayMode_e doubleClick(displayMode_e mode, SourceManagerState& sources,
-                                 const BtLinkState& bt, unsigned& cycleCalls) {
-  if (resolveUiInput(context(mode, sources), UiInputEvent::Double).action !=
-      UiInputAction::CycleSource)
-    return mode;
-  ++cycleCalls;
-  sources.cycle(bt);
-  return PLAYER;
+static bool opensSourceSelector(displayMode_e mode,
+                                const SourceManagerState& sources) {
+  return resolveUiInput(context(mode, sources), UiInputEvent::Double).action ==
+         UiInputAction::OpenSourceSelector;
 }
 
 struct ClickCalls {
@@ -68,19 +64,20 @@ int main() {
   BtLinkState bt{};
   bt.runtimeAvailable = true;
   sources.observe(bt);
-  unsigned cycleCalls = 0;
 
-  // RADIO PLAYER: long press opens stations, double-click selects BT.
+  // RADIO PLAYER: long press opens stations, double-click opens the complete
+  // capability-filtered source selector without changing source immediately.
   assert(longPress(PLAYER, sources) == STATIONS);
-  assert(doubleClick(STATIONS, sources, bt, cycleCalls) == STATIONS);
-  assert(cycleCalls == 0 && sources.active() == ActiveSource::Radio);
-  assert(doubleClick(PLAYER, sources, bt, cycleCalls) == PLAYER);
-  assert(cycleCalls == 1 && sources.active() == ActiveSource::Bluetooth);
+  assert(!opensSourceSelector(STATIONS, sources));
+  assert(opensSourceSelector(PLAYER, sources));
+  assert(sources.active() == ActiveSource::Radio);
+  sources.select(ActiveSource::Bluetooth, bt);
 
   // A selected BT source without a phone cannot open transport.
   assert(longPress(PLAYER, sources) == PLAYER);
-  assert(doubleClick(PLAYER, sources, bt, cycleCalls) == PLAYER);
-  assert(cycleCalls == 2 && sources.active() == ActiveSource::Radio);
+  assert(opensSourceSelector(PLAYER, sources));
+  assert(sources.active() == ActiveSource::Bluetooth);
+  sources.select(ActiveSource::Radio, bt);
 
   // A phone connection selects BT; transport long press is available.
   bt.connected = true;
@@ -88,8 +85,8 @@ int main() {
   sources.observe(bt);
   assert(sources.active() == ActiveSource::Bluetooth);
   assert(longPress(PLAYER, sources) == BT_TRANSPORT);
-  assert(doubleClick(BT_TRANSPORT, sources, bt, cycleCalls) == BT_TRANSPORT);
-  assert(cycleCalls == 2 && sources.active() == ActiveSource::Bluetooth);
+  assert(!opensSourceSelector(BT_TRANSPORT, sources));
+  assert(sources.active() == ActiveSource::Bluetooth);
   assert(longPress(BT_TRANSPORT, sources) == PLAYER);
 
   // Rotation and click retain the existing transport command mapping.
@@ -124,11 +121,12 @@ int main() {
   assert(temporaryView.playback == DisplayPlaybackState::Stopped);
   assert(sources.canControlBluetooth());
 
-  // BT PLAYER: double-click selects RADIO; other screens remain unchanged.
-  assert(doubleClick(VOL, sources, bt, cycleCalls) == VOL);
-  assert(cycleCalls == 2 && sources.active() == ActiveSource::Bluetooth);
-  assert(doubleClick(PLAYER, sources, bt, cycleCalls) == PLAYER);
-  assert(cycleCalls == 3 && sources.active() == ActiveSource::Radio);
+  // BT PLAYER uses the same selector; other screens remain unchanged.
+  assert(!opensSourceSelector(VOL, sources));
+  assert(sources.active() == ActiveSource::Bluetooth);
+  assert(opensSourceSelector(PLAYER, sources));
+  assert(sources.active() == ActiveSource::Bluetooth);
+  sources.select(ActiveSource::Radio, bt);
 
   // Main encoder click controls only the active source on PLAYER.
   ClickCalls calls;

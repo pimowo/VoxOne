@@ -229,11 +229,19 @@ void dispatchUiInput(UiInputEvent event, int8_t steps,
     case UiInputAction::SourceNext:
       navigateCurrentSource(sourceManagerActiveSource(), true);
       break;
-    case UiInputAction::CycleSource:
-#if VOXONE_HAS_BT && VOXONE_PIN_MAP_COMPLETE
-      cycleNextSource();
-      transitionUiMode(PLAYER);
-#endif
+    case UiInputAction::OpenSourceSelector:
+      if (uiMenu.open(voxone::ui_menu::MenuId::SOURCE)) {
+        config.beginMenuTransaction();
+        voxone::source_menu::entered();
+        if (!transitionUiMode(MENU)) {
+          config.discardMenuTransaction();
+          uiMenu.close();
+        }
+      }
+      break;
+    case UiInputAction::OpenVolume:
+      transitionUiMode(VOL);
+      display.putRequest(DRAWVOL);
       break;
     case UiInputAction::OpenStations:
       transitionUiMode(STATIONS);

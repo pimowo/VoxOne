@@ -50,7 +50,8 @@ void auditTransport() {
   assert(source.find("player.suppressTemporaryRadioRestore()") !=
          std::string::npos);
   const auto begin = source.find("void sourceManagerTransport(");
-  const auto end = source.find("void cycleNextSource(", begin);
+  const auto end = source.find(
+      "\n#endif\n\nbool sourceManagerSelectSource(", begin);
   assert(begin != std::string::npos && end != std::string::npos);
   for (const char* command : {"btLink.play()", "btLink.pause()", "btLink.next()",
                               "btLink.prev()", "btLink.stop()"}) {

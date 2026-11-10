@@ -14,7 +14,9 @@ checkpointów pozostaje w historii Git i w istniejących raportach.
   „Do widzenia!” z natychmiastowym zatrzymaniem audio, płynne odświeżanie Menu,
   kontekstową belkę Menu na TFT, wygaszenie ekranu z ochroną OLED oraz tryby
   enkodera NORMAL/REVERSED (w tym obrót z wciśniętym przyciskiem i
-  synchronizację ustawienia pomiędzy WWW a Menu), a także transakcyjny ekran
+  synchronizację ustawienia pomiędzy WWW a Menu), szybki wybór wszystkich
+  źródeł dostępnych w profilu po dwukliku w Playerze oraz nakładkę głośności
+  po długim kliknięciu w trybie REVERSED, a także transakcyjny ekran
   „Zapisać zmiany?” na TFT/OLED: zapis przez TAK, pełne przywrócenie wyglądu i
   ustawień przez NIE oraz natychmiastowe wyjście, gdy nie ma zmian; dodatkowo
   sprawdzić polskie znaki w nazwach stacji i metadanych ICY/DLNA/ID3,
@@ -22,6 +24,9 @@ checkpointów pozostaje w historii Git i w istniejących raportach.
   migotania przy zmianie metadanych/Wi-Fi na TFT i przewijaniu na OLED S0;
   po zimnym starcie L0 potwierdzić wzrokowo pełne przejście TFT z logo do
   widoku Playera (zdalny most nie ma podłączonej kamery).
+- [ ] Na L0 z rzeczywiście sparowanym i odtwarzającym telefonem potwierdzić
+  słyszalny dźwięk Bluetooth po wyborze źródła, niezerowy transfer I2S do
+  DAC, synchronizację ustawionej głośności oraz zachowanie MUTE.
 - [ ] Fizycznie przetestować TTS/media z Home Assistant: źródło `SOURCE_HA`,
   metadane title/artist i `N/A` zamiast bitrate na TFT/OLED oraz powrót do
   wcześniej używanego źródła i jego stanu po EOF albo komendzie Stop.
@@ -57,8 +62,8 @@ checkpointów pozostaje w historii Git i w istniejących raportach.
 
 - [ ] Dodać trzeci tryb enkodera „Tylko stacje” (bez regulacji głośności) oraz
   zapewnić jego poprawne zachowanie z LINE OUT dla wszystkich trybów enkodera.
-- [ ] Ujednolicić gesty: w Menu obrót/klik/dwuklik/długi klik odpowiadają za
-  nawigację/wybór/wstecz/wyjście, a dwuklik w Playerze przełącza źródła.
+- [ ] Ujednolicić gesty w Menu: obrót/klik/dwuklik/długi klik odpowiadają za
+  nawigację/wybór/wstecz/wyjście.
 - [ ] Rozbudować działający szkielet Menu na TFT i OLED o pełne ekrany
   konfiguracji oraz odczyt i zapis ustawień; zachować obsługę enkoderem.
 - [ ] Dodać docelowe widoki `HOME`, `STATIONS`, `SETTINGS`, `UPDATE` i

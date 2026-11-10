@@ -23,6 +23,10 @@ class TemporaryAudioState;
 enum class ActiveSource : uint8_t;
 bool sourceManagerSelectSource(ActiveSource source);
 bool sourceManagerSelectSource(SourceId source);
+// Network callbacks only publish a request. The main loop performs the
+// potentially stack-heavy BT snapshot and source transition.
+bool sourceManagerRequestSource(SourceId source);
+void sourceManagerServiceRequests();
 bool sourceManagerSourceAvailable(SourceId source);
 uint8_t sourceManagerSourceMask();
 SourceId sourceManagerActiveSource();
@@ -49,7 +53,6 @@ void sourceManagerWebSnapshot(SourceWebSnapshot& snapshot);
 void sourceManagerBegin();
 void sourceManagerLoop();
 void sourceManagerStopForUpdate();
-void cycleNextSource();
 bool bluetoothSourceSelected();
 bool bluetoothAudioOutputAllowed();
 bool bluetoothPhysicallyConnected();

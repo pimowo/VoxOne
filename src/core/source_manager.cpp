@@ -13,9 +13,12 @@
 #include "serialcli.h"
 #include "../hardware/hardware_descriptor.h"
 
+#include <atomic>
+
 namespace {
 SourceManagerState sourceState;
 portMUX_TYPE sourceMux = portMUX_INITIALIZER_UNLOCKED;
+std::atomic<uint8_t> pendingSourceRequest{0};
 
 struct DisplayText {
   char peerName[97];
@@ -100,6 +103,23 @@ uint8_t sourceManagerSourceMask() {
 
 bool sourceManagerSourceAvailable(SourceId source) {
   return sourceIncluded(sourceManagerSourceMask(), source);
+}
+
+bool sourceManagerRequestSource(SourceId source) {
+  if (systemUpdateAudioBlocked() || !sourceManagerSourceAvailable(source))
+    return false;
+  pendingSourceRequest.store(
+      static_cast<uint8_t>(source) + 1U, std::memory_order_release);
+  return true;
+}
+
+void sourceManagerServiceRequests() {
+  const uint8_t request =
+      pendingSourceRequest.exchange(0, std::memory_order_acq_rel);
+  if (request == 0) return;
+  const SourceId source = static_cast<SourceId>(request - 1U);
+  if (!sourceManagerSelectSource(source))
+    netserver.requestOnChange(WEBSTATUS, 0);
 }
 
 SourceId sourceManagerActiveSource() {
@@ -464,16 +484,6 @@ void sourceManagerTransport(BtTransportInput input) {
   }
 }
 
-void cycleNextSource() {
-  if (systemUpdateAudioBlocked()) return;
-  portENTER_CRITICAL(&sourceMux);
-  const SourceUpdate update = sourceState.cycle(btLink.state());
-  const ActiveSource active = sourceState.active();
-  const bool temporaryAtChange = player.temporaryBusy();
-  portEXIT_CRITICAL(&sourceMux);
-  applyManualSourceChange(update, active, temporaryAtChange);
-}
-
 #endif
 
 bool sourceManagerSelectSource(ActiveSource source) {
@@ -493,6 +503,10 @@ bool sourceManagerSelectSource(ActiveSource source) {
     player.sendCommand({PR_STOP, 0});
   }
   applyManualSourceChange(update, source, temporaryAtChange);
+#if VOXONE_HAS_BT && VOXONE_PIN_MAP_COMPLETE
+  if (update.activeChanged && source == ActiveSource::Bluetooth)
+    sourceManagerApplyConfiguredBluetoothVolume();
+#endif
   return update.activeChanged;
 }
 

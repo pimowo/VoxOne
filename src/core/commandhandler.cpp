@@ -53,8 +53,7 @@ bool CommandHandler::exec(const char *command, const char *value, uint32_t cid) 
     SourceId target;
     if (!parseSourceId(value, target) ||
         !sourceManagerSourceAvailable(target)) return false;
-    if (!sourceManagerSelectSource(target)) netserver.requestOnChange(WEBSTATUS, cid);
-    return true;
+    return sourceManagerRequestSource(target);
   }
   if (strEquals(command, "webtransport")) {
     bool bluetoothSelected = false;

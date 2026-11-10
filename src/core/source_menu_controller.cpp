@@ -1,6 +1,7 @@
 #include "source_menu_controller.h"
 
 #include "source_manager.h"
+#include "config.h"
 #include "ui_menu.h"
 #include "ui_state.h"
 
@@ -15,6 +16,7 @@ void entered() {
 void select() {
   if (uiMenu.menuId() != ui_menu::MenuId::SOURCE) return;
   sourceManagerSelectSource(uiMenu.selectedSource());
+  config.discardMenuTransaction();
   uiMenu.close();
   transitionUiMode(PLAYER);
 }
