@@ -60,6 +60,7 @@ uint16_t sourceManagerGetVuLevel(uint16_t dimension, bool& playing);
 bool bluetoothTransportAvailable();
 bool sourceManagerStepBluetoothVolume(int8_t delta);
 bool sourceManagerSetBluetoothVolume(uint8_t user);
+void sourceManagerApplyConfiguredBluetoothVolume();
 void sourceManagerTransport(BtTransportInput input);
 #endif
 

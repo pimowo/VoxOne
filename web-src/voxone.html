@@ -214,6 +214,14 @@
         <article class="card volume-settings" aria-labelledby="volume-settings-title">
           <h3 id="volume-settings-title">Ustawienia głośności</h3>
           <div class="audio-control">
+            <label class="display-setting-toggle" for="line-out-enabled-toggle"><input id="line-out-enabled-toggle" type="checkbox" disabled><span>Tryb LINE OUT (Stała głośność)</span></label>
+            <p class="hint">Blokuje zwykłą regulację i utrzymuje jeden poziom wyjścia. MUTE pozostaje aktywny.</p>
+          </div>
+          <div id="line-out-volume-control" class="audio-control" hidden>
+            <div class="audio-control-heading"><label for="line-out-volume-slider">Stały poziom LINE OUT</label><output id="line-out-volume-value">—</output></div>
+            <input id="line-out-volume-slider" class="volume-slider" type="range" min="0" max="100" step="1" value="100" disabled>
+          </div>
+          <div class="audio-control">
             <div class="audio-control-heading"><label for="maximum-volume-slider">Maksymalna głośność</label><output id="maximum-volume-value">—</output></div>
             <input id="maximum-volume-slider" class="volume-slider" type="range" min="1" max="100" step="1" value="100" disabled>
             <p class="hint">Główny suwak głośności nadal działa w zakresie 0–100. Wartość 100 odpowiada ustawionemu tutaj maksimum.</p>

@@ -597,6 +597,10 @@ window.VoxOneRestartWaiter = Object.freeze({
   const startupFixedSlider = document.getElementById("startup-fixed-slider");
   const startupFixedValue = document.getElementById("startup-fixed-value");
   const volumeSettingsPending = document.getElementById("volume-settings-pending");
+  const lineOutEnabledToggle = document.getElementById("line-out-enabled-toggle");
+  const lineOutVolumeControl = document.getElementById("line-out-volume-control");
+  const lineOutVolumeSlider = document.getElementById("line-out-volume-slider");
+  const lineOutVolumeValue = document.getElementById("line-out-volume-value");
   const displaySettingsCard = document.getElementById("display-settings-card");
   const flipScreenControl = document.getElementById("flip-screen-control");
   const flipScreenToggle = document.getElementById("flip-screen-toggle");
@@ -731,6 +735,8 @@ window.VoxOneRestartWaiter = Object.freeze({
     maximumVolume: null,
     startupMode: null,
     startupFixedVolume: null,
+    lineOutEnabled: null,
+    lineOutVolume: null,
     brightness: null,
     canBrightness: false,
     canTftTheme: false,
@@ -798,9 +804,9 @@ window.VoxOneRestartWaiter = Object.freeze({
   let lastVolumeSentAt = 0;
   let pendingVolume = null;
   let awaitingVolume = null;
-  const volumeSettingEditing = { maximumVolume: null, startupMode: null, startupFixedVolume: null };
-  const volumeSettingTimers = { maximumVolume: 0, startupMode: 0, startupFixedVolume: 0 };
-  const volumeSettingDragging = { maximumVolume: false, startupFixedVolume: false };
+  const volumeSettingEditing = { maximumVolume: null, startupMode: null, startupFixedVolume: null, lineOutEnabled: null, lineOutVolume: null };
+  const volumeSettingTimers = { maximumVolume: 0, startupMode: 0, startupFixedVolume: 0, lineOutEnabled: 0, lineOutVolume: 0 };
+  const volumeSettingDragging = { maximumVolume: false, startupFixedVolume: false, lineOutVolume: false };
   let draggingVolume = false;
   let activeVolumeSlider = null;
   let leaving = false;
@@ -2006,11 +2012,13 @@ window.VoxOneRestartWaiter = Object.freeze({
     buttons.next.disabled = !connected || !state.webStatus || !transportSource || btDisconnected;
     buttons.play.disabled = !connected || !state.webStatus || !transportSource || btDisconnected ||
       !state.webStatus.playback;
-    for (const slider of volumeSliders) slider.disabled = !connected || state.volume100 === null;
+    for (const slider of volumeSliders) slider.disabled = !connected || state.volume100 === null || state.lineOutEnabled === true;
     for (const button of muteButtons) button.disabled = !connected || state.muted === null;
     maximumVolumeSlider.disabled = !connected || state.maximumVolume === null;
     startupModeSelect.disabled = !connected || state.startupMode === null;
     startupFixedSlider.disabled = !connected || state.startupMode !== 1 || state.startupFixedVolume === null;
+    lineOutEnabledToggle.disabled = !connected || state.lineOutEnabled === null;
+    lineOutVolumeSlider.disabled = !connected || state.lineOutEnabled !== true || state.lineOutVolume === null;
     brightnessSlider.disabled = !connected || !state.canBrightness || state.brightness === null;
     for (const [key, control] of Object.entries(audioControls)) {
       control.slider.disabled = !connected || state[key] === null;
@@ -2138,6 +2146,12 @@ window.VoxOneRestartWaiter = Object.freeze({
   }
 
   function renderVolumeSettings() {
+    const lineOutEnabled = volumeSettingEditing.lineOutEnabled ?? state.lineOutEnabled;
+    if (lineOutEnabled !== null) lineOutEnabledToggle.checked = lineOutEnabled;
+    lineOutVolumeControl.hidden = lineOutEnabled !== true;
+    const lineOutShown = volumeSettingEditing.lineOutVolume ?? state.lineOutVolume;
+    if (!volumeSettingDragging.lineOutVolume && lineOutShown !== null) lineOutVolumeSlider.value = String(lineOutShown);
+    lineOutVolumeValue.textContent = lineOutShown === null ? "—" : String(lineOutShown) + "%";
     const maxShown = volumeSettingEditing.maximumVolume ?? state.maximumVolume;
     if (!volumeSettingDragging.maximumVolume && maxShown !== null) maximumVolumeSlider.value = String(maxShown);
     maximumVolumeValue.textContent = maxShown === null ? "—" : String(maxShown);
@@ -2742,7 +2756,7 @@ window.VoxOneRestartWaiter = Object.freeze({
   }
   function resetRuntime() {
     const previousCurrent = state.current;
-    for (const key of ["source", "station", "metadata", "codec", "bitrate", "rssi", "volume", "volume100", "muted", "maximumVolume", "startupMode", "startupFixedVolume", "brightness", "stationListTimeout", "btTransportTimeout", "bass", "middle", "treble", "balance", "playing", "current", "ip", "haDiscoveryEnabled"]) {
+    for (const key of ["source", "station", "metadata", "codec", "bitrate", "rssi", "volume", "volume100", "muted", "maximumVolume", "startupMode", "startupFixedVolume", "lineOutEnabled", "lineOutVolume", "brightness", "stationListTimeout", "btTransportTimeout", "bass", "middle", "treble", "balance", "playing", "current", "ip", "haDiscoveryEnabled"]) {
       state[key] = null;
     }
     state.webStatus = null;
@@ -2789,6 +2803,7 @@ window.VoxOneRestartWaiter = Object.freeze({
     }
     volumeSettingDragging.maximumVolume = false;
     volumeSettingDragging.startupFixedVolume = false;
+    volumeSettingDragging.lineOutVolume = false;
     draggingVolume = false;
     activeVolumeSlider = null;
     awaitingVolume = null;
@@ -2874,6 +2889,15 @@ window.VoxOneRestartWaiter = Object.freeze({
         const volume = Number(value);
         if (!Number.isInteger(volume) || volume < 0 || volume > 100) break;
         confirmVolumeSetting("startupFixedVolume", volume);
+        break;
+      }
+      case "lineOutEnabled":
+        if (value === 0 || value === 1) confirmVolumeSetting("lineOutEnabled", value === 1);
+        break;
+      case "lineOutVolume": {
+        const volume = Number(value);
+        if (!Number.isInteger(volume) || volume < 0 || volume > 100) break;
+        confirmVolumeSetting("lineOutVolume", volume);
         break;
       }
       case "bass":
@@ -2975,12 +2999,16 @@ window.VoxOneRestartWaiter = Object.freeze({
         Array.isArray(status.availableSources) &&
         status.btModule && typeof status.btModule.online === "boolean" &&
         Number.isInteger(status.volume100) && status.volume100 >= 0 && status.volume100 <= 100 &&
-        typeof status.muted === "boolean") {
+        typeof status.muted === "boolean" && typeof status.lineOutEnabled === "boolean" &&
+        Number.isInteger(status.lineOutVolume) && status.lineOutVolume >= 0 && status.lineOutVolume <= 100) {
       state.webStatus = status;
       state.volume100 = status.volume100;
       state.muted = status.muted;
+      state.lineOutEnabled = status.lineOutEnabled;
+      state.lineOutVolume = status.lineOutVolume;
       renderStatus();
       renderVolume();
+      renderVolumeSettings();
       renderBtModule();
       renderUpdateFiles();
     }
@@ -3576,6 +3604,28 @@ window.VoxOneRestartWaiter = Object.freeze({
       return;
     }
     sendVolumeSetting("startupMode", "startupmode", mode);
+  });
+
+  lineOutEnabledToggle.addEventListener("change", () => {
+    if (lineOutEnabledToggle.disabled) return;
+    sendVolumeSetting("lineOutEnabled", "lineoutenabled",
+                      lineOutEnabledToggle.checked ? 1 : 0);
+  });
+
+  lineOutVolumeSlider.addEventListener("input", () => {
+    if (lineOutVolumeSlider.disabled) return;
+    volumeSettingDragging.lineOutVolume = true;
+    lineOutVolumeValue.textContent = lineOutVolumeSlider.value + "%";
+  });
+  lineOutVolumeSlider.addEventListener("change", () => {
+    if (lineOutVolumeSlider.disabled) return;
+    const value = Number(lineOutVolumeSlider.value);
+    volumeSettingDragging.lineOutVolume = false;
+    if (!Number.isInteger(value) || value < 0 || value > 100) {
+      renderVolumeSettings();
+      return;
+    }
+    sendVolumeSetting("lineOutVolume", "lineoutvolume", value);
   });
 
   startupFixedSlider.addEventListener("input", () => {

@@ -63,6 +63,8 @@ struct Snapshot {
   uint8_t tftTheme;
   uint8_t powerMode;
   bool encoderUiReversed;
+  bool lineOutEnabled;
+  uint8_t lineOutVolume;
   char mdnsName[kMdnsNameCapacity];
   char haName[kHaNameCapacity];
 };

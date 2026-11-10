@@ -33,8 +33,10 @@ inline bool displayVolumeMuted(uint8_t /*userVolume*/, bool muted = false) {
     return muted;
 }
 inline const char* displaySt7789VolumeText(uint8_t userVolume, bool muted,
-                                         char* buffer, size_t bufferSize) {
+                                         char* buffer, size_t bufferSize,
+                                         bool lineOutEnabled = false) {
     if (displayVolumeMuted(userVolume, muted)) return "MUTE";
+    if (lineOutEnabled) return "LINE";
     snprintf(buffer, bufferSize, "\023 %u", static_cast<unsigned>(userVolume));
     return buffer;
 }

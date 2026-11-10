@@ -6,6 +6,7 @@
 #include "netserver.h"
 #include "timekeeper.h"
 #include "volume_map.h"
+#include "line_out_volume.h"
 #include "system_operation_state.h"
 #include "source_manager.h"
 #include "network.h"
@@ -43,6 +44,9 @@ void Player::init() {
   _volumePending = false;
   _maximumPending = false;
   _mute.setUserVolume(runtime.userVolume);
+  _effectiveOutputUser.store(
+      voxone::line_out::effectiveUserVolume(runtime),
+      std::memory_order_release);
   _radioReconnect.reset();
   _pendingStationRefresh.reset();
   const auto audioPlan = voxone::hardware::runtimeAudioActivationPlan(
@@ -71,7 +75,7 @@ void Player::init() {
   #if PLAYER_FORCE_MONO
     forceMono(true);
   #endif
-  _loadVol(runtime.volume);
+  _loadVol(voxone::line_out::effectiveRawVolume(runtime));
   setConnectionTimeout(CONNECTION_TIMEOUT, CONNECTION_TIMEOUT_SSL);
   const bool taskStarted = startAudioTask();
   const auto inputBuffer = voxone::audio_runtime::currentInputBufferPlan();
@@ -345,8 +349,9 @@ void Player::loop() {
     } else if (pendingMode == 2) {
       config.setVolumeState(runtime.volume, pendingVolume);
     }
+    const auto updated = config.runtimeSnapshot();
     Audio::setVolume(_mute.outputVolume(
-        volToI2S(config.runtimeSnapshot().volume)));
+        volToI2S(voxone::line_out::effectiveRawVolume(updated))));
   }
   if (_shutdownSuspended) return;
   playerRequestParams_t requestP;
@@ -425,6 +430,7 @@ void Player::loop() {
         break;
       }
       case PR_VOL: {
+        if (config.runtimeSnapshot().lineOutEnabled) break;
         const uint8_t requested = static_cast<uint8_t>(constrain(requestP.payload, 0, 254));
         const VolumeState state = volumeStateFromRaw(
             requested, config.runtimeSnapshot().maximumVolume);
@@ -810,7 +816,8 @@ void Player::setMuted(bool muted) {
 }
 
 bool Player::outputSilent() const {
-  return _mute.outputSilent();
+  return _mute.active() ||
+         _effectiveOutputUser.load(std::memory_order_acquire) == 0;
 }
 
 PlayerRuntimeVolumeSnapshot Player::runtimeVolumeSnapshot() const {
@@ -819,7 +826,8 @@ PlayerRuntimeVolumeSnapshot Player::runtimeVolumeSnapshot() const {
 }
 
 void Player::setVol(uint8_t volume) {
-  if (systemUpdateAudioBlocked()) return;
+  if (systemUpdateAudioBlocked() ||
+      config.runtimeSnapshot().lineOutEnabled) return;
   _volTicks = millis();
   _volTimer = true;
   portENTER_CRITICAL(&playerVolumeMux);
@@ -830,7 +838,8 @@ void Player::setVol(uint8_t volume) {
 }
 
 void Player::setUserVol(uint8_t user) {
-  if (systemUpdateAudioBlocked()) return;
+  if (systemUpdateAudioBlocked() ||
+      config.runtimeSnapshot().lineOutEnabled) return;
   if (user > 100) user = 100;
   _volTicks = millis();
   _volTimer = true;
@@ -839,6 +848,7 @@ void Player::setUserVol(uint8_t user) {
   config.userVolume = user;
   config.store.lastUserVolume = user;
   _mute.setUserVolume(user);
+  _effectiveOutputUser.store(user, std::memory_order_release);
   _pendingVolume = user;
   _pendingMode = 1;
   _volumePending = true;
@@ -847,13 +857,15 @@ void Player::setUserVol(uint8_t user) {
 }
 
 void Player::stepUserVol(int8_t direction) {
-  if (systemUpdateAudioBlocked()) return;
+  if (systemUpdateAudioBlocked() ||
+      config.runtimeSnapshot().lineOutEnabled) return;
   Config::WriteLock configLock(config._persistMutex);
   portENTER_CRITICAL(&playerVolumeMux);
   const uint8_t user = _mute.stepUserVolume(
       _mute.outputSnapshot().userVolume, direction);
   config.userVolume = user;
   config.store.lastUserVolume = user;
+  _effectiveOutputUser.store(user, std::memory_order_release);
   _pendingVolume = user;
   _pendingMode = 1;
   _volumePending = true;
@@ -864,6 +876,10 @@ void Player::stepUserVol(int8_t direction) {
 }
 
 void Player::applyCurrentVolume() {
+  const auto runtime = config.runtimeSnapshot();
+  _effectiveOutputUser.store(
+      voxone::line_out::effectiveUserVolume(runtime),
+      std::memory_order_release);
   portENTER_CRITICAL(&playerVolumeMux);
   _pendingVolume = _mute.outputSnapshot().userVolume;
   _pendingMode = 2;

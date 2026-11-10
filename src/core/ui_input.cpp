@@ -88,13 +88,14 @@ UiInputContext currentUiInputContext() {
     bluetoothConnected = bluetoothTransportAvailable();
   }
 #endif
+  const auto runtime = config.runtimeSnapshot();
   return {uiState.mode(), network.status == CONNECTED,
           capabilities.hasLocalDisplay(), capabilities.supportsVoxOneBt,
           bluetoothSelected, bluetoothConnected,
           capabilities.supportsBtTransportUi &&
               display.supportsBluetoothTransportView(),
           sourceManagerActiveSource(),
-          config.runtimeSnapshot().encoderUiReversed};
+          runtime.encoderUiReversed, runtime.lineOutEnabled};
 }
 
 int8_t signedSteps(UiInputAction action, int8_t steps) {
@@ -108,6 +109,7 @@ int8_t signedSteps(UiInputAction action, int8_t steps) {
 }
 
 void stepVolume(UiInputAction action, int8_t steps) {
+  if (config.runtimeSnapshot().lineOutEnabled) return;
   const int8_t direction = signedSteps(action, steps);
 #if VOXONE_HAS_BT && VOXONE_PIN_MAP_COMPLETE
   if (voxone::hardware::hardwareCapabilities().supportsVoxOneBt &&

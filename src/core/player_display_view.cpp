@@ -18,8 +18,10 @@ void capturePlayerDisplayView(PlayerDisplayView& out, int rssi) {
   btConnected = bluetoothPhysicallyConnected();
 #endif
   const MuteOutputSnapshot output = player.outputSnapshot();
+  const auto runtime = config.runtimeSnapshot();
   makePlayerDisplayView(out, source, config.station.name, config.station.title,
                         config.station.metadataMode == STATION_META_SWAP,
                         output.userVolume, output.muted, btConnected, rssi,
-                        config.station.bitrate, config.configFmt);
+                        config.station.bitrate, config.configFmt,
+                        runtime.lineOutEnabled, runtime.lineOutVolume);
 }

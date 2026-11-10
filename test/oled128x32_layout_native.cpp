@@ -213,6 +213,11 @@ int main() {
   assertVolumeDialog(99, false, "99%");
   assertVolumeDialog(100, false, "100%");
   assertVolumeDialog(20, true, "MUTE");
+  char lineOut[5]{};
+  formatVolume(lineOut, sizeof(lineOut), 80, false, true);
+  assert(std::strcmp(lineOut, "LINE") == 0);
+  formatVolumePercent(lineOut, sizeof(lineOut), 80, false, true);
+  assert(std::strcmp(lineOut, "LINE") == 0);
 
   assertSource("WEB", "[WEB]");
   assertSource("BT", "[BT]");

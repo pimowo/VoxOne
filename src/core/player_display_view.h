@@ -20,6 +20,7 @@ struct PlayerDisplayView {
   DisplayPlaybackState playback = DisplayPlaybackState::Stopped;
   uint8_t userVolume = 0;
   bool muted = false;
+  bool lineOutEnabled = false;
   bool btConnected = false;
   uint8_t wifiLevel = 0;
   uint32_t sampleRate = 0;
@@ -87,14 +88,17 @@ inline void makePlayerDisplayView(PlayerDisplayView& out,
                                   uint8_t userVolume, bool muted,
                                   bool btConnected, int rssi,
                                   uint16_t radioBitrate,
-                                  BitrateFormat radioFormat) {
+                                  BitrateFormat radioFormat,
+                                  bool lineOutEnabled = false,
+                                  uint8_t lineOutVolume = 100) {
   const char* name = stationName ? stationName : "";
   voxone::utf8::copy(out.station, sizeof(out.station),
                      displayPlayerStationText(source, name));
   out.source = source.kind;
   out.playback = source.playback;
-  out.userVolume = userVolume;
+  out.userVolume = lineOutEnabled ? lineOutVolume : userVolume;
   out.muted = muted;
+  out.lineOutEnabled = lineOutEnabled;
   out.btConnected = btConnected;
   out.wifiLevel = playerWifiLevel(rssi);
   out.sampleRate = source.sampleRate;

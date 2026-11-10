@@ -46,10 +46,14 @@ constexpr uint8_t displayVolume(uint8_t volume) {
 }
 
 inline void formatVolume(char* output, size_t outputSize, uint8_t volume,
-                         bool muted) {
+                         bool muted, bool lineOutEnabled = false) {
   if (!output || outputSize == 0) return;
   if (muted) {
     snprintf(output, outputSize, "X");
+    return;
+  }
+  if (lineOutEnabled) {
+    snprintf(output, outputSize, "LINE");
     return;
   }
   snprintf(output, outputSize, "%u",
@@ -57,10 +61,15 @@ inline void formatVolume(char* output, size_t outputSize, uint8_t volume,
 }
 
 inline void formatVolumePercent(char* output, size_t outputSize,
-                                uint8_t volume, bool muted) {
+                                uint8_t volume, bool muted,
+                                bool lineOutEnabled = false) {
   if (!output || outputSize == 0) return;
   if (muted) {
     snprintf(output, outputSize, "MUTE");
+    return;
+  }
+  if (lineOutEnabled) {
+    snprintf(output, outputSize, "LINE");
     return;
   }
   snprintf(output, outputSize, "%u%%",

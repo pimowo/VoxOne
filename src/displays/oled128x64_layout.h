@@ -98,10 +98,13 @@ inline void formatSource(char* output, size_t outputSize, const char* label) {
 }
 
 inline void formatStatusVolume(char* output, size_t outputSize,
-                               uint8_t volume, bool muted) {
+                               uint8_t volume, bool muted,
+                               bool lineOutEnabled = false) {
   if (!output || outputSize == 0) return;
   if (muted) {
     snprintf(output, outputSize, "X");
+  } else if (lineOutEnabled) {
+    snprintf(output, outputSize, "LINE");
   } else {
     snprintf(output, outputSize, "%u",
              static_cast<unsigned>(displayVolume(volume)));

@@ -288,16 +288,26 @@ void sourceManagerLoop() {
   BtVolumeSessionEvent volumeEvent;
   while (btLink.takeVolumeSessionEvent(volumeEvent)) {
     if (!sessionCapable || update.btDisconnected) continue;
-    const uint8_t currentUser = player.outputSnapshot().userVolume;
+    const auto runtime = config.runtimeSnapshot();
+    const uint8_t currentUser = runtime.lineOutEnabled
+                                    ? runtime.lineOutVolume
+                                    : player.outputSnapshot().userVolume;
     uint8_t peerUser = currentUser;
     portENTER_CRITICAL(&sourceMux);
     const BtVolumeDecision decision = volumeSessionGate.receive(
         volumeEvent, currentUser, active == ActiveSource::Bluetooth,
         peerUser);
     portEXIT_CRITICAL(&sourceMux);
-    if (decision == BtVolumeDecision::PeerVolumeAccepted)
-      player.setUserVol(peerUser);
+    if (decision == BtVolumeDecision::PeerVolumeAccepted) {
+      if (runtime.lineOutEnabled)
+        sendBluetoothUserVolume(runtime.lineOutVolume);
+      else
+        player.setUserVol(peerUser);
+    }
   }
+  if ((update.btConnected || update.activeChanged) &&
+      active == ActiveSource::Bluetooth)
+    sourceManagerApplyConfiguredBluetoothVolume();
   if (update.activeChanged)
     serialCli.printf("##[SOURCE]# active=%s reason=%s\n",
                      sourceName(active), sourceReason(update.reason));
@@ -399,7 +409,8 @@ bool bluetoothTransportAvailable() {
 }
 
 bool sourceManagerStepBluetoothVolume(int8_t delta) {
-  if (systemUpdateAudioBlocked()) return false;
+  if (systemUpdateAudioBlocked() ||
+      config.runtimeSnapshot().lineOutEnabled) return false;
   portENTER_CRITICAL(&sourceMux);
   const bool available = sourceState.canControlBluetooth();
   portEXIT_CRITICAL(&sourceMux);
@@ -413,7 +424,8 @@ bool sourceManagerStepBluetoothVolume(int8_t delta) {
 }
 
 bool sourceManagerSetBluetoothVolume(uint8_t user) {
-  if (systemUpdateAudioBlocked()) return false;
+  if (systemUpdateAudioBlocked() ||
+      config.runtimeSnapshot().lineOutEnabled) return false;
   if (user > 100) user = 100;
   portENTER_CRITICAL(&sourceMux);
   const bool available = sourceState.canControlBluetooth();
@@ -422,6 +434,18 @@ bool sourceManagerSetBluetoothVolume(uint8_t user) {
   if (!sendBluetoothUserVolume(user)) return false;
   player.setUserVol(user);
   return true;
+}
+
+void sourceManagerApplyConfiguredBluetoothVolume() {
+  if (systemUpdateAudioBlocked()) return;
+  const auto runtime = config.runtimeSnapshot();
+  const uint8_t configured = runtime.lineOutEnabled
+                                 ? runtime.lineOutVolume
+                                 : player.outputSnapshot().userVolume;
+  portENTER_CRITICAL(&sourceMux);
+  const bool available = sourceState.canControlBluetooth();
+  portEXIT_CRITICAL(&sourceMux);
+  if (available) sendBluetoothUserVolume(configured);
 }
 
 void sourceManagerTransport(BtTransportInput input) {

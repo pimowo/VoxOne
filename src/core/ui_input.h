@@ -96,6 +96,19 @@ struct UiInputContext {
   bool supportsBluetoothTransportView;
   SourceId activeSource;
   bool encoderUiReversed;
+  bool lineOutEnabled;
+
+  constexpr UiInputContext(displayMode_e uiMode, bool connected,
+                           bool localDisplay, bool bluetoothSupported,
+                           bool btSelected, bool btConnected,
+                           bool btTransportView, SourceId source,
+                           bool encoderReversed,
+                           bool lineOut = false)
+      : mode(uiMode), networkConnected(connected),
+        hasLocalDisplay(localDisplay), supportsBluetooth(bluetoothSupported),
+        bluetoothSelected(btSelected), bluetoothConnected(btConnected),
+        supportsBluetoothTransportView(btTransportView), activeSource(source),
+        encoderUiReversed(encoderReversed), lineOutEnabled(lineOut) {}
 };
 
 struct UiInputDecision {
@@ -119,6 +132,7 @@ inline UiInputDecision resolveUiInput(const UiInputContext& context,
     const bool encoderRotation =
         control == UiInputControl::EncoderRotation;
     const bool navigationControl =
+        (encoderRotation && context.lineOutEnabled) ||
         context.encoderUiReversed == encoderRotation;
     if (!navigationControl)
       return uiInputDecision(event == UiInputEvent::Left

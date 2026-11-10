@@ -29,8 +29,9 @@ int main() {
   assert(controls.find("normalizeEc11Delta(") != std::string::npos);
   assert(controls.find("UiInputControl::EncoderGesture") !=
          std::string::npos);
-  assert(input.find("runtimeSnapshot().encoderUiReversed") !=
+  assert(input.find("runtime.encoderUiReversed") !=
          std::string::npos);
+  assert(input.find("runtime.lineOutEnabled") != std::string::npos);
   assert(input.find("SourceId::Bluetooth") != std::string::npos);
   assert(input.find("SourceId::Dlna") != std::string::npos);
   assert(menu.find("Odwrócony enkoder") != std::string::npos);

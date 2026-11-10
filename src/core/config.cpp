@@ -24,6 +24,7 @@
 #include "ui_timeout_config.h"
 #include "ui_state.h"
 #include "ui_menu.h"
+#include "source_manager.h"
 #include "www_readiness.h"
 #include "www_asset_integrity.h"
 #include "ap_wifi_recovery.h"
@@ -240,6 +241,13 @@ void Config::init() {
           store.reservedWeather, sizeof(store.reservedWeather),
           store.encoderUiReversed))
     store.encoderUiReversed = false;
+  if (loaded.status != voxone::config_format::ConfigRecordStatus::LOADED_V7 ||
+      !voxone::line_out::decode(
+          store.reservedWeather, sizeof(store.reservedWeather),
+          store.lineOutEnabled, store.lineOutVolume)) {
+    store.lineOutEnabled = voxone::line_out::kDefaultEnabled;
+    store.lineOutVolume = voxone::line_out::kDefaultVolume;
+  }
   _startupStatus = loaded.status;
   _storage.begin(loaded.status, loaded.storedBtEnabled);
   const bool needsBtIntroductionMigration =
@@ -546,6 +554,11 @@ void Config::_applyDefaults() {
   voxone::encoder_ui::encode(
       store.encoderUiReversed, store.reservedWeather,
       sizeof(store.reservedWeather));
+  store.lineOutEnabled = voxone::line_out::kDefaultEnabled;
+  store.lineOutVolume = voxone::line_out::kDefaultVolume;
+  voxone::line_out::encode(
+      store.lineOutEnabled, store.lineOutVolume, store.reservedWeather,
+      sizeof(store.reservedWeather));
 }
 
 bool Config::persistV7() {
@@ -621,6 +634,59 @@ bool Config::setEncoderUiReversed(bool reversed) {
   return persisted;
 }
 
+bool Config::setLineOutEnabled(bool enabled) {
+  bool persisted = true;
+  {
+    WriteLock lock(_persistMutex);
+    if (store.lineOutEnabled == enabled) return true;
+    if (!voxone::line_out::encode(
+            enabled, store.lineOutVolume, store.reservedWeather,
+            sizeof(store.reservedWeather)))
+      return false;
+    store.lineOutEnabled = enabled;
+    _storage.markDirty();
+    _publishRuntimeLocked();
+    persisted = !_startupReadOnly && persistV7();
+  }
+  if (!persisted) return false;
+  player.applyCurrentVolume();
+#if VOXONE_HAS_BT && VOXONE_PIN_MAP_COMPLETE
+  sourceManagerApplyConfiguredBluetoothVolume();
+#endif
+  display.putRequest(DRAWVOL);
+  netserver.requestOnChange(VOLUME, 0);
+  return true;
+}
+
+bool Config::setLineOutVolume(uint8_t volume) {
+  if (volume > 100) return false;
+  bool enabled = false;
+  bool persisted = true;
+  {
+    WriteLock lock(_persistMutex);
+    if (store.lineOutVolume == volume) return true;
+    if (!voxone::line_out::encode(
+            store.lineOutEnabled, volume, store.reservedWeather,
+            sizeof(store.reservedWeather)))
+      return false;
+    store.lineOutVolume = volume;
+    enabled = store.lineOutEnabled;
+    _storage.markDirty();
+    _publishRuntimeLocked();
+    persisted = !_startupReadOnly && persistV7();
+  }
+  if (!persisted) return false;
+  if (enabled) {
+    player.applyCurrentVolume();
+#if VOXONE_HAS_BT && VOXONE_PIN_MAP_COMPLETE
+    sourceManagerApplyConfiguredBluetoothVolume();
+#endif
+    display.putRequest(DRAWVOL);
+  }
+  netserver.requestOnChange(VOLUME, 0);
+  return true;
+}
+
 void Config::beginMenuTransaction() {
   voxone::ui_menu::MenuSettings settings{};
   {
@@ -632,6 +698,8 @@ void Config::beginMenuTransaction() {
     settings.tftTheme = static_cast<uint8_t>(store.tftTheme);
     settings.screensaverEnabled = store.screensaverEnabled;
     settings.encoderUiReversed = store.encoderUiReversed;
+    settings.lineOutEnabled = store.lineOutEnabled;
+    settings.lineOutVolume = store.lineOutVolume;
     _menuPersistedSettings = settings;
     _menuDraftSettings = settings;
     _menuTransactionActive = true;
@@ -644,6 +712,10 @@ void Config::_applyMenuSettingsLive(
     const voxone::ui_menu::MenuSettings& settings) {
   player.setBalance(settings.balance);
   player.setTone(settings.bass, store.middle, settings.treble);
+  player.applyCurrentVolume();
+#if VOXONE_HAS_BT && VOXONE_PIN_MAP_COMPLETE
+  sourceManagerApplyConfiguredBluetoothVolume();
+#endif
   if (localBacklightInstalled() && runtimeSnapshot().dspOn) {
     analogWrite(voxone::hardware::currentHardware().display.backlight,
                 map(settings.brightness, 0, 100, 0, 255));
@@ -659,6 +731,7 @@ void Config::previewMenuSettings(
   if (settings.brightness > 100) settings.brightness = 100;
   if (!voxone::tft_theme::valid(static_cast<TftTheme>(settings.tftTheme)))
     settings.tftTheme = static_cast<uint8_t>(THEME_DEFAULT);
+  if (settings.lineOutVolume > 100) settings.lineOutVolume = 100;
   {
     WriteLock lock(_persistMutex);
     if (!_menuTransactionActive) return;
@@ -697,6 +770,16 @@ bool Config::commitMenuTransaction() {
       store.encoderUiReversed = draft.encoderUiReversed;
       _storage.markDirty();
     }
+    if (store.lineOutEnabled != draft.lineOutEnabled ||
+        store.lineOutVolume != draft.lineOutVolume) {
+      if (!voxone::line_out::encode(
+              draft.lineOutEnabled, draft.lineOutVolume,
+              store.reservedWeather, sizeof(store.reservedWeather)))
+        return false;
+      store.lineOutEnabled = draft.lineOutEnabled;
+      store.lineOutVolume = draft.lineOutVolume;
+      _storage.markDirty();
+    }
 
     _menuTransactionActive = false;
     _publishRuntimeLocked();
@@ -712,11 +795,16 @@ bool Config::commitMenuTransaction() {
           static_cast<TftTheme>(_menuPersistedSettings.tftTheme);
       store.encoderUiReversed =
           _menuPersistedSettings.encoderUiReversed;
+      store.lineOutEnabled = _menuPersistedSettings.lineOutEnabled;
+      store.lineOutVolume = _menuPersistedSettings.lineOutVolume;
       voxone::tft_theme::encode(
           store.tftTheme, store.reservedWeather,
           sizeof(store.reservedWeather));
       voxone::encoder_ui::encode(
           store.encoderUiReversed, store.reservedWeather,
+          sizeof(store.reservedWeather));
+      voxone::line_out::encode(
+          store.lineOutEnabled, store.lineOutVolume, store.reservedWeather,
           sizeof(store.reservedWeather));
       _menuTransactionActive = true;
       _publishRuntimeLocked();
@@ -726,6 +814,7 @@ bool Config::commitMenuTransaction() {
   uiMenu.configureEncoderUiReversed(draft.encoderUiReversed);
   netserver.requestOnChange(BALANCE, 0);
   netserver.requestOnChange(EQUALIZER, 0);
+  netserver.requestOnChange(VOLUME, 0);
   netserver.requestOnChange(GETSCREEN, 0);
   return true;
 }
@@ -743,6 +832,8 @@ void Config::discardMenuTransaction() {
     restored.tftTheme = static_cast<uint8_t>(store.tftTheme);
     restored.screensaverEnabled = store.screensaverEnabled;
     restored.encoderUiReversed = store.encoderUiReversed;
+    restored.lineOutEnabled = store.lineOutEnabled;
+    restored.lineOutVolume = store.lineOutVolume;
     _publishRuntimeLocked();
   }
   uiMenu.configureEncoderUiReversed(restored.encoderUiReversed);
@@ -768,7 +859,8 @@ bool Config::setDefaults() {
     btRuntime.setEnabled(supportsBt);
     portENTER_CRITICAL(&playerVolumeMux);
     userVolume = store.lastUserVolume;
-    player._syncOutputSilence(userVolume);
+    player._syncOutputSilence(userVolume, store.lineOutEnabled,
+                              store.lineOutVolume);
     portEXIT_CRITICAL(&playerVolumeMux);
     _vuThreshold.reset();
     _publishRuntimeLocked();
@@ -804,7 +896,8 @@ uint8_t Config::setVolumeState(uint8_t raw, uint8_t user) {
   store.volume = raw;
   userVolume = user;
   store.lastUserVolume = user;
-  player._syncOutputSilence(user);
+  player._syncOutputSilence(user, store.lineOutEnabled,
+                            store.lineOutVolume);
   portEXIT_CRITICAL(&playerVolumeMux);
   _publishRuntimeLocked();
   display.putRequest(DRAWVOL);
@@ -1203,6 +1296,8 @@ void Config::_publishRuntimeLocked() {
   runtime.tftTheme = static_cast<uint8_t>(store.tftTheme);
   runtime.powerMode = static_cast<uint8_t>(store.powerMode);
   runtime.encoderUiReversed = store.encoderUiReversed;
+  runtime.lineOutEnabled = store.lineOutEnabled;
+  runtime.lineOutVolume = store.lineOutVolume;
   if (_menuTransactionActive) {
     runtime.balance = _menuDraftSettings.balance;
     runtime.bass = _menuDraftSettings.bass;
@@ -1213,6 +1308,8 @@ void Config::_publishRuntimeLocked() {
     runtime.tftTheme = _menuDraftSettings.tftTheme;
     runtime.encoderUiReversed =
         _menuDraftSettings.encoderUiReversed;
+    runtime.lineOutEnabled = _menuDraftSettings.lineOutEnabled;
+    runtime.lineOutVolume = _menuDraftSettings.lineOutVolume;
   }
   strlcpy(runtime.mdnsName, store.mdnsname, sizeof(runtime.mdnsName));
   strlcpy(runtime.haName, store.haName, sizeof(runtime.haName));

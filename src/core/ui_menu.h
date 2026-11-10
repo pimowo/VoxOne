@@ -53,6 +53,8 @@ enum class MenuSetting : uint8_t {
   AUDIO_BALANCE,
   AUDIO_BASS,
   AUDIO_TREBLE,
+  LINE_OUT_ENABLED,
+  LINE_OUT_VOLUME,
   DISPLAY_BRIGHTNESS,
   DISPLAY_THEME,
   SCREENSAVER_ENABLED,
@@ -67,6 +69,8 @@ struct MenuSettings {
   uint8_t tftTheme = 0;
   bool screensaverEnabled = false;
   bool encoderUiReversed = false;
+  bool lineOutEnabled = false;
+  uint8_t lineOutVolume = 100;
 };
 
 inline bool operator==(const MenuSettings& left, const MenuSettings& right) {
@@ -75,7 +79,9 @@ inline bool operator==(const MenuSettings& left, const MenuSettings& right) {
          left.brightness == right.brightness &&
          left.tftTheme == right.tftTheme &&
          left.screensaverEnabled == right.screensaverEnabled &&
-         left.encoderUiReversed == right.encoderUiReversed;
+         left.encoderUiReversed == right.encoderUiReversed &&
+         left.lineOutEnabled == right.lineOutEnabled &&
+         left.lineOutVolume == right.lineOutVolume;
 }
 
 inline bool operator!=(const MenuSettings& left, const MenuSettings& right) {
@@ -169,6 +175,8 @@ class UiMenu {
   std::atomic<uint8_t> draftBrightness_{100};
   std::atomic<uint8_t> draftTftTheme_{0};
   std::atomic<bool> draftScreensaverEnabled_{false};
+  std::atomic<bool> draftLineOutEnabled_{false};
+  std::atomic<uint8_t> draftLineOutVolume_{100};
 };
 
 MenuLevel menuLevel(MenuId menuId);

@@ -79,8 +79,10 @@ class MockWebSocket {
   receiveNetwork(info, haDiscoveryEnabled = true) {
     this.onmessage({data: JSON.stringify({networkInfo: info, haDiscoveryEnabled})});
   }
-  receiveVolume(volume, muted) { this.onmessage({data: JSON.stringify({payload:[
-    {id:'volume100',value:volume},{id:'muted',value:muted ? 1 : 0}
+  receiveVolume(volume, muted, lineOutEnabled = false, lineOutVolume = 100) { this.onmessage({data: JSON.stringify({payload:[
+    {id:'volume100',value:volume},{id:'muted',value:muted ? 1 : 0},
+    {id:'lineOutEnabled',value:lineOutEnabled ? 1 : 0},
+    {id:'lineOutVolume',value:lineOutVolume}
   ]})}); }
 }
 window.WebSocket = MockWebSocket;
@@ -721,12 +723,29 @@ setTimeout(async () => {
     btTestSocket.receiveVolume(27, true);
     check(muteButtons[0].getAttribute('aria-pressed') === 'true', 'external mute update');
     check(!btTestSocket.sent.some(item => /^(stop|webtransport|source)=/.test(item)), 'mute does not stop or switch source');
+    const lineOutToggle = get('line-out-enabled-toggle');
+    const lineOutSlider = get('line-out-volume-slider');
+    check(!lineOutToggle.disabled && get('line-out-volume-control').hidden,
+      'LINE OUT waits disabled and hides its fixed slider');
+    lineOutToggle.checked = true;
+    lineOutToggle.dispatchEvent(new Event('change'));
+    check(btTestSocket.sent.at(-1) === 'lineoutenabled=1', 'LINE OUT enable command');
+    btTestSocket.receiveVolume(27, true, true, 80);
+    check(!get('line-out-volume-control').hidden &&
+      [...document.querySelectorAll('.volume-slider')].slice(0, 2).every(slider => slider.disabled),
+      'LINE OUT shows fixed slider and disables standard volume');
+    lineOutSlider.value = '85';
+    lineOutSlider.dispatchEvent(new Event('input'));
+    lineOutSlider.dispatchEvent(new Event('change'));
+    check(btTestSocket.sent.at(-1) === 'lineoutvolume=85', 'LINE OUT fixed level command');
+    btTestSocket.receiveVolume(27, true, true, 85);
+    check(get('line-out-volume-value').textContent === '85%', 'LINE OUT level ack');
     const activeSourceFor = {WEB:'radio', BT:'bt', HA:'ha', DLNA:'dlna', AUX:'aux'};
     const sourceSnapshot = (source, availableSources, online, fields = {}) => ({
       source, activeSource:activeSourceFor[source], availableSources,
       name:'Radio', metadata:'', artist:'', title:'',
       codec:'MP3', playback:'PLAY', transport:'playing', bitrate:128, sampleRate:0,
-      btConnected:false, volume100:27, muted:true,
+      btConnected:false, volume100:27, muted:true, lineOutEnabled:false, lineOutVolume:100,
       btModule:{online, firmware:'', protocol:0, name:'', capabilities:''}, ...fields
     });
     const selector = get('source-selector');
@@ -938,7 +957,7 @@ setTimeout(async () => {
     check(btTestSocket.sent.some(item => item.includes('getwebstatus')), 'status request');
     const status = {source:'BT', activeSource:'bt', availableSources:['radio','bt'], name:'Telefon', metadata:'', artist:'', title:'',
       codec:'', playback:'', transport:'unavailable', bitrate:0, sampleRate:0, btConnected:false,
-      volume100:32, muted:true,
+      volume100:32, muted:true, lineOutEnabled:false, lineOutVolume:100,
       btModule:{online:true, firmware:'0.6.1-dev', protocol:2,
                 name:'VoxOneBT-EFF35A', capabilities:'AVRCP,VU'}};
     btTestSocket.receive(status);

@@ -54,7 +54,7 @@ int main() {
   assert(std::strcmp(source, "[SPDIF]") == 0);
   assert(centeredTextLeft(kSource, std::strlen(source)) == 11);
 
-  char volume[4]{};
+  char volume[5]{};
   formatStatusVolume(volume, sizeof(volume), 0, false);
   assert(std::strcmp(volume, "0") == 0);
   assert(centeredTextLeft(kVolume, std::strlen(volume)) == 71);
@@ -67,6 +67,8 @@ int main() {
   assert(std::strcmp(volume, "100") == 0);
   formatStatusVolume(volume, sizeof(volume), 42, true);
   assert(std::strcmp(volume, "X") == 0);
+  formatStatusVolume(volume, sizeof(volume), 80, false, true);
+  assert(std::strcmp(volume, "LINE") == 0);
 
   char ssid[22]{};
   formatStartupSsid(ssid, sizeof(ssid), "");

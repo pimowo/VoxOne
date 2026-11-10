@@ -41,6 +41,8 @@ Snapshot makeSnapshot(uint8_t id) {
   value.maximumVolume = static_cast<uint8_t>(80 + id);
   value.startupMode = id & 1U;
   value.startupFixedVolume = static_cast<uint8_t>(30 + id);
+  value.lineOutEnabled = (id & 1U) != 0;
+  value.lineOutVolume = static_cast<uint8_t>(70 + id);
   value.balance = static_cast<int8_t>(id == 1 ? -6 : 6);
   value.bass = static_cast<int8_t>(id);
   value.middle = static_cast<int8_t>(id + 1);
@@ -89,6 +91,8 @@ bool samePayload(const Snapshot& left, const Snapshot& right) {
       left.maximumVolume == right.maximumVolume &&
       left.startupMode == right.startupMode &&
       left.startupFixedVolume == right.startupFixedVolume &&
+      left.lineOutEnabled == right.lineOutEnabled &&
+      left.lineOutVolume == right.lineOutVolume &&
       left.balance == right.balance && left.bass == right.bass &&
       left.middle == right.middle && left.treble == right.treble &&
       left.lastStation == right.lastStation &&

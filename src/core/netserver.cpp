@@ -1349,6 +1349,7 @@ static bool formatNetworkInfo(
 
 static void formatWebStatus(char* output, size_t capacity) {
   const MuteOutputSnapshot volume = player.outputSnapshot();
+  const auto runtime = config.runtimeSnapshot();
   char radioMetadata[BUFLEN + 1]{};
   stationMetaDisplay(config.station.title,
                      config.station.metadataMode == STATION_META_SWAP,
@@ -1425,12 +1426,13 @@ static void formatWebStatus(char* output, size_t capacity) {
     return;
   }
   const int tail = snprintf(output + used, capacity - used,
-      ",\"online\":%s,\"protocol\":%u},\"bitrate\":%u,\"sampleRate\":%lu,\"btConnected\":%s,\"availableSources\":[%s],\"volume100\":%u,\"muted\":%s}}",
+      ",\"online\":%s,\"protocol\":%u},\"bitrate\":%u,\"sampleRate\":%lu,\"btConnected\":%s,\"availableSources\":[%s],\"volume100\":%u,\"muted\":%s,\"lineOutEnabled\":%s,\"lineOutVolume\":%u}}",
       btOnline ? "true" : "false", btProtocol,
       status.bitrate, static_cast<unsigned long>(status.sampleRate),
       btPhoneConnected ? "true" : "false",
       availableSources,
-      volume.userVolume, volume.muted ? "true" : "false");
+      volume.userVolume, volume.muted ? "true" : "false",
+      runtime.lineOutEnabled ? "true" : "false", runtime.lineOutVolume);
   if (tail < 0 || static_cast<size_t>(tail) >= capacity - used) output[0] = '\0';
 }
 
@@ -3543,7 +3545,7 @@ void NetServer::processQueue(){
       case VOLUME: {
         const PlayerRuntimeVolumeSnapshot volume =
             player.runtimeVolumeSnapshot();
-        sprintf (wsBuf, "{\"payload\":[{\"id\":\"volume\",\"value\":%d},{\"id\":\"volume100\",\"value\":%d},{\"id\":\"muted\",\"value\":%d},{\"id\":\"maximumVolume\",\"value\":%d},{\"id\":\"startupMode\",\"value\":%d},{\"id\":\"startupFixedVolume\",\"value\":%d}]}", volume.config.volume, volume.output.userVolume, volume.output.muted, volume.config.maximumVolume, volume.config.startupMode, volume.config.startupFixedVolume);
+        sprintf (wsBuf, "{\"payload\":[{\"id\":\"volume\",\"value\":%d},{\"id\":\"volume100\",\"value\":%d},{\"id\":\"muted\",\"value\":%d},{\"id\":\"maximumVolume\",\"value\":%d},{\"id\":\"startupMode\",\"value\":%d},{\"id\":\"startupFixedVolume\",\"value\":%d},{\"id\":\"lineOutEnabled\",\"value\":%d},{\"id\":\"lineOutVolume\",\"value\":%d}]}", volume.config.volume, volume.output.userVolume, volume.output.muted, volume.config.maximumVolume, volume.config.startupMode, volume.config.startupFixedVolume, volume.config.lineOutEnabled, volume.config.lineOutVolume);
         serialCli.printf("##CLI.VOL#: %d\n", volume.config.volume);
         break;
       }
@@ -3640,7 +3642,7 @@ void NetServer::processVolumeUpdate(){
 
   _lastVolumeUpdate = now;
   const PlayerRuntimeVolumeSnapshot volume = player.runtimeVolumeSnapshot();
-  sprintf(wsBuf, "{\"payload\":[{\"id\":\"volume\",\"value\":%d},{\"id\":\"volume100\",\"value\":%d},{\"id\":\"muted\",\"value\":%d},{\"id\":\"maximumVolume\",\"value\":%d},{\"id\":\"startupMode\",\"value\":%d},{\"id\":\"startupFixedVolume\",\"value\":%d}]}", volume.config.volume, volume.output.userVolume, volume.output.muted, volume.config.maximumVolume, volume.config.startupMode, volume.config.startupFixedVolume);
+  sprintf(wsBuf, "{\"payload\":[{\"id\":\"volume\",\"value\":%d},{\"id\":\"volume100\",\"value\":%d},{\"id\":\"muted\",\"value\":%d},{\"id\":\"maximumVolume\",\"value\":%d},{\"id\":\"startupMode\",\"value\":%d},{\"id\":\"startupFixedVolume\",\"value\":%d},{\"id\":\"lineOutEnabled\",\"value\":%d},{\"id\":\"lineOutVolume\",\"value\":%d}]}", volume.config.volume, volume.output.userVolume, volume.output.muted, volume.config.maximumVolume, volume.config.startupMode, volume.config.startupFixedVolume, volume.config.lineOutEnabled, volume.config.lineOutVolume);
   if(hasWebClients) securityWebSocketTextAll(wsBuf);
   serialCli.printf("##CLI.VOL#: %d\n", volume.config.volume);
 }

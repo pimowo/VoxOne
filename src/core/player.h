@@ -64,6 +64,7 @@ class Player: public Audio {
     volatile bool _maximumPending;
     plStatus_e  _status;
     MuteState _mute;
+    std::atomic<uint8_t> _effectiveOutputUser{0};
     TemporaryAudioState _temporary;
     voxone::temporary_audio::ProgressWatchdog _temporaryProgress;
     voxone::radio::ReconnectPolicy _radioReconnect;
@@ -93,8 +94,12 @@ class Player: public Audio {
     // Config calls this only while holding playerVolumeMux with its
     // config.userVolume update, so the audio snapshot changes atomically with
     // the runtime volume state.
-    void _syncOutputSilence(uint8_t userVolume) {
+    void _syncOutputSilence(uint8_t userVolume, bool lineOutEnabled = false,
+                            uint8_t lineOutVolume = 100) {
       _mute.setUserVolume(userVolume);
+      _effectiveOutputUser.store(
+          lineOutEnabled ? lineOutVolume : userVolume,
+          std::memory_order_release);
     }
     friend class Config;
   public:

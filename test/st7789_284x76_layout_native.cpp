@@ -49,6 +49,8 @@ int main() {
       100, false, volumeText, sizeof(volumeText))));
   assert(textFits(volume, displaySt7789VolumeText(
       100, true, volumeText, sizeof(volumeText))));
+  assert(std::strcmp(displaySt7789VolumeText(
+      80, false, volumeText, sizeof(volumeText), true), "LINE") == 0);
 
   DisplaySourceView radio{};
   radio.kind = DisplaySourceKind::Radio;

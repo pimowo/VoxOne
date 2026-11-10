@@ -25,6 +25,8 @@ constexpr MenuItemDefinition kAudioItems[] = {
     {"Balans", MenuId::NONE},
     {"Bass", MenuId::NONE},
     {"Treble", MenuId::NONE},
+    {"LINE OUT", MenuId::NONE},
+    {"Poziom LINE", MenuId::NONE},
 };
 
 constexpr MenuItemDefinition kDisplayItems[] = {
@@ -177,6 +179,8 @@ MenuSetting itemSetting(MenuId menuId, uint8_t index) {
     if (index == 0) return MenuSetting::AUDIO_BALANCE;
     if (index == 1) return MenuSetting::AUDIO_BASS;
     if (index == 2) return MenuSetting::AUDIO_TREBLE;
+    if (index == 3) return MenuSetting::LINE_OUT_ENABLED;
+    if (index == 4) return MenuSetting::LINE_OUT_VOLUME;
   }
   if (menuId == MenuId::SCREEN) {
     if (index == 0) return MenuSetting::DISPLAY_BRIGHTNESS;
@@ -201,6 +205,13 @@ bool formatItemValue(const MenuSnapshot& snapshot, uint8_t index,
       break;
     case MenuSetting::AUDIO_TREBLE:
       snprintf(output, outputSize, "%+d", snapshot.settings.treble);
+      break;
+    case MenuSetting::LINE_OUT_ENABLED:
+      snprintf(output, outputSize, "%s",
+               snapshot.settings.lineOutEnabled ? "TAK" : "NIE");
+      break;
+    case MenuSetting::LINE_OUT_VOLUME:
+      snprintf(output, outputSize, "%u%%", snapshot.settings.lineOutVolume);
       break;
     case MenuSetting::DISPLAY_BRIGHTNESS:
       snprintf(output, outputSize, "%u%%", snapshot.settings.brightness);
@@ -356,6 +367,10 @@ void UiMenu::beginSettingsTransaction(const MenuSettings& persisted) {
   draftTftTheme_.store(persisted.tftTheme, std::memory_order_relaxed);
   draftScreensaverEnabled_.store(persisted.screensaverEnabled,
                                  std::memory_order_relaxed);
+  draftLineOutEnabled_.store(persisted.lineOutEnabled,
+                             std::memory_order_relaxed);
+  draftLineOutVolume_.store(persisted.lineOutVolume,
+                            std::memory_order_relaxed);
   encoderUiReversed_.store(persisted.encoderUiReversed,
                            std::memory_order_release);
   markChanged();
@@ -370,6 +385,10 @@ MenuSettings UiMenu::settings() const {
   result.tftTheme = draftTftTheme_.load(std::memory_order_acquire);
   result.screensaverEnabled =
       draftScreensaverEnabled_.load(std::memory_order_acquire);
+  result.lineOutEnabled =
+      draftLineOutEnabled_.load(std::memory_order_acquire);
+  result.lineOutVolume =
+      draftLineOutVolume_.load(std::memory_order_acquire);
   result.encoderUiReversed =
       encoderUiReversed_.load(std::memory_order_acquire);
   return result;
@@ -565,6 +584,19 @@ MenuAction UiMenu::handle(MenuCommand command, int8_t steps) {
         if (value > 6) value = 6;
         draftTreble_.store(static_cast<int8_t>(value),
                            std::memory_order_release);
+        break;
+      }
+      case MenuSetting::LINE_OUT_ENABLED:
+        draftLineOutEnabled_.store(direction > 0,
+                                   std::memory_order_release);
+        break;
+      case MenuSetting::LINE_OUT_VOLUME: {
+        int16_t value = draftLineOutVolume_.load(std::memory_order_relaxed) +
+                        direction * magnitude * 5;
+        if (value < 0) value = 0;
+        if (value > 100) value = 100;
+        draftLineOutVolume_.store(static_cast<uint8_t>(value),
+                                  std::memory_order_release);
         break;
       }
       case MenuSetting::DISPLAY_BRIGHTNESS: {

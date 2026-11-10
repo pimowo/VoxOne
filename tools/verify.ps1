@@ -138,6 +138,7 @@ $nativeSources=@{
  button_handler_native=@('src/core/button_handler.cpp')
  dlna_client_native=@('src/network/dlna_client.cpp')
  ui_menu_native=@('src/core/ui_menu.cpp')
+ line_out_native=@('src/core/volume_map.cpp')
  bt_a2dp_transport_contract_native=@('src/core/bt_link_protocol.cpp')
  bt_link_native=@('src/core/bt_link_protocol.cpp')
  bt_loss_audio_safety_native=@('src/core/bt_link_protocol.cpp')

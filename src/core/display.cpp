@@ -496,6 +496,7 @@ class Oled128x32PlayerStatusWidget : public Widget {
   DisplaySourceKind source_ = DisplaySourceKind::Radio;
   uint8_t volume_ = 255;
   bool muted_ = false;
+  bool lineOutEnabled_ = false;
   bool btConnected_ = false;
   bool wifiConnected_ = false;
   uint8_t wifiBars_ = 255;
@@ -513,6 +514,7 @@ class Oled128x32PlayerStatusWidget : public Widget {
     if (!force && drawn_ && playback_ == view.playback &&
         source_ == view.source &&
         volume_ == view.userVolume && muted_ == view.muted &&
+        lineOutEnabled_ == view.lineOutEnabled &&
         btConnected_ == view.btConnected &&
         wifiConnected_ == wifiConnected && wifiBars_ == wifiBars) return;
 
@@ -558,18 +560,24 @@ class Oled128x32PlayerStatusWidget : public Widget {
 
     char level[5];
     voxone::oled128x32::formatVolume(level, sizeof(level), view.userVolume,
-                                     view.muted);
+                                     view.muted, view.lineOutEnabled);
     const uint8_t shownVolume = voxone::oled128x32::displayVolume(
         view.userVolume);
-    const uint16_t volumeLeft = voxone::oled128x32::playerVolumeTextLeft(
-        shownVolume, view.muted);
+    const uint16_t volumeLeft = view.lineOutEnabled && !view.muted
+        ? voxone::oled128x32::centeredLeft(
+              voxone::oled128x32::kPlayerSpeaker.left,
+              voxone::oled128x32::right(voxone::oled128x32::kPlayerVolume),
+              voxone::oled128x32::textWidth(4))
+        : voxone::oled128x32::playerVolumeTextLeft(shownVolume, view.muted);
     const uint16_t top = voxone::oled128x32::kPlayerStatus.top;
     const uint16_t speakerLeft = voxone::oled128x32::kPlayerSpeaker.left;
-    dsp.fillRect(speakerLeft, top + 2, 2, 4, WHITE);
-    dsp.fillTriangle(speakerLeft + 1, top + 2, speakerLeft + 6, top,
-                     speakerLeft + 6, top + 7, WHITE);
-    dsp.fillTriangle(speakerLeft + 1, top + 2, speakerLeft + 1, top + 5,
-                     speakerLeft + 6, top + 7, WHITE);
+    if (!view.lineOutEnabled || view.muted) {
+      dsp.fillRect(speakerLeft, top + 2, 2, 4, WHITE);
+      dsp.fillTriangle(speakerLeft + 1, top + 2, speakerLeft + 6, top,
+                       speakerLeft + 6, top + 7, WHITE);
+      dsp.fillTriangle(speakerLeft + 1, top + 2, speakerLeft + 1, top + 5,
+                       speakerLeft + 6, top + 7, WHITE);
+    }
     if (view.muted) {
       dsp.drawLine(speakerLeft + 4, top + 1, speakerLeft + 6, top + 6,
                    BLACK);
@@ -581,7 +589,8 @@ class Oled128x32PlayerStatusWidget : public Widget {
 
     if (voxone::oled128x32::bluetoothVisible(view.btConnected)) {
       const uint16_t volumeRight = volumeLeft +
-          voxone::oled128x32::playerVolumeTextWidth(shownVolume, view.muted);
+          (view.lineOutEnabled ? voxone::oled128x32::textWidth(4) :
+           voxone::oled128x32::playerVolumeTextWidth(shownVolume, view.muted));
       const uint16_t btLeft =
           voxone::oled128x32::playerBluetoothTextLeft(volumeRight);
       dsp.setCursor(btLeft, voxone::oled128x32::kPlayerBluetoothBand.top);
@@ -607,6 +616,7 @@ class Oled128x32PlayerStatusWidget : public Widget {
     source_ = view.source;
     volume_ = view.userVolume;
     muted_ = view.muted;
+    lineOutEnabled_ = view.lineOutEnabled;
     btConnected_ = view.btConnected;
     wifiConnected_ = wifiConnected;
     wifiBars_ = wifiBars;
@@ -677,7 +687,7 @@ class Oled128x64PlayerStatusWidget : public Widget {
   BitrateFormat format_ = BF_UNKNOWN;
   DisplaySourceKind source_ = DisplaySourceKind::Radio;
   DisplayPlaybackState playback_ = DisplayPlaybackState::None;
-  bool muted_ = false, btConnected_ = false;
+  bool muted_ = false, btConnected_ = false, lineOutEnabled_ = false;
 
   void _draw() override { if (_active) render(true); }
 
@@ -739,7 +749,8 @@ class Oled128x64PlayerStatusWidget : public Widget {
     }
 
     if (force || !drawn_ || source_ != view.source || playback_ != view.playback ||
-        volume_ != volume || muted_ != muted || btConnected_ != connected) {
+        volume_ != volume || muted_ != muted || btConnected_ != connected ||
+        lineOutEnabled_ != view.lineOutEnabled) {
       // x=116..127 belongs to the existing graphical Wi-Fi widget.
       dsp.fillRect(0, 56, 116, 8, BLACK);
       namespace oled64 = voxone::oled128x64;
@@ -774,11 +785,13 @@ class Oled128x64PlayerStatusWidget : public Widget {
       const uint16_t speakerLeft = oled64::kSpeaker.left;
       const uint16_t top = oled64::kSpeaker.top;
       // Keep the exact body/cone geometry used by OLED 128x32.
-      dsp.fillRect(speakerLeft, top + 2, 2, 4, WHITE);
-      dsp.fillTriangle(speakerLeft + 1, top + 2, speakerLeft + 6, top,
-                       speakerLeft + 6, top + 7, WHITE);
-      dsp.fillTriangle(speakerLeft + 1, top + 2, speakerLeft + 1, top + 5,
-                       speakerLeft + 6, top + 7, WHITE);
+      if (!view.lineOutEnabled || muted) {
+        dsp.fillRect(speakerLeft, top + 2, 2, 4, WHITE);
+        dsp.fillTriangle(speakerLeft + 1, top + 2, speakerLeft + 6, top,
+                         speakerLeft + 6, top + 7, WHITE);
+        dsp.fillTriangle(speakerLeft + 1, top + 2, speakerLeft + 1, top + 5,
+                         speakerLeft + 6, top + 7, WHITE);
+      }
       if (muted) {
         dsp.drawLine(speakerLeft + 4, top + 1, speakerLeft + 6, top + 6,
                      BLACK);
@@ -786,10 +799,14 @@ class Oled128x64PlayerStatusWidget : public Widget {
                      BLACK);
       }
 
-      char level[4];
-      oled64::formatStatusVolume(level, sizeof(level), volume, muted);
-      const uint16_t volumeLeft = oled64::centeredTextLeft(
-          oled64::kVolume, strlen(level));
+      char level[5];
+      oled64::formatStatusVolume(level, sizeof(level), volume, muted,
+                                 view.lineOutEnabled);
+      const uint16_t volumeLeft = view.lineOutEnabled && !muted
+          ? oled64::centeredLeft(oled64::kSpeaker.left,
+                                oled64::right(oled64::kVolume),
+                                oled64::textWidth(strlen(level)))
+          : oled64::centeredTextLeft(oled64::kVolume, strlen(level));
       dsp.setTextColor(WHITE, BLACK);
       dsp.setCursor(volumeLeft, oled64::kVolume.top);
       dsp.print(level);
@@ -808,6 +825,7 @@ class Oled128x64PlayerStatusWidget : public Widget {
     minute_ = minute;
     volume_ = volume;
     muted_ = muted;
+    lineOutEnabled_ = view.lineOutEnabled;
     source_ = view.source;
     playback_ = view.playback;
     btConnected_ = connected;
@@ -903,6 +921,7 @@ class St7789PlayerStatusWidget : public Widget {
   uint8_t volume_ = 255;
   uint8_t wifiLevel_ = 255;
   bool muted_ = false;
+  bool lineOutEnabled_ = false;
   bool btConnected_ = false;
   char audioText_[20] = {};
 
@@ -972,6 +991,7 @@ class St7789PlayerStatusWidget : public Widget {
     capturePlayerDisplayView(view, WiFi.RSSI());
     if (!force && drawn_ && source_ == view.source && playback_ == view.playback &&
         volume_ == view.userVolume && muted_ == view.muted &&
+        lineOutEnabled_ == view.lineOutEnabled &&
         btConnected_ == view.btConnected && wifiLevel_ == view.wifiLevel &&
         strcmp(audioText_, view.audioText) == 0) return;
 
@@ -985,7 +1005,8 @@ class St7789PlayerStatusWidget : public Widget {
 
     char volumeBuffer[12];
     const char* volumeText = displaySt7789VolumeText(
-        view.userVolume, view.muted, volumeBuffer, sizeof(volumeBuffer));
+        view.userVolume, view.muted, volumeBuffer, sizeof(volumeBuffer),
+        view.lineOutEnabled);
     drawCenteredText(st7789_284x76::volume, volumeText,
                      view.muted ? kMuteColor : config.theme.vol);
     drawCenteredText(st7789_284x76::audio, view.audioText, config.theme.bitrate);
@@ -997,6 +1018,7 @@ class St7789PlayerStatusWidget : public Widget {
     playback_ = view.playback;
     volume_ = view.userVolume;
     muted_ = view.muted;
+    lineOutEnabled_ = view.lineOutEnabled;
     btConnected_ = view.btConnected;
     wifiLevel_ = view.wifiLevel;
     strlcpy(audioText_, view.audioText, sizeof(audioText_));
@@ -1124,10 +1146,12 @@ class St7796VolumeWidget : public Widget {
     Widget::init(position, color, background);
   }
 
-  void setVolume(uint8_t value, bool muted) {
-    if (_value == value && _muted == muted) return;
+  void setVolume(uint8_t value, bool muted, bool lineOutEnabled = false) {
+    if (_value == value && _muted == muted &&
+        _lineOutEnabled == lineOutEnabled) return;
     _value = value;
     _muted = muted;
+    _lineOutEnabled = lineOutEnabled;
     if (_active) _draw();
   }
 
@@ -1143,6 +1167,7 @@ class St7796VolumeWidget : public Widget {
   static constexpr uint16_t kMuteColor = 0xF800;
   uint8_t _value = 0;
   bool _muted = false;
+  bool _lineOutEnabled = false;
   bool _dacMuted = true;
 
   void _draw() override {
@@ -1159,6 +1184,11 @@ class St7796VolumeWidget : public Widget {
     if (muted) {
       dsp.setCursor(_config.left + (kWidth - 4 * 12) / 2, _config.top + 4);
       dsp.print("MUTE");
+      return;
+    }
+    if (_lineOutEnabled) {
+      dsp.setCursor(_config.left + (kWidth - 4 * 12) / 2, _config.top + 4);
+      dsp.print("LINE");
       return;
     }
     const uint8_t digits = _value >= 100 ? 3 : (_value >= 10 ? 2 : 1);
@@ -1732,7 +1762,8 @@ void Display::_buildPager(){
       _st7796Volume = new St7796VolumeWidget(voltxtConf, config.theme.meta, config.theme.background);
       PlayerDisplayView initialView{};
       capturePlayerDisplayView(initialView, WiFi.RSSI());
-      _st7796Volume->setVolume(initialView.userVolume, initialView.muted);
+      _st7796Volume->setVolume(initialView.userVolume, initialView.muted,
+                               initialView.lineOutEnabled);
     }
 #else
     _voltxt = new TextWidget(voltxtConf, 10, config.theme.vol, config.theme.background);
@@ -2658,7 +2689,9 @@ uint32_t yamahaTopSignature(const PlayerDisplayView& view) {
 uint32_t yamahaVolumeSignature(const PlayerDisplayView& view) {
   uint32_t hash = 2166136261u;
   hash = yamahaHashBytes(hash, &view.userVolume, sizeof(view.userVolume));
-  return yamahaHashBytes(hash, &view.muted, sizeof(view.muted));
+  hash = yamahaHashBytes(hash, &view.muted, sizeof(view.muted));
+  return yamahaHashBytes(hash, &view.lineOutEnabled,
+                         sizeof(view.lineOutEnabled));
 }
 }  // namespace
 
@@ -2739,6 +2772,8 @@ void Display::render_yamaha_tft(bool bootHandoff) {
     dsp.setCursor(18, 262);
     if (view.muted) {
       dsp.print("MUTE");
+    } else if (view.lineOutEnabled) {
+      dsp.print("LINE");
     } else {
       char volume[16];
       snprintf(volume, sizeof(volume), "VOL %3u",
@@ -3413,7 +3448,8 @@ void Display::_volume() {
   if(_st7796Volume) {
     PlayerDisplayView view{};
     capturePlayerDisplayView(view, WiFi.RSSI());
-    _st7796Volume->setVolume(view.userVolume, view.muted);
+    _st7796Volume->setVolume(view.userVolume, view.muted,
+                             view.lineOutEnabled);
   }
 #else
   #ifndef HIDE_VOL
@@ -3428,7 +3464,8 @@ void Display::_volume() {
     if (smallOledActive() && oled128x32Active()) {
       char level[5];
       voxone::oled128x32::formatVolumePercent(
-          level, sizeof(level), view.userVolume, view.muted);
+          level, sizeof(level), view.userVolume, view.muted,
+          view.lineOutEnabled);
       _meta->setText("");
       _nums->setText(level);
     } else
@@ -3438,12 +3475,14 @@ void Display::_volume() {
       if (oled128x64Active()) {
         char level[5];
         voxone::oled128x32::formatVolumePercent(
-            level, sizeof(level), view.userVolume, view.muted);
+            level, sizeof(level), view.userVolume, view.muted,
+            view.lineOutEnabled);
         _nums->setText(level);
       } else
 #endif
       {
         if (view.muted) _nums->setText("MUTE");
+        else if (view.lineOutEnabled) _nums->setText("LINE");
         else _nums->setText(view.userVolume, numtxtFmt);
       }
     }

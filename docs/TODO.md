@@ -28,7 +28,7 @@ checkpointów pozostaje w historii Git i w istniejących raportach.
 - [ ] Zweryfikować mapowanie pinów na nowym profilu DIN0 po zmianie `I2S_LRC`
   na GPIO9.
 - [ ] Fizycznie podłączyć i przetestować przekaźnik dla trybu Hard Power.
-- [ ] Po implementacji LINE OUT sprawdzić na L0 i S0: stały poziom wyjścia,
+- [ ] Sprawdzić na L0 i S0 tryb LINE OUT: stały poziom wyjścia,
   oddzielne zapamiętywanie nastawy, napis `LINE`, konfigurację w WWW i menu
   oraz automatyczny AVRCP Absolute Volume z rzeczywistym źródłem Bluetooth.
 - [ ] Po implementacji Local Files podłączyć kartę microSD i sprawdzić
@@ -55,12 +55,8 @@ checkpointów pozostaje w historii Git i w istniejących raportach.
 
 ## 2. Wersja 1.2.0 (UI / UX / Sterowanie)
 
-- [ ] Zaimplementować tryb LINE OUT: stały poziom wyjścia, oddzielną zapisaną
-  nastawę, blokadę zwykłej regulacji, ekran `LINE`, ustawienia WWW/menu i AVRCP
-  Absolute Volume dla Bluetooth.
 - [ ] Dodać trzeci tryb enkodera „Tylko stacje” (bez regulacji głośności) oraz
-  po implementacji LINE OUT zapewnić jego poprawne zachowanie dla wszystkich
-  trybów enkodera.
+  zapewnić jego poprawne zachowanie z LINE OUT dla wszystkich trybów enkodera.
 - [ ] Ujednolicić gesty: w Menu obrót/klik/dwuklik/długi klik odpowiadają za
   nawigację/wybór/wstecz/wyjście, a dwuklik w Playerze przełącza źródła.
 - [ ] Rozbudować działający szkielet Menu na TFT i OLED o pełne ekrany

@@ -96,6 +96,7 @@ bool securityWebSocketCommandAllowed(const char* command) {
       "webtransport", "start", "stop", "playurl", "toggle", "prev", "next",
       "volm", "volp", "ballance", "playstation", "play", "vol",
       "volume", "vol100", "mute", "wakeup", "maximumvolume", "startupmode",
+      "lineoutenabled", "lineoutvolume",
       "startupfixedvolume", "dspon", "dim", "getindex", "getrssi",
       "getsystem", "getwebstatus", "getscreen", "stationlisttimeout",
       "bttransporttimeout", "numplaylist", "flipscreen", "brightness",

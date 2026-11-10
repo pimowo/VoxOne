@@ -62,7 +62,7 @@ void testProductionUsesLockFreeSnapshot() {
 
   const std::string outputSilent =
       functionBody(player, "bool Player::outputSilent() const");
-  assert(outputSilent.find("_mute.outputSilent()") != std::string::npos);
+  assert(outputSilent.find("_effectiveOutputUser.load(") != std::string::npos);
   assert(outputSilent.find("config.userVolume") == std::string::npos);
   assert(outputSilent.find("portENTER_CRITICAL") == std::string::npos);
   assert(outputSilent.find("xSemaphoreTake") == std::string::npos);
@@ -77,7 +77,7 @@ void testProductionUsesLockFreeSnapshot() {
       player, "void Player::stepUserVol(", "_mute.stepUserVolume(");
   assertCriticalSectionContains(
       config, "uint8_t Config::setVolumeState(",
-      "player._syncOutputSilence(user)");
+      "player._syncOutputSilence(user,");
 
   const std::string readLoop =
       functionBody(input, "void BtAudioInput::readContinuously()");

@@ -131,6 +131,18 @@ bool CommandHandler::exec(const char *command, const char *value, uint32_t cid) 
     }
     return true;
   }
+  if (strEquals(command, "lineoutenabled")) {
+    if (!value || (strcmp(value, "0") != 0 && strcmp(value, "1") != 0))
+      return false;
+    return config.setLineOutEnabled(value[0] == '1');
+  }
+  if (strEquals(command, "lineoutvolume")) {
+    long lineOutVolume;
+    if (!parseVolumeValue(value, lineOutVolume) || lineOutVolume < 0 ||
+        lineOutVolume > 100)
+      return false;
+    return config.setLineOutVolume(static_cast<uint8_t>(lineOutVolume));
+  }
   if (strEquals(command, "mute")) {
     if (value && (strcmp(value, "0") == 0 || strcmp(value, "1") == 0))
       player.setMuted(value[0] == '1');
