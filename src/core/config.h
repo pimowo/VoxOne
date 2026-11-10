@@ -210,6 +210,7 @@ class Config {
     void loadTheme();
     uint8_t setVolume(uint8_t val);
     uint8_t setVolumeState(uint8_t raw, uint8_t user);
+    uint8_t applyConfiguredStartupVolume();
     void saveVolume();
     void setMaximumVolume(uint8_t maximum);
     void setStartupMode(uint8_t mode);

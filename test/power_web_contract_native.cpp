@@ -46,6 +46,32 @@ int main() {
   assert(manager.find("config.setDspOn(false, false)") == std::string::npos);
   assert(manager.find("if (!standby() && !shutdownNotice_) return;") !=
          std::string::npos);
+  const size_t wakeVolume =
+      manager.find("config.applyConfiguredStartupVolume()");
+  const size_t wakeBtVolume =
+      manager.find("sourceManagerApplyConfiguredBluetoothVolume()");
+  const size_t wakeUnmute = manager.find("player.setMuted(false)");
+  const size_t wakeResume = manager.find("player.resumeAfterShutdown()");
+  assert(wakeVolume != std::string::npos);
+  assert(wakeBtVolume != std::string::npos);
+  assert(manager.rfind("#if VOXONE_HAS_BT && VOXONE_PIN_MAP_COMPLETE",
+                       wakeBtVolume) != std::string::npos);
+  assert(wakeUnmute != std::string::npos);
+  assert(wakeResume != std::string::npos);
+  assert(wakeVolume < wakeBtVolume);
+  assert(wakeBtVolume < wakeUnmute);
+  assert(wakeUnmute < wakeResume);
+
+  const std::string config = readFile("src/core/config.cpp");
+  const size_t startupApply =
+      config.find("uint8_t Config::applyConfiguredStartupVolume()");
+  assert(startupApply != std::string::npos);
+  assert(config.find("volumeStateAtStartup(", startupApply) !=
+         std::string::npos);
+  assert(config.find("runtime.startupMode == STARTUP_FIXED", startupApply) !=
+         std::string::npos);
+  assert(config.find("setVolumeState(startup.raw, startup.user)",
+                     startupApply) != std::string::npos);
   assert(manager.find("ButtonEvent::BUTTON_CLICK") != std::string::npos);
   assert(manager.find("if (standby())") != std::string::npos);
   assert(manager.find("uiCarouselActive()") != std::string::npos);

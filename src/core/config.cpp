@@ -905,6 +905,15 @@ uint8_t Config::setVolumeState(uint8_t raw, uint8_t user) {
   return store.volume;
 }
 
+uint8_t Config::applyConfiguredStartupVolume() {
+  const auto runtime = runtimeSnapshot();
+  const VolumeState startup = volumeStateAtStartup(
+      runtime.volume, runtime.lastUserVolume, runtime.maximumVolume,
+      runtime.startupMode == STARTUP_FIXED, runtime.startupFixedVolume, false);
+  setVolumeState(startup.raw, startup.user);
+  return startup.user;
+}
+
 void Config::setMaximumVolume(uint8_t maximum) {
   WriteLock lock(_persistMutex);
   if (maximum < 1 || maximum > 100 || maximum == store.maximumVolume) return;

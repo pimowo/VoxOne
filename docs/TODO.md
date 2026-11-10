@@ -16,7 +16,9 @@ checkpointów pozostaje w historii Git i w istniejących raportach.
   „Do widzenia!” z natychmiastowym zatrzymaniem audio, płynne odświeżanie Menu,
   kontekstową belkę Menu na TFT, wygaszenie ekranu z ochroną OLED oraz tryby
   enkodera NORMAL/REVERSED (w tym obrót z wciśniętym przyciskiem i
-  synchronizację ustawienia pomiędzy WWW a Menu), osobną karuzelę wszystkich
+  synchronizację ustawienia pomiędzy WWW a Menu), głośność po wybudzeniu ze
+  Standby dla `Startup Volume` ustawionego na wartość stałą oraz „Ostatnia”
+  (wraz z brakiem trzasku przy odblokowaniu DAC), osobną karuzelę wszystkich
   źródeł dostępnych w profilu po dwukliku w Playerze, kontekstowe karuzele po
   długim kliknięciu w trybie NORMAL oraz nakładkę głośności po długim kliknięciu
   w trybie REVERSED, a także transakcyjny ekran

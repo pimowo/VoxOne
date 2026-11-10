@@ -8,6 +8,7 @@
 #include "display.h"
 #include "dlna_menu_controller.h"
 #include "player.h"
+#include "source_manager.h"
 #include "source_menu_controller.h"
 #include "ui_menu.h"
 #include "ui_input.h"
@@ -124,9 +125,14 @@ void PowerManager::wakeup() {
   display.cancelShutdownSequence();
   setPowerRelay(true);
   config.setDspOn(true, false);
+  const uint8_t startupVolume = config.applyConfiguredStartupVolume();
+#if VOXONE_HAS_BT && VOXONE_PIN_MAP_COMPLETE
+  sourceManagerApplyConfiguredBluetoothVolume();
+#endif
   player.setMuted(false);
   player.resumeAfterShutdown();
   standby_.store(false, std::memory_order_release);
   transitionUiMode(PLAYER);
-  Serial.println("##[POWER]# awake");
+  Serial.printf("##[POWER]# awake startupVolume=%u\n",
+                static_cast<unsigned>(startupVolume));
 }
