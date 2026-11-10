@@ -79,9 +79,10 @@ enum class UiInputAction : uint8_t {
   BluetoothToggle,
   SourcePrevious,
   SourceNext,
-  OpenSourceSelector,
+  CycleSource,
   OpenVolume,
   OpenStations,
+  OpenDlnaBrowser,
   OpenBluetoothTransport,
   ShowPlayer,
   WakePlayer
@@ -190,7 +191,7 @@ inline UiInputDecision resolveUiInput(const UiInputContext& context,
     if (context.mode == SCREENSAVER || context.mode == SCREENBLANK)
       return uiInputDecision(UiInputAction::WakePlayer);
     if (context.mode == PLAYER && context.hasLocalDisplay)
-      return uiInputDecision(UiInputAction::OpenSourceSelector);
+      return uiInputDecision(UiInputAction::CycleSource);
     return uiInputDecision(UiInputAction::None);
   }
 
@@ -202,6 +203,8 @@ inline UiInputDecision resolveUiInput(const UiInputContext& context,
     if (context.mode == PLAYER) {
       if (context.encoderUiReversed && !context.lineOutEnabled)
         return uiInputDecision(UiInputAction::OpenVolume);
+      if (context.activeSource == SourceId::Dlna)
+        return uiInputDecision(UiInputAction::OpenDlnaBrowser);
       if (context.supportsBluetooth && context.bluetoothSelected) {
         if (!context.supportsBluetoothTransportView)
           return uiInputDecision(UiInputAction::None);

@@ -26,6 +26,7 @@ bool sourceManagerSelectSource(SourceId source);
 // Network callbacks only publish a request. The main loop performs the
 // potentially stack-heavy BT snapshot and source transition.
 bool sourceManagerRequestSource(SourceId source);
+bool sourceManagerRequestNextSource();
 void sourceManagerServiceRequests();
 bool sourceManagerSourceAvailable(SourceId source);
 uint8_t sourceManagerSourceMask();

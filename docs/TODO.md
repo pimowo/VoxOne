@@ -14,14 +14,16 @@ checkpointów pozostaje w historii Git i w istniejących raportach.
   „Do widzenia!” z natychmiastowym zatrzymaniem audio, płynne odświeżanie Menu,
   kontekstową belkę Menu na TFT, wygaszenie ekranu z ochroną OLED oraz tryby
   enkodera NORMAL/REVERSED (w tym obrót z wciśniętym przyciskiem i
-  synchronizację ustawienia pomiędzy WWW a Menu), szybki wybór wszystkich
-  źródeł dostępnych w profilu po dwukliku w Playerze oraz nakładkę głośności
-  po długim kliknięciu w trybie REVERSED, a także transakcyjny ekran
+  synchronizację ustawienia pomiędzy WWW a Menu), pętlę wszystkich źródeł
+  dostępnych w profilu po kolejnych dwuklikach w Playerze oraz nakładkę
+  głośności po długim kliknięciu w trybie REVERSED, a także transakcyjny ekran
   „Zapisać zmiany?” na TFT/OLED: zapis przez TAK, pełne przywrócenie wyglądu i
   ustawień przez NIE oraz natychmiastowe wyjście, gdy nie ma zmian; dodatkowo
   sprawdzić polskie znaki w nazwach stacji i metadanych ICY/DLNA/ID3,
   wyśrodkowanie kontekstowej belki i wielokropki długich nazw na L0 oraz brak
   migotania przy zmianie metadanych/Wi-Fi na TFT i przewijaniu na OLED S0;
+  ocenić karuzelowe widoki stacji, DLNA i Menu (nagłówek, jedna duża pozycja,
+  licznik oraz wskaźnik `GRA`) na TFT L0 i OLED S0;
   po zimnym starcie L0 potwierdzić wzrokowo pełne przejście TFT z logo do
   widoku Playera (zdalny most nie ma podłączonej kamery).
 - [ ] Na L0 z rzeczywiście sparowanym i odtwarzającym telefonem potwierdzić

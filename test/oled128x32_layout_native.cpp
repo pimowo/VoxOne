@@ -275,11 +275,11 @@ int main() {
   formatStartupSsid(ssid, sizeof(ssid), "Zażółć-gęślą-jaźń-dom");
   assert(std::strstr(ssid, "...") != nullptr);
 
-  // STATIONS and VOL keep their existing fonts.
+  // STATIONS uses all four 8 px bands: header, a 2x selected item and footer.
   assert(startup128x32::progress.top == 16 &&
          startup128x32::ssid.top == 24);
   assert(stations128x32::selected.widget.textsize == 2);
-  assert(stations128x32::selected.widget.top == 0);
+  assert(stations128x32::selected.widget.top == 8);
   assert(stations128x32::header.top == 0 &&
          stations128x32::playing.top == 24 &&
          stations128x32::counter.top == 24);
@@ -395,10 +395,8 @@ int main() {
   assert(compactVolume.find("_showDialog(\"\")") != std::string::npos);
   assert(compactVolume.find("_nums->setText(level)") != std::string::npos);
 
-  assert(display.find(
-      "if (!oled128x32Active()) _plheader->setText(\"WEB - STACJA\")") !=
-      std::string::npos);
-  assert(display.find(
-      "if (!oled128x32Active()) pages[PG_PLAYLIST]->addWidget(_plheader)") !=
-      std::string::npos);
+  assert(display.find("_plheader->setText(\"WEB - STACJA\")") !=
+         std::string::npos);
+  assert(display.find("pages[PG_PLAYLIST]->addWidget(_plheader)") !=
+         std::string::npos);
 }

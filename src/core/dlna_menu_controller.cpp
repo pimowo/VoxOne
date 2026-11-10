@@ -22,6 +22,7 @@ char currentParent[sizeof(dlna::BrowseItem::id)] = "0";
 char parentHistory[kMaximumDepth][sizeof(dlna::BrowseItem::id)]{};
 uint8_t parentDepth = 0;
 ui_menu::DlnaMenuEntry menuEntries[ui_menu::kMaxDlnaMenuItems];
+char playingObjectId[sizeof(dlna::BrowseItem::id)]{};
 
 bool beginBrowse(const char* parent) {
   uint32_t job = 0;
@@ -81,6 +82,7 @@ void select() {
   strlcpy(request.title, item.title[0] ? item.title : "DLNA",
           sizeof(request.title));
   request.source = temporary_audio::Source::Dlna;
+  strlcpy(playingObjectId, item.id, sizeof(playingObjectId));
   player.requestTemporaryUrl(request);
   uiMenu.close();
   transitionUiMode(PLAYER);
@@ -125,6 +127,9 @@ void service() {
             sizeof(entry.label));
     entry.folder = item.container;
     entry.playable = !item.container && item.resourceUrl[0];
+    entry.playing = entry.playable && playingObjectId[0] &&
+        sourceManagerActiveSource() == SourceId::Dlna &&
+        strcmp(playingObjectId, item.id) == 0;
   }
   browseReady = true;
   if (copied) uiMenu.setDlnaItems(menuEntries, copied);

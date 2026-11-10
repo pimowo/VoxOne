@@ -661,6 +661,11 @@ bool dlnaItemFolder(uint8_t bank, uint8_t index) {
   return index < page.count && page.entries[index].folder;
 }
 
+bool dlnaItemPlaying(uint8_t bank, uint8_t index) {
+  const DlnaMenuPage& page = dlnaPages[bank & 1U];
+  return index < page.count && page.entries[index].playing;
+}
+
 uint8_t sourceItemCount(uint8_t mask) {
   uint8_t count = 0;
   for (uint8_t value = 0; value <= static_cast<uint8_t>(SourceId::Aux); ++value)

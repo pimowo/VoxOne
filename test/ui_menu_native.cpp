@@ -186,6 +186,7 @@ int main() {
   dlnaItems[0].folder = true;
   std::strcpy(dlnaItems[1].label, "Koncert.flac");
   dlnaItems[1].playable = true;
+  dlnaItems[1].playing = true;
   std::strcpy(dlnaItems[2].label, "Brak URL");
   menu.setDlnaItems(dlnaItems, 3);
   assert(menu.itemCount() == 3);
@@ -194,6 +195,7 @@ int main() {
   assert(menu.handle(MenuCommand::SELECT) == MenuAction::SELECTED);
   assert(menu.handle(MenuCommand::NEXT) == MenuAction::NAVIGATED);
   assert(!menu.selectedDlnaFolder() && menu.selectedDlnaPlayable());
+  assert(voxone::ui_menu::itemIsActive(menu.snapshot(), 1));
   assert(menu.handle(MenuCommand::SELECT) == MenuAction::SELECTED);
   assert(menu.handle(MenuCommand::NEXT) == MenuAction::NAVIGATED);
   assert(menu.handle(MenuCommand::SELECT) == MenuAction::NONE);
@@ -275,9 +277,8 @@ int main() {
   assert(display.find("class UiMenuWidget") != std::string::npos);
   assert(display.find("_pager->setPage(_menuPage, true)") !=
          std::string::npos);
-  assert(display.find("itemHasSubmenu(menu, index)") != std::string::npos);
-  assert(display.find("itemIsActive(menu, index)") != std::string::npos);
-  assert(display.find("dsp.print(\">") != std::string::npos);
+  assert(display.find("drawSelection") != std::string::npos);
+  assert(display.find("drawFooter") != std::string::npos);
   const size_t menuWidgetStart = display.find("class UiMenuWidget");
   const size_t menuWidgetEnd = display.find(
       "#if VOXONE_DISPLAY_COMPILES_SMALL_OLED", menuWidgetStart);
@@ -290,6 +291,9 @@ int main() {
          std::string::npos);
   assert(menuRenderer.find("menuContextHeader(menu.menuId)") !=
          std::string::npos);
+  assert(menuRenderer.find("DLNA - FOLDER") != std::string::npos);
+  assert(menuRenderer.find("DLNA - UTWÓR") != std::string::npos);
+  assert(menuRenderer.find("dsp.print(\"GRA\")") != std::string::npos);
   assert(menuRenderer.find("drawConfirmation") != std::string::npos);
   assert(menuRenderer.find("Zapisać zmiany?") != std::string::npos);
   assert(menuRenderer.find("formatItemValue") != std::string::npos);

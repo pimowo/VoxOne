@@ -113,6 +113,12 @@ bool sourceManagerRequestSource(SourceId source) {
   return true;
 }
 
+bool sourceManagerRequestNextSource() {
+  const uint8_t mask = sourceManagerSourceMask();
+  return sourceManagerRequestSource(
+      nextSourceInMask(mask, sourceManagerActiveSource()));
+}
+
 void sourceManagerServiceRequests() {
   const uint8_t request =
       pendingSourceRequest.exchange(0, std::memory_order_acq_rel);

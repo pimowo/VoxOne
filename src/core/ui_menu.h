@@ -119,6 +119,7 @@ struct DlnaMenuEntry {
   char label[96]{};
   bool folder = false;
   bool playable = false;
+  bool playing = false;
 };
 
 constexpr uint8_t kMaxDlnaMenuItems = 24;
@@ -219,6 +220,10 @@ inline const char* itemLabel(const MenuSnapshot& snapshot, uint8_t index) {
 inline bool itemIsActive(const MenuSnapshot& snapshot, uint8_t index) {
   if (snapshot.menuId == MenuId::SOURCE)
     return sourceItemAt(snapshot.sourceMask, index) == snapshot.activeSource;
+  if (snapshot.menuId == MenuId::DLNA) {
+    extern bool dlnaItemPlaying(uint8_t bank, uint8_t index);
+    return dlnaItemPlaying(snapshot.dynamicBank, index);
+  }
   return snapshot.menuId == MenuId::SYSTEM && index == 3 &&
          snapshot.settings.encoderUiReversed;
 }

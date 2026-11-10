@@ -118,7 +118,7 @@ int main() {
   assert(action(bluetooth(), UiInputEvent::Right) ==
          UiInputAction::VolumeUp);
   assert(action(bluetooth(), UiInputEvent::Double) ==
-         UiInputAction::OpenSourceSelector);
+         UiInputAction::CycleSource);
   assert(action(bluetooth(), UiInputEvent::Long) ==
          UiInputAction::OpenBluetoothTransport);
   assert(action(bluetooth(BT_TRANSPORT), UiInputEvent::Left) ==
@@ -150,14 +150,19 @@ int main() {
   assert(action(compactBluetooth, UiInputEvent::Ok) ==
          UiInputAction::BluetoothToggle);
   assert(action(compactBluetooth, UiInputEvent::Double) ==
-         UiInputAction::OpenSourceSelector);
+         UiInputAction::CycleSource);
 
-  // The quick selector is capability-filtered after opening, so it is also
+  // The source cycle is capability-filtered, so the gesture is also
   // available on boards whose source set does not include Bluetooth.
   UiInputContext noBluetooth = radio();
   noBluetooth.supportsBluetooth = false;
   assert(action(noBluetooth, UiInputEvent::Double) ==
-         UiInputAction::OpenSourceSelector);
+         UiInputAction::CycleSource);
+
+  UiInputContext dlna = radio();
+  dlna.activeSource = SourceId::Dlna;
+  assert(action(dlna, UiInputEvent::Long) ==
+         UiInputAction::OpenDlnaBrowser);
 
   UiInputContext reversedLineOut = reversedRadio;
   reversedLineOut.lineOutEnabled = true;

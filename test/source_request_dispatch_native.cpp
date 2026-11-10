@@ -36,6 +36,12 @@ int main() {
       "void sourceManagerServiceRequests()");
   assert(request.find("pendingSourceRequest.store") != std::string::npos);
   assert(request.find("btLink.state()") == std::string::npos);
+  const std::string requestNext = functionBody(
+      manager, "bool sourceManagerRequestNextSource()",
+      "void sourceManagerServiceRequests()");
+  assert(requestNext.find("nextSourceInMask") != std::string::npos);
+  assert(requestNext.find("sourceManagerRequestSource") !=
+         std::string::npos);
   const std::string service = functionBody(
       manager, "void sourceManagerServiceRequests()",
       "SourceId sourceManagerActiveSource()");

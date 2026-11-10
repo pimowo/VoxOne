@@ -186,14 +186,15 @@ class UiMenuWidget : public Widget {
     uint16_t height;
     uint16_t background;
     uint16_t foreground;
-    uint16_t contentTop;
-    uint16_t rowHeight;
+    uint16_t headerHeight;
+    uint16_t footerTop;
+    uint16_t centerTop;
+    uint16_t centerHeight;
     uint16_t horizontalMargin;
-    uint16_t rowWidth;
-    uint8_t firstIndex;
-    uint8_t visibleCount;
+    uint16_t contentWidth;
     uint8_t titleSize;
     uint8_t itemSize;
+    uint8_t footerSize;
     bool oled;
     bool compact;
     bool contextualTft;
@@ -223,35 +224,49 @@ class UiMenuWidget : public Widget {
     const bool compact = height <= 76;
     const bool contextualTft = width >= 400 && height >= 200;
     const uint8_t titleSize =
-        compact ? 1 : (contextualTft ? 4 : (width >= 400 ? 3 : 2));
-    const uint8_t itemSize = compact ? 1 : (height >= 200 ? 2 : 1);
-    const uint16_t contentTop = height <= 32 ? 0 : (compact ? 12 : 68);
-    const uint8_t itemCount = voxone::ui_menu::itemCount(menu);
-    const uint8_t maximumRows = oled ? (height <= 32 ? 2 : 4)
-                                     : (compact ? 4 : 6);
-    const uint8_t visibleCount = itemCount < maximumRows
-                                     ? itemCount : maximumRows;
-    const uint8_t firstIndex =
-        itemCount <= visibleCount || menu.selectedIndex < visibleCount
-            ? 0
-            : static_cast<uint8_t>(menu.selectedIndex - visibleCount + 1);
-    const uint16_t rowHeight =
-        visibleCount == 0 ? 0 : (height - contentTop) / visibleCount;
-    const uint16_t horizontalMargin = oled ? 0 : (width >= 300 ? 36 : 8);
-    const uint16_t rowWidth = width - horizontalMargin * 2;
-    return {width, height, background, foreground, contentTop, rowHeight,
-            horizontalMargin, rowWidth, firstIndex, visibleCount, titleSize,
-            itemSize, oled, compact, contextualTft};
+        compact ? 1 : (contextualTft ? 3 : 1);
+    const uint8_t itemSize = height <= 32 ? 2
+        : (oled ? 2 : (contextualTft ? 4 : 2));
+    const uint8_t footerSize = contextualTft ? 2 : 1;
+    const uint16_t headerHeight = height <= 32 ? 8
+        : (compact ? 20 : (contextualTft ? 52 : 12));
+    const uint16_t footerHeight = height <= 32 ? 8
+        : (compact ? 14 : (contextualTft ? 48 : 12));
+    const uint16_t footerTop = height - footerHeight;
+    const uint16_t centerTop = headerHeight;
+    const uint16_t centerHeight = footerTop - centerTop;
+    const uint16_t horizontalMargin = oled ? 2 : (width >= 300 ? 36 : 8);
+    const uint16_t contentWidth = width - horizontalMargin * 2;
+    return {width, height, background, foreground, headerHeight, footerTop,
+            centerTop, centerHeight, horizontalMargin, contentWidth,
+            titleSize, itemSize, footerSize, oled, compact, contextualTft};
+  }
+
+  void formatHeader(const voxone::ui_menu::MenuSnapshot& menu,
+                    char* output, size_t outputSize) const {
+    if (!output || outputSize == 0) return;
+    if (menu.menuId == voxone::ui_menu::MenuId::DLNA) {
+      const bool folder = voxone::ui_menu::itemHasSubmenu(
+          menu, menu.selectedIndex);
+      snprintf(output, outputSize, "%s", folder ? "DLNA - FOLDER"
+                                                  : "DLNA - UTWÓR");
+      return;
+    }
+    if (menu.menuId == voxone::ui_menu::MenuId::MAIN) {
+      snprintf(output, outputSize, "MENU");
+      return;
+    }
+    snprintf(output, outputSize, "MENU - %s",
+             voxone::ui_menu::menuContextHeader(menu.menuId));
   }
 
   void drawHeader(const voxone::ui_menu::MenuSnapshot& menu,
                   const Layout& view) {
-    if (view.contentTop == 0) return;
-    dsp.fillRect(0, 0, view.width, view.contentTop, view.background);
-    const char* title = voxone::ui_menu::menuTitle(menu);
+    dsp.fillRect(0, 0, view.width, view.headerHeight, view.background);
+    char title[48];
+    formatHeader(menu, title, sizeof(title));
     uint16_t titleBackground = view.background;
     if (view.contextualTft) {
-      title = voxone::ui_menu::menuContextHeader(menu.menuId);
       titleBackground = config.theme.metabg;
       dsp.fillRect(0, 0, view.width, 50, titleBackground);
       dsp.fillRect(0, 50, view.width, 2, config.theme.metafill);
@@ -267,75 +282,97 @@ class UiMenuWidget : public Widget {
     dsp.setFont();
     dsp.setTextSize(view.titleSize);
     dsp.setTextColor(view.foreground, titleBackground);
-    dsp.setClipping({sideInset, 0, availableWidth, view.contentTop});
+    dsp.setClipping({sideInset, 0, availableWidth, view.headerHeight});
     dsp.setCursor(sideInset + (availableWidth - titleWidth) / 2,
-                  view.compact ? 1 : (view.contextualTft ? 10 : 20));
+                  view.height <= 32 ? 0 :
+                  (view.compact ? 4 : (view.contextualTft ? 13 : 2)));
     dsp.print(utf8Rus(visibleTitle));
     dsp.clearClipping();
   }
 
-  void drawRow(const voxone::ui_menu::MenuSnapshot& menu, uint8_t index,
-               bool selected, const Layout& view) {
-    if (index >= voxone::ui_menu::itemCount(menu) || view.rowHeight == 0 ||
-        index < view.firstIndex ||
-        index >= view.firstIndex + view.visibleCount)
-      return;
-    const uint16_t top = view.contentTop +
-                         (index - view.firstIndex) * view.rowHeight;
-    const uint16_t rowBackground = selected ? view.foreground : view.background;
-    const uint16_t rowForeground = selected ? view.background : view.foreground;
-    dsp.fillRect(view.horizontalMargin, top, view.rowWidth, view.rowHeight,
-                 rowBackground);
-    if (selected)
-      dsp.drawRect(view.horizontalMargin, top, view.rowWidth, view.rowHeight,
-                   rowForeground);
-    dsp.setFont();
-    dsp.setTextSize(view.itemSize);
-    dsp.setTextColor(rowForeground, rowBackground);
-    const uint16_t textHeight = view.itemSize * CHARHEIGHT;
-    const uint16_t textTop = top +
-        (view.rowHeight > textHeight ? (view.rowHeight - textHeight) / 2 : 0);
-    const uint16_t glyphWidth = CHARWIDTH * view.itemSize;
-    const uint16_t valueMargin = view.oled ? 3 : 10;
+  void drawSelection(const voxone::ui_menu::MenuSnapshot& menu,
+                     const Layout& view) {
+    const uint8_t index = menu.selectedIndex;
+    if (index >= voxone::ui_menu::itemCount(menu)) return;
+    dsp.fillRect(0, view.centerTop, view.width, view.centerHeight,
+                 view.background);
+
+    const bool editing =
+        menu.state == voxone::ui_menu::MenuState::EDITING;
+    const uint16_t cardBackground = editing ? view.foreground : view.background;
+    const uint16_t cardForeground = editing ? view.background : view.foreground;
+    const uint16_t inset = view.height <= 32 ? 0 : (view.oled ? 1 : 8);
+    const uint16_t cardTop = view.centerTop + inset;
+    const uint16_t cardHeight = view.centerHeight > inset * 2
+        ? view.centerHeight - inset * 2 : view.centerHeight;
+    dsp.fillRect(view.horizontalMargin, cardTop, view.contentWidth, cardHeight,
+                 cardBackground);
+    dsp.drawRect(view.horizontalMargin, cardTop, view.contentWidth, cardHeight,
+                 view.foreground);
+
     char value[16]{};
     const bool hasValue = voxone::ui_menu::formatItemValue(
         menu, index, value, sizeof(value));
     const bool hasSubmenu = voxone::ui_menu::itemHasSubmenu(menu, index);
-    const uint16_t trailingWidth = hasValue
-        ? static_cast<uint16_t>(voxone::utf8::count(value) * glyphWidth)
-        : (hasSubmenu ? glyphWidth : 0);
-    const uint16_t textLeft = view.horizontalMargin + (view.oled ? 4 : 12);
-    const bool active = voxone::ui_menu::itemIsActive(menu, index);
-    const uint16_t markerWidth = active ? 2 * glyphWidth : 0;
-    const uint16_t textRight = view.horizontalMargin + view.rowWidth -
-        valueMargin - trailingWidth - (trailingWidth ? glyphWidth : 0);
-    const uint16_t labelLeft = textLeft + markerWidth;
-    const uint16_t labelWidth = textRight > labelLeft
-        ? textRight - labelLeft : 0;
-    char visibleLabel[96];
-    voxone::utf8::ellipsize(
-        visibleLabel, sizeof(visibleLabel),
-        voxone::ui_menu::itemLabel(menu, index),
-        glyphWidth ? labelWidth / glyphWidth : 0);
-    dsp.setCursor(textLeft, textTop);
-    if (active) dsp.print("* ");
-    if (labelWidth) {
-      dsp.setClipping({labelLeft, textTop, labelWidth, textHeight});
-      dsp.setCursor(labelLeft, textTop);
-      dsp.print(utf8Rus(visibleLabel));
-      dsp.clearClipping();
-    }
-    if (hasValue) {
-      dsp.setCursor(view.horizontalMargin + view.rowWidth - trailingWidth -
-                        valueMargin,
-                    textTop);
-      dsp.print(utf8Rus(value));
-    }
-    if (hasSubmenu) {
-      dsp.setCursor(view.horizontalMargin + view.rowWidth - glyphWidth -
-                        valueMargin,
-                    textTop);
-      dsp.print(">");
+    char label[128];
+    if (hasValue)
+      snprintf(label, sizeof(label), "%s: %s",
+               voxone::ui_menu::itemLabel(menu, index), value);
+    else if (hasSubmenu)
+      snprintf(label, sizeof(label), "%s >",
+               voxone::ui_menu::itemLabel(menu, index));
+    else
+      snprintf(label, sizeof(label), "%s",
+               voxone::ui_menu::itemLabel(menu, index));
+
+    const uint16_t glyphWidth = CHARWIDTH * view.itemSize;
+    const uint16_t availableWidth = view.contentWidth > inset * 2
+        ? view.contentWidth - inset * 2 : view.contentWidth;
+    char visibleLabel[128];
+    voxone::utf8::ellipsize(visibleLabel, sizeof(visibleLabel), label,
+                            glyphWidth ? availableWidth / glyphWidth : 0);
+    const uint16_t textWidth = static_cast<uint16_t>(
+        voxone::utf8::count(visibleLabel) * glyphWidth);
+    const uint16_t textHeight = CHARHEIGHT * view.itemSize;
+    const uint16_t textTop = cardTop +
+        (cardHeight > textHeight ? (cardHeight - textHeight) / 2 : 0);
+    dsp.setFont();
+    dsp.setTextSize(view.itemSize);
+    dsp.setTextColor(cardForeground, cardBackground);
+    dsp.setClipping(
+        {static_cast<uint16_t>(view.horizontalMargin + inset), cardTop,
+         availableWidth, cardHeight});
+    dsp.setCursor(view.horizontalMargin +
+                      (view.contentWidth > textWidth
+                           ? (view.contentWidth - textWidth) / 2 : inset),
+                  textTop);
+    dsp.print(utf8Rus(visibleLabel));
+    dsp.clearClipping();
+  }
+
+  void drawFooter(const voxone::ui_menu::MenuSnapshot& menu,
+                  const Layout& view) {
+    dsp.fillRect(0, view.footerTop, view.width,
+                 view.height - view.footerTop, view.background);
+    const uint8_t count = voxone::ui_menu::itemCount(menu);
+    char counter[16];
+    snprintf(counter, sizeof(counter), "%u/%u",
+             count ? static_cast<unsigned>(menu.selectedIndex + 1U) : 0U,
+             static_cast<unsigned>(count));
+    const uint16_t glyphWidth = CHARWIDTH * view.footerSize;
+    const uint16_t textHeight = CHARHEIGHT * view.footerSize;
+    const uint16_t textTop = view.footerTop +
+        ((view.height - view.footerTop) > textHeight
+             ? (view.height - view.footerTop - textHeight) / 2 : 0);
+    dsp.setFont();
+    dsp.setTextSize(view.footerSize);
+    dsp.setTextColor(view.foreground, view.background);
+    dsp.setCursor((view.width - strlen(counter) * glyphWidth) / 2, textTop);
+    dsp.print(counter);
+    if (menu.menuId == voxone::ui_menu::MenuId::DLNA &&
+        voxone::ui_menu::itemIsActive(menu, menu.selectedIndex)) {
+      dsp.setCursor(view.oled ? 2 : view.horizontalMargin, textTop);
+      dsp.print("GRA");
     }
   }
 
@@ -385,11 +422,8 @@ class UiMenuWidget : public Widget {
   void drawFull(const voxone::ui_menu::MenuSnapshot& menu,
                 const Layout& view) {
     drawHeader(menu, view);
-    dsp.fillRect(0, view.contentTop, view.width,
-                 view.height - view.contentTop, view.background);
-    const uint8_t end = view.firstIndex + view.visibleCount;
-    for (uint8_t index = view.firstIndex; index < end; ++index)
-      drawRow(menu, index, index == menu.selectedIndex, view);
+    drawSelection(menu, view);
+    drawFooter(menu, view);
   }
 
   void render(const voxone::ui_menu::MenuSnapshot& menu) {
@@ -405,13 +439,13 @@ class UiMenuWidget : public Widget {
       revision_ = menu.revision;
       return;
     }
-    const bool windowChanged = rendered_ &&
-        layout(renderedMenu_).firstIndex != view.firstIndex;
-    if (plan.kind == voxone::ui_menu::MenuRenderKind::FULL || windowChanged) {
+    if (plan.kind == voxone::ui_menu::MenuRenderKind::FULL) {
       drawFull(menu, view);
     } else if (plan.kind == voxone::ui_menu::MenuRenderKind::SELECTION) {
-      drawRow(menu, plan.previousIndex, false, view);
-      drawRow(menu, plan.selectedIndex, true, view);
+      if (menu.menuId == voxone::ui_menu::MenuId::DLNA)
+        drawHeader(menu, view);
+      drawSelection(menu, view);
+      drawFooter(menu, view);
     }
     renderedMenu_ = menu;
     rendered_ = true;
@@ -1693,7 +1727,7 @@ void Display::_buildPager(){
     _plplaying = new TextWidget(oled128x32Active() ? stations128x32::playing
                                                    : stations128x64::playing,
                                 8, WHITE, BLACK);
-    if (!oled128x32Active()) _plheader->setText("WEB - STACJA");
+    _plheader->setText("WEB - STACJA");
   } else
 #endif
 #if VOXONE_DISPLAY_PROFILE == VOXONE_DISPLAY_PROFILE_ST7789_284X76
@@ -1902,7 +1936,7 @@ void Display::_buildPager(){
     pages[PG_DIALOG]->addPage(_footer);
 #if VOXONE_DISPLAY_COMPILES_SMALL_OLED
   if (smallOledActive()) {
-    if (!oled128x32Active()) pages[PG_PLAYLIST]->addWidget(_plheader);
+    pages[PG_PLAYLIST]->addWidget(_plheader);
     pages[PG_PLAYLIST]->addWidget(_plcurrent);
     pages[PG_PLAYLIST]->addWidget(_plplaying);
     pages[PG_PLAYLIST]->addWidget(_plcounter);

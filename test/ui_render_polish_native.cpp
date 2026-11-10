@@ -25,7 +25,8 @@ int main() {
   assert(display.find("voxone::utf8::ellipsize(") != std::string::npos);
   assert(display.find("dsp.setClipping({sideInset, 0, availableWidth") !=
          std::string::npos);
-  assert(display.find("rowForeground);") != std::string::npos);
+  assert(display.find("cardForeground, cardBackground") !=
+         std::string::npos);
 
   assert(displayHeader.find("_yamahaTopSignature") != std::string::npos);
   assert(displayHeader.find("_yamahaMetadataSignature") != std::string::npos);

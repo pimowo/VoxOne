@@ -14,4 +14,17 @@ int main() {
   assert(sourceIncluded(full, SourceId::HomeAssistant));
   assert(sourceIncluded(full, SourceId::Dlna));
   assert(sourceIncluded(full, SourceId::Aux));
+
+  assert(nextSourceInMask(full, SourceId::Web) == SourceId::Bluetooth);
+  assert(nextSourceInMask(full, SourceId::Bluetooth) ==
+         SourceId::HomeAssistant);
+  assert(nextSourceInMask(full, SourceId::HomeAssistant) == SourceId::Dlna);
+  assert(nextSourceInMask(full, SourceId::Dlna) == SourceId::Aux);
+  assert(nextSourceInMask(full, SourceId::Aux) == SourceId::Web);
+
+  const uint8_t sparse = sourceBit(SourceId::Web) |
+                         sourceBit(SourceId::Dlna);
+  assert(nextSourceInMask(sparse, SourceId::Web) == SourceId::Dlna);
+  assert(nextSourceInMask(sparse, SourceId::Dlna) == SourceId::Web);
+  assert(nextSourceInMask(w0, SourceId::Web) == SourceId::Web);
 }

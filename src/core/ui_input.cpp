@@ -229,10 +229,13 @@ void dispatchUiInput(UiInputEvent event, int8_t steps,
     case UiInputAction::SourceNext:
       navigateCurrentSource(sourceManagerActiveSource(), true);
       break;
-    case UiInputAction::OpenSourceSelector:
-      if (uiMenu.open(voxone::ui_menu::MenuId::SOURCE)) {
+    case UiInputAction::CycleSource:
+      sourceManagerRequestNextSource();
+      break;
+    case UiInputAction::OpenDlnaBrowser:
+      if (uiMenu.open(voxone::ui_menu::MenuId::DLNA)) {
         config.beginMenuTransaction();
-        voxone::source_menu::entered();
+        voxone::dlna_menu::entered();
         if (!transitionUiMode(MENU)) {
           config.discardMenuTransaction();
           uiMenu.close();
