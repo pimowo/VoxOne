@@ -33,7 +33,13 @@ bool dispatchMenuInput(UiInputEvent event, int8_t steps) {
     action = uiMenu.handle(MenuCommand::SELECT);
   } else if (event == UiInputEvent::Double) {
     if (voxone::dlna_menu::back()) return true;
-    action = uiMenu.handle(MenuCommand::BACK);
+    const auto menuId = uiMenu.menuId();
+    if (menuId == voxone::ui_menu::MenuId::SOURCE ||
+        menuId == voxone::ui_menu::MenuId::DLNA ||
+        menuId == voxone::ui_menu::MenuId::MAIN)
+      action = uiMenu.handle(MenuCommand::CLOSE);
+    else
+      action = uiMenu.handle(MenuCommand::BACK);
   } else if (event == UiInputEvent::Long ||
              event == UiInputEvent::VeryLong) {
     action = uiMenu.handle(MenuCommand::CLOSE);
@@ -229,8 +235,15 @@ void dispatchUiInput(UiInputEvent event, int8_t steps,
     case UiInputAction::SourceNext:
       navigateCurrentSource(sourceManagerActiveSource(), true);
       break;
-    case UiInputAction::CycleSource:
-      sourceManagerRequestNextSource();
+    case UiInputAction::OpenSourceSelector:
+      if (uiMenu.open(voxone::ui_menu::MenuId::SOURCE)) {
+        config.beginMenuTransaction();
+        voxone::source_menu::entered();
+        if (!transitionUiMode(MENU)) {
+          config.discardMenuTransaction();
+          uiMenu.close();
+        }
+      }
       break;
     case UiInputAction::OpenDlnaBrowser:
       if (uiMenu.open(voxone::ui_menu::MenuId::DLNA)) {

@@ -28,6 +28,18 @@ void setPowerRelay(bool enabled) {
   if (voxone::hardware::hasPin(pin))
     digitalWrite(pin, enabled ? HIGH : LOW);
 }
+
+bool uiCarouselActive() {
+  const displayMode_e mode = uiState.mode();
+  return uiMenu.visible() || mode == MENU || mode == STATIONS ||
+         mode == BT_TRANSPORT;
+}
+
+void cancelUiToPlayer() {
+  config.discardMenuTransaction();
+  if (uiMenu.visible()) uiMenu.close();
+  transitionUiMode(PLAYER);
+}
 }  // namespace
 
 PowerManager powerManager;
@@ -52,17 +64,15 @@ void PowerManager::loop() {
     const auto event = button_.update(powerButtonPressed(), nowMs);
     if (!updateLockActive() && !shutdownNotice_) {
       if (event == voxone::power::ButtonEvent::BUTTON_CLICK) {
-        if (uiMenu.visible()) {
-          dispatchUiInput(UiInputEvent::Ok);
-        } else if (standby()) {
+        if (standby()) {
           wakeup();
+        } else if (uiCarouselActive()) {
+          cancelUiToPlayer();
         } else {
           player.toggleMute();
         }
       } else if (event == voxone::power::ButtonEvent::BUTTON_DOUBLE_CLICK) {
-        if (uiMenu.visible()) {
-          dispatchUiInput(UiInputEvent::Double);
-        } else if (uiMenu.open()) {
+        if (!standby() && uiState.mode() == PLAYER && uiMenu.open()) {
           config.beginMenuTransaction();
           if (!transitionUiMode(MENU)) {
             config.discardMenuTransaction();
@@ -71,9 +81,8 @@ void PowerManager::loop() {
           else ESP_LOGI(kTag, "Menu opened");
         }
       } else if (event == voxone::power::ButtonEvent::BUTTON_LONG_PRESS) {
-        if (uiMenu.visible()) {
-          dispatchUiInput(UiInputEvent::Long);
-        } else if (!standby()) {
+        if (!standby()) {
+          if (uiCarouselActive()) cancelUiToPlayer();
           beginShutdown();
         }
       }

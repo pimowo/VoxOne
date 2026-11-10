@@ -100,7 +100,9 @@ int main() {
   // VOL and STATIONS.
   assert(action(radio(VOL), UiInputEvent::Ok) == UiInputAction::ToggleMute);
   assert(action(radio(STATIONS), UiInputEvent::Right) ==
-         UiInputAction::VolumeUp);
+         UiInputAction::StationNext);
+  assert(action(radio(STATIONS), UiInputEvent::Left) ==
+         UiInputAction::StationPrevious);
   assert(resolveUiInput(radio(STATIONS), UiInputEvent::Right,
                         UiInputControl::DirectionButtons).action ==
          UiInputAction::StationNext);
@@ -109,6 +111,10 @@ int main() {
          UiInputAction::StationPrevious);
   assert(action(radio(STATIONS), UiInputEvent::Ok) ==
          UiInputAction::StationSelect);
+  assert(action(radio(STATIONS), UiInputEvent::Double) ==
+         UiInputAction::ShowPlayer);
+  assert(action(radio(STATIONS), UiInputEvent::Long) ==
+         UiInputAction::ShowPlayer);
 
   // Bluetooth behavior is selected by capabilities and runtime source state.
   assert(action(bluetooth(), UiInputEvent::Ok) ==
@@ -118,11 +124,11 @@ int main() {
   assert(action(bluetooth(), UiInputEvent::Right) ==
          UiInputAction::VolumeUp);
   assert(action(bluetooth(), UiInputEvent::Double) ==
-         UiInputAction::CycleSource);
+         UiInputAction::OpenSourceSelector);
   assert(action(bluetooth(), UiInputEvent::Long) ==
          UiInputAction::OpenBluetoothTransport);
   assert(action(bluetooth(BT_TRANSPORT), UiInputEvent::Left) ==
-         UiInputAction::VolumeDown);
+         UiInputAction::BluetoothPrevious);
   assert(resolveUiInput(bluetooth(BT_TRANSPORT), UiInputEvent::Left,
                         UiInputControl::EncoderGesture).action ==
          UiInputAction::BluetoothPrevious);
@@ -131,6 +137,8 @@ int main() {
          UiInputAction::BluetoothNext);
   assert(action(bluetooth(BT_TRANSPORT), UiInputEvent::Ok) ==
          UiInputAction::BluetoothToggle);
+  assert(action(bluetooth(BT_TRANSPORT), UiInputEvent::Double) ==
+         UiInputAction::ShowPlayer);
   assert(action(bluetooth(BT_TRANSPORT), UiInputEvent::Long) ==
          UiInputAction::ShowPlayer);
 
@@ -150,14 +158,14 @@ int main() {
   assert(action(compactBluetooth, UiInputEvent::Ok) ==
          UiInputAction::BluetoothToggle);
   assert(action(compactBluetooth, UiInputEvent::Double) ==
-         UiInputAction::CycleSource);
+         UiInputAction::OpenSourceSelector);
 
-  // The source cycle is capability-filtered, so the gesture is also
+  // The source carousel is capability-filtered, so the gesture is also
   // available on boards whose source set does not include Bluetooth.
   UiInputContext noBluetooth = radio();
   noBluetooth.supportsBluetooth = false;
   assert(action(noBluetooth, UiInputEvent::Double) ==
-         UiInputAction::CycleSource);
+         UiInputAction::OpenSourceSelector);
 
   UiInputContext dlna = radio();
   dlna.activeSource = SourceId::Dlna;
@@ -167,7 +175,7 @@ int main() {
   UiInputContext reversedLineOut = reversedRadio;
   reversedLineOut.lineOutEnabled = true;
   assert(action(reversedLineOut, UiInputEvent::Long) ==
-         UiInputAction::OpenStations);
+         UiInputAction::OpenVolume);
 
   // Existing user-volume limits remain 0..100.
   assert(applyVolume(0, action(radio(), UiInputEvent::Left)) == 0);

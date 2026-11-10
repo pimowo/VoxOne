@@ -79,7 +79,7 @@ enum class UiInputAction : uint8_t {
   BluetoothToggle,
   SourcePrevious,
   SourceNext,
-  CycleSource,
+  OpenSourceSelector,
   OpenVolume,
   OpenStations,
   OpenDlnaBrowser,
@@ -131,6 +131,18 @@ inline UiInputDecision resolveUiInput(const UiInputContext& context,
     return uiInputDecision(UiInputAction::None);
 
   if (event == UiInputEvent::Left || event == UiInputEvent::Right) {
+    if (context.mode == STATIONS)
+      return uiInputDecision(event == UiInputEvent::Left
+                                 ? UiInputAction::StationPrevious
+                                 : UiInputAction::StationNext);
+    if (context.mode == BT_TRANSPORT) {
+      if (!context.supportsBluetooth || !context.bluetoothSelected ||
+          !context.bluetoothConnected)
+        return uiInputDecision(UiInputAction::None);
+      return uiInputDecision(event == UiInputEvent::Left
+                                 ? UiInputAction::BluetoothPrevious
+                                 : UiInputAction::BluetoothNext);
+    }
     if (context.mode == VOL && !context.lineOutEnabled)
       return uiInputDecision(event == UiInputEvent::Left
                                  ? UiInputAction::VolumeDown
@@ -147,18 +159,6 @@ inline UiInputDecision resolveUiInput(const UiInputContext& context,
                              context.mode == NUMBERS);
     if (!context.networkConnected)
       return uiInputDecision(UiInputAction::None);
-    if (context.mode == BT_TRANSPORT) {
-      if (!context.supportsBluetooth || !context.bluetoothSelected ||
-          !context.bluetoothConnected)
-        return uiInputDecision(UiInputAction::None);
-      return uiInputDecision(event == UiInputEvent::Left
-                                 ? UiInputAction::BluetoothPrevious
-                                 : UiInputAction::BluetoothNext);
-    }
-    if (context.mode == STATIONS)
-      return uiInputDecision(event == UiInputEvent::Left
-                                 ? UiInputAction::StationPrevious
-                                 : UiInputAction::StationNext);
     return uiInputDecision(event == UiInputEvent::Left
                                ? UiInputAction::SourcePrevious
                                : UiInputAction::SourceNext,
@@ -191,17 +191,19 @@ inline UiInputDecision resolveUiInput(const UiInputContext& context,
     if (context.mode == SCREENSAVER || context.mode == SCREENBLANK)
       return uiInputDecision(UiInputAction::WakePlayer);
     if (context.mode == PLAYER && context.hasLocalDisplay)
-      return uiInputDecision(UiInputAction::CycleSource);
+      return uiInputDecision(UiInputAction::OpenSourceSelector);
+    if (context.mode == STATIONS || context.mode == BT_TRANSPORT)
+      return uiInputDecision(UiInputAction::ShowPlayer);
     return uiInputDecision(UiInputAction::None);
   }
 
   if (event == UiInputEvent::Long) {
     if (!context.hasLocalDisplay)
       return uiInputDecision(UiInputAction::None);
-    if (context.mode == BT_TRANSPORT)
+    if (context.mode == BT_TRANSPORT || context.mode == STATIONS)
       return uiInputDecision(UiInputAction::ShowPlayer);
     if (context.mode == PLAYER) {
-      if (context.encoderUiReversed && !context.lineOutEnabled)
+      if (context.encoderUiReversed)
         return uiInputDecision(UiInputAction::OpenVolume);
       if (context.activeSource == SourceId::Dlna)
         return uiInputDecision(UiInputAction::OpenDlnaBrowser);
@@ -212,7 +214,9 @@ inline UiInputDecision resolveUiInput(const UiInputContext& context,
                                    ? UiInputAction::OpenBluetoothTransport
                                    : UiInputAction::None);
       }
-      return uiInputDecision(UiInputAction::OpenStations);
+      if (context.activeSource == SourceId::Web)
+        return uiInputDecision(UiInputAction::OpenStations);
+      return uiInputDecision(UiInputAction::None);
     }
     return uiInputDecision(UiInputAction::ShowPlayer);
   }

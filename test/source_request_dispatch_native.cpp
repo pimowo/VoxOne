@@ -36,12 +36,6 @@ int main() {
       "void sourceManagerServiceRequests()");
   assert(request.find("pendingSourceRequest.store") != std::string::npos);
   assert(request.find("btLink.state()") == std::string::npos);
-  const std::string requestNext = functionBody(
-      manager, "bool sourceManagerRequestNextSource()",
-      "void sourceManagerServiceRequests()");
-  assert(requestNext.find("nextSourceInMask") != std::string::npos);
-  assert(requestNext.find("sourceManagerRequestSource") !=
-         std::string::npos);
   const std::string service = functionBody(
       manager, "void sourceManagerServiceRequests()",
       "SourceId sourceManagerActiveSource()");
@@ -54,7 +48,24 @@ int main() {
       "bool sourceManagerSelectSource(SourceId source)");
   assert(select.find("sourceManagerApplyConfiguredBluetoothVolume()") !=
          std::string::npos);
+  assert(manager.find("configuredBtVolumePending.store(true") !=
+         std::string::npos);
+  assert(manager.find("kConfiguredBtVolumeRetryMs") != std::string::npos);
+  assert(manager.find("tryApplyConfiguredBluetoothVolume()") !=
+         std::string::npos);
+
+  const std::string sourceMenu =
+      readFile("src/core/source_menu_controller.cpp");
+  assert(sourceMenu.find("sourceManagerRequestSource(uiMenu.selectedSource())") !=
+         std::string::npos);
+  assert(sourceMenu.find("sourceManagerSelectSource(uiMenu.selectedSource())") ==
+         std::string::npos);
 
   const std::string main = readFile("src/main.cpp");
   assert(main.find("sourceManagerServiceRequests();") != std::string::npos);
+
+  const std::string btAudio = readFile("src/core/bt_audio_input.cpp");
+  assert(btAudio.find("i2s_start(I2S_NUM_0)") != std::string::npos);
+  assert(btAudio.find("player.setOutputPins(target.btOutput)") !=
+         std::string::npos);
 }

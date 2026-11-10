@@ -38,8 +38,8 @@ constexpr WidgetConfig screensaverClock = {0, 8, 0, WA_CENTER};
 namespace stations128x32 {
 constexpr WidgetConfig header = {0, 0, 1, WA_CENTER};
 constexpr ScrollConfig selected = {{0, 8, 2, WA_CENTER}, 140, 128, 1200, 2, 35};
-constexpr WidgetConfig playing = {2, 24, 1, WA_LEFT};
-constexpr WidgetConfig counter = {2, 24, 1, WA_RIGHT};
+constexpr WidgetConfig playing = {2, 24, 1, WA_RIGHT};
+constexpr WidgetConfig counter = {0, 24, 1, WA_CENTER};
 }
 
 namespace btTransport128x32 {

@@ -49,7 +49,7 @@ const WidgetConfig apPass2Conf    PROGMEM = { 0, 45, 1, WA_CENTER };
 const WidgetConfig clockConf      PROGMEM = { 0, 57, 0, WA_RIGHT };
 const WidgetConfig playlistHeaderConf  PROGMEM = { 0, 2, 2, WA_CENTER };
 const WidgetConfig playlistCounterConf PROGMEM = { 0, 60, 1, WA_CENTER };
-const WidgetConfig playlistPlayingConf PROGMEM = { 4, 60, 1, WA_LEFT };
+const WidgetConfig playlistPlayingConf PROGMEM = { 4, 60, 1, WA_RIGHT };
 const WidgetConfig vuConf         PROGMEM = { 2, DSP_HEIGHT-14, 1, WA_CENTER };
 
 const WidgetConfig bootWdtConf    PROGMEM = { 0, DSP_HEIGHT-8*2-5, 1, WA_CENTER };

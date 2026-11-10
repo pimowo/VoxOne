@@ -104,11 +104,15 @@ void BtAudioInput::route(bool bluetoothSelected, bool playbackPlaying,
   if (changedSource || changedRate) error = i2s_zero_dma_buffer(I2S_NUM_0);
   if (error == ESP_OK && targetRate != 0 && (changedSource || changedRate))
     error = i2s_set_sample_rates(I2S_NUM_0, targetRate);
+  if (error == ESP_OK && target.btOutput && (changedSource || changedRate))
+    error = i2s_start(I2S_NUM_0);
   if (error == ESP_OK) {
     bluetoothSelected_ = bluetoothSelected;
     outputRate_ = targetRate;
     routeEnabled_.store(target.btOutput);
     radioReady_.store(target.radioOutput);
+    if (bluetoothSelected || changedSource)
+      player.setOutputPins(target.btOutput);
   }
   xSemaphoreGive(outputMutex_);
   if (error != ESP_OK) {

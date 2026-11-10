@@ -108,7 +108,7 @@ int main() {
   assert(display.find("_st7789Clock") == std::string::npos);
   assert(display.find("view.btConnected") != std::string::npos);
   assert(display.find("displaySourceLabel(view.source)") != std::string::npos);
-  assert(config.find("playlistPlayingConf PROGMEM = { 4, 60, 1, WA_LEFT }") !=
+  assert(config.find("playlistPlayingConf PROGMEM = { 4, 60, 1, WA_RIGHT }") !=
          std::string::npos);
   // Preserve the accepted ST7789 row-scrolling timing and one-pixel step.
   assert(config.find("st7789StationConf PROGMEM = {{ TFT_FRAMEWDT, 2, 2, WA_LEFT }, 140, MAX_WIDTH, 5000, 1, 9 }") !=

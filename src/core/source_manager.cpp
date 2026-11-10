@@ -113,12 +113,6 @@ bool sourceManagerRequestSource(SourceId source) {
   return true;
 }
 
-bool sourceManagerRequestNextSource() {
-  const uint8_t mask = sourceManagerSourceMask();
-  return sourceManagerRequestSource(
-      nextSourceInMask(mask, sourceManagerActiveSource()));
-}
-
 void sourceManagerServiceRequests() {
   const uint8_t request =
       pendingSourceRequest.exchange(0, std::memory_order_acq_rel);
@@ -259,6 +253,9 @@ bool sourceManagerDlnaActive() {
 
 namespace {
 BtVolumeSessionGate volumeSessionGate;
+std::atomic<bool> configuredBtVolumePending{false};
+uint32_t configuredBtVolumeAttemptMs = 0;
+constexpr uint32_t kConfiguredBtVolumeRetryMs = 500;
 
 const char* sourceReason(SourceChangeReason reason) {
   switch (reason) {
@@ -290,6 +287,22 @@ bool sendBluetoothUserVolume(uint8_t user) {
   // Legacy peers cannot authenticate inbound VOLUME events, but explicit
   // local user commands remain safe and retain their old wire format.
   return btLink.setVolume(btUserToAbsolute(user));
+}
+
+bool tryApplyConfiguredBluetoothVolume() {
+  if (systemUpdateAudioBlocked()) return false;
+  const auto runtime = config.runtimeSnapshot();
+  const uint8_t configured = runtime.lineOutEnabled
+                                 ? runtime.lineOutVolume
+                                 : player.outputSnapshot().userVolume;
+  portENTER_CRITICAL(&sourceMux);
+  const bool available = sourceState.canControlBluetooth();
+  portEXIT_CRITICAL(&sourceMux);
+  if (!available || !sendBluetoothUserVolume(configured)) return false;
+  serialCli.printf("##[BT-AUDIO]# configured volume=%u mute=%u\n",
+                   static_cast<unsigned>(configured),
+                   player.isMuted() ? 1U : 0U);
+  return true;
 }
 }  // namespace
 
@@ -333,7 +346,17 @@ void sourceManagerLoop() {
   }
   if ((update.btConnected || update.activeChanged) &&
       active == ActiveSource::Bluetooth)
-    sourceManagerApplyConfiguredBluetoothVolume();
+    configuredBtVolumePending.store(true, std::memory_order_release);
+  if (active != ActiveSource::Bluetooth) {
+    configuredBtVolumePending.store(false, std::memory_order_release);
+  } else if (configuredBtVolumePending.load(std::memory_order_acquire)) {
+    const uint32_t nowMs = millis();
+    if (nowMs - configuredBtVolumeAttemptMs >= kConfiguredBtVolumeRetryMs) {
+      configuredBtVolumeAttemptMs = nowMs;
+      if (tryApplyConfiguredBluetoothVolume())
+        configuredBtVolumePending.store(false, std::memory_order_release);
+    }
+  }
   if (update.activeChanged)
     serialCli.printf("##[SOURCE]# active=%s reason=%s\n",
                      sourceName(active), sourceReason(update.reason));
@@ -463,15 +486,7 @@ bool sourceManagerSetBluetoothVolume(uint8_t user) {
 }
 
 void sourceManagerApplyConfiguredBluetoothVolume() {
-  if (systemUpdateAudioBlocked()) return;
-  const auto runtime = config.runtimeSnapshot();
-  const uint8_t configured = runtime.lineOutEnabled
-                                 ? runtime.lineOutVolume
-                                 : player.outputSnapshot().userVolume;
-  portENTER_CRITICAL(&sourceMux);
-  const bool available = sourceState.canControlBluetooth();
-  portEXIT_CRITICAL(&sourceMux);
-  if (available) sendBluetoothUserVolume(configured);
+  configuredBtVolumePending.store(true, std::memory_order_release);
 }
 
 void sourceManagerTransport(BtTransportInput input) {

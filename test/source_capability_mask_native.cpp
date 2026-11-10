@@ -14,17 +14,14 @@ int main() {
   assert(sourceIncluded(full, SourceId::HomeAssistant));
   assert(sourceIncluded(full, SourceId::Dlna));
   assert(sourceIncluded(full, SourceId::Aux));
-
-  assert(nextSourceInMask(full, SourceId::Web) == SourceId::Bluetooth);
-  assert(nextSourceInMask(full, SourceId::Bluetooth) ==
-         SourceId::HomeAssistant);
-  assert(nextSourceInMask(full, SourceId::HomeAssistant) == SourceId::Dlna);
-  assert(nextSourceInMask(full, SourceId::Dlna) == SourceId::Aux);
-  assert(nextSourceInMask(full, SourceId::Aux) == SourceId::Web);
-
-  const uint8_t sparse = sourceBit(SourceId::Web) |
-                         sourceBit(SourceId::Dlna);
-  assert(nextSourceInMask(sparse, SourceId::Web) == SourceId::Dlna);
-  assert(nextSourceInMask(sparse, SourceId::Dlna) == SourceId::Web);
-  assert(nextSourceInMask(w0, SourceId::Web) == SourceId::Web);
+  assert(full == (sourceBit(SourceId::Web) |
+                  sourceBit(SourceId::Bluetooth) |
+                  sourceBit(SourceId::HomeAssistant) |
+                  sourceBit(SourceId::Dlna) |
+                  sourceBit(SourceId::Aux)));
+  assert(sourceMenuLabel(SourceId::Web)[0] == 'W');
+  assert(sourceMenuLabel(SourceId::Bluetooth)[0] == 'B');
+  assert(sourceMenuLabel(SourceId::HomeAssistant)[0] == 'H');
+  assert(sourceMenuLabel(SourceId::Dlna)[0] == 'D');
+  assert(sourceMenuLabel(SourceId::Aux)[0] == 'A');
 }

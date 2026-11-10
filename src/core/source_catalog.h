@@ -28,18 +28,6 @@ constexpr bool sourceIncluded(uint8_t mask, SourceId source) {
   return (mask & sourceBit(source)) != 0;
 }
 
-inline SourceId nextSourceInMask(uint8_t mask, SourceId current) {
-  constexpr uint8_t kSourceCount =
-      static_cast<uint8_t>(SourceId::Aux) + 1U;
-  const uint8_t start = static_cast<uint8_t>(current);
-  for (uint8_t offset = 1; offset <= kSourceCount; ++offset) {
-    const SourceId candidate = static_cast<SourceId>(
-        static_cast<uint8_t>((start + offset) % kSourceCount));
-    if (sourceIncluded(mask, candidate)) return candidate;
-  }
-  return SourceId::Web;
-}
-
 constexpr const char* sourceApiName(SourceId source) {
   return source == SourceId::Web ? "radio" :
          source == SourceId::Bluetooth ? "bt" :

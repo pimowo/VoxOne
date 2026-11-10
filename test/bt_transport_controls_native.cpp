@@ -27,10 +27,10 @@ static displayMode_e longPress(displayMode_e mode,
   }
 }
 
-static bool cyclesSource(displayMode_e mode,
-                         const SourceManagerState& sources) {
+static bool opensSourceCarousel(displayMode_e mode,
+                                const SourceManagerState& sources) {
   return resolveUiInput(context(mode, sources), UiInputEvent::Double).action ==
-         UiInputAction::CycleSource;
+         UiInputAction::OpenSourceSelector;
 }
 
 struct ClickCalls {
@@ -65,17 +65,17 @@ int main() {
   bt.runtimeAvailable = true;
   sources.observe(bt);
 
-  // RADIO PLAYER: long press opens stations, double-click requests the next
-  // source from the complete capability-filtered cycle.
+  // RADIO PLAYER: long press opens stations, double-click opens the complete
+  // capability-filtered source carousel without changing source immediately.
   assert(longPress(PLAYER, sources) == STATIONS);
-  assert(!cyclesSource(STATIONS, sources));
-  assert(cyclesSource(PLAYER, sources));
+  assert(!opensSourceCarousel(STATIONS, sources));
+  assert(opensSourceCarousel(PLAYER, sources));
   assert(sources.active() == ActiveSource::Radio);
   sources.select(ActiveSource::Bluetooth, bt);
 
   // A selected BT source without a phone cannot open transport.
   assert(longPress(PLAYER, sources) == PLAYER);
-  assert(cyclesSource(PLAYER, sources));
+  assert(opensSourceCarousel(PLAYER, sources));
   assert(sources.active() == ActiveSource::Bluetooth);
   sources.select(ActiveSource::Radio, bt);
 
@@ -85,7 +85,7 @@ int main() {
   sources.observe(bt);
   assert(sources.active() == ActiveSource::Bluetooth);
   assert(longPress(PLAYER, sources) == BT_TRANSPORT);
-  assert(!cyclesSource(BT_TRANSPORT, sources));
+  assert(!opensSourceCarousel(BT_TRANSPORT, sources));
   assert(sources.active() == ActiveSource::Bluetooth);
   assert(longPress(BT_TRANSPORT, sources) == PLAYER);
 
@@ -121,10 +121,10 @@ int main() {
   assert(temporaryView.playback == DisplayPlaybackState::Stopped);
   assert(sources.canControlBluetooth());
 
-  // BT PLAYER uses the same cycle gesture; other screens remain unchanged.
-  assert(!cyclesSource(VOL, sources));
+  // BT PLAYER uses the same carousel gesture; other screens remain unchanged.
+  assert(!opensSourceCarousel(VOL, sources));
   assert(sources.active() == ActiveSource::Bluetooth);
-  assert(cyclesSource(PLAYER, sources));
+  assert(opensSourceCarousel(PLAYER, sources));
   assert(sources.active() == ActiveSource::Bluetooth);
   sources.select(ActiveSource::Radio, bt);
 

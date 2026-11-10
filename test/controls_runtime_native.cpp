@@ -44,8 +44,9 @@ int main() {
          std::string::npos);
   assert(implementation.find("void onBtnLongPressStart(int id)") !=
          std::string::npos);
-  assert(uiInput.find("sourceManagerRequestNextSource()") !=
+  assert(uiInput.find("ui_menu::MenuId::SOURCE") !=
          std::string::npos);
+  assert(uiInput.find("source_menu::entered()") != std::string::npos);
   assert(uiInput.find("sourceManagerTransport(") != std::string::npos);
   assert(uiInput.find("player.stepUserVol(direction)") != std::string::npos);
   assert(uiInputHeader.find("enum class UiInputEvent") != std::string::npos);

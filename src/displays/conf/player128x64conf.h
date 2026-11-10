@@ -48,8 +48,8 @@ constexpr uint16_t clockColonTop = 31;
 namespace stations128x64 {
 constexpr WidgetConfig header = {0, 0, 1, WA_CENTER};
 constexpr ScrollConfig selected = {{0, 24, 2, WA_CENTER}, 140, 128, 1200, 2, 35};
-constexpr WidgetConfig playing = {2, 56, 1, WA_LEFT};
-constexpr WidgetConfig counter = {2, 56, 1, WA_RIGHT};
+constexpr WidgetConfig playing = {2, 56, 1, WA_RIGHT};
+constexpr WidgetConfig counter = {0, 56, 1, WA_CENTER};
 }
 
 // OLED 128x64 Bluetooth transport. Metadata keeps the same scrolling behavior

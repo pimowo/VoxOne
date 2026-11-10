@@ -47,7 +47,9 @@ int main() {
   assert(manager.find("if (!standby() && !shutdownNotice_) return;") !=
          std::string::npos);
   assert(manager.find("ButtonEvent::BUTTON_CLICK") != std::string::npos);
-  assert(manager.find("else if (standby())") != std::string::npos);
+  assert(manager.find("if (standby())") != std::string::npos);
+  assert(manager.find("uiCarouselActive()") != std::string::npos);
+  assert(manager.find("cancelUiToPlayer()") != std::string::npos);
   assert(manager.find("player.toggleMute();") != std::string::npos);
   assert(manager.find("ButtonEvent::BUTTON_DOUBLE_CLICK") !=
          std::string::npos);

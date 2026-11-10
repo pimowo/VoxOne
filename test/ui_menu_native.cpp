@@ -268,7 +268,9 @@ int main() {
   const std::string power = readFile("src/core/power_manager.cpp");
   assert(power.find("ButtonEvent::BUTTON_DOUBLE_CLICK") != std::string::npos);
   assert(power.find("uiMenu.open()") != std::string::npos);
-  assert(power.find("dispatchUiInput(UiInputEvent::Double)") !=
+  assert(power.find("uiCarouselActive()") != std::string::npos);
+  assert(power.find("cancelUiToPlayer()") != std::string::npos);
+  assert(power.find("dispatchUiInput(UiInputEvent::Double)") ==
          std::string::npos);
   assert(power.find("config.beginMenuTransaction()") != std::string::npos);
   assert(power.find("transitionUiMode(MENU)") != std::string::npos);
@@ -293,7 +295,10 @@ int main() {
          std::string::npos);
   assert(menuRenderer.find("DLNA - FOLDER") != std::string::npos);
   assert(menuRenderer.find("DLNA - UTWÓR") != std::string::npos);
+  assert(menuRenderer.find("ŹRÓDŁO") != std::string::npos);
   assert(menuRenderer.find("dsp.print(\"GRA\")") != std::string::npos);
+  assert(menuRenderer.find("view.width - rightMargin - 3 * glyphWidth") !=
+         std::string::npos);
   assert(menuRenderer.find("drawConfirmation") != std::string::npos);
   assert(menuRenderer.find("Zapisać zmiany?") != std::string::npos);
   assert(menuRenderer.find("formatItemValue") != std::string::npos);

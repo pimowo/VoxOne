@@ -252,6 +252,10 @@ class UiMenuWidget : public Widget {
                                                   : "DLNA - UTWÓR");
       return;
     }
+    if (menu.menuId == voxone::ui_menu::MenuId::SOURCE) {
+      snprintf(output, outputSize, "ŹRÓDŁO");
+      return;
+    }
     if (menu.menuId == voxone::ui_menu::MenuId::MAIN) {
       snprintf(output, outputSize, "MENU");
       return;
@@ -369,9 +373,11 @@ class UiMenuWidget : public Widget {
     dsp.setTextColor(view.foreground, view.background);
     dsp.setCursor((view.width - strlen(counter) * glyphWidth) / 2, textTop);
     dsp.print(counter);
-    if (menu.menuId == voxone::ui_menu::MenuId::DLNA &&
+    if ((menu.menuId == voxone::ui_menu::MenuId::DLNA ||
+         menu.menuId == voxone::ui_menu::MenuId::SOURCE) &&
         voxone::ui_menu::itemIsActive(menu, menu.selectedIndex)) {
-      dsp.setCursor(view.oled ? 2 : view.horizontalMargin, textTop);
+      const uint16_t rightMargin = view.oled ? 2 : view.horizontalMargin;
+      dsp.setCursor(view.width - rightMargin - 3 * glyphWidth, textTop);
       dsp.print("GRA");
     }
   }
@@ -1727,7 +1733,7 @@ void Display::_buildPager(){
     _plplaying = new TextWidget(oled128x32Active() ? stations128x32::playing
                                                    : stations128x64::playing,
                                 8, WHITE, BLACK);
-    _plheader->setText("WEB - STACJA");
+    _plheader->setText("WEB - STACJE");
   } else
 #endif
 #if VOXONE_DISPLAY_PROFILE == VOXONE_DISPLAY_PROFILE_ST7789_284X76
@@ -1735,14 +1741,14 @@ void Display::_buildPager(){
   _plheader = new TextWidget(playlistHeaderConf, 30, config.theme.meta, config.theme.metabg);
   _plcounter = new TextWidget(playlistCounterConf, 16, config.theme.meta, config.theme.background);
   _plplaying = new TextWidget(playlistPlayingConf, 8, config.theme.meta, config.theme.background);
-  _plheader->setText("WEB - STACJA");
+  _plheader->setText("WEB - STACJE");
   }
 #elif VOXONE_DISPLAY_PROFILE == VOXONE_DISPLAY_PROFILE_ST7796_480X320
   {
   _plheader = new TextWidget(st7796PlaylistHeaderConf, 30, config.theme.meta, config.theme.metabg);
   _plcounter = new TextWidget(st7796PlaylistCounterConf, 16, config.theme.meta, config.theme.background);
   _plplaying = new TextWidget(st7796PlaylistPlayingConf, 8, config.theme.meta, config.theme.background);
-  _plheader->setText("WEB - STACJA");
+  _plheader->setText("WEB - STACJE");
   }
 #else
   {

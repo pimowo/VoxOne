@@ -283,6 +283,8 @@ int main() {
   assert(stations128x32::header.top == 0 &&
          stations128x32::playing.top == 24 &&
          stations128x32::counter.top == 24);
+  assert(stations128x32::playing.align == WA_RIGHT);
+  assert(stations128x32::counter.align == WA_CENTER);
   assert(fits(kVolumePrimary));
   assert(fits(kVolumeFooter));
   assert(player128x32::volumeNumber.textsize == 2 &&
@@ -395,7 +397,7 @@ int main() {
   assert(compactVolume.find("_showDialog(\"\")") != std::string::npos);
   assert(compactVolume.find("_nums->setText(level)") != std::string::npos);
 
-  assert(display.find("_plheader->setText(\"WEB - STACJA\")") !=
+  assert(display.find("_plheader->setText(\"WEB - STACJE\")") !=
          std::string::npos);
   assert(display.find("pages[PG_PLAYLIST]->addWidget(_plheader)") !=
          std::string::npos);

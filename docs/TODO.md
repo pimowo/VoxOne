@@ -7,28 +7,35 @@ checkpointów pozostaje w historii Git i w istniejących raportach.
 ## 1. HIL PENDING (do fizycznego przetestowania przez użytkownika)
 
 - [ ] Zweryfikować przycisk zasilania na L0 (GPIO42) i S0 (GPIO3): krótki
-  klik (Wakeup/Mute, wejście w podmenu lub wybór pozycji), dwuklik (otwarcie
-  Menu albo powrót z podmenu), długie naciśnięcie (zamknięcie Menu albo
-  shutdown), nawigację enkoderem bez zmiany głośności przy otwartym Menu,
+  klik (Wakeup/Mute albo Home z Menu/karuzeli), dwuklik otwierający Menu
+  Główne wyłącznie z Playera oraz długie naciśnięcie uruchamiające shutdown
+  także z Menu/karuzeli; sprawdzić nawigację enkoderem bez zmiany głośności
+  przy otwartej karuzeli, klik wyboru, dwuklik cofania o poziom i długi klik
+  wyjścia do Playera,
   renderowanie hierarchii i wskaźników `>` na TFT/OLED, sekwencję wyłączania
   „Do widzenia!” z natychmiastowym zatrzymaniem audio, płynne odświeżanie Menu,
   kontekstową belkę Menu na TFT, wygaszenie ekranu z ochroną OLED oraz tryby
   enkodera NORMAL/REVERSED (w tym obrót z wciśniętym przyciskiem i
-  synchronizację ustawienia pomiędzy WWW a Menu), pętlę wszystkich źródeł
-  dostępnych w profilu po kolejnych dwuklikach w Playerze oraz nakładkę
-  głośności po długim kliknięciu w trybie REVERSED, a także transakcyjny ekran
+  synchronizację ustawienia pomiędzy WWW a Menu), osobną karuzelę wszystkich
+  źródeł dostępnych w profilu po dwukliku w Playerze, kontekstowe karuzele po
+  długim kliknięciu w trybie NORMAL oraz nakładkę głośności po długim kliknięciu
+  w trybie REVERSED, a także transakcyjny ekran
   „Zapisać zmiany?” na TFT/OLED: zapis przez TAK, pełne przywrócenie wyglądu i
   ustawień przez NIE oraz natychmiastowe wyjście, gdy nie ma zmian; dodatkowo
   sprawdzić polskie znaki w nazwach stacji i metadanych ICY/DLNA/ID3,
   wyśrodkowanie kontekstowej belki i wielokropki długich nazw na L0 oraz brak
   migotania przy zmianie metadanych/Wi-Fi na TFT i przewijaniu na OLED S0;
-  ocenić karuzelowe widoki stacji, DLNA i Menu (nagłówek, jedna duża pozycja,
-  licznik oraz wskaźnik `GRA`) na TFT L0 i OLED S0;
+  ocenić karuzelowe widoki stacji, DLNA, Źródła i Menu (nagłówek, jedna duża
+  pozycja, licznik oraz prawostronny wskaźnik `GRA`) na TFT L0 i OLED S0;
   po zimnym starcie L0 potwierdzić wzrokowo pełne przejście TFT z logo do
   widoku Playera (zdalny most nie ma podłączonej kamery).
 - [ ] Na L0 z rzeczywiście sparowanym i odtwarzającym telefonem potwierdzić
   słyszalny dźwięk Bluetooth po wyborze źródła, niezerowy transfer I2S do
   DAC, synchronizację ustawionej głośności oraz zachowanie MUTE.
+- [ ] Naprawić watchdog trybu captive AP bez zapisanych profili Wi-Fi:
+  po wyczyszczeniu SPIFFS L0 doszedł do `netserver.begin`, po czym po około
+  7 s zgłosił `Task watchdog` dla `IDLE0` z zadaniem `wifi` na CPU0;
+  zweryfikować również provisioning i stabilność tego trybu na S0.
 - [ ] Fizycznie przetestować TTS/media z Home Assistant: źródło `SOURCE_HA`,
   metadane title/artist i `N/A` zamiast bitrate na TFT/OLED oraz powrót do
   wcześniej używanego źródła i jego stanu po EOF albo komendzie Stop.
@@ -64,8 +71,6 @@ checkpointów pozostaje w historii Git i w istniejących raportach.
 
 - [ ] Dodać trzeci tryb enkodera „Tylko stacje” (bez regulacji głośności) oraz
   zapewnić jego poprawne zachowanie z LINE OUT dla wszystkich trybów enkodera.
-- [ ] Ujednolicić gesty w Menu: obrót/klik/dwuklik/długi klik odpowiadają za
-  nawigację/wybór/wstecz/wyjście.
 - [ ] Rozbudować działający szkielet Menu na TFT i OLED o pełne ekrany
   konfiguracji oraz odczyt i zapis ustawień; zachować obsługę enkoderem.
 - [ ] Dodać docelowe widoki `HOME`, `STATIONS`, `SETTINGS`, `UPDATE` i

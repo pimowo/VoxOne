@@ -15,7 +15,7 @@ void entered() {
 
 void select() {
   if (uiMenu.menuId() != ui_menu::MenuId::SOURCE) return;
-  sourceManagerSelectSource(uiMenu.selectedSource());
+  sourceManagerRequestSource(uiMenu.selectedSource());
   config.discardMenuTransaction();
   uiMenu.close();
   transitionUiMode(PLAYER);
