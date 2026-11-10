@@ -83,8 +83,10 @@ void PowerManager::loop() {
         }
       } else if (event == voxone::power::ButtonEvent::BUTTON_LONG_PRESS) {
         if (!standby()) {
-          if (uiCarouselActive()) cancelUiToPlayer();
-          beginShutdown();
+          if (uiState.mode() == PLAYER && !uiMenu.visible())
+            beginShutdown();
+          else
+            dispatchUiInput(UiInputEvent::Long);
         }
       }
     }

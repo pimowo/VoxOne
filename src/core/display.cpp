@@ -246,6 +246,10 @@ class UiMenuWidget : public Widget {
                     char* output, size_t outputSize) const {
     if (!output || outputSize == 0) return;
     if (menu.menuId == voxone::ui_menu::MenuId::DLNA) {
+      if (voxone::ui_menu::itemCount(menu) == 0) {
+        snprintf(output, outputSize, "DLNA");
+        return;
+      }
       const bool folder = voxone::ui_menu::itemHasSubmenu(
           menu, menu.selectedIndex);
       snprintf(output, outputSize, "%s", folder ? "DLNA - FOLDER"
@@ -432,9 +436,37 @@ class UiMenuWidget : public Widget {
     drawFooter(menu, view);
   }
 
+  void drawEmpty(const voxone::ui_menu::MenuSnapshot& menu,
+                 const Layout& view) {
+    drawHeader(menu, view);
+    dsp.fillRect(0, view.centerTop, view.width, view.centerHeight,
+                 view.background);
+    const char* message = "Brak elementów";
+    const uint8_t textSize = view.oled ? 1 : (view.contextualTft ? 3 : 1);
+    const uint16_t textWidth = static_cast<uint16_t>(
+        voxone::utf8::count(message) * CHARWIDTH * textSize);
+    const uint16_t textHeight = CHARHEIGHT * textSize;
+    dsp.setFont();
+    dsp.setTextSize(textSize);
+    dsp.setTextColor(view.foreground, view.background);
+    dsp.setCursor(view.width > textWidth ? (view.width - textWidth) / 2 : 0,
+                  view.centerTop +
+                      (view.centerHeight > textHeight
+                           ? (view.centerHeight - textHeight) / 2
+                           : 0));
+    dsp.print(utf8Rus(message));
+    drawFooter(menu, view);
+  }
+
   void render(const voxone::ui_menu::MenuSnapshot& menu) {
     const Layout view = layout(menu);
-    if (voxone::ui_menu::itemCount(menu) == 0) return;
+    if (voxone::ui_menu::itemCount(menu) == 0) {
+      drawEmpty(menu, view);
+      renderedMenu_ = menu;
+      rendered_ = true;
+      revision_ = menu.revision;
+      return;
+    }
     const auto plan = voxone::ui_menu::menuRenderPlan(
         renderedMenu_, menu, rendered_);
     if (menu.state == voxone::ui_menu::MenuState::CONFIRM_SAVE) {
@@ -2114,11 +2146,16 @@ void Display::_buildPager(){
 #endif
 }
 
+void Display::_removeBootPage() {
+  if (!_boot) return;
+  // Pager owns registered pages and deletes them in removePage().  Fall back
+  // to direct deletion only if setup was interrupted before registration.
+  if (!_pager || !_pager->removePage(_boot)) delete _boot;
+  _boot = nullptr;
+}
+
 void Display::_apScreen() {
-  if (_boot) {
-    _pager->removePage(_boot);
-    _boot = nullptr;
-  }
+  _removeBootPage();
     _boot = new Page();
     const auto presentation = network.presentationSnapshot();
     const bool presentationReady = presentation.initialized;
@@ -2373,10 +2410,7 @@ void Display::_apScreen() {
 }
 
 void Display::_start() {
-  if (_boot) {
-    _pager->removePage(_boot);
-    _boot = nullptr;
-  }
+  _removeBootPage();
   if (network.status != CONNECTED) {
     _apScreen();
     // Do not publish display.ready() until the replacement for the boot logo

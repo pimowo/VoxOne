@@ -53,8 +53,13 @@ int main() {
   const std::size_t ready = display.rfind("_bootStep = 2;", handoff);
   assert(handoff != std::string::npos && forcedFlush != std::string::npos);
   assert(ready != std::string::npos && forcedFlush < ready && ready < handoff);
-  assert(display.find("_pager->removePage(_boot);\n    _boot = nullptr;") !=
+  assert(display.find("void Display::_removeBootPage()") !=
          std::string::npos);
+  assert(display.find("if (!_pager || !_pager->removePage(_boot)) delete _boot;") !=
+         std::string::npos);
+  assert(display.find("void Display::_apScreen() {\n  _removeBootPage();") !=
+         std::string::npos);
+  assert(display.find("Brak elementów") != std::string::npos);
 
   // The audited project font already owns all 18 Polish lower/upper slots.
   for (unsigned slot = 0x80; slot <= 0x91; ++slot) {

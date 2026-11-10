@@ -270,6 +270,16 @@ int main() {
   assert(power.find("uiMenu.open()") != std::string::npos);
   assert(power.find("uiCarouselActive()") != std::string::npos);
   assert(power.find("cancelUiToPlayer()") != std::string::npos);
+  const size_t longPress =
+      power.find("ButtonEvent::BUTTON_LONG_PRESS");
+  const size_t longPressEnd = power.find("if (shutdownNotice_", longPress);
+  assert(longPress != std::string::npos && longPressEnd != std::string::npos);
+  const std::string longPressHandler =
+      power.substr(longPress, longPressEnd - longPress);
+  assert(longPressHandler.find("uiState.mode() == PLAYER") !=
+         std::string::npos);
+  assert(longPressHandler.find("dispatchUiInput(UiInputEvent::Long)") !=
+         std::string::npos);
   assert(power.find("dispatchUiInput(UiInputEvent::Double)") ==
          std::string::npos);
   assert(power.find("config.beginMenuTransaction()") != std::string::npos);

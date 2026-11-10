@@ -42,6 +42,12 @@ int main() {
   assert(service.find("pendingSourceRequest.exchange") != std::string::npos);
   assert(service.find("sourceManagerSelectSource(source)") !=
          std::string::npos);
+  assert(manager.find("SourceManagerEventType::EVENT_SOURCE_CHANGED") !=
+         std::string::npos);
+  assert(manager.find("pendingSourceChangedEvent.store") !=
+         std::string::npos);
+  assert(manager.find("uiState") == std::string::npos);
+  assert(manager.find("#include \"ui_state.h\"") == std::string::npos);
 
   const std::string select = functionBody(
       manager, "bool sourceManagerSelectSource(ActiveSource source)",
@@ -63,6 +69,9 @@ int main() {
 
   const std::string main = readFile("src/main.cpp");
   assert(main.find("sourceManagerServiceRequests();") != std::string::npos);
+  assert(main.find("serviceSourceManagerUiEvents();") != std::string::npos);
+  assert(main.find("event.source != SourceId::Bluetooth") !=
+         std::string::npos);
 
   const std::string btAudio = readFile("src/core/bt_audio_input.cpp");
   assert(btAudio.find("i2s_start(I2S_NUM_0)") != std::string::npos);

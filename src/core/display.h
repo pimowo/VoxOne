@@ -251,6 +251,7 @@ class Display {
     uint32_t _updateDisplayAcquisition = 0;
     void _updateUpdateScreen(const UpdateProgressSnapshot& snapshot);
     void _time(bool redraw = false);
+    void _removeBootPage();
     void _apScreen();
     void _renderMode(displayMode_e newmode);
     void _drawPlaylist();

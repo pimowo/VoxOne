@@ -27,6 +27,18 @@ bool sourceManagerSelectSource(SourceId source);
 // potentially stack-heavy BT snapshot and source transition.
 bool sourceManagerRequestSource(SourceId source);
 void sourceManagerServiceRequests();
+
+enum class SourceManagerEventType : uint8_t {
+  EVENT_NONE,
+  EVENT_SOURCE_CHANGED,
+};
+
+struct SourceManagerEvent {
+  SourceManagerEventType type = SourceManagerEventType::EVENT_NONE;
+  SourceId source = SourceId::Web;
+};
+
+bool sourceManagerTakeEvent(SourceManagerEvent& event);
 bool sourceManagerSourceAvailable(SourceId source);
 uint8_t sourceManagerSourceMask();
 SourceId sourceManagerActiveSource();

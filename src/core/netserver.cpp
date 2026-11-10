@@ -1188,25 +1188,32 @@ size_t NetServer::chunkedHtmlPageCallback(uint8_t* buffer, size_t maxLen, size_t
     return 0;
   }
   File requiredfile = SPIFFS.open(netserver.chunkedPathBuffer, "r");
-  if (!requiredfile) return 0;
-  size_t filesize = requiredfile.size();
-  size_t needread = filesize - index;
-  if (!needread) {
+  if (!requiredfile) {
+    display.unlock();
+    return 0;
+  }
+  const size_t filesize = requiredfile.size();
+  if (!buffer || maxLen == 0 || index >= filesize) {
     requiredfile.close();
     display.unlock();
     return 0;
   }
+  const size_t needread = filesize - index;
   #ifdef MAX_PL_READ_BYTES
     if(maxLen>MAX_PL_READ_BYTES) maxLen=MAX_PL_READ_BYTES;
   #endif
-  size_t canread = (needread > maxLen) ? maxLen : needread;
+  const size_t canread = (needread > maxLen) ? maxLen : needread;
   DBGVB("[%s] seek to %d in %s and read %d bytes with maxLen=%d", __func__, index, netserver.chunkedPathBuffer, canread, maxLen);
   //netserver.loop();
-  requiredfile.seek(index, SeekSet);
-  requiredfile.read(buffer, canread);
-  index += canread;
-  if (requiredfile) requiredfile.close();
-  return canread;
+  if (!requiredfile.seek(index, SeekSet)) {
+    requiredfile.close();
+    display.unlock();
+    return 0;
+  }
+  const size_t bytesRead = requiredfile.read(buffer, canread);
+  requiredfile.close();
+  if (bytesRead == 0) display.unlock();
+  return bytesRead;
 }
 
 void NetServer::chunkedHtmlPage(const String& contentType, AsyncWebServerRequest *request, const char * path) {

@@ -6,7 +6,6 @@
 #include "config.h"
 #include "network.h"
 #include "system_operation_state.h"
-#include "ui_state.h"
 #include "display.h"
 #include "netserver.h"
 #include "player.h"
@@ -19,6 +18,7 @@ namespace {
 SourceManagerState sourceState;
 portMUX_TYPE sourceMux = portMUX_INITIALIZER_UNLOCKED;
 std::atomic<uint8_t> pendingSourceRequest{0};
+std::atomic<uint8_t> pendingSourceChangedEvent{0};
 
 struct DisplayText {
   char peerName[97];
@@ -49,6 +49,13 @@ ActiveSource activeSource(SourceId source) {
   if (source == SourceId::Dlna) return ActiveSource::SOURCE_DLNA;
   if (source == SourceId::Aux) return ActiveSource::Aux;
   return ActiveSource::Radio;
+}
+
+void publishSourceChanged(const SourceUpdate& update, ActiveSource active) {
+  if (!update.activeChanged) return;
+  pendingSourceChangedEvent.store(
+      static_cast<uint8_t>(sourceId(active)) + 1U,
+      std::memory_order_release);
 }
 
 void refreshDisplay(const SourceUpdate& update) {
@@ -87,6 +94,7 @@ void stopOnSourceChange(const SourceUpdate& update, bool temporaryAtChange) {
 void applyManualSourceChange(const SourceUpdate& update, ActiveSource active,
                              bool temporaryAtChange) {
   if (!update.activeChanged) return;
+  publishSourceChanged(update, active);
   stopOnSourceChange(update, temporaryAtChange);
   serialCli.printf("##[SOURCE]# active=%s reason=manual\n", sourceName(active));
   refreshDisplay(update);
@@ -120,6 +128,15 @@ void sourceManagerServiceRequests() {
   const SourceId source = static_cast<SourceId>(request - 1U);
   if (!sourceManagerSelectSource(source))
     netserver.requestOnChange(WEBSTATUS, 0);
+}
+
+bool sourceManagerTakeEvent(SourceManagerEvent& event) {
+  const uint8_t source =
+      pendingSourceChangedEvent.exchange(0, std::memory_order_acq_rel);
+  if (source == 0) return false;
+  event.type = SourceManagerEventType::EVENT_SOURCE_CHANGED;
+  event.source = static_cast<SourceId>(source - 1U);
+  return true;
 }
 
 SourceId sourceManagerActiveSource() {
@@ -187,6 +204,7 @@ void sourceManagerBeginHomeAssistant(const char* title, const char* artist) {
   portENTER_CRITICAL(&sourceMux);
   const SourceUpdate update = sourceState.beginHomeAssistant(title, artist);
   portEXIT_CRITICAL(&sourceMux);
+  publishSourceChanged(update, ActiveSource::SOURCE_HA);
   refreshDisplay(update);
   netserver.requestOnChange(WEBSTATUS, 0);
   serialCli.printf("##[SOURCE]# active=HA title=%.96s artist=%.96s\n",
@@ -199,6 +217,7 @@ void sourceManagerEndHomeAssistant() {
   const ActiveSource active = sourceState.active();
   portEXIT_CRITICAL(&sourceMux);
   if (!update.activeChanged) return;
+  publishSourceChanged(update, active);
   refreshDisplay(update);
   netserver.requestOnChange(WEBSTATUS, 0);
   serialCli.printf("##[SOURCE]# active=%s reason=ha-finished\n",
@@ -216,6 +235,7 @@ void sourceManagerBeginDlna(const char* title, const char* artist) {
   portENTER_CRITICAL(&sourceMux);
   const SourceUpdate update = sourceState.beginDlna(title, artist);
   portEXIT_CRITICAL(&sourceMux);
+  publishSourceChanged(update, ActiveSource::SOURCE_DLNA);
   refreshDisplay(update);
   netserver.requestOnChange(WEBSTATUS, 0);
   serialCli.printf("##[SOURCE]# active=DLNA title=%.96s artist=%.96s\n",
@@ -229,6 +249,7 @@ void sourceManagerEndTemporary() {
   const ActiveSource active = sourceState.active();
   portEXIT_CRITICAL(&sourceMux);
   if (!update.activeChanged) return;
+  publishSourceChanged(update, active);
   refreshDisplay(update);
   netserver.requestOnChange(WEBSTATUS, 0);
   serialCli.printf("##[SOURCE]# active=%s reason=%s-finished\n",
@@ -360,11 +381,7 @@ void sourceManagerLoop() {
   if (update.activeChanged)
     serialCli.printf("##[SOURCE]# active=%s reason=%s\n",
                      sourceName(active), sourceReason(update.reason));
-#if VOXONE_HAS_DISPLAY
-  if (update.activeChanged && active == ActiveSource::Radio &&
-      uiState.mode() == BT_TRANSPORT)
-    transitionUiMode(PLAYER);
-#endif
+  publishSourceChanged(update, active);
   refreshDisplay(update);
   if (update.activeChanged || update.stationChanged || update.titleChanged ||
       update.audioInfoChanged || update.btConnected || update.btDisconnected)

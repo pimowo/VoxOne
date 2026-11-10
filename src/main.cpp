@@ -57,6 +57,16 @@ constexpr uint32_t kEnduranceReportIntervalMs = 60000;
 uint32_t enduranceLastReportMs = 0;
 uint32_t enduranceMaximumLoopUs = 0;
 
+void serviceSourceManagerUiEvents() {
+  SourceManagerEvent event;
+  while (sourceManagerTakeEvent(event)) {
+    if (event.type == SourceManagerEventType::EVENT_SOURCE_CHANGED &&
+        event.source != SourceId::Bluetooth &&
+        uiState.mode() == BT_TRANSPORT)
+      transitionUiMode(PLAYER);
+  }
+}
+
 void reportEnduranceHealth(uint32_t nowMs) {
   if (nowMs - enduranceLastReportMs < kEnduranceReportIntervalMs) return;
 
@@ -354,6 +364,7 @@ void loop() {
     }
     netserver.serviceBtFirmwareUpdate();
   #endif
+  serviceSourceManagerUiEvents();
   netserver.serviceUpdateRestart();
   netserver.serviceScrollSettings();
   #if VOXONE_HAS_BT && VOXONE_PIN_MAP_COMPLETE && VOXONE_BT_I2S_RX_ENABLED

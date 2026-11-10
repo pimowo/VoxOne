@@ -9,9 +9,10 @@ checkpointów pozostaje w historii Git i w istniejących raportach.
 - [ ] Zweryfikować przycisk zasilania na L0 (GPIO42) i S0 (GPIO3): krótki
   klik (Wakeup/Mute albo Home z Menu/karuzeli), dwuklik otwierający Menu
   Główne wyłącznie z Playera oraz długie naciśnięcie uruchamiające shutdown
-  także z Menu/karuzeli; sprawdzić nawigację enkoderem bez zmiany głośności
-  przy otwartej karuzeli, klik wyboru, dwuklik cofania o poziom i długi klik
-  wyjścia do Playera,
+  wyłącznie z Playera; w Menu/karuzeli długie naciśnięcie ma wracać do
+  Playera albo otwierać „Zapisać zmiany?” bez wyłączania radia; sprawdzić
+  nawigację enkoderem bez zmiany głośności przy otwartej karuzeli, klik
+  wyboru, dwuklik cofania o poziom i długi klik wyjścia do Playera,
   renderowanie hierarchii i wskaźników `>` na TFT/OLED, sekwencję wyłączania
   „Do widzenia!” z natychmiastowym zatrzymaniem audio, płynne odświeżanie Menu,
   kontekstową belkę Menu na TFT, wygaszenie ekranu z ochroną OLED oraz tryby
@@ -29,6 +30,8 @@ checkpointów pozostaje w historii Git i w istniejących raportach.
   migotania przy zmianie metadanych/Wi-Fi na TFT i przewijaniu na OLED S0;
   ocenić karuzelowe widoki stacji, DLNA, Źródła i Menu (nagłówek, jedna duża
   pozycja, licznik oraz prawostronny wskaźnik `GRA`) na TFT L0 i OLED S0;
+  dla pustych list DLNA/Źródła potwierdzić wyśrodkowany napis „Brak elementów”
+  oraz działające wyjście dwuklikiem (Back) i długim kliknięciem (Home);
   po zimnym starcie L0 potwierdzić wzrokowo pełne przejście TFT z logo do
   widoku Playera (zdalny most nie ma podłączonej kamery).
 - [ ] Na L0 z rzeczywiście sparowanym i odtwarzającym telefonem potwierdzić
