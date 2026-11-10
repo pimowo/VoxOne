@@ -58,6 +58,7 @@ bool RuntimeOled128x64Display::begin(
   activeController_ = controller;
   activeProfile_ = profile;
   ready_ = false;
+  dirty_ = true;
   const auto& i2c = voxone::hardware::currentHardware().i2c;
   if (!voxone::hardware::initHardwareI2c()) return false;
   wire_.setClock(i2c.frequencyHz);
@@ -84,13 +85,17 @@ bool RuntimeOled128x64Display::begin(
 }
 
 void RuntimeOled128x64Display::display() {
-  if (!ready_) return;
+  if (!ready_ || !dirty_) return;
   if (activeController_ == ControllerId::Ssd1306) activeSsd1306()->display();
   else if (activeController_ == ControllerId::Ssd1309) ssd1309_.display();
   else if (activeController_ == ControllerId::Sh1106) sh1106_.display();
   else if (activeController_ == ControllerId::Ch1116g) {
-    if (!ch1116g_->display()) ready_ = false;
+    if (!ch1116g_->display()) {
+      ready_ = false;
+      return;
+    }
   }
+  dirty_ = false;
 }
 
 void RuntimeOled128x64Display::sleep() {
@@ -119,31 +124,49 @@ void RuntimeOled128x64Display::wake() {
 
 void RuntimeOled128x64Display::drawPixel(int16_t x, int16_t y,
                                          uint16_t color) {
-  if (ready_) active()->drawPixel(x, y, color);
+  if (ready_) {
+    dirty_ = true;
+    active()->drawPixel(x, y, color);
+  }
 }
 
 void RuntimeOled128x64Display::startWrite() {
-  if (ready_) active()->startWrite();
+  if (ready_) {
+    dirty_ = true;
+    active()->startWrite();
+  }
 }
 
 void RuntimeOled128x64Display::writePixel(int16_t x, int16_t y,
                                           uint16_t color) {
-  if (ready_) active()->writePixel(x, y, color);
+  if (ready_) {
+    dirty_ = true;
+    active()->writePixel(x, y, color);
+  }
 }
 
 void RuntimeOled128x64Display::writeFillRect(int16_t x, int16_t y, int16_t w,
                                              int16_t h, uint16_t color) {
-  if (ready_) active()->writeFillRect(x, y, w, h, color);
+  if (ready_) {
+    dirty_ = true;
+    active()->writeFillRect(x, y, w, h, color);
+  }
 }
 
 void RuntimeOled128x64Display::writeFastVLine(int16_t x, int16_t y, int16_t h,
                                               uint16_t color) {
-  if (ready_) active()->writeFastVLine(x, y, h, color);
+  if (ready_) {
+    dirty_ = true;
+    active()->writeFastVLine(x, y, h, color);
+  }
 }
 
 void RuntimeOled128x64Display::writeFastHLine(int16_t x, int16_t y, int16_t w,
                                               uint16_t color) {
-  if (ready_) active()->writeFastHLine(x, y, w, color);
+  if (ready_) {
+    dirty_ = true;
+    active()->writeFastHLine(x, y, w, color);
+  }
 }
 
 void RuntimeOled128x64Display::endWrite() {
@@ -153,6 +176,7 @@ void RuntimeOled128x64Display::endWrite() {
 void RuntimeOled128x64Display::setRotation(uint8_t rotation) {
   Adafruit_GFX::setRotation(rotation);
   if (Adafruit_GFX* backend = active()) backend->setRotation(rotation);
+  dirty_ = true;
   const auto geometry = voxone::display_profile::descriptor(activeProfile_);
   if ((rotation & 1u) == 0) {
     _width = static_cast<int16_t>(geometry.width);
@@ -169,21 +193,33 @@ void RuntimeOled128x64Display::invertDisplay(bool inverted) {
 
 void RuntimeOled128x64Display::drawFastVLine(int16_t x, int16_t y, int16_t h,
                                              uint16_t color) {
-  if (ready_) active()->drawFastVLine(x, y, h, color);
+  if (ready_) {
+    dirty_ = true;
+    active()->drawFastVLine(x, y, h, color);
+  }
 }
 
 void RuntimeOled128x64Display::drawFastHLine(int16_t x, int16_t y, int16_t w,
                                              uint16_t color) {
-  if (ready_) active()->drawFastHLine(x, y, w, color);
+  if (ready_) {
+    dirty_ = true;
+    active()->drawFastHLine(x, y, w, color);
+  }
 }
 
 void RuntimeOled128x64Display::fillRect(int16_t x, int16_t y, int16_t w,
                                         int16_t h, uint16_t color) {
-  if (ready_) active()->fillRect(x, y, w, h, color);
+  if (ready_) {
+    dirty_ = true;
+    active()->fillRect(x, y, w, h, color);
+  }
 }
 
 void RuntimeOled128x64Display::fillScreen(uint16_t color) {
-  if (ready_) active()->fillScreen(color);
+  if (ready_) {
+    dirty_ = true;
+    active()->fillScreen(color);
+  }
 }
 
 #if !VOXONE_MULTI_DISPLAY_HAS_ST7796

@@ -118,6 +118,28 @@ int main() {
   assert(std::string(cdataListing.items[0].id) == "9");
   assert(std::string(cdataListing.items[0].title) == "Podcasty");
 
+  // Raw UTF-8 and numeric XML entities must reach the display model as UTF-8.
+  const std::string polishSoap =
+      "<Envelope><Body><BrowseResponse><Result>"
+      "&lt;DIDL-Lite&gt;"
+      "&lt;item id=&quot;10&quot; parentID=&quot;0&quot;&gt;"
+      "&lt;title&gt;Zażółć gęślą jaźń&lt;/title&gt;"
+      "&lt;res protocolInfo=&quot;http-get:*:audio/flac:*&quot;&gt;x&lt;/res&gt;"
+      "&lt;/item&gt;"
+      "&lt;item id=&quot;11&quot; parentID=&quot;0&quot;&gt;"
+      "&lt;title&gt;G&amp;#281;śl&amp;#261; &amp;#x141;&amp;#xF3;dź&lt;/title&gt;"
+      "&lt;res protocolInfo=&quot;http-get:*:audio/flac:*&quot;&gt;y&lt;/res&gt;"
+      "&lt;/item&gt;&lt;/DIDL-Lite&gt;"
+      "</Result><NumberReturned>2</NumberReturned><TotalMatches>2</TotalMatches>"
+      "</BrowseResponse></Body></Envelope>";
+  BrowseResponseParser polishParser;
+  assert(writeChunks(polishParser, polishSoap, 1));
+  BrowseListing polishListing;
+  assert(polishParser.finish(polishListing));
+  assert(polishListing.count == 2);
+  assert(std::string(polishListing.items[0].title) == "Zażółć gęślą jaźń");
+  assert(std::string(polishListing.items[1].title) == "Gęślą Łódź");
+
   assert(validObjectId("0"));
   assert(validObjectId("64$2"));
   assert(!validObjectId(""));

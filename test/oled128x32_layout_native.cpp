@@ -226,6 +226,7 @@ int main() {
   assertMetadata("", "", "");
   assertMetadata(nullptr, "Utwor", "Utwor");
   assertMetadata("Artysta", nullptr, "Artysta");
+  assertMetadata("Zażółć", "Gęślą jaźń", "Zażółć - Gęślą jaźń");
   char longMetadata[kMetadataBufferSize]{};
   formatMetadata(longMetadata, sizeof(longMetadata),
                  "Bardzo dluga nazwa wykonawcy",
@@ -266,6 +267,8 @@ int main() {
                     "12345678901234567890123456789012");
   assert(std::strcmp(ssid, "123456789012345678...") == 0);
   assert(std::strlen(ssid) == kStartupVisibleChars);
+  formatStartupSsid(ssid, sizeof(ssid), "Zażółć-gęślą-jaźń-dom");
+  assert(std::strstr(ssid, "...") != nullptr);
 
   // STATIONS and VOL keep their existing fonts.
   assert(startup128x32::progress.top == 16 &&

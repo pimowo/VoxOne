@@ -5,6 +5,7 @@
 #include <cstddef>
 #include <cstring>
 #include "station_format.h"
+#include "utf8_text.h"
 
 struct StationMetadataParts {
   const char* artist;
@@ -33,10 +34,7 @@ inline StationMetadataParts playerStationMetadata(const char* raw, bool swapArti
 }
 
 inline void stationMetaCopy(char* output, size_t capacity, const char* text, size_t length) {
-  if (!capacity) return;
-  const size_t copy = std::min(length, capacity - 1);
-  std::memcpy(output, text, copy);
-  output[copy] = '\0';
+  voxone::utf8::copySpan(output, capacity, text, length);
 }
 
 inline void stationMetaDisplay(const char* raw, bool swapArtistTitle,

@@ -1,4 +1,5 @@
 #include "source_manager.h"
+#include "utf8_text.h"
 #include <Arduino.h>
 #include "source_manager_state.h"
 #include "temporary_audio_state.h"
@@ -484,10 +485,10 @@ void sourceManagerWebSnapshot(SourceWebSnapshot& snapshot) {
   snapshot.connected = view.connected;
   snapshot.playback = view.playback;
   snapshot.sampleRate = view.sampleRate;
-  strlcpy(snapshot.peerName, view.peerName ? view.peerName : "",
-          sizeof(snapshot.peerName));
-  strlcpy(snapshot.artist, view.artist ? view.artist : "", sizeof(snapshot.artist));
-  strlcpy(snapshot.title, view.title ? view.title : "", sizeof(snapshot.title));
+  voxone::utf8::copy(snapshot.peerName, sizeof(snapshot.peerName),
+                     view.peerName);
+  voxone::utf8::copy(snapshot.artist, sizeof(snapshot.artist), view.artist);
+  voxone::utf8::copy(snapshot.title, sizeof(snapshot.title), view.title);
   portEXIT_CRITICAL(&sourceMux);
 }
 
@@ -495,12 +496,11 @@ bool getDisplaySourceView(DisplaySourceView& view) {
   const bool playing = player.isRunning();
   portENTER_CRITICAL(&sourceMux);
   sourceState.displayView(view, playing, player.localAudioAvailable());
-  strlcpy(displayText.peerName, view.peerName ? view.peerName : "",
-          sizeof(displayText.peerName));
-  strlcpy(displayText.artist, view.artist ? view.artist : "",
-          sizeof(displayText.artist));
-  strlcpy(displayText.title, view.title ? view.title : "",
-          sizeof(displayText.title));
+  voxone::utf8::copy(displayText.peerName, sizeof(displayText.peerName),
+                     view.peerName);
+  voxone::utf8::copy(displayText.artist, sizeof(displayText.artist),
+                     view.artist);
+  voxone::utf8::copy(displayText.title, sizeof(displayText.title), view.title);
   view.peerName = displayText.peerName;
   view.artist = displayText.artist;
   view.title = displayText.title;

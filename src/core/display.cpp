@@ -13,6 +13,7 @@
 #include "volume_map.h"
 #include "station_metadata.h"
 #include "player_display_metadata.h"
+#include "utf8_text.h"
 #include "player_display_view.h"
 #include "network.h"
 #include "netserver.h"
@@ -255,14 +256,22 @@ class UiMenuWidget : public Widget {
       dsp.fillRect(0, 0, view.width, 50, titleBackground);
       dsp.fillRect(0, 50, view.width, 2, config.theme.metafill);
     }
+    const uint16_t sideInset = view.contextualTft ? 64 : 0;
+    const uint16_t availableWidth = view.width - sideInset * 2;
+    const uint16_t glyphWidth = CHARWIDTH * view.titleSize;
+    char visibleTitle[48];
+    voxone::utf8::ellipsize(visibleTitle, sizeof(visibleTitle), title,
+                            glyphWidth ? availableWidth / glyphWidth : 0);
     const uint16_t titleWidth = static_cast<uint16_t>(
-        strlen_utf8(title) * CHARWIDTH * view.titleSize);
+        voxone::utf8::count(visibleTitle) * glyphWidth);
     dsp.setFont();
     dsp.setTextSize(view.titleSize);
     dsp.setTextColor(view.foreground, titleBackground);
-    dsp.setCursor((view.width - titleWidth) / 2,
+    dsp.setClipping({sideInset, 0, availableWidth, view.contentTop});
+    dsp.setCursor(sideInset + (availableWidth - titleWidth) / 2,
                   view.compact ? 1 : (view.contextualTft ? 10 : 20));
-    dsp.print(utf8Rus(title));
+    dsp.print(utf8Rus(visibleTitle));
+    dsp.clearClipping();
   }
 
   void drawRow(const voxone::ui_menu::MenuSnapshot& menu, uint8_t index,
@@ -279,32 +288,52 @@ class UiMenuWidget : public Widget {
                  rowBackground);
     if (selected)
       dsp.drawRect(view.horizontalMargin, top, view.rowWidth, view.rowHeight,
-                   view.foreground);
+                   rowForeground);
     dsp.setFont();
     dsp.setTextSize(view.itemSize);
     dsp.setTextColor(rowForeground, rowBackground);
     const uint16_t textHeight = view.itemSize * CHARHEIGHT;
     const uint16_t textTop = top +
         (view.rowHeight > textHeight ? (view.rowHeight - textHeight) / 2 : 0);
-    dsp.setCursor(view.horizontalMargin + (view.oled ? 4 : 12), textTop);
-    if (voxone::ui_menu::itemIsActive(menu, index)) dsp.print("* ");
-    dsp.print(utf8Rus(voxone::ui_menu::itemLabel(menu, index)));
-    char value[16];
-    if (voxone::ui_menu::formatItemValue(
-            menu, index, value, sizeof(value))) {
-      const uint16_t valueWidth = static_cast<uint16_t>(
-          strlen_utf8(value) * CHARWIDTH * view.itemSize);
-      const uint16_t valueMargin = view.oled ? 3 : 10;
-      dsp.setCursor(view.horizontalMargin + view.rowWidth - valueWidth -
+    const uint16_t glyphWidth = CHARWIDTH * view.itemSize;
+    const uint16_t valueMargin = view.oled ? 3 : 10;
+    char value[16]{};
+    const bool hasValue = voxone::ui_menu::formatItemValue(
+        menu, index, value, sizeof(value));
+    const bool hasSubmenu = voxone::ui_menu::itemHasSubmenu(menu, index);
+    const uint16_t trailingWidth = hasValue
+        ? static_cast<uint16_t>(voxone::utf8::count(value) * glyphWidth)
+        : (hasSubmenu ? glyphWidth : 0);
+    const uint16_t textLeft = view.horizontalMargin + (view.oled ? 4 : 12);
+    const bool active = voxone::ui_menu::itemIsActive(menu, index);
+    const uint16_t markerWidth = active ? 2 * glyphWidth : 0;
+    const uint16_t textRight = view.horizontalMargin + view.rowWidth -
+        valueMargin - trailingWidth - (trailingWidth ? glyphWidth : 0);
+    const uint16_t labelLeft = textLeft + markerWidth;
+    const uint16_t labelWidth = textRight > labelLeft
+        ? textRight - labelLeft : 0;
+    char visibleLabel[96];
+    voxone::utf8::ellipsize(
+        visibleLabel, sizeof(visibleLabel),
+        voxone::ui_menu::itemLabel(menu, index),
+        glyphWidth ? labelWidth / glyphWidth : 0);
+    dsp.setCursor(textLeft, textTop);
+    if (active) dsp.print("* ");
+    if (labelWidth) {
+      dsp.setClipping({labelLeft, textTop, labelWidth, textHeight});
+      dsp.setCursor(labelLeft, textTop);
+      dsp.print(utf8Rus(visibleLabel));
+      dsp.clearClipping();
+    }
+    if (hasValue) {
+      dsp.setCursor(view.horizontalMargin + view.rowWidth - trailingWidth -
                         valueMargin,
                     textTop);
       dsp.print(utf8Rus(value));
     }
-    if (voxone::ui_menu::itemHasSubmenu(menu, index)) {
-      const uint16_t arrowWidth = CHARWIDTH * view.itemSize;
-      const uint16_t arrowMargin = view.oled ? 3 : 10;
-      dsp.setCursor(view.horizontalMargin + view.rowWidth - arrowWidth -
-                        arrowMargin,
+    if (hasSubmenu) {
+      dsp.setCursor(view.horizontalMargin + view.rowWidth - glyphWidth -
+                        valueMargin,
                     textTop);
       dsp.print(">");
     }
@@ -2559,17 +2588,24 @@ uint32_t yamahaHashBytes(uint32_t hash, const void* data, size_t length) {
   return hash;
 }
 
-uint32_t yamahaViewSignature(const PlayerDisplayView& view) {
+uint32_t yamahaTextSignature(const char* first, const char* second = nullptr) {
   uint32_t hash = 2166136261u;
-  hash = yamahaHashBytes(hash, view.station, strlen(view.station));
-  hash = yamahaHashBytes(hash, view.artist, strlen(view.artist));
-  hash = yamahaHashBytes(hash, view.title, strlen(view.title));
+  if (first) hash = yamahaHashBytes(hash, first, strlen(first));
+  if (second) hash = yamahaHashBytes(hash, second, strlen(second));
+  return hash;
+}
+
+uint32_t yamahaTopSignature(const PlayerDisplayView& view) {
+  uint32_t hash = 2166136261u;
   hash = yamahaHashBytes(hash, &view.source, sizeof(view.source));
   hash = yamahaHashBytes(hash, &view.playback, sizeof(view.playback));
-  hash = yamahaHashBytes(hash, &view.userVolume, sizeof(view.userVolume));
-  hash = yamahaHashBytes(hash, &view.muted, sizeof(view.muted));
-  hash = yamahaHashBytes(hash, &view.btConnected, sizeof(view.btConnected));
   return yamahaHashBytes(hash, &view.wifiLevel, sizeof(view.wifiLevel));
+}
+
+uint32_t yamahaVolumeSignature(const PlayerDisplayView& view) {
+  uint32_t hash = 2166136261u;
+  hash = yamahaHashBytes(hash, &view.userVolume, sizeof(view.userVolume));
+  return yamahaHashBytes(hash, &view.muted, sizeof(view.muted));
 }
 }  // namespace
 
@@ -2577,67 +2613,91 @@ void Display::render_yamaha_tft() {
   if (!_yamahaTftActive()) return;
   PlayerDisplayView view{};
   capturePlayerDisplayView(view, WiFi.RSSI());
-  const uint32_t signature = yamahaViewSignature(view);
-  if (_yamahaDrawn && signature == _yamahaSignature) return;
+  const uint32_t topSignature = yamahaTopSignature(view);
+  const uint32_t stationSignature = yamahaTextSignature(view.station);
+  const uint32_t metadataSignature = yamahaTextSignature(view.artist, view.title);
+  const uint32_t volumeSignature = yamahaVolumeSignature(view);
+  if (_yamahaDrawn && topSignature == _yamahaTopSignature &&
+      stationSignature == _yamahaStationSignature &&
+      metadataSignature == _yamahaMetadataSignature &&
+      volumeSignature == _yamahaVolumeSignature) return;
 
   using namespace voxone::yamaha_tft;
-  // Yamaha owns the whole physical frame. The signature gate above prevents
-  // unchanged frames from being cleared and redrawn on every display tick.
   dsp.clearClipping();
-  dsp.fillScreen(kBackground);
   dsp.setFont();
   dsp.setTextWrap(false);
   dsp.setTextColor(kAmber, kBackground);
 
-  auto printLine = [](const char* text, int16_t left, int16_t top,
-                      int16_t width, int16_t height, uint8_t size) {
+  auto printRegion = [](const char* text, int16_t left, int16_t top,
+                        int16_t width, int16_t height, uint8_t size) {
+    dsp.fillRect(left, top, width, height, kBackground);
     dsp.setClipping({static_cast<uint16_t>(left), static_cast<uint16_t>(top),
                      static_cast<uint16_t>(width),
                      static_cast<uint16_t>(height)});
     dsp.setTextSize(size);
     dsp.setCursor(left, top);
-    dsp.print(utf8Rus(text && text[0] ? text : "—"));
+    dsp.print(utf8Rus(text && text[0] ? text : "-"));
     dsp.clearClipping();
   };
 
-  dsp.drawFastHLine(0, kTopBarBottom, kWidth, kAmber);
-  dsp.setTextSize(3);
-  dsp.setCursor(14, 16);
-  dsp.print(displaySourceLabel(view.source));
-  dsp.setCursor(190, 16);
-  dsp.print(displayPlaybackLabel(view.playback));
+  if (!_yamahaDrawn) dsp.fillScreen(kBackground);
+  if (!_yamahaDrawn || topSignature != _yamahaTopSignature) {
+    dsp.fillRect(0, 0, kWidth, kTopBarBottom, kBackground);
+    dsp.drawFastHLine(0, kTopBarBottom, kWidth, kAmber);
+    dsp.setTextSize(3);
+    dsp.setCursor(14, 16);
+    dsp.print(displaySourceLabel(view.source));
+    const char* playback = displayPlaybackLabel(view.playback);
+    const uint16_t playbackWidth = static_cast<uint16_t>(
+        voxone::utf8::count(playback) * CHARWIDTH * 3);
+    dsp.setClipping({120, 0, 240, kTopBarBottom});
+    dsp.setCursor((kWidth - playbackWidth) / 2, 16);
+    dsp.print(utf8Rus(playback));
+    dsp.clearClipping();
 
-  const uint8_t signal = boundedSignalLevel(view.wifiLevel);
-  for (uint8_t index = 0; index < kSignalBars; ++index) {
-    const int16_t barHeight = 8 + index * 8;
-    const int16_t left = 402 + index * 17;
-    const int16_t top = 45 - barHeight;
-    if (index < signal)
-      dsp.fillRect(left, top, 11, barHeight, kAmber);
-    else
-      dsp.drawRect(left, top, 11, barHeight, kAmber);
+    const uint8_t signal = boundedSignalLevel(view.wifiLevel);
+    for (uint8_t index = 0; index < kSignalBars; ++index) {
+      const int16_t barHeight = 8 + index * 8;
+      const int16_t left = 402 + index * 17;
+      const int16_t top = 45 - barHeight;
+      if (index < signal)
+        dsp.fillRect(left, top, 11, barHeight, kAmber);
+      else
+        dsp.drawRect(left, top, 11, barHeight, kAmber);
+    }
   }
 
-  printLine(view.station, 16, kContentTop, 448, 42, 4);
-  const char* middle = view.title[0] ? view.title :
-                       (view.artist[0] ? view.artist : "Brak informacji");
-  printLine(middle, 16, 136, 448, 62, 4);
-  if (view.artist[0] && view.title[0])
-    printLine(view.artist, 18, 202, 444, 28, 2);
-
-  dsp.drawRect(0, kVolumeTop, kWidth, kHeight - kVolumeTop, kAmber);
-  dsp.setTextSize(5);
-  dsp.setCursor(18, 262);
-  if (view.muted) {
-    dsp.print("MUTE");
-  } else {
-    char volume[16];
-    snprintf(volume, sizeof(volume), "VOL %3u",
-             static_cast<unsigned>(view.userVolume));
-    dsp.print(volume);
+  if (!_yamahaDrawn || stationSignature != _yamahaStationSignature)
+    printRegion(view.station, 16, kContentTop, 448, 42, 4);
+  if (!_yamahaDrawn || metadataSignature != _yamahaMetadataSignature) {
+    dsp.fillRect(0, 128, kWidth, kVolumeTop - 128, kBackground);
+    const char* middle = view.title[0] ? view.title :
+                         (view.artist[0] ? view.artist : "Brak informacji");
+    printRegion(middle, 16, 136, 448, 62, 4);
+    if (view.artist[0] && view.title[0])
+      printRegion(view.artist, 18, 202, 444, 28, 2);
   }
 
-  _yamahaSignature = signature;
+  if (!_yamahaDrawn || volumeSignature != _yamahaVolumeSignature) {
+    dsp.fillRect(1, kVolumeTop + 1, kWidth - 2,
+                 kHeight - kVolumeTop - 2, kBackground);
+    dsp.drawRect(0, kVolumeTop, kWidth, kHeight - kVolumeTop, kAmber);
+    dsp.setTextSize(5);
+    dsp.setCursor(18, 262);
+    if (view.muted) {
+      dsp.print("MUTE");
+    } else {
+      char volume[16];
+      snprintf(volume, sizeof(volume), "VOL %3u",
+               static_cast<unsigned>(view.userVolume));
+      dsp.print(volume);
+    }
+  }
+
+  _yamahaTopSignature = topSignature;
+  _yamahaStationSignature = stationSignature;
+  _yamahaMetadataSignature = metadataSignature;
+  _yamahaVolumeSignature = volumeSignature;
   _yamahaDrawn = true;
 }
 #endif

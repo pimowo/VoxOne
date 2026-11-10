@@ -1,5 +1,7 @@
 #include "dlna_client.h"
 
+#include "../core/utf8_text.h"
+
 #include <algorithm>
 #include <cctype>
 #include <cerrno>
@@ -91,21 +93,22 @@ bool parseUnsigned(const char* value, uint32_t& output) {
   return true;
 }
 
-bool decodeEntity(const char* entity, char& output) {
-  if (equalsIgnoreCase(entity, "lt")) output = '<';
-  else if (equalsIgnoreCase(entity, "gt")) output = '>';
-  else if (equalsIgnoreCase(entity, "amp")) output = '&';
-  else if (equalsIgnoreCase(entity, "quot")) output = '"';
-  else if (equalsIgnoreCase(entity, "apos")) output = '\'';
+size_t decodeEntity(const char* entity, char output[4]) {
+  if (!output) return 0;
+  if (equalsIgnoreCase(entity, "lt")) output[0] = '<';
+  else if (equalsIgnoreCase(entity, "gt")) output[0] = '>';
+  else if (equalsIgnoreCase(entity, "amp")) output[0] = '&';
+  else if (equalsIgnoreCase(entity, "quot")) output[0] = '"';
+  else if (equalsIgnoreCase(entity, "apos")) output[0] = '\'';
   else if (entity && entity[0] == '#') {
     const bool hex = entity[1] == 'x' || entity[1] == 'X';
     char* end = nullptr;
     const unsigned long code = std::strtoul(entity + (hex ? 2 : 1), &end,
                                             hex ? 16 : 10);
-    if (!end || *end || code > 0x7f || code == 0) return false;
-    output = static_cast<char>(code);
-  } else return false;
-  return true;
+    if (!end || *end || code > 0x10ffff) return 0;
+    return voxone::utf8::encodeCodepoint(static_cast<uint32_t>(code), output);
+  } else return 0;
+  return 1;
 }
 
 void decodeAttribute(const char* input, char* output, size_t capacity) {
@@ -124,9 +127,14 @@ void decodeAttribute(const char* input, char* output, size_t capacity) {
     char entity[16] = {};
     const size_t length = static_cast<size_t>(semicolon - input - pos - 1);
     std::memcpy(entity, input + pos + 1, length);
-    char decoded = 0;
-    if (decodeEntity(entity, decoded)) output[used++] = decoded;
-    else output[used++] = input[pos];
+    char decoded[4] = {};
+    const size_t decodedLength = decodeEntity(entity, decoded);
+    if (decodedLength && decodedLength <= capacity - used - 1) {
+      std::memcpy(output + used, decoded, decodedLength);
+      used += decodedLength;
+    } else {
+      output[used++] = input[pos];
+    }
     pos = static_cast<size_t>(semicolon - input) + 1;
   }
   output[used] = '\0';
@@ -200,13 +208,14 @@ bool XmlStreamParser::appendToken(char ch) {
 
 bool XmlStreamParser::finishEntity() {
   token_[tokenLength_] = '\0';
-  char decoded = 0;
-  if (!decodeEntity(token_, decoded)) {
+  char decoded[4] = {};
+  const size_t decodedLength = decodeEntity(token_, decoded);
+  if (!decodedLength) {
     emit('&');
     callbacks_.xmlText(token_, tokenLength_);
     emit(';');
   } else {
-    emit(decoded);
+    callbacks_.xmlText(decoded, decodedLength);
   }
   tokenLength_ = 0;
   token_[0] = '\0';
@@ -560,6 +569,7 @@ void BrowseResponseParser::DidlCallbacks::xmlClose(const char* name) {
 }
 
 void BrowseResponseParser::finishItem() {
+  voxone::utf8::trimIncompleteTail(current_.title);
   trim(current_.title);
   trim(current_.resourceUrl);
   if (listing_.count < kMaxBrowseItems) listing_.items[listing_.count++] = current_;

@@ -7,6 +7,7 @@
 #include <string.h>
 
 #include "oled128x32_layout.h"
+#include "../core/utf8_text.h"
 
 namespace voxone {
 namespace oled128x32 {
@@ -79,14 +80,15 @@ inline void formatMetadata(char* output, size_t outputSize,
   if (!output || outputSize == 0) return;
   const bool hasArtist = artist && artist[0] != '\0';
   const bool hasTitle = title && title[0] != '\0';
+  output[0] = '\0';
   if (hasArtist && hasTitle) {
-    snprintf(output, outputSize, "%s - %s", artist, title);
+    voxone::utf8::copy(output, outputSize, artist);
+    voxone::utf8::append(output, outputSize, " - ");
+    voxone::utf8::append(output, outputSize, title);
   } else if (hasArtist) {
-    snprintf(output, outputSize, "%s", artist);
+    voxone::utf8::copy(output, outputSize, artist);
   } else if (hasTitle) {
-    snprintf(output, outputSize, "%s", title);
-  } else {
-    output[0] = '\0';
+    voxone::utf8::copy(output, outputSize, title);
   }
 }
 
@@ -99,15 +101,8 @@ inline void formatStartupSsid(char* output, size_t outputSize,
     snprintf(output, outputSize, "(brak SSID)");
     return;
   }
-  const size_t length = strlen(ssid);
-  if (length <= kStartupVisibleChars) {
-    snprintf(output, outputSize, "%s", ssid);
-    return;
-  }
-  constexpr size_t suffixLength = 3;
-  const size_t prefixLength = kStartupVisibleChars - suffixLength;
-  snprintf(output, outputSize, "%.*s...",
-           static_cast<int>(prefixLength), ssid);
+  voxone::utf8::ellipsize(output, outputSize, ssid,
+                          kStartupVisibleChars);
 }
 
 }  // namespace oled128x32

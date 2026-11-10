@@ -6,6 +6,7 @@
 #include <cassert>
 #include <cstring>
 #include <initializer_list>
+#include <string>
 
 int main() {
   PlayerDisplayView playerView{};
@@ -78,6 +79,25 @@ int main() {
   assert(std::strcmp(playerView.station, "AUX") == 0 && playerView.audioText[0] == '\0');
   assert(playerWifiLevel(-59) == 3 && playerWifiLevel(-69) == 2 &&
          playerWifiLevel(-79) == 1 && playerWifiLevel(-81) == 0);
+
+  raw.kind = DisplaySourceKind::Bluetooth;
+  raw.connected = true;
+  raw.peerName = "Łódź";
+  raw.artist = "Zażółć gęślą jaźń";
+  raw.title = "Ścieżka źródłowa";
+  makePlayerDisplayView(playerView, raw, "Radio One", "", false,
+                        50, false, true, -50, 0, BF_UNKNOWN);
+  assert(std::strcmp(playerView.station, "Łódź") == 0);
+  assert(std::strcmp(playerView.artist, "Zażółć gęślą jaźń") == 0);
+  assert(std::strcmp(playerView.title, "Ścieżka źródłowa") == 0);
+  std::string boundaryTitle(168, 'a');
+  boundaryTitle += "ą";
+  raw.artist = "";
+  raw.title = boundaryTitle.c_str();
+  makePlayerDisplayView(playerView, raw, "", "", false,
+                        50, false, true, -50, 0, BF_UNKNOWN);
+  assert(std::strlen(playerView.artist) == 168);
+  assert(static_cast<unsigned char>(playerView.artist[167]) == 'a');
 
   SourceManagerState sources;
   BtLinkState bt{};

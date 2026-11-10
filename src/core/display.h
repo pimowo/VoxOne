@@ -279,7 +279,10 @@ class Display {
     void _updatePlaybackStatus();
     bool _yamahaTftActive() const;
     void render_yamaha_tft();
-    uint32_t _yamahaSignature = 0;
+    uint32_t _yamahaTopSignature = 0;
+    uint32_t _yamahaStationSignature = 0;
+    uint32_t _yamahaMetadataSignature = 0;
+    uint32_t _yamahaVolumeSignature = 0;
     bool _yamahaDrawn = false;
     bool _yamahaWasActive = false;
 #endif

@@ -6,6 +6,8 @@
 #include <stdio.h>
 #include <string.h>
 
+#include "../core/utf8_text.h"
+
 namespace voxone {
 namespace oled128x64 {
 
@@ -117,15 +119,8 @@ inline void formatStartupSsid(char* output, size_t outputSize,
     snprintf(output, outputSize, "(brak SSID)");
     return;
   }
-  const size_t length = strlen(ssid);
-  if (length <= kStartupVisibleChars) {
-    snprintf(output, outputSize, "%s", ssid);
-    return;
-  }
-  constexpr size_t suffixLength = 3;
-  const size_t prefixLength = kStartupVisibleChars - suffixLength;
-  snprintf(output, outputSize, "%.*s...",
-           static_cast<int>(prefixLength), ssid);
+  voxone::utf8::ellipsize(output, outputSize, ssid,
+                          kStartupVisibleChars);
 }
 
 static_assert(fits(kPlayback) && fits(kSource) && fits(kSpeaker) &&

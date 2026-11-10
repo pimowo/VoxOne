@@ -70,6 +70,7 @@ class RuntimeOled128x64Display : public Adafruit_GFX {
   voxone::display_profile::ProfileId activeProfile_ =
       voxone::display_profile::ProfileId::None;
   bool ready_ = false;
+  bool dirty_ = true;
 };
 
 #if !defined(VOXONE_OLED_BACKEND_ONLY)

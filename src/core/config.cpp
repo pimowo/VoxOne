@@ -29,6 +29,7 @@
 #include "ap_wifi_recovery.h"
 #include "wifi_config_atomic.h"
 #include "wifi_config_parser.h"
+#include "utf8_text.h"
 #include "../displays/tools/l10n.h"
 #include <algorithm>
 #include <cstddef>
@@ -182,8 +183,7 @@ int8_t clampBalance(int8_t value) {
 Config config;
 
 void u8fix(char *src){
-  char last = src[strlen(src)-1]; 
-  if ((uint8_t)last >= 0xC2) src[strlen(src)-1]='\0';
+  voxone::utf8::trimIncompleteTail(src);
 }
 
 void Config::init() {
@@ -926,7 +926,7 @@ uint8_t Config::setLastSSID(uint8_t val) {
 void Config::setTitle(const char* title) {
   resetVuThreshold();
   memset(config.station.title, 0, BUFLEN);
-  strlcpy(config.station.title, title, BUFLEN);
+  voxone::utf8::copy(config.station.title, BUFLEN, title);
   u8fix(config.station.title);
   netserver.requestOnChange(TITLE, 0);
   display.putRequest(NEWTITLE);
@@ -934,8 +934,8 @@ void Config::setTitle(const char* title) {
 
 void Config::setStation(const char* station) {
   memset(config.station.name, 0, BUFLEN);
-  strlcpy(config.station.name, station, BUFLEN);
-  u8fix(config.station.title);
+  voxone::utf8::copy(config.station.name, BUFLEN, station);
+  u8fix(config.station.name);
 }
 
 void Config::initPlaylist() {

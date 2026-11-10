@@ -8,6 +8,7 @@
 #include "display_audio_info.h"
 #include "player_display_metadata.h"
 #include "station_metadata.h"
+#include "utf8_text.h"
 
 // Own the prepared text: SourceManager and Config may update their buffers later.
 struct PlayerDisplayView {
@@ -88,7 +89,8 @@ inline void makePlayerDisplayView(PlayerDisplayView& out,
                                   uint16_t radioBitrate,
                                   BitrateFormat radioFormat) {
   const char* name = stationName ? stationName : "";
-  snprintf(out.station, sizeof(out.station), "%s", displayPlayerStationText(source, name));
+  voxone::utf8::copy(out.station, sizeof(out.station),
+                     displayPlayerStationText(source, name));
   out.source = source.kind;
   out.playback = source.playback;
   out.userVolume = userVolume;
@@ -122,8 +124,8 @@ inline void makePlayerDisplayView(PlayerDisplayView& out,
     if (!parts.split && playerDisplayArtistIsStation(title, name)) title = "";
   }
   const PlayerDisplayMetadata shown = normalizePlayerMetadataForDisplay(artist, title);
-  snprintf(out.artist, sizeof(out.artist), "%s", shown.displayArtist);
-  snprintf(out.title, sizeof(out.title), "%s", shown.displayTitle);
+  voxone::utf8::copy(out.artist, sizeof(out.artist), shown.displayArtist);
+  voxone::utf8::copy(out.title, sizeof(out.title), shown.displayTitle);
 }
 
 void capturePlayerDisplayView(PlayerDisplayView& out, int rssi);

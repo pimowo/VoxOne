@@ -16,7 +16,10 @@ checkpointów pozostaje w historii Git i w istniejących raportach.
   enkodera NORMAL/REVERSED (w tym obrót z wciśniętym przyciskiem i
   synchronizację ustawienia pomiędzy WWW a Menu), a także transakcyjny ekran
   „Zapisać zmiany?” na TFT/OLED: zapis przez TAK, pełne przywrócenie wyglądu i
-  ustawień przez NIE oraz natychmiastowe wyjście, gdy nie ma zmian.
+  ustawień przez NIE oraz natychmiastowe wyjście, gdy nie ma zmian; dodatkowo
+  sprawdzić polskie znaki w nazwach stacji i metadanych ICY/DLNA/ID3,
+  wyśrodkowanie kontekstowej belki i wielokropki długich nazw na L0 oraz brak
+  migotania przy zmianie metadanych/Wi-Fi na TFT i przewijaniu na OLED S0.
 - [ ] Fizycznie przetestować TTS/media z Home Assistant: źródło `SOURCE_HA`,
   metadane title/artist i `N/A` zamiast bitrate na TFT/OLED oraz powrót do
   wcześniej używanego źródła i jego stanu po EOF albo komendzie Stop.
