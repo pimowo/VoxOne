@@ -18,6 +18,8 @@ int main() {
   const std::string displayHeader = readFile("src/core/display.h");
   const std::string oled = readFile(
       "src/displays/displayOLED128x64Runtime.cpp");
+  const std::string multi = readFile("src/displays/displayMultiRuntime.cpp");
+  const std::string common = readFile("src/displays/tools/commongfx.h");
   const std::string font = readFile("assets/yoradio_glcdfont.c");
 
   assert(display.find("voxone::utf8::ellipsize(") != std::string::npos);
@@ -35,9 +37,23 @@ int main() {
   assert(display.find("volumeSignature != _yamahaVolumeSignature") !=
          std::string::npos);
 
-  assert(oled.find("if (!ready_ || !dirty_) return;") != std::string::npos);
+  assert(oled.find("if (!ready_ || (!dirty_ && !force)) return;") !=
+         std::string::npos);
   assert(oled.find("dirty_ = false;") != std::string::npos);
   assert(oled.find("dirty_ = true;") != std::string::npos);
+  assert(multi.find("oled_->display(force)") != std::string::npos);
+  assert(common.find("flushSelected(force)") != std::string::npos);
+  assert(common.find("display(force)") != std::string::npos);
+
+  // The boot logo may be retired only after a forced first-frame commit.
+  const std::size_t handoff = display.find(
+      "display handoff\\tPLAYER committed");
+  const std::size_t forcedFlush = display.rfind("dsp.loop(true);", handoff);
+  const std::size_t ready = display.rfind("_bootStep = 2;", handoff);
+  assert(handoff != std::string::npos && forcedFlush != std::string::npos);
+  assert(ready != std::string::npos && forcedFlush < ready && ready < handoff);
+  assert(display.find("_pager->removePage(_boot);\n    _boot = nullptr;") !=
+         std::string::npos);
 
   // The audited project font already owns all 18 Polish lower/upper slots.
   for (unsigned slot = 0x80; slot <= 0x91; ++slot) {

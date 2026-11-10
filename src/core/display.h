@@ -278,7 +278,7 @@ class Display {
 #if VOXONE_DISPLAY_COMPILES_ST7796
     void _updatePlaybackStatus();
     bool _yamahaTftActive() const;
-    void render_yamaha_tft();
+    void render_yamaha_tft(bool bootHandoff = false);
     uint32_t _yamahaTopSignature = 0;
     uint32_t _yamahaStationSignature = 0;
     uint32_t _yamahaMetadataSignature = 0;

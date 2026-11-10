@@ -27,7 +27,7 @@ class MultiDisplayRuntime : public Adafruit_GFX {
   voxone::display_profile::ProfileId activeProfile() const {
     return selection_.profile;
   }
-  void flushSelected();
+  void flushSelected(bool force = false);
   void sleepSelected();
   void wakeSelected();
 

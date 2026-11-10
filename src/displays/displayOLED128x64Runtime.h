@@ -21,7 +21,7 @@ class RuntimeOled128x64Display : public Adafruit_GFX {
 
   bool begin(voxone::display_profile::ControllerId controller,
              voxone::display_profile::ProfileId profile);
-  void display();
+  void display(bool force = false);
   void sleep();
   void wake();
   bool ready() const { return ready_; }

@@ -34,8 +34,7 @@ class DspCore: public yoDisplay {
     void printClock(){}
     #if VOXONE_MULTI_DISPLAY_HAS_ST7796
     inline void loop(bool force=false){
-      (void)force;
-      flushSelected();
+      flushSelected(force);
     }
     inline void drawLogo(uint16_t top) {
       if (activeProfile() ==
@@ -55,7 +54,7 @@ class DspCore: public yoDisplay {
     }
     #elif defined(DSP_OLED)
     inline void loop(bool force=false){
-      display();
+      display(force);
       //delay(DSP_MODEL==DSP_ST7920?20:5);
       vTaskDelay(DSP_MODEL==DSP_ST7920?10:0);
     }

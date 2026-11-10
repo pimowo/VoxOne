@@ -2044,7 +2044,10 @@ void Display::_buildPager(){
 }
 
 void Display::_apScreen() {
-  if(_boot) _pager->removePage(_boot);
+  if (_boot) {
+    _pager->removePage(_boot);
+    _boot = nullptr;
+  }
     _boot = new Page();
     const auto presentation = network.presentationSnapshot();
     const bool presentationReady = presentation.initialized;
@@ -2299,18 +2302,27 @@ void Display::_apScreen() {
 }
 
 void Display::_start() {
-  if(_boot) _pager->removePage(_boot);
+  if (_boot) {
+    _pager->removePage(_boot);
+    _boot = nullptr;
+  }
   if (network.status != CONNECTED) {
     _apScreen();
+    // Do not publish display.ready() until the replacement for the boot logo
+    // has actually reached the panel.  In particular, OLED dirty rendering
+    // must not suppress this one-shot handoff.
+    _pager->loop();
+    dsp.loop(true);
     _bootStep = 2;
+    Serial.println("##[BOOT]#\tdisplay handoff\tAP committed");
     return;
   }
   _buildPager();
-  _bootStep = 2;
   _renderedMode = PLAYER;
   const bool yamahaPlayer =
 #if VOXONE_DISPLAY_COMPILES_ST7796
-      _yamahaTftActive();
+      !smallOledActive() &&
+      config.runtimeSnapshot().tftTheme == THEME_YAMAHA;
 #else
       false;
 #endif
@@ -2346,6 +2358,21 @@ void Display::_start() {
     _yamahaDrawn = false;
   }
 #endif
+
+  // Commit the first PLAYER frame while DisplayTask still exclusively owns
+  // the boot transition.  Only then release setup() from display.ready().
+  // This prevents partial/dirty gates from treating the boot logo as the
+  // already committed frame when networking and WebSocket work starts.
+#if VOXONE_DISPLAY_COMPILES_ST7796
+  if (yamahaPlayer) render_yamaha_tft(true);
+  else
+#endif
+  {
+    _pager->loop();
+    dsp.loop(true);
+  }
+  _bootStep = 2;
+  Serial.println("##[BOOT]#\tdisplay handoff\tPLAYER committed");
 }
 
 void Display::_showDialog(const char *title){
@@ -2609,8 +2636,8 @@ uint32_t yamahaVolumeSignature(const PlayerDisplayView& view) {
 }
 }  // namespace
 
-void Display::render_yamaha_tft() {
-  if (!_yamahaTftActive()) return;
+void Display::render_yamaha_tft(bool bootHandoff) {
+  if (!bootHandoff && !_yamahaTftActive()) return;
   PlayerDisplayView view{};
   capturePlayerDisplayView(view, WiFi.RSSI());
   const uint32_t topSignature = yamahaTopSignature(view);

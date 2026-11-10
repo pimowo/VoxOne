@@ -56,8 +56,8 @@ bool MultiDisplayRuntime::begin(
   return ready_;
 }
 
-void MultiDisplayRuntime::flushSelected() {
-  if (ready_ && oled_) oled_->display();
+void MultiDisplayRuntime::flushSelected(bool force) {
+  if (ready_ && oled_) oled_->display(force);
 }
 
 void MultiDisplayRuntime::sleepSelected() {

@@ -84,8 +84,8 @@ bool RuntimeOled128x64Display::begin(
   return ready_;
 }
 
-void RuntimeOled128x64Display::display() {
-  if (!ready_ || !dirty_) return;
+void RuntimeOled128x64Display::display(bool force) {
+  if (!ready_ || (!dirty_ && !force)) return;
   if (activeController_ == ControllerId::Ssd1306) activeSsd1306()->display();
   else if (activeController_ == ControllerId::Ssd1309) ssd1309_.display();
   else if (activeController_ == ControllerId::Sh1106) sh1106_.display();
