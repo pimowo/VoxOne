@@ -235,6 +235,15 @@ void dispatchUiInput(UiInputEvent event, int8_t steps,
     case UiInputAction::SourceNext:
       navigateCurrentSource(sourceManagerActiveSource(), true);
       break;
+    case UiInputAction::OpenMenu:
+      if (uiMenu.open(voxone::ui_menu::MenuId::MAIN)) {
+        config.beginMenuTransaction();
+        if (!transitionUiMode(MENU)) {
+          config.discardMenuTransaction();
+          uiMenu.close();
+        }
+      }
+      break;
     case UiInputAction::OpenSourceSelector:
       if (uiMenu.open(voxone::ui_menu::MenuId::SOURCE)) {
         config.beginMenuTransaction();

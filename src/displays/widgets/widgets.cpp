@@ -351,6 +351,13 @@ void ScrollWidget::_clear(){
 
 void ScrollWidget::_draw() {
   if(!available() || !_active || _locked) return;
+  // Every direct-to-panel frame owns its full row.  Without this clear a
+  // shorter or shifted scroll window leaves glyphs from the previous frame
+  // behind on immediate-mode TFT controllers.
+  if (!_frameBufferReady()) {
+    dsp.clearClipping();
+    dsp.fillRect(_config.left, _config.top, _width, _textheight, _bgcolor);
+  }
   _setTextParams();
   if (_doscroll) {
     uint16_t fbl = _frameBufferReady()?0:_config.left;
@@ -507,6 +514,9 @@ void VuWidget::init(WidgetConfig wconf, VUBandsConfig bands, uint16_t vumaxcolor
 
 void VuWidget::_draw(){
   if(!_active || _locked) return;
+  // VU is a full-frame bitmap.  Do not inherit a text widget's clipping
+  // rectangle, otherwise only part of the old meter gets overwritten.
+  dsp.clearClipping();
   static uint16_t measL, measR;
   uint16_t bandColor;
   uint16_t dimension = _config.align?_bands.width:_bands.height;
@@ -579,10 +589,11 @@ void VuWidget::_draw(){
     dsp.writePixels((uint16_t*)_canvas->getBuffer(), (_bands.width * 2 + _bands.space)*_bands.height);
     dsp.endWrite();
   }
+  dsp.clearClipping();
 }
 
 void VuWidget::loop(){
-  if(_active || !_locked) _draw();
+  if(_active && !_locked) _draw();
 }
 
 void VuWidget::_clear(){

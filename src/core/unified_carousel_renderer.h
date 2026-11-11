@@ -1,6 +1,7 @@
 #ifndef VOXONE_UNIFIED_CAROUSEL_RENDERER_H
 #define VOXONE_UNIFIED_CAROUSEL_RENDERER_H
 
+#include <stddef.h>
 #include <stdint.h>
 
 #include "options.h"
@@ -26,6 +27,11 @@ struct UnifiedCarouselTheme {
   uint16_t footerForeground;
 };
 
+using UnifiedCarouselItemFormatter =
+    void (*)(void* context, uint16_t index, char* output, size_t outputSize);
+using UnifiedCarouselActiveItem =
+    bool (*)(void* context, uint16_t index);
+
 struct UnifiedCarouselModel {
   const char* header;
   const char* item;
@@ -34,6 +40,9 @@ struct UnifiedCarouselModel {
   uint16_t total;
   bool playing;
   bool editing;
+  void* itemContext;
+  UnifiedCarouselItemFormatter formatItem;
+  UnifiedCarouselActiveItem itemIsActive;
 };
 
 class UnifiedCarouselRenderer {
@@ -60,6 +69,9 @@ class UnifiedCarouselWidget : public Widget {
   uint16_t total_ = 0;
   bool playing_ = false;
   bool editing_ = false;
+  void* itemContext_ = nullptr;
+  UnifiedCarouselItemFormatter formatItem_ = nullptr;
+  UnifiedCarouselActiveItem itemIsActive_ = nullptr;
   UnifiedCarouselRenderer renderer_{};
 
   void _draw() override;

@@ -19,8 +19,7 @@ checkpointów pozostaje w historii Git i w istniejących raportach.
   enkodera NORMAL/REVERSED (w tym obrót z wciśniętym przyciskiem i
   synchronizację ustawienia pomiędzy WWW a Menu), głośność po wybudzeniu ze
   Standby dla `Startup Volume` ustawionego na wartość stałą oraz „Ostatnia”
-  (wraz z brakiem trzasku przy odblokowaniu DAC), osobną karuzelę wszystkich
-  źródeł dostępnych w profilu po dwukliku w Playerze, kontekstowe karuzele po
+  (wraz z brakiem trzasku przy odblokowaniu DAC), kontekstowe karuzele po
   długim kliknięciu w trybie NORMAL oraz nakładkę głośności po długim kliknięciu
   w trybie REVERSED, a także transakcyjny ekran
   „Zapisać zmiany?” na TFT/OLED: zapis przez TAK, pełne przywrócenie wyglądu i
@@ -28,8 +27,9 @@ checkpointów pozostaje w historii Git i w istniejących raportach.
   sprawdzić polskie znaki w nazwach stacji i metadanych ICY/DLNA/ID3,
   wyśrodkowanie kontekstowej belki i wielokropki długich nazw na L0 oraz brak
   migotania przy zmianie metadanych/Wi-Fi na TFT i przewijaniu na OLED S0;
-  ocenić karuzelowe widoki stacji, DLNA, Źródła i Menu (nagłówek, jedna duża
-  pozycja, licznik oraz prawostronny wskaźnik `GRA`) na TFT L0 i OLED S0;
+  ocenić widoki stacji, DLNA, Źródła i Menu: karuzelę (nagłówek, jedna duża
+  pozycja, licznik oraz prawostronny wskaźnik `GRA`) na TFT L0 oraz
+  wielowierszową listę z inwersją zaznaczenia na OLED S0;
   dla pustych list DLNA/Źródła potwierdzić wyśrodkowany napis „Brak elementów”
   oraz działające wyjście dwuklikiem (Back) i długim kliknięciem (Home);
   po zimnym starcie L0 potwierdzić wzrokowo pełne przejście TFT z logo do

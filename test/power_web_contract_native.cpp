@@ -79,8 +79,8 @@ int main() {
   assert(manager.find("player.toggleMute();") != std::string::npos);
   assert(manager.find("ButtonEvent::BUTTON_DOUBLE_CLICK") !=
          std::string::npos);
-  assert(manager.find("uiMenu.open()") != std::string::npos);
-  assert(manager.find("transitionUiMode(MENU)") != std::string::npos);
+  assert(manager.find("dispatchUiInput(UiInputEvent::Double)") !=
+         std::string::npos);
   assert(manager.find("ButtonEvent::BUTTON_LONG_PRESS") != std::string::npos);
   assert(manager.find("beginShutdown();") != std::string::npos);
 

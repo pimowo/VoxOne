@@ -79,6 +79,7 @@ enum class UiInputAction : uint8_t {
   BluetoothToggle,
   SourcePrevious,
   SourceNext,
+  OpenMenu,
   OpenSourceSelector,
   OpenVolume,
   OpenStations,
@@ -191,7 +192,7 @@ inline UiInputDecision resolveUiInput(const UiInputContext& context,
     if (context.mode == SCREENSAVER || context.mode == SCREENBLANK)
       return uiInputDecision(UiInputAction::WakePlayer);
     if (context.mode == PLAYER && context.hasLocalDisplay)
-      return uiInputDecision(UiInputAction::OpenSourceSelector);
+      return uiInputDecision(UiInputAction::OpenMenu);
     if (context.mode == STATIONS || context.mode == BT_TRANSPORT)
       return uiInputDecision(UiInputAction::ShowPlayer);
     return uiInputDecision(UiInputAction::None);

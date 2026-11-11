@@ -1,7 +1,6 @@
 #include "power_manager.h"
 
 #include <Arduino.h>
-#include <esp_log.h>
 
 #include "options.h"
 #include "config.h"
@@ -17,8 +16,6 @@
 #include "../hardware/hardware_descriptor.h"
 
 namespace {
-constexpr char kTag[] = "PowerManager";
-
 bool powerButtonPressed() {
   const auto pin = voxone::hardware::currentHardware().power.button;
   return voxone::hardware::hasPin(pin) && digitalRead(pin) == LOW;
@@ -73,14 +70,7 @@ void PowerManager::loop() {
           player.toggleMute();
         }
       } else if (event == voxone::power::ButtonEvent::BUTTON_DOUBLE_CLICK) {
-        if (!standby() && uiState.mode() == PLAYER && uiMenu.open()) {
-          config.beginMenuTransaction();
-          if (!transitionUiMode(MENU)) {
-            config.discardMenuTransaction();
-            uiMenu.close();
-          }
-          else ESP_LOGI(kTag, "Menu opened");
-        }
+        if (!standby()) dispatchUiInput(UiInputEvent::Double);
       } else if (event == voxone::power::ButtonEvent::BUTTON_LONG_PRESS) {
         if (!standby()) {
           if (uiState.mode() == PLAYER && !uiMenu.visible())

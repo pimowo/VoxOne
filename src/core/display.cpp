@@ -224,26 +224,56 @@ void formatCarouselHeader(const voxone::ui_menu::MenuSnapshot& menu,
 }
 
 void formatCarouselItem(const voxone::ui_menu::MenuSnapshot& menu,
-                        char* output, size_t outputSize) {
+                        uint16_t index, char* output, size_t outputSize) {
   if (!output || outputSize == 0) return;
   output[0] = '\0';
   const uint8_t count = voxone::ui_menu::itemCount(menu);
-  if (menu.selectedIndex >= count) return;
+  if (index >= count) return;
   char value[16]{};
   const bool hasValue = voxone::ui_menu::formatItemValue(
-      menu, menu.selectedIndex, value, sizeof(value));
+      menu, static_cast<uint8_t>(index), value, sizeof(value));
   const bool hasSubmenu = voxone::ui_menu::itemHasSubmenu(
-      menu, menu.selectedIndex);
+      menu, static_cast<uint8_t>(index));
   if (hasValue) {
     snprintf(output, outputSize, "%s: %s",
-             voxone::ui_menu::itemLabel(menu, menu.selectedIndex), value);
+             voxone::ui_menu::itemLabel(menu, static_cast<uint8_t>(index)),
+             value);
   } else if (hasSubmenu) {
     snprintf(output, outputSize, "%s >",
-             voxone::ui_menu::itemLabel(menu, menu.selectedIndex));
+             voxone::ui_menu::itemLabel(menu, static_cast<uint8_t>(index)));
   } else {
     snprintf(output, outputSize, "%s",
-             voxone::ui_menu::itemLabel(menu, menu.selectedIndex));
+             voxone::ui_menu::itemLabel(menu, static_cast<uint8_t>(index)));
   }
+}
+
+void formatMenuCarouselItem(void* context, uint16_t index, char* output,
+                            size_t outputSize) {
+  if (!context) {
+    if (output && outputSize) output[0] = '\0';
+    return;
+  }
+  formatCarouselItem(
+      *static_cast<const voxone::ui_menu::MenuSnapshot*>(context), index,
+      output, outputSize);
+}
+
+bool menuCarouselItemIsActive(void* context, uint16_t index) {
+  if (!context) return false;
+  const auto& menu =
+      *static_cast<const voxone::ui_menu::MenuSnapshot*>(context);
+  return index < voxone::ui_menu::itemCount(menu) &&
+         voxone::ui_menu::itemIsActive(menu, static_cast<uint8_t>(index));
+}
+
+void formatStationCarouselItem(void*, uint16_t index, char* output,
+                               size_t outputSize) {
+  if (!output || outputSize == 0) return;
+  snprintf(output, outputSize, "%s", config.stationByNum(index + 1));
+}
+
+bool stationCarouselItemIsActive(void*, uint16_t index) {
+  return player.isRunning() && config.lastStation() == index + 1;
 }
 
 }  // namespace
@@ -275,13 +305,15 @@ class UiMenuWidget : public Widget {
     char header[64];
     char item[160];
     formatCarouselHeader(menu, header, sizeof(header));
-    formatCarouselItem(menu, item, sizeof(item));
+    formatCarouselItem(menu, menu.selectedIndex, item, sizeof(item));
     const uint16_t total = voxone::ui_menu::itemCount(menu);
     const UnifiedCarouselModel model{
         header, item, "Brak elementów",
         static_cast<uint16_t>(total ? menu.selectedIndex + 1U : 0U), total,
         total && voxone::ui_menu::itemIsActive(menu, menu.selectedIndex),
-        menu.state == voxone::ui_menu::MenuState::EDITING};
+        menu.state == voxone::ui_menu::MenuState::EDITING,
+        const_cast<voxone::ui_menu::MenuSnapshot*>(&menu),
+        formatMenuCarouselItem, menuCarouselItemIsActive};
     renderer_.render(activeCarouselLayout(), activeCarouselTheme(), model);
     revision_ = menu.revision;
   }
@@ -2592,7 +2624,8 @@ void Display::_drawPlaylist() {
       "WEB - STACJE",
       view.empty() ? "" : config.stationByNum(view.selected),
       "Brak elementów", view.selected, view.total,
-      view.selectedIsPlaying(), false};
+      view.selectedIsPlaying(), false, nullptr, formatStationCarouselItem,
+      stationCarouselItemIsActive};
   _stationCarousel->setModel(carousel);
 }
 

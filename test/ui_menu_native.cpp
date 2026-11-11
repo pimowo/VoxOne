@@ -275,7 +275,8 @@ int main() {
 
   const std::string power = readFile("src/core/power_manager.cpp");
   assert(power.find("ButtonEvent::BUTTON_DOUBLE_CLICK") != std::string::npos);
-  assert(power.find("uiMenu.open()") != std::string::npos);
+  assert(power.find("dispatchUiInput(UiInputEvent::Double)") !=
+         std::string::npos);
   assert(power.find("uiCarouselActive()") != std::string::npos);
   assert(power.find("cancelUiToPlayer()") != std::string::npos);
   const size_t longPress =
@@ -288,10 +289,11 @@ int main() {
          std::string::npos);
   assert(longPressHandler.find("dispatchUiInput(UiInputEvent::Long)") !=
          std::string::npos);
-  assert(power.find("dispatchUiInput(UiInputEvent::Double)") ==
+  assert(input.find("case UiInputAction::OpenMenu:") != std::string::npos);
+  assert(input.find("uiMenu.open(voxone::ui_menu::MenuId::MAIN)") !=
          std::string::npos);
-  assert(power.find("config.beginMenuTransaction()") != std::string::npos);
-  assert(power.find("transitionUiMode(MENU)") != std::string::npos);
+  assert(input.find("config.beginMenuTransaction()") != std::string::npos);
+  assert(input.find("transitionUiMode(MENU)") != std::string::npos);
 
   const std::string display = readFile("src/core/display.cpp");
   const std::string carousel =
@@ -312,6 +314,8 @@ int main() {
   assert(carousel.find("voxone::utf8::ellipsize") != std::string::npos);
   assert(carousel.find("model.playing") != std::string::npos);
   assert(carousel.find("\"GRA\"") != std::string::npos);
+  assert(carousel.find("dsp.height() <= 64") != std::string::npos);
+  assert(carousel.find("printOledListRow") != std::string::npos);
   assert(carousel.find("model.total ? model.item : model.emptyText") !=
          std::string::npos);
 
