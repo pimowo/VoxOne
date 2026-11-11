@@ -138,6 +138,7 @@ $nativeSources=@{
  button_handler_native=@('src/core/button_handler.cpp')
  dlna_client_native=@('src/network/dlna_client.cpp')
  ui_menu_native=@('src/core/ui_menu.cpp')
+ ui_menu_dlna_race_native=@('src/core/ui_menu.cpp')
  line_out_native=@('src/core/volume_map.cpp')
  bt_a2dp_transport_contract_native=@('src/core/bt_link_protocol.cpp')
  bt_link_native=@('src/core/bt_link_protocol.cpp')
@@ -205,7 +206,7 @@ Invoke-Step 'Native tests' {
    $exe=Join-Path $work ($label+$(if($onWindows) { '.exe' } else { '' }))
    $compileLog=Join-Path $work ($label+'.compile.log')
    $compileArgs=@('-std=c++11','-O2','-Wall','-Wextra','-Werror','-Wno-unused-parameter')
-  if($name -eq 'ap_ui_www_binding_native' -or $name -eq 'asynctcp_lifecycle_native' -or $name -eq 'asyncweb_lock_native' -or $name -eq 'bt_audio_mute_crosscore_native' -or $name -eq 'bt_link_single_owner_native' -or $name -eq 'config_runtime_snapshot_native' -or $name -eq 'display_scroll_runtime_config_native' -or $name -eq 'first_boot_runtime_snapshot_native' -or $name -eq 'first_boot_transaction_native' -or $name -eq 'sntp_server_lifetime_native' -or $name -eq 'tts_hil_diagnostics_native' -or $name -eq 'websocket_client_lifetime_native' -or $name -eq 'websocket_queue_lifecycle_native') { $compileArgs+='-pthread' }
+  if($name -eq 'ap_ui_www_binding_native' -or $name -eq 'asynctcp_lifecycle_native' -or $name -eq 'asyncweb_lock_native' -or $name -eq 'bt_audio_mute_crosscore_native' -or $name -eq 'bt_link_single_owner_native' -or $name -eq 'config_runtime_snapshot_native' -or $name -eq 'display_scroll_runtime_config_native' -or $name -eq 'first_boot_runtime_snapshot_native' -or $name -eq 'first_boot_transaction_native' -or $name -eq 'sntp_server_lifetime_native' -or $name -eq 'tts_hil_diagnostics_native' -or $name -eq 'ui_menu_dlna_race_native' -or $name -eq 'websocket_client_lifetime_native' -or $name -eq 'websocket_queue_lifecycle_native') { $compileArgs+='-pthread' }
    if($variant) {
     if($variant -eq 'CLEAN' -or $variant -eq 'DIRTY') { $compileArgs+=@("-DBUILD_ID_TEST_$variant=1",'-DVOXONE_PROFILE_M0=1') }
     elseif($variant -eq 'SECURITY-TEST') { $compileArgs+=@('-DVOXONE_PROFILE_M0=1','-DVOXONE_BUILD_IS_PRODUCTION_FIRMWARE=0','-DVOXONE_SECURITY_HTTP_ENFORCEMENT_TEST=1') }

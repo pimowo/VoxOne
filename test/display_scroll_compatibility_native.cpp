@@ -574,7 +574,11 @@ void testProductionIntegrationGuards() {
   assert(display.find("_st7796ScrollTick()") != std::string::npos);
   assert(widgets.find("if (_coreControlled) return;") != std::string::npos);
   assert(widgets.find("scrollComposeWindow(") != std::string::npos);
-  assert(widgets.find("const char* encoded = utf8Rus") != std::string::npos);
+  assert(widgets.find("char encoded[BUFLEN]") != std::string::npos);
+  assert(widgets.find("utf8Rus(encoded, sizeof(encoded), txt)") !=
+         std::string::npos);
+  const std::string utf8 = readFile("src/displays/tools/utf8Rus.cpp");
+  assert(utf8.find("thread_local") == std::string::npos);
   assert(countText(platformio, "-DVOXONE_PLAYER_SCROLL_CORE_ENABLED=1") == 2);
   const std::size_t m0 = platformio.find("[env:m0]");
   const std::size_t m0Security = platformio.find("[env:m0-security-test]");

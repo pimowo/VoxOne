@@ -90,8 +90,9 @@ int main() {
                         "reservedSdFlags", "reservedPlayMode"});
   hasAll(configSource, {"SPIFFS.open(PLAYLIST_PATH", "SPIFFS.open(INDEX_PATH",
                         "PlaylistGuard"});
-  hasAll(widgets, {"SPIFFS.open(PLAYLIST_PATH", "SPIFFS.open(INDEX_PATH",
-                   "substring(firstTab + 1, secondTab)"});
+  hasNone(widgets, {"SPIFFS.open(PLAYLIST_PATH", "SPIFFS.open(INDEX_PATH"});
+  hasAll(display, {"config.stationByNum(view.selected)",
+                   "_stationCarousel->setModel(carousel)"});
   hasAll(playlistStore, {"PlaylistStore::", "PLAYLIST_PATH", "INDEX_PATH"});
   hasAll(server, {"/api/stations/import", "/api/stations/export"});
 

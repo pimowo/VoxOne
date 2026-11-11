@@ -88,6 +88,15 @@ inline bool operator!=(const MenuSettings& left, const MenuSettings& right) {
   return !(left == right);
 }
 
+struct DlnaMenuEntry {
+  char label[96]{};
+  bool folder = false;
+  bool playable = false;
+  bool playing = false;
+};
+
+constexpr uint8_t kMaxDlnaMenuItems = 24;
+
 struct MenuSnapshot {
   MenuState state;
   MenuLevel level;
@@ -99,6 +108,8 @@ struct MenuSnapshot {
   SourceId activeSource;
   MenuSettings settings;
   bool settingsDirty;
+  uint8_t dynamicCount = 0;
+  DlnaMenuEntry dynamicItems[kMaxDlnaMenuItems]{};
 
   MenuSnapshot(MenuState menuState = MenuState::CLOSED,
                MenuLevel menuLevel = MenuLevel::MAIN,
@@ -114,15 +125,6 @@ struct MenuSnapshot {
     settings.encoderUiReversed = encoderReversed;
   }
 };
-
-struct DlnaMenuEntry {
-  char label[96]{};
-  bool folder = false;
-  bool playable = false;
-  bool playing = false;
-};
-
-constexpr uint8_t kMaxDlnaMenuItems = 24;
 
 enum class MenuRenderKind : uint8_t { NONE, FULL, SELECTION };
 
@@ -178,6 +180,7 @@ class UiMenu {
   std::atomic<bool> draftScreensaverEnabled_{false};
   std::atomic<bool> draftLineOutEnabled_{false};
   std::atomic<uint8_t> draftLineOutVolume_{100};
+  mutable char selectedDlnaLabel_[96]{};
 };
 
 MenuLevel menuLevel(MenuId menuId);
@@ -204,8 +207,7 @@ inline uint8_t itemCount(const MenuSnapshot& snapshot) {
     return sourceItemCount(snapshot.sourceMask);
   }
   if (snapshot.menuId != MenuId::DLNA) return itemCount(snapshot.menuId);
-  extern uint8_t dlnaItemCount(uint8_t bank);
-  return dlnaItemCount(snapshot.dynamicBank);
+  return snapshot.dynamicCount;
 }
 
 inline const char* itemLabel(const MenuSnapshot& snapshot, uint8_t index) {
@@ -213,16 +215,18 @@ inline const char* itemLabel(const MenuSnapshot& snapshot, uint8_t index) {
     return sourceMenuLabel(sourceItemAt(snapshot.sourceMask, index));
   }
   if (snapshot.menuId != MenuId::DLNA) return itemLabel(snapshot.menuId, index);
-  extern const char* dlnaItemLabel(uint8_t bank, uint8_t index);
-  return dlnaItemLabel(snapshot.dynamicBank, index);
+  return index < snapshot.dynamicCount
+             ? snapshot.dynamicItems[index].label : "";
 }
 
 inline bool itemIsActive(const MenuSnapshot& snapshot, uint8_t index) {
   if (snapshot.menuId == MenuId::SOURCE)
     return sourceItemAt(snapshot.sourceMask, index) == snapshot.activeSource;
+  if (snapshot.menuId == MenuId::MAIN)
+    return index == 4 && snapshot.activeSource == SourceId::Dlna;
   if (snapshot.menuId == MenuId::DLNA) {
-    extern bool dlnaItemPlaying(uint8_t bank, uint8_t index);
-    return dlnaItemPlaying(snapshot.dynamicBank, index);
+    return index < snapshot.dynamicCount &&
+           snapshot.dynamicItems[index].playing;
   }
   return snapshot.menuId == MenuId::SYSTEM && index == 3 &&
          snapshot.settings.encoderUiReversed;
@@ -231,8 +235,8 @@ inline bool itemIsActive(const MenuSnapshot& snapshot, uint8_t index) {
 inline bool itemHasSubmenu(const MenuSnapshot& snapshot, uint8_t index) {
   if (snapshot.menuId != MenuId::DLNA)
     return itemHasSubmenu(snapshot.menuId, index);
-  extern bool dlnaItemFolder(uint8_t bank, uint8_t index);
-  return dlnaItemFolder(snapshot.dynamicBank, index);
+  return index < snapshot.dynamicCount &&
+         snapshot.dynamicItems[index].folder;
 }
 
 }  // namespace ui_menu

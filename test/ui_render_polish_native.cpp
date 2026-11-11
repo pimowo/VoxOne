@@ -15,6 +15,8 @@ std::string readFile(const char* path) {
 
 int main() {
   const std::string display = readFile("src/core/display.cpp");
+  const std::string carousel =
+      readFile("src/core/unified_carousel_renderer.cpp");
   const std::string displayHeader = readFile("src/core/display.h");
   const std::string oled = readFile(
       "src/displays/displayOLED128x64Runtime.cpp");
@@ -22,11 +24,11 @@ int main() {
   const std::string common = readFile("src/displays/tools/commongfx.h");
   const std::string font = readFile("assets/yoradio_glcdfont.c");
 
-  assert(display.find("voxone::utf8::ellipsize(") != std::string::npos);
-  assert(display.find("dsp.setClipping({sideInset, 0, availableWidth") !=
+  assert(carousel.find("voxone::utf8::ellipsize(") != std::string::npos);
+  assert(carousel.find("dsp.setClipping({0, position.top") !=
          std::string::npos);
-  assert(display.find("cardForeground, cardBackground") !=
-         std::string::npos);
+  assert(carousel.find("const uint16_t itemForeground") != std::string::npos);
+  assert(carousel.find("const uint16_t itemBackground") != std::string::npos);
 
   assert(displayHeader.find("_yamahaTopSignature") != std::string::npos);
   assert(displayHeader.find("_yamahaMetadataSignature") != std::string::npos);

@@ -76,10 +76,11 @@ size_t strlen_utf8(const char* s) {
   return count;
 }
 
-char* utf8Rus(const char* str) {
-  static char out[BUFLEN];
-  int outPos = 0;
-  for (int i = 0; str[i] && outPos < BUFLEN - 1; i++) {
+size_t utf8Rus(char* out, size_t outputSize, const char* str) {
+  if (!out || outputSize == 0) return 0;
+  if (!str) str = "";
+  size_t outPos = 0;
+  for (size_t i = 0; str[i] && outPos + 1 < outputSize; i++) {
     uint8_t c = (uint8_t)str[i];
     char latinGlyph;
     if ((c == 0xC3 || c == 0xC4 || c == 0xC5) && str[i+1] &&
@@ -107,6 +108,6 @@ char* utf8Rus(const char* str) {
     }
   }
   out[outPos] = 0;
-  return out;
+  return outPos;
 }
 

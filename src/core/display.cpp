@@ -23,6 +23,7 @@
 #include "station_selection_view.h"
 #include "timekeeper.h"
 #include "ui_menu.h"
+#include "unified_carousel_renderer.h"
 #include "../displays/dspcore.h"
 #include "../displays/widgets/widgets.h"
 #include "../displays/widgets/pages.h"
@@ -162,6 +163,91 @@ static const char* runtimeEqPresetLabel() {
 
 DspCore dsp;
 
+namespace {
+
+UnifiedCarouselLayout activeCarouselLayout() {
+#if VOXONE_DISPLAY_COMPILES_SMALL_OLED
+  if (dsp.width() == 128 && dsp.height() == 32) {
+    return {stations128x32::header, stations128x32::selected.widget,
+            stations128x32::counter, stations128x32::playing,
+            stations128x32::selected.width};
+  }
+  if (dsp.width() == 128 && dsp.height() == 64) {
+    return {stations128x64::header, stations128x64::selected.widget,
+            stations128x64::counter, stations128x64::playing,
+            stations128x64::selected.width};
+  }
+#endif
+#if VOXONE_DISPLAY_PROFILE == VOXONE_DISPLAY_PROFILE_ST7789_284X76
+  return {playlistHeaderConf, playlistConf.widget, playlistCounterConf,
+          playlistPlayingConf, playlistConf.width};
+#elif VOXONE_DISPLAY_PROFILE == VOXONE_DISPLAY_PROFILE_ST7796_480X320
+  return {st7796PlaylistHeaderConf, st7796StationConf.widget,
+          st7796PlaylistCounterConf, st7796PlaylistPlayingConf,
+          st7796StationConf.width};
+#else
+  const uint16_t footerTop = dsp.height() > CHARHEIGHT
+                                 ? dsp.height() - CHARHEIGHT
+                                 : 0;
+  return {{0, 0, 1, WA_CENTER}, playlistConf.widget,
+          {0, footerTop, 1, WA_CENTER}, {0, footerTop, 1, WA_RIGHT},
+          playlistConf.width};
+#endif
+}
+
+UnifiedCarouselTheme activeCarouselTheme() {
+  return {config.theme.background, config.theme.meta, config.theme.metabg,
+          config.theme.plcurrent, config.theme.plcurrentbg,
+          config.theme.meta};
+}
+
+void formatCarouselHeader(const voxone::ui_menu::MenuSnapshot& menu,
+                          char* output, size_t outputSize) {
+  if (!output || outputSize == 0) return;
+  if (menu.state == voxone::ui_menu::MenuState::CONFIRM_SAVE) {
+    snprintf(output, outputSize, "Zapisać zmiany?");
+  } else if (menu.menuId == voxone::ui_menu::MenuId::DLNA) {
+    const bool hasItems = voxone::ui_menu::itemCount(menu) != 0;
+    const bool folder = hasItems &&
+        voxone::ui_menu::itemHasSubmenu(menu, menu.selectedIndex);
+    snprintf(output, outputSize, "%s",
+             !hasItems ? "DLNA" :
+             (folder ? "DLNA - FOLDER" : "DLNA - UTWÓR"));
+  } else if (menu.menuId == voxone::ui_menu::MenuId::SOURCE) {
+    snprintf(output, outputSize, "ŹRÓDŁA");
+  } else if (menu.menuId == voxone::ui_menu::MenuId::MAIN) {
+    snprintf(output, outputSize, "MENU");
+  } else {
+    snprintf(output, outputSize, "MENU - %s",
+             voxone::ui_menu::menuContextHeader(menu.menuId));
+  }
+}
+
+void formatCarouselItem(const voxone::ui_menu::MenuSnapshot& menu,
+                        char* output, size_t outputSize) {
+  if (!output || outputSize == 0) return;
+  output[0] = '\0';
+  const uint8_t count = voxone::ui_menu::itemCount(menu);
+  if (menu.selectedIndex >= count) return;
+  char value[16]{};
+  const bool hasValue = voxone::ui_menu::formatItemValue(
+      menu, menu.selectedIndex, value, sizeof(value));
+  const bool hasSubmenu = voxone::ui_menu::itemHasSubmenu(
+      menu, menu.selectedIndex);
+  if (hasValue) {
+    snprintf(output, outputSize, "%s: %s",
+             voxone::ui_menu::itemLabel(menu, menu.selectedIndex), value);
+  } else if (hasSubmenu) {
+    snprintf(output, outputSize, "%s >",
+             voxone::ui_menu::itemLabel(menu, menu.selectedIndex));
+  } else {
+    snprintf(output, outputSize, "%s",
+             voxone::ui_menu::itemLabel(menu, menu.selectedIndex));
+  }
+}
+
+}  // namespace
+
 class UiMenuWidget : public Widget {
  public:
   UiMenuWidget() { Widget::init({0, 0, 1, WA_LEFT}, 0xFFFF, 0x0000); }
@@ -173,312 +259,30 @@ class UiMenuWidget : public Widget {
   }
 
  private:
-  struct Layout {
-    uint16_t width;
-    uint16_t height;
-    uint16_t background;
-    uint16_t foreground;
-    uint16_t headerHeight;
-    uint16_t footerTop;
-    uint16_t centerTop;
-    uint16_t centerHeight;
-    uint16_t horizontalMargin;
-    uint16_t contentWidth;
-    uint8_t titleSize;
-    uint8_t itemSize;
-    uint8_t footerSize;
-    bool oled;
-    bool compact;
-    bool contextualTft;
-  };
-
   uint32_t revision_ = UINT32_MAX;
-  voxone::ui_menu::MenuSnapshot renderedMenu_{};
-  bool rendered_ = false;
+  UnifiedCarouselRenderer renderer_{};
 
   void _draw() override {
     if (!_active) return;
-    rendered_ = false;
     render(uiMenu.snapshot());
   }
 
   void _clear() override {
-    rendered_ = false;
     dsp.fillRect(0, 0, dsp.width(), dsp.height(), config.theme.background);
   }
 
-  Layout layout(const voxone::ui_menu::MenuSnapshot& menu) const {
-    const uint16_t width = dsp.width();
-    const uint16_t height = dsp.height();
-    const bool oled = width <= 128 && height <= 64;
-    const uint16_t background = oled ? 0x0000 : config.theme.background;
-    const uint16_t foreground = oled ? 0xFFFF : config.theme.meta;
-    const bool compact = height <= 76;
-    const bool contextualTft = width >= 400 && height >= 200;
-    const uint8_t titleSize =
-        compact ? 1 : (contextualTft ? 3 : 1);
-    const uint8_t itemSize = height <= 32 ? 2
-        : (oled ? 2 : (contextualTft ? 4 : 2));
-    const uint8_t footerSize = contextualTft ? 2 : 1;
-    const uint16_t headerHeight = height <= 32 ? 8
-        : (compact ? 20 : (contextualTft ? 52 : 12));
-    const uint16_t footerHeight = height <= 32 ? 8
-        : (compact ? 14 : (contextualTft ? 48 : 12));
-    const uint16_t footerTop = height - footerHeight;
-    const uint16_t centerTop = headerHeight;
-    const uint16_t centerHeight = footerTop - centerTop;
-    const uint16_t horizontalMargin = oled ? 2 : (width >= 300 ? 36 : 8);
-    const uint16_t contentWidth = width - horizontalMargin * 2;
-    return {width, height, background, foreground, headerHeight, footerTop,
-            centerTop, centerHeight, horizontalMargin, contentWidth,
-            titleSize, itemSize, footerSize, oled, compact, contextualTft};
-  }
-
-  void formatHeader(const voxone::ui_menu::MenuSnapshot& menu,
-                    char* output, size_t outputSize) const {
-    if (!output || outputSize == 0) return;
-    if (menu.menuId == voxone::ui_menu::MenuId::DLNA) {
-      if (voxone::ui_menu::itemCount(menu) == 0) {
-        snprintf(output, outputSize, "DLNA");
-        return;
-      }
-      const bool folder = voxone::ui_menu::itemHasSubmenu(
-          menu, menu.selectedIndex);
-      snprintf(output, outputSize, "%s", folder ? "DLNA - FOLDER"
-                                                  : "DLNA - UTWÓR");
-      return;
-    }
-    if (menu.menuId == voxone::ui_menu::MenuId::SOURCE) {
-      snprintf(output, outputSize, "ŹRÓDŁO");
-      return;
-    }
-    if (menu.menuId == voxone::ui_menu::MenuId::MAIN) {
-      snprintf(output, outputSize, "MENU");
-      return;
-    }
-    snprintf(output, outputSize, "MENU - %s",
-             voxone::ui_menu::menuContextHeader(menu.menuId));
-  }
-
-  void drawHeader(const voxone::ui_menu::MenuSnapshot& menu,
-                  const Layout& view) {
-    dsp.fillRect(0, 0, view.width, view.headerHeight, view.background);
-    char title[48];
-    formatHeader(menu, title, sizeof(title));
-    uint16_t titleBackground = view.background;
-    if (view.contextualTft) {
-      titleBackground = config.theme.metabg;
-      dsp.fillRect(0, 0, view.width, 50, titleBackground);
-      dsp.fillRect(0, 50, view.width, 2, config.theme.metafill);
-    }
-    const uint16_t sideInset = view.contextualTft ? 64 : 0;
-    const uint16_t availableWidth = view.width - sideInset * 2;
-    const uint16_t glyphWidth = CHARWIDTH * view.titleSize;
-    char visibleTitle[48];
-    voxone::utf8::ellipsize(visibleTitle, sizeof(visibleTitle), title,
-                            glyphWidth ? availableWidth / glyphWidth : 0);
-    const uint16_t titleWidth = static_cast<uint16_t>(
-        voxone::utf8::count(visibleTitle) * glyphWidth);
-    dsp.setFont();
-    dsp.setTextSize(view.titleSize);
-    dsp.setTextColor(view.foreground, titleBackground);
-    dsp.setClipping({sideInset, 0, availableWidth, view.headerHeight});
-    dsp.setCursor(sideInset + (availableWidth - titleWidth) / 2,
-                  view.height <= 32 ? 0 :
-                  (view.compact ? 4 : (view.contextualTft ? 13 : 2)));
-    dsp.print(utf8Rus(visibleTitle));
-    dsp.clearClipping();
-  }
-
-  void drawSelection(const voxone::ui_menu::MenuSnapshot& menu,
-                     const Layout& view) {
-    const uint8_t index = menu.selectedIndex;
-    if (index >= voxone::ui_menu::itemCount(menu)) return;
-    dsp.fillRect(0, view.centerTop, view.width, view.centerHeight,
-                 view.background);
-
-    const bool editing =
-        menu.state == voxone::ui_menu::MenuState::EDITING;
-    const uint16_t cardBackground = editing ? view.foreground : view.background;
-    const uint16_t cardForeground = editing ? view.background : view.foreground;
-    const uint16_t inset = view.height <= 32 ? 0 : (view.oled ? 1 : 8);
-    const uint16_t cardTop = view.centerTop + inset;
-    const uint16_t cardHeight = view.centerHeight > inset * 2
-        ? view.centerHeight - inset * 2 : view.centerHeight;
-    dsp.fillRect(view.horizontalMargin, cardTop, view.contentWidth, cardHeight,
-                 cardBackground);
-    dsp.drawRect(view.horizontalMargin, cardTop, view.contentWidth, cardHeight,
-                 view.foreground);
-
-    char value[16]{};
-    const bool hasValue = voxone::ui_menu::formatItemValue(
-        menu, index, value, sizeof(value));
-    const bool hasSubmenu = voxone::ui_menu::itemHasSubmenu(menu, index);
-    char label[128];
-    if (hasValue)
-      snprintf(label, sizeof(label), "%s: %s",
-               voxone::ui_menu::itemLabel(menu, index), value);
-    else if (hasSubmenu)
-      snprintf(label, sizeof(label), "%s >",
-               voxone::ui_menu::itemLabel(menu, index));
-    else
-      snprintf(label, sizeof(label), "%s",
-               voxone::ui_menu::itemLabel(menu, index));
-
-    const uint16_t glyphWidth = CHARWIDTH * view.itemSize;
-    const uint16_t availableWidth = view.contentWidth > inset * 2
-        ? view.contentWidth - inset * 2 : view.contentWidth;
-    char visibleLabel[128];
-    voxone::utf8::ellipsize(visibleLabel, sizeof(visibleLabel), label,
-                            glyphWidth ? availableWidth / glyphWidth : 0);
-    const uint16_t textWidth = static_cast<uint16_t>(
-        voxone::utf8::count(visibleLabel) * glyphWidth);
-    const uint16_t textHeight = CHARHEIGHT * view.itemSize;
-    const uint16_t textTop = cardTop +
-        (cardHeight > textHeight ? (cardHeight - textHeight) / 2 : 0);
-    dsp.setFont();
-    dsp.setTextSize(view.itemSize);
-    dsp.setTextColor(cardForeground, cardBackground);
-    dsp.setClipping(
-        {static_cast<uint16_t>(view.horizontalMargin + inset), cardTop,
-         availableWidth, cardHeight});
-    dsp.setCursor(view.horizontalMargin +
-                      (view.contentWidth > textWidth
-                           ? (view.contentWidth - textWidth) / 2 : inset),
-                  textTop);
-    dsp.print(utf8Rus(visibleLabel));
-    dsp.clearClipping();
-  }
-
-  void drawFooter(const voxone::ui_menu::MenuSnapshot& menu,
-                  const Layout& view) {
-    dsp.fillRect(0, view.footerTop, view.width,
-                 view.height - view.footerTop, view.background);
-    const uint8_t count = voxone::ui_menu::itemCount(menu);
-    char counter[16];
-    snprintf(counter, sizeof(counter), "%u/%u",
-             count ? static_cast<unsigned>(menu.selectedIndex + 1U) : 0U,
-             static_cast<unsigned>(count));
-    const uint16_t glyphWidth = CHARWIDTH * view.footerSize;
-    const uint16_t textHeight = CHARHEIGHT * view.footerSize;
-    const uint16_t textTop = view.footerTop +
-        ((view.height - view.footerTop) > textHeight
-             ? (view.height - view.footerTop - textHeight) / 2 : 0);
-    dsp.setFont();
-    dsp.setTextSize(view.footerSize);
-    dsp.setTextColor(view.foreground, view.background);
-    dsp.setCursor((view.width - strlen(counter) * glyphWidth) / 2, textTop);
-    dsp.print(counter);
-    if ((menu.menuId == voxone::ui_menu::MenuId::DLNA ||
-         menu.menuId == voxone::ui_menu::MenuId::SOURCE) &&
-        voxone::ui_menu::itemIsActive(menu, menu.selectedIndex)) {
-      const uint16_t rightMargin = view.oled ? 2 : view.horizontalMargin;
-      dsp.setCursor(view.width - rightMargin - 3 * glyphWidth, textTop);
-      dsp.print("GRA");
-    }
-  }
-
-  void drawConfirmation(const voxone::ui_menu::MenuSnapshot& menu,
-                        const Layout& view) {
-    dsp.fillRect(0, 0, view.width, view.height, view.background);
-    const uint8_t titleSize = view.oled ? 1 : (view.width >= 400 ? 3 : 2);
-    const char* title = "Zapisać zmiany?";
-    const uint16_t titleWidth = static_cast<uint16_t>(
-        strlen_utf8(title) * CHARWIDTH * titleSize);
-    const uint16_t titleTop = view.height <= 32 ? 1 :
-        (view.oled ? 10 : view.height / 4);
-    dsp.setFont();
-    dsp.setTextSize(titleSize);
-    dsp.setTextColor(view.foreground, view.background);
-    dsp.setCursor((view.width - titleWidth) / 2, titleTop);
-    dsp.print(utf8Rus(title));
-
-    const uint8_t optionSize = view.oled ? 1 : 2;
-    const uint16_t boxWidth = view.oled ? 44 : 112;
-    const uint16_t boxHeight = view.height <= 32 ? 14 :
-        (view.oled ? 20 : 48);
-    const uint16_t gap = view.oled ? 8 : 24;
-    const uint16_t boxesWidth = boxWidth * 2 + gap;
-    const uint16_t left = (view.width - boxesWidth) / 2;
-    const uint16_t top = view.height <= 32 ? 17 :
-        (view.oled ? 38 : view.height * 3 / 5);
-    const char* options[] = {"TAK", "NIE"};
-    for (uint8_t index = 0; index < 2; ++index) {
-      const bool selected = menu.selectedIndex == index;
-      const uint16_t boxLeft = left + index * (boxWidth + gap);
-      const uint16_t background = selected ? view.foreground : view.background;
-      const uint16_t foreground = selected ? view.background : view.foreground;
-      dsp.fillRect(boxLeft, top, boxWidth, boxHeight, background);
-      dsp.drawRect(boxLeft, top, boxWidth, boxHeight, view.foreground);
-      const uint16_t textWidth =
-          strlen(options[index]) * CHARWIDTH * optionSize;
-      const uint16_t textHeight = CHARHEIGHT * optionSize;
-      dsp.setTextSize(optionSize);
-      dsp.setTextColor(foreground, background);
-      dsp.setCursor(boxLeft + (boxWidth - textWidth) / 2,
-                    top + (boxHeight - textHeight) / 2);
-      dsp.print(options[index]);
-    }
-  }
-
-  void drawFull(const voxone::ui_menu::MenuSnapshot& menu,
-                const Layout& view) {
-    drawHeader(menu, view);
-    drawSelection(menu, view);
-    drawFooter(menu, view);
-  }
-
-  void drawEmpty(const voxone::ui_menu::MenuSnapshot& menu,
-                 const Layout& view) {
-    drawHeader(menu, view);
-    dsp.fillRect(0, view.centerTop, view.width, view.centerHeight,
-                 view.background);
-    const char* message = "Brak elementów";
-    const uint8_t textSize = view.oled ? 1 : (view.contextualTft ? 3 : 1);
-    const uint16_t textWidth = static_cast<uint16_t>(
-        voxone::utf8::count(message) * CHARWIDTH * textSize);
-    const uint16_t textHeight = CHARHEIGHT * textSize;
-    dsp.setFont();
-    dsp.setTextSize(textSize);
-    dsp.setTextColor(view.foreground, view.background);
-    dsp.setCursor(view.width > textWidth ? (view.width - textWidth) / 2 : 0,
-                  view.centerTop +
-                      (view.centerHeight > textHeight
-                           ? (view.centerHeight - textHeight) / 2
-                           : 0));
-    dsp.print(utf8Rus(message));
-    drawFooter(menu, view);
-  }
-
   void render(const voxone::ui_menu::MenuSnapshot& menu) {
-    const Layout view = layout(menu);
-    if (voxone::ui_menu::itemCount(menu) == 0) {
-      drawEmpty(menu, view);
-      renderedMenu_ = menu;
-      rendered_ = true;
-      revision_ = menu.revision;
-      return;
-    }
-    const auto plan = voxone::ui_menu::menuRenderPlan(
-        renderedMenu_, menu, rendered_);
-    if (menu.state == voxone::ui_menu::MenuState::CONFIRM_SAVE) {
-      if (plan.kind != voxone::ui_menu::MenuRenderKind::NONE)
-        drawConfirmation(menu, view);
-      renderedMenu_ = menu;
-      rendered_ = true;
-      revision_ = menu.revision;
-      return;
-    }
-    if (plan.kind == voxone::ui_menu::MenuRenderKind::FULL) {
-      drawFull(menu, view);
-    } else if (plan.kind == voxone::ui_menu::MenuRenderKind::SELECTION) {
-      if (menu.menuId == voxone::ui_menu::MenuId::DLNA)
-        drawHeader(menu, view);
-      drawSelection(menu, view);
-      drawFooter(menu, view);
-    }
-    renderedMenu_ = menu;
-    rendered_ = true;
+    char header[64];
+    char item[160];
+    formatCarouselHeader(menu, header, sizeof(header));
+    formatCarouselItem(menu, item, sizeof(item));
+    const uint16_t total = voxone::ui_menu::itemCount(menu);
+    const UnifiedCarouselModel model{
+        header, item, "Brak elementów",
+        static_cast<uint16_t>(total ? menu.selectedIndex + 1U : 0U), total,
+        total && voxone::ui_menu::itemIsActive(menu, menu.selectedIndex),
+        menu.state == voxone::ui_menu::MenuState::EDITING};
+    renderer_.render(activeCarouselLayout(), activeCarouselTheme(), model);
     revision_ = menu.revision;
   }
 };
@@ -1413,13 +1217,12 @@ Display::~Display() {
   delete _pager;
   _pager = nullptr;
   delete _footer;
-  delete _plwidget;
   delete _nums;
   delete _clock;
   delete _meta;
   delete _title1;
   delete _title2;
-  delete _plcurrent;
+  delete _stationCarousel;
 }
 
 void Display::init() {
@@ -1469,21 +1272,13 @@ void Display::init() {
   _createDspTask();
   while(_bootStep == 0) { delay(10); }
   _footer = new (std::nothrow) Page();
-#if VOXONE_DISPLAY_PROFILE == VOXONE_DISPLAY_PROFILE_ST7789_284X76 || VOXONE_DISPLAY_PROFILE == VOXONE_DISPLAY_PROFILE_ST7796_480X320 || VOXONE_DISPLAY_PROFILE_IS_SMALL_OLED
-  _plwidget = nullptr;
-#else
-  _plwidget = new (std::nothrow) PlayListWidget();
-#endif
   _nums = new (std::nothrow) NumWidget();
   _clock = new (std::nothrow) ClockWidget();
   _meta = new (std::nothrow) ScrollWidget();
   _title1 = new (std::nothrow) ScrollWidget();
-  _plcurrent = new (std::nothrow) ScrollWidget();
-  if (!_footer || !_nums || !_clock || !_meta || !_title1 || !_plcurrent
-#if !(VOXONE_DISPLAY_PROFILE == VOXONE_DISPLAY_PROFILE_ST7789_284X76 || VOXONE_DISPLAY_PROFILE == VOXONE_DISPLAY_PROFILE_ST7796_480X320 || VOXONE_DISPLAY_PROFILE_IS_SMALL_OLED)
-      || !_plwidget
-#endif
-  ) {
+  _stationCarousel = new (std::nothrow) UnifiedCarouselWidget();
+  if (!_footer || !_nums || !_clock || !_meta || !_title1 ||
+      !_stationCarousel) {
     _runtimeEnabled = false;
     _bootStep = 2;
     Serial.println("disabled (display widget allocation failed)");
@@ -1737,52 +1532,7 @@ void Display::_buildPager(){
   else
 #endif
     _clock->init(clockConf, 0, 0);
-#if VOXONE_DISPLAY_COMPILES_SMALL_OLED
-  if (smallOledActive())
-    _plcurrent->init("*", oled128x32Active() ? stations128x32::selected
-                                              : stations128x64::selected,
-                     WHITE, BLACK);
-  else
-#endif
-#if VOXONE_DISPLAY_PROFILE == VOXONE_DISPLAY_PROFILE_ST7796_480X320
-  _plcurrent->init("*", st7796StationConf, config.theme.plcurrent, config.theme.plcurrentbg);
-#else
-    _plcurrent->init("*", playlistConf, config.theme.plcurrent, config.theme.plcurrentbg);
-#endif
-#if VOXONE_DISPLAY_COMPILES_SMALL_OLED
-  if (smallOledActive()) {
-    _plheader = new TextWidget(oled128x32Active() ? stations128x32::header
-                                                  : stations128x64::header,
-                               24, WHITE, BLACK);
-    _plcounter = new TextWidget(oled128x32Active() ? stations128x32::counter
-                                                   : stations128x64::counter,
-                                16, WHITE, BLACK);
-    _plplaying = new TextWidget(oled128x32Active() ? stations128x32::playing
-                                                   : stations128x64::playing,
-                                8, WHITE, BLACK);
-    _plheader->setText("WEB - STACJE");
-  } else
-#endif
-#if VOXONE_DISPLAY_PROFILE == VOXONE_DISPLAY_PROFILE_ST7789_284X76
-  {
-  _plheader = new TextWidget(playlistHeaderConf, 30, config.theme.meta, config.theme.metabg);
-  _plcounter = new TextWidget(playlistCounterConf, 16, config.theme.meta, config.theme.background);
-  _plplaying = new TextWidget(playlistPlayingConf, 8, config.theme.meta, config.theme.background);
-  _plheader->setText("WEB - STACJE");
-  }
-#elif VOXONE_DISPLAY_PROFILE == VOXONE_DISPLAY_PROFILE_ST7796_480X320
-  {
-  _plheader = new TextWidget(st7796PlaylistHeaderConf, 30, config.theme.meta, config.theme.metabg);
-  _plcounter = new TextWidget(st7796PlaylistCounterConf, 16, config.theme.meta, config.theme.background);
-  _plplaying = new TextWidget(st7796PlaylistPlayingConf, 8, config.theme.meta, config.theme.background);
-  _plheader->setText("WEB - STACJE");
-  }
-#else
-  {
-  _plwidget->init(_plcurrent);
-    _plcurrent->moveTo({TFT_FRAMEWDT, (uint16_t)(_plwidget->currentTop()), (int16_t)playlistConf.width});
-  }
-#endif
+  _stationCarousel->init(activeCarouselLayout(), activeCarouselTheme());
   #ifndef HIDE_TITLE2
 #if VOXONE_DISPLAY_COMPILES_SMALL_OLED
     if (smallOledActive() && !oled128x32Active())
@@ -1802,12 +1552,6 @@ void Display::_buildPager(){
   }
 #endif
   _playerScrollBind();
-#if VOXONE_DISPLAY_PROFILE == VOXONE_DISPLAY_PROFILE_ST7789_284X76
-    _plbackground = new FillWidget(playlBGConf, config.theme.metabg);
-#else
-    if (!smallOledActive())
-      _plbackground = new FillWidget(playlBGConf, config.theme.plcurrentfill);
-#endif
     if (!smallOledActive()) {
       #if DSP_INVERT_TITLE || defined(DSP_OLED)
         _metabackground = new FillWidget(metaBGConf, config.theme.metafill);
@@ -1967,35 +1711,7 @@ void Display::_buildPager(){
 #endif
   if (smallOledActive())
     pages[PG_DIALOG]->addPage(_footer);
-#if VOXONE_DISPLAY_COMPILES_SMALL_OLED
-  if (smallOledActive()) {
-    pages[PG_PLAYLIST]->addWidget(_plheader);
-    pages[PG_PLAYLIST]->addWidget(_plcurrent);
-    pages[PG_PLAYLIST]->addWidget(_plplaying);
-    pages[PG_PLAYLIST]->addWidget(_plcounter);
-  } else
-#endif
-#if VOXONE_DISPLAY_PROFILE == VOXONE_DISPLAY_PROFILE_ST7789_284X76 || VOXONE_DISPLAY_PROFILE == VOXONE_DISPLAY_PROFILE_ST7796_480X320
-  {
-#if VOXONE_DISPLAY_PROFILE == VOXONE_DISPLAY_PROFILE_ST7789_284X76
-  if(_plbackground) pages[PG_PLAYLIST]->addWidget(_plbackground);
-#endif
-  pages[PG_PLAYLIST]->addWidget(_plheader);
-  pages[PG_PLAYLIST]->addWidget(_plcurrent);
-  pages[PG_PLAYLIST]->addWidget(_plcounter);
-  pages[PG_PLAYLIST]->addWidget(_plplaying);
-  }
-#else
-  {
-  if(_plbackground) {
-    pages[PG_PLAYLIST]->addWidget( _plbackground);
-    _plbackground->setHeight(_plwidget->itemHeight());
-    _plbackground->moveTo({0,(uint16_t)(_plwidget->currentTop()-playlistConf.widget.textsize*2), (int16_t)playlBGConf.width});
-  }
-  pages[PG_PLAYLIST]->addWidget(_plcurrent);
-  pages[PG_PLAYLIST]->addWidget(_plwidget);
-  }
-#endif
+  pages[PG_PLAYLIST]->addWidget(_stationCarousel);
   #if VOXONE_DISPLAY_PROFILE == VOXONE_DISPLAY_PROFILE_ST7796_480X320
   if (!smallOledActive()) {
     _btTransportPage = new Page();
@@ -2704,7 +2420,6 @@ void Display::_renderMode(displayMode_e newmode) {
   if (newmode == NUMBERS) _showDialog("");
   if (newmode == STATIONS) {
     _pager->setPage( pages[PG_PLAYLIST]);
-    _plcurrent->setText("");
     _drawPlaylist();
   }
   if (newmode == MENU && _menuPage) {
@@ -2791,7 +2506,9 @@ void Display::render_yamaha_tft(bool bootHandoff) {
                      static_cast<uint16_t>(height)});
     dsp.setTextSize(size);
     dsp.setCursor(left, top);
-    dsp.print(utf8Rus(text && text[0] ? text : "-"));
+    char encoded[160];
+    utf8Rus(encoded, sizeof(encoded), text && text[0] ? text : "-");
+    dsp.print(encoded);
     dsp.clearClipping();
   };
 
@@ -2807,7 +2524,9 @@ void Display::render_yamaha_tft(bool bootHandoff) {
         voxone::utf8::count(playback) * CHARWIDTH * 3);
     dsp.setClipping({120, 0, 240, kTopBarBottom});
     dsp.setCursor((kWidth - playbackWidth) / 2, 16);
-    dsp.print(utf8Rus(playback));
+    char encodedPlayback[32];
+    utf8Rus(encodedPlayback, sizeof(encodedPlayback), playback);
+    dsp.print(encodedPlayback);
     dsp.clearClipping();
 
     const uint8_t signal = boundedSignalLevel(view.wifiLevel);
@@ -2867,29 +2586,14 @@ void Display::_drawPlaylist() {
   const uint16_t total = config.playlistLength();
   const StationSelectionView view = stationSelectionView(
       total, uiState.selectedStation(), config.lastStation(), player.isRunning());
-  if(view.empty()) {
-#if VOXONE_DISPLAY_PROFILE == VOXONE_DISPLAY_PROFILE_ST7789_284X76 || VOXONE_DISPLAY_PROFILE == VOXONE_DISPLAY_PROFILE_ST7796_480X320 || VOXONE_DISPLAY_PROFILE_IS_SMALL_OLED
-    _plcurrent->setText("BRAK STACJI");
-    _plcounter->setText("0/0");
-    _plplaying->setText("");
-#else
-    _plwidget->drawPlaylist(view.selected);
-#endif
-  } else {
-#if VOXONE_DISPLAY_PROFILE_IS_SMALL_OLED
-    _plcurrent->setText(config.stationByNum(view.selected));
-#elif VOXONE_DISPLAY_PROFILE == VOXONE_DISPLAY_PROFILE_ST7789_284X76 || VOXONE_DISPLAY_PROFILE == VOXONE_DISPLAY_PROFILE_ST7796_480X320
-    _plcurrent->setText(config.stationByNum(view.selected));
-#else
-    _plwidget->drawPlaylist(view.selected);
-#endif
-#if VOXONE_DISPLAY_PROFILE == VOXONE_DISPLAY_PROFILE_ST7789_284X76 || VOXONE_DISPLAY_PROFILE == VOXONE_DISPLAY_PROFILE_ST7796_480X320 || VOXONE_DISPLAY_PROFILE_IS_SMALL_OLED
-    char counter[16];
-    snprintf(counter, sizeof(counter), "%u/%u", view.selected, view.total);
-    _plcounter->setText(counter);
-    _plplaying->setText(view.selectedIsPlaying() ? "GRA" : "");
-#endif
-  }
+  if (!_stationCarousel) return;
+  _stationCarousel->setTheme(activeCarouselTheme());
+  const UnifiedCarouselModel carousel{
+      "WEB - STACJE",
+      view.empty() ? "" : config.stationByNum(view.selected),
+      "Brak elementów", view.selected, view.total,
+      view.selectedIsPlaying(), false};
+  _stationCarousel->setModel(carousel);
 }
 
 void Display::_drawNextStationNum(uint16_t num) {
@@ -3195,9 +2899,7 @@ void Display::loop() {
         case NEWSTATION:
           if (systemUpdateAudioBlocked()) break;
           if (!yamahaTft) _station();
-#if VOXONE_DISPLAY_PROFILE == VOXONE_DISPLAY_PROFILE_ST7789_284X76 || VOXONE_DISPLAY_PROFILE == VOXONE_DISPLAY_PROFILE_ST7796_480X320 || VOXONE_DISPLAY_PROFILE_IS_SMALL_OLED
-          if(_renderedMode==STATIONS && _plplaying) _plplaying->setText(player.isRunning() && uiState.selectedStation() == config.lastStation() ? "GRA" : "");
-#endif
+          if(_renderedMode==STATIONS) _drawPlaylist();
           break;
         case NEXTSTATION:
           if (!yamahaTft) _drawNextStationNum(request.payload);
@@ -3284,9 +2986,7 @@ void Display::loop() {
             if (!smallOledActive()) _updatePlaybackStatus();
           }
 #endif
-#if VOXONE_DISPLAY_PROFILE == VOXONE_DISPLAY_PROFILE_ST7789_284X76 || VOXONE_DISPLAY_PROFILE == VOXONE_DISPLAY_PROFILE_ST7796_480X320 || VOXONE_DISPLAY_PROFILE_IS_SMALL_OLED
-          if(_renderedMode==STATIONS && _plplaying) _plplaying->setText(uiState.selectedStation() == config.lastStation() ? "GRA" : "");
-#endif
+          if(_renderedMode==STATIONS) _drawPlaylist();
           break;
         case PSTOP:
           if (!yamahaTft) _layoutChange(activeSourceVuVisible());
@@ -3299,9 +2999,7 @@ void Display::loop() {
             if (!smallOledActive()) _updatePlaybackStatus();
           }
 #endif
-#if VOXONE_DISPLAY_PROFILE == VOXONE_DISPLAY_PROFILE_ST7789_284X76 || VOXONE_DISPLAY_PROFILE == VOXONE_DISPLAY_PROFILE_ST7796_480X320 || VOXONE_DISPLAY_PROFILE_IS_SMALL_OLED
-          if(_renderedMode==STATIONS && _plplaying) _plplaying->setText("");
-#endif
+          if(_renderedMode==STATIONS) _drawPlaylist();
           break;
         case DSP_START: _start();  break;
         case NEWIP: {

@@ -58,8 +58,10 @@ struct DlnaMenuPage {
   uint8_t count = 0;
 };
 
-DlnaMenuPage dlnaPages[2];
+constexpr uint8_t kDlnaMenuPageCount = 3;
+DlnaMenuPage dlnaPages[kDlnaMenuPageCount];
 std::atomic<uint8_t> activeDlnaPage{0};
+std::atomic<uint8_t> dlnaPageReaders[kDlnaMenuPageCount];
 std::atomic<uint8_t> availableSourceMask{kCoreSourceMask};
 std::atomic<SourceId> activeMenuSource{SourceId::Web};
 
@@ -290,6 +292,7 @@ MenuId UiMenu::menuId() const {
 }
 
 uint8_t UiMenu::itemCount() const {
+  if (menuId() == MenuId::DLNA) return snapshot().dynamicCount;
   return ui_menu::itemCount(menuId());
 }
 
@@ -298,27 +301,34 @@ uint8_t UiMenu::selectedIndex() const {
 }
 
 const char* UiMenu::selectedLabel() const {
+  if (menuId() == MenuId::DLNA) {
+    const MenuSnapshot view = snapshot();
+    snprintf(selectedDlnaLabel_, sizeof(selectedDlnaLabel_), "%s",
+             itemLabel(view, view.selectedIndex));
+    return selectedDlnaLabel_;
+  }
   return itemLabel(menuId(), selectedIndex());
 }
 
 bool UiMenu::selectedHasSubmenu() const {
+  if (menuId() == MenuId::DLNA) {
+    const MenuSnapshot view = snapshot();
+    return itemHasSubmenu(view, view.selectedIndex);
+  }
   return itemHasSubmenu(menuId(), selectedIndex());
 }
 
 bool UiMenu::selectedDlnaFolder() const {
   if (menuId() != MenuId::DLNA) return false;
-  const DlnaMenuPage& page =
-      dlnaPages[activeDlnaPage.load(std::memory_order_acquire)];
-  const uint8_t selected = selectedIndex();
-  return selected < page.count && page.entries[selected].folder;
+  const MenuSnapshot view = snapshot();
+  return itemHasSubmenu(view, view.selectedIndex);
 }
 
 bool UiMenu::selectedDlnaPlayable() const {
   if (menuId() != MenuId::DLNA) return false;
-  const DlnaMenuPage& page =
-      dlnaPages[activeDlnaPage.load(std::memory_order_acquire)];
-  const uint8_t selected = selectedIndex();
-  return selected < page.count && page.entries[selected].playable;
+  const MenuSnapshot view = snapshot();
+  return view.selectedIndex < view.dynamicCount &&
+         view.dynamicItems[view.selectedIndex].playable;
 }
 
 SourceId UiMenu::selectedSource() const {
@@ -418,9 +428,21 @@ void UiMenu::setDlnaStatus(const char* label) {
 
 void UiMenu::setDlnaItems(const DlnaMenuEntry* entries, uint8_t count) {
   const uint8_t current = activeDlnaPage.load(std::memory_order_acquire);
-  const uint8_t next = current ^ 1U;
+  uint8_t next = current;
+  for (uint8_t offset = 1; offset < kDlnaMenuPageCount; ++offset) {
+    const uint8_t candidate =
+        static_cast<uint8_t>((current + offset) % kDlnaMenuPageCount);
+    if (dlnaPageReaders[candidate].load(std::memory_order_acquire) == 0) {
+      next = candidate;
+      break;
+    }
+  }
+  // One display task pins at most one retired page while copying it. With
+  // three banks a writable page is therefore always available; refusing an
+  // update is safer than mutating a page still visible to a reader.
+  if (next == current) return;
   DlnaMenuPage& page = dlnaPages[next];
-  page = DlnaMenuPage{};
+  page.count = 0;
   if (count > kMaxDlnaMenuItems) count = kMaxDlnaMenuItems;
   if (entries && count) {
     for (uint8_t index = 0; index < count; ++index)
@@ -441,7 +463,24 @@ MenuSnapshot UiMenu::snapshot() const {
     result.menuId = menuId_.load(std::memory_order_acquire);
     result.level = menuLevel(result.menuId);
     result.selectedIndex = selectedIndex_.load(std::memory_order_acquire);
-    result.dynamicBank = activeDlnaPage.load(std::memory_order_acquire);
+    if (result.menuId == MenuId::DLNA) {
+      uint8_t bank = 0;
+      do {
+        bank = activeDlnaPage.load(std::memory_order_acquire);
+        dlnaPageReaders[bank].fetch_add(1, std::memory_order_acq_rel);
+        if (bank == activeDlnaPage.load(std::memory_order_acquire)) break;
+        dlnaPageReaders[bank].fetch_sub(1, std::memory_order_release);
+      } while (true);
+      result.dynamicBank = bank;
+      const DlnaMenuPage& page = dlnaPages[bank];
+      result.dynamicCount = page.count;
+      for (uint8_t index = 0; index < page.count; ++index)
+        result.dynamicItems[index] = page.entries[index];
+      dlnaPageReaders[bank].fetch_sub(1, std::memory_order_release);
+    } else {
+      result.dynamicBank = activeDlnaPage.load(std::memory_order_acquire);
+      result.dynamicCount = 0;
+    }
     result.sourceMask =
         availableSourceMask.load(std::memory_order_acquire);
     result.activeSource = activeMenuSource.load(std::memory_order_acquire);
@@ -508,11 +547,11 @@ MenuAction UiMenu::handle(MenuCommand command, int8_t steps) {
       return MenuAction::SELECTED;
     }
     if (current == MenuId::DLNA) {
-      const DlnaMenuPage& page =
-          dlnaPages[activeDlnaPage.load(std::memory_order_acquire)];
-      const uint8_t selected = selectedIndex();
-      if (selected >= page.count ||
-          (!page.entries[selected].folder && !page.entries[selected].playable))
+      const MenuSnapshot view = snapshot();
+      const uint8_t selected = view.selectedIndex;
+      if (selected >= view.dynamicCount ||
+          (!view.dynamicItems[selected].folder &&
+           !view.dynamicItems[selected].playable))
         return MenuAction::NONE;
       state_.store(MenuState::OPEN, std::memory_order_release);
       return MenuAction::SELECTED;
@@ -645,25 +684,6 @@ MenuAction UiMenu::handle(MenuCommand command, int8_t steps) {
 
 void UiMenu::markChanged() {
   revision_.fetch_add(1, std::memory_order_release);
-}
-
-uint8_t dlnaItemCount(uint8_t bank) {
-  return dlnaPages[bank & 1U].count;
-}
-
-const char* dlnaItemLabel(uint8_t bank, uint8_t index) {
-  const DlnaMenuPage& page = dlnaPages[bank & 1U];
-  return index < page.count ? page.entries[index].label : "";
-}
-
-bool dlnaItemFolder(uint8_t bank, uint8_t index) {
-  const DlnaMenuPage& page = dlnaPages[bank & 1U];
-  return index < page.count && page.entries[index].folder;
-}
-
-bool dlnaItemPlaying(uint8_t bank, uint8_t index) {
-  const DlnaMenuPage& page = dlnaPages[bank & 1U];
-  return index < page.count && page.entries[index].playing;
 }
 
 uint8_t sourceItemCount(uint8_t mask) {

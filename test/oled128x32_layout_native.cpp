@@ -397,8 +397,8 @@ int main() {
   assert(compactVolume.find("_showDialog(\"\")") != std::string::npos);
   assert(compactVolume.find("_nums->setText(level)") != std::string::npos);
 
-  assert(display.find("_plheader->setText(\"WEB - STACJE\")") !=
+  assert(display.find("\"WEB - STACJE\"") !=
          std::string::npos);
-  assert(display.find("pages[PG_PLAYLIST]->addWidget(_plheader)") !=
+  assert(display.find("pages[PG_PLAYLIST]->addWidget(_stationCarousel)") !=
          std::string::npos);
 }

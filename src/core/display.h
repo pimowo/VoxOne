@@ -117,7 +117,7 @@ extern bool getDisplaySourceView(DisplaySourceView& view) __attribute__((weak));
 
 #ifndef DUMMYDISPLAY
 class ScrollWidget;
-class PlayListWidget;
+class UnifiedCarouselWidget;
 class BitrateWidget;
 class FillWidget;
 class SliderWidget;
@@ -176,11 +176,10 @@ class Display {
   private:
     ScrollWidget *_meta = nullptr;
     ScrollWidget *_title1 = nullptr;
-    ScrollWidget *_plcurrent = nullptr;
     ScrollWidget *_title2 = nullptr;
-    PlayListWidget *_plwidget = nullptr;
+    UnifiedCarouselWidget *_stationCarousel = nullptr;
     BitrateWidget *_fullbitrate = nullptr;
-    FillWidget *_metabackground = nullptr, *_plbackground = nullptr;
+    FillWidget *_metabackground = nullptr;
     SliderWidget *_volbar = nullptr;
     Pager *_pager = nullptr;
     Page *_footer = nullptr;
@@ -217,10 +216,6 @@ class Display {
     TextWidget *_oled128x64UpdateTarget = nullptr, *_oled128x64UpdatePercent = nullptr;
     TextWidget *_oled128x64UpdateActivity = nullptr;
     Oled128x64UpdateProgressWidget *_oled128x64UpdateBar = nullptr;
-#endif
-#if VOXONE_DISPLAY_PROFILE == VOXONE_DISPLAY_PROFILE_ST7789_284X76 || VOXONE_DISPLAY_COMPILES_ST7796 || VOXONE_DISPLAY_COMPILES_SMALL_OLED
-    TextWidget *_plheader = nullptr, *_plcounter = nullptr;
-    TextWidget *_plplaying = nullptr;
 #endif
 #if VOXONE_DISPLAY_PROFILE == VOXONE_DISPLAY_PROFILE_ST7789_284X76
     ScrollWidget *_st7789Station = nullptr;

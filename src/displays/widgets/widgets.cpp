@@ -66,7 +66,7 @@ void TextWidget::init(WidgetConfig wconf, uint16_t buffsize, uint16_t fgcolor, u
 
 void TextWidget::setText(const char* txt) {
   if (!available() || !_text || !_oldtext || _buffsize == 0) return;
-  strlcpy(_text, utf8Rus(txt), _buffsize);
+  utf8Rus(_text, _buffsize, txt);
   _textwidth = strlen(_text) * _charWidth;
   if (strcmp(_oldtext, _text) == 0) return;
   if (_active) dsp.fillRect(_oldleft == 0 ? _realLeft() : min(_oldleft, _realLeft()),  _config.top, max(_oldtextwidth, _textwidth), _textheight, _bgcolor);
@@ -198,7 +198,8 @@ bool ScrollWidget::_frameBufferReady() const {
 
 void ScrollWidget::setText(const char* txt) {
   if (!available()) return;
-  const char* encoded = utf8Rus(txt ? txt : "");
+  char encoded[BUFLEN];
+  utf8Rus(encoded, sizeof(encoded), txt);
   int16_t assignedOffset = _x;
   const bool changed = scrollTextAssign(
       _text, _buffsize, encoded, assignedOffset,
@@ -936,10 +937,12 @@ void ClockWidget::_printClock(bool force){
         gfx.setTextSize(_superfont);
         gfx.setCursor(_linesleft+_space+1, _top()-CHARHEIGHT * _superfont);
         gfx.setTextColor(config.theme.dow, config.theme.background);
-        gfx.print(utf8Rus(LANG::dow[network.timeinfo.tm_wday]));
+        char dow[BUFLEN];
+        utf8Rus(dow, sizeof(dow), LANG::dow[network.timeinfo.tm_wday]);
+        gfx.print(dow);
         sprintf(_tmp, "%2d %s %d", network.timeinfo.tm_mday,LANG::mnths[network.timeinfo.tm_mon], network.timeinfo.tm_year+1900);
         #ifndef HIDE_DATE
-        strlcpy(_datebuf, utf8Rus(_tmp), sizeof(_datebuf));
+        utf8Rus(_datebuf, sizeof(_datebuf), _tmp);
         uint16_t _datewidth = strlen(_datebuf) * CHARWIDTH*_dateheight;
         gfx.setTextSize(_dateheight);
         #if DSP_MODEL==DSP_GC9A01A
@@ -1143,83 +1146,6 @@ void BitrateWidget::_draw(){
 }
 void BitrateWidget::_clear() {
   dsp.fillRect(_config.left, _config.top, _frameWidth, _dimension, _bgcolor);
-}
-
-
-/**************************
-      PLAYLIST WIDGET
- **************************/
-void PlayListWidget::init(ScrollWidget* current){
-  Widget::init({0, 0, 0, WA_LEFT}, 0, 0);
-  _current = current;
-  _plItemHeight = playlistConf.widget.textsize*(CHARHEIGHT-1)+playlistConf.widget.textsize*4;
-  _plTtemsCount = round((float)dsp.height()/_plItemHeight);
-  if(_plTtemsCount%2==0) _plTtemsCount++;
-  _plCurrentPos = _plTtemsCount/2;
-  _plYStart = (dsp.height() / 2 - _plItemHeight / 2) - _plItemHeight * (_plTtemsCount - 1) / 2 + playlistConf.widget.textsize*2;
-}
-
-uint8_t PlayListWidget::_fillPlMenu(int from, uint8_t count) {
-  int     ls      = from;
-  uint8_t c       = 0;
-  bool    finded  = false;
-  if (config.playlistLength() == 0) {
-    return 0;
-  }
-  File playlist = SPIFFS.open(PLAYLIST_PATH, "r");
-  File index = SPIFFS.open(INDEX_PATH, "r");
-  while (true) {
-    if (ls < 1) {
-      ls++;
-      _printPLitem(c, "");
-      c++;
-      continue;
-    }
-    if (!finded) {
-      index.seek((ls - 1) * 4, SeekSet);
-      uint32_t pos;
-      index.readBytes((char *) &pos, 4);
-      finded = true;
-      index.close();
-      playlist.seek(pos, SeekSet);
-    }
-    bool pla = true;
-    while (pla) {
-      pla = playlist.available();
-      String stationLine = playlist.readStringUntil('\n');
-      const int firstTab = stationLine.indexOf('\t');
-      const int secondTab = firstTab < 0 ? -1 : stationLine.indexOf('\t', firstTab + 1);
-      String stationName = firstTab >= 0 && secondTab > firstTab
-                               ? stationLine.substring(firstTab + 1, secondTab)
-                               : String();
-      if(config.runtimeSnapshot().numPlaylist && stationName.length()>0) stationName = String(from+c)+" "+stationName;
-      _printPLitem(c, stationName.c_str());
-      c++;
-      if (c >= count) break;
-    }
-    break;
-  }
-  playlist.close();
-  return c;
-}
-void PlayListWidget::drawPlaylist(uint16_t currentItem) {
-  uint8_t lastPos = _fillPlMenu(currentItem - _plCurrentPos, _plTtemsCount);
-  if(lastPos<_plTtemsCount){
-    dsp.fillRect(0, lastPos*_plItemHeight+_plYStart, dsp.width(), dsp.height()/2, config.theme.background);
-  }
-}
-
-void PlayListWidget::_printPLitem(uint8_t pos, const char* item){
-  dsp.setTextSize(playlistConf.widget.textsize);
-  if (pos == _plCurrentPos) {
-    _current->setText(item);
-  } else {
-    uint8_t plColor = (abs(pos - _plCurrentPos)-1)>4?4:abs(pos - _plCurrentPos)-1;
-    dsp.setTextColor(config.theme.playlist[plColor], config.theme.background);
-    dsp.setCursor(TFT_FRAMEWDT, _plYStart + pos * _plItemHeight);
-    dsp.fillRect(0, _plYStart + pos * _plItemHeight - 1, dsp.width(), _plItemHeight - 2, config.theme.background);
-    dsp.print(utf8Rus(item));
-  }
 }
 
 

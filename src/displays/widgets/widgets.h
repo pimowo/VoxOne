@@ -296,22 +296,5 @@ class BitrateWidget: public Widget {
     void _charSize(uint8_t textsize, uint8_t& width, uint16_t& height);
 };
 
-class PlayListWidget: public Widget {
-  public:
-    using Widget::init;
-    void init(ScrollWidget* current);
-    void drawPlaylist(uint16_t currentItem);
-    inline uint16_t itemHeight(){ return _plItemHeight; }
-    inline uint16_t currentTop(){ return _plYStart+_plCurrentPos*_plItemHeight; }
-  private:
-    ScrollWidget* _current;
-    uint16_t _plItemHeight, _plTtemsCount, _plCurrentPos;
-    int _plYStart;
-    uint8_t _fillPlMenu(int from, uint8_t count);
-    void _printPLitem(uint8_t pos, const char* item);
-    
-};
-
-
 #endif
 #endif

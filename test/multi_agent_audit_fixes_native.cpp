@@ -47,7 +47,10 @@ int main() {
   assert(display.find("!_pager->removePage(_boot)) delete _boot") !=
          std::string::npos);
   assert(display.find("_pager->addOwnedPage(_boot)") != std::string::npos);
-  assert(display.find("void drawEmpty(") != std::string::npos);
+  const std::string carousel =
+      readFile("src/core/unified_carousel_renderer.cpp");
+  assert(carousel.find("model.total ? model.item : model.emptyText") !=
+         std::string::npos);
   assert(display.find("Brak elementów") != std::string::npos);
 
   const std::string mainSource = readFile("src/main.cpp");
