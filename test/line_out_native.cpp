@@ -27,8 +27,12 @@ int main() {
   runtime.lineOutEnabled = true;
   runtime.lineOutVolume = 100;
   assert(voxone::line_out::effectiveRawVolume(runtime) ==
-         volumeUserToRaw(100, 80));
+         volumeUserToRaw(100));
   assert(voxone::line_out::effectiveUserVolume(runtime) == 100);
+  runtime.maximumVolume = 1;
+  runtime.lineOutVolume = 75;
+  assert(voxone::line_out::effectiveRawVolume(runtime) ==
+         volumeUserToRaw(75));
 
   const UiInputContext normal{PLAYER, true, true, false, false, false,
                               false, SourceId::Web, false, false};

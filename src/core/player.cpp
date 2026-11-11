@@ -573,7 +573,7 @@ void Player::_play(uint16_t stationId, bool sourceResume) {
   remoteStationName = false;
   
   if(!config.prepareForPlaying(stationId, sourceResume)) return;
-  _loadVol(config.runtimeSnapshot().volume);
+  _loadVol(voxone::line_out::effectiveRawVolume(config.runtimeSnapshot()));
   _temporary.allowRadioMetadata();
   
   bool isConnected = false;
@@ -786,6 +786,8 @@ void Player::stepVol(bool up) {
 }
 
 uint8_t Player::volToI2S(uint8_t volume) {
+  if (config.runtimeSnapshot().lineOutEnabled)
+    return volume > 254 ? 254 : volume;
   int vol = map(volume, 0, 254 - config.station.ovol * 3 , 0, 254);
   return volumeClampOutput(vol, config.runtimeSnapshot().maximumVolume);
 }
