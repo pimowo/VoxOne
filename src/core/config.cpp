@@ -267,6 +267,12 @@ void Config::init() {
   bootInfo(); // https://github.com/e2002/yoradio/pull/149
   const bool migratingVolume = loaded.migratingVolume;
   if (store.maximumVolume < 1 || store.maximumVolume > 100) store.maximumVolume = 100;
+  if (store.lineOutVolume > store.maximumVolume) {
+    store.lineOutVolume = store.maximumVolume;
+    voxone::line_out::encode(store.lineOutEnabled, store.lineOutVolume,
+                             store.reservedWeather,
+                             sizeof(store.reservedWeather));
+  }
   if (store.startupMode != STARTUP_LAST && store.startupMode != STARTUP_FIXED) store.startupMode = STARTUP_LAST;
   if (store.startupFixedVolume > 100) store.startupFixedVolume = 20;
   if (store.lastUserVolume > 100) store.lastUserVolume = volumeRawToUser(store.volume, store.maximumVolume);
@@ -664,6 +670,7 @@ bool Config::setLineOutVolume(uint8_t volume) {
   bool persisted = true;
   {
     WriteLock lock(_persistMutex);
+    if (volume > store.maximumVolume) return false;
     if (store.lineOutVolume == volume) return true;
     if (!voxone::line_out::encode(
             store.lineOutEnabled, volume, store.reservedWeather,
@@ -700,6 +707,7 @@ void Config::beginMenuTransaction() {
     settings.encoderUiReversed = store.encoderUiReversed;
     settings.lineOutEnabled = store.lineOutEnabled;
     settings.lineOutVolume = store.lineOutVolume;
+    settings.maximumVolume = store.maximumVolume;
     _menuPersistedSettings = settings;
     _menuDraftSettings = settings;
     _menuTransactionActive = true;
@@ -731,10 +739,11 @@ void Config::previewMenuSettings(
   if (settings.brightness > 100) settings.brightness = 100;
   if (!voxone::tft_theme::valid(static_cast<TftTheme>(settings.tftTheme)))
     settings.tftTheme = static_cast<uint8_t>(THEME_DEFAULT);
-  if (settings.lineOutVolume > 100) settings.lineOutVolume = 100;
   {
     WriteLock lock(_persistMutex);
     if (!_menuTransactionActive) return;
+    if (settings.lineOutVolume > store.maximumVolume)
+      settings.lineOutVolume = store.maximumVolume;
     _menuDraftSettings = settings;
     _publishRuntimeLocked();
   }
@@ -924,6 +933,13 @@ void Config::setMaximumVolume(uint8_t maximum) {
   const uint8_t oldRaw = player.pendingRawAtMax(oldMaximum);
   const uint8_t oldOutput = player.volToI2S(oldRaw);
   store.maximumVolume = maximum;
+  if (store.lineOutVolume > maximum) {
+    store.lineOutVolume = maximum;
+    voxone::line_out::encode(store.lineOutEnabled, store.lineOutVolume,
+                             store.reservedWeather,
+                             sizeof(store.reservedWeather));
+    _storage.markDirty();
+  }
   VolumeState adjusted = volumeStateAfterMaximum({oldRaw, oldUser}, oldMaximum, maximum);
   if (maximum > oldMaximum) {
     adjusted.raw = player.rawNotLouderThan(adjusted.raw, maximum, oldOutput);

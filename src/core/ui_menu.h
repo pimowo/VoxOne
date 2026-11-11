@@ -71,6 +71,7 @@ struct MenuSettings {
   bool encoderUiReversed = false;
   bool lineOutEnabled = false;
   uint8_t lineOutVolume = 100;
+  uint8_t maximumVolume = 100;
 };
 
 inline bool operator==(const MenuSettings& left, const MenuSettings& right) {

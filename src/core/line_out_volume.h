@@ -10,7 +10,7 @@ namespace line_out {
 inline uint8_t effectiveRawVolume(
     const config_runtime::Snapshot& runtime) {
   return runtime.lineOutEnabled
-             ? volumeUserToRaw(runtime.lineOutVolume)
+             ? volumeUserToRaw(runtime.lineOutVolume, runtime.maximumVolume)
              : runtime.volume;
 }
 

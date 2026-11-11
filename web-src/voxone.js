@@ -2149,10 +2149,14 @@ window.VoxOneRestartWaiter = Object.freeze({
     const lineOutEnabled = volumeSettingEditing.lineOutEnabled ?? state.lineOutEnabled;
     if (lineOutEnabled !== null) lineOutEnabledToggle.checked = lineOutEnabled;
     lineOutVolumeControl.hidden = lineOutEnabled !== true;
-    const lineOutShown = volumeSettingEditing.lineOutVolume ?? state.lineOutVolume;
+    const maxShown = volumeSettingEditing.maximumVolume ?? state.maximumVolume;
+    const lineOutMaximum = Number.isInteger(maxShown) ? maxShown : 100;
+    lineOutVolumeSlider.max = String(lineOutMaximum);
+    const configuredLineOut = volumeSettingEditing.lineOutVolume ?? state.lineOutVolume;
+    const lineOutShown = configuredLineOut === null ? null :
+      Math.min(configuredLineOut, lineOutMaximum);
     if (!volumeSettingDragging.lineOutVolume && lineOutShown !== null) lineOutVolumeSlider.value = String(lineOutShown);
     lineOutVolumeValue.textContent = lineOutShown === null ? "—" : String(lineOutShown) + "%";
-    const maxShown = volumeSettingEditing.maximumVolume ?? state.maximumVolume;
     if (!volumeSettingDragging.maximumVolume && maxShown !== null) maximumVolumeSlider.value = String(maxShown);
     maximumVolumeValue.textContent = maxShown === null ? "—" : String(maxShown);
     if (state.startupMode !== null && volumeSettingEditing.startupMode === null) {
@@ -3621,7 +3625,8 @@ window.VoxOneRestartWaiter = Object.freeze({
     if (lineOutVolumeSlider.disabled) return;
     const value = Number(lineOutVolumeSlider.value);
     volumeSettingDragging.lineOutVolume = false;
-    if (!Number.isInteger(value) || value < 0 || value > 100) {
+    const maximum = volumeSettingEditing.maximumVolume ?? state.maximumVolume ?? 100;
+    if (!Number.isInteger(value) || value < 0 || value > maximum) {
       renderVolumeSettings();
       return;
     }

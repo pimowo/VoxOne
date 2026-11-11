@@ -632,7 +632,11 @@ MenuAction UiMenu::handle(MenuCommand command, int8_t steps) {
         int16_t value = draftLineOutVolume_.load(std::memory_order_relaxed) +
                         direction * magnitude * 5;
         if (value < 0) value = 0;
-        if (value > 100) value = 100;
+        const uint8_t maximum = persistedSettings_.maximumVolume >= 1 &&
+                                        persistedSettings_.maximumVolume <= 100
+                                    ? persistedSettings_.maximumVolume
+                                    : 100;
+        if (value > maximum) value = maximum;
         draftLineOutVolume_.store(static_cast<uint8_t>(value),
                                   std::memory_order_release);
         break;

@@ -76,6 +76,7 @@ int main() {
   assert(menu.visible());
   assert(menu.selectedIndex() == 0);
   voxone::ui_menu::MenuSettings persisted{};
+  persisted.maximumVolume = 95;
   persisted.balance = -2;
   persisted.bass = 0;
   persisted.treble = 3;
@@ -138,6 +139,8 @@ int main() {
   assert(std::string(menu.selectedLabel()) == "Poziom LINE");
   assert(menu.handle(MenuCommand::SELECT) == MenuAction::EDITING_STARTED);
   assert(menu.handle(MenuCommand::PREVIOUS) == MenuAction::SETTING_CHANGED);
+  assert(menu.settings().lineOutVolume == 95);
+  assert(menu.handle(MenuCommand::NEXT) == MenuAction::SETTING_CHANGED);
   assert(menu.settings().lineOutVolume == 95);
   assert(menu.handle(MenuCommand::SELECT) == MenuAction::EDITING_FINISHED);
   assert(menu.handle(MenuCommand::NEXT) == MenuAction::NAVIGATED);

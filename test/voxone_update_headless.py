@@ -79,8 +79,9 @@ class MockWebSocket {
   receiveNetwork(info, haDiscoveryEnabled = true) {
     this.onmessage({data: JSON.stringify({networkInfo: info, haDiscoveryEnabled})});
   }
-  receiveVolume(volume, muted, lineOutEnabled = false, lineOutVolume = 100) { this.onmessage({data: JSON.stringify({payload:[
+  receiveVolume(volume, muted, lineOutEnabled = false, lineOutVolume = 100, maximumVolume = 100) { this.onmessage({data: JSON.stringify({payload:[
     {id:'volume100',value:volume},{id:'muted',value:muted ? 1 : 0},
+    {id:'maximumVolume',value:maximumVolume},
     {id:'lineOutEnabled',value:lineOutEnabled ? 1 : 0},
     {id:'lineOutVolume',value:lineOutVolume}
   ]})}); }
@@ -740,6 +741,9 @@ setTimeout(async () => {
     check(btTestSocket.sent.at(-1) === 'lineoutvolume=85', 'LINE OUT fixed level command');
     btTestSocket.receiveVolume(27, true, true, 85);
     check(get('line-out-volume-value').textContent === '85%', 'LINE OUT level ack');
+    btTestSocket.receiveVolume(27, true, true, 60, 60);
+    check(lineOutSlider.max === '60' && lineOutSlider.value === '60',
+      'LINE OUT fixed level is capped by global maximum');
     const activeSourceFor = {WEB:'radio', BT:'bt', HA:'ha', DLNA:'dlna', AUX:'aux'};
     const sourceSnapshot = (source, availableSources, online, fields = {}) => ({
       source, activeSource:activeSourceFor[source], availableSources,
