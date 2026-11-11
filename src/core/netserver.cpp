@@ -1220,9 +1220,7 @@ void NetServer::chunkedHtmlPage(const String& contentType, AsyncWebServerRequest
   memset(chunkedPathBuffer, 0, sizeof(chunkedPathBuffer));
   strlcpy(chunkedPathBuffer, path, sizeof(chunkedPathBuffer)-1);
   AsyncWebServerResponse *response;
-  #ifndef NETSERVER_LOOP1
   display.lock();
-  #endif
   response = request->beginChunkedResponse(contentType, chunkedHtmlPageCallback);
   response->addHeader("Cache-Control","max-age=31536000");
   request->send(response);
@@ -3663,7 +3661,8 @@ void NetServer::loop() {
     ESP.restart();
   }
   if (systemOperationState.blocksRequests() || updateNetworkQuiescing.load()) return;
-  // DspTask and the player task can both call loop(); only one may use wsBuf.
+  // Core 0 can enter through playback preparation as well as its regular
+  // service point; only one invocation may use wsBuf at a time.
   portENTER_CRITICAL(&netserverLoopMux);
   if (netserverLoopActive) {
     portEXIT_CRITICAL(&netserverLoopMux);

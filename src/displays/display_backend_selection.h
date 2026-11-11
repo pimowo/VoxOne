@@ -61,7 +61,7 @@ constexpr RendererKind rendererKind(const Selection& selection) {
 }
 
 constexpr ActivationPlan activationPlan(const Selection& selection) {
-  // DisplayTask also services timekeeper.loop0() and netserver.loop().
+  // DisplayTask also services timekeeper.loop0(); networking stays on loopTask.
   return selection.controller == display_profile::ControllerId::None
              ? ActivationPlan{false, false, false, true}
              : ActivationPlan{true, true, true, true};

@@ -5,6 +5,11 @@
 #include "widgets.h"
 #include "owned_pointer_list.h"
 
+Pager::~Pager() {
+  voxone::display::deleteOwnedPointers(_ownedPages);
+  _pages.clear();
+}
+
 void Pager::begin(){
 
 }
@@ -20,13 +25,21 @@ Page& Pager::addPage(Page* page, bool setNow){
   return *page;
 }
 
+Page& Pager::addOwnedPage(Page* page, bool setNow){
+  _ownedPages.push_back(page);
+  return addPage(page, setNow);
+}
+
 bool Pager::removePage(Page* page){
   page->setActive(false);
   dsp.clearDsp();
   auto i = std::find_if(_pages.begin(), _pages.end(), [&page](const Page* pn){ return page == pn; });
   if (i != _pages.end()){
-    delete (*i);
-    (*i) = nullptr;
+    auto owned = std::find(_ownedPages.begin(), _ownedPages.end(), page);
+    if (owned != _ownedPages.end()) {
+      delete *owned;
+      _ownedPages.erase(owned);
+    }
     _pages.erase(i);
     return true;
   }

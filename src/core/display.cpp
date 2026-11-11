@@ -50,10 +50,11 @@ static TaskHandle_t displayTaskHandle = nullptr;
 
 #ifndef CORE_STACK_SIZE
   // ESP-IDF expresses task stack sizes and high-water marks in bytes.
-  // Rendering and NetServer::loop() share this task and exceed 4 KiB under
-  // combined OLED/metadata/volume/station activity.
-  #define CORE_STACK_SIZE  1024*6
+  // Keep enough headroom for combined OLED/metadata/volume/station rendering.
+  #define CORE_STACK_SIZE  (12 * 1024)
 #endif
+static_assert(CORE_STACK_SIZE >= 12 * 1024,
+              "DspTask stack must be at least 12 KiB");
 #ifndef DSP_TASK_PRIORITY
   #define DSP_TASK_PRIORITY  2
 #endif
@@ -85,21 +86,12 @@ static void loopDspTask(void * pvParameters){
       if(displayQueue==NULL) break;
       if(timekeeper.loop0()){
         display.loop();
-      #ifndef NETSERVER_LOOP1
-        netserver.loop();
-      #endif
       }
     } else {
       timekeeper.loop0();
-    #ifndef NETSERVER_LOOP1
-      netserver.loop();
-    #endif
     }
   #else
     timekeeper.loop0();
-    #ifndef NETSERVER_LOOP1
-      netserver.loop();
-    #endif
   #endif
     vTaskDelay(DSP_TASK_DELAY);
   }
@@ -1416,7 +1408,10 @@ void returnPlayer(){
 }
 
 Display::~Display() {
+  // Pager owns every dynamically allocated top-level page. Static player,
+  // dialog, playlist and screensaver pages are registered as non-owning.
   delete _pager;
+  _pager = nullptr;
   delete _footer;
   delete _plwidget;
   delete _nums;
@@ -1594,7 +1589,7 @@ void Display::_bootScreen(){
   _boot->addWidget(new ProgressWidget(bootWdtConf, bootPrgConf, config.theme.title2, config.theme.background));
   _bootstring = (TextWidget*) &_boot->addWidget(new TextWidget(bootstrConf, 50, config.theme.meta, config.theme.background));
   }
-  _pager->addPage(_boot);
+  _pager->addOwnedPage(_boot);
   _pager->setPage(_boot, true);
 #if VOXONE_DISPLAY_COMPILES_SMALL_OLED
   if (!smallOledActive()) dsp.drawLogo(bootLogoTop);
@@ -1674,7 +1669,7 @@ void Display::_startShutdownSequence(uint32_t nowMs) {
     goodbye->setText("Do widzenia!");
   }
 
-  _pager->addPage(_shutdownPage);
+  _pager->addOwnedPage(_shutdownPage);
   _pager->setPage(_shutdownPage, true);
 #if VOXONE_DISPLAY_COMPILES_SMALL_OLED
   if (!smallOledActive()) dsp.drawLogo(bootLogoTop);
@@ -2069,10 +2064,10 @@ void Display::_buildPager(){
   _menuPage = new Page();
   _menuWidget = new UiMenuWidget();
   _menuPage->addWidget(_menuWidget);
-  _pager->addPage(_menuPage);
+  _pager->addOwnedPage(_menuPage);
   #if VOXONE_DISPLAY_PROFILE == VOXONE_DISPLAY_PROFILE_ST7796_480X320
   if (!smallOledActive()) {
-    _pager->addPage(_btTransportPage);
+    _pager->addOwnedPage(_btTransportPage);
     _st7796UpdatePage = new Page();
     TextWidget* updateTitle = new TextWidget({0, 48, 3, WA_CENTER}, 32, 0xFFFF, 0x0000);
     updateTitle->setText("AKTUALIZACJA");
@@ -2085,11 +2080,11 @@ void Display::_buildPager(){
     _st7796UpdatePage->addWidget(_st7796UpdatePercent);
     _st7796UpdateActivity = new TextWidget({0, 302, 1, WA_CENTER}, 80, 0xFFFF, 0x0000);
     _st7796UpdatePage->addWidget(_st7796UpdateActivity);
-    _pager->addPage(_st7796UpdatePage);
+    _pager->addOwnedPage(_st7796UpdatePage);
   }
   #endif
 #if VOXONE_DISPLAY_COMPILES_SMALL_OLED
-  if (_oledBtTransportPage) _pager->addPage(_oledBtTransportPage);
+  if (_oledBtTransportPage) _pager->addOwnedPage(_oledBtTransportPage);
 #endif
 #if VOXONE_DISPLAY_COMPILES_SMALL_OLED
   if (smallOledActive()) {
@@ -2115,7 +2110,7 @@ void Display::_buildPager(){
         oled128x32Active() ? update128x32::activity : update128x64::activity,
         24, WHITE, BLACK);
     _oled128x64UpdatePage->addWidget(_oled128x64UpdateActivity);
-    _pager->addPage(_oled128x64UpdatePage);
+    _pager->addOwnedPage(_oled128x64UpdatePage);
   }
 #endif
 #if VOXONE_DISPLAY_PROFILE == VOXONE_DISPLAY_PROFILE_ST7789_284X76
@@ -2139,7 +2134,7 @@ void Display::_buildPager(){
       {0, st7789_284x76::updateActivityTop, 1, WA_CENTER}, 24,
       config.theme.title2, config.theme.background);
   _st7789UpdatePage->addWidget(_st7789UpdateActivity);
-  _pager->addPage(_st7789UpdatePage);
+  _pager->addOwnedPage(_st7789UpdatePage);
 #endif
 #if VOXONE_DISPLAY_PROFILE == VOXONE_DISPLAY_PROFILE_ST7796_480X320
   _st7796PlayerReady = !smallOledActive();
@@ -2186,7 +2181,7 @@ void Display::_apScreen() {
       ScrollWidget* footer = (ScrollWidget*) &_boot->addWidget(
           new ScrollWidget("*", setup128x32::footer, WHITE, BLACK));
       footer->setText(presentationReady ? presentation.statusText : "");
-      _pager->addPage(_boot);
+      _pager->addOwnedPage(_boot);
       _pager->setPage(_boot);
       return;
     }
@@ -2201,7 +2196,7 @@ void Display::_apScreen() {
         ScrollWidget* status = (ScrollWidget*) &_boot->addWidget(
             new ScrollWidget("*", setup128x64::footer, WHITE, BLACK));
         status->setText(presentationReady ? presentation.statusText : "");
-        _pager->addPage(_boot);
+        _pager->addOwnedPage(_boot);
         _pager->setPage(_boot);
         return;
       }
@@ -2229,7 +2224,7 @@ void Display::_apScreen() {
           new ScrollWidget("*", setup128x64::footer, WHITE, BLACK));
       if (firstBootSetup) footer->setText(presentation.statusText);
       else footer->setText(presentation.apAddress, "IP %s");
-      _pager->addPage(_boot);
+      _pager->addOwnedPage(_boot);
       _pager->setPage(_boot);
       return;
     }
@@ -2264,7 +2259,7 @@ void Display::_apScreen() {
           new ScrollWidget("*", apSettConf, config.theme.title2,
                            config.theme.background));
       bootStatus->setText(presentationReady ? presentation.statusText : "");
-      _pager->addPage(_boot);
+      _pager->addOwnedPage(_boot);
       _pager->setPage(_boot);
       return;
     }
@@ -2301,7 +2296,7 @@ void Display::_apScreen() {
 #endif
                          config.theme.background));
       recoveryAddress->setText(presentation.apAddress);
-      _pager->addPage(_boot);
+      _pager->addOwnedPage(_boot);
       _pager->setPage(_boot);
       return;
     }
@@ -2322,7 +2317,7 @@ void Display::_apScreen() {
                          config.theme.background));
       firstBootIp->setText(presentation.apAddress, "IP %s");
 
-      _pager->addPage(_boot);
+      _pager->addOwnedPage(_boot);
       _pager->setPage(_boot);
       dsp.drawFirstBootLogo(firstBootLogoTop);
       return;
@@ -2344,7 +2339,7 @@ void Display::_apScreen() {
                          config.theme.background));
       recoveryIp->setText(presentation.apAddress, "IP %s");
 
-      _pager->addPage(_boot);
+      _pager->addOwnedPage(_boot);
       _pager->setPage(_boot);
       dsp.drawFirstBootLogo(firstBootLogoTop);
       return;
@@ -2405,7 +2400,7 @@ void Display::_apScreen() {
         config.theme.title2, config.theme.background));
     if (firstBootSetup) bootSett->setText(presentation.statusText);
     else bootSett->setText(presentation.apAddress, "IP %s");
-    _pager->addPage(_boot);
+    _pager->addOwnedPage(_boot);
     _pager->setPage(_boot);
 }
 

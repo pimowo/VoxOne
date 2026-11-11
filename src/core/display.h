@@ -178,29 +178,30 @@ class Display {
     ScrollWidget *_title1 = nullptr;
     ScrollWidget *_plcurrent = nullptr;
     ScrollWidget *_title2 = nullptr;
-    PlayListWidget *_plwidget;
-    BitrateWidget *_fullbitrate;
-    FillWidget *_metabackground, *_plbackground;
-    SliderWidget *_volbar;
-    Pager *_pager;
-    Page *_footer;
-    VuWidget *_vuwidget;
-    NumWidget *_nums;
-    ClockWidget *_clock;
-    Page *_boot;
+    PlayListWidget *_plwidget = nullptr;
+    BitrateWidget *_fullbitrate = nullptr;
+    FillWidget *_metabackground = nullptr, *_plbackground = nullptr;
+    SliderWidget *_volbar = nullptr;
+    Pager *_pager = nullptr;
+    Page *_footer = nullptr;
+    VuWidget *_vuwidget = nullptr;
+    NumWidget *_nums = nullptr;
+    ClockWidget *_clock = nullptr;
+    Page *_boot = nullptr;
     Page *_shutdownPage = nullptr;
     Page *_menuPage = nullptr;
     UiMenuWidget *_menuWidget = nullptr;
-    TextWidget *_bootstring, *_volip, *_voltxt, *_rssi, *_bitrate;
+    TextWidget *_bootstring = nullptr, *_volip = nullptr, *_voltxt = nullptr;
+    TextWidget *_rssi = nullptr, *_bitrate = nullptr;
 #if VOXONE_DISPLAY_COMPILES_ST7796
-    TextWidget *_btTransportPlayback;
+    TextWidget *_btTransportPlayback = nullptr;
     St7796PlaybackIconWidget *_st7796Playback = nullptr;
-    St7796VolumeWidget *_st7796Volume;
-    St7796BluetoothWidget *_st7796BluetoothIcon;
+    St7796VolumeWidget *_st7796Volume = nullptr;
+    St7796BluetoothWidget *_st7796BluetoothIcon = nullptr;
     St7796LabelFrameWidget *_st7796Source = nullptr, *_st7796Eq = nullptr;
     St7796LabelFrameWidget *_st7796Loud = nullptr, *_st7796Mode = nullptr;
-    ScrollWidget *_btTransportArtist, *_btTransportTitle;
-    Page *_btTransportPage;
+    ScrollWidget *_btTransportArtist = nullptr, *_btTransportTitle = nullptr;
+    Page *_btTransportPage = nullptr;
     Page *_st7796UpdatePage = nullptr;
     TextWidget *_st7796UpdateTarget = nullptr, *_st7796UpdatePercent = nullptr;
     TextWidget *_st7796UpdateActivity = nullptr;
@@ -218,10 +219,11 @@ class Display {
     Oled128x64UpdateProgressWidget *_oled128x64UpdateBar = nullptr;
 #endif
 #if VOXONE_DISPLAY_PROFILE == VOXONE_DISPLAY_PROFILE_ST7789_284X76 || VOXONE_DISPLAY_COMPILES_ST7796 || VOXONE_DISPLAY_COMPILES_SMALL_OLED
-    TextWidget *_plheader, *_plcounter, *_plplaying;
+    TextWidget *_plheader = nullptr, *_plcounter = nullptr;
+    TextWidget *_plplaying = nullptr;
 #endif
 #if VOXONE_DISPLAY_PROFILE == VOXONE_DISPLAY_PROFILE_ST7789_284X76
-    ScrollWidget *_st7789Station;
+    ScrollWidget *_st7789Station = nullptr;
     St7789PlayerStatusWidget *_st7789PlayerStatus = nullptr;
     Page *_st7789UpdatePage = nullptr;
     TextWidget *_st7789UpdateTarget = nullptr, *_st7789UpdatePercent = nullptr;

@@ -36,11 +36,38 @@ int main() {
   assert(chunked.find("const size_t bytesRead") != std::string::npos);
 
   const std::string display = readFile("src/core/display.cpp");
+  const std::string displayTask = functionBody(
+      display, "static void loopDspTask(", "void Display::_createDspTask(");
+  assert(display.find("#define CORE_STACK_SIZE  (12 * 1024)") !=
+         std::string::npos);
+  assert(display.find("static_assert(CORE_STACK_SIZE >= 12 * 1024") !=
+         std::string::npos);
+  assert(displayTask.find("netserver.loop()") == std::string::npos);
   assert(display.find("void Display::_removeBootPage()") != std::string::npos);
   assert(display.find("!_pager->removePage(_boot)) delete _boot") !=
          std::string::npos);
+  assert(display.find("_pager->addOwnedPage(_boot)") != std::string::npos);
   assert(display.find("void drawEmpty(") != std::string::npos);
   assert(display.find("Brak elementów") != std::string::npos);
+
+  const std::string mainSource = readFile("src/main.cpp");
+  const std::string mainLoop = functionBody(
+      mainSource, "void loop()", "#include \"core/audiohandlers.h\"");
+  assert(mainLoop.find("netserver.loop()") != std::string::npos);
+  assert(mainLoop.find("NETSERVER_LOOP1") == std::string::npos);
+
+  const std::string pagesHeader =
+      readFile("src/displays/widgets/pages.h");
+  const std::string pagesSource =
+      readFile("src/displays/widgets/pages.cpp");
+  assert(pagesHeader.find("~Pager()") != std::string::npos);
+  assert(pagesHeader.find("addOwnedPage") != std::string::npos);
+  assert(pagesSource.find("deleteOwnedPointers(_ownedPages)") !=
+         std::string::npos);
+  assert(display.find("_pager->addOwnedPage(_menuPage)") !=
+         std::string::npos);
+  assert(display.find("_pager->addOwnedPage(_st7796UpdatePage)") !=
+         std::string::npos);
 
   const std::string power = readFile("src/core/power_manager.cpp");
   const std::string longPress = functionBody(

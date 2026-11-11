@@ -25,14 +25,16 @@ class Page {
 
 class Pager{
   public:
-    //Pager() : _pages(std::list<Page*>([](Page* pg){ delete pg; })) {}
+    ~Pager();
     void begin();
     void loop();
     Page& addPage(Page* page, bool setNow = false);
+    Page& addOwnedPage(Page* page, bool setNow = false);
     bool removePage(Page* page);
     void setPage(Page* page, bool black=false);
   private:
     std::list<Page*> _pages;
+    std::list<Page*> _ownedPages;
     
 };
 

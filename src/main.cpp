@@ -401,9 +401,9 @@ void loop() {
 #endif
   loopControls();
   powerManager.loop();
-  #ifdef NETSERVER_LOOP1
+  // Keep JSON/WebSocket generation on Arduino's Core 0 loopTask, away from
+  // the renderer stack.
   netserver.loop();
-  #endif
   const uint32_t loopElapsedUs = micros() - loopStartedUs;
   if (loopElapsedUs > enduranceMaximumLoopUs)
     enduranceMaximumLoopUs = loopElapsedUs;
