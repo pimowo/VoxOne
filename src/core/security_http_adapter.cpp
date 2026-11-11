@@ -92,23 +92,15 @@ bool securityWebSocketCommandAllowed(const char* command) {
   // maintenance commands were retired; recovery/configuration use dedicated
   // workflows instead of the general WebSocket dispatcher.
   static const char* const allowed[] = {
-      "ping", "tone", "trebble", "middle", "bass", "source",
+      "ping", "tone", "treble", "middle", "bass", "source",
       "webtransport", "start", "stop", "playurl", "toggle", "prev", "next",
-      "volm", "volp", "ballance", "playstation", "play", "vol",
-      "volume", "vol100", "mute", "wakeup", "maximumvolume", "startupmode",
+      "playstation", "vol100", "mute", "wakeup", "maximumvolume", "startupmode",
       "lineoutenabled", "lineoutvolume",
-      "startupfixedvolume", "dspon", "dim", "getindex", "getrssi",
+      "startupfixedvolume", "dim", "getindex", "getrssi",
       "getsystem", "getwebstatus", "getscreen", "stationlisttimeout",
-      "bttransporttimeout", "numplaylist", "flipscreen", "brightness",
-      "screenon", "contrast", "screensaverenabled", "screensavertimeout",
-      "screensaverblank", "screensaverplayingenabled",
-      "screensaverplayingtimeout", "screensaverplayingblank", "abuff",
-      "scrollsettings",
-      "encoderuireversed",
-      "tzh", "tzm", "sntp2", "sntp1", "timeint", "timeintrtc",
-      "volsteps", "encacc", "oneclickswitching", "balance", "reboot",
-      "boot", "smartstart", "vumeter", "softap", "mdnsname",
-      "hadiscovery"};
+      "bttransporttimeout", "flipscreen", "scrollsettings",
+      "encoderuireversed", "timeint", "timeintrtc", "balance", "reboot",
+      "vumeter", "hadiscovery"};
   for (const char* allowedCommand : allowed)
     if (std::strcmp(command, allowedCommand) == 0) return true;
   return false;

@@ -31,6 +31,9 @@ bool dispatchMenuInput(UiInputEvent event, int8_t steps) {
     action = uiMenu.handle(MenuCommand::NEXT, steps);
   } else if (event == UiInputEvent::Ok) {
     action = uiMenu.handle(MenuCommand::SELECT);
+    if (action == MenuAction::NONE &&
+        uiMenu.menuId() == voxone::ui_menu::MenuId::DLNA)
+      voxone::dlna_menu::select();
   } else if (event == UiInputEvent::Double) {
     if (voxone::dlna_menu::back()) return true;
     const auto menuId = uiMenu.menuId();

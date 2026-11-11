@@ -77,7 +77,7 @@ GETINDEX_REQUIRED_TOP_LEVEL = frozenset({"current"})
 GETINDEX_REQUIRED_PAYLOAD_IDS = frozenset({
     "nameset", "meta", "volume", "volume100", "muted",
     "maximumVolume", "startupMode", "startupFixedVolume",
-    "bass", "middle", "trebble", "balance", "bitrate", "fmt",
+    "bass", "middle", "treble", "balance", "bitrate", "fmt",
     "playerwrap",
 })
 

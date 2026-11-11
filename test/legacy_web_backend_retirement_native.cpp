@@ -55,6 +55,11 @@ int main() {
   assert(!contains(commands, "\"format\""));
   assert(!contains(commands, "\"clearspiffs\""));
   assert(!contains(commands, "\"reset\""));
+  for (const char* retired : {"\"ballance\"", "\"play\"", "\"vol\"",
+                              "\"volume\"", "\"brightness\"",
+                              "\"screenon\"", "\"abuff\"", "\"boot\"",
+                              "\"smartstart\"", "\"mdnsname\""})
+    assert(!contains(commands, retired));
   for (const char* retired : {"resetSystem", "spiffsCleanup", "parseJSON",
                               "setTimezoneOffset", "getTimezoneOffset",
                               "setCountStation", "indexPlaylist",
@@ -89,6 +94,6 @@ int main() {
   // CommandHandler remains the current WebSocket command dispatcher.
   assert(contains(server, "cmd.exec(_wscmd, _wsval, clientId)"));
   for (const char* command : {"\"start\"", "\"stop\"", "\"prev\"",
-                              "\"next\"", "\"volume\""})
+                              "\"next\"", "\"vol100\""})
     assert(contains(commands, command));
 }

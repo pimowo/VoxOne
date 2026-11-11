@@ -44,6 +44,9 @@ int main() {
          std::string::npos);
   assert(manager.find("SourceManagerEventType::EVENT_SOURCE_CHANGED") !=
          std::string::npos);
+  assert(manager.find("btLink.sourceSnapshot()") != std::string::npos);
+  assert(manager.find("sourceState.observe(btLink.state())") ==
+         std::string::npos);
   assert(manager.find("pendingSourceChangedEvent.store") !=
          std::string::npos);
   assert(manager.find("uiState") == std::string::npos);

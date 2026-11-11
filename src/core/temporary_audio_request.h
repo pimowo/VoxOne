@@ -18,10 +18,29 @@ constexpr size_t kPlayUrlCommandCapacity = 1536;
 enum class Source : uint8_t { HomeAssistant, Dlna };
 
 struct Request {
+  const char* url = "";
+  const char* title = "";
+  const char* artist = "";
+  Source source = Source::HomeAssistant;
+
+  Request() = default;
+  Request(const char* requestUrl, const char* requestTitle,
+          const char* requestArtist, Source requestSource)
+      : url(requestUrl), title(requestTitle), artist(requestArtist),
+        source(requestSource) {}
+};
+
+// Parsing and protocol adapters may use bounded stack storage, while the
+// cross-task mailbox carries only a pointer to an exact-sized owned copy.
+// Keeping storage separate makes Request a small, non-owning view.
+struct RequestStorage {
   char url[kUrlCapacity]{};
   char title[kMetadataCapacity]{};
   char artist[kMetadataCapacity]{};
-  Source source = Source::HomeAssistant;
+
+  Request view(Source source = Source::HomeAssistant) const {
+    return Request(url, title, artist, source);
+  }
 };
 
 inline const char* findLastField(const char* value, size_t length,
@@ -65,8 +84,9 @@ inline bool decodeMetadata(const char* encoded, size_t length,
   return true;
 }
 
-inline bool parseRequest(const char* value, size_t length, Request& request) {
-  request = Request{};
+inline bool parseRequest(const char* value, size_t length,
+                         RequestStorage& storage) {
+  storage = RequestStorage{};
   if (!value || length == 0 || length >= kPlayUrlCommandCapacity) return false;
 
   const char* titleField = findLastField(value, length, "&title=");
@@ -82,20 +102,20 @@ inline bool parseRequest(const char* value, size_t length, Request& request) {
     const char* artistValue = artistField + strlen("&artist=");
     if (!decodeMetadata(titleValue,
                         static_cast<size_t>(artistField - titleValue),
-                        request.title, sizeof(request.title)) ||
+                        storage.title, sizeof(storage.title)) ||
         !decodeMetadata(artistValue,
                         length - static_cast<size_t>(artistValue - value),
-                        request.artist, sizeof(request.artist)))
+                        storage.artist, sizeof(storage.artist)))
       return false;
   } else {
-    memcpy(request.title, "Home Assistant", sizeof("Home Assistant"));
+    memcpy(storage.title, "Home Assistant", sizeof("Home Assistant"));
   }
 
   if (!isSafeUrl(value, urlLength)) return false;
-  memcpy(request.url, value, urlLength);
-  request.url[urlLength] = '\0';
-  if (request.title[0] == '\0')
-    memcpy(request.title, "Home Assistant", sizeof("Home Assistant"));
+  memcpy(storage.url, value, urlLength);
+  storage.url[urlLength] = '\0';
+  if (storage.title[0] == '\0')
+    memcpy(storage.title, "Home Assistant", sizeof("Home Assistant"));
   return true;
 }
 

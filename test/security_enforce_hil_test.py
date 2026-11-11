@@ -297,7 +297,7 @@ class SecurityEnforceHilTest(unittest.TestCase):
             {"payload": [
                 {"id": "bass", "value": 0},
                 {"id": "middle", "value": 0},
-                {"id": "trebble", "value": 0},
+                {"id": "treble", "value": 0},
             ]},
             {"webStatus": {"source": "WEB"}},
             {"payload": [{"id": "balance", "value": 0}]},
@@ -356,7 +356,7 @@ class SecurityEnforceHilTest(unittest.TestCase):
             {"payload": [
                 {"id": "bass", "value": 0},
                 {"id": "middle", "value": 0},
-                {"id": "trebble", "value": 0},
+                {"id": "treble", "value": 0},
                 {"id": "balance", "value": 0},
             ]},
             {"payload": [{"id": "rssi", "value": -50}]},

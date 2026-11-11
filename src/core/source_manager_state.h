@@ -162,13 +162,17 @@ class SourceManagerState {
     lastDataMs = rawVuLastMs_;
   }
 
-  SourceUpdate cycle(const BtLinkState& bt) {
+  SourceUpdate cycle(const BtSourceSnapshot& bt) {
     return select(active_ == ActiveSource::Radio ? ActiveSource::Bluetooth
                                                   : ActiveSource::Radio,
                   bt);
   }
 
-  SourceUpdate select(ActiveSource source, const BtLinkState& bt) {
+  SourceUpdate cycle(const BtLinkState& bt) {
+    return cycle(makeBtSourceSnapshot(bt));
+  }
+
+  SourceUpdate select(ActiveSource source, const BtSourceSnapshot& bt) {
     if (source == ActiveSource::Bluetooth && !bt.runtimeAvailable) return {};
     if (active_ == source && !temporaryActive_) return {};
     if (active_ != source) {
@@ -184,7 +188,11 @@ class SourceManagerState {
     return update;
   }
 
-  SourceUpdate observe(const BtLinkState& bt) {
+  SourceUpdate select(ActiveSource source, const BtLinkState& bt) {
+    return select(source, makeBtSourceSnapshot(bt));
+  }
+
+  SourceUpdate observe(const BtSourceSnapshot& bt) {
     SourceUpdate update;
     rawVuLeft_ = bt.rawVuLeft;
     rawVuRight_ = bt.rawVuRight;
@@ -244,6 +252,10 @@ class SourceManagerState {
     if (update.stationChanged || update.titleChanged || update.audioInfoChanged)
       remember(bt);
     return update;
+  }
+
+  SourceUpdate observe(const BtLinkState& bt) {
+    return observe(makeBtSourceSnapshot(bt));
   }
 
   void displayView(DisplaySourceView& view, bool radioPlaying = false,
@@ -326,7 +338,7 @@ class SourceManagerState {
     return temporaryActive_ || active_ == ActiveSource::Radio;
   }
 
-  void stopForUpdate(const BtLinkState& bt) {
+  void stopForUpdate(const BtSourceSnapshot& bt) {
     temporaryActive_ = false;
     temporarySource_ = ActiveSource::Radio;
     temporaryTitle_[0] = '\0';
@@ -341,6 +353,10 @@ class SourceManagerState {
     observedVolumeRevision_ = bt.volumeRevision;
   }
 
+  void stopForUpdate(const BtLinkState& bt) {
+    stopForUpdate(makeBtSourceSnapshot(bt));
+  }
+
  private:
   static void copyText(char* destination, size_t capacity, const char* source) {
     if (!capacity) return;
@@ -350,7 +366,7 @@ class SourceManagerState {
     memcpy(destination, source, length);
     destination[length] = '\0';
   }
-  void remember(const BtLinkState& bt) {
+  void remember(const BtSourceSnapshot& bt) {
     connected_ = bt.connected;
     playback_ = bt.playback;
     sampleRate_ = bt.connected ? bt.sampleRate : 0;

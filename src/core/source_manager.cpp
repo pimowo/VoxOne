@@ -334,7 +334,7 @@ void sourceManagerBegin() {
 void sourceManagerLoop() {
   if (systemUpdateAudioBlocked()) return;
   portENTER_CRITICAL(&sourceMux);
-  const SourceUpdate update = sourceState.observe(btLink.state());
+  const SourceUpdate update = sourceState.observe(btLink.sourceSnapshot());
   const ActiveSource active = sourceState.active();
   const bool temporaryAtChange = player.temporaryBusy();
   if (temporaryBtLossRequiresRadioStop(update, temporaryAtChange))
@@ -390,7 +390,7 @@ void sourceManagerLoop() {
 
 void sourceManagerStopForUpdate() {
   portENTER_CRITICAL(&sourceMux);
-  sourceState.stopForUpdate(btLink.state());
+  sourceState.stopForUpdate(btLink.sourceSnapshot());
   volumeSessionGate.setAuthorized(false);
   portEXIT_CRITICAL(&sourceMux);
 }
@@ -527,9 +527,9 @@ void sourceManagerTransport(BtTransportInput input) {
 bool sourceManagerSelectSource(ActiveSource source) {
   if (systemUpdateAudioBlocked() ||
       !sourceManagerSourceAvailable(sourceId(source))) return false;
-  BtLinkState bt{};
+  BtSourceSnapshot bt{};
 #if VOXONE_HAS_BT && VOXONE_PIN_MAP_COMPLETE
-  bt = btLink.state();
+  bt = btLink.sourceSnapshot();
 #endif
   const bool temporaryAtChange = player.temporaryBusy();
   portENTER_CRITICAL(&sourceMux);

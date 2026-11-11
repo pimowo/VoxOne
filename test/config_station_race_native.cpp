@@ -203,9 +203,13 @@ int main() {
          std::string::npos);
   assert(sendCommand.find("sourceManagerRadioCommandQueued", queueSend) !=
          std::string::npos);
-  assert(player.find("if (uxQueueMessagesWaiting(playerQueue) == 0)\n"
-                     "    _servicePendingStationRefresh();\n"
-                     "  voxone::temporary_audio::Request temporaryRequest") !=
+  assert(player.find("if (_shutdownSuspended || !processPlayerCommands()) return;") !=
+         std::string::npos);
+  assert(player.find("_servicePendingStationRefresh();") !=
+         std::string::npos);
+  assert(player.find("void Player::serviceTemporaryAudio()") !=
+         std::string::npos);
+  assert(player.find("QueuedTemporaryRequest* temporaryRequest") !=
          std::string::npos);
   assert(player.find("_refreshStation(static_cast<uint16_t>(requestP.payload))") !=
          std::string::npos);

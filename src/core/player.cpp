@@ -20,11 +20,65 @@
 #endif
 #include "../hardware/runtime_audio_output.h"
 #include "../hardware/runtime_hardware_config.h"
+#include <cstddef>
+#include <cstdlib>
 #include <driver/i2s.h>
+#include <esp_heap_caps.h>
 #include "../displays/tools/l10n.h"
 Player player;
 QueueHandle_t playerQueue;
 portMUX_TYPE playerVolumeMux = portMUX_INITIALIZER_UNLOCKED;
+
+namespace {
+
+struct QueuedTemporaryRequest {
+  voxone::temporary_audio::Source source;
+  uint16_t urlBytes;
+  uint16_t titleBytes;
+  uint16_t artistBytes;
+  char data[1];
+
+  voxone::temporary_audio::Request view() const {
+    const char* title = data + urlBytes;
+    const char* artist = title + titleBytes;
+    return voxone::temporary_audio::Request(data, title, artist, source);
+  }
+};
+
+QueuedTemporaryRequest* copyTemporaryRequest(
+    const voxone::temporary_audio::Request& request) {
+  const char* url = request.url ? request.url : "";
+  const char* title = request.title ? request.title : "";
+  const char* artist = request.artist ? request.artist : "";
+  const size_t urlBytes = strlen(url) + 1;
+  const size_t titleBytes = strlen(title) + 1;
+  const size_t artistBytes = strlen(artist) + 1;
+  if (urlBytes > voxone::temporary_audio::kUrlCapacity ||
+      titleBytes > voxone::temporary_audio::kMetadataCapacity ||
+      artistBytes > voxone::temporary_audio::kMetadataCapacity)
+    return nullptr;
+  const size_t allocationBytes = offsetof(QueuedTemporaryRequest, data) +
+      urlBytes + titleBytes + artistBytes;
+  void* memory = heap_caps_malloc(
+      allocationBytes, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
+  if (!memory) memory = std::malloc(allocationBytes);
+  if (!memory) return nullptr;
+  auto* copy = static_cast<QueuedTemporaryRequest*>(memory);
+  copy->source = request.source;
+  copy->urlBytes = static_cast<uint16_t>(urlBytes);
+  copy->titleBytes = static_cast<uint16_t>(titleBytes);
+  copy->artistBytes = static_cast<uint16_t>(artistBytes);
+  memcpy(copy->data, url, urlBytes);
+  memcpy(copy->data + urlBytes, title, titleBytes);
+  memcpy(copy->data + urlBytes + titleBytes, artist, artistBytes);
+  return copy;
+}
+
+void releaseTemporaryRequest(QueuedTemporaryRequest* request) {
+  std::free(request);
+}
+
+}  // namespace
 
 Player::Player(): Audio(voxone::hardware::currentHardware().audioOutInternal,
                         3, I2S_NUM_0, false) {}
@@ -55,7 +109,7 @@ void Player::init() {
   playerQueue = xQueueCreate( 5, sizeof( playerRequestParams_t ) );
   setOutputPins(false);
   delay(50);
-  _temporaryUrls = xQueueCreate(1, sizeof(voxone::temporary_audio::Request));
+  _temporaryUrls = xQueueCreate(1, sizeof(QueuedTemporaryRequest*));
   if(MUTE_PIN!=255) pinMode(MUTE_PIN, OUTPUT);
   const auto& audioPins = voxone::hardware::currentHardware().audioOut;
   if (audioPlan.initializeSerialI2s &&
@@ -128,6 +182,15 @@ void Player::sendCommand(playerRequestParams_t request){
 
 void Player::resetQueue(){
   if(playerQueue!=NULL) xQueueReset(playerQueue);
+}
+
+void Player::clearTemporaryRequests() {
+  if (!_temporaryUrls) return;
+  QueuedTemporaryRequest* request = nullptr;
+  while (xQueueReceive(_temporaryUrls, &request, 0) == pdTRUE) {
+    releaseTemporaryRequest(request);
+    request = nullptr;
+  }
 }
 
 void Player::stopInfo() {
@@ -273,7 +336,7 @@ void Player::_applyStop(int payload, bool consumeUserCommand) {
   }
   _radioReconnect.cancel();
   network.lostPlaying = false;
-  if (_temporaryUrls) xQueueReset(_temporaryUrls);
+  clearTemporaryRequests();
   if (temporaryBusy()) {
     if (!consumeUserCommand) suppressTemporaryRadioRestore();
     if (temporaryActive()) {
@@ -314,7 +377,17 @@ void resetPlayer(){
   #define PL_QUEUE_TICKS_ST 15
 #endif
 void Player::loop() {
-  if(playerQueue==NULL) return;
+  if (playerQueue == nullptr) return;
+  servicePendingVolume();
+  if (_shutdownSuspended || !processPlayerCommands()) return;
+  if (uxQueueMessagesWaiting(playerQueue) == 0)
+    _servicePendingStationRefresh();
+  serviceTemporaryAudio();
+  serviceRadioReconnect();
+  serviceVolumePersistence();
+}
+
+void Player::servicePendingVolume() {
   uint8_t pendingMaximum = 0;
   bool maximumPending = false;
   portENTER_CRITICAL(&playerVolumeMux);
@@ -353,14 +426,17 @@ void Player::loop() {
     Audio::setVolume(_mute.outputVolume(
         volToI2S(voxone::line_out::effectiveRawVolume(updated))));
   }
-  if (_shutdownSuspended) return;
+}
+
+bool Player::processPlayerCommands() {
   playerRequestParams_t requestP;
   if(xQueueReceive(playerQueue, &requestP, isRunning()?PL_QUEUE_TICKS:PL_QUEUE_TICKS_ST)){
-    if (systemUpdateAudioBlocked() && requestP.type != PR_UPDATE_STOP) return;
+    if (systemUpdateAudioBlocked() && requestP.type != PR_UPDATE_STOP)
+      return false;
     switch (requestP.type){
       case PR_UPDATE_STOP:
         _radioReconnect.cancel();
-        if (_temporaryUrls) xQueueReset(_temporaryUrls);
+        clearTemporaryRequests();
         suppressTemporaryRadioRestore();
         if (temporaryActive()) {
 #if defined(VOXONE_TTS_HIL_DIAGNOSTICS)
@@ -452,12 +528,17 @@ void Player::loop() {
       default: break;
     }
   }
-  if (uxQueueMessagesWaiting(playerQueue) == 0)
-    _servicePendingStationRefresh();
-  voxone::temporary_audio::Request temporaryRequest{};
+  return true;
+}
+
+void Player::serviceTemporaryAudio() {
+  QueuedTemporaryRequest* temporaryRequest = nullptr;
   if (_temporaryUrls &&
       xQueueReceive(_temporaryUrls, &temporaryRequest, 0) == pdTRUE &&
-      !systemUpdateAudioBlocked()) browseUrl(temporaryRequest);
+      temporaryRequest) {
+    if (!systemUpdateAudioBlocked()) browseUrl(temporaryRequest->view());
+    releaseTemporaryRequest(temporaryRequest);
+  }
   // Backend EOF/error callbacks run synchronously inside these calls. They
   // signal this invocation's token; never reconnect from a decoder callback.
   _callbackToken = _temporary.token();
@@ -512,12 +593,12 @@ void Player::loop() {
   if (uxQueueMessagesWaiting(playerQueue) == 0 &&
       (!_temporaryUrls || uxQueueMessagesWaiting(_temporaryUrls) == 0))
     restoreTemporaryBase();
-  serviceRadioReconnect();
-  if(_volTimer){
-    if((millis()-_volTicks)>3000){
-      config.saveVolume();
-      _volTimer=false;
-    }
+}
+
+void Player::serviceVolumePersistence() {
+  if (_volTimer && millis() - _volTicks > 3000) {
+    config.saveVolume();
+    _volTimer = false;
   }
 }
 
@@ -528,7 +609,7 @@ void Player::stopForShutdown() {
   _radioReconnect.cancel();
   cancelPendingConnection();
   resetQueue();
-  if (_temporaryUrls) xQueueReset(_temporaryUrls);
+  clearTemporaryRequests();
   if (temporaryBusy()) {
     suppressTemporaryRadioRestore();
     finishTemporary();
@@ -618,18 +699,40 @@ void Player::serviceRadioReconnect() {
 
 void Player::requestTemporaryUrl(
     const voxone::temporary_audio::Request& request) {
-  const size_t length = strlen(request.url);
+  const char* url = request.url ? request.url : "";
+  const size_t length = strlen(url);
   const SourceId requestedSource =
       request.source == voxone::temporary_audio::Source::Dlna
           ? SourceId::Dlna
           : SourceId::HomeAssistant;
   if (!_temporaryUrls ||
-      !voxone::temporary_audio::isSafeUrl(request.url, length) ||
+      !voxone::temporary_audio::isSafeUrl(url, length) ||
       !sourceManagerSourceAvailable(requestedSource) ||
       systemUpdateAudioBlocked() || !_localAudioAvailable) return;
-  // Network commands run on another task. Replace the pending URL atomically, never a
-  // buffer currently used by connecttohost(). Latest pending request wins.
-  xQueueOverwrite(_temporaryUrls, &request);
+  QueuedTemporaryRequest* pending = copyTemporaryRequest(request);
+  if (!pending) {
+    serialCli.printf("##[TTS]# temporary request allocation failed\n");
+    return;
+  }
+  // Producers may run on different tasks. The one-slot queue stores only an
+  // owning pointer; when full, remove and release the older pending request.
+  // A request already consumed by Player owns its allocation until browseUrl
+  // returns, so replacement can never invalidate connecttohost() input.
+  bool queued = false;
+  for (uint8_t attempt = 0; attempt < 4 && !queued; ++attempt) {
+    queued = xQueueSend(_temporaryUrls, &pending, 0) == pdPASS;
+    if (queued) break;
+    QueuedTemporaryRequest* replaced = nullptr;
+    if (xQueueReceive(_temporaryUrls, &replaced, 0) == pdTRUE)
+      releaseTemporaryRequest(replaced);
+    else
+      taskYIELD();
+  }
+  if (!queued) {
+    releaseTemporaryRequest(pending);
+    serialCli.printf("##[TTS]# temporary request mailbox busy\n");
+    return;
+  }
   sendCommand({PR_BURL, 0});
 }
 
@@ -786,10 +889,11 @@ void Player::stepVol(bool up) {
 }
 
 uint8_t Player::volToI2S(uint8_t volume) {
-  if (config.runtimeSnapshot().lineOutEnabled)
+  const auto runtime = config.runtimeSnapshot();
+  if (runtime.lineOutEnabled)
     return volume > 254 ? 254 : volume;
   int vol = map(volume, 0, 254 - config.station.ovol * 3 , 0, 254);
-  return volumeClampOutput(vol, config.runtimeSnapshot().maximumVolume);
+  return volumeClampOutput(vol, runtime.maximumVolume);
 }
 
 void Player::_loadVol(uint8_t volume) {

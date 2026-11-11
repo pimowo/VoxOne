@@ -7,21 +7,14 @@
 #include "display.h"
 #include "netserver.h"
 #include "config.h"
-#include "controls.h"
 #include "serialcli.h"
-#include "volume_map.h"
 #include "ui_timeout_config.h"
 #include "source_manager.h"
-#include "source_manager_state.h"
 #include "web_transport.h"
 #include "update_progress.h"
 #include "ui_state.h"
 #include "audio_balance.h"
 #include "power_manager.h"
-
-#if DSP_MODEL==DSP_DUMMY
-#define DUMMYDISPLAY
-#endif
 
 CommandHandler cmd;
 
@@ -79,9 +72,10 @@ bool CommandHandler::exec(const char *command, const char *value, uint32_t cid) 
   if (strEquals(command, "stop"))     { player.sendCommand({PR_STOP, 0}); return true; }
   if (strEquals(command, "playurl")) {
     const size_t length = value ? strlen(value) : 0;
-    voxone::temporary_audio::Request request{};
-    if (!voxone::temporary_audio::parseRequest(value, length, request))
+    voxone::temporary_audio::RequestStorage storage{};
+    if (!voxone::temporary_audio::parseRequest(value, length, storage))
       return false;
+    const auto request = storage.view();
     const SourceId requestedSource =
         request.source == voxone::temporary_audio::Source::Dlna
             ? SourceId::Dlna
@@ -93,29 +87,18 @@ bool CommandHandler::exec(const char *command, const char *value, uint32_t cid) 
   if (strEquals(command, "toggle"))   { player.toggle(); return true; }
   if (strEquals(command, "prev"))     { player.prev(); return true; }
   if (strEquals(command, "next"))     { player.next(); return true; }
-  if (strEquals(command, "volm"))     { player.stepVol(false); return true; }
-  if (strEquals(command, "volp"))     { player.stepVol(true); return true; }
   if (voxone::audio_balance::isBalanceCommand(command)) {
     int8_t balance;
     if (!voxone::audio_balance::parseValue(value, balance)) return false;
     config.setBalance(balance);
     return true;
   }
-  if (strEquals(command, "playstation") || strEquals(command, "play")){ 
+  if (strEquals(command, "playstation")) {
     int id = atoi(value);
     if (id < 1) id = 1;
     uint16_t cs = config.playlistLength();
     if (id > cs) id = cs;
     player.sendCommand({PR_PLAY, id});
-    return true;
-  }
-  if (strEquals(command, "vol") || strEquals(command, "volume")) {
-    long raw;
-    if (parseVolumeValue(value, raw)) {
-      if (raw < 0) raw = 0;
-      if (raw > 254) raw = 254;
-      player.setVol(static_cast<uint8_t>(raw));
-    }
     return true;
   }
   if (strEquals(command, "vol100")) {
@@ -174,11 +157,7 @@ bool CommandHandler::exec(const char *command, const char *value, uint32_t cid) 
     }
     return true;
   }
-  if (strEquals(command, "dspon"))     { config.setDspOn(atoi(value)!=0); return true; }
   if (strEquals(command, "dim"))       { int d=atoi(value); config.setRuntimeBrightness((uint8_t)(d < 0 ? 0 : (d > 100 ? 100 : d))); config.setBrightness(true); return true; }
-  /*********************************************/
-  /****************** WEBSOCKET ****************/
-  /*********************************************/
   if (strEquals(command, "getindex"))  { netserver.requestOnChange(GETINDEX, cid); return true; }
   if (strEquals(command, "getrssi"))   { netserver.requestOnChange(NRSSI, cid); return true; }
   
@@ -201,7 +180,6 @@ bool CommandHandler::exec(const char *command, const char *value, uint32_t cid) 
     netserver.requestOnChange(GETSCREEN, 0);
     return true;
   }
-  if (strEquals(command, "numplaylist"))  { config.saveValue(&config.store.numplaylist, static_cast<bool>(atoi(value))); transitionUiMode(CLEAR); transitionUiMode(PLAYER); return true; }
   if (strEquals(command, "flipscreen")) {
     config.saveValue(&config.store.flipscreen, static_cast<bool>(atoi(value)));
     display.flip();
@@ -210,36 +188,12 @@ bool CommandHandler::exec(const char *command, const char *value, uint32_t cid) 
     netserver.requestOnChange(GETSCREEN, 0);
     return true;
   }
-  if (strEquals(command, "brightness"))   { config.setRuntimeBrightness(static_cast<uint8_t>(atoi(value))); config.setBrightness(true); return true; }
-  if (strEquals(command, "screenon"))     { config.setDspOn(static_cast<bool>(atoi(value))); return true; }
-  if (strEquals(command, "contrast"))     { config.saveValue(&config.store.contrast, static_cast<uint8_t>(atoi(value))); display.setContrast(); return true; }
-  if (strEquals(command, "screensaverenabled")){ config.enableScreensaver(static_cast<bool>(atoi(value))); return true; }
-  if (strEquals(command, "screensavertimeout")){ config.setScreensaverTimeout(static_cast<uint16_t>(atoi(value))); return true; }
-  if (strEquals(command, "screensaverblank"))  { config.setScreensaverBlank(static_cast<bool>(atoi(value))); return true; }
-  if (strEquals(command, "screensaverplayingenabled")){ config.setScreensaverPlayingEnabled(static_cast<bool>(atoi(value))); return true; }
-  if (strEquals(command, "screensaverplayingtimeout")){ config.setScreensaverPlayingTimeout(static_cast<uint16_t>(atoi(value))); return true; }
-  if (strEquals(command, "screensaverplayingblank"))  { config.setScreensaverPlayingBlank(static_cast<bool>(atoi(value))); return true; }
-  if (strEquals(command, "abuff")){ config.saveValue(&config.store.abuff, static_cast<uint16_t>(atoi(value))); return true; }
-
-  
-  if (strEquals(command, "tzh"))        { config.saveValue(&config.store.tzHour, static_cast<int8_t>(atoi(value))); return true; }
-  if (strEquals(command, "tzm"))        { config.saveValue(&config.store.tzMin, static_cast<int8_t>(atoi(value))); return true; }
-  if (strEquals(command, "sntp2"))      { config.saveValue(config.store.sntp2, value, 35, false); return true; }
-  if (strEquals(command, "sntp1"))      { config.setSntpOne(value); return true; }
   if (strEquals(command, "timeint"))    { uint16_t minutes; if (!parseTimeInterval(value, 1, 10080, minutes)) return false; config.saveValue(&config.store.timeSyncInterval, minutes); return true; }
   if (strEquals(command, "timeintrtc")) { uint16_t hours; if (!parseTimeInterval(value, 1, 1000, hours)) return false; config.saveValue(&config.store.timeSyncIntervalRTC, hours); return true; }
-  
-  if (strEquals(command, "volsteps"))         { config.saveValue(&config.store.volsteps, static_cast<uint8_t>(atoi(value))); return true; }
-  if (strEquals(command, "encacc"))  { setEncAcceleration(static_cast<uint16_t>(atoi(value))); return true; }
-  if (strEquals(command, "oneclickswitching")){ config.saveValue(&config.store.skipPlaylistUpDown, static_cast<bool>(atoi(value))); return true; }
-  
+
   if (strEquals(command, "reboot"))  { requestSystemRestart(); return true; }
-  if (strEquals(command, "boot"))    { requestSystemRestart(); return true; }
-  if (strEquals(command, "smartstart")){ uint8_t ss = atoi(value) == 1 ? 1 : 2; if (!player.isRunning() && ss == 1) ss = 0; config.setSmartStart(ss); return true; }
 
   if (strEquals(command, "vumeter"))   { config.saveValue(&config.store.vumeter, static_cast<bool>(atoi(value))); display.putRequest(SHOWVUMETER); netserver.requestOnChange(GETSYSTEM, 0); return true; }
-  if (strEquals(command, "softap"))    { config.saveValue(&config.store.softapdelay, static_cast<uint8_t>(atoi(value))); return true; }
-  if (strEquals(command, "mdnsname"))  { config.saveValue(config.store.mdnsname, value, MDNS_LENGTH); return true; }
   if (strEquals(command, "hadiscovery")) {
     config.saveValue(&config.store.haDiscoveryEnabled, static_cast<bool>(atoi(value)));
     netserver.requestOnChange(GETSYSTEM, 0);

@@ -121,4 +121,3 @@ checkpointów pozostaje w historii Git i w istniejących raportach.
 
 - [ ] GPL / yoRadio: przeprowadzić analizę prawną i w razie potrzeby usunąć
   zależności.
-- [ ] Ostatecznie uporządkować stare wpisy i testy.

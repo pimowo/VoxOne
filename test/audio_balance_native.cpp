@@ -96,7 +96,7 @@ void testPcmApplication() {
 
 void testCommandParser() {
   assert(balance::isBalanceCommand("balance"));
-  assert(balance::isBalanceCommand("ballance"));
+  assert(!balance::isBalanceCommand("ballance"));
   assert(!balance::isBalanceCommand(nullptr));
   assert(!balance::isBalanceCommand("Balance"));
   assert(!balance::isBalanceCommand("balancex"));
@@ -122,17 +122,14 @@ void testCommandParser() {
     assert(parsed == 77);
   }
 
-  // Both WebSocket spellings share this parser, so invalid input cannot reach
-  // Config::setBalance and valid historical commands preserve their value.
-  for (const char* command : {"balance", "ballance"}) {
-    assert(balance::isBalanceCommand(command));
-    for (int value = -16; value <= 16; ++value) {
-      char text[5];
-      std::snprintf(text, sizeof(text), "%d", value);
-      parsed = 99;
-      assert(balance::parseValue(text, parsed));
-      assert(parsed == value);
-    }
+  // Invalid input cannot reach Config::setBalance; only the canonical command
+  // remains accepted after retiring the yoRadio misspelling.
+  for (int value = -16; value <= 16; ++value) {
+    char text[5];
+    std::snprintf(text, sizeof(text), "%d", value);
+    parsed = 99;
+    assert(balance::parseValue(text, parsed));
+    assert(parsed == value);
   }
 }
 

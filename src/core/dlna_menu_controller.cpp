@@ -2,6 +2,7 @@
 
 #include <Arduino.h>
 #include <cstring>
+#include <esp_log.h>
 
 #include "player.h"
 #include "temporary_audio_request.h"
@@ -15,6 +16,7 @@ namespace dlna_menu {
 namespace {
 
 constexpr uint8_t kMaximumDepth = 8;
+constexpr char kDlnaMenuTag[] = "DlnaMenu";
 
 uint32_t browseJob = 0;
 bool browseReady = false;
@@ -58,11 +60,28 @@ void entered() {
 }
 
 void select() {
-  if (!browseReady || uiMenu.menuId() != ui_menu::MenuId::DLNA) return;
+  if (!browseReady) {
+    ESP_LOGW(kDlnaMenuTag,
+             "Selection ignored: browse results not ready (job=%lu)",
+             static_cast<unsigned long>(browseJob));
+    return;
+  }
+  if (uiMenu.menuId() != ui_menu::MenuId::DLNA) {
+    ESP_LOGW(kDlnaMenuTag, "Selection ignored: DLNA menu is not active");
+    return;
+  }
   dlna::BrowseItem item{};
-  if (!dlna::copyBrowseItem(browseJob, uiMenu.selectedIndex(), item)) return;
+  if (!dlna::copyBrowseItem(browseJob, uiMenu.selectedIndex(), item)) {
+    ESP_LOGW(kDlnaMenuTag,
+             "Selection ignored: item unavailable (job=%lu index=%u)",
+             static_cast<unsigned long>(browseJob),
+             static_cast<unsigned>(uiMenu.selectedIndex()));
+    return;
+  }
   if (item.container) {
     if (!dlna::validObjectId(item.id) || parentDepth >= kMaximumDepth) {
+      ESP_LOGW(kDlnaMenuTag,
+               "Folder selection rejected: invalid id or history full");
       uiMenu.setDlnaStatus("Brak miejsca w historii");
       return;
     }
@@ -74,16 +93,17 @@ void select() {
     return;
   }
   if (!item.resourceUrl[0]) {
+    ESP_LOGW(kDlnaMenuTag, "Track selection rejected: resource URL missing");
     uiMenu.setDlnaStatus("Brak URL utworu");
     return;
   }
-  temporary_audio::Request request{};
-  strlcpy(request.url, item.resourceUrl, sizeof(request.url));
-  strlcpy(request.title, item.title[0] ? item.title : "DLNA",
-          sizeof(request.title));
-  request.source = temporary_audio::Source::Dlna;
+  temporary_audio::RequestStorage storage{};
+  strlcpy(storage.url, item.resourceUrl, sizeof(storage.url));
+  strlcpy(storage.title, item.title[0] ? item.title : "DLNA",
+          sizeof(storage.title));
   strlcpy(playingObjectId, item.id, sizeof(playingObjectId));
-  player.requestTemporaryUrl(request);
+  player.requestTemporaryUrl(
+      storage.view(temporary_audio::Source::Dlna));
   uiMenu.close();
   transitionUiMode(PLAYER);
 }

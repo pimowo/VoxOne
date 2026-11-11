@@ -38,6 +38,7 @@ class BtLink : private BtFirmwareTransport {
   }
 
   BtLinkState state() const;
+  BtSourceSnapshot sourceSnapshot() const;
   BtLinkDiagnostics diagnostics() const;
   bool hasIncompleteOnlineSnapshot() const;
 

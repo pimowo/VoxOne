@@ -85,6 +85,11 @@ class Player: public Audio {
     void _servicePendingStationRefresh();
     void _clearStation(bool resetOvol);
     void _loadVol(uint8_t volume);
+    void clearTemporaryRequests();
+    void servicePendingVolume();
+    bool processPlayerCommands();
+    void serviceTemporaryAudio();
+    void serviceVolumePersistence();
     bool _hasError;
     void browseUrl(const voxone::temporary_audio::Request& request);
     void finishTemporary();

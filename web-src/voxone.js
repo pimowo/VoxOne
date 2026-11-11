@@ -653,7 +653,7 @@ window.VoxOneRestartWaiter = Object.freeze({
   const audioControls = {
     bass: { slider: document.getElementById("audio-bass-slider"), command: "bass" },
     middle: { slider: document.getElementById("audio-middle-slider"), command: "middle" },
-    treble: { slider: document.getElementById("audio-treble-slider"), command: "trebble" },
+    treble: { slider: document.getElementById("audio-treble-slider"), command: "treble" },
     balance: { slider: document.getElementById("audio-balance-slider"), command: "balance" }
   };
   const tonePresets = {
@@ -3008,11 +3008,11 @@ window.VoxOneRestartWaiter = Object.freeze({
       }
       case "bass":
       case "middle":
-      case "trebble":
+      case "treble":
       case "balance": {
         const setting = Number(value);
         if (!Number.isInteger(setting)) break;
-        const key = id === "trebble" ? "treble" : id;
+        const key = id;
         state[key] = setting;
         clearTimeout(audioControls[key].ackTimer);
         break;
@@ -3149,7 +3149,7 @@ window.VoxOneRestartWaiter = Object.freeze({
       let toneChanged = false;
       for (const item of message.payload) {
         updatePayload(item.id, item.value);
-        if (["bass", "middle", "trebble", "balance"].includes(item.id)) toneChanged = true;
+        if (["bass", "middle", "treble", "balance"].includes(item.id)) toneChanged = true;
       }
       if (toneChanged) renderAudio();
     }

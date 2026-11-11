@@ -215,6 +215,14 @@ BtLinkState BtLink::state() const {
   return state;
 }
 
+BtSourceSnapshot BtLink::sourceSnapshot() const {
+  if (!btRuntime.available()) return {};
+  portENTER_CRITICAL(&stateMux_);
+  const BtSourceSnapshot snapshot = makeBtSourceSnapshot(publishedState_);
+  portEXIT_CRITICAL(&stateMux_);
+  return snapshot;
+}
+
 BtLinkDiagnostics BtLink::diagnostics() const {
   portENTER_CRITICAL(&stateMux_);
   const BtLinkDiagnostics diagnostics = publishedDiagnostics_;

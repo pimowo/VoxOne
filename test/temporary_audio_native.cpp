@@ -97,7 +97,11 @@ void auditTransport() {
   assert(player.find("const bool connected = connecttohost(request.url);") !=
          std::string::npos);
   assert(player.find("_temporary.signal(token);") != std::string::npos);
-  assert(player.find("xQueueOverwrite(_temporaryUrls, &request);") !=
+  assert(player.find("xQueueCreate(1, sizeof(QueuedTemporaryRequest*))") !=
+         std::string::npos);
+  assert(player.find("xQueueSend(_temporaryUrls, &pending, 0)") !=
+         std::string::npos);
+  assert(player.find("releaseTemporaryRequest(replaced)") !=
          std::string::npos);
   assert(player.find("request.type == PR_STOP && temporaryBusy()") !=
          std::string::npos);
@@ -176,14 +180,14 @@ void auditTransport() {
   const auto server = readFile("src/core/netserver.cpp");
   assert(server.find("dlna::kPlayRoute") != std::string::npos);
   assert(server.find("Source::Dlna") != std::string::npos);
-  assert(server.find("player.requestTemporaryUrl(playback)") !=
+  assert(server.find("playback.view(voxone::temporary_audio::Source::Dlna)") !=
          std::string::npos);
   const auto commands = readFile("src/core/commandhandler.cpp");
   assert(commands.find("strEquals(command, \"playurl\")") !=
          std::string::npos);
   assert(commands.find("player.requestTemporaryUrl(request);") !=
          std::string::npos);
-  assert(commands.find("parseRequest(value, length, request)") !=
+  assert(commands.find("parseRequest(value, length, storage)") !=
          std::string::npos);
 }
 
@@ -209,26 +213,34 @@ void validateTemporaryUrls() {
   const std::string tooLong(kUrlCapacity, 'a');
   assert(!isSafeUrl(tooLong.c_str(), tooLong.size()));
 
-  voxone::temporary_audio::Request request{};
+  static_assert(sizeof(voxone::temporary_audio::Request) <=
+                    sizeof(void*) * 4,
+                "temporary request view must stay pointer-sized");
+  static_assert(sizeof(voxone::temporary_audio::RequestStorage) >
+                    sizeof(voxone::temporary_audio::Request),
+                "bounded parsing storage must not enter the mailbox");
+  voxone::temporary_audio::RequestStorage storage{};
   const char* withMetadata =
       "http://ha.local/api/tts.mp3?token=a=b&title=Home%20Assistant"
       "&artist=Drzwi%20s%C4%85%20otwarte";
   assert(voxone::temporary_audio::parseRequest(
-      withMetadata, std::strlen(withMetadata), request));
+      withMetadata, std::strlen(withMetadata), storage));
+  auto request = storage.view();
   assert(std::strcmp(request.url,
                      "http://ha.local/api/tts.mp3?token=a=b") == 0);
   assert(std::strcmp(request.title, "Home Assistant") == 0);
   assert(std::strcmp(request.artist, "Drzwi są otwarte") == 0);
   assert(request.source == voxone::temporary_audio::Source::HomeAssistant);
   assert(voxone::temporary_audio::parseRequest(
-      http, std::strlen(http), request));
+      http, std::strlen(http), storage));
+  request = storage.view();
   assert(std::strcmp(request.url, http) == 0);
   assert(std::strcmp(request.title, "Home Assistant") == 0);
   assert(request.artist[0] == '\0');
   const char* malformed =
       "http://ha.local/a.mp3&title=Home%2&artist=TTS";
   assert(!voxone::temporary_audio::parseRequest(
-      malformed, std::strlen(malformed), request));
+      malformed, std::strlen(malformed), storage));
 }
 
 struct Scenario {

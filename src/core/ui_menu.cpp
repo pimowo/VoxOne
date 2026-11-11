@@ -362,49 +362,33 @@ void UiMenu::configureSources(uint8_t availableMask, SourceId activeSource) {
 }
 
 void UiMenu::configureEncoderUiReversed(bool reversed) {
-  const bool previous =
-      encoderUiReversed_.exchange(reversed, std::memory_order_acq_rel);
+  lockSettings();
+  const bool previous = draft_.encoderUiReversed;
+  draft_.encoderUiReversed = reversed;
+  unlockSettings();
   if (previous != reversed) markChanged();
 }
 
 void UiMenu::beginSettingsTransaction(const MenuSettings& persisted) {
+  lockSettings();
   persistedSettings_ = persisted;
-  draftBalance_.store(persisted.balance, std::memory_order_relaxed);
-  draftBass_.store(persisted.bass, std::memory_order_relaxed);
-  draftTreble_.store(persisted.treble, std::memory_order_relaxed);
-  draftBrightness_.store(persisted.brightness, std::memory_order_relaxed);
-  draftTftTheme_.store(persisted.tftTheme, std::memory_order_relaxed);
-  draftScreensaverEnabled_.store(persisted.screensaverEnabled,
-                                 std::memory_order_relaxed);
-  draftLineOutEnabled_.store(persisted.lineOutEnabled,
-                             std::memory_order_relaxed);
-  draftLineOutVolume_.store(persisted.lineOutVolume,
-                            std::memory_order_relaxed);
-  encoderUiReversed_.store(persisted.encoderUiReversed,
-                           std::memory_order_release);
+  draft_ = persisted;
+  unlockSettings();
   markChanged();
 }
 
 MenuSettings UiMenu::settings() const {
-  MenuSettings result{};
-  result.balance = draftBalance_.load(std::memory_order_acquire);
-  result.bass = draftBass_.load(std::memory_order_acquire);
-  result.treble = draftTreble_.load(std::memory_order_acquire);
-  result.brightness = draftBrightness_.load(std::memory_order_acquire);
-  result.tftTheme = draftTftTheme_.load(std::memory_order_acquire);
-  result.screensaverEnabled =
-      draftScreensaverEnabled_.load(std::memory_order_acquire);
-  result.lineOutEnabled =
-      draftLineOutEnabled_.load(std::memory_order_acquire);
-  result.lineOutVolume =
-      draftLineOutVolume_.load(std::memory_order_acquire);
-  result.encoderUiReversed =
-      encoderUiReversed_.load(std::memory_order_acquire);
+  lockSettings();
+  const MenuSettings result = draft_;
+  unlockSettings();
   return result;
 }
 
 bool UiMenu::settingsDirty() const {
-  return settings() != persistedSettings_;
+  lockSettings();
+  const bool dirty = draft_ != persistedSettings_;
+  unlockSettings();
+  return dirty;
 }
 
 bool UiMenu::finishTransaction() {
@@ -596,74 +580,65 @@ MenuAction UiMenu::handle(MenuCommand command, int8_t steps) {
     if (magnitude == 0) magnitude = 1;
     const int16_t direction = command == MenuCommand::NEXT ? 1 : -1;
     const MenuSetting setting = selectedSetting();
+    MenuSettings draft = settings();
     switch (setting) {
       case MenuSetting::AUDIO_BALANCE: {
-        int16_t value = draftBalance_.load(std::memory_order_relaxed) +
-                        direction * magnitude;
+        int16_t value = draft.balance + direction * magnitude;
         if (value < -16) value = -16;
         if (value > 16) value = 16;
-        draftBalance_.store(static_cast<int8_t>(value),
-                            std::memory_order_release);
+        draft.balance = static_cast<int8_t>(value);
         break;
       }
       case MenuSetting::AUDIO_BASS: {
-        int16_t value = draftBass_.load(std::memory_order_relaxed) +
-                        direction * magnitude;
+        int16_t value = draft.bass + direction * magnitude;
         if (value < -6) value = -6;
         if (value > 6) value = 6;
-        draftBass_.store(static_cast<int8_t>(value),
-                         std::memory_order_release);
+        draft.bass = static_cast<int8_t>(value);
         break;
       }
       case MenuSetting::AUDIO_TREBLE: {
-        int16_t value = draftTreble_.load(std::memory_order_relaxed) +
-                        direction * magnitude;
+        int16_t value = draft.treble + direction * magnitude;
         if (value < -6) value = -6;
         if (value > 6) value = 6;
-        draftTreble_.store(static_cast<int8_t>(value),
-                           std::memory_order_release);
+        draft.treble = static_cast<int8_t>(value);
         break;
       }
       case MenuSetting::LINE_OUT_ENABLED:
-        draftLineOutEnabled_.store(direction > 0,
-                                   std::memory_order_release);
+        draft.lineOutEnabled = direction > 0;
         break;
       case MenuSetting::LINE_OUT_VOLUME: {
-        int16_t value = draftLineOutVolume_.load(std::memory_order_relaxed) +
-                        direction * magnitude * 5;
+        int16_t value = draft.lineOutVolume + direction * magnitude * 5;
         if (value < 0) value = 0;
-        const uint8_t maximum = persistedSettings_.maximumVolume >= 1 &&
-                                        persistedSettings_.maximumVolume <= 100
-                                    ? persistedSettings_.maximumVolume
+        const uint8_t maximum = draft.maximumVolume >= 1 &&
+                                        draft.maximumVolume <= 100
+                                    ? draft.maximumVolume
                                     : 100;
         if (value > maximum) value = maximum;
-        draftLineOutVolume_.store(static_cast<uint8_t>(value),
-                                  std::memory_order_release);
+        draft.lineOutVolume = static_cast<uint8_t>(value);
         break;
       }
       case MenuSetting::DISPLAY_BRIGHTNESS: {
-        int16_t value = draftBrightness_.load(std::memory_order_relaxed) +
-                        direction * magnitude * 5;
+        int16_t value = draft.brightness + direction * magnitude * 5;
         if (value < 0) value = 0;
         if (value > 100) value = 100;
-        draftBrightness_.store(static_cast<uint8_t>(value),
-                               std::memory_order_release);
+        draft.brightness = static_cast<uint8_t>(value);
         break;
       }
       case MenuSetting::DISPLAY_THEME:
-        draftTftTheme_.store(direction > 0 ? 1 : 0,
-                             std::memory_order_release);
+        draft.tftTheme = direction > 0 ? 1 : 0;
         break;
       case MenuSetting::SCREENSAVER_ENABLED:
-        draftScreensaverEnabled_.store(direction > 0,
-                                       std::memory_order_release);
+        draft.screensaverEnabled = direction > 0;
         break;
       case MenuSetting::ENCODER_UI_REVERSED:
-        encoderUiReversed_.store(direction > 0, std::memory_order_release);
+        draft.encoderUiReversed = direction > 0;
         break;
       case MenuSetting::NONE:
         return MenuAction::NONE;
     }
+    lockSettings();
+    draft_ = draft;
+    unlockSettings();
     markChanged();
     return MenuAction::SETTING_CHANGED;
   }
@@ -688,6 +663,14 @@ MenuAction UiMenu::handle(MenuCommand command, int8_t steps) {
 
 void UiMenu::markChanged() {
   revision_.fetch_add(1, std::memory_order_release);
+}
+
+void UiMenu::lockSettings() const {
+  while (settingsLock_.test_and_set(std::memory_order_acquire)) {}
+}
+
+void UiMenu::unlockSettings() const {
+  settingsLock_.clear(std::memory_order_release);
 }
 
 uint8_t sourceItemCount(uint8_t mask) {

@@ -178,7 +178,7 @@ int main() {
   assert(serverSource.find("Source::Dlna") != std::string::npos);
   const std::string menuSource = readFile("src/core/dlna_menu_controller.cpp");
   assert(menuSource.find("copyBrowseItem") != std::string::npos);
-  assert(menuSource.find("request.source = temporary_audio::Source::Dlna") !=
+  assert(menuSource.find("storage.view(temporary_audio::Source::Dlna)") !=
          std::string::npos);
   assert(menuSource.find("parentHistory") != std::string::npos);
   const std::string web = readFile("web-src/voxone.js");

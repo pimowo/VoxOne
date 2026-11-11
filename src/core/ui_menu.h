@@ -166,21 +166,16 @@ class UiMenu {
 
  private:
   void markChanged();
+  void lockSettings() const;
+  void unlockSettings() const;
 
   std::atomic<MenuState> state_{MenuState::CLOSED};
   std::atomic<MenuId> menuId_{MenuId::MAIN};
   std::atomic<uint8_t> selectedIndex_{0};
   std::atomic<uint32_t> revision_{0};
-  std::atomic<bool> encoderUiReversed_{false};
+  mutable std::atomic_flag settingsLock_ = ATOMIC_FLAG_INIT;
   MenuSettings persistedSettings_{};
-  std::atomic<int8_t> draftBalance_{0};
-  std::atomic<int8_t> draftBass_{0};
-  std::atomic<int8_t> draftTreble_{0};
-  std::atomic<uint8_t> draftBrightness_{100};
-  std::atomic<uint8_t> draftTftTheme_{0};
-  std::atomic<bool> draftScreensaverEnabled_{false};
-  std::atomic<bool> draftLineOutEnabled_{false};
-  std::atomic<uint8_t> draftLineOutVolume_{100};
+  MenuSettings draft_{};
   mutable char selectedDlnaLabel_[96]{};
 };
 

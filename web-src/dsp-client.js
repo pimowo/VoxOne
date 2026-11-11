@@ -263,7 +263,7 @@
     const sharedCommands = {
       volume100: "vol100", balance: "balance", maximumVolume: "maximumvolume",
       startupMode: "startupmode", startupFixedVolume: "startupfixedvolume",
-      bass: "bass", middle: "middle", treble: "trebble"
+      bass: "bass", middle: "middle", treble: "treble"
     };
     function setRange(id, value, unit = "") {
       const control = $(id);

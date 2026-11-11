@@ -226,8 +226,8 @@ void clearBackpressureState() {
 }
 }  // namespace
 
-static bool parseToneValue(const char* value, int8_t& bass, int8_t& middle, int8_t& trebble) {
-  int8_t* fields[] = {&bass, &middle, &trebble};
+static bool parseToneValue(const char* value, int8_t& bass, int8_t& middle, int8_t& treble) {
+  int8_t* fields[] = {&bass, &middle, &treble};
   const char* cursor = value;
   for (int index = 0; index < 3; ++index) {
     const char* digits = cursor;
@@ -1174,8 +1174,6 @@ bool NetServer::begin(bool quiet) {
   DefaultHeaders::Instance().addHeader(F("Access-Control-Allow-Headers"), F("content-type"));
 #endif
   webserver.begin();
-  //if(strlen(config.store.mdnsname)>0)
-  //  MDNS.begin(config.store.mdnsname);
   websocket.onEvent(onWsEvent);
   if (voxone::security::securityHttpEnforcementEnabled())
     websocket.setSubprotocolPolicy(
@@ -1208,7 +1206,6 @@ size_t NetServer::chunkedHtmlPageCallback(uint8_t* buffer, size_t maxLen, size_t
   #endif
   const size_t canread = (needread > maxLen) ? maxLen : needread;
   DBGVB("[%s] seek to %d in %s and read %d bytes with maxLen=%d", __func__, index, netserver.chunkedPathBuffer, canread, maxLen);
-  //netserver.loop();
   if (!requiredfile.seek(index, SeekSet)) {
     requiredfile.close();
     display.unlock();
@@ -1926,7 +1923,7 @@ void handleDlnaPlay(AsyncWebServerRequest* request) {
   const String title = request->hasParam("title", true)
                            ? request->getParam("title", true)->value()
                            : String("DLNA");
-  voxone::temporary_audio::Request playback{};
+  voxone::temporary_audio::RequestStorage playback{};
   if (!voxone::temporary_audio::isSafeUrl(url.c_str(), url.length()) ||
       title.length() >= sizeof(playback.title)) {
     stationsReply(request, 400, R"({"error":"invalid_dlna_item"})");
@@ -1935,8 +1932,8 @@ void handleDlnaPlay(AsyncWebServerRequest* request) {
   strlcpy(playback.url, url.c_str(), sizeof(playback.url));
   strlcpy(playback.title, title.length() ? title.c_str() : "DLNA",
           sizeof(playback.title));
-  playback.source = voxone::temporary_audio::Source::Dlna;
-  player.requestTemporaryUrl(playback);
+  player.requestTemporaryUrl(
+      playback.view(voxone::temporary_audio::Source::Dlna));
   stationsReply(request, 202, R"({"status":"starting","source":"dlna"})");
 }
 namespace {
@@ -3647,10 +3644,10 @@ void NetServer::processQueue(){
         serialCli.printf("##CLI.VOL#: %d\n", volume.config.volume);
         break;
       }
-      case NRSSI:         rssi = WiFi.RSSI(); sprintf (wsBuf, "{\"payload\":[{\"id\":\"rssi\", \"value\": %d}, {\"id\":\"heap\", \"value\": %d}]}", rssi, (player.isRunning() && runtime.audioInfo)?(int)(100*player.inBufferFilled()/playerBufMax):0); /*rssi = 255;*/ break;
+      case NRSSI:         rssi = WiFi.RSSI(); sprintf (wsBuf, "{\"payload\":[{\"id\":\"rssi\", \"value\": %d}, {\"id\":\"heap\", \"value\": %d}]}", rssi, (player.isRunning() && runtime.audioInfo)?(int)(100*player.inBufferFilled()/playerBufMax):0); break;
       case BITRATE:       sprintf (wsBuf, "{\"payload\":[{\"id\":\"bitrate\", \"value\": %d}, {\"id\":\"fmt\", \"value\": \"%s\"}]}", config.station.bitrate, getFormat(config.configFmt)); break;
       case MODE:          sprintf (wsBuf, "{\"payload\":[{\"id\":\"playerwrap\", \"value\": \"%s\"}]}", player.status() == PLAYING ? "playing" : "stopped"); serialCli.info(); break;
-      case EQUALIZER:     sprintf (wsBuf, "{\"payload\":[{\"id\":\"bass\", \"value\": %d}, {\"id\": \"middle\", \"value\": %d}, {\"id\": \"trebble\", \"value\": %d}]}", runtime.bass, runtime.middle, runtime.treble); break;
+      case EQUALIZER:     sprintf (wsBuf, "{\"payload\":[{\"id\":\"bass\", \"value\": %d}, {\"id\": \"middle\", \"value\": %d}, {\"id\": \"treble\", \"value\": %d}]}", runtime.bass, runtime.middle, runtime.treble); break;
       case BALANCE:       sprintf (wsBuf, "{\"payload\":[{\"id\": \"balance\", \"value\": %d}]}", runtime.balance); break;
       case WEBSTATUS:     formatWebStatus(wsBuf, sizeof(wsBuf)); break;
       default:          break;
@@ -3775,7 +3772,6 @@ void NetServer::loop() {
   portENTER_CRITICAL(&netserverLoopMux);
   netserverLoopActive = false;
   portEXIT_CRITICAL(&netserverLoopMux);
-  //processQueue();
 }
 
 void NetServer::serviceBtFirmwareUpdate() {
@@ -3984,13 +3980,13 @@ void NetServer::onWsMessage(void *arg, const uint8_t *data, size_t len,
       return;
     }
     if (strcmp(_wscmd, "tone") == 0) {
-      int8_t bass, middle, trebble;
-      if (len <= 64 && parseToneValue(_wsval, bass, middle, trebble)) {
-        config.setTone(bass, middle, trebble);
+      int8_t bass, middle, treble;
+      if (len <= 64 && parseToneValue(_wsval, bass, middle, treble)) {
+        config.setTone(bass, middle, treble);
       }
       return;
     }
-    if (strcmp(_wscmd, "trebble") == 0) {
+    if (strcmp(_wscmd, "treble") == 0) {
       int8_t valb = atoi(_wsval);
       const auto runtime = config.runtimeSnapshot();
       config.setTone(runtime.bass, runtime.middle, valb);

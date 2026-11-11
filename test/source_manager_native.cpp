@@ -9,6 +9,8 @@
 #include <string>
 
 int main() {
+  static_assert(sizeof(BtSourceSnapshot) < sizeof(BtLinkState),
+                "SourceManager snapshot must remain smaller than BtLinkState");
   PlayerDisplayView playerView{};
   DisplaySourceView raw{};
   raw.kind = DisplaySourceKind::Radio;

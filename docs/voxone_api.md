@@ -236,59 +236,41 @@ kodem 1008. Nieprawidłowa wartość często jest tylko ignorowana.
 | `stop` | ignorowana | STOP RADIO. |
 | `toggle` | ignorowana | Przełącza PLAY/STOP RADIO. |
 | `prev`, `next` | ignorowana | Poprzednia/następna stacja RADIO. |
-| `playstation`, `play` | liczba stacji | PLAY; liczba jest ograniczana do zakresu 1..liczność playlisty. |
-| `volm`, `volp` | ignorowana | Krok głośności w dół/w górę. |
-| `vol`, `volume` | liczba | Starsza skala raw 0..254; wartość jest clampowana. |
+| `playstation` | liczba stacji | PLAY; liczba jest ograniczana do zakresu 1..liczność playlisty. |
 | `vol100` | 0..100 | Głośność użytkownika; przy aktywnym BT steruje głośnością sesji BT, w przeciwnym razie RADIO. |
 | `mute` | `0` albo `1` | Wyłącza/włącza MUTE. |
 | `maximumvolume` | 1..100 | Maksymalna głośność użytkownika. |
 | `startupmode` | `0` (`LAST`) albo `1` (`FIXED`) | Polityka głośności przy starcie. |
 | `startupfixedvolume` | 0..100 | Stała głośność startowa. |
-| `balance`, `ballance` | -16..16 | Balans; błędna historyczna pisownia pozostaje aliasem. |
+| `balance` | -16..16 | Balans kanałów. |
 
 #### Audio, ekran i UI
 
 | Komenda | Wartość | Efekt |
 |---|---|---|
 | `tone` | `bass,middle,treble`, każda liczba w `int8_t` | Atomowo zapisuje trzy regulatory tonu. |
-| `bass`, `middle`, `trebble` | liczba | Zapisuje jedną składową; `trebble` jest historyczną pisownią kontraktu. |
-| `dspon`, `screenon` | `0`/niezero | Wyłącza/włącza prezentację DSP/display. |
+| `bass`, `middle`, `treble` | liczba | Zapisuje jedną składową. |
 | `dim` | 0..100 (clamp) | Ustawia jasność runtime i zapisuje ją. |
-| `brightness` | liczba rzutowana do `uint8_t` | Starszy setter jasności bez walidacji 0..100. Preferowane `dim`. |
 | `flipscreen` | `0`/niezero | Flip ekranu, zapis i broadcast `getscreen`. |
-| `contrast` | liczba rzutowana do `uint8_t` | Zapis kontrastu i zastosowanie na display. |
-| `numplaylist` | `0`/niezero | Sposób numerowania/listy playlisty. |
 | `vumeter` | `0`/niezero | Włącza VU i publikuje nowy `getsystem`; nie publikuje samych poziomów L/R. |
 | `stationlisttimeout` | 0..120 s | Trwały timeout widoku listy stacji. |
 | `bttransporttimeout` | 0..120 s | Trwały timeout widoku transportu BT. |
 | `scrollsettings` | `true|false,slow|normal|fast,0|1000|2000|3000|4000|5000` | Trwały zapis scroll. Jedyna zwykła mutacja z własnym zdarzeniem wyniku. |
-| `screensaverenabled` | `0`/niezero | Włącza screensaver. |
-| `screensavertimeout` | liczba rzutowana do `uint16_t` | Timeout screensavera. |
-| `screensaverblank` | `0`/niezero | Blank zamiast widoku screensavera. |
-| `screensaverplayingenabled` | `0`/niezero | Osobna polityka podczas PLAY. |
-| `screensaverplayingtimeout` | liczba rzutowana do `uint16_t` | Timeout podczas PLAY. |
-| `screensaverplayingblank` | `0`/niezero | Blank podczas PLAY. |
-| `abuff` | liczba rzutowana do `uint16_t` | Pole zgodności legacy. Bieżący plan pamięci dobiera stały bufor z capability PSRAM: 512 KiB w PSRAM albo 48 KiB w DRAM. |
 
 #### Czas, sieć, wejście i system
 
 | Komenda | Wartość | Efekt |
 |---|---|---|
-| `tzh`, `tzm` | liczba rzutowana do `int8_t` | Pola legacy strefy; bieżący runtime używa Europe/Warsaw. |
-| `sntp1`, `sntp2` | nazwa serwera, do 34 B + NUL | Ustawia serwery SNTP. |
 | `timeint` | 1..10080 min | Interwał synchronizacji sieciowej. |
 | `timeintrtc` | 1..1000 h | Interwał synchronizacji RTC. |
-| `volsteps` | liczba rzutowana do `uint8_t` | Liczba/kroków głośności konfiguracji legacy. |
-| `encacc` | liczba rzutowana do `uint16_t` | Akceleracja enkodera. |
 | `encoderuireversed` | `0` albo `1` | Trwale przełącza funkcjonalny tryb NORMAL/REVERSED i rozsyła nowy `getscreen`; nie zmienia sprzętowej inwersji A/B. |
-| `oneclickswitching` | `0`/niezero | Przełączanie playlisty jednym kliknięciem. |
-| `softap` | liczba rzutowana do `uint8_t` | Opóźnienie/polityka SoftAP. |
-| `mdnsname` | tekst do 23 B + NUL | Trwała nazwa hosta; zmiana wymaga ponownego uruchomienia usług sieciowych. |
-| `smartstart` | `1` albo inna wartość | `1` zapisuje intencję PLAY tylko gdy player aktualnie działa; pozostałe wartości mapują się na tryb 2. |
-| `reboot`, `boot` | ignorowana | Planowany restart urządzenia. |
+| `reboot` | ignorowana | Planowany restart urządzenia. |
 
-Destrukcyjne komendy legacy `format`, `clearspiffs` i `reset` zostały usunięte
-z `CommandHandler`; nie są częścią protokołu WS.
+Komendy legacy `format`, `clearspiffs`, `reset`, `play`, `vol`, `volume`,
+`volm`, `volp`, `ballance`, `trebble`, `dspon`, `screenon`, `brightness`,
+`contrast`, `numplaylist`, `screensaver*`, `abuff`, `tzh`, `tzm`, `sntp1`,
+`sntp2`, `volsteps`, `encacc`, `oneclickswitching`, `boot`, `smartstart`,
+`softap` i `mdnsname` zostały wycofane i są odrzucane przez politykę WS.
 
 ### Komendy DSP klient → serwer (tylko L0)
 
@@ -349,7 +331,7 @@ Pełna lista kształtów wiadomości:
 | RSSI/bufor | `{"payload":[{"id":"rssi","value":-58},{"id":"heap","value":74}]}`. Uwaga: `heap` nie jest stertą; to procent zapełnienia bufora audio, albo 0. |
 | Format audio | `payload` z `bitrate` i `fmt` (`MP3`, `AAC`, `FLAC`, `OGG`, `WAV` albo `bitrate`). |
 | Playback RADIO | `{"payload":[{"id":"playerwrap","value":"playing|stopped"}]}`. Stan `paused` występuje w `webStatus` dla BT, nie tutaj. |
-| EQ | `payload` z `bass`, `middle`, `trebble`. |
+| EQ | `payload` z `bass`, `middle`, `treble`. |
 | Balance | `{"payload":[{"id":"balance","value":0}]}`. |
 | `webStatus` | Obiekt opisany poniżej. |
 | `getsystem` | Obiekt ustawień i `systemInfo`/`networkInfo`, opisany poniżej. |

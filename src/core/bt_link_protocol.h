@@ -3,6 +3,7 @@
 
 #include <stddef.h>
 #include <stdint.h>
+#include <string.h>
 #include "bt_ota_state.h"
 
 enum class BtPlayback : uint8_t { Stopped, Playing, Paused };
@@ -66,6 +67,41 @@ struct BtLinkState {
   uint16_t rawVuRight = 0;
   uint32_t rawVuLastMs = 0;
 };
+
+// SourceManager does not need firmware identity, capabilities, album or OTA
+// state. Keep its cross-task snapshot focused so the main loop no longer
+// copies the full BtLinkState (currently almost 1 KiB) on every iteration.
+struct BtSourceSnapshot {
+  bool runtimeAvailable = false;
+  bool connected = false;
+  BtPlayback playback = BtPlayback::Stopped;
+  int16_t volume = -1;
+  uint32_t volumeRevision = 0;
+  uint32_t sampleRate = 0;
+  uint16_t rawVuLeft = 0;
+  uint16_t rawVuRight = 0;
+  uint32_t rawVuLastMs = 0;
+  char peerName[sizeof(BtLinkState::peerName)]{};
+  char artist[sizeof(BtLinkState::artist)]{};
+  char title[sizeof(BtLinkState::title)]{};
+};
+
+inline BtSourceSnapshot makeBtSourceSnapshot(const BtLinkState& state) {
+  BtSourceSnapshot snapshot{};
+  snapshot.runtimeAvailable = state.runtimeAvailable;
+  snapshot.connected = state.connected;
+  snapshot.playback = state.playback;
+  snapshot.volume = state.volume;
+  snapshot.volumeRevision = state.volumeRevision;
+  snapshot.sampleRate = state.sampleRate;
+  snapshot.rawVuLeft = state.rawVuLeft;
+  snapshot.rawVuRight = state.rawVuRight;
+  snapshot.rawVuLastMs = state.rawVuLastMs;
+  memcpy(snapshot.peerName, state.peerName, sizeof(snapshot.peerName));
+  memcpy(snapshot.artist, state.artist, sizeof(snapshot.artist));
+  memcpy(snapshot.title, state.title, sizeof(snapshot.title));
+  return snapshot;
+}
 
 struct BtLinkDiagnostics {
   char resetReason[48]{};

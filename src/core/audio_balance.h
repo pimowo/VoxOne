@@ -45,9 +45,7 @@ inline int32_t applyStereoGain(int16_t left, int16_t right,
 }
 
 inline bool isBalanceCommand(const char* command) {
-  return command &&
-         (std::strcmp(command, "balance") == 0 ||
-          std::strcmp(command, "ballance") == 0);
+  return command && std::strcmp(command, "balance") == 0;
 }
 
 inline bool parseValue(const char* value, int8_t& parsed) {
