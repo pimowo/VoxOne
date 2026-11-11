@@ -142,6 +142,10 @@ reorder.
 | `POST` | `/api/stations/reorder` | `revision`, `id`, `targetPosition` (1..liczba stacji) | Przenosi rekord. |
 | `POST` | `/api/stations/metadata` | `revision`, `id`, `swapArtistTitle=0|1` | Ustawia interpretację `Artist - Title` dla rekordu. |
 | `GET` | `/api/directory/search` | Start: `q`, opcjonalnie `country=PL`, `limit=20`; polling: `job=<uint32>` | Chronione proxy Radio Browser. `q` ma 1–80 B, `country` to 2 litery, limit 1–20. Start zwraca 202 `{"status":"pending","job":N}`; polling zwraca 202 pending albo 200 `{"results":[...]}`. Równolegle działa tylko jedno zadanie. Upstream HTTPS jest używany z `setInsecure()`, więc certyfikat nie jest walidowany. |
+| `GET` | `/api/dlna/servers` | Start: brak; polling: `job=<uint32>` | Uruchamia 3-sekundowe SSDP i zwraca maksymalnie trzy serwery, deduplikowane po UDN lub IP. Wynik 200 zawiera `active` oraz tablicę `servers` z polami `index`, `name`, `ip`, `udn`. |
+| `POST` | `/api/dlna/select` | dokładnie jedno z: `index=0..2` albo `ip=<adres>` | Ustawia aktywny serwer z ostatniego wykrywania; wybór obowiązuje dla kolejnych operacji browse. |
+| `GET` | `/api/dlna/browse` | Start: opcjonalnie `parent` (domyślnie `0`); polling: `job=<uint32>` | Asynchronicznie pobiera folder z aktywnego serwera. Gdy lista serwerów jest pusta, najpierw wykonuje SSDP. |
+| `POST` | `/api/dlna/play` | `url`, opcjonalnie `title` | Uruchamia bezpieczny URL elementu jako tymczasowe źródło DLNA. |
 
 Wynik katalogu zawiera dla każdej stacji: `directoryId`, `name`, `url`,
 `country`, `countryCode`, `codec`, `bitrate`, `hls`, `favicon`. Do wyniku

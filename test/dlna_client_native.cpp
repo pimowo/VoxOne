@@ -43,6 +43,24 @@ int main() {
   assert(ssdpParser.finish(server));
   assert(std::string(server.location) ==
          "http://192.168.1.20:8200/rootDesc.xml");
+  assert(std::string(server.ip) == "192.168.1.20");
+  assert(std::string(server.udn) == "uuid:test");
+
+  SsdpServer discovered[kMaxDlnaServers];
+  size_t discoveredCount = 0;
+  assert(addSsdpServer(discovered, discoveredCount, server));
+  assert(discoveredCount == 1);
+  assert(!addSsdpServer(discovered, discoveredCount, server));
+  SsdpServer sameIp = server;
+  std::strcpy(sameIp.udn, "uuid:duplicate-ip");
+  assert(!addSsdpServer(discovered, discoveredCount, sameIp));
+  SsdpServer second = server;
+  std::strcpy(second.location, "http://192.168.1.21:8200/rootDesc.xml");
+  std::strcpy(second.ip, "192.168.1.21");
+  assert(!addSsdpServer(discovered, discoveredCount, second));
+  std::strcpy(second.udn, "uuid:second");
+  assert(addSsdpServer(discovered, discoveredCount, second));
+  assert(discoveredCount == 2);
 
   const std::string descriptionXml =
       "<?xml version=\"1.0\"?>"
@@ -155,6 +173,8 @@ int main() {
 
   const std::string serverSource = readFile("src/core/netserver.cpp");
   assert(serverSource.find("dlna::kPlayRoute") != std::string::npos);
+  assert(serverSource.find("dlna::kServersRoute") != std::string::npos);
+  assert(serverSource.find("dlna::kSelectRoute") != std::string::npos);
   assert(serverSource.find("Source::Dlna") != std::string::npos);
   const std::string menuSource = readFile("src/core/dlna_menu_controller.cpp");
   assert(menuSource.find("copyBrowseItem") != std::string::npos);
@@ -164,6 +184,8 @@ int main() {
   const std::string web = readFile("web-src/voxone.js");
   assert(web.find("/api/dlna/browse?parent=") != std::string::npos);
   assert(web.find("/api/dlna/play") != std::string::npos);
+  assert(web.find("/api/dlna/servers") != std::string::npos);
+  assert(web.find("/api/dlna/select") != std::string::npos);
   assert(web.find("data-dlna-index") != std::string::npos);
   return 0;
 }

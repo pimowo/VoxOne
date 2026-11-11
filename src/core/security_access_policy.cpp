@@ -88,6 +88,12 @@ const SecurityRouteRule kRouteRules[] = {
     {SecurityAccessMethod::Get, "/api/directory/search",
      SecurityEndpoint::DirectorySearch, SecurityRouteClass::ProtectedRest,
      false, false},
+    {SecurityAccessMethod::Get, "/api/dlna/servers",
+     SecurityEndpoint::DlnaServers, SecurityRouteClass::ProtectedRest,
+     false, false},
+    {SecurityAccessMethod::Post, "/api/dlna/select",
+     SecurityEndpoint::DlnaSelect, SecurityRouteClass::ProtectedRest,
+     true, false},
     {SecurityAccessMethod::Get, "/api/dlna/browse",
      SecurityEndpoint::DlnaBrowse, SecurityRouteClass::ProtectedRest,
      false, false},
@@ -339,6 +345,8 @@ const char* securityEndpointName(SecurityEndpoint endpoint) {
     case SecurityEndpoint::Variables: return "variables";
     case SecurityEndpoint::StationsSnapshot: return "stations-snapshot";
     case SecurityEndpoint::DirectorySearch: return "directory-search";
+    case SecurityEndpoint::DlnaServers: return "dlna-servers";
+    case SecurityEndpoint::DlnaSelect: return "dlna-select";
     case SecurityEndpoint::DlnaBrowse: return "dlna-browse";
     case SecurityEndpoint::DlnaPlay: return "dlna-play";
     case SecurityEndpoint::StationsExport: return "stations-export";

@@ -251,6 +251,8 @@ void handleUpload(AsyncWebServerRequest *request, String filename, size_t index,
 void handleStationsRead(AsyncWebServerRequest *request);
 void handleStationsReadSnapshot(AsyncWebServerRequest *request);
 void handleStationDirectorySearch(AsyncWebServerRequest *request);
+void handleDlnaServers(AsyncWebServerRequest *request);
+void handleDlnaSelect(AsyncWebServerRequest *request);
 void handleDlnaBrowse(AsyncWebServerRequest *request);
 void handleDlnaPlay(AsyncWebServerRequest *request);
 void handleStationsMutation(AsyncWebServerRequest *request);
@@ -1090,6 +1092,8 @@ bool NetServer::begin(bool quiet) {
   webserver.on(stationDirectory::kStationsSnapshotRoute, HTTP_GET, handleStationsReadSnapshot);
   webserver.on(stationDirectory::kDirectorySearchRoute, HTTP_GET, handleStationDirectorySearch);
   if (voxone::hardware::hardwareCapabilities().supportsDlna) {
+    webserver.on(voxone::dlna::kServersRoute, HTTP_GET, handleDlnaServers);
+    webserver.on(voxone::dlna::kSelectRoute, HTTP_POST, handleDlnaSelect);
     webserver.on(voxone::dlna::kBrowseRoute, HTTP_GET, handleDlnaBrowse);
     webserver.on(voxone::dlna::kPlayRoute, HTTP_POST, handleDlnaPlay);
   }
@@ -1769,6 +1773,95 @@ void handleStationDirectorySearch(AsyncWebServerRequest* request) {
                   query.c_str(), country.c_str(), limit);
     stationsReply(request, 202,
                   String(R"({"status":"pending","job":)") + job + "}");
+  }
+}
+
+void handleDlnaServers(AsyncWebServerRequest* request) {
+  if (request->hasParam("job")) {
+    const String jobText = request->getParam("job")->value();
+    char* end = nullptr;
+    const unsigned long parsed = strtoul(jobText.c_str(), &end, 10);
+    if (!jobText.length() || !end || *end || !parsed || parsed > UINT32_MAX) {
+      stationsReply(request, 400, R"({"error":"bad_job"})");
+      return;
+    }
+    int status = 0;
+    String body;
+    bool ready = false;
+    if (!voxone::dlna::pollServerDiscovery(static_cast<uint32_t>(parsed),
+                                           status, body, ready)) {
+      stationsReply(request, 404, R"({"error":"job_not_found"})");
+      return;
+    }
+    stationsReply(request, status, body);
+    return;
+  }
+
+  uint32_t job = 0;
+  const voxone::dlna::StartResult result =
+      voxone::dlna::startServerDiscovery(job);
+  switch (result) {
+    case voxone::dlna::StartResult::Busy:
+      stationsReply(request, 429, R"({"error":"dlna_busy"})");
+      break;
+    case voxone::dlna::StartResult::Offline:
+      stationsReply(request, 503, R"({"error":"offline"})");
+      break;
+    case voxone::dlna::StartResult::NoMemory:
+      stationsReply(request, 503, R"({"error":"insufficient_memory"})");
+      break;
+    case voxone::dlna::StartResult::Started:
+      Serial.printf("##[DLNA]# discovery job=%lu\n",
+                    static_cast<unsigned long>(job));
+      stationsReply(request, 202,
+                    String(R"({"status":"pending","job":)") + job +
+                        R"(,"poll":"/api/dlna/servers?job=)" + job +
+                        R"("})");
+      break;
+  }
+}
+
+void handleDlnaSelect(AsyncWebServerRequest* request) {
+  const bool hasIndex = request->hasParam("index", true);
+  const bool hasIp = request->hasParam("ip", true);
+  if (hasIndex == hasIp) {
+    stationsReply(request, 400, R"({"error":"provide_index_or_ip"})");
+    return;
+  }
+  int index = -1;
+  String ip;
+  if (hasIndex) {
+    const String value = request->getParam("index", true)->value();
+    char* end = nullptr;
+    const long parsed = strtol(value.c_str(), &end, 10);
+    if (!value.length() || !end || *end || parsed < 0 ||
+        parsed >= static_cast<long>(voxone::dlna::kMaxDlnaServers)) {
+      stationsReply(request, 400, R"({"error":"bad_server_index"})");
+      return;
+    }
+    index = static_cast<int>(parsed);
+  } else {
+    ip = request->getParam("ip", true)->value();
+    if (!ip.length() || ip.length() >= sizeof(voxone::dlna::DlnaServerInfo::ip)) {
+      stationsReply(request, 400, R"({"error":"bad_server_ip"})");
+      return;
+    }
+  }
+  String body;
+  switch (voxone::dlna::selectServer(index, hasIp ? ip.c_str() : nullptr,
+                                     body)) {
+    case voxone::dlna::SelectResult::Selected:
+      stationsReply(request, 200, body);
+      break;
+    case voxone::dlna::SelectResult::Invalid:
+      stationsReply(request, 400, R"({"error":"bad_server_selector"})");
+      break;
+    case voxone::dlna::SelectResult::NotFound:
+      stationsReply(request, 404, R"({"error":"server_not_found"})");
+      break;
+    case voxone::dlna::SelectResult::NoMemory:
+      stationsReply(request, 503, R"({"error":"insufficient_memory"})");
+      break;
   }
 }
 

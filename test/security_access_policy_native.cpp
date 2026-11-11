@@ -77,6 +77,10 @@ const EndpointCase kEndpoints[] = {
      SecurityRouteClass::ProtectedRest, false, false},
     {SecurityAccessMethod::Get, "/api/directory/search?country=PL&q=radio",
      SecurityEndpoint::DirectorySearch, SecurityRouteClass::ProtectedRest, false, false},
+    {SecurityAccessMethod::Get, "/api/dlna/servers",
+     SecurityEndpoint::DlnaServers, SecurityRouteClass::ProtectedRest, false, false},
+    {SecurityAccessMethod::Post, "/api/dlna/select",
+     SecurityEndpoint::DlnaSelect, SecurityRouteClass::ProtectedRest, true, false},
     {SecurityAccessMethod::Get, "/api/dlna/browse?parent=0",
      SecurityEndpoint::DlnaBrowse, SecurityRouteClass::ProtectedRest, false, false},
     {SecurityAccessMethod::Post, "/api/dlna/play",
@@ -260,11 +264,11 @@ void testCompleteEndpointInventory() {
     assert(std::strcmp(securityEndpointName(actual.endpoint), "unknown") != 0);
     assert(std::strcmp(securityRouteClassName(actual.routeClass), "unknown") != 0);
   }
-  assert(sizeof(kEndpoints) / sizeof(kEndpoints[0]) == 55);
+  assert(sizeof(kEndpoints) / sizeof(kEndpoints[0]) == 57);
 
   size_t ruleCount = 0;
   const SecurityRouteRule* rules = securityAccessRouteRules(ruleCount);
-  assert(rules != nullptr && ruleCount == 55);
+  assert(rules != nullptr && ruleCount == 57);
   for (size_t index = 0; index < ruleCount; ++index) {
     const SecurityRouteRule& rule = rules[index];
     assert(rule.path && rule.path[0] == '/');
@@ -635,7 +639,8 @@ void testProductionInventoryAndHttpOnlyIntegration() {
   const char* registrations[] = {
       "webserver.on(\"/\", HTTP_ANY", "/api/stations/export",
       "/api/stations/import", "kStationsSnapshotRoute", "kDirectorySearchRoute",
-      "dlna::kBrowseRoute", "dlna::kPlayRoute",
+      "dlna::kServersRoute", "dlna::kSelectRoute", "dlna::kBrowseRoute",
+      "dlna::kPlayRoute",
       "/api/stations/add", "/api/stations/edit", "/api/stations/delete",
       "/api/stations/reorder", "/api/stations/metadata",
       "/api/hardware", "/api/ha", "/api/display/theme", "kBackupRoute", "kRestoreRoute", "/api/time",

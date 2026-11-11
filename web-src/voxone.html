@@ -181,6 +181,11 @@
       <section id="dlna" data-panel aria-labelledby="dlna-title" hidden>
         <div class="section-heading"><div><p class="eyebrow">BIBLIOTEKA SIECIOWA</p><h2 id="dlna-title">DLNA</h2></div><span class="badge" id="dlna-server">MediaServer</span></div>
         <article class="card dlna-browser">
+          <div class="dlna-server-picker">
+            <label for="dlna-server-select">Serwer DLNA</label>
+            <select id="dlna-server-select" class="setting-select" disabled><option>Nie wykryto serwerów</option></select>
+            <button id="dlna-discover" type="button">Wyszukaj</button>
+          </div>
           <div class="dlna-toolbar">
             <button id="dlna-back" type="button" disabled>← Wstecz</button>
             <strong id="dlna-path">Główne</strong>

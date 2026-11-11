@@ -13,11 +13,25 @@ namespace dlna {
 
 constexpr char kBrowseRoute[] = "/api/dlna/browse";
 constexpr char kPlayRoute[] = "/api/dlna/play";
+constexpr char kServersRoute[] = "/api/dlna/servers";
+constexpr char kSelectRoute[] = "/api/dlna/select";
 constexpr size_t kMaxBrowseItems = 24;
+constexpr size_t kMaxDlnaServers = 3;
+
+struct DlnaServerInfo {
+  char name[128] = {};
+  char ip[64] = {};
+  char udn[128] = {};
+};
 
 struct SsdpServer {
   char location[384] = {};
+  char ip[64] = {};
+  char udn[128] = {};
 };
+
+bool addSsdpServer(SsdpServer (&servers)[kMaxDlnaServers], size_t& count,
+                   const SsdpServer& candidate);
 
 class SsdpResponseParser {
  public:
@@ -31,6 +45,7 @@ class SsdpResponseParser {
   bool invalid_ = false;
   bool mediaServer_ = false;
   char location_[sizeof(SsdpServer::location)] = {};
+  char udn_[sizeof(SsdpServer::udn)] = {};
 };
 
 struct DeviceDescription {
@@ -167,7 +182,11 @@ bool validObjectId(const char* value);
 
 #ifdef ARDUINO
 enum class StartResult : uint8_t { Started, Busy, Offline, NoMemory };
+enum class SelectResult : uint8_t { Selected, Invalid, NotFound, NoMemory };
 bool init();
+StartResult startServerDiscovery(uint32_t& job);
+bool pollServerDiscovery(uint32_t job, int& status, String& body, bool& ready);
+SelectResult selectServer(int index, const char* ip, String& body);
 StartResult startBrowse(const char* parent, uint32_t& job);
 bool pollBrowse(uint32_t job, int& status, String& body, bool& ready);
 bool pollBrowseItems(uint32_t job, int& status, bool& ready, size_t& count);

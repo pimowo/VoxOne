@@ -524,10 +524,14 @@ window.VoxOneRestartWaiter = Object.freeze({
   const dlnaItemsElement = document.getElementById("dlna-items");
   const dlnaBack = document.getElementById("dlna-back");
   const dlnaRefresh = document.getElementById("dlna-refresh");
+  const dlnaServerSelect = document.getElementById("dlna-server-select");
+  const dlnaDiscover = document.getElementById("dlna-discover");
   let dlnaItems = [];
+  let dlnaServers = [];
   let dlnaPathStack = [{id: "0", title: "Główne"}];
   let dlnaRequestGeneration = 0;
   let dlnaLoaded = false;
+  let dlnaServersLoaded = false;
   let dlnaBusy = false;
   const updateImages = {
     firmware: {
@@ -1462,6 +1466,8 @@ window.VoxOneRestartWaiter = Object.freeze({
     dlnaPath.textContent = dlnaPathStack.map(part => part.title).join(" / ");
     dlnaBack.disabled = dlnaBusy || dlnaPathStack.length <= 1;
     dlnaRefresh.disabled = dlnaBusy;
+    dlnaDiscover.disabled = dlnaBusy;
+    dlnaServerSelect.disabled = dlnaBusy || !dlnaServers.length;
     const rows = dlnaItems.map((item, index) => {
       const row = document.createElement("li");
       const button = document.createElement("button");
@@ -1495,6 +1501,101 @@ window.VoxOneRestartWaiter = Object.freeze({
       if (payload?.error) return fallback + " (" + payload.error + ")";
     } catch (_) {}
     return fallback + " (HTTP " + response.status + ")";
+  }
+
+  async function discoverDlnaServers() {
+    if (dlnaBusy) return false;
+    const generation = ++dlnaRequestGeneration;
+    dlnaBusy = true;
+    dlnaStatus.textContent = "Wyszukiwanie serwerów DLNA (3 sekundy)…";
+    renderDlnaBrowser();
+    let browseAfterDiscovery = false;
+    try {
+      let response = await securityFetch("/api/dlna/servers",
+        {cache: "no-store", credentials: "same-origin"}, 7000);
+      if (response.status !== 202)
+        throw new Error(await dlnaError(response, "Nie udało się rozpocząć wyszukiwania"));
+      const accepted = await response.json();
+      if (!Number.isInteger(accepted?.job) || accepted.job <= 0)
+        throw new Error("Urządzenie zwróciło nieprawidłowy identyfikator zadania DLNA.");
+      let payload = null;
+      for (let attempt = 0; attempt < 60 && generation === dlnaRequestGeneration; ++attempt) {
+        await new Promise(resolve => setTimeout(resolve, 400));
+        response = await securityFetch("/api/dlna/servers?job=" + accepted.job,
+          {cache: "no-store", credentials: "same-origin"}, 7000);
+        if (response.status === 202) continue;
+        if (!response.ok)
+          throw new Error(await dlnaError(response, "Wyszukiwanie DLNA nie powiodło się"));
+        payload = await response.json();
+        break;
+      }
+      if (generation !== dlnaRequestGeneration) return false;
+      if (!payload || payload.status !== "ok" || !Array.isArray(payload.servers))
+        throw new Error("Wyszukiwanie serwerów DLNA przekroczyło limit czasu.");
+      dlnaServers = payload.servers.filter(server => server &&
+        Number.isInteger(server.index) && typeof server.name === "string" &&
+        typeof server.ip === "string").slice(0, 3);
+      if (!dlnaServers.length) throw new Error("Nie znaleziono serwera DLNA.");
+      const options = dlnaServers.map(server => {
+        const option = document.createElement("option");
+        option.value = String(server.index);
+        option.textContent = (server.name || "MediaServer") + " (" + server.ip + ")";
+        return option;
+      });
+      dlnaServerSelect.replaceChildren(...options);
+      const active = dlnaServers.some(server => server.index === payload.active)
+        ? payload.active : dlnaServers[0].index;
+      dlnaServerSelect.value = String(active);
+      const selected = dlnaServers.find(server => server.index === active);
+      dlnaServer.textContent = selected?.name || "MediaServer";
+      dlnaServersLoaded = true;
+      dlnaLoaded = false;
+      dlnaItems = [];
+      dlnaPathStack = [{id: "0", title: "Główne"}];
+      browseAfterDiscovery = true;
+      return true;
+    } catch (error) {
+      if (generation === dlnaRequestGeneration)
+        dlnaStatus.textContent = error?.message || "Błąd wyszukiwania DLNA.";
+      return false;
+    } finally {
+      if (generation === dlnaRequestGeneration) {
+        dlnaBusy = false;
+        renderDlnaBrowser();
+        if (browseAfterDiscovery) browseDlna("0");
+      }
+    }
+  }
+
+  async function selectDlnaServer() {
+    if (dlnaBusy || !dlnaServers.length) return;
+    const selectedIndex = Number(dlnaServerSelect.value);
+    if (!Number.isInteger(selectedIndex)) return;
+    dlnaBusy = true;
+    dlnaStatus.textContent = "Przełączanie serwera DLNA…";
+    renderDlnaBrowser();
+    let browseAfterSelection = false;
+    try {
+      const response = await securityFetch("/api/dlna/select", {
+        method: "POST", credentials: "same-origin", cache: "no-store",
+        headers: {"Content-Type": "application/x-www-form-urlencoded"},
+        body: new URLSearchParams({index: String(selectedIndex)}).toString()
+      });
+      if (!response.ok)
+        throw new Error(await dlnaError(response, "Nie udało się wybrać serwera"));
+      const selected = dlnaServers.find(server => server.index === selectedIndex);
+      dlnaServer.textContent = selected?.name || "MediaServer";
+      dlnaLoaded = false;
+      dlnaItems = [];
+      dlnaPathStack = [{id: "0", title: "Główne"}];
+      browseAfterSelection = true;
+    } catch (error) {
+      dlnaStatus.textContent = error?.message || "Błąd wyboru serwera DLNA.";
+    } finally {
+      dlnaBusy = false;
+      renderDlnaBrowser();
+      if (browseAfterSelection) browseDlna("0");
+    }
   }
 
   async function browseDlna(parent, pathAction = null) {
@@ -1581,7 +1682,8 @@ window.VoxOneRestartWaiter = Object.freeze({
       else link.removeAttribute("aria-current");
     }
     if (selected === "stations" && state.stationsStatus === "idle") loadStations();
-    if (selected === "dlna" && !dlnaLoaded && !dlnaBusy) browseDlna("0");
+    if (selected === "dlna" && !dlnaServersLoaded && !dlnaBusy)
+      discoverDlnaServers();
     if (selected === "settings") {
       loadTimeStatus();
       loadHaSettings();
@@ -3694,6 +3796,8 @@ window.VoxOneRestartWaiter = Object.freeze({
     if (!dlnaBusy)
       browseDlna(dlnaPathStack[dlnaPathStack.length - 1].id);
   });
+  dlnaDiscover.addEventListener("click", discoverDlnaServers);
+  dlnaServerSelect.addEventListener("change", selectDlnaServer);
 
   window.addEventListener("hashchange", showTab);
   window.addEventListener("pageshow", event => {

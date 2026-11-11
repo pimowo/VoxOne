@@ -83,6 +83,26 @@ void appendBounded(char* output, size_t capacity, const char* data, size_t lengt
   output[used + copied] = '\0';
 }
 
+bool locationHost(const char* location, char* output, size_t capacity) {
+  if (!location || !output || capacity < 2) return false;
+  const char* host = std::strstr(location, "://");
+  host = host ? host + 3 : location;
+  const char* end = host;
+  if (*host == '[') {
+    ++host;
+    end = std::strchr(host, ']');
+    if (!end) return false;
+  } else {
+    while (*end && *end != ':' && *end != '/' && *end != '?' && *end != '#')
+      ++end;
+  }
+  const size_t length = static_cast<size_t>(end - host);
+  if (!length || length >= capacity) return false;
+  std::memcpy(output, host, length);
+  output[length] = '\0';
+  return true;
+}
+
 bool parseUnsigned(const char* value, uint32_t& output) {
   if (!value || !*value) return false;
   errno = 0;
@@ -155,9 +175,18 @@ bool SsdpResponseParser::finishLine() {
     trim(value);
     if (equalsIgnoreCase(line_, "location"))
       copyBounded(location_, sizeof(location_), value);
-    else if ((equalsIgnoreCase(line_, "st") || equalsIgnoreCase(line_, "usn")) &&
-             containsIgnoreCase(value, "MediaServer"))
-      mediaServer_ = true;
+    else if (equalsIgnoreCase(line_, "st") || equalsIgnoreCase(line_, "usn")) {
+      if (containsIgnoreCase(value, "MediaServer")) mediaServer_ = true;
+      if (equalsIgnoreCase(line_, "usn")) {
+        const char* suffix = std::strstr(value, "::");
+        const size_t length = suffix ? static_cast<size_t>(suffix - value)
+                                     : std::strlen(value);
+        if (length && length < sizeof(udn_)) {
+          std::memcpy(udn_, value, length);
+          udn_[length] = '\0';
+        }
+      }
+    }
   }
   length_ = 0;
   line_[0] = '\0';
@@ -184,6 +213,23 @@ bool SsdpResponseParser::finish(SsdpServer& server) {
   if (length_) finishLine();
   if (!mediaServer_ || !location_[0]) return false;
   copyBounded(server.location, sizeof(server.location), location_);
+  copyBounded(server.udn, sizeof(server.udn), udn_);
+  if (!locationHost(server.location, server.ip, sizeof(server.ip))) return false;
+  return true;
+}
+
+bool addSsdpServer(SsdpServer (&servers)[kMaxDlnaServers], size_t& count,
+                   const SsdpServer& candidate) {
+  if (!candidate.location[0] || !candidate.ip[0] || count > kMaxDlnaServers)
+    return false;
+  for (size_t index = 0; index < count; ++index) {
+    const bool sameUdn = candidate.udn[0] && servers[index].udn[0] &&
+                         equalsIgnoreCase(candidate.udn, servers[index].udn);
+    const bool sameIp = equalsIgnoreCase(candidate.ip, servers[index].ip);
+    if (sameUdn || sameIp) return false;
+  }
+  if (count == kMaxDlnaServers) return false;
+  servers[count++] = candidate;
   return true;
 }
 
@@ -646,7 +692,7 @@ namespace {
 
 const IPAddress kSsdpAddress(239, 255, 255, 250);
 constexpr uint16_t kSsdpPort = 1900;
-constexpr uint32_t kDiscoveryTimeoutMs = 3200;
+constexpr uint32_t kDiscoveryTimeoutMs = 3000;
 constexpr uint32_t kConnectTimeoutMs = 2500;
 constexpr uint16_t kReadTimeoutMs = 5000;
 constexpr size_t kMaxXmlBytes = 256 * 1024;
@@ -662,8 +708,27 @@ int completedStatus = 0;
 std::string completedBody;
 BrowseListing* completedListing = nullptr;
 
+enum class JobKind : uint8_t { None, Browse, Servers };
+JobKind activeJobKind = JobKind::None;
+
+struct RuntimeServer {
+  DlnaServerInfo info;
+  char location[sizeof(SsdpServer::location)] = {};
+  char controlUrl[sizeof(DeviceDescription::controlUrl)] = {};
+};
+
+RuntimeServer servers[kMaxDlnaServers];
+size_t serverCount = 0;
+size_t activeServer = 0;
+
 struct BrowseParams {
   char parent[96];
+  uint32_t job;
+  bool hasServer;
+  RuntimeServer server;
+};
+
+struct DiscoveryParams {
   uint32_t job;
 };
 
@@ -733,13 +798,14 @@ bool sendDiscovery(WiFiUDP& udp) {
          udp.endPacket() == 1;
 }
 
-bool discoverMediaServer(SsdpServer& server) {
+size_t discoverMediaServers(SsdpServer (&servers)[kMaxDlnaServers]) {
   WiFiUDP udp;
-  if (!udp.begin(0)) return false;
+  if (!udp.begin(0)) return 0;
   if (!sendDiscovery(udp)) {
     udp.stop();
-    return false;
+    return 0;
   }
+  size_t count = 0;
   const uint32_t started = millis();
   bool repeated = false;
   while (millis() - started < kDiscoveryTimeoutMs) {
@@ -755,15 +821,18 @@ bool discoverMediaServer(SsdpServer& server) {
         const int received = udp.read(chunk, sizeof(chunk));
         if (received <= 0 || !parser.write(chunk, static_cast<size_t>(received))) break;
       }
-      if (parser.finish(server)) {
-        udp.stop();
-        return true;
+      SsdpServer candidate;
+      if (parser.finish(candidate)) {
+        const String remoteIp = udp.remoteIP().toString();
+        if (remoteIp.length())
+          copyBounded(candidate.ip, sizeof(candidate.ip), remoteIp.c_str());
+        addSsdpServer(servers, count, candidate);
       }
     }
     delay(10);
   }
   udp.stop();
-  return false;
+  return count;
 }
 
 template <typename Parser, typename Result>
@@ -940,14 +1009,114 @@ void appendUnsigned(std::string& output, uint32_t value) {
   if (length > 0) output.append(number, static_cast<size_t>(length));
 }
 
-std::string formatBrowseJson(const BrowseParams& params, const SsdpServer& server,
-                             const DeviceDescription& description,
-                             const char* controlUrl,
+std::string formatServerListJson(uint32_t job, const RuntimeServer* list,
+                                 size_t count, size_t selected) {
+  std::string output;
+  size_t capacity = 96;
+  for (size_t index = 0; index < count; ++index)
+    capacity += 96 + jsonEscapedSize(list[index].info.name) +
+                jsonEscapedSize(list[index].info.ip) +
+                jsonEscapedSize(list[index].info.udn);
+  output.reserve(capacity);
+  output = "{\"status\":\"ok\",\"job\":";
+  appendUnsigned(output, job);
+  output += ",\"active\":";
+  appendUnsigned(output, static_cast<uint32_t>(selected));
+  output += ",\"servers\":[";
+  for (size_t index = 0; index < count; ++index) {
+    if (index) output += ',';
+    output += "{\"index\":";
+    appendUnsigned(output, static_cast<uint32_t>(index));
+    output += ",\"name\":";
+    appendJsonString(output, list[index].info.name);
+    output += ",\"ip\":";
+    appendJsonString(output, list[index].info.ip);
+    output += ",\"udn\":";
+    appendJsonString(output, list[index].info.udn);
+    output += '}';
+  }
+  output += "]}";
+  return output;
+}
+
+bool prepareRuntimeServer(const SsdpServer& discovered, RuntimeServer& server,
+                          int& status) {
+  DeviceDescription description;
+  RuntimeObject<DeviceDescriptionParser> parser =
+      makeRuntimeObject<DeviceDescriptionParser>();
+  if (!parser) {
+    status = 503;
+    return false;
+  }
+  if (!httpGetXml(discovered.location, *parser, description, status) ||
+      !resolveUrl(discovered.location, description.urlBase,
+                  description.controlUrl, server.controlUrl,
+                  sizeof(server.controlUrl))) {
+    if (status == 200) status = 502;
+    return false;
+  }
+  copyBounded(server.info.name, sizeof(server.info.name),
+              description.friendlyName[0] ? description.friendlyName
+                                          : discovered.ip);
+  copyBounded(server.info.ip, sizeof(server.info.ip), discovered.ip);
+  copyBounded(server.info.udn, sizeof(server.info.udn), discovered.udn);
+  copyBounded(server.location, sizeof(server.location), discovered.location);
+  return true;
+}
+
+size_t discoverRuntimeServers(RuntimeServer (&result)[kMaxDlnaServers],
+                              int& status) {
+  SsdpServer discovered[kMaxDlnaServers];
+  const size_t discoveredCount = discoverMediaServers(discovered);
+  size_t count = 0;
+  status = discoveredCount ? 502 : 504;
+  for (size_t index = 0; index < discoveredCount; ++index) {
+    RuntimeServer candidate;
+    int candidateStatus = 502;
+    if (prepareRuntimeServer(discovered[index], candidate, candidateStatus)) {
+      result[count++] = candidate;
+      status = 200;
+    } else if (candidateStatus == 503) {
+      status = 503;
+      break;
+    }
+  }
+  return count;
+}
+
+size_t commitServerList(const RuntimeServer* discovered, size_t count) {
+  xSemaphoreTake(stateMutex, portMAX_DELAY);
+  char previousUdn[sizeof(DlnaServerInfo::udn)] = {};
+  char previousIp[sizeof(DlnaServerInfo::ip)] = {};
+  if (serverCount && activeServer < serverCount) {
+    copyBounded(previousUdn, sizeof(previousUdn), servers[activeServer].info.udn);
+    copyBounded(previousIp, sizeof(previousIp), servers[activeServer].info.ip);
+  }
+  serverCount = std::min(count, kMaxDlnaServers);
+  activeServer = 0;
+  for (size_t index = 0; index < serverCount; ++index) {
+    servers[index] = discovered[index];
+    const bool sameUdn = previousUdn[0] && servers[index].info.udn[0] &&
+                         equalsIgnoreCase(previousUdn, servers[index].info.udn);
+    const bool sameIp = previousIp[0] &&
+                        equalsIgnoreCase(previousIp, servers[index].info.ip);
+    if (sameUdn || sameIp) activeServer = index;
+  }
+  for (size_t index = serverCount; index < kMaxDlnaServers; ++index)
+    servers[index] = RuntimeServer{};
+  const size_t selected = activeServer;
+  xSemaphoreGive(stateMutex);
+  return selected;
+}
+
+std::string formatBrowseJson(const BrowseParams& params,
+                             const RuntimeServer& server,
                              const BrowseListing& listing) {
   std::string output;
   size_t capacity = 256 + jsonEscapedSize(params.parent) +
-      jsonEscapedSize(description.friendlyName) +
-      jsonEscapedSize(server.location) + jsonEscapedSize(controlUrl);
+      jsonEscapedSize(server.info.name) + jsonEscapedSize(server.info.ip) +
+      jsonEscapedSize(server.info.udn) + jsonEscapedSize(server.location) +
+      jsonEscapedSize(server.controlUrl);
   for (size_t index = 0; index < listing.count; ++index) {
     const BrowseItem& item = listing.items[index];
     capacity += 128 + jsonEscapedSize(item.id) +
@@ -962,11 +1131,15 @@ std::string formatBrowseJson(const BrowseParams& params, const SsdpServer& serve
   output += ",\"parent\":";
   appendJsonString(output, params.parent);
   output += ",\"server\":{\"name\":";
-  appendJsonString(output, description.friendlyName);
+  appendJsonString(output, server.info.name);
+  output += ",\"ip\":";
+  appendJsonString(output, server.info.ip);
+  output += ",\"udn\":";
+  appendJsonString(output, server.info.udn);
   output += ",\"location\":";
   appendJsonString(output, server.location);
   output += ",\"contentDirectory\":";
-  appendJsonString(output, controlUrl);
+  appendJsonString(output, server.controlUrl);
   output += "},\"numberReturned\":";
   appendUnsigned(output, listing.numberReturned);
   output += ",\"totalMatches\":";
@@ -995,10 +1168,10 @@ std::string formatBrowseJson(const BrowseParams& params, const SsdpServer& serve
   return output;
 }
 
-void finishJob(uint32_t job, int status, std::string&& body,
+void finishJob(uint32_t job, JobKind kind, int status, std::string&& body,
                BrowseListing* listing) {
   xSemaphoreTake(stateMutex, portMAX_DELAY);
-  if (running && activeJob == job) {
+  if (running && activeJob == job && activeJobKind == kind) {
     destroyBrowseListing(completedListing);
     completedListing = listing;
     listing = nullptr;
@@ -1015,51 +1188,98 @@ void browseWorker(void* context) {
   std::unique_ptr<BrowseParams> params(static_cast<BrowseParams*>(context));
   int status = 502;
   std::string body;
-  SsdpServer server;
-  DeviceDescription description;
   RuntimeObject<BrowseListing> listing = makeRuntimeObject<BrowseListing>();
-  char controlUrl[384] = {};
   if (!listing) {
     status = 503;
     body = "{\"error\":\"insufficient_memory\"}";
   } else if (WiFi.status() != WL_CONNECTED) {
     status = 503;
     body = "{\"error\":\"offline\"}";
-  } else if (!discoverMediaServer(server)) {
-    status = 504;
-    body = "{\"error\":\"media_server_not_found\"}";
   } else {
-    Serial.printf("##[DLNA]# MediaServer location=%s\n", server.location);
-    RuntimeObject<DeviceDescriptionParser> parser =
-        makeRuntimeObject<DeviceDescriptionParser>();
-    if (!parser) {
-      status = 503;
-      body = "{\"error\":\"insufficient_memory\"}";
-    } else if (!httpGetXml(server.location, *parser, description, status)) {
-      body = "{\"error\":\"invalid_device_description\"}";
-    } else if (!resolveUrl(server.location, description.urlBase,
-                           description.controlUrl, controlUrl,
-                           sizeof(controlUrl))) {
-      status = 502;
-      body = "{\"error\":\"invalid_content_directory_url\"}";
-    } else if (!browseContentDirectory(controlUrl, params->parent, *listing, status)) {
+    if (!params->hasServer) {
+      RuntimeServer discovered[kMaxDlnaServers];
+      const size_t count = discoverRuntimeServers(discovered, status);
+      if (count) {
+        const size_t selected = commitServerList(discovered, count);
+        params->server = discovered[selected];
+        params->hasServer = true;
+      } else {
+        body = status == 503 ? "{\"error\":\"insufficient_memory\"}"
+                             : "{\"error\":\"media_server_not_found\"}";
+      }
+    }
+    if (params->hasServer &&
+        !browseContentDirectory(params->server.controlUrl, params->parent,
+                                *listing, status)) {
       if (status == 504) body = "{\"error\":\"browse_timeout\"}";
       else if (status == 503) body = "{\"error\":\"insufficient_memory\"}";
       else body = "{\"error\":\"invalid_browse_response\"}";
-    } else {
+    } else if (params->hasServer) {
       status = 200;
-      body = formatBrowseJson(*params, server, description, controlUrl, *listing);
+      body = formatBrowseJson(*params, params->server, *listing);
       Serial.printf("##[DLNA]# server=%s parent=%s items=%u total=%lu%s\n",
-                    description.friendlyName, params->parent,
+                    params->server.info.name, params->parent,
                     static_cast<unsigned>(listing->count),
                     static_cast<unsigned long>(listing->totalMatches),
                     listing->truncated ? " truncated" : "");
     }
   }
   BrowseListing* completedItems = status == 200 ? listing.release() : nullptr;
-  finishJob(params->job, status, std::move(body), completedItems);
+  finishJob(params->job, JobKind::Browse, status, std::move(body), completedItems);
   Serial.println("##[DLNA]# browse task done");
   vTaskDelete(nullptr);
+}
+
+void discoveryWorker(void* context) {
+  std::unique_ptr<DiscoveryParams> params(
+      static_cast<DiscoveryParams*>(context));
+  int status = 502;
+  std::string body;
+  if (WiFi.status() != WL_CONNECTED) {
+    status = 503;
+    body = "{\"error\":\"offline\"}";
+  } else {
+    RuntimeServer discovered[kMaxDlnaServers];
+    const size_t count = discoverRuntimeServers(discovered, status);
+    if (!count) {
+      body = status == 503 ? "{\"error\":\"insufficient_memory\"}"
+                           : "{\"error\":\"media_server_not_found\"}";
+    } else {
+      const size_t selected = commitServerList(discovered, count);
+      status = 200;
+      body = formatServerListJson(params->job, discovered, count, selected);
+      Serial.printf("##[DLNA]# discovered=%u active=%u\n",
+                    static_cast<unsigned>(count),
+                    static_cast<unsigned>(selected));
+    }
+  }
+  finishJob(params->job, JobKind::Servers, status, std::move(body), nullptr);
+  Serial.println("##[DLNA]# discovery task done");
+  vTaskDelete(nullptr);
+}
+
+bool pollJob(uint32_t job, JobKind kind, int& status, String& body,
+             bool& ready) {
+  if (!stateMutex || !job) return false;
+  xSemaphoreTake(stateMutex, portMAX_DELAY);
+  const bool found = activeJob == job && activeJobKind == kind &&
+                     (running || completed);
+  if (found) {
+    ready = completed;
+    status = ready ? completedStatus : 202;
+    if (ready && !completedBody.empty() && !body.reserve(completedBody.size())) {
+      status = 503;
+      body = "{\"error\":\"insufficient_memory\"}";
+    } else {
+      body = ready ? completedBody.c_str() : "{\"status\":\"pending\"}";
+    }
+    if (ready && body.length() != completedBody.size()) {
+      status = 503;
+      body = "{\"error\":\"insufficient_memory\"}";
+    }
+  }
+  xSemaphoreGive(stateMutex);
+  return found;
 }
 
 }  // namespace
@@ -1067,6 +1287,80 @@ void browseWorker(void* context) {
 bool init() {
   if (!stateMutex) stateMutex = xSemaphoreCreateMutex();
   return stateMutex != nullptr;
+}
+
+StartResult startServerDiscovery(uint32_t& job) {
+  if (!init()) return StartResult::NoMemory;
+  if (WiFi.status() != WL_CONNECTED) return StartResult::Offline;
+  DiscoveryParams* params = new (std::nothrow) DiscoveryParams{};
+  if (!params) return StartResult::NoMemory;
+  xSemaphoreTake(stateMutex, portMAX_DELAY);
+  if (running) {
+    xSemaphoreGive(stateMutex);
+    delete params;
+    return StartResult::Busy;
+  }
+  activeJob = ++nextJob;
+  if (!activeJob) activeJob = ++nextJob;
+  activeJobKind = JobKind::Servers;
+  params->job = activeJob;
+  job = activeJob;
+  running = true;
+  completed = false;
+  destroyBrowseListing(completedListing);
+  completedListing = nullptr;
+  completedBody.clear();
+  xSemaphoreGive(stateMutex);
+  if (xTaskCreatePinnedToCore(discoveryWorker, "DlnaDiscovery",
+                              kWorkerStackBytes, params, 1, nullptr, 0) !=
+      pdPASS) {
+    xSemaphoreTake(stateMutex, portMAX_DELAY);
+    if (activeJob == job && activeJobKind == JobKind::Servers) {
+      running = false;
+      activeJob = 0;
+      activeJobKind = JobKind::None;
+    }
+    xSemaphoreGive(stateMutex);
+    delete params;
+    return StartResult::NoMemory;
+  }
+  return StartResult::Started;
+}
+
+bool pollServerDiscovery(uint32_t job, int& status, String& body, bool& ready) {
+  return pollJob(job, JobKind::Servers, status, body, ready);
+}
+
+SelectResult selectServer(int index, const char* ip, String& body) {
+  if (!init()) return SelectResult::NoMemory;
+  const bool hasIndex = index >= 0;
+  const bool hasIp = ip && *ip;
+  if (hasIndex == hasIp || (hasIp && std::strlen(ip) >= sizeof(DlnaServerInfo::ip)))
+    return SelectResult::Invalid;
+  xSemaphoreTake(stateMutex, portMAX_DELAY);
+  size_t selected = kMaxDlnaServers;
+  if (hasIndex && static_cast<size_t>(index) < serverCount) {
+    selected = static_cast<size_t>(index);
+  } else if (hasIp) {
+    for (size_t current = 0; current < serverCount; ++current) {
+      if (equalsIgnoreCase(ip, servers[current].info.ip)) {
+        selected = current;
+        break;
+      }
+    }
+  }
+  if (selected == kMaxDlnaServers) {
+    xSemaphoreGive(stateMutex);
+    return SelectResult::NotFound;
+  }
+  activeServer = selected;
+  std::string response =
+      formatServerListJson(0, servers, serverCount, activeServer);
+  xSemaphoreGive(stateMutex);
+  if ((!response.empty() && !body.reserve(response.size())) ||
+      (body = response.c_str()).length() != response.size())
+    return SelectResult::NoMemory;
+  return SelectResult::Selected;
 }
 
 StartResult startBrowse(const char* parent, uint32_t& job) {
@@ -1084,7 +1378,12 @@ StartResult startBrowse(const char* parent, uint32_t& job) {
   }
   activeJob = ++nextJob;
   if (!activeJob) activeJob = ++nextJob;
+  activeJobKind = JobKind::Browse;
   params->job = activeJob;
+  if (serverCount && activeServer < serverCount) {
+    params->server = servers[activeServer];
+    params->hasServer = true;
+  }
   job = activeJob;
   running = true;
   completed = false;
@@ -1100,6 +1399,7 @@ StartResult startBrowse(const char* parent, uint32_t& job) {
     if (activeJob == job) {
       running = false;
       activeJob = 0;
+      activeJobKind = JobKind::None;
     }
     xSemaphoreGive(stateMutex);
     delete params;
@@ -1109,32 +1409,14 @@ StartResult startBrowse(const char* parent, uint32_t& job) {
 }
 
 bool pollBrowse(uint32_t job, int& status, String& body, bool& ready) {
-  if (!stateMutex || !job) return false;
-  xSemaphoreTake(stateMutex, portMAX_DELAY);
-  const bool found = activeJob == job && (running || completed);
-  if (found) {
-    ready = completed;
-    status = ready ? completedStatus : 202;
-    if (ready && !completedBody.empty() &&
-        !body.reserve(completedBody.size())) {
-      status = 503;
-      body = "{\"error\":\"insufficient_memory\"}";
-    } else {
-      body = ready ? completedBody.c_str() : "{\"status\":\"pending\"}";
-    }
-    if (ready && body.length() != completedBody.size()) {
-      status = 503;
-      body = "{\"error\":\"insufficient_memory\"}";
-    }
-  }
-  xSemaphoreGive(stateMutex);
-  return found;
+  return pollJob(job, JobKind::Browse, status, body, ready);
 }
 
 bool pollBrowseItems(uint32_t job, int& status, bool& ready, size_t& count) {
   if (!stateMutex || !job) return false;
   xSemaphoreTake(stateMutex, portMAX_DELAY);
-  const bool found = activeJob == job && (running || completed);
+  const bool found = activeJob == job && activeJobKind == JobKind::Browse &&
+                     (running || completed);
   if (found) {
     ready = completed;
     status = ready ? completedStatus : 202;
@@ -1147,8 +1429,9 @@ bool pollBrowseItems(uint32_t job, int& status, bool& ready, size_t& count) {
 bool copyBrowseItem(uint32_t job, size_t index, BrowseItem& item) {
   if (!stateMutex || !job) return false;
   xSemaphoreTake(stateMutex, portMAX_DELAY);
-  const bool found = activeJob == job && completed && completedStatus == 200 &&
-                     completedListing && index < completedListing->count;
+  const bool found = activeJob == job && activeJobKind == JobKind::Browse &&
+                     completed && completedStatus == 200 && completedListing &&
+                     index < completedListing->count;
   if (found) item = completedListing->items[index];
   xSemaphoreGive(stateMutex);
   return found;
