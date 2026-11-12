@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="theme-color" content="#09111a">
+  <meta name="theme-color" content="#09090B">
   <title>VoxOne — Status</title>
   <link rel="icon" type="image/svg+xml" href="/voxone-symbol.svg?v={voxone-symbol.svg-hash}">
   <link rel="stylesheet" href="/voxone.css?v={voxone.css-hash}">
@@ -76,24 +76,25 @@
   <div id="app-shell" class="shell">
     <header class="topbar">
       <div class="brand">
-        <div><p class="eyebrow">RADIO INTERNETOWE</p><img class="brand-logo" src="/voxone-logo.svg?v={voxone-logo.svg-hash}" alt="VoxOne" width="207" height="50"></div>
+        <div><p class="eyebrow">DEVELOPER DASHBOARD</p><img class="brand-logo" src="/voxone-logo.svg?v={voxone-logo.svg-hash}" alt="VoxOne" width="207" height="50"></div>
       </div>
       <div class="identity"><div class="identity-badges"><span id="header-version" class="profile">Wersja —</span><span id="header-profile" class="profile">Profil —</span></div><button id="security-logout" class="security-logout" type="button" hidden>Wyloguj</button></div>
     </header>
     <p id="security-api-warning" class="security-api-warning" role="status" hidden>Nie udało się odczytać stanu ochrony. Panel pozostaje dostępny, aby zachować możliwość aktualizacji urządzenia.</p>
 
     <nav class="tabs" aria-label="Główna nawigacja">
-      <a href="#status" data-tab="status" aria-current="page">Status</a>
-      <a href="#stations" data-tab="stations">Stacje</a>
-      <a href="#dlna" data-tab="dlna">DLNA</a>
-      <a href="#audio" data-tab="audio">Audio</a>
+      <span class="nav-label" aria-hidden="true">Workspace</span>
+      <a href="#status" data-tab="status" aria-current="page"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 4h6v6H4zM14 4h6v6h-6zM4 14h6v6H4zM14 14h6v6h-6z"/></svg><span>Status</span></a>
+      <a href="#stations" data-tab="stations"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 5h14v14H5zM9 5v14M12 9h4M12 13h4"/></svg><span>Stacje</span></a>
+      <a href="#dlna" data-tab="dlna"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 6h14v12H5zM8 10a5 5 0 0 1 5 5M8 13a2 2 0 0 1 2 2"/></svg><span>DLNA</span></a>
+      <a href="#audio" data-tab="audio"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 10v4M8 7v10M12 4v16M16 7v10M20 10v4"/></svg><span>Audio</span></a>
       <!-- VOXONE_DSP_BEGIN -->
-      <a href="#dsp" data-tab="dsp">DSP</a>
+      <a href="#dsp" data-tab="dsp"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 8h3M17 8h3M4 16h7M15 16h5M7 5v6M15 13v6"/></svg><span>DSP</span></a>
       <!-- VOXONE_DSP_END -->
-      <a href="#settings" data-tab="settings">Ustawienia</a>
-      <a href="#hardware" data-tab="hardware">Sprzęt</a>
-      <a href="#system" data-tab="system">System</a>
-      <a href="#update" data-tab="update">Aktualizacja</a>
+      <a href="#settings" data-tab="settings"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 8a4 4 0 1 0 0 8 4 4 0 0 0 0-8ZM12 3v2M12 19v2M3 12h2M19 12h2M5.6 5.6 7 7M17 17l1.4 1.4M18.4 5.6 17 7M7 17l-1.4 1.4"/></svg><span>Ustawienia</span></a>
+      <a href="#hardware" data-tab="hardware"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 8h8v8H8zM10 2v3M14 2v3M10 19v3M14 19v3M2 10h3M19 10h3M2 14h3M19 14h3"/></svg><span>Sprzęt</span></a>
+      <a href="#system" data-tab="system"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5h16v11H4zM8 20h8M12 16v4"/></svg><span>System</span></a>
+      <a href="#update" data-tab="update"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 16V4M8 8l4-4 4 4M5 20h14"/></svg><span>Aktualizacja</span></a>
     </nav>
 
     <main id="main">
