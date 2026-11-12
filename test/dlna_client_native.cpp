@@ -158,6 +158,40 @@ int main() {
   assert(std::string(polishListing.items[0].title) == "Zażółć gęślą jaźń");
   assert(std::string(polishListing.items[1].title) == "Gęślą Łódź");
 
+  // Windows Media Player Network Sharing Service commonly returns several
+  // resources for one item. Selection must be based on protocolInfo rather
+  // than document order, and nested SOAP/DIDL entity decoding must preserve
+  // the query string used by the media URL.
+  const std::string windowsSoap =
+      "<s:Envelope><s:Body><u:BrowseResponse><Result>"
+      "&lt;DIDL-Lite&gt;&lt;item id=&quot;wmp-1&quot; parentID=&quot;0&quot;&gt;"
+      "&lt;dc:title&gt;Windows track&lt;/dc:title&gt;"
+      "&lt;res protocolInfo=&quot;http-get:*:image/jpeg:*&quot;&gt;"
+      "http://windows:10243/album.jpg&lt;/res&gt;"
+      "&lt;res protocolInfo=&quot;http-get:*:audio/x-ms-wma:*&quot;&gt;"
+      "http://windows:10243/original.wma&lt;/res&gt;"
+      "&lt;res protocolInfo=&quot;HTTP-GET:*:audio/mpeg:DLNA.ORG_PN=MP3&quot;&gt;"
+      "http://windows:10243/WMPNSSv4/track.mp3?album=Rock&amp;amp;id=7&lt;/res&gt;"
+      "&lt;res protocolInfo=&quot;http-get:*:audio/flac:*&quot;&gt;"
+      "http://windows:10243/later.flac&lt;/res&gt;"
+      "&lt;/item&gt;&lt;item id=&quot;wmp-2&quot; parentID=&quot;0&quot;&gt;"
+      "&lt;dc:title&gt;Unsupported WMA&lt;/dc:title&gt;"
+      "&lt;res protocolInfo=&quot;http-get:*:audio/x-ms-wma:*&quot;&gt;"
+      "http://windows:10243/only.wma&lt;/res&gt;"
+      "&lt;/item&gt;&lt;/DIDL-Lite&gt;"
+      "</Result><NumberReturned>2</NumberReturned><TotalMatches>2</TotalMatches>"
+      "</u:BrowseResponse></s:Body></s:Envelope>";
+  BrowseResponseParser windowsParser;
+  assert(writeChunks(windowsParser, windowsSoap, 2));
+  BrowseListing windowsListing;
+  assert(windowsParser.finish(windowsListing));
+  assert(windowsListing.count == 2);
+  assert(std::string(windowsListing.items[0].mime) == "audio/mpeg");
+  assert(std::string(windowsListing.items[0].resourceUrl) ==
+         "http://windows:10243/WMPNSSv4/track.mp3?album=Rock&id=7");
+  assert(windowsListing.items[1].resourceUrl[0] == '\0');
+  assert(windowsListing.items[1].mime[0] == '\0');
+
   assert(validObjectId("0"));
   assert(validObjectId("64$2"));
   assert(!validObjectId(""));
@@ -187,5 +221,11 @@ int main() {
   assert(web.find("/api/dlna/servers") != std::string::npos);
   assert(web.find("/api/dlna/select") != std::string::npos);
   assert(web.find("data-dlna-index") != std::string::npos);
+  const std::string audio = readFile("src/audioI2S/Audio.cpp");
+  assert(audio.find("User-Agent: VoxOne/") != std::string::npos);
+  assert(audio.find("VOXONE_VERSION") != std::string::npos);
+  assert(audio.find("httpResponseAction(httpStatus)") != std::string::npos);
+  assert(audio.find("followResolutionUrl(redirectUrl, \"redirect\")") !=
+         std::string::npos);
   return 0;
 }

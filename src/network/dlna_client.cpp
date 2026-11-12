@@ -51,6 +51,79 @@ bool containsIgnoreCase(const char* text, const char* needle) {
   return false;
 }
 
+bool spanEqualsIgnoreCase(const char* value, size_t length,
+                          const char* expected) {
+  if (!value || !expected || std::strlen(expected) != length) return false;
+  for (size_t index = 0; index < length; ++index) {
+    if (std::tolower(static_cast<unsigned char>(value[index])) !=
+        std::tolower(static_cast<unsigned char>(expected[index])))
+      return false;
+  }
+  return true;
+}
+
+uint8_t resourcePreference(const char* mime, bool protocolSeen,
+                           bool httpGet) {
+  if (protocolSeen && !httpGet) return 0;
+  if (!mime || !*mime) return protocolSeen ? 0 : 1;
+  if (equalsIgnoreCase(mime, "audio/mpeg") ||
+      equalsIgnoreCase(mime, "audio/x-mpeg"))
+    return 60;
+  if (equalsIgnoreCase(mime, "audio/flac") ||
+      equalsIgnoreCase(mime, "audio/x-flac"))
+    return 50;
+  if (equalsIgnoreCase(mime, "audio/aac") ||
+      equalsIgnoreCase(mime, "audio/aacp") ||
+      equalsIgnoreCase(mime, "audio/mp4"))
+    return 40;
+  if (equalsIgnoreCase(mime, "audio/ogg") ||
+      equalsIgnoreCase(mime, "application/ogg"))
+    return 30;
+  if (equalsIgnoreCase(mime, "audio/wav") ||
+      equalsIgnoreCase(mime, "audio/x-wav"))
+    return 20;
+  // In particular, image/jpeg and audio/x-ms-wma remain unplayable and
+  // cannot replace a supported audio resource selected earlier.
+  return 0;
+}
+
+bool parseProtocolInfo(const char* value, char* mime, size_t mimeCapacity,
+                       bool& httpGet) {
+  if (!value || !mime || mimeCapacity == 0) return false;
+  mime[0] = '\0';
+  httpGet = false;
+  const char* first = std::strchr(value, ':');
+  const char* second = first ? std::strchr(first + 1, ':') : nullptr;
+  const char* third = second ? std::strchr(second + 1, ':') : nullptr;
+  if (!first || !second || !third || third <= second + 1) return false;
+
+  const char* protocolBegin = value;
+  while (protocolBegin < first &&
+         std::isspace(static_cast<unsigned char>(*protocolBegin)))
+    ++protocolBegin;
+  const char* protocolEnd = first;
+  while (protocolEnd > protocolBegin &&
+         std::isspace(static_cast<unsigned char>(protocolEnd[-1])))
+    --protocolEnd;
+  httpGet = spanEqualsIgnoreCase(
+      protocolBegin, static_cast<size_t>(protocolEnd - protocolBegin),
+      "http-get");
+
+  const char* mimeBegin = second + 1;
+  while (mimeBegin < third &&
+         std::isspace(static_cast<unsigned char>(*mimeBegin)))
+    ++mimeBegin;
+  const char* mimeEnd = third;
+  while (mimeEnd > mimeBegin &&
+         std::isspace(static_cast<unsigned char>(mimeEnd[-1])))
+    --mimeEnd;
+  const size_t mimeLength = static_cast<size_t>(mimeEnd - mimeBegin);
+  if (!mimeLength || mimeLength >= mimeCapacity) return false;
+  std::memcpy(mime, mimeBegin, mimeLength);
+  mime[mimeLength] = '\0';
+  return true;
+}
+
 const char* localName(const char* name) {
   const char* colon = name ? std::strrchr(name, ':') : nullptr;
   return colon ? colon + 1 : name;
@@ -564,12 +637,16 @@ void BrowseResponseParser::DidlCallbacks::xmlOpen(const char* name) {
     owner_.current_.container = equalsIgnoreCase(local, "container");
     owner_.inItem_ = true;
     owner_.didlCapture_ = DidlCapture::None;
+    owner_.bestResourceScore_ = 0;
   } else if (owner_.inItem_ && equalsIgnoreCase(local, "title")) {
     owner_.current_.title[0] = '\0';
     owner_.didlCapture_ = DidlCapture::Title;
   } else if (owner_.inItem_ && !owner_.current_.container &&
              equalsIgnoreCase(local, "res")) {
-    owner_.current_.resourceUrl[0] = '\0';
+    owner_.resourceUrl_[0] = '\0';
+    owner_.resourceMime_[0] = '\0';
+    owner_.resourceProtocolSeen_ = false;
+    owner_.resourceHttpGet_ = false;
     owner_.didlCapture_ = DidlCapture::Resource;
   }
 }
@@ -584,15 +661,10 @@ void BrowseResponseParser::DidlCallbacks::xmlAttribute(const char* name,
     copyBounded(owner_.current_.parentId, sizeof(owner_.current_.parentId), value);
   else if (owner_.didlCapture_ == DidlCapture::Resource &&
            equalsIgnoreCase(local, "protocolInfo")) {
-    const char* first = std::strchr(value, ':');
-    const char* second = first ? std::strchr(first + 1, ':') : nullptr;
-    const char* third = second ? std::strchr(second + 1, ':') : nullptr;
-    if (second && third && third > second + 1) {
-      const size_t length = std::min(static_cast<size_t>(third - second - 1),
-                                     sizeof(owner_.current_.mime) - 1);
-      std::memcpy(owner_.current_.mime, second + 1, length);
-      owner_.current_.mime[length] = '\0';
-    }
+    owner_.resourceProtocolSeen_ = true;
+    parseProtocolInfo(value, owner_.resourceMime_,
+                      sizeof(owner_.resourceMime_),
+                      owner_.resourceHttpGet_);
   }
 }
 
@@ -601,17 +673,31 @@ void BrowseResponseParser::DidlCallbacks::xmlText(const char* data, size_t lengt
   if (owner_.didlCapture_ == DidlCapture::Title)
     appendBounded(owner_.current_.title, sizeof(owner_.current_.title), data, length);
   else if (owner_.didlCapture_ == DidlCapture::Resource)
-    appendBounded(owner_.current_.resourceUrl,
-                  sizeof(owner_.current_.resourceUrl), data, length);
+    appendBounded(owner_.resourceUrl_, sizeof(owner_.resourceUrl_), data,
+                  length);
 }
 
 void BrowseResponseParser::DidlCallbacks::xmlClose(const char* name) {
   const char* local = localName(name);
+  if (equalsIgnoreCase(local, "res") &&
+      owner_.didlCapture_ == DidlCapture::Resource)
+    owner_.finishResource();
   if (equalsIgnoreCase(local, "title") || equalsIgnoreCase(local, "res"))
     owner_.didlCapture_ = DidlCapture::None;
   if (owner_.inItem_ &&
       (equalsIgnoreCase(local, "container") || equalsIgnoreCase(local, "item")))
     owner_.finishItem();
+}
+
+void BrowseResponseParser::finishResource() {
+  trim(resourceUrl_);
+  trim(resourceMime_);
+  const uint8_t score = resourcePreference(
+      resourceMime_, resourceProtocolSeen_, resourceHttpGet_);
+  if (!resourceUrl_[0] || score <= bestResourceScore_) return;
+  copyBounded(current_.resourceUrl, sizeof(current_.resourceUrl), resourceUrl_);
+  copyBounded(current_.mime, sizeof(current_.mime), resourceMime_);
+  bestResourceScore_ = score;
 }
 
 void BrowseResponseParser::finishItem() {

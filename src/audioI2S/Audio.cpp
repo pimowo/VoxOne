@@ -19,6 +19,7 @@
 #include "../core/radio_reconnect_policy.h"
 #include "../core/radio_url_request_parts.h"
 #include "../core/system_operation_state.h"
+#include "../core/version.h"
 #include "web_file_bounds.h"
 #include "audio_ring_math.h"
 #include "../core/i2s_output_lock.h"
@@ -44,6 +45,8 @@ bool audioPsramFound() {
 }
 
 constexpr TickType_t kI2SOutputLockWait = pdMS_TO_TICKS(100);
+constexpr char kVoxOneUserAgentHeader[] =
+    "User-Agent: VoxOne/" VOXONE_VERSION "\r\n";
 
 }  // namespace
 
@@ -752,7 +755,7 @@ bool Audio::connectToHost(const char* host, const char* user, const char* pwd,
       strcat(rqh, "\r\n");
     }
     strcat(rqh, "Accept-Encoding: identity;q=1,*;q=0\r\n");
-    strcat(rqh, "User-Agent: Mozilla/5.0\r\n");
+    strcat(rqh, kVoxOneUserAgentHeader);
     strcat(rqh, "Connection: keep-alive\r\n\r\n");
 
     if(ESP_ARDUINO_VERSION_MAJOR == 2 && ESP_ARDUINO_VERSION_MINOR == 0 && ESP_ARDUINO_VERSION_PATCH >= 3 && MAX_AUDIO_SOCKET_TIMEOUT){
@@ -924,7 +927,7 @@ bool Audio::httpPrint(const char* host) {
     strcat(rqh, hostwoext);
     strcat(rqh, "\r\n");
     strcat(rqh, "Accept-Encoding: identity;q=1,*;q=0\r\n");
-    strcat(rqh, "User-Agent: Mozilla/5.0\r\n");
+    strcat(rqh, kVoxOneUserAgentHeader);
     strcat(rqh, "Connection: keep-alive\r\n\r\n");
 
     if(m_f_ssl){ _client = static_cast<WiFiClient*>(&clientsecure); if(port == 80) port = 443;}

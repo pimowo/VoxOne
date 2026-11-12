@@ -161,6 +161,7 @@ class BrowseResponseParser : private detail::XmlCallbacks {
   void xmlText(const char* data, size_t length) override;
   void xmlClose(const char* name) override;
   void appendDidlText(const char* data, size_t length);
+  void finishResource();
   void finishItem();
 
   DidlCallbacks didlCallbacks_;
@@ -172,6 +173,11 @@ class BrowseResponseParser : private detail::XmlCallbacks {
   DidlCapture didlCapture_ = DidlCapture::None;
   bool inItem_ = false;
   bool sawResult_ = false;
+  bool resourceProtocolSeen_ = false;
+  bool resourceHttpGet_ = false;
+  uint8_t bestResourceScore_ = 0;
+  char resourceUrl_[sizeof(BrowseItem::resourceUrl)] = {};
+  char resourceMime_[sizeof(BrowseItem::mime)] = {};
   char number_[16] = {};
   size_t numberLength_ = 0;
 };
