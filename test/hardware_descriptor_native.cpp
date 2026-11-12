@@ -287,11 +287,11 @@ int main() {
   assert(d.board.family == 'S' && d.board.revision == 0);
   assert(d.board.flashBytes == 4u * 1024u * 1024u);
   assert(d.board.psramBytes == 2u * 1024u * 1024u);
-  assert(VOXONE_PROFILE_DISPLAY == Display::Ssd1306_128x32);
-  assert(d.displayKind == DisplayKind::Ssd1306_128x32);
+  assert(VOXONE_PROFILE_DISPLAY == Display::Ssd1306_128x64);
+  assert(d.displayKind == DisplayKind::Ssd1306_128x64);
   assert(activeController() == ControllerId::Ssd1306);
-  assert(activeProfile() == ProfileId::Oled128x32);
-  assert(layout.width == 128 && layout.height == 32 && layout.monochrome);
+  assert(activeProfile() == ProfileId::Oled128x64);
+  assert(layout.width == 128 && layout.height == 64 && layout.monochrome);
   assert(d.display.bus == BusKind::I2c);
   assert(caps.supportedDisplays ==
          (displaySupport(DisplayKind::Ssd1306_128x32) |
@@ -313,6 +313,8 @@ int main() {
   assert(!bool(ENC_INTERNALPULLUP));
   assert(!bool(ENC_BUTTON_INTERNALPULLUP));
   assert(!caps.supportsRtc);
+  assert(!bool(VOXONE_HAS_DLNA));
+  assert(!caps.supportsDlna);
   assert(caps.supportsVoxOneBt);
   assert(caps.supportsBtAudioRx && d.btAudioRxEnabled);
   assert(!caps.supportsBtFirmwareUpdate);

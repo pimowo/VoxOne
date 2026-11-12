@@ -60,7 +60,7 @@ constexpr HardwareCapabilities kCapabilities = {
 #elif defined(VOXONE_PROFILE_S0)
 constexpr BoardId kBoardId = BoardId::BoardS0;
 constexpr char kBoardFamily = 'S';
-constexpr DisplayKind kDisplayKind = DisplayKind::Ssd1306_128x32;
+constexpr DisplayKind kDisplayKind = DisplayKind::Ssd1306_128x64;
 constexpr SpiBusPins kSpi = {kNoPin, kNoPin, kNoPin};
 constexpr I2cBusConfig kI2c = {
   fromLegacyPin(I2C_SDA), fromLegacyPin(I2C_SCL), I2CFREQ_HZ, SCREEN_ADDRESS};
@@ -83,7 +83,8 @@ constexpr HardwareCapabilities kCapabilities = {
       audioOutputSupport(AudioOutputKind::None),
   inputSupport(LocalInputKind::Ec11) | inputSupport(LocalInputKind::Buttons3),
   true, true, true, true, false, false, false, true, false,
-  bool(VOXONE_INCLUDE_DSP), true, true, false, false, false, true, false
+  bool(VOXONE_INCLUDE_DSP), true, bool(VOXONE_HAS_DLNA), false, false, false,
+  true, false
 };
 #elif defined(VOXONE_PROFILE_DIN0)
 constexpr BoardId kBoardId = BoardId::BoardDIN0;

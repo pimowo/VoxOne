@@ -81,7 +81,7 @@ int main() {
   assert(compiled.contains(ControllerId::Sh1106));
   assert(compiled.contains(ControllerId::Ch1116g));
 #if defined(VOXONE_PROFILE_S0)
-  assert(selected.profile == ProfileId::Oled128x32);
+  assert(selected.profile == ProfileId::Oled128x64);
 #elif defined(VOXONE_PROFILE_L0)
   assert(compiled.contains(ControllerId::St7796));
   assert(defaults.display == RuntimeDisplay::St7796s_480x320);
@@ -94,9 +94,9 @@ int main() {
 
   RuntimeHardwareConfig stored = defaults;
 #if defined(VOXONE_PROFILE_S0)
-  assert(defaults.display == RuntimeDisplay::Ssd1306_128x32);
+  assert(defaults.display == RuntimeDisplay::Ssd1306_128x64);
   assert(selected.controller == ControllerId::Ssd1306);
-  stored.display = RuntimeDisplay::Ssd1306_128x64;
+  stored.display = RuntimeDisplay::Ssd1306_128x32;
   assert(select(stored, hardware, compiled).controller == ControllerId::Ssd1306);
 #elif defined(VOXONE_PROFILE_L0)
   stored.display = RuntimeDisplay::Ssd1306_128x64;
@@ -109,7 +109,11 @@ int main() {
 #endif
   selected = select(stored, hardware, compiled);
   assert(!selected.usedBuildDefault);
+#if defined(VOXONE_PROFILE_S0)
+  assert(selected.profile == ProfileId::Oled128x32);
+#else
   assert(selected.profile == ProfileId::Oled128x64);
+#endif
 
   for (RuntimeDisplay display :
        {RuntimeDisplay::Ssd1306_128x32,

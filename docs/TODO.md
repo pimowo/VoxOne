@@ -90,6 +90,9 @@ checkpointów pozostaje w historii Git i w istniejących raportach.
 
 ## 3. Wersja 1.3.0+ (Audio / Sprzęt / Sieć)
 
+- [ ] Dokończyć Etap 2 synchronizacji Hardware Matrix v2: po fizycznym
+  potwierdzeniu pinów przenieść profil M0 na ESP32-S3 N16R8 i domyślny
+  ST7796S oraz uzupełnić `AMP_ENABLE` i `MUTE/XSMT` dla L0, S0, M0 i DIN0.
 - [ ] DSPmini: obsłużyć ADAU1701 przez I2C, dodać konfigurację do WWW oraz
   Parametric EQ, Crossover, wyjście subwoofera, Loudness i AutoEQ; wykorzystać
   posiadany moduł do testów HIL.

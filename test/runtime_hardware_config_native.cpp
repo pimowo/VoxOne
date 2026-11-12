@@ -102,7 +102,7 @@ int main() {
   assert(defaults.display == RuntimeDisplay::St7789_284x76);
   assert(defaults.input == RuntimeInput::Ec11);
 #elif defined(VOXONE_PROFILE_S0)
-  assert(defaults.display == RuntimeDisplay::Ssd1306_128x32);
+  assert(defaults.display == RuntimeDisplay::Ssd1306_128x64);
   assert(defaults.input == RuntimeInput::Ec11);
 #elif defined(VOXONE_PROFILE_M0) || defined(VOXONE_PROFILE_DIN0)
   assert(defaults.display == RuntimeDisplay::Ssd1306_128x64);
@@ -390,7 +390,7 @@ int main() {
   // activation layer consumes loaded.config separately.
   assert(currentHardware().displayKind ==
 #if defined(VOXONE_PROFILE_S0)
-         DisplayKind::Ssd1306_128x32);
+         DisplayKind::Ssd1306_128x64);
 #elif defined(VOXONE_PROFILE_L0)
          DisplayKind::St7796_480x320);
 #else

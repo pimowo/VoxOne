@@ -1,4 +1,51 @@
-# Rodziny sprzętowe VoxOne
+# VOXONE - MATRIX SPRZĘTOWY (v2)
+
+| SPRZĘT / FUNKCJA | DIN | W | S | M | L | STATUS |
+| :--- | :---: | :---: | :---: | :---: | :---: | :--- |
+| **[MIKROKONTROLERY]** | | | | | | |
+| ESP32-S3 N16R8 | NIE | NIE | NIE | TAK | TAK | 🟢 ZROBIONE |
+| ESP32-S3 Zero | TAK | NIE | TAK | NIE | NIE | 🟢 ZROBIONE |
+| ESP-WROOM-32 | NIE | TAK | NIE | NIE | NIE | 🟢 ZROBIONE |
+| **[WYŚWIETLACZE]** | | | | | | |
+| SSD1306 128x64 | TAK | TAK | TAK | TAK | NIE | 🟢 ZROBIONE |
+| SSD1306 128x32 | TAK | NIE | NIE | NIE | NIE | 🟢 ZROBIONE |
+| SSD1309, SH1106, CH1116G | TAK | TAK | TAK | TAK | NIE | 🟢 ZROBIONE |
+| SSD1322, ST7920, GC9A01 | NIE | NIE | NIE | TAK | TAK | 🔴 W PLANACH |
+| ST7789 | NIE | TAK | NIE | NIE | NIE | 🟢 ZROBIONE |
+| ST7796S | NIE | NIE | NIE | TAK | TAK | 🟡 W TESTACH (M0 w Etapie 2) |
+| **[STEROWANIE]** | | | | | | |
+| Enkoder EC11 / 3xSW | TAK | TAK | TAK | TAK | TAK | 🟢 ZROBIONE |
+| Przycisk POWER | TAK | NIE | TAK | TAK | TAK | 🟡 W TESTACH |
+| Pilot IR | NIE | NIE | TAK | TAK | TAK | 🔴 W PLANACH |
+| **[AUDIO]** | | | | | | |
+| PCM5102A | TAK | TAK | TAK | TAK | TAK | 🟢 ZROBIONE |
+| MAX98357A | NIE | NIE | TAK | TAK | NIE | 🟢 ZROBIONE |
+| DSPmini | NIE | NIE | NIE | NIE | TAK | 🟡 W TESTACH |
+| VoxOneBT RX | TAK | NIE | TAK | TAK | TAK | 🟢 ZROBIONE |
+| VoxOneBT TX | NIE | NIE | TAK | TAK | TAK | 🔴 W PLANACH |
+| AUX | NIE | NIE | NIE | TAK | TAK | 🔴 W PLANACH |
+| **[SIEĆ I PAMIĘĆ]** | | | | | | |
+| Ethernet W5500 | NIE | NIE | NIE | NIE | TAK | 🔴 W PLANACH |
+| Karta SD | NIE | NIE | NIE | TAK | TAK | 🔴 W PLANACH |
+| DLNA | TAK | NIE | NIE | TAK | TAK | ⚠️ DO POPRAWY |
+| **[ZASILANIE I RTC]** | | | | | | |
+| RTC DS3231 | NIE | NIE | TAK | TAK | TAK | 🔴 W PLANACH |
+| Przekaźnik / Pomiar napięcia | NIE | NIE | TAK | TAK | TAK | 🟡 W TESTACH |
+
+*(Uwaga: Piny AMP_ENABLE, MUTE/XTSM oraz konfiguracja SPI dla M0 zostaną uzupełnione w Etapie 2 po weryfikacji sprzętowej).*
+
+## Referencyjny pinout Etapu 1: L0 i S0
+
+| Profil | Audio I²S `BCLK / DOUT / LRCK` | Display | Local input `A / B / KEY` | Pozostałe |
+|---|---|---|---|---|
+| L0 | `5 / 4 / 6` | SPI `SCK12`, `MOSI11`, `MISO13`; ST7796S `CS10`, `DC9`, `RST—`, backlight `14` | `41 / 40 / 39` | RTC `SDA8/SCL7`; BT UART `RX15/TX16`; BT I2S RX `BCLK1/WS2/DIN17`; POWER `GPIO42`; XSMT `255` |
+| S0 | MAX98357A `5 / 6 / 4` | SSD1306 128×64 I2C: `SDA1`, `SCL2`, `RST—`, adres `0x3C` | `9 / 8 / 7` | BT UART1 `RX44/TX43`; BT I2S1 RX `BCLK11/WS12/DIN13`; POWER `GPIO3`; MUTE/ENABLE `255/-1` |
+
+Powyższe GPIO są skopiowane z bieżących profili `l0.h` i `s0.h`.
+Stanowią punkt odniesienia dla mapowania M0 w Etapie 2; nie nadają M0
+żadnych pinów automatycznie.
+
+## Rodziny sprzętowe VoxOne
 
 Litera oznacza rodzinę, cyfra rewizję: `0` to prototyp, `1` pierwsza docelowa PCB, `2..n` następne rewizje tej samej rodziny. Rewizje mogą mieć różne GPIO. Capability wynika z konkretnego profilu i potwierdzonego sprzętu, a nie z nazwy rodziny. VoxOneBT jest osobnym projektem/repo i posiada własną rodzinę sprzętową Vx.
 
