@@ -112,6 +112,7 @@ extern UiState uiState;
 // current board/display timeout values without making Display their owner.
 bool requestUiMode(displayMode_e requested);
 bool transitionUiMode(displayMode_e requested);
+void returnUiHome();
 void resetUiReturnTimeout();
 void armUiReturnTimeout(uint32_t seconds);
 void normalizeUiStationSelection();

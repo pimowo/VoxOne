@@ -70,11 +70,11 @@ int main() {
   assert(manager.find("ButtonEvent::BUTTON_CLICK") != std::string::npos);
   assert(manager.find("if (standby())") != std::string::npos);
   assert(manager.find("uiCarouselActive()") != std::string::npos);
-  assert(manager.find("cancelUiToPlayer()") != std::string::npos);
+  assert(manager.find("returnUiHome()") != std::string::npos);
   assert(manager.find("player.toggleMute();") != std::string::npos);
   assert(manager.find("ButtonEvent::BUTTON_DOUBLE_CLICK") !=
          std::string::npos);
-  assert(manager.find("dispatchUiInput(UiInputEvent::Double)") !=
+  assert(manager.find("UiInputControl::PowerButton") !=
          std::string::npos);
   assert(manager.find("ButtonEvent::BUTTON_LONG_PRESS") != std::string::npos);
   assert(manager.find("beginShutdown();") != std::string::npos);

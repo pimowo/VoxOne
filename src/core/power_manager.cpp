@@ -33,11 +33,6 @@ bool uiCarouselActive() {
          mode == BT_TRANSPORT;
 }
 
-void cancelUiToPlayer() {
-  config.discardMenuTransaction();
-  if (uiMenu.visible()) uiMenu.close();
-  transitionUiMode(PLAYER);
-}
 }  // namespace
 
 PowerManager powerManager;
@@ -63,12 +58,14 @@ void PowerManager::loop() {
         if (standby()) {
           wakeup();
         } else if (uiCarouselActive()) {
-          cancelUiToPlayer();
+          returnUiHome();
         } else {
           player.toggleMute();
         }
       } else if (event == voxone::power::ButtonEvent::BUTTON_DOUBLE_CLICK) {
-        if (!standby()) dispatchUiInput(UiInputEvent::Double);
+        if (!standby())
+          dispatchUiInput(UiInputEvent::Double, 1,
+                          UiInputControl::PowerButton);
       } else if (event == voxone::power::ButtonEvent::BUTTON_LONG_PRESS) {
         if (!standby()) {
           if (uiState.mode() == PLAYER && !uiMenu.visible())

@@ -171,7 +171,7 @@ bool TimeKeeper::loop1(){ // core1 (player)
 
 void TimeKeeper::_returnPlayer(){
   if(uiReturnToPlayerDue(millis())){
-    transitionUiMode(PLAYER);
+    returnUiHome();
   }
 }
 

@@ -180,6 +180,9 @@ void navigateCurrentSource(SourceId source, bool next) {
 
 void dispatchUiInput(UiInputEvent event, int8_t steps,
                      UiInputControl control) {
+  // Any physical interaction extends the lifetime of the currently visible
+  // menu/carousel. Modes without an armed return timer ignore this call.
+  resetUiReturnTimeout();
   if (dispatchMenuInput(event, steps)) return;
   const UiInputDecision decision =
       resolveUiInput(currentUiInputContext(), event, control);

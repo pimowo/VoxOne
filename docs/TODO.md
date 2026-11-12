@@ -7,12 +7,16 @@ checkpointów pozostaje w historii Git i w istniejących raportach.
 ## 1. HIL PENDING (do fizycznego przetestowania przez użytkownika)
 
 - [ ] Zweryfikować przycisk zasilania na L0 (GPIO42) i S0 (GPIO3): krótki
-  klik (Wakeup/Mute albo Home z Menu/karuzeli), dwuklik otwierający wybór
-  źródła wyłącznie z Playera oraz długie naciśnięcie uruchamiające shutdown
-  wyłącznie z Playera; w Menu/karuzeli długie naciśnięcie ma wracać do
-  Playera albo otwierać „Zapisać zmiany?” bez wyłączania radia; sprawdzić
-  nawigację enkoderem bez zmiany głośności przy otwartej karuzeli, klik
-  wyboru, dwuklik cofania o poziom i długi klik wyjścia do Playera,
+  klik (Wakeup/Mute albo Home z Menu/karuzeli), dwuklik otwierający Menu
+  Główne wyłącznie z Playera oraz długie naciśnięcie uruchamiające shutdown
+  wyłącznie z Playera; potwierdzić, że dwuklik enkodera z Playera otwiera
+  Wybór Źródła jednakowo na TFT i OLED; w Menu/karuzeli długie naciśnięcie ma
+  wracać do Playera albo otwierać „Zapisać zmiany?” bez wyłączania radia;
+  sprawdzić automatyczny powrót Home po 10 s bezczynności oraz restart tego
+  czasu przez każdy obrót lub klik w Menu, Źródłach, DLNA, Liście Stacji i
+  transporcie BT; sprawdzić nawigację enkoderem bez zmiany głośności przy
+  otwartej karuzeli, klik wyboru, dwuklik cofania o poziom i długi klik wyjścia
+  do Playera,
   renderowanie hierarchii bez tekstowych wskaźników `>` na TFT/OLED,
   sekwencję wyłączania
   „Do widzenia!” z natychmiastowym zatrzymaniem audio, płynne odświeżanie Menu,

@@ -4,9 +4,11 @@
 #include <cstdint>
 #include <cstdlib>
 
+constexpr uint8_t kMenuIdleTimeoutSeconds = 10;
+
 struct UiTimeoutSettings {
   uint8_t stationListSeconds = 10;
-  uint8_t btTransportSeconds = 20;
+  uint8_t btTransportSeconds = 10;
 };
 
 inline bool parseUiTimeout(const char* text, uint8_t& seconds) {

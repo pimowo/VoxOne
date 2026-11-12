@@ -5,8 +5,16 @@
 
 int main() {
   UiTimeoutSettings settings{};
+  assert(kMenuIdleTimeoutSeconds == 10);
   assert(settings.stationListSeconds == 10);
-  assert(settings.btTransportSeconds == 20);
+  assert(settings.btTransportSeconds == 10);
+
+  ReturnPlayerTimeout menuTimer;
+  menuTimer.armForMode(1000, kMenuIdleTimeoutSeconds, MENU);
+  assert(!menuTimer.poll(10999, MENU));
+  menuTimer.armForMode(9000, kMenuIdleTimeoutSeconds, MENU);  // gesture
+  assert(!menuTimer.poll(11000, MENU));
+  assert(menuTimer.poll(19000, MENU));
 
   ReturnPlayerTimeout timer;
   timer.armForMode(1000, settings.stationListSeconds, STATIONS);
@@ -25,15 +33,15 @@ int main() {
   assert(!timer.poll(100000, STATIONS));
 
   timer.armForMode(1000, settings.btTransportSeconds, BT_TRANSPORT);
-  assert(!timer.poll(20999, BT_TRANSPORT));
-  assert(timer.poll(21000, BT_TRANSPORT));
+  assert(!timer.poll(10999, BT_TRANSPORT));
+  assert(timer.poll(11000, BT_TRANSPORT));
   // Both rotation and click use the same idle reset request in BT TRANSPORT.
   timer.armForMode(1000, settings.btTransportSeconds, BT_TRANSPORT);
-  timer.armForMode(15000, settings.btTransportSeconds, BT_TRANSPORT);  // rotation
-  assert(!timer.poll(21000, BT_TRANSPORT));
-  timer.armForMode(25000, settings.btTransportSeconds, BT_TRANSPORT);  // click
-  assert(!timer.poll(35000, BT_TRANSPORT));
-  assert(timer.poll(45000, BT_TRANSPORT));
+  timer.armForMode(5000, settings.btTransportSeconds, BT_TRANSPORT);  // rotation
+  assert(!timer.poll(11000, BT_TRANSPORT));
+  timer.armForMode(10000, settings.btTransportSeconds, BT_TRANSPORT);  // click
+  assert(!timer.poll(19000, BT_TRANSPORT));
+  assert(timer.poll(20000, BT_TRANSPORT));
 
   settings.btTransportSeconds = 0;
   timer.armForMode(1000, settings.btTransportSeconds, BT_TRANSPORT);

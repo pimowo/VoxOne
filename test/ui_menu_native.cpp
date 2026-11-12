@@ -305,10 +305,10 @@ int main() {
 
   const std::string power = readFile("src/core/power_manager.cpp");
   assert(power.find("ButtonEvent::BUTTON_DOUBLE_CLICK") != std::string::npos);
-  assert(power.find("dispatchUiInput(UiInputEvent::Double)") !=
+  assert(power.find("UiInputControl::PowerButton") !=
          std::string::npos);
   assert(power.find("uiCarouselActive()") != std::string::npos);
-  assert(power.find("cancelUiToPlayer()") != std::string::npos);
+  assert(power.find("returnUiHome()") != std::string::npos);
   const size_t longPress =
       power.find("ButtonEvent::BUTTON_LONG_PRESS");
   const size_t longPressEnd = power.find("if (shutdownNotice_", longPress);
@@ -326,6 +326,16 @@ int main() {
          std::string::npos);
   assert(input.find("config.beginMenuTransaction()") != std::string::npos);
   assert(input.find("transitionUiMode(MENU)") != std::string::npos);
+  assert(input.find("resetUiReturnTimeout();") != std::string::npos);
+
+  const std::string uiState = readFile("src/core/ui_state.cpp");
+  const std::string timekeeper = readFile("src/core/timekeeper.cpp");
+  assert(uiState.find("mode == MENU") != std::string::npos);
+  assert(uiState.find("kMenuIdleTimeoutSeconds") != std::string::npos);
+  assert(uiState.find("void returnUiHome()") != std::string::npos);
+  assert(uiState.find("config.discardMenuTransaction();") !=
+         std::string::npos);
+  assert(timekeeper.find("returnUiHome();") != std::string::npos);
 
   const std::string display = readFile("src/core/display.cpp");
   const std::string carousel =

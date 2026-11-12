@@ -33,6 +33,7 @@ uint32_t returnTimeoutForMode(displayMode_e mode) {
     return 3;
 #endif
   }
+  if (mode == MENU) return kMenuIdleTimeoutSeconds;
   if (mode == STATIONS) return uiTimeoutConfig().stationListSeconds;
   if (mode == BT_TRANSPORT) return uiTimeoutConfig().btTransportSeconds;
   return 0;
@@ -69,6 +70,12 @@ bool transitionUiMode(displayMode_e requested) {
   if (requested != MENU && uiMenu.visible()) uiMenu.close();
   display.queueModeRender(requested);
   return true;
+}
+
+void returnUiHome() {
+  config.discardMenuTransaction();
+  if (uiMenu.visible()) uiMenu.close();
+  transitionUiMode(PLAYER);
 }
 
 void resetUiReturnTimeout() {

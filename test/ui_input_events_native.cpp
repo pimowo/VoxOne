@@ -166,6 +166,9 @@ int main() {
   noBluetooth.supportsBluetooth = false;
   assert(action(noBluetooth, UiInputEvent::Double) ==
          UiInputAction::OpenSourceSelector);
+  assert(resolveUiInput(noBluetooth, UiInputEvent::Double,
+                        UiInputControl::PowerButton).action ==
+         UiInputAction::OpenMenu);
 
   UiInputContext dlna = radio();
   dlna.activeSource = SourceId::Dlna;
