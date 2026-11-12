@@ -193,11 +193,51 @@ MenuSetting itemSetting(MenuId menuId, uint8_t index) {
   return MenuSetting::NONE;
 }
 
+uint8_t audioItemCount(const MenuSettings& settings) {
+  if (settings.supportsDspMini && settings.audioPath == AUDIO_DSPMINI)
+    return 1;
+  return static_cast<uint8_t>(sizeof(kAudioItems) / sizeof(kAudioItems[0])) +
+         (settings.supportsDspMini ? 1 : 0);
+}
+
+const char* audioItemLabel(const MenuSettings& settings, uint8_t index) {
+  if (settings.supportsDspMini) {
+    if (index == 0) return "Ścieżka audio";
+    --index;
+  }
+  if (settings.audioPath == AUDIO_DSPMINI) return "";
+  return index < sizeof(kAudioItems) / sizeof(kAudioItems[0])
+             ? kAudioItems[index].label
+             : "";
+}
+
+MenuSetting audioItemSetting(const MenuSettings& settings, uint8_t index) {
+  if (settings.supportsDspMini) {
+    if (index == 0) return MenuSetting::AUDIO_PATH;
+    --index;
+  }
+  if (settings.audioPath == AUDIO_DSPMINI) return MenuSetting::NONE;
+  if (index == 0) return MenuSetting::AUDIO_BALANCE;
+  if (index == 1) return MenuSetting::AUDIO_BASS;
+  if (index == 2) return MenuSetting::AUDIO_TREBLE;
+  if (index == 3) return MenuSetting::LINE_OUT_ENABLED;
+  if (index == 4) return MenuSetting::LINE_OUT_VOLUME;
+  return MenuSetting::NONE;
+}
+
 bool formatItemValue(const MenuSnapshot& snapshot, uint8_t index,
                      char* output, size_t outputSize) {
   if (!output || outputSize == 0) return false;
   output[0] = '\0';
-  switch (itemSetting(snapshot.menuId, index)) {
+  const MenuSetting setting = snapshot.menuId == MenuId::AUDIO
+                                  ? audioItemSetting(snapshot.settings, index)
+                                  : itemSetting(snapshot.menuId, index);
+  switch (setting) {
+    case MenuSetting::AUDIO_PATH:
+      snprintf(output, outputSize, "%s",
+               snapshot.settings.audioPath == AUDIO_DSPMINI
+                   ? "DSPmini" : "PCM5102");
+      break;
     case MenuSetting::AUDIO_BALANCE:
       snprintf(output, outputSize, "%+d", snapshot.settings.balance);
       break;
@@ -293,6 +333,7 @@ MenuId UiMenu::menuId() const {
 
 uint8_t UiMenu::itemCount() const {
   if (menuId() == MenuId::DLNA) return snapshot().dynamicCount;
+  if (menuId() == MenuId::AUDIO) return audioItemCount(settings());
   return ui_menu::itemCount(menuId());
 }
 
@@ -307,6 +348,8 @@ const char* UiMenu::selectedLabel() const {
              itemLabel(view, view.selectedIndex));
     return selectedDlnaLabel_;
   }
+  if (menuId() == MenuId::AUDIO)
+    return audioItemLabel(settings(), selectedIndex());
   return itemLabel(menuId(), selectedIndex());
 }
 
@@ -337,6 +380,8 @@ SourceId UiMenu::selectedSource() const {
 }
 
 MenuSetting UiMenu::selectedSetting() const {
+  if (menuId() == MenuId::AUDIO)
+    return audioItemSetting(settings(), selectedIndex());
   return itemSetting(menuId(), selectedIndex());
 }
 
@@ -540,6 +585,15 @@ MenuAction UiMenu::handle(MenuCommand command, int8_t steps) {
       state_.store(MenuState::OPEN, std::memory_order_release);
       return MenuAction::SELECTED;
     }
+    if (current == MenuId::AUDIO) {
+      if (selectedIndex() >= itemCount()) return MenuAction::NONE;
+      if (selectedSetting() != MenuSetting::NONE) {
+        state_.store(MenuState::EDITING, std::memory_order_release);
+        markChanged();
+        return MenuAction::EDITING_STARTED;
+      }
+      return MenuAction::SELECTED;
+    }
     const auto menu = menuDefinition(current);
     const uint8_t selected = selectedIndex();
     if (selected >= menu.count) return MenuAction::NONE;
@@ -582,6 +636,10 @@ MenuAction UiMenu::handle(MenuCommand command, int8_t steps) {
     const MenuSetting setting = selectedSetting();
     MenuSettings draft = settings();
     switch (setting) {
+      case MenuSetting::AUDIO_PATH:
+        if (!draft.supportsDspMini) return MenuAction::NONE;
+        draft.audioPath = direction > 0 ? AUDIO_DSPMINI : AUDIO_PCM5102;
+        break;
       case MenuSetting::AUDIO_BALANCE: {
         int16_t value = draft.balance + direction * magnitude;
         if (value < -16) value = -16;

@@ -3,6 +3,7 @@
 #include <cstddef>
 #include <cstdint>
 
+#include "audio_path_config.h"
 #include "../hardware/hardware_descriptor.h"
 
 namespace voxone::audio_runtime {
@@ -31,6 +32,32 @@ constexpr InputBufferPlan inputBufferPlan(bool supportsPsram) {
 inline InputBufferPlan currentInputBufferPlan() {
   return inputBufferPlan(
       hardware::hardwareCapabilities().supportsPsram);
+}
+
+struct OutputActivationPlan {
+  bool initializeSerialI2s;
+  bool localPlaybackAvailable;
+  bool dspMiniSelected;
+};
+
+// DSPmini consumes the same serial I2S stream as PCM5102. Its ADAU1701 I2C
+// programming is intentionally outside this stage; selecting it only chooses
+// and validates the audio route prepared for the later backend.
+constexpr OutputActivationPlan outputActivationPlan(
+    hardware::AudioOutputKind output, AudioPath path,
+    bool supportsDspMini) {
+  return output == hardware::AudioOutputKind::None
+             ? OutputActivationPlan{false, false, false}
+             : path == AUDIO_DSPMINI
+                   ? (supportsDspMini &&
+                              output == hardware::AudioOutputKind::DspMini
+                          ? OutputActivationPlan{true, true, true}
+                          : OutputActivationPlan{false, false, false})
+                   : (output == hardware::AudioOutputKind::Pcm5102a ||
+                              output == hardware::AudioOutputKind::Max98357 ||
+                              output == hardware::AudioOutputKind::Max98357Stereo
+                          ? OutputActivationPlan{true, true, false}
+                          : OutputActivationPlan{false, false, false});
 }
 
 // Only decode and I2S output run here. The network producer stays in loop().

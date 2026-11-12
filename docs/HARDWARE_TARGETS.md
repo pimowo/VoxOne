@@ -143,11 +143,17 @@ Każda bieżąca rodzina dopuszcza runtime stan „sprzęt nie jest zainstalowan
 
 | Profil | Runtime audio |
 |---|---|
-| `l0` | PCM5102A, NONE |
+| `l0` | PCM5102A, DSPmini (ADAU1701; I2S bez konfiguracji I2C), NONE |
 | `m0` | PCM5102A, MAX98357A MONO, MAX98357A STEREO, NONE |
 | `s0` | PCM5102A, MAX98357A MONO, MAX98357A STEREO, NONE |
 | `din0` | PCM5102A |
 | `w0` | PCM5102A |
+
+L0 zapisuje aktywną ścieżkę `AUDIO_PCM5102` / `AUDIO_DSPMINI` jako
+kompatybilne rozszerzenie Config v7 i synchronizuje ją z wyborem sprzętowym w
+NVS. Kreator First Boot oraz zakładka Sprzęt udostępniają oba warianty. Panel
+WWW pokazuje zakładkę Audio dla PCM5102 albo DSP dla DSPmini; menu urządzenia
+analogicznie ukrywa ustawienia właściwe wyłącznie dla PCM5102.
 
 `display=NONE` nie uruchamia kontrolera ani magistrali display, nie alokuje framebufferów i nie uruchamia renderera. Techniczny DisplayTask pozostaje aktywny, ponieważ obsługuje również `timekeeper.loop0()` oraz — zależnie od konfiguracji — `netserver.loop()`; operacje display są wtedy no-op. `input=NONE` nie konfiguruje A/B/KEY, ISR, EC11 ani OneButton local input. NONE nie jest capability fizycznego urządzenia i nie zmienia build defaults.
 

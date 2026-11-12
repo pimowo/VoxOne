@@ -213,7 +213,11 @@ int main() {
   candidate = defaults;
   candidate.audio = RuntimeAudioOutput::DspMini;
   assert(validateRuntimeHardwareConfig(candidate, capabilities) ==
+#if defined(VOXONE_PROFILE_L0)
+         RuntimeHardwareValidation::Valid);
+#else
          RuntimeHardwareValidation::Unsupported);
+#endif
   candidate.audio = RuntimeAudioOutput::Max98357;
   assert(validateRuntimeHardwareConfig(candidate, capabilities) ==
 #if defined(VOXONE_PROFILE_M0) || defined(VOXONE_PROFILE_S0)

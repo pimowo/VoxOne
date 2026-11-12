@@ -248,8 +248,28 @@ void Config::init() {
     store.lineOutEnabled = voxone::line_out::kDefaultEnabled;
     store.lineOutVolume = voxone::line_out::kDefaultVolume;
   }
+  AudioPath storedAudioPath = voxone::audio_path::kDefault;
+  const bool audioPathDecoded =
+      loaded.status == voxone::config_format::ConfigRecordStatus::LOADED_V7 &&
+      voxone::audio_path::decode(
+          store.reservedWeather, sizeof(store.reservedWeather),
+          storedAudioPath);
+  const auto& runtimeHardware = voxone::hardware::runtimeHardwareConfig();
+  store.audioPath = capabilities.supportsDspMini &&
+                            runtimeHardware.audio ==
+                                voxone::hardware::RuntimeAudioOutput::DspMini
+                        ? AUDIO_DSPMINI
+                        : AUDIO_PCM5102;
+  const bool audioPathNeedsPersistence =
+      loaded.status !=
+              voxone::config_format::ConfigRecordStatus::UNSUPPORTED_NEWER &&
+      (!audioPathDecoded || storedAudioPath != store.audioPath);
+  if (audioPathNeedsPersistence)
+    voxone::audio_path::encode(
+        store.audioPath, store.reservedWeather, sizeof(store.reservedWeather));
   _startupStatus = loaded.status;
   _storage.begin(loaded.status, loaded.storedBtEnabled);
+  if (audioPathNeedsPersistence) _storage.markDirty();
   const bool needsBtIntroductionMigration =
       capabilities.needsVoxOneBtIntroductionMigration;
   const auto btMigrationMarker = needsBtIntroductionMigration
@@ -289,7 +309,8 @@ void Config::init() {
   // A valid v7 boot does not rewrite the record. Legacy/default records get
   // one full write; future versions remain read-only for this entire boot.
   voxone::config_storage::ConfigEepromStorage backend;
-  const auto startupWrite = btMigration.persistEnabled
+  const auto startupWrite = btMigration.persistEnabled ||
+                                    audioPathNeedsPersistence
       ? _storage.persist(store, backend)
       : _storage.finishStartup(store, backend);
   if (startupWrite != voxone::config_format::ConfigWriteStatus::OK &&
@@ -565,6 +586,9 @@ void Config::_applyDefaults() {
   voxone::line_out::encode(
       store.lineOutEnabled, store.lineOutVolume, store.reservedWeather,
       sizeof(store.reservedWeather));
+  store.audioPath = voxone::audio_path::kDefault;
+  voxone::audio_path::encode(
+      store.audioPath, store.reservedWeather, sizeof(store.reservedWeather));
 }
 
 bool Config::persistV7() {
@@ -694,6 +718,53 @@ bool Config::setLineOutVolume(uint8_t volume) {
   return true;
 }
 
+bool Config::setAudioPath(AudioPath path) {
+  if (!voxone::audio_path::valid(path)) return false;
+  const auto& capabilities = voxone::hardware::hardwareCapabilities();
+  if (path == AUDIO_DSPMINI && !capabilities.supportsDspMini) return false;
+
+  const voxone::hardware::RuntimeHardwareConfig previousHardware =
+      voxone::hardware::runtimeHardwareConfig();
+  voxone::hardware::RuntimeHardwareConfig requested = previousHardware;
+  bool hardwareAudioChanged = false;
+  if (capabilities.supportsDspMini) {
+    requested.audio = path == AUDIO_DSPMINI
+                          ? voxone::hardware::RuntimeAudioOutput::DspMini
+                          : voxone::hardware::RuntimeAudioOutput::Pcm5102a;
+    const auto hardwareStatus =
+        voxone::hardware::saveRuntimeHardwareConfig(requested);
+    if (hardwareStatus != voxone::hardware::RuntimeHardwareSaveStatus::Saved &&
+        hardwareStatus !=
+            voxone::hardware::RuntimeHardwareSaveStatus::Unchanged)
+      return false;
+    hardwareAudioChanged =
+        hardwareStatus == voxone::hardware::RuntimeHardwareSaveStatus::Saved;
+  }
+
+  WriteLock lock(_persistMutex);
+  if (store.audioPath == path) return true;
+  if (!voxone::audio_path::encode(
+          path, store.reservedWeather, sizeof(store.reservedWeather))) {
+    if (hardwareAudioChanged)
+      voxone::hardware::saveRuntimeHardwareConfig(previousHardware);
+    return false;
+  }
+  const AudioPath previousPath = store.audioPath;
+  store.audioPath = path;
+  _storage.markDirty();
+  _publishRuntimeLocked();
+  const bool persisted = !_startupReadOnly && persistV7();
+  if (!persisted) {
+    store.audioPath = previousPath;
+    voxone::audio_path::encode(
+        store.audioPath, store.reservedWeather, sizeof(store.reservedWeather));
+    _publishRuntimeLocked();
+    if (hardwareAudioChanged)
+      voxone::hardware::saveRuntimeHardwareConfig(previousHardware);
+  }
+  return persisted;
+}
+
 void Config::beginMenuTransaction() {
   voxone::ui_menu::MenuSettings settings{};
   {
@@ -708,6 +779,9 @@ void Config::beginMenuTransaction() {
     settings.lineOutEnabled = store.lineOutEnabled;
     settings.lineOutVolume = store.lineOutVolume;
     settings.maximumVolume = store.maximumVolume;
+    settings.audioPath = store.audioPath;
+    settings.supportsDspMini =
+        voxone::hardware::hardwareCapabilities().supportsDspMini;
     _menuPersistedSettings = settings;
     _menuDraftSettings = settings;
     _menuTransactionActive = true;
@@ -736,6 +810,10 @@ void Config::previewMenuSettings(
   settings.balance = clampBalance(settings.balance);
   settings.bass = clampTone(settings.bass);
   settings.treble = clampTone(settings.treble);
+  if (!voxone::audio_path::valid(settings.audioPath) ||
+      (settings.audioPath == AUDIO_DSPMINI &&
+       !voxone::hardware::hardwareCapabilities().supportsDspMini))
+    settings.audioPath = AUDIO_PCM5102;
   if (settings.brightness > 100) settings.brightness = 100;
   if (!voxone::tft_theme::valid(static_cast<TftTheme>(settings.tftTheme)))
     settings.tftTheme = static_cast<uint8_t>(THEME_DEFAULT);
@@ -752,6 +830,8 @@ void Config::previewMenuSettings(
 
 bool Config::commitMenuTransaction() {
   bool persisted = false;
+  bool hardwareAudioChanged = false;
+  voxone::hardware::RuntimeHardwareConfig previousHardware{};
   voxone::ui_menu::MenuSettings draft{};
   {
     WriteLock lock(_persistMutex);
@@ -789,6 +869,28 @@ bool Config::commitMenuTransaction() {
       store.lineOutVolume = draft.lineOutVolume;
       _storage.markDirty();
     }
+    if (store.audioPath != draft.audioPath) {
+      previousHardware = voxone::hardware::runtimeHardwareConfig();
+      voxone::hardware::RuntimeHardwareConfig requested = previousHardware;
+      requested.audio = draft.audioPath == AUDIO_DSPMINI
+                            ? voxone::hardware::RuntimeAudioOutput::DspMini
+                            : voxone::hardware::RuntimeAudioOutput::Pcm5102a;
+      const auto hardwareStatus =
+          voxone::hardware::saveRuntimeHardwareConfig(requested);
+      if (hardwareStatus !=
+              voxone::hardware::RuntimeHardwareSaveStatus::Saved &&
+          hardwareStatus !=
+              voxone::hardware::RuntimeHardwareSaveStatus::Unchanged)
+        return false;
+      hardwareAudioChanged =
+          hardwareStatus == voxone::hardware::RuntimeHardwareSaveStatus::Saved;
+      if (!voxone::audio_path::encode(
+              draft.audioPath, store.reservedWeather,
+              sizeof(store.reservedWeather)))
+        return false;
+      store.audioPath = draft.audioPath;
+      _storage.markDirty();
+    }
 
     _menuTransactionActive = false;
     _publishRuntimeLocked();
@@ -806,6 +908,7 @@ bool Config::commitMenuTransaction() {
           _menuPersistedSettings.encoderUiReversed;
       store.lineOutEnabled = _menuPersistedSettings.lineOutEnabled;
       store.lineOutVolume = _menuPersistedSettings.lineOutVolume;
+      store.audioPath = _menuPersistedSettings.audioPath;
       voxone::tft_theme::encode(
           store.tftTheme, store.reservedWeather,
           sizeof(store.reservedWeather));
@@ -815,8 +918,21 @@ bool Config::commitMenuTransaction() {
       voxone::line_out::encode(
           store.lineOutEnabled, store.lineOutVolume, store.reservedWeather,
           sizeof(store.reservedWeather));
+      voxone::audio_path::encode(
+          store.audioPath, store.reservedWeather,
+          sizeof(store.reservedWeather));
       _menuTransactionActive = true;
       _publishRuntimeLocked();
+      if (hardwareAudioChanged) {
+        const auto rollbackStatus =
+            voxone::hardware::saveRuntimeHardwareConfig(previousHardware);
+        if (rollbackStatus !=
+                voxone::hardware::RuntimeHardwareSaveStatus::Saved &&
+            rollbackStatus !=
+                voxone::hardware::RuntimeHardwareSaveStatus::Unchanged)
+          Serial.println(
+              "##[ERROR]# audio path hardware rollback failed");
+      }
     }
   }
   if (!persisted) return false;
@@ -843,6 +959,9 @@ void Config::discardMenuTransaction() {
     restored.encoderUiReversed = store.encoderUiReversed;
     restored.lineOutEnabled = store.lineOutEnabled;
     restored.lineOutVolume = store.lineOutVolume;
+    restored.audioPath = store.audioPath;
+    restored.supportsDspMini =
+        voxone::hardware::hardwareCapabilities().supportsDspMini;
     _publishRuntimeLocked();
   }
   uiMenu.configureEncoderUiReversed(restored.encoderUiReversed);
@@ -1323,6 +1442,7 @@ void Config::_publishRuntimeLocked() {
   runtime.encoderUiReversed = store.encoderUiReversed;
   runtime.lineOutEnabled = store.lineOutEnabled;
   runtime.lineOutVolume = store.lineOutVolume;
+  runtime.audioPath = static_cast<uint8_t>(store.audioPath);
   if (_menuTransactionActive) {
     runtime.balance = _menuDraftSettings.balance;
     runtime.bass = _menuDraftSettings.bass;
@@ -1335,6 +1455,7 @@ void Config::_publishRuntimeLocked() {
         _menuDraftSettings.encoderUiReversed;
     runtime.lineOutEnabled = _menuDraftSettings.lineOutEnabled;
     runtime.lineOutVolume = _menuDraftSettings.lineOutVolume;
+    runtime.audioPath = static_cast<uint8_t>(_menuDraftSettings.audioPath);
   }
   strlcpy(runtime.mdnsName, store.mdnsname, sizeof(runtime.mdnsName));
   strlcpy(runtime.haName, store.haName, sizeof(runtime.haName));

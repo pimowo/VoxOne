@@ -4,6 +4,7 @@
 #include <atomic>
 #include <stdint.h>
 
+#include "audio_path_config.h"
 #include "source_catalog.h"
 
 namespace voxone {
@@ -50,6 +51,7 @@ enum class MenuAction : uint8_t {
 
 enum class MenuSetting : uint8_t {
   NONE,
+  AUDIO_PATH,
   AUDIO_BALANCE,
   AUDIO_BASS,
   AUDIO_TREBLE,
@@ -72,6 +74,8 @@ struct MenuSettings {
   bool lineOutEnabled = false;
   uint8_t lineOutVolume = 100;
   uint8_t maximumVolume = 100;
+  AudioPath audioPath = AUDIO_PCM5102;
+  bool supportsDspMini = false;
 };
 
 inline bool operator==(const MenuSettings& left, const MenuSettings& right) {
@@ -82,7 +86,9 @@ inline bool operator==(const MenuSettings& left, const MenuSettings& right) {
          left.screensaverEnabled == right.screensaverEnabled &&
          left.encoderUiReversed == right.encoderUiReversed &&
          left.lineOutEnabled == right.lineOutEnabled &&
-         left.lineOutVolume == right.lineOutVolume;
+         left.lineOutVolume == right.lineOutVolume &&
+         left.audioPath == right.audioPath &&
+         left.supportsDspMini == right.supportsDspMini;
 }
 
 inline bool operator!=(const MenuSettings& left, const MenuSettings& right) {
@@ -186,6 +192,9 @@ uint8_t itemCount(MenuId menuId);
 const char* itemLabel(MenuId menuId, uint8_t index);
 bool itemHasSubmenu(MenuId menuId, uint8_t index);
 MenuSetting itemSetting(MenuId menuId, uint8_t index);
+uint8_t audioItemCount(const MenuSettings& settings);
+const char* audioItemLabel(const MenuSettings& settings, uint8_t index);
+MenuSetting audioItemSetting(const MenuSettings& settings, uint8_t index);
 bool formatItemValue(const MenuSnapshot& snapshot, uint8_t index,
                      char* output, size_t outputSize);
 uint8_t sourceItemCount(uint8_t mask);
@@ -202,6 +211,8 @@ inline uint8_t itemCount(const MenuSnapshot& snapshot) {
   if (snapshot.menuId == MenuId::SOURCE) {
     return sourceItemCount(snapshot.sourceMask);
   }
+  if (snapshot.menuId == MenuId::AUDIO)
+    return audioItemCount(snapshot.settings);
   if (snapshot.menuId != MenuId::DLNA) return itemCount(snapshot.menuId);
   return snapshot.dynamicCount;
 }
@@ -210,6 +221,8 @@ inline const char* itemLabel(const MenuSnapshot& snapshot, uint8_t index) {
   if (snapshot.menuId == MenuId::SOURCE) {
     return sourceMenuLabel(sourceItemAt(snapshot.sourceMask, index));
   }
+  if (snapshot.menuId == MenuId::AUDIO)
+    return audioItemLabel(snapshot.settings, index);
   if (snapshot.menuId != MenuId::DLNA) return itemLabel(snapshot.menuId, index);
   return index < snapshot.dynamicCount
              ? snapshot.dynamicItems[index].label : "";

@@ -1,4 +1,5 @@
 #include "../src/hardware/runtime_audio_output.h"
+#include "../src/core/audio_runtime_config.h"
 
 #include <cassert>
 #include <fstream>
@@ -36,8 +37,26 @@ int main() {
   assert(maxStereo.localPlaybackAvailable == max.localPlaybackAvailable);
   assert(!dsp.initializeSerialI2s && !dsp.localPlaybackAvailable);
 
+  const auto pcmPath = voxone::audio_runtime::outputActivationPlan(
+      AudioOutputKind::Pcm5102a, AUDIO_PCM5102, true);
+  const auto dspPath = voxone::audio_runtime::outputActivationPlan(
+      AudioOutputKind::DspMini, AUDIO_DSPMINI, true);
+  const auto unsupportedDspPath = voxone::audio_runtime::outputActivationPlan(
+      AudioOutputKind::DspMini, AUDIO_DSPMINI, false);
+  const auto mismatchedDspPath = voxone::audio_runtime::outputActivationPlan(
+      AudioOutputKind::Pcm5102a, AUDIO_DSPMINI, true);
+  assert(pcmPath.initializeSerialI2s && pcmPath.localPlaybackAvailable &&
+         !pcmPath.dspMiniSelected);
+  assert(dspPath.initializeSerialI2s && dspPath.localPlaybackAvailable &&
+         dspPath.dspMiniSelected);
+  assert(!unsupportedDspPath.initializeSerialI2s &&
+         !unsupportedDspPath.localPlaybackAvailable);
+  assert(!mismatchedDspPath.initializeSerialI2s &&
+         !mismatchedDspPath.localPlaybackAvailable);
+
   const std::string player = readFile("src/core/player.cpp");
   contains(player, "I2S_NUM_0, false");
+  contains(player, "outputActivationPlan");
   contains(player, "audioPlan.initializeSerialI2s");
   contains(player, "!_localAudioAvailable &&");
   contains(player, "request.type == PR_PLAY");

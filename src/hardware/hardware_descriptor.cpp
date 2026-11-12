@@ -28,7 +28,7 @@ constexpr HardwareCapabilities kCapabilities = {
   audioOutputSupport(AudioOutputKind::Pcm5102a),
   inputSupport(LocalInputKind::Ec11) | inputSupport(LocalInputKind::Buttons3),
   true, false, false, false, false, false, false, false, false,
-  bool(VOXONE_INCLUDE_DSP), false, false, false, false, false, false
+  bool(VOXONE_INCLUDE_DSP), false, false, false, false, false, false, false
 };
 #elif defined(VOXONE_PROFILE_M0)
 constexpr BoardId kBoardId = BoardId::BoardM0;
@@ -55,7 +55,7 @@ constexpr HardwareCapabilities kCapabilities = {
       audioOutputSupport(AudioOutputKind::None),
   inputSupport(LocalInputKind::Ec11) | inputSupport(LocalInputKind::Buttons3),
   true, false, false, false, false, false, false, true, false,
-  bool(VOXONE_INCLUDE_DSP), true, true, false, false, false, false
+  bool(VOXONE_INCLUDE_DSP), true, true, false, false, false, false, false
 };
 #elif defined(VOXONE_PROFILE_S0)
 constexpr BoardId kBoardId = BoardId::BoardS0;
@@ -83,7 +83,7 @@ constexpr HardwareCapabilities kCapabilities = {
       audioOutputSupport(AudioOutputKind::None),
   inputSupport(LocalInputKind::Ec11) | inputSupport(LocalInputKind::Buttons3),
   true, true, true, true, false, false, false, true, false,
-  bool(VOXONE_INCLUDE_DSP), true, true, false, false, false, true
+  bool(VOXONE_INCLUDE_DSP), true, true, false, false, false, true, false
 };
 #elif defined(VOXONE_PROFILE_DIN0)
 constexpr BoardId kBoardId = BoardId::BoardDIN0;
@@ -107,7 +107,7 @@ constexpr HardwareCapabilities kCapabilities = {
   audioOutputSupport(AudioOutputKind::Pcm5102a),
   inputSupport(LocalInputKind::Ec11) | inputSupport(LocalInputKind::Buttons3),
   true, false, false, false, false, false, false, true, false,
-  bool(VOXONE_INCLUDE_DSP), true, true, false, false, false, false
+  bool(VOXONE_INCLUDE_DSP), true, true, false, false, false, false, false
 };
 #elif defined(VOXONE_PROFILE_L0)
 constexpr BoardId kBoardId = BoardId::BoardL0;
@@ -132,10 +132,11 @@ constexpr HardwareCapabilities kCapabilities = {
       displaySupport(DisplayKind::Sh1106_128x64) |
       displaySupport(DisplayKind::Ch1116g_128x64),
   audioOutputSupport(AudioOutputKind::Pcm5102a) |
+      audioOutputSupport(AudioOutputKind::DspMini) |
       audioOutputSupport(AudioOutputKind::None),
   inputSupport(LocalInputKind::Ec11) | inputSupport(LocalInputKind::Buttons3),
   true, true, true, true, true, true, true, true, false,
-  bool(VOXONE_INCLUDE_DSP), true, true, false, false, false, false
+  bool(VOXONE_INCLUDE_DSP), true, true, false, false, false, false, true
 };
 #else
 // No matching hardware profile.
@@ -212,6 +213,10 @@ static_assert(bool(VOXONE_HAS_SPDIF) == kCapabilities.supportsSpdif,
               "SPDIF compile gate must match board capabilities");
 static_assert(bool(VOXONE_HAS_TDA7719) == kCapabilities.supportsTda7719,
               "TDA7719 compile gate must match board capabilities");
+static_assert(kCapabilities.supportsDspMini ==
+                  kCapabilities.supportsAudioOutput(
+                      AudioOutputKind::DspMini),
+              "DSPmini flag must match the supported audio-output mask");
 static_assert(bool(VOXONE_BT_I2S_RX_ENABLED) == kCapabilities.supportsBtAudioRx,
               "BT audio RX compile gate must match board capabilities");
 static_assert(bool(VOXONE_BT_FW_UPDATE_ENABLED) ==
@@ -270,10 +275,13 @@ bool validateDescriptor(const HardwareDescriptor& d) {
   const bool serialI2sOutput =
       d.capabilities.supportsAudioOutput(AudioOutputKind::Pcm5102a) ||
       d.capabilities.supportsAudioOutput(AudioOutputKind::Max98357) ||
-      d.capabilities.supportsAudioOutput(AudioOutputKind::Max98357Stereo);
+      d.capabilities.supportsAudioOutput(AudioOutputKind::Max98357Stereo) ||
+      d.capabilities.supportsAudioOutput(AudioOutputKind::DspMini);
   if ((display && !d.capabilities.supportsDisplay(d.displayKind)) ||
       (!display && d.capabilities.hasLocalDisplay()) ||
       !d.capabilities.supportsAudioOutput(d.audioOutputKind) ||
+      d.capabilities.supportsDspMini !=
+          d.capabilities.supportsAudioOutput(AudioOutputKind::DspMini) ||
       d.capabilities.supportsRtc != (d.rtcKind != RtcKind::None) ||
       (d.capabilities.supportsRtc &&
        (!hasPin(d.i2c.sda) || !hasPin(d.i2c.scl))) ||

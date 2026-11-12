@@ -60,7 +60,8 @@ constexpr CatalogItem kInputCatalog[] = {
     {"buttons3", "BUTTONS3", "Brak fizycznego PASS"}};
 
 constexpr CatalogItem kLAudio[] = {
-    {"pcm5102a", "PCM5102A", ""}, {"dspmini", "DSPmini", ""},
+    {"pcm5102a", "PCM5102 (Domyślny)", ""},
+    {"dspmini", "DSPmini (ADAU1701)", ""},
     {"none", "Brak", ""}};
 constexpr CatalogItem kMAudio[] = {
     {"pcm5102a", "PCM5102A", ""},
@@ -153,11 +154,11 @@ const char* audioValue(AudioOutputKind kind) {
 
 const char* audioLabel(AudioOutputKind kind) {
   switch (kind) {
-    case AudioOutputKind::Pcm5102a: return "PCM5102A";
+    case AudioOutputKind::Pcm5102a: return "PCM5102 (Domyślny)";
     case AudioOutputKind::Max98357: return "MAX98357A MONO (1 moduł)";
     case AudioOutputKind::Max98357Stereo:
       return "MAX98357A STEREO (2 moduły)";
-    case AudioOutputKind::DspMini: return "DSPmini";
+    case AudioOutputKind::DspMini: return "DSPmini (ADAU1701)";
     case AudioOutputKind::None: return "Brak";
   }
   return nullptr;

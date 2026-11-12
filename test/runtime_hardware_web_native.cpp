@@ -122,8 +122,8 @@ int main() {
   const size_t audioOutputCount =
       supportedRuntimeAudioOutputOptions(capabilities, audioOutputs, 5);
   assert(std::strcmp(audioOutputs[0].value, "pcm5102a") == 0);
-  assert(std::strcmp(audioOutputs[0].label, "PCM5102A") == 0);
 #if defined(VOXONE_PROFILE_M0) || defined(VOXONE_PROFILE_S0)
+  assert(std::strcmp(audioOutputs[0].label, "PCM5102 (Domyślny)") == 0);
   assert(audioOutputCount == 4);
   assert(hasOption(audioOutputs, audioOutputCount, "max98357a"));
   assert(hasOption(audioOutputs, audioOutputCount, "max98357a_stereo"));
@@ -141,16 +141,24 @@ int main() {
                               "MAX98357A STEREO (2 moduły)") == 0);
   assert(hasOption(audioOutputs, audioOutputCount, "none"));
 #elif defined(VOXONE_PROFILE_L0)
-  assert(audioOutputCount == 2);
+  assert(std::strcmp(audioOutputs[0].label, "PCM5102 (Domyślny)") == 0);
+  assert(audioOutputCount == 3);
   assert(!hasOption(audioOutputs, audioOutputCount, "max98357a"));
+  assert(hasOption(audioOutputs, audioOutputCount, "dspmini"));
   assert(hasOption(audioOutputs, audioOutputCount, "none"));
 #else
+  assert(std::strcmp(audioOutputs[0].label, "PCM5102 (Domyślny)") == 0);
   assert(audioOutputCount == 1);
   assert(std::strcmp(audioOutputs[0].value, "pcm5102a") == 0);
   assert(!hasOption(audioOutputs, audioOutputCount, "max98357a"));
   assert(!hasOption(audioOutputs, audioOutputCount, "none"));
 #endif
-  assert(!hasOption(audioOutputs, audioOutputCount, "dspmini"));
+  assert(hasOption(audioOutputs, audioOutputCount, "dspmini") ==
+#if defined(VOXONE_PROFILE_L0)
+         true);
+#else
+         false);
+#endif
   assert(hasOption(audioOutputs, audioOutputCount, "max98357a_stereo") ==
 #if defined(VOXONE_PROFILE_M0) || defined(VOXONE_PROFILE_S0)
          true);
@@ -357,7 +365,11 @@ int main() {
   assert(makeRuntimeHardwareWebCandidate(
              current, capabilities, runtimeDisplayWebValue(current.display),
              "ec11", "dspmini", candidate) ==
+#if defined(VOXONE_PROFILE_L0)
+         RuntimeHardwareValidation::Valid);
+#else
          RuntimeHardwareValidation::Unsupported);
+#endif
 
   assert(makeRuntimeHardwareWebCandidate(
              current, capabilities, runtimeDisplayWebValue(current.display),

@@ -56,6 +56,7 @@ window.voxOneVersion = '0.8.0';
 window.voxOneChannel = 'dev';
 window.voxOneBuild = '192a400';
 window.yoRadioVersion = 'test';
+window.voxOneAudioPath = 'pcm5102';
 window.securityFinePointer = true;
 const nativeMatchMedia = window.matchMedia.bind(window);
 window.matchMedia = query => query.includes('(pointer: fine)') ? {
@@ -160,7 +161,7 @@ window.hardwareSnapshot = {
     {value:'buttons3',label:'BUTTONS3',status:'untested',statusLabel:'DO TESTU'}
   ],
   supportedAudioOutputs:[
-    {value:'pcm5102a',label:'PCM5102A'},
+    {value:'pcm5102a',label:'PCM5102 (Domyślny)'},
     {value:'max98357a',label:'MAX98357A MONO (1 moduł)'},
     {value:'max98357a_stereo',label:'MAX98357A STEREO (2 moduły)'},
     {value:'none',label:'Brak'}
@@ -366,8 +367,19 @@ setTimeout(async () => {
     get('security-setup-later').click();
     check(!get('app-shell').hidden && securityRequests.length === 0,
       'legacy user can defer setup without losing panel or OTA access');
+    check(!document.querySelector('[data-tab="audio"]').hidden &&
+      document.querySelector('[data-tab="dsp"]').hidden,
+      'PCM5102 path exposes Audio and hides DSP');
     check(webSocketInstances.length === 1,
       'explicit legacy compatibility entry starts one WebSocket');
+    btTestSocket.onmessage({data:JSON.stringify({audioPath:'dspmini'})});
+    check(document.querySelector('[data-tab="audio"]').hidden &&
+      !document.querySelector('[data-tab="dsp"]').hidden,
+      'DSPmini path hides Audio and exposes DSP');
+    btTestSocket.onmessage({data:JSON.stringify({audioPath:'pcm5102'})});
+    check(!document.querySelector('[data-tab="audio"]').hidden &&
+      document.querySelector('[data-tab="dsp"]').hidden,
+      'runtime audio path can return the navigation to PCM5102');
     await VoxOneSecurityUi.refresh();
     check(webSocketInstances[0].readyState === 3,
       'returning to the security gate closes an existing WebSocket');
@@ -1224,7 +1236,7 @@ setTimeout(async () => {
     check([...hardwareAudio.options].map(option => option.value).join(',') ===
       'pcm5102a,max98357a,max98357a_stereo,none' &&
       [...hardwareAudio.options].map(option => option.textContent).join(',') ===
-      'PCM5102A,MAX98357A MONO (1 moduł),MAX98357A STEREO (2 moduły),Brak' &&
+      'PCM5102 (Domyślny),MAX98357A MONO (1 moduł),MAX98357A STEREO (2 moduły),Brak' &&
       hardwareAudio.value === 'pcm5102a' &&
       !hardwareAudio.disabled,
       'audio select contains the exact M0 runtime matrix');
@@ -2154,7 +2166,7 @@ def main():
         '<option value="buttons3">BUTTONS3</option>')
     first_boot_rendered_html = first_boot_rendered_html.replace(
         '%FIRST_BOOT_AUDIO_OPTIONS%',
-        '<option value="pcm5102a" selected>PCM5102A</option>'
+        '<option value="pcm5102a" selected>PCM5102 (Domyślny)</option>'
         '<option value="max98357a">MAX98357A MONO (1 moduł)</option>'
         '<option value="max98357a_stereo">MAX98357A STEREO (2 moduły)</option>'
         '<option value="none">Brak</option>')

@@ -7,6 +7,7 @@
 #include "timekeeper.h"
 #include "volume_map.h"
 #include "line_out_volume.h"
+#include "audio_runtime_config.h"
 #include "system_operation_state.h"
 #include "source_manager.h"
 #include "network.h"
@@ -18,7 +19,6 @@
 #if defined(VOXONE_TTS_HIL_DIAGNOSTICS)
 #include "tts_hil_diagnostics.h"
 #endif
-#include "../hardware/runtime_audio_output.h"
 #include "../hardware/runtime_hardware_config.h"
 #include <cstddef>
 #include <cstdlib>
@@ -103,8 +103,14 @@ void Player::init() {
       std::memory_order_release);
   _radioReconnect.reset();
   _pendingStationRefresh.reset();
-  const auto audioPlan = voxone::hardware::runtimeAudioActivationPlan(
-      voxone::hardware::runtimeHardwareConfig().audio);
+  voxone::hardware::AudioOutputKind outputKind =
+      voxone::hardware::AudioOutputKind::None;
+  voxone::hardware::runtimeAudioOutputKind(
+      voxone::hardware::runtimeHardwareConfig().audio, outputKind);
+  const auto audioPlan = voxone::audio_runtime::outputActivationPlan(
+      outputKind,
+      static_cast<AudioPath>(runtime.audioPath),
+      voxone::hardware::hardwareCapabilities().supportsDspMini);
   _localAudioAvailable = audioPlan.localPlaybackAvailable;
   playerQueue = xQueueCreate( 5, sizeof( playerRequestParams_t ) );
   setOutputPins(false);
@@ -119,6 +125,10 @@ void Player::init() {
       _localAudioAvailable = false;
       Serial.println("failed: local I2S unavailable");
   }
+  Serial.printf("audio path: %s%s\n",
+                voxone::audio_path::apiName(
+                    static_cast<AudioPath>(runtime.audioPath)),
+                audioPlan.dspMiniSelected ? " (I2S prepared, I2C pending)" : "");
   setBalance(runtime.balance);
   setTone(runtime.bass, runtime.middle, runtime.treble);
   setVolume(0);

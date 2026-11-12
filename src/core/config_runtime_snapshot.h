@@ -65,6 +65,7 @@ struct Snapshot {
   bool encoderUiReversed;
   bool lineOutEnabled;
   uint8_t lineOutVolume;
+  uint8_t audioPath;
   char mdnsName[kMdnsNameCapacity];
   char haName[kHaNameCapacity];
 };

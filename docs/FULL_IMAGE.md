@@ -227,11 +227,11 @@ pozwala także wybrać `display=NONE` i `input=NONE`.
 | M0 | ESP32-S3 Zero, 4 MiB flash, 2 MiB PSRAM | SSD1306 lub SSD1309 128×64 | EC11 / Buttons3 / NONE | PCM5102A, RADIO, WWW, Web Update; bez BT, RTC i VU. |
 | S0 | ESP32-S3 Zero, 4 MiB flash, 2 MiB PSRAM | SSD1306 lub SSD1309 128×64 | EC11 / Buttons3 / NONE | Tymczasowy pinout rewizji 0 jak M0; przyszłe wyposażenie rodziny S nie jest dostępne. |
 | DIN0 | ESP32-S3 Zero, 4 MiB flash, 2 MiB PSRAM | SSD1306 lub SSD1309 128×64 | EC11 / Buttons3 / NONE | Tymczasowy pinout rewizji 0 jak M0; przyszłe wyposażenie DIN nie jest dostępne. |
-| L0 | ESP32-S3, build 16 MiB flash i PSRAM OPI | ST7796S 480×320 | EC11 / Buttons3 / NONE | PCM5102A, DS3231, VoxOneBT przez UART/I2S, VU, RADIO, WWW i Web Update. |
+| L0 | ESP32-S3, build 16 MiB flash i PSRAM OPI | ST7796S 480×320 | EC11 / Buttons3 / NONE | PCM5102A lub DSPmini (I2S przygotowane, konfiguracja ADAU1701 przez I2C jeszcze nieaktywna), DS3231, VoxOneBT przez UART/I2S, VU, RADIO, WWW i Web Update. |
 
-Audio w bieżących pięciu profilach jest ograniczone do PCM5102A. Pozycja w
-katalogu roadmapy nie oznacza, że dany układ można wybrać w aktualnym
-firmware.
+Domyślną ścieżką audio pozostaje PCM5102A. DSPmini można wybrać wyłącznie w
+L0; bieżący etap przełącza konfigurację, UI oraz inicjalizację I2S, ale nie
+wysyła jeszcze konfiguracji do ADAU1701 przez I2C.
 
 W0, M0 i L0 są profilami kwalifikowanymi do Stable 1.0.0. S0 i DIN0 zachowują
 tymczasowy pinout M0 oraz wymagają własnego HIL w POST-STABLE; przyszłe

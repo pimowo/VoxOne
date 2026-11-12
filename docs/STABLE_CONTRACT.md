@@ -193,7 +193,9 @@ usuwa je wyłącznie jako bezpieczne czyszczenie po aktualizacji.
 
 RADIO istnieje na wszystkich profilach i odtwarza przez wybrane lokalne
 wyjście I2S. Domyślnie W0/M0/L0/DIN0 używają PCM5102A, a S0 MAX98357A MONO;
-runtime `NONE` wyłącza lokalne I2S tam, gdzie profil je udostępnia.
+runtime `NONE` wyłącza lokalne I2S tam, gdzie profil je udostępnia. Profil L0
+pozwala także wybrać ścieżkę DSPmini (ADAU1701): na tym etapie uruchamia ona
+strumień I2S, bez programowania DSP przez I2C.
 Obsługiwane ścieżki obejmują MP3, AAC/AAC+, FLAC i M4A/AAC,
 HTTP/HTTPS, ICY metadata, M3U/PLS i redirect; pełna macierz realnych streamów
 pozostaje HIL.

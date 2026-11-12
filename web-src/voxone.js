@@ -783,6 +783,9 @@ window.VoxOneRestartWaiter = Object.freeze({
     version: typeof voxOneVersion === "string" ? voxOneVersion : null,
     channel: typeof voxOneChannel === "string" ? voxOneChannel : null,
     build: typeof voxOneBuild === "string" ? voxOneBuild : null,
+    audioPath: typeof voxOneAudioPath === "string" &&
+      ["pcm5102", "dspmini"].includes(voxOneAudioPath)
+        ? voxOneAudioPath : "pcm5102",
     baseVersion: typeof yoRadioVersion === "string" ? yoRadioVersion : null
   };
   const advancedAudio = typeof window.createAdvancedAudioLive === "function"
@@ -1674,7 +1677,19 @@ window.VoxOneRestartWaiter = Object.freeze({
 
   function showTab() {
     const requested = location.hash.slice(1);
-    const selected = tabs.includes(requested) ? requested : "status";
+    const audioPathAllows = tab =>
+      tab !== "audio" && tab !== "dsp" ||
+      (tab === "audio" && state.audioPath === "pcm5102") ||
+      (tab === "dsp" && state.audioPath === "dspmini");
+    for (const tab of tabs) {
+      const link = document.querySelector('[data-tab="' + tab + '"]');
+      if (link && (tab === "audio" || tab === "dsp"))
+        link.hidden = !audioPathAllows(tab);
+    }
+    const selected = tabs.includes(requested) && audioPathAllows(requested)
+      ? requested : "status";
+    if (selected !== requested && requested)
+      history.replaceState(null, "", "#" + selected);
     for (const tab of tabs) {
       document.getElementById(tab).hidden = tab !== selected;
       const link = document.querySelector('[data-tab="' + tab + '"]');
@@ -3119,6 +3134,11 @@ window.VoxOneRestartWaiter = Object.freeze({
       renderUpdateFiles();
     }
     const systemInfo = message.systemInfo;
+    if (["pcm5102", "dspmini"].includes(message.audioPath) &&
+        state.audioPath !== message.audioPath) {
+      state.audioPath = message.audioPath;
+      showTab();
+    }
     if (systemInfo && typeof systemInfo === "object" &&
         ["mac", "capabilities"].every(key => typeof systemInfo[key] === "string") &&
         Number.isInteger(systemInfo.rssi) &&

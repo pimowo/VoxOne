@@ -51,7 +51,9 @@ int main() {
   assert(!caps.supportsAudioOutput(AudioOutputKind::None));
 #endif
 #endif
-  assert(!caps.supportsAudioOutput(AudioOutputKind::DspMini));
+  assert(caps.supportsAudioOutput(AudioOutputKind::DspMini) ==
+         (d.board.id == BoardId::BoardL0));
+  assert(caps.supportsDspMini == (d.board.id == BoardId::BoardL0));
   assert(caps.supportsDsp == bool(VOXONE_INCLUDE_DSP));
 #if defined(VOXONE_PROFILE_L0)
   assert(caps.supportsDsp);

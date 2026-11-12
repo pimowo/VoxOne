@@ -162,6 +162,10 @@ HTTP(S) URL.
 
 ### DSP (tylko L0)
 
+Pole `audioPath` w odpowiedzi WebSocket `GETSYSTEM` ma wartość `pcm5102` albo
+`dspmini` i steruje widocznością zakładek Audio/DSP w panelu WWW. Początkowa
+wartość jest także publikowana w `/variables.js` jako `voxOneAudioPath`.
+
 | Metoda | Ścieżka | Parametry | Odpowiedź / działanie |
 |---|---|---|---|
 | `GET` | `/api/dsp/state` | brak | Tylko build `VOXONE_PROFILE_L0`. Chroniony pełny snapshot demonstracyjnego modelu DSP: capabilities, shared audio, global, PEQ/dynamics, presety, runtime/revision i wartości wyliczone. Bieżący kod raportuje demo, nie potwierdza obecności fizycznego DSPmini. |

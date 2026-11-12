@@ -2028,7 +2028,13 @@ String firstBootTemplateValue(const String& name) {
     count = supportedRuntimeInputOptions(capabilities, options, 5);
     selected = runtimeInputWebValue(config.input);
   } else if (name == "FIRST_BOOT_AUDIO_OPTIONS") {
-    count = supportedRuntimeAudioOutputOptions(capabilities, options, 5);
+    if (capabilities.supportsDspMini) {
+      options[0] = {"pcm5102a", "PCM5102 (Domyślny)"};
+      options[1] = {"dspmini", "DSPmini (ADAU1701)"};
+      count = 2;
+    } else {
+      count = supportedRuntimeAudioOutputOptions(capabilities, options, 5);
+    }
     selected = runtimeAudioOutputWebValue(config.audio);
   } else {
     return String();
@@ -3545,6 +3551,7 @@ void NetServer::processQueue(){
           {boardCapabilities.supportsPsram, "PSRAM"},
           {boardCapabilities.supportsDacHardwareMute, "DAC_XSMT"},
           {boardCapabilities.supportsDsp, "DSP"},
+          {boardCapabilities.supportsDspMini, "DSPMINI"},
           {boardCapabilities.supportsHa, "HA"},
           {boardCapabilities.supportsDlna, "DLNA"},
           {boardCapabilities.supportsAux, "AUX"},
@@ -3569,12 +3576,14 @@ void NetServer::processQueue(){
         const unsigned long long uptimeSeconds =
             static_cast<unsigned long long>(esp_timer_get_time() / 1000000LL);
         const int prefixLength = snprintf(wsBuf, sizeof(wsBuf),
-            "{\"sst\":%d,\"vu\":%d,\"canVu\":%d,\"softr\":%d,\"vut\":%d,\"mdns\":\"%s\",\"haDiscoveryEnabled\":%s,\"ipaddr\":\"%s\",\"abuff\":%d,\"systemInfo\":{\"version\":\"%s\",\"channel\":\"%s\",\"build\":\"%s\",\"profile\":\"%s\",\"mac\":\"%s\",\"rssi\":%d,\"uptimeSeconds\":%llu,\"freeHeap\":%lu,\"minimumFreeHeap\":%lu,\"psramTotal\":%lu,\"psramFree\":%lu,\"btFirmwareUpdateSupported\":%s,\"capabilities\":\"%s\"},\"networkInfo\":",
+            "{\"sst\":%d,\"vu\":%d,\"canVu\":%d,\"softr\":%d,\"vut\":%d,\"mdns\":\"%s\",\"haDiscoveryEnabled\":%s,\"ipaddr\":\"%s\",\"abuff\":%d,\"audioPath\":\"%s\",\"systemInfo\":{\"version\":\"%s\",\"channel\":\"%s\",\"build\":\"%s\",\"profile\":\"%s\",\"mac\":\"%s\",\"rssi\":%d,\"uptimeSeconds\":%llu,\"freeHeap\":%lu,\"minimumFreeHeap\":%lu,\"psramTotal\":%lu,\"psramFree\":%lu,\"btFirmwareUpdateSupported\":%s,\"capabilities\":\"%s\"},\"networkInfo\":",
             runtime.smartStart != 2, runtime.vuMeter,
             boardCapabilities.supportsVu, runtime.softApDelay,
             config.vuThresholdSnapshot(), runtime.mdnsName,
             runtime.haDiscoveryEnabled ? "true" : "false", ipText,
             runtime.audioBuffer,
+            voxone::audio_path::apiName(
+                static_cast<AudioPath>(runtime.audioPath)),
             VOXONE_VERSION, VOXONE_BUILD_CHANNEL, VOXONE_BUILD_SHA,
             VOXONE_BUILD_PROFILE, macText, wifiRssi,
             uptimeSeconds, static_cast<unsigned long>(freeHeap),
@@ -4450,7 +4459,8 @@ void handleNotFound(AsyncWebServerRequest * request) {
   if (request->url() == "/variables.js") {
     const auto presentation = network.presentationSnapshot();
     const auto webBinding = voxone::first_boot::webBindingFor(presentation);
-    sprintf (netserver.nsBuf, "var voxOneVersion='%s';\nvar voxOneChannel='%s';\nvar voxOneBuild='%s';\nvar yoRadioVersion='%s';\nvar yoVersion=voxOneVersion;\nvar voxOneProfile='%s';\nvar playMode='%s';\n", VOXONE_VERSION, VOXONE_BUILD_CHANNEL, VOXONE_BUILD_SHA, YOVERSION, VOXONE_BUILD_PROFILE, webBinding.normalPanel?"player":"ap");
+    const auto runtime = config.runtimeSnapshot();
+    sprintf (netserver.nsBuf, "var voxOneVersion='%s';\nvar voxOneChannel='%s';\nvar voxOneBuild='%s';\nvar yoRadioVersion='%s';\nvar yoVersion=voxOneVersion;\nvar voxOneProfile='%s';\nvar voxOneAudioPath='%s';\nvar playMode='%s';\n", VOXONE_VERSION, VOXONE_BUILD_CHANNEL, VOXONE_BUILD_SHA, YOVERSION, VOXONE_BUILD_PROFILE, voxone::audio_path::apiName(static_cast<AudioPath>(runtime.audioPath)), webBinding.normalPanel?"player":"ap");
     request->send(200, "text/html", netserver.nsBuf);
     return;
   }

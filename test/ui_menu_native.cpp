@@ -111,6 +111,33 @@ int main() {
   assert(std::string(voxone::ui_menu::itemLabel(sourceMenu.snapshot(), 2)) ==
          "DLNA");
 
+  // L0 exposes the audio-path selector. DSPmini keeps only the path entry;
+  // PCM5102 restores the existing balance/tone/LINE OUT controls.
+  UiMenu dspMenu;
+  voxone::ui_menu::MenuSettings dspSettings{};
+  dspSettings.supportsDspMini = true;
+  dspSettings.audioPath = AUDIO_PCM5102;
+  assert(dspMenu.open(MenuId::AUDIO));
+  dspMenu.beginSettingsTransaction(dspSettings);
+  assert(dspMenu.itemCount() == 6);
+  assert(std::string(dspMenu.selectedLabel()) == "Ścieżka audio");
+  char audioPathValue[16];
+  assert(voxone::ui_menu::formatItemValue(
+      dspMenu.snapshot(), 0, audioPathValue, sizeof(audioPathValue)));
+  assert(std::string(audioPathValue) == "PCM5102");
+  assert(dspMenu.handle(MenuCommand::SELECT) ==
+         MenuAction::EDITING_STARTED);
+  assert(dspMenu.handle(MenuCommand::NEXT) == MenuAction::SETTING_CHANGED);
+  assert(dspMenu.settings().audioPath == AUDIO_DSPMINI);
+  assert(dspMenu.itemCount() == 1);
+  assert(voxone::ui_menu::formatItemValue(
+      dspMenu.snapshot(), 0, audioPathValue, sizeof(audioPathValue)));
+  assert(std::string(audioPathValue) == "DSPmini");
+  assert(dspMenu.handle(MenuCommand::PREVIOUS) ==
+         MenuAction::SETTING_CHANGED);
+  assert(dspMenu.settings().audioPath == AUDIO_PCM5102);
+  assert(dspMenu.itemCount() == 6);
+
   // Enter Audio, navigate its leaves, select one and return to the parent.
   assert(menu.handle(MenuCommand::SELECT) == MenuAction::ENTERED_SUBMENU);
   assert(menu.menuId() == MenuId::AUDIO);
