@@ -12,6 +12,7 @@
 #include "source_manager.h"
 #include "network.h"
 #include "bt_audio_input.h"
+#include "i2s_output_lock.h"
 #include "ui_state.h"
 #include "playlist_mapping.h"
 #include "playlist_store.h"
@@ -236,6 +237,8 @@ void Player::_stop(bool alreadyStopped, RadioStopReason reason,
                    bool preserveRadioPresentation){
   log_i("%s called", __func__);
   _status = STOPPED;
+  _pcmOutputPending = false;
+  cancelPcmOutput();
   if (reason == RadioStopReason::Normal) _radioReconnect.cancel();
   setOutputPins(false);
   if (!preserveRadioPresentation) {
@@ -247,8 +250,10 @@ void Player::_stop(bool alreadyStopped, RadioStopReason reason,
   if(!alreadyStopped) stopSong();
   if (systemUpdateAudioBlocked()) {
     if (voxone::hardware::hasPin(
-            voxone::hardware::currentHardware().audioOut.dout))
-      i2s_zero_dma_buffer(I2S_NUM_0);
+            voxone::hardware::currentHardware().audioOut.dout)) {
+      voxone::i2s_output::Guard outputGuard(pdMS_TO_TICKS(100));
+      if (outputGuard) i2s_zero_dma_buffer(I2S_NUM_0);
+    }
     systemUpdateRadioStopped();
   }
   if (!preserveRadioPresentation) {
@@ -393,6 +398,7 @@ void Player::loop() {
   if (uxQueueMessagesWaiting(playerQueue) == 0)
     _servicePendingStationRefresh();
   serviceTemporaryAudio();
+  servicePcmOutputActivation();
   serviceRadioReconnect();
   serviceVolumePersistence();
 }
@@ -605,6 +611,14 @@ void Player::serviceTemporaryAudio() {
     restoreTemporaryBase();
 }
 
+void Player::servicePcmOutputActivation() {
+  if (!_pcmOutputPending || !takePcmOutputReady()) return;
+  _pcmOutputPending = false;
+  if (_status != PLAYING || systemUpdateAudioBlocked()) return;
+  setOutputPins(true);
+  if (player_on_start_play) player_on_start_play();
+}
+
 void Player::serviceVolumePersistence() {
   if (_volTimer && millis() - _volTicks > 3000) {
     config.saveVolume();
@@ -633,8 +647,10 @@ void Player::stopForShutdown() {
   _stop(false, RadioStopReason::SourceSwitch, true);
   stopAudioTask();
   if (voxone::hardware::hasPin(
-          voxone::hardware::currentHardware().audioOut.dout))
-    i2s_zero_dma_buffer(I2S_NUM_0);
+          voxone::hardware::currentHardware().audioOut.dout)) {
+    voxone::i2s_output::Guard outputGuard(pdMS_TO_TICKS(100));
+    if (outputGuard) i2s_zero_dma_buffer(I2S_NUM_0);
+  }
   Serial.println("##[POWER]# audio stopped before shutdown screen");
 }
 
@@ -669,14 +685,16 @@ void Player::_play(uint16_t stationId, bool sourceResume) {
   
   bool isConnected = false;
   connproc = false;
+  armPcmOutput();
+  _pcmOutputPending = true;
   isConnected=connecttohost(config.station.url);
   connproc = true;
   if(isConnected){
     _status = PLAYING;
     config.configPostPlaying();
-    setOutputPins(true);
-    if (player_on_start_play) player_on_start_play();
   }else{
+    _pcmOutputPending = false;
+    cancelPcmOutput();
     serialCli.printf("##ERROR#:\tError connecting to %.128s\n", config.station.url);
     snprintf(config.tmpBuf, sizeof(config.tmpBuf), "Error connecting to %.128s", config.station.url); setError();
     _stop(true, RadioStopReason::SourceSwitch);
@@ -836,6 +854,7 @@ void Player::browseUrl(const voxone::temporary_audio::Request& request){
       token, millis(), transportProgressBytes(), httpBodyProgressBytes());
 #endif
   stopSong();
+  _pcmOutputPending = false;
   network.lostPlaying = false;
   _hasError=false;
   remoteStationName = true;

@@ -7,8 +7,6 @@
 
 #include <atomic>
 #include <stdint.h>
-#include <freertos/FreeRTOS.h>
-#include <freertos/semphr.h>
 
 #include "bt_link_protocol.h"
 
@@ -55,7 +53,6 @@ class BtAudioInput {
   bool bluetoothSelected_ = false;
   std::atomic<bool> routeEnabled_{false};
   std::atomic<bool> radioReady_{true};
-  SemaphoreHandle_t outputMutex_ = nullptr;
   std::atomic<bool> stopRequested_{false};
   std::atomic<bool> taskRunning_{false};
   std::atomic<int> readError_{0};

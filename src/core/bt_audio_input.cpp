@@ -8,6 +8,7 @@
 #include "bt_audio_input_state.h"
 #include "bt_runtime.h"
 #include "bt_audio_route_state.h"
+#include "i2s_output_lock.h"
 #include "player.h"
 #include "serialcli.h"
 #include "system_operation_state.h"
@@ -28,8 +29,7 @@ constexpr BaseType_t kTaskCore = 1;
 BtAudioInput btAudioInput;
 
 void BtAudioInput::begin() {
-  outputMutex_ = xSemaphoreCreateMutex();
-  if (!outputMutex_)
+  if (!voxone::i2s_output::begin())
     serialCli.printf("##[BT-AUDIO]# I2S0 route mutex creation failed\n");
   lastReportMs_ = millis();
 }
@@ -38,10 +38,9 @@ bool BtAudioInput::blockForUpdate() {
   if (!btRuntime.physicalStarted()) return true;
   routeEnabled_.store(false);
   radioReady_.store(false);
-  if (!outputMutex_ || xSemaphoreTake(outputMutex_, pdMS_TO_TICKS(100)) != pdTRUE)
-    return false;
+  voxone::i2s_output::Guard outputGuard(pdMS_TO_TICKS(100));
+  if (!outputGuard) return false;
   const esp_err_t error = i2s_zero_dma_buffer(I2S_NUM_0);
-  xSemaphoreGive(outputMutex_);
   return error == ESP_OK;
 }
 
@@ -50,15 +49,14 @@ bool BtAudioInput::acquirePlayerOutput() {
   routeEnabled_.store(false);
   radioReady_.store(false);
   // Drain any in-flight BT write before Player resets its decoder/I2S clock.
-  if (!outputMutex_ || xSemaphoreTake(outputMutex_, pdMS_TO_TICKS(100)) != pdTRUE)
-    return false;
+  voxone::i2s_output::Guard outputGuard(pdMS_TO_TICKS(100));
+  if (!outputGuard) return false;
   const esp_err_t error = i2s_zero_dma_buffer(I2S_NUM_0);
   if (error == ESP_OK) {
     bluetoothSelected_ = false;
     outputRate_ = player.getSampleRate();
     radioReady_.store(true);
   }
-  xSemaphoreGive(outputMutex_);
   return error == ESP_OK;
 }
 
@@ -87,16 +85,9 @@ void BtAudioInput::route(bool bluetoothSelected, bool playbackPlaying,
 
   routeEnabled_.store(false);
   radioReady_.store(false);
-  if (!outputMutex_) {
-    if (!bluetoothSelected) {
-      bluetoothSelected_ = false;
-      outputRate_ = target.outputRate;
-      radioReady_.store(target.radioOutput);
-    }
-    return;
-  }
-  if (xSemaphoreTake(outputMutex_, pdMS_TO_TICKS(kRouteLockWaitMs)) != pdTRUE)
-    return;
+  voxone::i2s_output::Guard outputGuard(
+      pdMS_TO_TICKS(kRouteLockWaitMs));
+  if (!outputGuard) return;
 
   const bool changedSource = bluetoothSelected != bluetoothSelected_;
   const bool changedRate = targetRate != outputRate_;
@@ -114,7 +105,6 @@ void BtAudioInput::route(bool bluetoothSelected, bool playbackPlaying,
     if (bluetoothSelected || changedSource)
       player.setOutputPins(target.btOutput);
   }
-  xSemaphoreGive(outputMutex_);
   if (error != ESP_OK) {
     if (!routeErrorReported_)
       serialCli.printf("##[BT-AUDIO]# I2S0 route failed err=%d\n", error);
@@ -246,8 +236,15 @@ void BtAudioInput::readContinuously() {
     stats_.lastDataMs = dataMs;
     if (blockPeak > stats_.peak16) stats_.peak16 = blockPeak;
     portEXIT_CRITICAL(&statsMux_);
-    if (routeEnabled_.load() && !systemUpdateAudioBlocked() && outputMutex_ &&
-        xSemaphoreTake(outputMutex_, pdMS_TO_TICKS(kWriteWaitMs)) == pdTRUE) {
+    if (routeEnabled_.load() && !systemUpdateAudioBlocked()) {
+      voxone::i2s_output::Guard outputGuard(
+          pdMS_TO_TICKS(kWriteWaitMs));
+      if (!outputGuard) {
+        portENTER_CRITICAL(&statsMux_);
+        ++stats_.shortWrites;
+        portEXIT_CRITICAL(&statsMux_);
+        continue;
+      }
       if (routeEnabled_.load() && !systemUpdateAudioBlocked()) {
         if (player.outputSilent()) memset(pcm, 0, bytesRead);
         size_t bytesWritten = 0;
@@ -261,7 +258,6 @@ void BtAudioInput::readContinuously() {
         if (bytesWritten != bytesRead) ++stats_.shortWrites;
         portEXIT_CRITICAL(&statsMux_);
       }
-      xSemaphoreGive(outputMutex_);
     } else if (routeEnabled_.load()) {
       portENTER_CRITICAL(&statsMux_);
       ++stats_.shortWrites;

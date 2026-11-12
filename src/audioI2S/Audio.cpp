@@ -20,6 +20,8 @@
 #include "../core/radio_url_request_parts.h"
 #include "../core/system_operation_state.h"
 #include "web_file_bounds.h"
+#include "audio_ring_math.h"
+#include "../core/i2s_output_lock.h"
 #include <new>
 #include <lwip/sockets.h>
 #if VOXONE_HAS_BT && VOXONE_PIN_MAP_COMPLETE && VOXONE_BT_I2S_RX_ENABLED
@@ -40,6 +42,8 @@ bool audioPsramFound() {
     return voxone::hardware::hardwareCapabilities().supportsPsram &&
            psramFound();
 }
+
+constexpr TickType_t kI2SOutputLockWait = pdMS_TO_TICKS(100);
 
 }  // namespace
 
@@ -143,30 +147,29 @@ uint16_t AudioBuffer::getMaxBlockSize(){
 
 size_t AudioBuffer::freeSpace() {
     lock();
-    if(m_readPtr >= m_writePtr) {
-        m_freeSpace = (m_readPtr - m_writePtr);
-    } else {
-        m_freeSpace = (m_endPtr - m_writePtr) + (m_readPtr - m_buffer);
+    if(!m_buffer || !m_readPtr || !m_writePtr || m_buffSize < 2) {
+        unlock();
+        return 0;
     }
-    if(m_f_start)
-        m_freeSpace = m_buffSize;
-    const size_t result = m_freeSpace - 1;
+    const auto ringSpace = voxone::audio_ring::space(
+        m_buffSize, static_cast<size_t>(m_readPtr - m_buffer),
+        static_cast<size_t>(m_writePtr - m_buffer), m_f_start);
+    m_freeSpace = ringSpace.freeBytes;
+    const size_t result = m_freeSpace;
     unlock();
     return result;
 }
 
 size_t AudioBuffer::writeSpace() {
     lock();
-    if(m_readPtr >= m_writePtr) {
-        m_writeSpace = (m_readPtr - m_writePtr - 1); // readPtr must not be overtaken
-    } else {
-        if(getReadPos() == 0)
-            m_writeSpace = (m_endPtr - m_writePtr - 1);
-        else
-            m_writeSpace = (m_endPtr - m_writePtr);
+    if(!m_buffer || !m_readPtr || !m_writePtr || m_buffSize < 2) {
+        unlock();
+        return 0;
     }
-    if(m_f_start)
-        m_writeSpace = m_buffSize - 1;
+    const auto ringSpace = voxone::audio_ring::space(
+        m_buffSize, static_cast<size_t>(m_readPtr - m_buffer),
+        static_cast<size_t>(m_writePtr - m_buffer), m_f_start);
+    m_writeSpace = ringSpace.contiguousWriteBytes;
     const size_t result = m_writeSpace;
     unlock();
     return result;
@@ -186,10 +189,19 @@ size_t AudioBuffer::bufferFilled() {
 
 void AudioBuffer::bytesWritten(size_t bw) {
     lock();
-    m_writePtr += bw;
-    if(m_writePtr == m_endPtr) {
-        m_writePtr = m_buffer;
+    if(!m_buffer || !m_writePtr || m_buffSize == 0) {
+        unlock();
+        return;
     }
+    const size_t writable = writeSpace();
+    if(bw > writable) {
+        log_e("AudioBuffer write advance %u exceeds contiguous space %u",
+              static_cast<unsigned>(bw), static_cast<unsigned>(writable));
+        bw = writable;
+    }
+    const size_t position = static_cast<size_t>(m_writePtr - m_buffer);
+    m_writePtr = m_buffer +
+        voxone::audio_ring::advance(m_buffSize, position, bw);
     if(bw && m_f_start)
         m_f_start = false;
     unlock();
@@ -197,11 +209,16 @@ void AudioBuffer::bytesWritten(size_t bw) {
 
 void AudioBuffer::bytesWasRead(size_t br) {
     lock();
-    m_readPtr += br;
-    if(m_readPtr >= m_endPtr) {
-        size_t tmp = m_readPtr - m_endPtr;
-        m_readPtr = m_buffer + tmp;
+    if(!m_buffer || !m_readPtr || m_buffSize == 0) {
+        unlock();
+        return;
     }
+    const size_t filled = bufferFilled();
+    if(br > filled) br = filled;
+    const size_t position = static_cast<size_t>(m_readPtr - m_buffer);
+    m_readPtr = m_buffer +
+        voxone::audio_ring::advance(m_buffSize, position, br);
+    if(m_readPtr == m_writePtr) m_f_start = true;
     unlock();
 }
 
@@ -252,6 +269,8 @@ Audio::Audio(bool internalDAC /* = false */,
              uint8_t i2sPort, bool initializeI2s) {
 
     m_audioTaskMutex = xSemaphoreCreateRecursiveMutex();
+    if(!voxone::i2s_output::begin())
+        log_e("shared I2S0 output mutex creation failed");
 
     //    build-in-DAC works only with ESP32 (ESP32-S3 has no build-in-DAC)
     //    build-in-DAC last working Arduino Version: 2.0.0-RC2
@@ -338,6 +357,8 @@ bool Audio::initializeI2S() {
 #if !defined(CONFIG_IDF_TARGET_ESP32)
     if (m_f_internalDAC) return false;
 #endif
+    voxone::i2s_output::Guard outputGuard(kI2SOutputLockWait);
+    if(!outputGuard) return false;
     if (i2s_driver_install((i2s_port_t)m_i2s_num, &m_i2s_config, 0, NULL) != ESP_OK)
         return false;
 #ifdef CONFIG_IDF_TARGET_ESP32
@@ -453,11 +474,13 @@ bool Audio::tuneAudioSocket(WiFiClient& socketClient) {
 esp_err_t Audio::I2Sstart(uint8_t i2s_num) {
     // It is not necessary to call this function after i2s_driver_install() (it is started automatically),
     // however it is necessary to call it after i2s_stop()
-    return i2s_start((i2s_port_t) i2s_num);
+    voxone::i2s_output::Guard outputGuard(kI2SOutputLockWait);
+    return outputGuard ? i2s_start((i2s_port_t) i2s_num) : ESP_ERR_TIMEOUT;
 }
 
 esp_err_t Audio::I2Sstop(uint8_t i2s_num) {
-    return i2s_stop((i2s_port_t) i2s_num);
+    voxone::i2s_output::Guard outputGuard(kI2SOutputLockWait);
+    return outputGuard ? i2s_stop((i2s_port_t) i2s_num) : ESP_ERR_TIMEOUT;
 }
 //---------------------------------------------------------------------------------------------------------------------
 esp_err_t Audio::i2s_mclk_pin_select(const uint8_t pin) {
@@ -1499,7 +1522,8 @@ int Audio::read_FLAC_Header(uint8_t *data, size_t len) {
         vTaskDelay(2);
         m_flacMaxFrameSize = bigEndian(data + 10, 3);
         if(m_flacMaxFrameSize){
-            AUDIO_INFO("FLAC maxFrameSize: %u", m_flacMaxFrameSize);
+            AUDIO_INFO("FLAC maxFrameSize: %lu",
+                       static_cast<unsigned long>(m_flacMaxFrameSize));
         }
         else {
             AUDIO_INFO("FLAC maxFrameSize: N/A");
@@ -2224,7 +2248,8 @@ int Audio::read_OGG_Header(uint8_t *data, size_t len){
         m_flacMaxFrameSize = bigEndian(data + i, 3);
         i += 3;
         if(m_flacMaxFrameSize){
-            AUDIO_INFO("FLAC maxFrameSize: %u", m_flacMaxFrameSize);
+            AUDIO_INFO("FLAC maxFrameSize: %lu",
+                       static_cast<unsigned long>(m_flacMaxFrameSize));
         }
         else {
             AUDIO_INFO("FLAC maxFrameSize: N/A");
@@ -2275,8 +2300,8 @@ int Audio::read_OGG_Header(uint8_t *data, size_t len){
         return 0;
     }
     if(m_controlCounter == OGG_AMRDY){ // ogg almost ready
-        if(!audioPsramFound()){
-            AUDIO_INFO("FLAC works only with PSRAM!");
+        if(!audioPsramFound() || !InBuff.havePSRAM()){
+            AUDIO_INFO("FLAC requires the PSRAM input buffer; DRAM fallback is too small");
             m_f_running = false; stopSong();
             return -1;
         }
@@ -2345,8 +2370,13 @@ uint32_t Audio::stopSong() {
     cancelPendingConnection();
     m_f_running = false;
     m_audioDecodeReady = false;
+    cancelPcmOutput();
     memset(m_outBuff, 0, sizeof(m_outBuff));     //Clear OutputBuffer
-    if (radioCanUseI2S()) i2s_zero_dma_buffer((i2s_port_t) m_i2s_num);
+    if (radioCanUseI2S()) {
+        voxone::i2s_output::Guard outputGuard(kI2SOutputLockWait);
+        if(outputGuard && radioCanUseI2S())
+            i2s_zero_dma_buffer((i2s_port_t) m_i2s_num);
+    }
     if(m_audioTaskMutex) xSemaphoreGiveRecursive(m_audioTaskMutex);
     return 0;
 }
@@ -2372,7 +2402,11 @@ bool Audio::pauseResume() {
         retVal = true;
         if(!m_f_running) {
             memset(m_outBuff, 0, sizeof(m_outBuff));               //Clear OutputBuffer
-            if (radioCanUseI2S()) i2s_zero_dma_buffer((i2s_port_t) m_i2s_num);
+            if (radioCanUseI2S()) {
+                voxone::i2s_output::Guard outputGuard(kI2SOutputLockWait);
+                if(outputGuard && radioCanUseI2S())
+                    i2s_zero_dma_buffer((i2s_port_t) m_i2s_num);
+            }
         }
     }
     return retVal;
@@ -2380,6 +2414,17 @@ bool Audio::pauseResume() {
 //---------------------------------------------------------------------------------------------------------------------
 bool Audio::playChunk() {
     // If we've got data, try and pump it out..
+    if(!radioCanUseI2S()) {
+        m_validSamples = 0;
+        m_curSample = 0;
+        return false;
+    }
+    voxone::i2s_output::Guard outputGuard(kI2SOutputLockWait);
+    if(!outputGuard || !radioCanUseI2S()) {
+        m_validSamples = 0;
+        m_curSample = 0;
+        return false;
+    }
     int16_t sample[2];
     if(getBitsPerSample() == 8) {
         if(getChannels() == 1) {
@@ -3723,8 +3768,8 @@ bool Audio:: initializeDecoder(){
             }
             break;
         case CODEC_FLAC:
-            if(!audioPsramFound()){
-                AUDIO_INFO("FLAC works only with PSRAM!");
+            if(!audioPsramFound() || !InBuff.havePSRAM()){
+                AUDIO_INFO("FLAC requires the PSRAM input buffer; DRAM fallback is too small");
                 goto exit;
             }
             if(!FLACDecoder_AllocateBuffers()) goto exit;
@@ -4057,7 +4102,11 @@ int Audio::sendBytes(uint8_t* data, size_t len) {
             if(hadMeasuredBitrate && audio_bitrate) audio_bitrate("0");
         }
         if(m_f_Log) if(m_codec == CODEC_M4A){log_i("begin not found"); return 1;}
-        if (radioCanUseI2S()) i2s_zero_dma_buffer((i2s_port_t)m_i2s_num);
+        if (radioCanUseI2S()) {
+            voxone::i2s_output::Guard outputGuard(kI2SOutputLockWait);
+            if(outputGuard && radioCanUseI2S())
+                i2s_zero_dma_buffer((i2s_port_t)m_i2s_num);
+        }
         if(!getChannels() && (ret == -2)) {
              ; // suppress errorcode MAINDATA_UNDERFLOW
         }
@@ -4123,9 +4172,17 @@ int Audio::sendBytes(uint8_t* data, size_t len) {
             return bytesDecoded;
         }
     }
+    const bool validPcmFrame = m_validSamples > 0;
+    bool pcmFrameWritten = validPcmFrame;
     while(m_validSamples) {
-        playChunk();
+        if(!playChunk()) {
+            pcmFrameWritten = false;
+            break;
+        }
     }
+    if(pcmFrameWritten && m_pcmOutputArmed.exchange(
+                              false, std::memory_order_acq_rel))
+        m_pcmOutputReady.store(true, std::memory_order_release);
     return bytesDecoded;
 }
 //---------------------------------------------------------------------------------------------------------------------
@@ -4238,6 +4295,7 @@ void Audio::printDecodeError(int r) {
             case ERR_FLAC_RESERVED_RESIDUAL_CODING:         e = "RESERVED RESIDUAL CODING";         break;
             case ERR_FLAC_WRONG_RICE_PARTITION_NR:          e = "WRONG RICE PARTITION NR";          break;
             case ERR_FLAC_BITS_PER_SAMPLE_TOO_BIG:          e = "BITS PER SAMPLE > 16";             break;
+            case ERR_FLAC_BITREADER_UNDERFLOW:              e = "BITREADER INPUT EXHAUSTED";         break;
             case ERR_FLAG_BITS_PER_SAMPLE_UNKNOWN:          e = "BITS PER SAMPLE UNKNOWN";          break;
             default: e = "ERR_UNKNOWN";
         }
@@ -4270,7 +4328,22 @@ uint32_t Audio::getTotalPlayingTime() {
 //---------------------------------------------------------------------------------------------------------------------
 bool Audio::setSampleRate(uint32_t sampRate) {
     if(!sampRate) sampRate = 16000; // fuse, if there is no value -> set default #209
-    if (radioCanUseI2S()) i2s_set_sample_rates((i2s_port_t)m_i2s_num, sampRate);
+    if (radioCanUseI2S()) {
+        voxone::i2s_output::Guard outputGuard(kI2SOutputLockWait);
+        if(!outputGuard) {
+            log_e("I2S sample-rate lock timeout");
+            return false;
+        }
+        if(radioCanUseI2S()) {
+            const esp_err_t error = i2s_set_sample_rates(
+                (i2s_port_t)m_i2s_num, sampRate);
+            if(error != ESP_OK) {
+                log_e("i2s_set_sample_rates(%lu) failed: %d",
+                      static_cast<unsigned long>(sampRate), error);
+                return false;
+            }
+        }
+    }
     m_sampleRate = sampRate;
     IIR_calculateCoefficients(m_gain0, m_gain1, m_gain2); // must be recalculated after each samplerate change
     return true;
@@ -4337,8 +4410,19 @@ void Audio::setI2SCommFMT_LSB(bool commFMT) {
 
     }
     AUDIO_INFO("commFMT = %i", m_i2s_config.communication_format);
-    i2s_driver_uninstall((i2s_port_t)m_i2s_num);
-    i2s_driver_install  ((i2s_port_t)m_i2s_num, &m_i2s_config, 0, NULL);
+    voxone::i2s_output::Guard outputGuard(kI2SOutputLockWait);
+    if(!outputGuard) {
+        log_e("I2S format lock timeout");
+        return;
+    }
+    const esp_err_t uninstallError =
+        i2s_driver_uninstall((i2s_port_t)m_i2s_num);
+    const esp_err_t installError = uninstallError == ESP_OK
+        ? i2s_driver_install((i2s_port_t)m_i2s_num, &m_i2s_config, 0, NULL)
+        : uninstallError;
+    if(uninstallError != ESP_OK || installError != ESP_OK)
+        log_e("I2S format reconfigure failed: uninstall=%d install=%d",
+              uninstallError, installError);
 }
 //---------------------------------------------------------------------------------------------------------------------
 bool Audio::playSample(int16_t sample[2]) {

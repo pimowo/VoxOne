@@ -28,8 +28,9 @@ uint16_t m_blockSizeLeft = 0;
 uint16_t m_validSamples = 0;
 uint8_t  m_status = 0;
 uint8_t* m_inptr;
-int16_t  m_bytesAvail;
-int16_t  m_bytesDecoded = 0;
+int32_t  m_bytesAvail;
+int32_t  m_bytesDecoded = 0;
+bool     m_bitReaderOverrun = false;
 float    m_compressionRatio = 0;
 uint16_t m_rIndex=0;
 uint64_t m_bitBuffer = 0;
@@ -85,17 +86,21 @@ void FLACDecoder_FreeBuffers(){
 //----------------------------------------------------------------------------------------------------------------------
 uint32_t readUint(uint8_t nBits){
     while (m_bitBufferLen < nBits){
+        if(m_bytesAvail <= 0) {
+            if(!m_bitReaderOverrun) log_e("FLAC bitreader input exhausted");
+            m_bitReaderOverrun = true;
+            return UINT32_MAX;
+        }
         uint8_t temp = *(m_inptr + m_rIndex);
         m_rIndex++;
         m_bytesAvail--;
-        if(m_bytesAvail < 0) { log_i("error in bitreader"); }
         m_bitBuffer = (m_bitBuffer << 8) | temp;
         m_bitBufferLen += 8;
     }
     m_bitBufferLen -= nBits;
     uint32_t result = m_bitBuffer >> m_bitBufferLen;
     if (nBits < 32)
-        result &= (1 << nBits) - 1;
+        result &= (uint32_t{1} << nBits) - 1;
     return result;
 }
 
@@ -131,6 +136,7 @@ void FLACDecoderReset(){ // set var to default
     m_status = DECODE_FRAME;
     m_bitBuffer = 0;
     m_bitBufferLen = 0;
+    m_bitReaderOverrun = false;
 }
 //----------------------------------------------------------------------------------------------------------------------
 int FLACFindSyncWord(unsigned char *buf, int nBytes) {
@@ -216,6 +222,10 @@ int FLACparseOggHeader(unsigned char *buf){
 //----------------------------------------------------------------------------------------------------------------------
 int8_t FLACDecode(uint8_t *inbuf, int *bytesLeft, short *outbuf){
 
+    if(!inbuf || !bytesLeft || !outbuf ||
+       (*bytesLeft <= 0 && m_status != OUT_SAMPLES))
+        return ERR_FLAC_BITREADER_UNDERFLOW;
+
     if(m_f_OggS_found == true){
         m_f_OggS_found = false;
         *bytesLeft -= FLACparseOggHeader(inbuf);
@@ -224,13 +234,15 @@ int8_t FLACDecode(uint8_t *inbuf, int *bytesLeft, short *outbuf){
 
     if(m_status != OUT_SAMPLES){
         m_rIndex = 0;
-        m_bytesAvail = (*bytesLeft);
+        m_bytesAvail = static_cast<int32_t>(*bytesLeft);
+        m_bitReaderOverrun = false;
         m_inptr = inbuf;
     }
 
     if(m_status == DECODE_FRAME){  // Read a ton of header fields, and ignore most of them
 
-        if ((inbuf[0] == 'O') && (inbuf[1] == 'g') && (inbuf[2] == 'g') && (inbuf[3] == 'S')){
+        if (*bytesLeft >= 4 && (inbuf[0] == 'O') && (inbuf[1] == 'g') &&
+            (inbuf[2] == 'g') && (inbuf[3] == 'S')){
             *bytesLeft -= 4;
             m_f_OggS_found = true;
             return ERR_FLAC_NONE;
@@ -238,6 +250,7 @@ int8_t FLACDecode(uint8_t *inbuf, int *bytesLeft, short *outbuf){
 
         uint32_t temp = readUint(8);
         uint16_t sync = temp << 6 |readUint(6);
+        if(m_bitReaderOverrun) return ERR_FLAC_BITREADER_UNDERFLOW;
         if (sync != 0x3FFE){
             log_i("Sync code expected 0x3FFE but received %X", sync);
             return ERR_FLAC_SYNC_CODE_NOT_FOUND;
@@ -320,6 +333,7 @@ int8_t FLACDecode(uint8_t *inbuf, int *bytesLeft, short *outbuf){
             readUint(16);
         }
         readUint(8);
+        if(m_bitReaderOverrun) return ERR_FLAC_BITREADER_UNDERFLOW;
         m_status = DECODE_SUBFRAMES;
         *bytesLeft = m_bytesAvail;
         m_blockSizeLeft = m_blockSize;
@@ -332,6 +346,7 @@ int8_t FLACDecode(uint8_t *inbuf, int *bytesLeft, short *outbuf){
         // Decode each channel's subframe, then skip footer
         int ret = decodeSubframes();
         if(ret != 0) return ret;
+        if(m_bitReaderOverrun) return ERR_FLAC_BITREADER_UNDERFLOW;
         m_status = OUT_SAMPLES;
     }
 
@@ -362,6 +377,7 @@ int8_t FLACDecode(uint8_t *inbuf, int *bytesLeft, short *outbuf){
 
     alignToByte();
     readUint(16);
+    if(m_bitReaderOverrun) return ERR_FLAC_BITREADER_UNDERFLOW;
     m_bytesDecoded = *bytesLeft - m_bytesAvail;
 //    log_i("m_bytesDecoded %i", m_bytesDecoded);
 //    m_compressionRatio = (float)m_bytesDecoded / (float)m_blockSize * FLACMetadataBlock->numChannels * (16/8);

@@ -112,7 +112,7 @@ void auditProductionWiring() {
   const std::string input = readFile("src/core/bt_audio_input.cpp");
   const size_t route = input.find("void BtAudioInput::route(");
   const size_t disable = input.find("routeEnabled_.store(false)", route);
-  const size_t lock = input.find("xSemaphoreTake(outputMutex_", route);
+  const size_t lock = input.find("voxone::i2s_output::Guard outputGuard", route);
   assert(route != std::string::npos && disable < lock);
   assert(input.find("player.outputSilent()", lock) != std::string::npos);
   assert(input.find("if (desiredRate == 0)") != std::string::npos);

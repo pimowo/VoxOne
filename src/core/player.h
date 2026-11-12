@@ -72,6 +72,7 @@ class Player: public Audio {
     uint32_t _callbackToken = 0;
     QueueHandle_t _temporaryUrls = nullptr;
     bool _localAudioAvailable = false;
+    bool _pcmOutputPending = false;
     bool _shutdownSuspended = false;
     bool _shutdownResumeRadio = false;
     //char        _plError[PLERR_LN];
@@ -89,6 +90,7 @@ class Player: public Audio {
     void servicePendingVolume();
     bool processPlayerCommands();
     void serviceTemporaryAudio();
+    void servicePcmOutputActivation();
     void serviceVolumePersistence();
     bool _hasError;
     void browseUrl(const voxone::temporary_audio::Request& request);

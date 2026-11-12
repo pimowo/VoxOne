@@ -8,6 +8,7 @@
 
 #pragma once
 #pragma GCC optimize ("Ofast")
+#include <atomic>
 #include <vector>
 #include "../core/radio_url_resolution.h"
 #include "../core/flac_bitrate_meter.h"
@@ -154,6 +155,17 @@ public:
     bool pauseResume();
     bool isRunning() {return m_f_running;}
     bool audioStreamStarted() const {return m_f_playing;}
+    void armPcmOutput() {
+      m_pcmOutputReady.store(false, std::memory_order_release);
+      m_pcmOutputArmed.store(true, std::memory_order_release);
+    }
+    void cancelPcmOutput() {
+      m_pcmOutputArmed.store(false, std::memory_order_release);
+      m_pcmOutputReady.store(false, std::memory_order_release);
+    }
+    bool takePcmOutputReady() {
+      return m_pcmOutputReady.exchange(false, std::memory_order_acq_rel);
+    }
     uint64_t transportProgressBytes() const { return m_transportProgressBytes; }
 #if defined(VOXONE_TTS_HIL_DIAGNOSTICS)
     uint64_t httpBodyProgressBytes() const {
@@ -551,7 +563,7 @@ private:
     uint8_t         m_flacBitsPerSample = 0;        // bps should be 16
     uint8_t         m_flacNumChannels = 0;          // can be read out in the FLAC file header
     uint32_t        m_flacSampleRate = 0;           // can be read out in the FLAC file header
-    uint16_t        m_flacMaxFrameSize = 0;         // can be read out in the FLAC file header
+    uint32_t        m_flacMaxFrameSize = 0;         // 24-bit value from the FLAC STREAMINFO header
     uint16_t        m_flacMaxBlockSize = 0;         // can be read out in the FLAC file header
     uint32_t        m_flacTotalSamplesInStream = 0; // can be read out in the FLAC file header
     uint32_t        m_metaint = 0;                  // Number of databytes between metadata
@@ -579,6 +591,8 @@ private:
     bool            m_f_chunked = false ;           // Station provides chunked transfer
     bool            m_f_firstmetabyte = false;      // True if first metabyte (counter)
     bool            m_f_playing = false;            // valid mp3 stream recognized
+    std::atomic<bool> m_pcmOutputArmed{false};       // wait for the first decoded PCM frame
+    std::atomic<bool> m_pcmOutputReady{false};       // first frame reached I2S while DAC was muted
     bool            m_f_tts = false;                // text to speech
     bool            m_f_forceMono = false;          // if true stereo -> mono
     bool            m_f_internalDAC = false;        // false: output vis I2S, true output via internal DAC
