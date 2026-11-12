@@ -17,10 +17,11 @@
 namespace {
 constexpr i2s_port_t kBtI2sPort = I2S_NUM_1;
 constexpr uint32_t kReportIntervalMs = 5000;
-constexpr uint32_t kRetryIntervalMs = 5000;
 constexpr uint32_t kReadWaitMs = 20;
 constexpr uint32_t kWriteWaitMs = 10;
+constexpr uint8_t kWriteAttempts = 3;
 constexpr uint32_t kRouteLockWaitMs = 30;
+constexpr uint32_t kTaskStopWaitMs = 100;
 constexpr uint32_t kTaskStackBytes = 4096;
 constexpr UBaseType_t kTaskPriority = 2;
 constexpr BaseType_t kTaskCore = 1;
@@ -32,6 +33,9 @@ void BtAudioInput::begin() {
   if (!voxone::i2s_output::begin())
     serialCli.printf("##[BT-AUDIO]# I2S0 route mutex creation failed\n");
   lastReportMs_ = millis();
+  taskStopped_ = xSemaphoreCreateBinaryStatic(&taskStoppedStorage_);
+  if (!taskStopped_)
+    serialCli.printf("##[BT-AUDIO]# RX completion semaphore creation failed\n");
 }
 
 bool BtAudioInput::blockForUpdate() {
@@ -60,7 +64,7 @@ bool BtAudioInput::acquirePlayerOutput() {
   return error == ESP_OK;
 }
 
-void BtAudioInput::route(bool bluetoothSelected, bool playbackPlaying,
+void BtAudioInput::route(bool bluetoothSelected, bool physicalStreamStarted,
                          uint32_t radioRate) {
   if (systemUpdateAudioBlocked()) {
     routeEnabled_.store(false);
@@ -74,7 +78,8 @@ void BtAudioInput::route(bool bluetoothSelected, bool playbackPlaying,
     return;
   }
   const BtAudioRouteTarget target = btAudioRouteTarget(
-      bluetoothSelected, playbackPlaying, active_ && taskRunning_.load() &&
+      bluetoothSelected, physicalStreamStarted,
+      active_ && taskRunning_.load() &&
           !stopRequested_.load(), sampleRate_, radioRate);
   const uint32_t targetRate = target.outputRate;
   const bool desiredBt = target.btOutput;
@@ -120,6 +125,7 @@ void BtAudioInput::route(bool bluetoothSelected, bool playbackPlaying,
 }
 
 bool BtAudioInput::start(uint32_t rate, uint32_t nowMs) {
+  if (!taskStopped_) return false;
   i2s_config_t config{};
   config.mode = static_cast<i2s_mode_t>(I2S_MODE_SLAVE | I2S_MODE_RX);
   config.sample_rate = rate;
@@ -152,6 +158,7 @@ bool BtAudioInput::start(uint32_t rate, uint32_t nowMs) {
   }
 
   stopRequested_.store(false);
+  clearPhysicalStream();
   readError_.store(0);
   sampleRate_ = rate;
   lastReportMs_ = nowMs;
@@ -161,6 +168,7 @@ bool BtAudioInput::start(uint32_t rate, uint32_t nowMs) {
   stats_ = Stats{};
   portEXIT_CRITICAL(&statsMux_);
   taskRunning_.store(true);
+  while (xSemaphoreTake(taskStopped_, 0) == pdTRUE) {}
   if (xTaskCreatePinnedToCore(readTask, "BtI2SRx", kTaskStackBytes, this,
                               kTaskPriority, nullptr, kTaskCore) != pdPASS) {
     taskRunning_.store(false);
@@ -169,6 +177,7 @@ bool BtAudioInput::start(uint32_t rate, uint32_t nowMs) {
     serialCli.printf("##[BT-AUDIO]# I2S1 RX task creation failed\n");
     return false;
   }
+  taskExitPending_ = true;
 
   active_ = true;
   serialCli.printf("##[BT-AUDIO]# I2S1 RX started rate=%lu BCLK=%d WS=%d DATA=%d\n",
@@ -181,8 +190,14 @@ bool BtAudioInput::stop() {
   if (!active_) return true;
   stopRequested_.store(true);
   routeEnabled_.store(false);
-  // The task's read has a bounded 20 ms wait. Only it calls i2s_read(), so
-  // uninstall the driver after it has left its read loop.
+  // Only the RX task calls i2s_read(). Its explicit completion handshake is
+  // the ownership boundary: never stop/uninstall I2S1 while that call or the
+  // task epilogue can still be running.
+  if (taskExitPending_) {
+    if (xSemaphoreTake(taskStopped_, pdMS_TO_TICKS(kTaskStopWaitMs)) != pdTRUE)
+      return false;
+    taskExitPending_ = false;
+  }
   if (taskRunning_.load()) return false;
   i2s_stop(kBtI2sPort);
   const esp_err_t error = i2s_driver_uninstall(kBtI2sPort);
@@ -195,6 +210,7 @@ bool BtAudioInput::stop() {
   cleanupErrorReported_ = false;
   active_ = false;
   sampleRate_ = 0;
+  clearPhysicalStream();
   serialCli.printf("##[BT-AUDIO]# I2S1 RX stopped\n");
   return true;
 }
@@ -230,6 +246,8 @@ void BtAudioInput::readContinuously() {
       if (magnitude > blockPeak) blockPeak = magnitude;
     }
     const uint32_t dataMs = millis();
+    lastPcmMs_.store(dataMs, std::memory_order_relaxed);
+    pcmSeen_.store(true, std::memory_order_release);
     portENTER_CRITICAL(&statsMux_);
     stats_.bytesReceived += bytesRead;
     ++stats_.blocksReceived;
@@ -237,27 +255,41 @@ void BtAudioInput::readContinuously() {
     if (blockPeak > stats_.peak16) stats_.peak16 = blockPeak;
     portEXIT_CRITICAL(&statsMux_);
     if (routeEnabled_.load() && !systemUpdateAudioBlocked()) {
-      voxone::i2s_output::Guard outputGuard(
-          pdMS_TO_TICKS(kWriteWaitMs));
-      if (!outputGuard) {
-        portENTER_CRITICAL(&statsMux_);
-        ++stats_.shortWrites;
-        portEXIT_CRITICAL(&statsMux_);
-        continue;
-      }
-      if (routeEnabled_.load() && !systemUpdateAudioBlocked()) {
-        if (player.outputSilent()) memset(pcm, 0, bytesRead);
+      if (player.outputSilent()) memset(pcm, 0, bytesRead);
+      size_t totalWritten = 0;
+      uint32_t writeErrors = 0;
+      uint32_t writeRetries = 0;
+      for (uint8_t attempt = 0;
+           attempt < kWriteAttempts && totalWritten < bytesRead &&
+           routeEnabled_.load() && !systemUpdateAudioBlocked(); ++attempt) {
+        if (attempt != 0) ++writeRetries;
         size_t bytesWritten = 0;
-        const esp_err_t writeError = i2s_write(I2S_NUM_0, pcm, bytesRead,
-                                               &bytesWritten,
-                                               pdMS_TO_TICKS(kWriteWaitMs));
-        portENTER_CRITICAL(&statsMux_);
-        stats_.bytesTransmitted += bytesWritten;
-        if (bytesWritten) ++stats_.blocksTransmitted;
-        if (writeError != ESP_OK) ++stats_.writeErrors;
-        if (bytesWritten != bytesRead) ++stats_.shortWrites;
-        portEXIT_CRITICAL(&statsMux_);
+        esp_err_t writeError = ESP_ERR_TIMEOUT;
+        {
+          voxone::i2s_output::Guard outputGuard(
+              pdMS_TO_TICKS(kWriteWaitMs));
+          if (outputGuard && routeEnabled_.load() &&
+              !systemUpdateAudioBlocked()) {
+            writeError = i2s_write(
+                I2S_NUM_0,
+                reinterpret_cast<uint8_t*>(pcm) + totalWritten,
+                bytesRead - totalWritten, &bytesWritten,
+                pdMS_TO_TICKS(kWriteWaitMs));
+          }
+        }
+        totalWritten += bytesWritten;
+        if (writeError != ESP_OK) ++writeErrors;
       }
+      portENTER_CRITICAL(&statsMux_);
+      stats_.bytesTransmitted += totalWritten;
+      if (totalWritten) ++stats_.blocksTransmitted;
+      stats_.writeErrors += writeErrors;
+      stats_.writeRetries += writeRetries;
+      if (totalWritten != bytesRead) {
+        ++stats_.shortWrites;
+        stats_.droppedBytes += bytesRead - totalWritten;
+      }
+      portEXIT_CRITICAL(&statsMux_);
     } else if (routeEnabled_.load()) {
       portENTER_CRITICAL(&statsMux_);
       ++stats_.shortWrites;
@@ -265,47 +297,77 @@ void BtAudioInput::readContinuously() {
     }
   }
   taskRunning_.store(false);
+  xSemaphoreGive(taskStopped_);
   vTaskDelete(nullptr);
+}
+
+bool BtAudioInput::physicalStreamStarted(uint32_t nowMs) const {
+  const bool seen = pcmSeen_.load(std::memory_order_acquire);
+  const uint32_t lastPcmMs = lastPcmMs_.load(std::memory_order_relaxed);
+  return btPcmStreamStarted(seen, lastPcmMs, nowMs);
+}
+
+void BtAudioInput::clearPhysicalStream() {
+  pcmSeen_.store(false, std::memory_order_release);
+  lastPcmMs_.store(0, std::memory_order_relaxed);
+}
+
+void BtAudioInput::recordRetryFailure(uint32_t nowMs) {
+  retryState_.failed(nowMs);
+  if (retryState_.exhausted() && !retryLimitReported_) {
+    serialCli.printf("##[BT-AUDIO]# I2S1 retry limit reached attempts=%u\n",
+                     static_cast<unsigned>(retryState_.attempts()));
+    retryLimitReported_ = true;
+  }
 }
 
 void BtAudioInput::loop(const BtLinkState& link, bool bluetoothSelected,
                         uint32_t radioRate, uint32_t nowMs) {
   const uint32_t desiredRate = btAudioDesiredRate(link);
-  const bool playbackPlaying = desiredRate != 0 &&
-                               link.playback == BtPlayback::Playing;
+  const bool streamStarted = desiredRate != 0 && physicalStreamStarted(nowMs);
   if (desiredRate == 0) {
     route(bluetoothSelected, false, radioRate);
     stop();
-    retryPending_ = false;
+    retryState_.reset();
+    retryLimitReported_ = false;
+    clearPhysicalStream();
     return;
   }
   if (active_ && stopRequested_.load() && !stop()) {
-    route(bluetoothSelected, playbackPlaying, radioRate);
+    route(bluetoothSelected, streamStarted, radioRate);
     return;
   }
   if (active_ && sampleRate_ != desiredRate) {
     route(false, false, radioRate);
     if (!stop()) return;
+    retryState_.reset();
+    retryLimitReported_ = false;
   }
   if (active_ && !taskRunning_.load()) {
     const int error = readError_.load();
     if (!stop()) return;
     if (error != 0)
       serialCli.printf("##[BT-AUDIO]# I2S1 read failed err=%d\n", error);
-    retryPending_ = true;
-    lastFailureMs_ = nowMs;
+    recordRetryFailure(nowMs);
   }
   if (!active_) {
-    if (retryPending_ && nowMs - lastFailureMs_ < kRetryIntervalMs) return;
-    if (!start(desiredRate, nowMs)) {
-      retryPending_ = true;
-      lastFailureMs_ = nowMs;
+    if (!retryState_.canAttempt(nowMs)) {
+      route(bluetoothSelected, false, radioRate);
       return;
     }
-    retryPending_ = false;
+    if (!start(desiredRate, nowMs)) {
+      recordRetryFailure(nowMs);
+      return;
+    }
+    retryState_.started();
   }
 
-  route(bluetoothSelected, playbackPlaying, radioRate);
+  const bool physicalStarted = physicalStreamStarted(nowMs);
+  if (physicalStarted && retryState_.attempts() != 0) {
+    retryState_.reset();
+    retryLimitReported_ = false;
+  }
+  route(bluetoothSelected, physicalStarted, radioRate);
 
   if (active_ && nowMs - lastReportMs_ >= kReportIntervalMs) {
     Stats snapshot;
@@ -321,7 +383,7 @@ void BtAudioInput::loop(const BtLinkState& link, bool bluetoothSelected,
     const uint32_t expectedBytesPerSecond = sampleRate_ * 4;
     const uint32_t percent = bytesPerSecond * 100 / expectedBytesPerSecond;
     serialCli.printf(
-        "##[BT-AUDIO]# rate=%lu rx=%lu B/s tx=%lu B/s pct=%lu bytes=%llu txBytes=%llu rxBlocks=%lu txBlocks=%lu timeouts=%lu errors=%lu writeErrors=%lu shortWrites=%lu peak=%u lastDataMs=%lu\n",
+        "##[BT-AUDIO]# rate=%lu rx=%lu B/s tx=%lu B/s pct=%lu bytes=%llu txBytes=%llu rxBlocks=%lu txBlocks=%lu timeouts=%lu errors=%lu writeErrors=%lu writeRetries=%lu shortWrites=%lu droppedBytes=%llu peak=%u lastDataMs=%lu\n",
         static_cast<unsigned long>(sampleRate_),
         static_cast<unsigned long>(bytesPerSecond),
         static_cast<unsigned long>(txBytesPerSecond),
@@ -333,7 +395,9 @@ void BtAudioInput::loop(const BtLinkState& link, bool bluetoothSelected,
         static_cast<unsigned long>(snapshot.readTimeouts),
         static_cast<unsigned long>(snapshot.readErrors),
         static_cast<unsigned long>(snapshot.writeErrors),
+        static_cast<unsigned long>(snapshot.writeRetries),
         static_cast<unsigned long>(snapshot.shortWrites),
+        static_cast<unsigned long long>(snapshot.droppedBytes),
         static_cast<unsigned>(snapshot.peak16),
         static_cast<unsigned long>(snapshot.lastDataMs));
     lastReportBytes_ = snapshot.bytesReceived;

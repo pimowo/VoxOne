@@ -7,7 +7,9 @@
 
 #include <atomic>
 #include <stdint.h>
+#include <freertos/semphr.h>
 
+#include "bt_audio_retry_state.h"
 #include "bt_link_protocol.h"
 
 class BtAudioInput {
@@ -16,6 +18,7 @@ class BtAudioInput {
   void loop(const BtLinkState& link, bool bluetoothSelected,
             uint32_t radioRate, uint32_t nowMs);
   bool radioOutputReady() const { return radioReady_.load(); }
+  bool bluetoothOutputActive() const { return routeEnabled_.load(); }
   bool blockForUpdate();
   bool acquirePlayerOutput();
 
@@ -29,6 +32,8 @@ class BtAudioInput {
     uint32_t blocksTransmitted = 0;
     uint32_t writeErrors = 0;
     uint32_t shortWrites = 0;
+    uint32_t writeRetries = 0;
+    uint64_t droppedBytes = 0;
     uint32_t lastDataMs = 0;
     uint16_t peak16 = 0;
   };
@@ -37,15 +42,18 @@ class BtAudioInput {
   void readContinuously();
   bool start(uint32_t rate, uint32_t nowMs);
   bool stop();
-  void route(bool bluetoothSelected, bool playbackPlaying,
+  void route(bool bluetoothSelected, bool physicalStreamStarted,
              uint32_t radioRate);
+  bool physicalStreamStarted(uint32_t nowMs) const;
+  void clearPhysicalStream();
+  void recordRetryFailure(uint32_t nowMs);
 
   bool active_ = false;
-  bool retryPending_ = false;
   bool cleanupErrorReported_ = false;
   bool routeErrorReported_ = false;
+  bool retryLimitReported_ = false;
+  bool taskExitPending_ = false;
   uint32_t sampleRate_ = 0;
-  uint32_t lastFailureMs_ = 0;
   uint32_t lastReportMs_ = 0;
   uint64_t lastReportBytes_ = 0;
   uint64_t lastReportTxBytes_ = 0;
@@ -56,6 +64,11 @@ class BtAudioInput {
   std::atomic<bool> stopRequested_{false};
   std::atomic<bool> taskRunning_{false};
   std::atomic<int> readError_{0};
+  std::atomic<bool> pcmSeen_{false};
+  std::atomic<uint32_t> lastPcmMs_{0};
+  BtAudioRetryState retryState_{};
+  StaticSemaphore_t taskStoppedStorage_{};
+  SemaphoreHandle_t taskStopped_ = nullptr;
   portMUX_TYPE statsMux_ = portMUX_INITIALIZER_UNLOCKED;
   Stats stats_{};
 };

@@ -388,13 +388,17 @@ void loop() {
     const BtLinkState& bt = btLink.state();
     const BtRuntimeStatus btStatus = btRuntime.status(bt.runtimeAvailable,
                                                       bt.connected);
+#if VOXONE_BT_I2S_RX_ENABLED
+    const bool btStreamStarted = btAudioInput.bluetoothOutputActive();
+#else
+    const bool btStreamStarted = false;
+#endif
     const DacPlaybackState dacPlayback = dacPlaybackForSource(
         player.localAudioAvailable() &&
             bluetoothOwnsAudio(bluetoothSourceSelected(), player.temporaryActive()),
         player.isRunning(),
-        bluetoothAudioOutputAllowed() &&
-            !btLink.hasIncompleteOnlineSnapshot() && btStatus.btOnline &&
-            btStatus.btConnected && btAudioDesiredRate(bt) != 0,
+        !btLink.hasIncompleteOnlineSnapshot() && btStatus.btOnline &&
+            btStatus.btConnected && btStreamStarted,
         bt.playback);
     dacMute.update(dacPlayback, systemUpdateAudioBlocked());
   }

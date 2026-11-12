@@ -32,6 +32,12 @@ int main() {
   const auto manualRadio = btAudioRouteTarget(false, true, true, 44100, 32000);
   assert(manualRadio.radioOutput && !manualRadio.btOutput);
 
+  // The physical stream may start before AVRCP catches up. Routing depends
+  // only on selection, RX readiness, sample rate and observed PCM activity.
+  const auto delayedAvrcp =
+      btAudioRouteTarget(true, true, true, 48000, 44100);
+  assert(delayedAvrcp.btOutput && delayedAvrcp.outputRate == 48000);
+
   for (bool selected : {false, true}) {
     for (bool running : {false, true}) {
       const auto state = btAudioRouteTarget(selected, true, running, 44100, 32000);

@@ -8,12 +8,11 @@ enum class DacPlaybackState : uint8_t { Stopped, Paused, Playing };
 
 inline DacPlaybackState dacPlaybackForSource(bool bluetoothSelected,
                                              bool radioPlaying,
-                                             bool bluetoothReady,
+                                             bool bluetoothStreamStarted,
                                              BtPlayback bluetoothPlayback) {
   if (!bluetoothSelected)
     return radioPlaying ? DacPlaybackState::Playing : DacPlaybackState::Stopped;
-  if (!bluetoothReady) return DacPlaybackState::Stopped;
-  if (bluetoothPlayback == BtPlayback::Playing) return DacPlaybackState::Playing;
+  if (bluetoothStreamStarted) return DacPlaybackState::Playing;
   if (bluetoothPlayback == BtPlayback::Paused) return DacPlaybackState::Paused;
   return DacPlaybackState::Stopped;
 }

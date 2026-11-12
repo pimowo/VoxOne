@@ -417,13 +417,15 @@ int main() {
     assert(!s.route().btOutput && s.route().radioOutput);
     assert(s.route().outputRate == 24000);
     assert(dacXsmtHigh(dacPlaybackForSource(
-        bluetoothOwnsAudio(true, s.temporary.active()), true, true, playback), false));
+        bluetoothOwnsAudio(true, s.temporary.active()), true,
+        playback == BtPlayback::Playing, playback), false));
     s.end(token);
     assert(s.resumes == 0 && s.bt.connected && s.bt.playback == playback);
     assert(!s.route().radioOutput);
     assert(s.route().btOutput == (playback == BtPlayback::Playing));
     assert(s.route().outputRate == (playback == BtPlayback::Playing ? 44100U : 0U));
-    assert(dacXsmtHigh(dacPlaybackForSource(true, false, true, playback), false) ==
+    assert(dacXsmtHigh(dacPlaybackForSource(
+               true, false, playback == BtPlayback::Playing, playback), false) ==
            (playback == BtPlayback::Playing));
   }
 

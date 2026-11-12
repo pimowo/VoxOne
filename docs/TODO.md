@@ -37,7 +37,10 @@ checkpointów pozostaje w historii Git i w istniejących raportach.
   widoku Playera (zdalny most nie ma podłączonej kamery).
 - [ ] Na L0 z rzeczywiście sparowanym i odtwarzającym telefonem potwierdzić
   słyszalny dźwięk Bluetooth po wyborze źródła, niezerowy transfer I2S do
-  DAC, synchronizację ustawionej głośności oraz zachowanie MUTE.
+  DAC także przy opóźnionym stanie AVRCP, synchronizację ustawionej głośności
+  oraz zachowanie MUTE; sprawdzić brak słyszalnych ubytków przy krótkiej
+  kontencji I2S, zamknięcie toru po fizycznym zatrzymaniu PCM i ograniczenie
+  restartów I2S1 do pięciu kolejnych nieudanych prób.
 - [ ] Naprawić watchdog trybu captive AP bez zapisanych profili Wi-Fi:
   po wyczyszczeniu SPIFFS L0 doszedł do `netserver.begin`, po czym po około
   7 s zgłosił `Task watchdog` dla `IDLE0` z zadaniem `wifi` na CPU0;

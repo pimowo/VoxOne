@@ -9,17 +9,21 @@ int main() {
     return displayVolumeFrameRed(27, false, !dacXsmtHigh(playback, false));
   };
   const auto sourcePlayback = [](bool btSelected, bool radioPlaying,
-                                 bool btReady, BtPlayback btPlayback) {
-    return dacPlaybackForSource(btSelected, radioPlaying, btReady, btPlayback);
+                                 bool btStreamStarted,
+                                 BtPlayback btPlayback) {
+    return dacPlaybackForSource(btSelected, radioPlaying, btStreamStarted,
+                                btPlayback);
   };
   assert(!frameRed(sourcePlayback(false, true, false, BtPlayback::Stopped)));
   assert(frameRed(sourcePlayback(false, false, false, BtPlayback::Stopped)));
   assert(frameRed(sourcePlayback(true, true, false, BtPlayback::Playing)));
-  assert(frameRed(sourcePlayback(true, false, true, BtPlayback::Stopped)));
-  assert(frameRed(sourcePlayback(true, false, true, BtPlayback::Paused)));
-  assert(frameRed(sourcePlayback(true, false, true,
-                                 static_cast<BtPlayback>(255))));
+  // Physical PCM, not delayed/stale AVRCP, owns the DAC gate.
+  assert(!frameRed(sourcePlayback(true, false, true, BtPlayback::Stopped)));
+  assert(!frameRed(sourcePlayback(true, false, true, BtPlayback::Paused)));
+  assert(!frameRed(sourcePlayback(true, false, true,
+                                  static_cast<BtPlayback>(255))));
   assert(!frameRed(sourcePlayback(true, false, true, BtPlayback::Playing)));
+  assert(frameRed(sourcePlayback(true, false, false, BtPlayback::Playing)));
   assert(displayVolumeFrameRed(27, true, false));
   assert(displayVolumeMuted(27, true));
   assert(!displayVolumeFrameRed(0, false, false));
