@@ -124,7 +124,7 @@ int main() {
   assert(action(bluetooth(), UiInputEvent::Right) ==
          UiInputAction::VolumeUp);
   assert(action(bluetooth(), UiInputEvent::Double) ==
-         UiInputAction::OpenMenu);
+         UiInputAction::OpenSourceSelector);
   assert(action(bluetooth(), UiInputEvent::Long) ==
          UiInputAction::OpenBluetoothTransport);
   assert(action(bluetooth(BT_TRANSPORT), UiInputEvent::Left) ==
@@ -158,14 +158,14 @@ int main() {
   assert(action(compactBluetooth, UiInputEvent::Ok) ==
          UiInputAction::BluetoothToggle);
   assert(action(compactBluetooth, UiInputEvent::Double) ==
-         UiInputAction::OpenMenu);
+         UiInputAction::OpenSourceSelector);
 
   // The source carousel is capability-filtered, so the gesture is also
   // available on boards whose source set does not include Bluetooth.
   UiInputContext noBluetooth = radio();
   noBluetooth.supportsBluetooth = false;
   assert(action(noBluetooth, UiInputEvent::Double) ==
-         UiInputAction::OpenMenu);
+         UiInputAction::OpenSourceSelector);
 
   UiInputContext dlna = radio();
   dlna.activeSource = SourceId::Dlna;

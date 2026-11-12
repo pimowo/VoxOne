@@ -320,6 +320,8 @@ int main() {
   assert(longPressHandler.find("dispatchUiInput(UiInputEvent::Long)") !=
          std::string::npos);
   assert(input.find("case UiInputAction::OpenMenu:") != std::string::npos);
+  assert(input.find("case UiInputAction::OpenSourceSelector:") !=
+         std::string::npos);
   assert(input.find("uiMenu.open(voxone::ui_menu::MenuId::MAIN)") !=
          std::string::npos);
   assert(input.find("config.beginMenuTransaction()") != std::string::npos);
@@ -341,11 +343,16 @@ int main() {
   assert(display.find("ŹRÓDŁA") != std::string::npos);
   assert(display.find("Zapisać zmiany?") != std::string::npos);
   assert(display.find("formatItemValue") != std::string::npos);
+  assert(display.find("%s >") == std::string::npos);
   assert(carousel.find("voxone::utf8::ellipsize") != std::string::npos);
   assert(carousel.find("model.playing") != std::string::npos);
   assert(carousel.find("\"GRA\"") != std::string::npos);
   assert(carousel.find("dsp.height() <= 64") != std::string::npos);
   assert(carousel.find("printOledListRow") != std::string::npos);
+  assert(carousel.find("selected ? theme.itemForeground") ==
+         std::string::npos);
+  assert(carousel.find("rowHeight - 2, theme.itemForeground") !=
+         std::string::npos);
   assert(carousel.find("model.total ? model.item : model.emptyText") !=
          std::string::npos);
 

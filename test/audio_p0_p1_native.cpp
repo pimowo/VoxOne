@@ -50,6 +50,12 @@ int main() {
   assert(audio.find("!InBuff.havePSRAM()") != std::string::npos);
   assert(audio.find("i2s_set_sample_rates(%lu) failed") !=
          std::string::npos);
+  assert(audioHeader.find("std::atomic<uint8_t> m_vol{64}") !=
+         std::string::npos);
+  assert(audio.find("m_vol.store(vol, std::memory_order_relaxed)") !=
+         std::string::npos);
+  assert(audio.find("m_vol.load(std::memory_order_relaxed)") !=
+         std::string::npos);
 
   const std::size_t play = player.find("void Player::_play(");
   const std::size_t arm = player.find("armPcmOutput()", play);

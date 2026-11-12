@@ -603,6 +603,20 @@ bool Config::persistV7() {
   return result == voxone::config_format::ConfigWriteStatus::OK;
 }
 
+void Config::servicePendingSave() {
+  if (!_pendingConfigSave.load(std::memory_order_acquire)) return;
+  const uint32_t now = millis();
+  if (static_cast<int32_t>(now - _pendingConfigSaveNotBeforeMs) < 0) return;
+  if (!_pendingConfigSave.exchange(false, std::memory_order_acq_rel)) return;
+  if (persistV7()) {
+    _pendingConfigSaveNotBeforeMs = 0;
+    return;
+  }
+  Serial.println("[CONFIG] deferred persistence failed; retry scheduled");
+  _pendingConfigSaveNotBeforeMs = now + 1000;
+  _pendingConfigSave.store(true, std::memory_order_release);
+}
+
 bool Config::setHaName(const char* value) {
   if (!value) return false;
   const size_t length = strlen(value);
@@ -665,7 +679,6 @@ bool Config::setEncoderUiReversed(bool reversed) {
 }
 
 bool Config::setLineOutEnabled(bool enabled) {
-  bool persisted = true;
   {
     WriteLock lock(_persistMutex);
     if (store.lineOutEnabled == enabled) return true;
@@ -676,9 +689,9 @@ bool Config::setLineOutEnabled(bool enabled) {
     store.lineOutEnabled = enabled;
     _storage.markDirty();
     _publishRuntimeLocked();
-    persisted = !_startupReadOnly && persistV7();
+    if (_startupReadOnly) return false;
+    _pendingConfigSave.store(true, std::memory_order_release);
   }
-  if (!persisted) return false;
   player.applyCurrentVolume();
 #if VOXONE_HAS_BT && VOXONE_PIN_MAP_COMPLETE
   sourceManagerApplyConfiguredBluetoothVolume();

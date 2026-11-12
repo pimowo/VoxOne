@@ -192,7 +192,7 @@ inline UiInputDecision resolveUiInput(const UiInputContext& context,
     if (context.mode == SCREENSAVER || context.mode == SCREENBLANK)
       return uiInputDecision(UiInputAction::WakePlayer);
     if (context.mode == PLAYER && context.hasLocalDisplay)
-      return uiInputDecision(UiInputAction::OpenMenu);
+      return uiInputDecision(UiInputAction::OpenSourceSelector);
     if (context.mode == STATIONS || context.mode == BT_TRANSPORT)
       return uiInputDecision(UiInputAction::ShowPlayer);
     return uiInputDecision(UiInputAction::None);

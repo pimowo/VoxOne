@@ -82,15 +82,16 @@ void printOledListRow(const UnifiedCarouselTheme& theme,
                       const UnifiedCarouselModel& model, uint16_t index,
                       uint16_t top, bool selected) {
   const uint16_t rowHeight = CHARHEIGHT;
-  const uint16_t rowBackground =
-      selected ? theme.itemForeground : theme.background;
-  const uint16_t rowForeground =
-      selected ? theme.itemBackground : theme.itemForeground;
+  const uint16_t rowBackground = theme.background;
+  const uint16_t rowForeground = theme.itemForeground;
   dsp.fillRect(0, top, dsp.width(), rowHeight, rowBackground);
+  if (selected && rowHeight > 2)
+    dsp.fillRect(0, top + 1, 2, rowHeight - 2, theme.itemForeground);
 
   const bool active = modelItemIsActive(model, index);
   const uint16_t markerWidth = active ? 4 * CHARWIDTH : 0;
-  WidgetConfig itemPosition{2, top, 1, WA_LEFT};
+  WidgetConfig itemPosition{static_cast<uint16_t>(selected ? 4 : 2), top, 1,
+                            WA_LEFT};
   char item[160];
   formatModelItem(model, index, item, sizeof(item));
   const uint16_t textWidth = dsp.width() > itemPosition.left + markerWidth
@@ -160,12 +161,19 @@ void UnifiedCarouselRenderer::render(
                   theme.headerBackground);
 
   const char* item = model.total ? model.item : model.emptyText;
-  const uint16_t itemForeground =
-      model.editing ? theme.itemBackground : theme.itemForeground;
-  const uint16_t itemBackground =
-      model.editing ? theme.itemForeground : theme.itemBackground;
+  const uint16_t itemForeground = theme.itemForeground;
+  const uint16_t itemBackground = theme.itemBackground;
   printEllipsized(item, layout.item, layout.itemWidth, itemForeground,
                   itemBackground);
+  if (model.editing) {
+    const uint16_t width = availableWidth(layout.item, layout.itemWidth);
+    const uint16_t markerWidth = width / 3;
+    const uint16_t top = layout.item.top +
+        CHARHEIGHT * layout.item.textsize;
+    if (markerWidth && top < dsp.height())
+      dsp.fillRect((dsp.width() - markerWidth) / 2, top, markerWidth, 1,
+                   theme.itemForeground);
+  }
 
   char counter[20];
   snprintf(counter, sizeof(counter), "%u/%u",

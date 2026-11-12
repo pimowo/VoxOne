@@ -7,13 +7,14 @@ checkpointów pozostaje w historii Git i w istniejących raportach.
 ## 1. HIL PENDING (do fizycznego przetestowania przez użytkownika)
 
 - [ ] Zweryfikować przycisk zasilania na L0 (GPIO42) i S0 (GPIO3): krótki
-  klik (Wakeup/Mute albo Home z Menu/karuzeli), dwuklik otwierający Menu
-  Główne wyłącznie z Playera oraz długie naciśnięcie uruchamiające shutdown
+  klik (Wakeup/Mute albo Home z Menu/karuzeli), dwuklik otwierający wybór
+  źródła wyłącznie z Playera oraz długie naciśnięcie uruchamiające shutdown
   wyłącznie z Playera; w Menu/karuzeli długie naciśnięcie ma wracać do
   Playera albo otwierać „Zapisać zmiany?” bez wyłączania radia; sprawdzić
   nawigację enkoderem bez zmiany głośności przy otwartej karuzeli, klik
   wyboru, dwuklik cofania o poziom i długi klik wyjścia do Playera,
-  renderowanie hierarchii i wskaźników `>` na TFT/OLED, sekwencję wyłączania
+  renderowanie hierarchii bez tekstowych wskaźników `>` na TFT/OLED,
+  sekwencję wyłączania
   „Do widzenia!” z natychmiastowym zatrzymaniem audio, płynne odświeżanie Menu,
   kontekstową belkę Menu na TFT, wygaszenie ekranu z ochroną OLED oraz tryby
   enkodera NORMAL/REVERSED (w tym obrót z wciśniętym przyciskiem i
@@ -29,7 +30,7 @@ checkpointów pozostaje w historii Git i w istniejących raportach.
   migotania przy zmianie metadanych/Wi-Fi na TFT i przewijaniu na OLED S0;
   ocenić widoki stacji, DLNA, Źródła i Menu: karuzelę (nagłówek, jedna duża
   pozycja, licznik oraz prawostronny wskaźnik `GRA`) na TFT L0 oraz
-  wielowierszową listę z inwersją zaznaczenia na OLED S0;
+  wielowierszową listę z akcentem zaznaczenia bez inwersji na OLED S0;
   dla pustych list DLNA/Źródła potwierdzić wyśrodkowany napis „Brak elementów”
   oraz działające wyjście dwuklikiem (Back) i długim kliknięciem (Home);
   po zimnym starcie L0 potwierdzić wzrokowo pełne przejście TFT z logo do

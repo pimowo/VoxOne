@@ -12,6 +12,7 @@ import tempfile
 
 
 ROOT = Path(__file__).resolve().parents[1]
+CHROME_PROCESS_TIMEOUT_SECONDS = 60
 sys.path.insert(0, str(ROOT / "scripts"))
 
 from www_asset_manifest import (  # noqa: E402
@@ -2188,7 +2189,8 @@ def main():
                    "--user-data-dir=" + str(Path(temporary) / "profile"),
                    "--virtual-time-budget=2500", "--dump-dom", page.as_uri()]
         result = subprocess.run(command, capture_output=True, text=True,
-                                encoding="utf-8", errors="replace", timeout=30)
+                                encoding="utf-8", errors="replace",
+                                timeout=CHROME_PROCESS_TIMEOUT_SECONDS)
         mobile_command = [
             str(chrome), "--headless", "--disable-gpu",
             "--disable-gpu-compositing",
@@ -2201,7 +2203,8 @@ def main():
         ]
         mobile_result = subprocess.run(
             mobile_command, capture_output=True, text=True,
-            encoding="utf-8", errors="replace", timeout=30)
+            encoding="utf-8", errors="replace",
+            timeout=CHROME_PROCESS_TIMEOUT_SECONDS)
         recovery_page = Path(temporary) / "recovery-test.html"
         recovery_page.write_text(recovery_test_html, encoding="utf-8")
         recovery_command = [
@@ -2215,7 +2218,8 @@ def main():
         ]
         recovery_result = subprocess.run(
             recovery_command, capture_output=True, text=True,
-            encoding="utf-8", errors="replace", timeout=30)
+            encoding="utf-8", errors="replace",
+            timeout=CHROME_PROCESS_TIMEOUT_SECONDS)
         wifi_recovery_page = Path(temporary) / "wifi-recovery-test.html"
         wifi_recovery_page.write_text(wifi_recovery_test_html, encoding="utf-8")
         wifi_recovery_command = [
@@ -2230,7 +2234,8 @@ def main():
         ]
         wifi_recovery_result = subprocess.run(
             wifi_recovery_command, capture_output=True, text=True,
-            encoding="utf-8", errors="replace", timeout=30)
+            encoding="utf-8", errors="replace",
+            timeout=CHROME_PROCESS_TIMEOUT_SECONDS)
         first_boot_page = Path(temporary) / "first-boot-test.html"
         first_boot_page.write_text(first_boot_test_html, encoding="utf-8")
         first_boot_command = [
@@ -2244,7 +2249,8 @@ def main():
         ]
         first_boot_result = subprocess.run(
             first_boot_command, capture_output=True, text=True,
-            encoding="utf-8", errors="replace", timeout=30)
+            encoding="utf-8", errors="replace",
+            timeout=CHROME_PROCESS_TIMEOUT_SECONDS)
         first_boot_mobile_command = [
             str(chrome), "--headless", "--disable-gpu",
             "--disable-gpu-compositing",
@@ -2257,7 +2263,8 @@ def main():
         ]
         first_boot_mobile_result = subprocess.run(
             first_boot_mobile_command, capture_output=True, text=True,
-            encoding="utf-8", errors="replace", timeout=30)
+            encoding="utf-8", errors="replace",
+            timeout=CHROME_PROCESS_TIMEOUT_SECONDS)
     match = re.search(r'<output id="headless-result">([^<]+)</output>', result.stdout)
     outcome = match.group(1) if match else "FAIL: Chrome did not return the test result"
     print(outcome)

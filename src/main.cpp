@@ -401,6 +401,9 @@ void loop() {
 #endif
   loopControls();
   powerManager.loop();
+  // Async HTTP/WebSocket callbacks only mutate the runtime snapshot. Keep
+  // EEPROM/NVS commits on Arduino's main loop task, outside the network task.
+  config.servicePendingSave();
   // Keep JSON/WebSocket generation on Arduino's Core 0 loopTask, away from
   // the renderer stack.
   netserver.loop();

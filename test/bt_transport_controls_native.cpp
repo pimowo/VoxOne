@@ -27,10 +27,10 @@ static displayMode_e longPress(displayMode_e mode,
   }
 }
 
-static bool opensMainMenu(displayMode_e mode,
-                          const SourceManagerState& sources) {
+static bool opensSourceSelector(displayMode_e mode,
+                                const SourceManagerState& sources) {
   return resolveUiInput(context(mode, sources), UiInputEvent::Double).action ==
-         UiInputAction::OpenMenu;
+         UiInputAction::OpenSourceSelector;
 }
 
 struct ClickCalls {
@@ -65,16 +65,16 @@ int main() {
   bt.runtimeAvailable = true;
   sources.observe(bt);
 
-  // RADIO PLAYER: long press opens stations, double-click opens the main menu.
+  // RADIO PLAYER: long press opens stations, double-click opens sources.
   assert(longPress(PLAYER, sources) == STATIONS);
-  assert(!opensMainMenu(STATIONS, sources));
-  assert(opensMainMenu(PLAYER, sources));
+  assert(!opensSourceSelector(STATIONS, sources));
+  assert(opensSourceSelector(PLAYER, sources));
   assert(sources.active() == ActiveSource::Radio);
   sources.select(ActiveSource::Bluetooth, bt);
 
   // A selected BT source without a phone cannot open transport.
   assert(longPress(PLAYER, sources) == PLAYER);
-  assert(opensMainMenu(PLAYER, sources));
+  assert(opensSourceSelector(PLAYER, sources));
   assert(sources.active() == ActiveSource::Bluetooth);
   sources.select(ActiveSource::Radio, bt);
 
@@ -84,7 +84,7 @@ int main() {
   sources.observe(bt);
   assert(sources.active() == ActiveSource::Bluetooth);
   assert(longPress(PLAYER, sources) == BT_TRANSPORT);
-  assert(!opensMainMenu(BT_TRANSPORT, sources));
+  assert(!opensSourceSelector(BT_TRANSPORT, sources));
   assert(sources.active() == ActiveSource::Bluetooth);
   assert(longPress(BT_TRANSPORT, sources) == PLAYER);
 
@@ -121,9 +121,9 @@ int main() {
   assert(sources.canControlBluetooth());
 
   // BT PLAYER uses the same carousel gesture; other screens remain unchanged.
-  assert(!opensMainMenu(VOL, sources));
+  assert(!opensSourceSelector(VOL, sources));
   assert(sources.active() == ActiveSource::Bluetooth);
-  assert(opensMainMenu(PLAYER, sources));
+  assert(opensSourceSelector(PLAYER, sources));
   assert(sources.active() == ActiveSource::Bluetooth);
   sources.select(ActiveSource::Radio, bt);
 

@@ -4496,13 +4496,13 @@ void Audio::setBalance(int8_t bal){ // bal -16...16
 //---------------------------------------------------------------------------------------------------------------------
 void Audio::setVolume(uint8_t vol) { // vol 22 steps, 0...21
     if(vol > 254) vol = 254;
-    m_vol = vol;
+    m_vol.store(vol, std::memory_order_relaxed);
 /*    if(vol > 21) vol = 21;
     m_vol = volumetable[vol];*/
 }
 //---------------------------------------------------------------------------------------------------------------------
 uint8_t Audio::getVolume() {
-    return m_vol;
+    return m_vol.load(std::memory_order_relaxed);
     /*for(uint8_t i = 0; i < 22; i++) {
         if(volumetable[i] == m_vol) return i;
     }
@@ -4516,7 +4516,8 @@ uint8_t Audio::getI2sPort() {
 //---------------------------------------------------------------------------------------------------------------------
 int32_t Audio::Gain(int16_t s[2]) {
     const voxone::audio_balance::StereoGain gain =
-        voxone::audio_balance::calculateStereoGain(m_vol, m_balance);
+        voxone::audio_balance::calculateStereoGain(
+            m_vol.load(std::memory_order_relaxed), m_balance);
     return voxone::audio_balance::applyStereoGain(
         s[LEFTCHANNEL], s[RIGHTCHANNEL], gain);
 }

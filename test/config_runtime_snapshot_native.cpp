@@ -216,6 +216,8 @@ void testProductionBindings() {
   const std::string display = readFile("src/core/display.cpp");
   const std::string dsp = readFile("src/core/dsp_transport_runtime.cpp");
   const std::string audio = readFile("src/audioI2S/Audio.cpp");
+  const std::string main = readFile("src/main.cpp");
+  const std::string web = readFile("web-src/voxone.js");
   const std::string runtime =
       readFile("src/core/config_runtime_snapshot.h");
 
@@ -224,6 +226,22 @@ void testProductionBindings() {
   assert(configHeader.find("_publishRuntimeLocked();\n      if (commit") !=
          std::string::npos);
   assert(configSource.find("void Config::_publishRuntimeLocked()") !=
+         std::string::npos);
+  const std::string lineOutEnabled = section(
+      configSource, "bool Config::setLineOutEnabled",
+      "bool Config::setLineOutVolume");
+  assert(lineOutEnabled.find("_pendingConfigSave.store") !=
+         std::string::npos);
+  assert(lineOutEnabled.find("persistV7") == std::string::npos);
+  assert(configSource.find("void Config::servicePendingSave()") !=
+         std::string::npos);
+  assert(main.find("config.servicePendingSave();") != std::string::npos);
+  assert(web.find("const maxShown = state.maximumVolume;") !=
+         std::string::npos);
+  assert(web.find("state.maximumVolume = maximum;") != std::string::npos);
+  assert(web.find("volumeSettingEditing.maximumVolume") ==
+         std::string::npos);
+  assert(web.find("volumeSettingDragging.maximumVolume") ==
          std::string::npos);
   assert(runtime.find("EEPROM") == std::string::npos);
   assert(runtime.find("NVS") == std::string::npos);

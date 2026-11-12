@@ -17,6 +17,7 @@
 #include "www_asset_integrity.h"
 #include "wifi_config_parser.h"
 #include "ui_menu.h"
+#include <atomic>
 #include <freertos/semphr.h>
 #include "../displays/widgets/widgetsconfig.h" //BitrateFormat
 
@@ -189,6 +190,7 @@ class Config {
     //void save();
     void init();
     bool persistV7();
+    void servicePendingSave();
     bool setHaName(const char* value);
     bool setTftTheme(TftTheme theme);
     bool setPowerMode(PowerMode mode);
@@ -304,6 +306,8 @@ class Config {
     voxone::config_runtime::SnapshotStore _runtime;
     voxone::config_runtime::VuThresholdRuntime _vuThreshold;
     voxone::config_format::ConfigPersistence _storage;
+    std::atomic<bool> _pendingConfigSave{false};
+    uint32_t _pendingConfigSaveNotBeforeMs = 0;
     bool _startupReadOnly = false;
     bool _menuTransactionActive = false;
     voxone::ui_menu::MenuSettings _menuPersistedSettings{};

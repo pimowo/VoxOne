@@ -232,15 +232,10 @@ void formatCarouselItem(const voxone::ui_menu::MenuSnapshot& menu,
   char value[16]{};
   const bool hasValue = voxone::ui_menu::formatItemValue(
       menu, static_cast<uint8_t>(index), value, sizeof(value));
-  const bool hasSubmenu = voxone::ui_menu::itemHasSubmenu(
-      menu, static_cast<uint8_t>(index));
   if (hasValue) {
     snprintf(output, outputSize, "%s: %s",
              voxone::ui_menu::itemLabel(menu, static_cast<uint8_t>(index)),
              value);
-  } else if (hasSubmenu) {
-    snprintf(output, outputSize, "%s >",
-             voxone::ui_menu::itemLabel(menu, static_cast<uint8_t>(index)));
   } else {
     snprintf(output, outputSize, "%s",
              voxone::ui_menu::itemLabel(menu, static_cast<uint8_t>(index)));
