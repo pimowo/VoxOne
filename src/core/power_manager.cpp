@@ -55,8 +55,6 @@ void PowerManager::begin() {
 
 void PowerManager::loop() {
   const uint32_t nowMs = millis();
-  if (wakeRequested_.exchange(false, std::memory_order_acq_rel)) wakeup();
-
   if (voxone::hardware::hasPin(
           voxone::hardware::currentHardware().power.button)) {
     const auto event = button_.update(powerButtonPressed(), nowMs);
@@ -84,10 +82,6 @@ void PowerManager::loop() {
 
   if (shutdownNotice_ && display.shutdownSequenceComplete())
     enterStandby();
-}
-
-void PowerManager::requestWakeup() {
-  wakeRequested_.store(true, std::memory_order_release);
 }
 
 void PowerManager::beginShutdown() {

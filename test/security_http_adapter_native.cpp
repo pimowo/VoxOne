@@ -222,7 +222,6 @@ void testSubprotocolAndCommandContract() {
   assert(securityWebSocketCommandAllowed("vol100"));
   assert(securityWebSocketCommandAllowed("scrollsettings"));
   assert(securityWebSocketCommandAllowed("playurl"));
-  assert(securityWebSocketCommandAllowed("wakeup"));
   assert(securityWebSocketCommandAllowed("encoderuireversed"));
   for (const char* retired : {"ballance", "play", "vol", "volume",
                               "brightness", "screenon", "abuff", "boot",

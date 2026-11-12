@@ -94,7 +94,7 @@ bool securityWebSocketCommandAllowed(const char* command) {
   static const char* const allowed[] = {
       "ping", "tone", "treble", "middle", "bass", "source",
       "webtransport", "start", "stop", "playurl", "toggle", "prev", "next",
-      "playstation", "vol100", "mute", "wakeup", "maximumvolume", "startupmode",
+      "playstation", "vol100", "mute", "maximumvolume", "startupmode",
       "lineoutenabled", "lineoutvolume",
       "startupfixedvolume", "dim", "getindex", "getrssi",
       "getsystem", "getwebstatus", "getscreen", "stationlisttimeout",

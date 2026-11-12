@@ -248,7 +248,6 @@ AsyncWebServer webserver(80);
 AsyncWebSocket websocket("/ws");
 
 void handleUpload(AsyncWebServerRequest *request, String filename, size_t index, uint8_t *data, size_t len, bool final);
-void handleStationsRead(AsyncWebServerRequest *request);
 void handleStationsReadSnapshot(AsyncWebServerRequest *request);
 void handleStationDirectorySearch(AsyncWebServerRequest *request);
 void handleDlnaServers(AsyncWebServerRequest *request);
@@ -269,7 +268,6 @@ void handleDisplayThemeRead(AsyncWebServerRequest *request);
 void handleDisplayThemeSave(AsyncWebServerRequest *request);
 void handlePowerSettingsRead(AsyncWebServerRequest *request);
 void handlePowerSettingsSave(AsyncWebServerRequest *request);
-void handlePowerWakeup(AsyncWebServerRequest *request);
 void handleConfigBackup(AsyncWebServerRequest *request);
 void handleConfigRestore(AsyncWebServerRequest *request);
 void handleConfigRestoreBody(AsyncWebServerRequest *request, uint8_t *data,
@@ -1027,11 +1025,6 @@ void releaseWebUpdateSession(AsyncWebServerRequest* request) {
 }
 }  // namespace
 
-char* updateError() {
-  sprintf(netserver.nsBuf, "Update failed with error (%d)<br /> %s", (int)Update.getError(), Update.errorString());
-  return netserver.nsBuf;
-}
-
 bool NetServer::begin(bool quiet) {
   Serial.printf("##[BOOT]# NetServer::begin called: status=%d started=%s caller=%s\n",
                 static_cast<int>(network.status), _started ? "yes" : "no",
@@ -1110,7 +1103,6 @@ bool NetServer::begin(bool quiet) {
   webserver.on("/api/display/theme", HTTP_POST, handleDisplayThemeSave);
   webserver.on("/api/power", HTTP_GET, handlePowerSettingsRead);
   webserver.on("/api/power", HTTP_POST, handlePowerSettingsSave);
-  webserver.on("/api/power/wakeup", HTTP_POST, handlePowerWakeup);
   webserver.on(voxone::config_backup_web::kBackupRoute, HTTP_GET,
                handleConfigBackup);
   webserver.on(voxone::config_backup_web::kRestoreRoute, HTTP_POST,
@@ -1442,169 +1434,6 @@ static void formatWebStatus(char* output, size_t capacity) {
   if (tail < 0 || static_cast<size_t>(tail) >= capacity - used) output[0] = '\0';
 }
 
-static bool readIndexedStation(File &playlist, File &index, uint16_t number, station_t &station) {
-  const uint32_t indexOffset = (static_cast<uint32_t>(number) - 1) * sizeof(uint32_t);
-  if (number == 0 || !index.seek(indexOffset, SeekSet)) return false;
-  uint32_t position = 0;
-  if (index.readBytes(reinterpret_cast<char*>(&position), sizeof(position)) != sizeof(position) ||
-      position >= playlist.size() || !playlist.seek(position, SeekSet)) return false;
-
-  char line[BUFLEN * 3];
-  const size_t length = playlist.readBytesUntil('\n', line, sizeof(line) - 1);
-  if (length == 0 || length >= sizeof(line) - 1) return false;
-  line[length] = '\0';
-  char* name = nullptr;
-  char* url = nullptr;
-  if (!stationParseFields(line, station.id, name, url, station.ovol,
-                          station.metadataMode)) return false;
-  strlcpy(station.name, name, sizeof(station.name));
-  strlcpy(station.url, url, sizeof(station.url));
-  return true;
-}
-
-struct StationsJsonStream {
-  File playlist;
-  File index;
-  uint16_t count = 0;
-  uint16_t current = 0;
-  uint32_t next = 1;
-  uint8_t stage = 0;
-  bool failed = false;
-  char pending[BUFLEN * 12 + 128];
-  size_t length = 0;
-  size_t offset = 0;
-
-  bool appendLiteral(const char *value) {
-    const size_t size = strlen(value);
-    if (size >= sizeof(pending) - length) return false;
-    memcpy(pending + length, value, size);
-    length += size;
-    pending[length] = '\0';
-    return true;
-  }
-
-  void reset() {
-    next = 1;
-    stage = 0;
-    failed = false;
-    length = offset = 0;
-  }
-
-  bool fail() {
-    failed = true;
-    return false;
-  }
-
-  bool nextPiece() {
-    length = offset = 0;
-    if (stage == 0) {
-      const int written = snprintf(pending, sizeof(pending),
-          "{\"current\":%u,\"count\":%u,\"stations\":[", current, count);
-      if (written < 0 || static_cast<size_t>(written) >= sizeof(pending)) return fail();
-      length = static_cast<size_t>(written);
-      stage = 1;
-      return true;
-    }
-    if (next <= count) {
-      station_t station;
-      if (!readIndexedStation(playlist, index, static_cast<uint16_t>(next), station)) return fail();
-      char id[17];
-      stationFormatId(station.id, id);
-      const int written = snprintf(pending, sizeof(pending),
-          "%s{\"number\":%u,\"id\":\"%s\",\"name\":\"",
-          next == 1 ? "" : ",", next, id);
-      if (written < 0 || static_cast<size_t>(written) >= sizeof(pending)) return fail();
-      length = static_cast<size_t>(written);
-      if (!appendJsonEscaped(pending, sizeof(pending), length, station.name) ||
-          !appendLiteral("\",\"url\":\"") ||
-          !appendJsonEscaped(pending, sizeof(pending), length, station.url)) return fail();
-      const int tail = snprintf(pending + length, sizeof(pending) - length,
-          "\",\"ovol\":%d,\"metadataMode\":\"%s\",\"swapArtistTitle\":%s}",
-          station.ovol, station.metadataMode == STATION_META_SWAP ? "swap" : "normal",
-          station.metadataMode == STATION_META_SWAP ? "true" : "false");
-      if (tail < 0 || static_cast<size_t>(tail) >= sizeof(pending) - length) return fail();
-      length += static_cast<size_t>(tail);
-      ++next;
-      return true;
-    }
-    if (stage == 1) {
-      memcpy(pending, "]}", 2);
-      length = 2;
-      stage = 2;
-      return true;
-    }
-    return false;
-  }
-
-  size_t fill(uint8_t *buffer, size_t capacity) {
-    size_t copied = 0;
-    while (copied < capacity) {
-      if (offset == length && !nextPiece()) break;
-      const size_t available = length - offset;
-      const size_t size = min(available, capacity - copied);
-      memcpy(buffer + copied, pending + offset, size);
-      offset += size;
-      copied += size;
-    }
-    return copied;
-  }
-};
-
-void handleStationsRead(AsyncWebServerRequest *request) {
-  std::shared_ptr<StationsJsonStream> stream = std::make_shared<StationsJsonStream>();
-  stream->playlist = SPIFFS.open(PLAYLIST_PATH, "r");
-  stream->index = SPIFFS.open(INDEX_PATH, "r");
-  bool valid = stream->playlist && stream->index;
-  if (valid) {
-    const size_t indexSize = stream->index.size();
-    valid = indexSize % sizeof(uint32_t) == 0 &&
-            indexSize / sizeof(uint32_t) <= UINT16_MAX;
-    if (valid) {
-      stream->count = indexSize / sizeof(uint32_t);
-      station_t station;
-      for (uint32_t number = 1; number <= stream->count; ++number) {
-        if (!readIndexedStation(stream->playlist, stream->index, number, station)) {
-          valid = false;
-          break;
-        }
-      }
-    }
-  }
-  if (!valid) {
-    AsyncWebServerResponse *response = request->beginResponse(
-        500, "application/json; charset=utf-8", "{\"error\":\"playlist_read_failed\"}");
-    response->addHeader("Cache-Control", "no-store");
-    request->send(response);
-    return;
-  }
-  const uint16_t selected = config.lastStation();
-  stream->current = selected >= 1 && selected <= stream->count ? selected : 0;
-  size_t responseLength = 0;
-  while (stream->nextPiece()) {
-    if (SIZE_MAX - responseLength < stream->length) {
-      stream->failed = true;
-      break;
-    }
-    responseLength += stream->length;
-  }
-  if (stream->failed || stream->stage != 2 || responseLength == 0) {
-    AsyncWebServerResponse *response = request->beginResponse(
-        500, "application/json; charset=utf-8", "{\"error\":\"playlist_read_failed\"}");
-    response->addHeader("Cache-Control", "no-store");
-    request->send(response);
-    return;
-  }
-  stream->reset();
-  AsyncWebServerResponse *response = request->beginResponse(
-      "application/json; charset=utf-8", responseLength,
-      [stream](uint8_t *buffer, size_t capacity, size_t) {
-        if (stream->failed) return static_cast<size_t>(RESPONSE_TRY_AGAIN);
-        const size_t copied = stream->fill(buffer, capacity);
-        return stream->failed ? static_cast<size_t>(RESPONSE_TRY_AGAIN) : copied;
-      });
-  response->addHeader("Cache-Control", "no-store");
-  request->send(response);
-}
 static void stationsError(AsyncWebServerRequest* request, int code, const char* error);
 
 void handleStationsReadSnapshot(AsyncWebServerRequest *request) {
@@ -2754,12 +2583,6 @@ void handlePowerSettingsSave(AsyncWebServerRequest* request) {
   snprintf(body, sizeof(body), "{\"ok\":true,\"mode\":\"%s\"}",
            voxone::power_mode::apiName(mode));
   stationsReply(request, 200, body);
-}
-
-void handlePowerWakeup(AsyncWebServerRequest* request) {
-  if (!deviceApiAuthorized(request)) return;
-  powerManager.requestWakeup();
-  stationsReply(request, 202, R"({"ok":true,"state":"waking"})");
 }
 
 void handleHardwareConfigRead(AsyncWebServerRequest* request) {

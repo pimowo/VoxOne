@@ -14,15 +14,10 @@ std::string readFile(const char* path) {
 
 int main() {
   const std::string server = readFile("src/core/netserver.cpp");
-  const std::string command = readFile("src/core/commandhandler.cpp");
   const std::string html = readFile("web-src/voxone.html");
   const std::string javascript = readFile("web-src/voxone.js");
   const std::string manager = readFile("src/core/power_manager.cpp");
 
-  assert(server.find("/api/power/wakeup") != std::string::npos);
-  assert(server.find("powerManager.requestWakeup()") != std::string::npos);
-  assert(command.find("strEquals(command, \"wakeup\")") !=
-         std::string::npos);
   assert(html.find("Tryb zasilania") != std::string::npos);
   for (const char* mode : {"soft_standby", "hard_power", "mute_only"}) {
     assert(html.find(mode) != std::string::npos);

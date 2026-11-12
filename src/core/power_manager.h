@@ -10,7 +10,6 @@ class PowerManager {
  public:
   void begin();
   void loop();
-  void requestWakeup();
   bool standby() const { return standby_.load(std::memory_order_acquire); }
 
  private:
@@ -19,7 +18,6 @@ class PowerManager {
   void wakeup();
 
   voxone::power::ButtonHandler button_;
-  std::atomic<bool> wakeRequested_{false};
   std::atomic<bool> standby_{false};
   bool shutdownNotice_ = false;
 };
