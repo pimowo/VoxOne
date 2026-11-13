@@ -74,11 +74,15 @@ def build_assets(target_dir, include_dsp):
     rendered = {
         name: source_bytes(name) for name in assets if name != "voxone.html"
     }
-    if "manifest.json" in rendered and "sprite.svg" in rendered:
-        sprite_hash = hashlib.sha256(rendered["sprite.svg"]).hexdigest()[:12]
-        rendered["manifest.json"] = rendered["manifest.json"].replace(
-            b"{sprite.svg-hash}", sprite_hash.encode("ascii")
-        )
+    if "manifest.json" in rendered:
+        for name, data in rendered.items():
+            if name == "manifest.json":
+                continue
+            digest = hashlib.sha256(data).hexdigest()[:12]
+            rendered["manifest.json"] = rendered["manifest.json"].replace(
+                ("{" + name + "-hash}").encode("ascii"),
+                digest.encode("ascii"),
+            )
     hashes = {
         name: hashlib.sha256(data).hexdigest()[:12]
         for name, data in rendered.items()

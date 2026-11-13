@@ -35,6 +35,10 @@ const EndpointCase kEndpoints[] = {
      SecurityRouteClass::PublicBootstrap, false, false},
     {SecurityAccessMethod::Get, "/sprite.svg", SecurityEndpoint::BrandAsset,
      SecurityRouteClass::PublicBootstrap, false, false},
+    {SecurityAccessMethod::Get, "/icon-192.png", SecurityEndpoint::BrandAsset,
+     SecurityRouteClass::PublicBootstrap, false, false},
+    {SecurityAccessMethod::Get, "/icon-512.png", SecurityEndpoint::BrandAsset,
+     SecurityRouteClass::PublicBootstrap, false, false},
     {SecurityAccessMethod::Get, "/manifest.json", SecurityEndpoint::LoginAsset,
      SecurityRouteClass::PublicBootstrap, false, false},
     {SecurityAccessMethod::Get, "/favicon.ico", SecurityEndpoint::LoginAsset,
@@ -45,6 +49,12 @@ const EndpointCase kEndpoints[] = {
     {SecurityAccessMethod::Get, "/dsp-client.js.gz", SecurityEndpoint::LoginAsset,
      SecurityRouteClass::RejectedDirectCompressedAsset, false, false},
     {SecurityAccessMethod::Get, "/sprite.svg.gz",
+     SecurityEndpoint::LoginAsset,
+     SecurityRouteClass::RejectedDirectCompressedAsset, false, false},
+    {SecurityAccessMethod::Get, "/icon-192.png.gz",
+     SecurityEndpoint::LoginAsset,
+     SecurityRouteClass::RejectedDirectCompressedAsset, false, false},
+    {SecurityAccessMethod::Get, "/icon-512.png.gz",
      SecurityEndpoint::LoginAsset,
      SecurityRouteClass::RejectedDirectCompressedAsset, false, false},
     {SecurityAccessMethod::Get, "/manifest.json.gz",
@@ -264,11 +274,11 @@ void testCompleteEndpointInventory() {
     assert(std::strcmp(securityEndpointName(actual.endpoint), "unknown") != 0);
     assert(std::strcmp(securityRouteClassName(actual.routeClass), "unknown") != 0);
   }
-  assert(sizeof(kEndpoints) / sizeof(kEndpoints[0]) == 57);
+  assert(sizeof(kEndpoints) / sizeof(kEndpoints[0]) == 61);
 
   size_t ruleCount = 0;
   const SecurityRouteRule* rules = securityAccessRouteRules(ruleCount);
-  assert(rules != nullptr && ruleCount == 57);
+  assert(rules != nullptr && ruleCount == 61);
   for (size_t index = 0; index < ruleCount; ++index) {
     const SecurityRouteRule& rule = rules[index];
     assert(rule.path && rule.path[0] == '/');
@@ -333,11 +343,13 @@ void testHostOriginAndCsrfMatrix() {
 void testDirectCompressedAssetsAndCanonicalFallback() {
   const char* canonicalAssets[] = {
       "/advanced-audio.js", "/dsp-client.js", "/sprite.svg",
-      "/manifest.json", "/voxone.css", "/voxone.html", "/voxone.js"};
+      "/icon-192.png", "/icon-512.png", "/manifest.json", "/voxone.css",
+      "/voxone.html", "/voxone.js"};
   const char* directCompressedAssets[] = {
       "/advanced-audio.js.gz", "/dsp-client.js.gz",
-      "/sprite.svg.gz", "/manifest.json.gz", "/voxone.css.gz",
-      "/voxone.html.gz", "/voxone.js.gz"};
+      "/sprite.svg.gz", "/icon-192.png.gz", "/icon-512.png.gz",
+      "/manifest.json.gz", "/voxone.css.gz", "/voxone.html.gz",
+      "/voxone.js.gz"};
 
   for (size_t index = 0;
        index < sizeof(canonicalAssets) / sizeof(canonicalAssets[0]); ++index) {
@@ -650,7 +662,8 @@ void testProductionInventoryAndHttpOnlyIntegration() {
       "/api/bt/update", "/api/dsp/state", "AsyncWebSocket websocket(\"/ws\")",
       "request->url()==\"/update\"", "request->url() == \"/update/bt\"",
       "request->url()==\"/emergency\"", "request->url() == \"/update.html\"",
-      "request->url() == \"/variables.js\"", "PLAYLIST_PATH"};
+      "webserver.on(\"/variables.js\", HTTP_GET, handleVariablesJs)",
+      "PLAYLIST_PATH"};
   for (const char* registration : registrations)
     assert(server.find(registration) != std::string::npos);
 

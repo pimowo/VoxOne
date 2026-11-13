@@ -23,6 +23,8 @@ static const char* const kCurrentWwwAssetPaths[] = {
     "/www/dsp-client.js.gz",
 #endif
     "/www/sprite.svg.gz",
+    "/www/icon-192.png.gz",
+    "/www/icon-512.png.gz",
     "/www/manifest.json.gz",
 };
 

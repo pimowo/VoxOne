@@ -89,7 +89,7 @@ function Invoke-Pio([string]$label,[string[]]$arguments) {
  if(-not (Select-String -LiteralPath $log -Pattern '\[SUCCESS\]' -Quiet)) { throw "No SUCCESS marker: $log" }
  Write-Host "  log: $log"
 }
-$assetNames=@('voxone.html','voxone.css','voxone.js','advanced-audio.js','dsp-client.js','sprite.svg','manifest.json')
+$assetNames=@('voxone.html','voxone.css','voxone.js','advanced-audio.js','dsp-client.js','sprite.svg','icon-192.png','icon-512.png','manifest.json')
 function Get-AssetHashes {
  $hashes=[ordered]@{}
  foreach($name in $assetNames) {
@@ -105,11 +105,15 @@ function Get-AssetHashes {
 function Get-RenderedWebAsset([string]$name) {
  $bytes=[System.IO.File]::ReadAllBytes((Join-Path $root "web-src/$name"))
  if($name -eq 'manifest.json') {
-  $sprite=[System.IO.File]::ReadAllBytes((Join-Path $root 'web-src/sprite.svg'))
-  $sha=[System.Security.Cryptography.SHA256]::Create()
-  try { $digest=[BitConverter]::ToString($sha.ComputeHash($sprite)).Replace('-','').ToLowerInvariant().Substring(0,12) }
-  finally { $sha.Dispose() }
-  $text=[System.Text.Encoding]::UTF8.GetString($bytes).Replace('{sprite.svg-hash}',$digest)
+  $text=[System.Text.Encoding]::UTF8.GetString($bytes)
+  foreach($asset in @('sprite.svg','icon-192.png','icon-512.png')) {
+   $assetBytes=[System.IO.File]::ReadAllBytes((Join-Path $root "web-src/$asset"))
+   $sha=[System.Security.Cryptography.SHA256]::Create()
+   try { $digest=[BitConverter]::ToString($sha.ComputeHash($assetBytes)).Replace('-','').ToLowerInvariant().Substring(0,12) }
+   finally { $sha.Dispose() }
+   $placeholder='{'+$asset+'-hash}'
+   $text=$text.Replace($placeholder,$digest)
+  }
   return [System.Text.Encoding]::UTF8.GetBytes($text)
  }
  return $bytes
@@ -144,7 +148,7 @@ function Assert-WebAssets {
    (Join-Path $root 'data/www/assets.vxwm') '--asset-dir' `
    (Join-Path $root 'data/www') '--verify-assets'
  if($LASTEXITCODE -ne 0) { throw 'WWW asset manifest validation failed' }
- Write-Host '  seven gzip assets and manifest match web-src'
+ Write-Host '  nine gzip assets and manifest match web-src'
 }
 $nativeSources=@{
  button_handler_native=@('src/core/button_handler.cpp')

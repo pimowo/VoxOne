@@ -186,8 +186,8 @@ void testProductionBinding() {
       "voxone::security::SecuritySessionBinding* websocketBinding) {",
       "void securityApiResultReply(");
   const std::string variables = functionSource(
-      server, "if (request->url() == \"/variables.js\") {",
-      "Serial.print(\"Not Found: \")");
+      server, "void handleVariablesJs(AsyncWebServerRequest *request) {",
+      "void handleIndex(AsyncWebServerRequest * request) {");
 
   assert(count(index, "network.presentationSnapshot()") == 1);
   assert(index.find("config.ssidsCount") == std::string::npos);

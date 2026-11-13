@@ -5,8 +5,8 @@
 #include <cstring>
 
 int main() {
-  static_assert(voxone::kCurrentWwwAssetCount == 5,
-                "Non-DSP WWW contract must contain five assets");
+  static_assert(voxone::kCurrentWwwAssetCount == 7,
+                "Non-DSP WWW contract must contain seven assets");
   for (std::size_t index = 0; index < voxone::kCurrentWwwAssetCount; ++index) {
     assert(std::strstr(voxone::kCurrentWwwAssetPaths[index],
                        "advanced-audio.js") == nullptr);

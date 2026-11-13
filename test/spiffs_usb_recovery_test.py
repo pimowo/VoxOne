@@ -197,8 +197,8 @@ class SpiffsUsbRecoveryTest(unittest.TestCase):
             self.assertLessEqual(spiffs["offset"] + spiffs["size"], spec.flash_size)
         self.assertEqual(MODULE.PROFILE_SPECS["W0"].chip, "esp32")
         self.assertEqual(MODULE.PROFILE_SPECS["L0"].flash_size, 16 * 1024 * 1024)
-        self.assertEqual(len(MODULE.required_asset_paths("L0")), 7)
-        self.assertEqual(len(MODULE.required_asset_paths("S0")), 5)
+        self.assertEqual(len(MODULE.required_asset_paths("L0")), 9)
+        self.assertEqual(len(MODULE.required_asset_paths("S0")), 7)
         self.assertNotIn(
             "/www/dsp-client.js.gz", MODULE.required_asset_paths("S0")
         )
@@ -212,7 +212,7 @@ class SpiffsUsbRecoveryTest(unittest.TestCase):
             "4c56820b",
         )
         self.assertEqual(manifest["image"]["size"], 0x30000)
-        self.assertEqual(len(manifest["requiredAssets"]), 7)
+        self.assertEqual(len(manifest["requiredAssets"]), 9)
         self.assertTrue(all(item["decompressedSize"] for item in manifest["requiredAssets"]))
 
     def test_image_size_format_hash_and_required_asset_fail_closed(self):

@@ -1,3 +1,4 @@
 # Keep audited font bytes and generated asset inputs identical across Windows checkouts.
 assets/yoradio_glcdfont.c -text
 web-src/* text eol=lf
+web-src/*.png -text

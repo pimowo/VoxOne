@@ -47,7 +47,7 @@ class WwwAssetManifestTest(unittest.TestCase):
             self.assertEqual(report["assetSetId"], repeated["assetSetId"])
             parsed = parse_manifest(first)
             verify_assets(root, parsed)
-            self.assertEqual(len(parsed["assets"]), 7)
+            self.assertEqual(len(parsed["assets"]), 9)
             self.assertEqual(parsed["trust"],
                              "integrity metadata generated with the assets; not a signature")
 
@@ -55,8 +55,8 @@ class WwwAssetManifestTest(unittest.TestCase):
         slim = contract_from_header(
             ROOT / "src/core/www_readiness.h", include_dsp=False
         )
-        self.assertEqual(len(self.contract["paths"]), 7)
-        self.assertEqual(len(slim["paths"]), 5)
+        self.assertEqual(len(self.contract["paths"]), 9)
+        self.assertEqual(len(slim["paths"]), 7)
         self.assertNotIn("/www/advanced-audio.js.gz", slim["paths"])
         self.assertNotIn("/www/dsp-client.js.gz", slim["paths"])
         self.assertTrue(profile_includes_dsp(ROOT, "L0"))

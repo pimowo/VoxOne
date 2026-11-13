@@ -16,6 +16,7 @@
 #include "../core/config.h"
 #include "../core/audio_balance.h"
 #include "../core/radio_format_detection.h"
+#include "../core/radio_http_request.h"
 #include "../core/radio_reconnect_policy.h"
 #include "../core/radio_url_request_parts.h"
 #include "../core/system_operation_state.h"
@@ -661,9 +662,11 @@ bool Audio::connectToHost(const char* host, const char* user, const char* pwd,
         return false;
     }
 
-    uint16_t lenHost = strlen(host);
+    const size_t lenHost = strlen(host);
 
-    if(lenHost >= 512 - 10) {
+    constexpr size_t kMaxHostInputLength =
+        voxone::radio::kMaxResolvedUrlLength - 10;
+    if(lenHost >= kMaxHostInputLength) {
         AUDIO_INFO("Hostaddress is too long");
         if(audio_error) audio_error("Hostaddress is too long");
         return false;
@@ -727,8 +730,15 @@ bool Audio::connectToHost(const char* host, const char* user, const char* pwd,
     else                            m_f_ssl = false;
 
     // authentification
-    uint8_t auth = strlen(user) + strlen(pwd);
-    char toEncode[auth + 4];
+    const size_t userLength = strlen(user);
+    const size_t passwordLength = strlen(pwd);
+    if(userLength > UINT8_MAX || passwordLength > UINT8_MAX ||
+       userLength > UINT8_MAX - passwordLength) {
+        free(l_host);
+        return resolutionError("HTTP credentials are too long");
+    }
+    const size_t auth = userLength + passwordLength;
+    char toEncode[auth + 2];
     toEncode[0] = '\0';
     strcat(toEncode, user);
     strcat(toEncode, ":");
@@ -739,24 +749,17 @@ bool Audio::connectToHost(const char* host, const char* user, const char* pwd,
 
     //  AUDIO_INFO("Connect to \"%s\" on port %d, extension \"%s\"", hostwoext, port, extension);
 
-    char rqh[strlen(h_host) + strlen(authorization) + 200]; // http request header
-    rqh[0] = '\0';
-
-    strcat(rqh, "GET ");
-    strcat(rqh, extension);
-    strcat(rqh, " HTTP/1.1\r\n");
-    strcat(rqh, "Host: ");
-    strcat(rqh, hostwoext);
-    strcat(rqh, "\r\n");
-    strcat(rqh, "Icy-MetaData:1\r\n");
-    if (auth > 0) {
-      strcat(rqh, "Authorization: Basic ");
-      strcat(rqh, authorization);
-      strcat(rqh, "\r\n");
+    voxone::radio::HttpRequestHeader requestHeader;
+    const auto headerResult = requestHeader.build(
+        extension, hostwoext, auth > 0 ? authorization : nullptr,
+        kVoxOneUserAgentHeader, true);
+    if(headerResult != voxone::radio::HttpRequestBuildResult::Ok) {
+        free(l_host);
+        return resolutionError(
+            headerResult == voxone::radio::HttpRequestBuildResult::NoMemory
+                ? "out of memory building HTTP request"
+                : "HTTP request header is too large");
     }
-    strcat(rqh, "Accept-Encoding: identity;q=1,*;q=0\r\n");
-    strcat(rqh, kVoxOneUserAgentHeader);
-    strcat(rqh, "Connection: keep-alive\r\n\r\n");
 
     if(ESP_ARDUINO_VERSION_MAJOR == 2 && ESP_ARDUINO_VERSION_MINOR == 0 && ESP_ARDUINO_VERSION_PATCH >= 3 && MAX_AUDIO_SOCKET_TIMEOUT){
         m_timeout_ms_ssl = UINT16_MAX;  // bug in v2.0.3 if hostwoext is a IPaddr not a name
@@ -825,7 +828,7 @@ bool Audio::connectToHost(const char* host, const char* user, const char* pwd,
     m_expectedPlsFmt = FORMAT_NONE;
 
     if(res){
-        _client->print(rqh);
+        _client->print(requestHeader.get());
         if(endsWith(extension, ".mp3"))   m_expectedCodec = CODEC_MP3;
         if(endsWith(extension, ".aac"))   m_expectedCodec = CODEC_AAC;
         if(endsWith(extension, ".wav"))   m_expectedCodec = CODEC_WAV;
@@ -917,18 +920,17 @@ bool Audio::httpPrint(const char* host) {
 
     AUDIO_INFO("new request: \"%s\"", host);
 
-    char rqh[strlen(h_host) + 200]; // http request header
-    rqh[0] = '\0';
-
-    strcat(rqh, "GET ");
-    strcat(rqh, extension);
-    strcat(rqh, " HTTP/1.1\r\n");
-    strcat(rqh, "Host: ");
-    strcat(rqh, hostwoext);
-    strcat(rqh, "\r\n");
-    strcat(rqh, "Accept-Encoding: identity;q=1,*;q=0\r\n");
-    strcat(rqh, kVoxOneUserAgentHeader);
-    strcat(rqh, "Connection: keep-alive\r\n\r\n");
+    voxone::radio::HttpRequestHeader requestHeader;
+    const auto headerResult = requestHeader.build(
+        extension, hostwoext, nullptr, kVoxOneUserAgentHeader, false);
+    if(headerResult != voxone::radio::HttpRequestBuildResult::Ok) {
+        AUDIO_ERROR("Cannot build HTTP request header: %s",
+                    headerResult ==
+                            voxone::radio::HttpRequestBuildResult::NoMemory
+                        ? "out of memory"
+                        : "header too large");
+        return false;
+    }
 
     if(m_f_ssl){ _client = static_cast<WiFiClient*>(&clientsecure); if(port == 80) port = 443;}
     else       { _client = static_cast<WiFiClient*>(&client);}
@@ -941,7 +943,7 @@ bool Audio::httpPrint(const char* host) {
             return false;
         }
     }
-    _client->print(rqh);
+    _client->print(requestHeader.get());
 
     if(endsWith(extension, ".mp3"))   m_expectedCodec = CODEC_MP3;
     if(endsWith(extension, ".aac"))   m_expectedCodec = CODEC_AAC;

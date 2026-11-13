@@ -273,6 +273,7 @@ void handleConfigRestore(AsyncWebServerRequest *request);
 void handleConfigRestoreBody(AsyncWebServerRequest *request, uint8_t *data,
                              size_t len, size_t index, size_t total);
 void handleTimeStatus(AsyncWebServerRequest *request);
+void handleVariablesJs(AsyncWebServerRequest *request);
 void handleTimeSync(AsyncWebServerRequest *request);
 void handleSecurityState(AsyncWebServerRequest *request);
 void handleSecuritySetup(AsyncWebServerRequest *request);
@@ -1079,6 +1080,7 @@ bool NetServer::begin(bool quiet) {
   webserver.addHandler(new SecurityHttpAccessGate());
   webserver.addHandler(new WebUpdateRequestGuard());
   webserver.on("/", HTTP_ANY, handleIndex);
+  webserver.on("/variables.js", HTTP_GET, handleVariablesJs);
   webserver.on("/api/stations/export", HTTP_GET, handleStationsExport);
   webserver.on("/api/stations/import", HTTP_POST, handleStationsImport,
                handleStationsImportUpload);
@@ -4279,17 +4281,29 @@ void handleNotFound(AsyncWebServerRequest * request) {
     }
   }// if (request->method() == HTTP_POST)
   
-  if (request->url() == "/variables.js") {
-    const auto presentation = network.presentationSnapshot();
-    const auto webBinding = voxone::first_boot::webBindingFor(presentation);
-    const auto runtime = config.runtimeSnapshot();
-    sprintf (netserver.nsBuf, "var voxOneVersion='%s';\nvar voxOneChannel='%s';\nvar voxOneBuild='%s';\nvar yoRadioVersion='%s';\nvar yoVersion=voxOneVersion;\nvar voxOneProfile='%s';\nvar voxOneAudioPath='%s';\nvar playMode='%s';\n", VOXONE_VERSION, VOXONE_BUILD_CHANNEL, VOXONE_BUILD_SHA, YOVERSION, VOXONE_BUILD_PROFILE, voxone::audio_path::apiName(static_cast<AudioPath>(runtime.audioPath)), webBinding.normalPanel?"player":"ap");
-    request->send(200, "application/javascript", netserver.nsBuf);
-    return;
-  }
   Serial.print("Not Found: ");
   Serial.println(request->url());
   request->send(404, "text/plain", "Not found");
+}
+
+void handleVariablesJs(AsyncWebServerRequest *request) {
+  const auto presentation = network.presentationSnapshot();
+  const auto webBinding = voxone::first_boot::webBindingFor(presentation);
+  const auto runtime = config.runtimeSnapshot();
+  snprintf(
+      netserver.nsBuf, sizeof(netserver.nsBuf),
+      "var voxOneVersion='%s';\nvar voxOneChannel='%s';\n"
+      "var voxOneBuild='%s';\nvar yoRadioVersion='%s';\n"
+      "var yoVersion=voxOneVersion;\nvar voxOneProfile='%s';\n"
+      "var voxOneAudioPath='%s';\nvar playMode='%s';\n",
+      VOXONE_VERSION, VOXONE_BUILD_CHANNEL, VOXONE_BUILD_SHA, YOVERSION,
+      VOXONE_BUILD_PROFILE,
+      voxone::audio_path::apiName(static_cast<AudioPath>(runtime.audioPath)),
+      webBinding.normalPanel ? "player" : "ap");
+  AsyncWebServerResponse* response = request->beginResponse(
+      200, "application/javascript", netserver.nsBuf);
+  response->addHeader("Cache-Control", "no-store, max-age=0");
+  request->send(response);
 }
 
 void handleIndex(AsyncWebServerRequest * request) {
@@ -4307,11 +4321,18 @@ void handleIndex(AsyncWebServerRequest * request) {
   if (request->url() == "/" && webBinding.wifiProvisioning) {
     if (request->method() == HTTP_GET) {
       if (webBinding.page == voxone::first_boot::WebPage::FirstBootSetup) {
-        request->send_P(200, "text/html", first_boot_setup_html,
-                        firstBootTemplateValue);
+        AsyncWebServerResponse* response = request->beginResponse_P(
+            200, "text/html", first_boot_setup_html, firstBootTemplateValue);
+        response->addHeader(
+            "Cache-Control", "no-cache, max-age=0, must-revalidate");
+        request->send(response);
         return;
       }
-      request->send_P(200, "text/html", emptyfs_html);
+      AsyncWebServerResponse* response =
+          request->beginResponse_P(200, "text/html", emptyfs_html);
+      response->addHeader(
+          "Cache-Control", "no-cache, max-age=0, must-revalidate");
+      request->send(response);
       return;
     }
     if (request->method() == HTTP_POST) {
@@ -4439,7 +4460,11 @@ void handleIndex(AsyncWebServerRequest * request) {
     }
 #endif
   if (strcmp(request->url().c_str(), "/") == 0 && request->params() == 0) {
-    request->redirect("/voxone.html");
+    AsyncWebServerResponse* response = request->beginResponse(302);
+    response->addHeader("Location", "/voxone.html");
+    response->addHeader(
+        "Cache-Control", "no-cache, max-age=0, must-revalidate");
+    request->send(response);
     return;
   }
   request->send(404, "text/plain", "Not found");

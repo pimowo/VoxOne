@@ -1997,12 +1997,16 @@ def main():
     pwa_manifest = json.loads(
         (ROOT / "web-src/manifest.json").read_text(encoding="utf-8"))
     sprite = (ROOT / "web-src/sprite.svg").read_text(encoding="utf-8")
+    manifest_icons = {icon["sizes"]: icon for icon in pwa_manifest["icons"]}
     assert pwa_manifest["name"] == "VoxOne" and \
            pwa_manifest["display"] == "standalone" and \
            pwa_manifest["theme_color"] == "#0f1117" and \
-           pwa_manifest["icons"][0]["src"] == "/sprite.svg?v={sprite.svg-hash}", \
+           manifest_icons["192x192"]["type"] == "image/png" and \
+           manifest_icons["512x512"]["type"] == "image/png" and \
+           manifest_icons["any"]["src"] == "/sprite.svg?v={sprite.svg-hash}", \
         "PWA manifest must describe the standalone VoxOne application"
     assert '<link rel="manifest" href="/manifest.json?v={manifest.json-hash}">' in html and \
+           '<link rel="apple-touch-icon" sizes="192x192" href="/icon-192.png?v={icon-192.png-hash}">' in html and \
            '<meta name="theme-color" content="#0f1117">' in html and \
            "serviceWorker" not in html and "serviceWorker" not in \
            (ROOT / "web-src/voxone.js").read_text(encoding="utf-8"), \
@@ -2017,23 +2021,31 @@ def main():
            "quotedSha[0] = '\"';" in web_handlers and \
            'response->addHeader("ETag", etag)' in web_handlers, \
         "static ETags must use quoted SHA-256 records from assets.vxwm"
+    assert "ifNoneMatchMatches" in web_handlers and \
+           "acceptsGzip" in web_handlers and \
+           'response->addHeader("Vary", "Accept-Encoding")' in web_handlers, \
+        "static assets must negotiate gzip and parse conditional ETags"
     assert re.search(
-        r'if \(request->url\(\) == "/variables\.js"\).*?'
-        r'request->send\(200, "application/javascript", netserver\.nsBuf\);',
-        route, re.S), "variables.js must use the JavaScript MIME type"
+        r'webserver\.on\("/variables\.js", HTTP_GET, handleVariablesJs\).*?'
+        r'void handleVariablesJs\(.*?"application/javascript"',
+        route, re.S), "variables.js must be explicit and use the JavaScript MIME type"
+    assert route.count("no-cache, max-age=0, must-revalidate") >= 3, \
+        "root and HTML routes must force cache revalidation"
     assert '"/voxone.html"' in access_policy and \
            'SecurityRouteClass::PublicBootstrap' in access_policy, \
         "login bootstrap assets must remain public in the prepared policy"
     compressed_assets = (
         "advanced-audio.js", "dsp-client.js", "sprite.svg",
-        "manifest.json", "voxone.css", "voxone.html", "voxone.js")
+        "icon-192.png", "icon-512.png", "manifest.json", "voxone.css",
+        "voxone.html", "voxone.js")
     expected_assets = {
         asset: (ROOT / "web-src" / asset).read_bytes()
         for asset in compressed_assets
     }
-    sprite_digest = hashlib.sha256(expected_assets["sprite.svg"]).hexdigest()[:12]
-    expected_assets["manifest.json"] = expected_assets["manifest.json"].replace(
-        b"{sprite.svg-hash}", sprite_digest.encode("ascii"))
+    for asset in ("sprite.svg", "icon-192.png", "icon-512.png"):
+        digest = hashlib.sha256(expected_assets[asset]).hexdigest()[:12]
+        expected_assets["manifest.json"] = expected_assets["manifest.json"].replace(
+            ("{" + asset + "-hash}").encode("ascii"), digest.encode("ascii"))
     generated_html = expected_assets["voxone.html"].decode("utf-8")
     generated_html = re.sub(
         r"[ \t]*<!-- VOXONE_DSP_BEGIN -->\s*(.*?)\s*"

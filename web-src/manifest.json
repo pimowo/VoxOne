@@ -8,6 +8,18 @@
   "theme_color": "#0f1117",
   "icons": [
     {
+      "src": "/icon-192.png?v={icon-192.png-hash}",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/icon-512.png?v={icon-512.png-hash}",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
       "src": "/sprite.svg?v={sprite.svg-hash}",
       "sizes": "any",
       "type": "image/svg+xml",

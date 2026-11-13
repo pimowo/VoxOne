@@ -20,6 +20,7 @@
 */
 #include "ESPAsyncWebServer.h"
 #include "WebHandlerImpl.h"
+#include "http_header_utils.h"
 
 namespace {
 
@@ -150,6 +151,7 @@ bool AsyncStaticWebHandler::canHandle(AsyncWebServerRequest *request){
   ){
     return false;
   }
+  request->addInterestingHeader("Accept-Encoding");
   if (_getFile(request)) {
     // We interested in "If-Modified-Since" header to check if file was modified
     if (_last_modified.length())
@@ -201,10 +203,13 @@ bool AsyncStaticWebHandler::_fileExists(AsyncWebServerRequest *request, const St
 {
   bool fileFound = false;
   bool gzipFound = false;
+  const bool gzipAccepted =
+      !request->hasHeader("Accept-Encoding") ||
+      voxone::http::acceptsGzip(request->header("Accept-Encoding").c_str());
 
   String gzip = path + ".gz";
 
-  if (_gzipFirst) {
+  if (_gzipFirst && gzipAccepted) {
     request->_tempFile = _fs.open(gzip, "r");
     gzipFound = FILE_IS_REAL(request->_tempFile);
     if (!gzipFound){
@@ -214,7 +219,7 @@ bool AsyncStaticWebHandler::_fileExists(AsyncWebServerRequest *request, const St
   } else {
     request->_tempFile = _fs.open(path, "r");
     fileFound = FILE_IS_REAL(request->_tempFile);
-    if (!fileFound){
+    if (!fileFound && gzipAccepted){
       request->_tempFile = _fs.open(gzip, "r");
       gzipFound = FILE_IS_REAL(request->_tempFile);
     }
@@ -226,6 +231,11 @@ bool AsyncStaticWebHandler::_fileExists(AsyncWebServerRequest *request, const St
     // Extract the file name from the path and keep it in _tempObject
     size_t pathLen = path.length();
     char * _tempPath = (char*)malloc(pathLen+1);
+    if (!_tempPath) {
+      request->_tempFile.close();
+      request->_tempObject = NULL;
+      return true;
+    }
     snprintf(_tempPath, pathLen+1, "%s", path.c_str());
     request->_tempObject = (void*)_tempPath;
 
@@ -249,6 +259,14 @@ uint8_t AsyncStaticWebHandler::_countBits(const uint8_t value) const
 
 void AsyncStaticWebHandler::handleRequest(AsyncWebServerRequest *request)
 {
+  if (!request->_tempObject) {
+    request->_tempFile.close();
+    AsyncWebServerResponse* response = request->beginResponse(
+        503, "text/plain; charset=utf-8", "Static asset unavailable");
+    response->addHeader("Cache-Control", "no-store, max-age=0");
+    request->send(response);
+    return;
+  }
   // Get the filename from request->_tempObject and free it
   String filename = String((char*)request->_tempObject);
   free(request->_tempObject);
@@ -259,14 +277,28 @@ void AsyncStaticWebHandler::handleRequest(AsyncWebServerRequest *request)
   if (request->_tempFile == true) {
     String etag;
     manifestEtag(_fs, filename, request->_tempFile.size(), etag);
-    if (_last_modified.length() && _last_modified == request->header("If-Modified-Since")) {
+    const bool hasIfNoneMatch =
+        _cache_control.length() && etag.length() &&
+        request->hasHeader("If-None-Match");
+    const bool etagMatches =
+        hasIfNoneMatch && voxone::http::ifNoneMatchMatches(
+                              request->header("If-None-Match").c_str(),
+                              etag.c_str());
+    if (etagMatches) {
       request->_tempFile.close();
-      request->send(304); // Not modified
-    } else if (_cache_control.length() && etag.length() && request->hasHeader("If-None-Match") && request->header("If-None-Match").equals(etag)) {
-      request->_tempFile.close();
-      AsyncWebServerResponse * response = new AsyncBasicResponse(304); // Not modified
+      AsyncWebServerResponse * response = new AsyncBasicResponse(304);
       response->addHeader("Cache-Control", _cache_control);
       response->addHeader("ETag", etag);
+      response->addHeader("Vary", "Accept-Encoding");
+      request->send(response);
+    } else if (!hasIfNoneMatch && _last_modified.length() &&
+               _last_modified == request->header("If-Modified-Since")) {
+      request->_tempFile.close();
+      AsyncWebServerResponse * response = new AsyncBasicResponse(304);
+      if (_cache_control.length())
+        response->addHeader("Cache-Control", _cache_control);
+      if (etag.length()) response->addHeader("ETag", etag);
+      response->addHeader("Vary", "Accept-Encoding");
       request->send(response);
     } else {
       AsyncWebServerResponse * response = new AsyncFileResponse(request->_tempFile, filename, String(), false, _callback);
@@ -276,6 +308,7 @@ void AsyncStaticWebHandler::handleRequest(AsyncWebServerRequest *request)
         response->addHeader("Cache-Control", _cache_control);
         if (etag.length()) response->addHeader("ETag", etag);
       }
+      response->addHeader("Vary", "Accept-Encoding");
       request->send(response);
     }
   } else {
