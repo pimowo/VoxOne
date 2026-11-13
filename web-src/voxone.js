@@ -2163,23 +2163,18 @@ window.VoxOneRestartWaiter = Object.freeze({
 
   function renderStation() {
     const status = state.webStatus;
-    const external = ["BT", "HA", "DLNA", "AUX"].includes(status?.source);
-    text("status-name-label", external ? "ŹRÓDŁO" : "STACJA");
+    text("status-name-label", "STACJA");
     text("current-station-name", status?.name || "—");
   }
 
   function renderMetadata() {
     const status = state.webStatus;
     const bt = status?.source === "BT";
-    const detailed = bt || status?.source === "HA" || status?.source === "DLNA";
     const connected = !bt || status.btConnected;
-    document.getElementById("metadata").hidden = detailed;
-    document.getElementById("metadata-hint").hidden = detailed;
-    document.getElementById("bt-metadata").hidden = !detailed || !connected;
     document.getElementById("bt-disconnected").hidden = !bt || status.btConnected;
-    text("metadata", status?.metadata || "—");
-    text("bt-artist", detailed && connected && status.artist ? status.artist : "—");
-    text("bt-title", detailed && connected && status.title ? status.title : "—");
+    text("status-artist", connected && status?.artist ? status.artist : "—");
+    text("status-track", connected && (status?.title || status?.metadata) ?
+      (status.title || status.metadata) : "—");
   }
 
   function renderStream() {
@@ -2204,7 +2199,11 @@ window.VoxOneRestartWaiter = Object.freeze({
   function renderSourceSelector() {
     const status = state.webStatus;
     const sources = Array.isArray(status?.availableSources) ? status.availableSources : [];
-    const ids = sources.filter(source => typeof source === "string");
+    const knownSources = ["radio", "bt", "ha", "dlna", "aux"];
+    const supportsAux = ["l0", "m0"].includes(String(state.profile || "").toLowerCase());
+    const ids = sources.filter(source => knownSources.includes(source) &&
+      (source !== "aux" || supportsAux));
+    if (status && supportsAux && !ids.includes("aux")) ids.push("aux");
     const key = ids.join(",");
     if (sourceSelector.dataset.sources !== key) {
       sourceSelector.replaceChildren(...ids.map(source => {
@@ -2237,6 +2236,7 @@ window.VoxOneRestartWaiter = Object.freeze({
     const playback = status?.playback || "";
     const bt = status?.source === "BT";
     buttons.play.textContent = !playback ? "—" : playback === "PLAY" ? (bt ? "❚❚" : "■") : "▶";
+    buttons.play.classList.toggle("is-stop", playback === "PLAY" && !bt);
     buttons.play.setAttribute("aria-label", !playback ? "Stan odtwarzania niedostępny" :
       playback === "PLAY" ? (bt ? "Pauza" : "Zatrzymaj") : "Odtwarzaj");
     text("playback-state", bt && !status.btConnected ? "Brak połączenia" : playback || "—");

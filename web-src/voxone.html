@@ -106,16 +106,22 @@
       <section id="status" data-panel aria-labelledby="status-title">
         <div class="section-heading"><div><p class="eyebrow">ODTWARZANIE</p><h2 id="status-title">Status VoxOne</h2></div><span class="badge" id="ws-state" role="status" aria-live="polite" data-state="connecting">Łączenie...</span></div>
         <article class="card hero">
-          <span class="label" id="status-name-label">STACJA</span><h3 id="current-station-name">—</h3>
-          <p class="track" id="metadata">—</p>
-          <div id="bt-metadata" class="status-metadata" hidden>
-            <div class="status-metadata-field"><span class="status-metadata-label">Artysta</span><p class="track" id="bt-artist">—</p></div>
-            <div class="status-metadata-field"><span class="status-metadata-label">Utwór</span><p class="track" id="bt-title">—</p></div>
+          <div class="status-metadata" aria-label="Metadane odtwarzania">
+            <div class="status-station-row"><span class="label" id="status-name-label">STACJA</span><h3 id="current-station-name">—</h3></div>
+            <div class="status-metadata-row"><span class="status-metadata-label">ARTYSTA</span><p class="track" id="status-artist">—</p></div>
+            <div class="status-metadata-row"><span class="status-metadata-label">UTWÓR</span><p class="track" id="status-track">—</p></div>
           </div>
           <p class="track" id="bt-disconnected" hidden>Brak połączenia z telefonem.</p>
-          <p class="hint" id="metadata-hint">Metadata z bieżącego strumienia.</p>
-          <p class="hint" id="playback-state" aria-live="polite">—</p>
-          <div id="source-selector" class="source-selector" role="group" aria-label="Wybór źródła"></div>
+          <div class="status-control-row">
+            <div class="status-control-tile status-source-tile">
+              <span class="status-control-label">ŹRÓDŁO</span>
+              <div id="source-selector" class="source-selector" role="group" aria-label="Wybór źródła"></div>
+            </div>
+            <div class="status-control-tile status-playback-tile">
+              <span class="status-control-label">STAN</span>
+              <p id="playback-state" aria-live="polite">—</p>
+            </div>
+          </div>
           <div class="transport" aria-label="Sterowanie odtwarzaniem">
             <button type="button" id="prev-button" disabled aria-label="Poprzednia stacja">‹‹</button>
             <button type="button" id="play-button" disabled class="primary" aria-label="Stan odtwarzania niedostępny">—</button>

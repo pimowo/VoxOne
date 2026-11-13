@@ -773,16 +773,17 @@ setTimeout(async () => {
       playback:'STOP', transport:'stopped', volume100:41, muted:false
     }));
     check(get('current-station-name').textContent === 'Radio A', 'RADIO station from snapshot');
-    check(get('metadata').textContent === 'Artysta - Utwór', 'RADIO ICY metadata from snapshot');
+    check(get('status-artist').textContent === 'Artysta' &&
+      get('status-track').textContent === 'Utwór', 'RADIO metadata uses separate artist and track rows');
     check(get('playback-state').textContent === 'STOP', 'RADIO stopped snapshot');
     btTestSocket.receive(sourceSnapshot('DLNA', ['radio','bt'], true, {
       name:'DLNA', artist:'DLNA Artysta', title:'DLNA Utwór', codec:'MP3',
       playback:'PLAY', transport:'playing', bitrate:320
     }));
-    check(get('status-name-label').textContent === 'ŹRÓDŁO' &&
+    check(get('status-name-label').textContent === 'STACJA' &&
       get('current-station-name').textContent === 'DLNA' &&
-      get('bt-artist').textContent === 'DLNA Artysta' &&
-      get('bt-title').textContent === 'DLNA Utwór' &&
+      get('status-artist').textContent === 'DLNA Artysta' &&
+      get('status-track').textContent === 'DLNA Utwór' &&
       get('source').textContent === 'DLNA' &&
       get('playback-state').textContent === 'PLAY',
       'DLNA snapshot shows source metadata and playback');
@@ -791,13 +792,13 @@ setTimeout(async () => {
       playback:'PLAY', transport:'playing', codec:'', bitrate:0
     }));
     check(get('current-station-name').textContent === 'Home Assistant' &&
-      get('bt-artist').textContent === 'TTS' &&
-      get('bt-title').textContent === 'Powiadomienie' &&
+      get('status-artist').textContent === 'TTS' &&
+      get('status-track').textContent === 'Powiadomienie' &&
       get('source').textContent === 'HA', 'HA snapshot is accepted');
     btTestSocket.receive(sourceSnapshot('AUX', ['radio','bt'], true, {
       name:'AUX', playback:'PLAY', transport:'playing', codec:'', bitrate:0
     }));
-    check(get('status-name-label').textContent === 'ŹRÓDŁO' &&
+    check(get('status-name-label').textContent === 'STACJA' &&
       get('current-station-name').textContent === 'AUX' &&
       get('source').textContent === 'AUX', 'future AUX snapshot is accepted');
     btTestSocket.receive(sourceSnapshot('WEB', ['radio','bt','ha','dlna','aux'], true, {
@@ -826,12 +827,11 @@ setTimeout(async () => {
     }));
     check(sourceButton('bt').getAttribute('aria-pressed') === 'true', 'BT active from device');
     check(get('current-station-name').textContent === 'Telefon' &&
-      get('bt-artist').textContent.includes('BT Artysta') && get('bt-title').textContent.includes('BT Utwór'),
+      get('status-artist').textContent.includes('BT Artysta') && get('status-track').textContent.includes('BT Utwór'),
       'BT AVRCP metadata replaces RADIO metadata');
-    check(get('metadata').hidden && !get('bt-metadata').hidden &&
-      [...get('bt-metadata').querySelectorAll('.status-metadata-label')]
-        .map(node => node.textContent).join(',') === 'Artysta,Utwór' &&
-      get('playback-state').textContent === 'PLAY', 'BT metadata fields and playback');
+    check([...document.querySelectorAll('.status-metadata .status-metadata-label')]
+        .map(node => node.textContent).join(',') === 'ARTYSTA,UTWÓR' &&
+      get('playback-state').textContent === 'PLAY', 'shared metadata rows and BT playback');
     btTestSocket.receive({source:'BT', btConnected:false});
     check(get('bt-disconnected').hidden && get('playback-state').textContent === 'PLAY',
       'incomplete status cannot imply BT disconnect; complete webStatus is atomic');
@@ -840,8 +840,8 @@ setTimeout(async () => {
       btConnected:true, playback:'PAUZA', transport:'paused'
     }));
     check(get('playback-state').textContent === 'PAUZA' &&
-      !get('bt-artist').textContent.includes('BT Artysta') &&
-      !get('bt-title').textContent.includes('BT Utwór'), 'BT pause and metadata clear');
+      !get('status-artist').textContent.includes('BT Artysta') &&
+      !get('status-track').textContent.includes('BT Utwór'), 'BT pause and metadata clear');
     btTestSocket.receive(sourceSnapshot('BT', ['radio','bt'], true, {
       name:'Bluetooth', codec:'', bitrate:0, btConnected:false, playback:'', transport:'unavailable'
     }));
@@ -851,7 +851,7 @@ setTimeout(async () => {
     check(btTestSocket.sent.at(-1) === 'source=radio', 'manual RADIO command');
     btTestSocket.receive(sourceSnapshot('WEB', ['radio','bt'], true));
     check(sourceButton('radio').getAttribute('aria-pressed') === 'true', 'RADIO active from device');
-    check(!get('metadata').hidden && get('metadata').textContent === '—' &&
+    check(get('status-artist').textContent === '—' && get('status-track').textContent === '—' &&
       get('playback-state').textContent === 'PLAY', 'RADIO return has no stale BT metadata');
     btTestSocket.receiveVolume(32, true);
     check(get('volume').textContent === '32' && muteButtons.every(button => button.getAttribute('aria-pressed') === 'true'),
@@ -859,8 +859,8 @@ setTimeout(async () => {
     btTestSocket.receive(sourceSnapshot('WEB', ['radio','bt'], false));
     check(sourceButton('bt').disabled && sourceButton('bt').textContent.includes('offline'), 'BT offline shown');
     btTestSocket.receive(sourceSnapshot('WEB', ['radio','ha','dlna'], false));
-    check(selector.querySelectorAll('button').length === 3 && !sourceButton('bt') &&
-      !sourceButton('aux'), 'target without BT or AUX keeps core network sources');
+    check(selector.querySelectorAll('button').length === 4 && !sourceButton('bt') &&
+      sourceButton('aux'), 'L0 profile keeps capability-gated AUX with core network sources');
     check(!btTestSocket.sent.some(item => /^(webtransport|stop)=/.test(item)), 'source selection sends no transport');
     const icon = document.querySelector('link[rel="icon"]');
     const headerBrand = document.querySelector('.topbar .brand .brand-logo');
@@ -878,6 +878,19 @@ setTimeout(async () => {
       footer.children[1].textContent === 'Support: pmw.voxone@gmail.com' &&
       footer.children[1].getAttribute('href') === 'mailto:pmw.voxone@gmail.com' &&
       !get('footer-details') && !get('footer-connection'), 'static support footer without runtime identity');
+    const statusControlRow = document.querySelector('.status-control-row');
+    const transport = document.querySelector('.transport');
+    check(getComputedStyle(statusControlRow).display === 'flex' &&
+      statusControlRow.lastElementChild.classList.contains('status-playback-tile'),
+      'source and playback tiles share one flex row with playback on the right');
+    check(getComputedStyle(transport).justifyContent === 'center' &&
+      get('play-button').classList.contains('is-stop') &&
+      get('play-button').getAttribute('aria-label') === 'Zatrzymaj',
+      'transport is centered and playing radio uses the square Stop variant');
+    check(getComputedStyle(footer).flexDirection === 'column' &&
+      getComputedStyle(footer).alignItems === 'center' &&
+      getComputedStyle(footer).textAlign === 'center',
+      'support footer remains centered in two rows');
     const stationTransfer = document.querySelector('.station-transfer-actions');
     check(stationTransfer?.contains(get('station-import')) && stationTransfer.contains(get('station-export')) &&
       get('station-import').textContent === 'Import listy' &&
