@@ -13,6 +13,7 @@
 #include "../../core/network.h"   //  for Clock widget
 #include "../../core/config.h"
 #include "../../core/source_vu_state.h"
+#include "../../core/vu_frame_limiter.h"
 #include "../tools/l10n.h"
 #include "../tools/psframebuffer.h"
 
@@ -500,7 +501,7 @@ void SliderWidget::_reset() {
  ************************/
 #if !defined(DSP_OLED)
 VuWidget::~VuWidget() {
-  if(_canvas) free(_canvas);
+  delete _canvas;
 }
 
 void VuWidget::init(WidgetConfig wconf, VUBandsConfig bands, uint16_t vumaxcolor, uint16_t vumincolor, uint16_t bgcolor) {
@@ -508,12 +509,18 @@ void VuWidget::init(WidgetConfig wconf, VUBandsConfig bands, uint16_t vumaxcolor
   _vumaxcolor = vumaxcolor;
   _vumincolor = vumincolor;
   _bands = bands;
-  _canvas = new Canvas(_bands.width * 2 + _bands.space, _bands.height);
+  _canvas = new (std::nothrow)
+      Canvas(_bands.width * 2 + _bands.space, _bands.height);
+  if (!_canvas || !_canvas->getBuffer()) {
+    delete _canvas;
+    _canvas = nullptr;
+    markUnavailable();
+  }
 }
 
 
 void VuWidget::_draw(){
-  if(!_active || _locked) return;
+  if(!_active || _locked || !_canvas || !_canvas->getBuffer()) return;
   // VU is a full-frame bitmap.  Do not inherit a text widget's clipping
   // rectangle, otherwise only part of the old meter gets overwritten.
   dsp.clearClipping();
@@ -593,7 +600,11 @@ void VuWidget::_draw(){
 }
 
 void VuWidget::loop(){
-  if(_active && !_locked) _draw();
+  if (!_active || _locked || !_canvas) return;
+  const uint32_t now = millis();
+  if (!voxone::vu::frameDue(now, _lastDrawMs)) return;
+  _lastDrawMs = now;
+  _draw();
 }
 
 void VuWidget::_clear(){

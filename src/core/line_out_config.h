@@ -12,6 +12,15 @@ namespace line_out {
 constexpr bool kDefaultEnabled = false;
 constexpr uint8_t kDefaultVolume = 100;
 
+inline uint8_t maximumOrDefault(uint8_t maximum) {
+  return maximum >= 1 && maximum <= 100 ? maximum : 100;
+}
+
+inline uint8_t clampToMaximum(uint8_t volume, uint8_t maximum) {
+  const uint8_t boundedMaximum = maximumOrDefault(maximum);
+  return volume > boundedMaximum ? boundedMaximum : volume;
+}
+
 // Config v7 has a frozen 255-byte wire format. Keep LINE OUT in the retired
 // weather area after the other optional, versioned runtime records.
 constexpr size_t kOffset = encoder_ui::kOffset + encoder_ui::kEncodedBytes;

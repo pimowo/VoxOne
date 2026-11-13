@@ -187,7 +187,14 @@ bool CommandHandler::exec(const char *command, const char *value, uint32_t cid) 
 
   if (strEquals(command, "reboot"))  { requestSystemRestart(); return true; }
 
-  if (strEquals(command, "vumeter"))   { config.saveValue(&config.store.vumeter, static_cast<bool>(atoi(value))); display.putRequest(SHOWVUMETER); netserver.requestOnChange(GETSYSTEM, 0); return true; }
+  if (strEquals(command, "vumeter")) {
+    if (!value || (strcmp(value, "0") != 0 && strcmp(value, "1") != 0) ||
+        !config.setVuMeter(value[0] == '1'))
+      return false;
+    display.putRequest(SHOWVUMETER);
+    netserver.requestOnChange(GETSYSTEM, 0);
+    return true;
+  }
   if (strEquals(command, "hadiscovery")) {
     config.saveValue(&config.store.haDiscoveryEnabled, static_cast<bool>(atoi(value)));
     netserver.requestOnChange(GETSYSTEM, 0);

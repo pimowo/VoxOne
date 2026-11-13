@@ -1,4 +1,5 @@
 #include "ui_menu.h"
+#include "line_out_config.h"
 
 #include <stddef.h>
 #include <stdio.h>
@@ -667,12 +668,9 @@ MenuAction UiMenu::handle(MenuCommand command, int8_t steps) {
       case MenuSetting::LINE_OUT_VOLUME: {
         int16_t value = draft.lineOutVolume + direction * magnitude * 5;
         if (value < 0) value = 0;
-        const uint8_t maximum = draft.maximumVolume >= 1 &&
-                                        draft.maximumVolume <= 100
-                                    ? draft.maximumVolume
-                                    : 100;
-        if (value > maximum) value = maximum;
-        draft.lineOutVolume = static_cast<uint8_t>(value);
+        if (value > 100) value = 100;
+        draft.lineOutVolume = voxone::line_out::clampToMaximum(
+            static_cast<uint8_t>(value), draft.maximumVolume);
         break;
       }
       case MenuSetting::DISPLAY_BRIGHTNESS: {

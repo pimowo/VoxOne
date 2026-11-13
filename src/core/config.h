@@ -197,6 +197,7 @@ class Config {
     bool setEncoderUiReversed(bool reversed);
     bool setLineOutEnabled(bool enabled);
     bool setLineOutVolume(uint8_t volume);
+    bool setVuMeter(bool enabled);
     bool setAudioPath(AudioPath path);
     void beginMenuTransaction();
     void previewMenuSettings(const voxone::ui_menu::MenuSettings& settings);

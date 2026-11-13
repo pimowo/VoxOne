@@ -17,6 +17,10 @@ int main() {
   assert(voxone::line_out::decode(storage, sizeof(storage), enabled, volume));
   assert(enabled && volume == 80);
   assert(!voxone::line_out::encode(true, 101, storage, sizeof(storage)));
+  assert(voxone::line_out::maximumOrDefault(80) == 80);
+  assert(voxone::line_out::maximumOrDefault(0) == 100);
+  assert(voxone::line_out::clampToMaximum(100, 80) == 80);
+  assert(voxone::line_out::clampToMaximum(75, 80) == 75);
 
   voxone::config_runtime::Snapshot runtime{};
   runtime.volume = 25;
@@ -27,12 +31,13 @@ int main() {
   runtime.lineOutEnabled = true;
   runtime.lineOutVolume = 100;
   assert(voxone::line_out::effectiveRawVolume(runtime) ==
-         volumeUserToRaw(100, 80));
-  assert(voxone::line_out::effectiveUserVolume(runtime) == 100);
+         volumeUserToRaw(80, 80));
+  assert(voxone::line_out::effectiveUserVolume(runtime) == 80);
   runtime.maximumVolume = 1;
   runtime.lineOutVolume = 75;
   assert(voxone::line_out::effectiveRawVolume(runtime) ==
-         volumeUserToRaw(75, 1));
+         volumeUserToRaw(1, 1));
+  assert(voxone::line_out::effectiveUserVolume(runtime) == 1);
 
   const UiInputContext normal{PLAYER, true, true, false, false, false,
                               false, SourceId::Web, false, false};

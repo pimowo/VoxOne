@@ -755,6 +755,15 @@ setTimeout(async () => {
     check(btTestSocket.sent.at(-1) === 'lineoutvolume=85', 'LINE OUT fixed level command');
     btTestSocket.receiveVolume(27, true, true, 85);
     check(get('line-out-volume-value').textContent === '85%', 'LINE OUT level ack');
+    const maximumVolumeSlider = get('maximum-volume-slider');
+    maximumVolumeSlider.value = '60';
+    maximumVolumeSlider.dispatchEvent(new Event('input'));
+    check(lineOutSlider.max === '60' && lineOutSlider.value === '60' &&
+      get('line-out-volume-value').textContent === '60%',
+      'global maximum immediately caps the LINE OUT slider preview');
+    maximumVolumeSlider.dispatchEvent(new Event('change'));
+    check(btTestSocket.sent.at(-1) === 'maximumvolume=60',
+      'global maximum command preserves the shared LINE OUT limit');
     btTestSocket.receiveVolume(27, true, true, 60, 60);
     check(lineOutSlider.max === '60' && lineOutSlider.value === '60',
       'LINE OUT fixed level is capped by global maximum');

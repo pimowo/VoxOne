@@ -197,7 +197,8 @@ class VuWidget: public Widget {
     void loop();
   protected:
     #if !defined(DSP_OLED)
-      Canvas *_canvas;
+      Canvas *_canvas = nullptr;
+      uint32_t _lastDrawMs = 0;
     #endif
     VUBandsConfig _bands;
     uint16_t _vumaxcolor, _vumincolor;

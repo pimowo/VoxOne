@@ -143,6 +143,20 @@ void auditProductionWiring() {
   const size_t vuBroadcast = commands.find("requestOnChange(GETSYSTEM, 0)",
                                            vuCommand);
   assert(vuCommand != std::string::npos && vuBroadcast != std::string::npos);
+  const std::string vuCommandBlock = commands.substr(
+      vuCommand, vuBroadcast + strlen("requestOnChange(GETSYSTEM, 0)") -
+                     vuCommand);
+  assert(vuCommandBlock.find("config.setVuMeter") != std::string::npos);
+  assert(vuCommandBlock.find("config.saveValue") == std::string::npos);
+
+  const std::string config = readFile("src/core/config.cpp");
+  const size_t vuSetter = config.find("bool Config::setVuMeter");
+  const size_t nextSetter = config.find("bool Config::setAudioPath", vuSetter);
+  assert(vuSetter != std::string::npos && nextSetter != std::string::npos);
+  const std::string vuSetterBlock = config.substr(vuSetter,
+                                                   nextSetter - vuSetter);
+  assert(vuSetterBlock.find("_pendingConfigSave.store") != std::string::npos);
+  assert(vuSetterBlock.find("persistV7") == std::string::npos);
 
   const std::string server = readFile("src/core/netserver.cpp");
   assert(server.find("\"{\\\"sst\\\":%d,\\\"vu\\\":%d,\\\"canVu\\\":%d") !=

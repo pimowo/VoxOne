@@ -286,9 +286,12 @@ void Config::init() {
   Serial.printf("[CONFIG] %s\n", voxone::config_format::configStartupMessage(loaded.status));
   bootInfo(); // https://github.com/e2002/yoradio/pull/149
   const bool migratingVolume = loaded.migratingVolume;
-  if (store.maximumVolume < 1 || store.maximumVolume > 100) store.maximumVolume = 100;
-  if (store.lineOutVolume > store.maximumVolume) {
-    store.lineOutVolume = store.maximumVolume;
+  store.maximumVolume = voxone::line_out::maximumOrDefault(
+      store.maximumVolume);
+  const uint8_t boundedLineOut = voxone::line_out::clampToMaximum(
+      store.lineOutVolume, store.maximumVolume);
+  if (store.lineOutVolume != boundedLineOut) {
+    store.lineOutVolume = boundedLineOut;
     voxone::line_out::encode(store.lineOutEnabled, store.lineOutVolume,
                              store.reservedWeather,
                              sizeof(store.reservedWeather));
@@ -704,7 +707,6 @@ bool Config::setLineOutEnabled(bool enabled) {
 bool Config::setLineOutVolume(uint8_t volume) {
   if (volume > 100) return false;
   bool enabled = false;
-  bool persisted = true;
   {
     WriteLock lock(_persistMutex);
     if (volume > store.maximumVolume) return false;
@@ -717,9 +719,9 @@ bool Config::setLineOutVolume(uint8_t volume) {
     enabled = store.lineOutEnabled;
     _storage.markDirty();
     _publishRuntimeLocked();
-    persisted = !_startupReadOnly && persistV7();
+    if (_startupReadOnly) return false;
+    _pendingConfigSave.store(true, std::memory_order_release);
   }
-  if (!persisted) return false;
   if (enabled) {
     player.applyCurrentVolume();
 #if VOXONE_HAS_BT && VOXONE_PIN_MAP_COMPLETE
@@ -728,6 +730,18 @@ bool Config::setLineOutVolume(uint8_t volume) {
     display.putRequest(DRAWVOL);
   }
   netserver.requestOnChange(VOLUME, 0);
+  return true;
+}
+
+bool Config::setVuMeter(bool enabled) {
+  WriteLock lock(_persistMutex);
+  if (store.vumeter == enabled) return true;
+  _storage.update(store.vumeter, enabled);
+  _publishRuntimeLocked();
+  if (_startupReadOnly) return false;
+  // WebSocket commands execute on async_tcp. EEPROM/NVS commits use a deep
+  // flash stack and must stay on loopTask, where servicePendingSave() runs.
+  _pendingConfigSave.store(true, std::memory_order_release);
   return true;
 }
 
@@ -1057,21 +1071,25 @@ uint8_t Config::applyConfiguredStartupVolume() {
 
 void Config::setMaximumVolume(uint8_t maximum) {
   WriteLock lock(_persistMutex);
-  if (maximum < 1 || maximum > 100 || maximum == store.maximumVolume) return;
+  if (maximum < 1 || maximum > 100) return;
   const uint8_t oldMaximum = store.maximumVolume;
+  const uint8_t boundedLineOut = voxone::line_out::clampToMaximum(
+      store.lineOutVolume, maximum);
+  if (maximum == oldMaximum && boundedLineOut == store.lineOutVolume) return;
   portENTER_CRITICAL(&playerVolumeMux);
   const uint8_t oldUser = userVolume;
   portEXIT_CRITICAL(&playerVolumeMux);
   const uint8_t oldRaw = player.pendingRawAtMax(oldMaximum);
   const uint8_t oldOutput = player.volToI2S(oldRaw);
   store.maximumVolume = maximum;
-  if (store.lineOutVolume > maximum) {
-    store.lineOutVolume = maximum;
-    voxone::line_out::encode(store.lineOutEnabled, store.lineOutVolume,
-                             store.reservedWeather,
-                             sizeof(store.reservedWeather));
-    _storage.markDirty();
+  if (store.lineOutVolume != boundedLineOut) {
+    if (!voxone::line_out::encode(
+            store.lineOutEnabled, boundedLineOut, store.reservedWeather,
+            sizeof(store.reservedWeather)))
+      return;
+    store.lineOutVolume = boundedLineOut;
   }
+  _storage.markDirty();
   VolumeState adjusted = volumeStateAfterMaximum({oldRaw, oldUser}, oldMaximum, maximum);
   if (maximum > oldMaximum) {
     adjusted.raw = player.rawNotLouderThan(adjusted.raw, maximum, oldOutput);

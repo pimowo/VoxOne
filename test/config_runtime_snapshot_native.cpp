@@ -230,9 +230,15 @@ void testProductionBindings() {
   const std::string lineOutEnabled = section(
       configSource, "bool Config::setLineOutEnabled",
       "bool Config::setLineOutVolume");
+  const std::string lineOutVolume = section(
+      configSource, "bool Config::setLineOutVolume",
+      "bool Config::setVuMeter");
   assert(lineOutEnabled.find("_pendingConfigSave.store") !=
          std::string::npos);
   assert(lineOutEnabled.find("persistV7") == std::string::npos);
+  assert(lineOutVolume.find("_pendingConfigSave.store") !=
+         std::string::npos);
+  assert(lineOutVolume.find("persistV7") == std::string::npos);
   assert(configSource.find("void Config::servicePendingSave()") !=
          std::string::npos);
   assert(main.find("config.servicePendingSave();") != std::string::npos);

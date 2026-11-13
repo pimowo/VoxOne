@@ -3522,7 +3522,14 @@ window.VoxOneRestartWaiter = Object.freeze({
 
   maximumVolumeSlider.addEventListener("input", () => {
     if (maximumVolumeSlider.disabled) return;
+    const maximum = Number(maximumVolumeSlider.value);
     maximumVolumeValue.textContent = maximumVolumeSlider.value;
+    if (Number.isInteger(maximum) && maximum >= 1 && maximum <= 100) {
+      lineOutVolumeSlider.max = String(maximum);
+      const lineOutPreview = Math.min(Number(lineOutVolumeSlider.value), maximum);
+      lineOutVolumeSlider.value = String(lineOutPreview);
+      lineOutVolumeValue.textContent = String(lineOutPreview) + "%";
+    }
   });
   maximumVolumeSlider.addEventListener("change", () => {
     if (maximumVolumeSlider.disabled) return;
