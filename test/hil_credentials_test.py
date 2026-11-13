@@ -26,7 +26,6 @@ class HilCredentialsTest(unittest.TestCase):
         path.write_text(json.dumps({
             "version": 1,
             "voxone": {
-                "W0": {"www_admin_password": ""},
                 "M0": {"www_admin_password": password},
                 "L0": {"www_admin_password": ""},
             },

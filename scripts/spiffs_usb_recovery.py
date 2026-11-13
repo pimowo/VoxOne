@@ -78,9 +78,7 @@ class ProfileSpec(NamedTuple):
 
 
 PROFILE_SPECS = {
-    "W0": ProfileSpec("W0", "esp32", 4 * 1024 * 1024,
-                      ROOT / "partitions_yoradio.csv"),
-    "M0": ProfileSpec("M0", "esp32s3", 4 * 1024 * 1024,
+    "M0": ProfileSpec("M0", "esp32s3", 16 * 1024 * 1024,
                       ROOT / "partitions_yoradio.csv"),
     "S0": ProfileSpec("S0", "esp32s3", 4 * 1024 * 1024,
                       ROOT / "partitions_yoradio.csv"),

@@ -43,8 +43,8 @@
       "controlLinesConfidence": "UNVERIFIED"
     },
     {
-      "name": "M0_NATIVE",
-      "target": "M0 ESP32-S3 Zero",
+      "name": "S0_NATIVE",
+      "target": "S0 ESP32-S3 Zero",
       "usbRole": "ESP32-S3 native USB Serial/JTAG",
       "vid": "303a",
       "pid": "1001",

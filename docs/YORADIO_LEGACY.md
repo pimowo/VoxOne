@@ -16,15 +16,15 @@ Aktywne profile i capabilities opisuje teraz
 | Moduł / plik | Obecna rola | VoxOne używa? | Przyszłość | Akcja |
 |---|---|---|---|---|
 | src/audioI2S/Audio.cpp, AudioEx.h | Strumień i dekodowanie radia przez I2S, współpraca z Player | Tak, aktualny PCM5102A | Zachować tor i wydzielić wybór backendu sprzętowego w późniejszym etapie | REFACTOR |
-| src/audioVS1053/ | Alternatywny dekoder/wyjście VS1053 | Nie na l0/m0/s0/din0/w0: VS1053_CS=255, Player wybiera I2S | Zweryfikować użycie poza aktywnymi targetami i zależności przed usunięciem | UNKNOWN |
-| src/displays/displayST7789.*, displayST7796.* | Aktywne sterowniki LCD W0 i L0 | Tak | Zachować zachowanie; później podłączyć do DisplayManager | REFACTOR |
-| src/displays/dspcore.h, widgets/, conf/, fonts/ | Wybór DspCore według DSP_MODEL, widżety i układy LCD | Tak | Oddzielić driver od renderera; utrzymać układy W0/L0 | REFACTOR |
+| src/audioVS1053/ | Alternatywny dekoder/wyjście VS1053 | Nie na l0/m0/s0/din0: VS1053_CS=255, Player wybiera I2S | Zweryfikować użycie poza aktywnymi targetami i zależności przed usunięciem | UNKNOWN |
+| src/displays/displayST7789.*, displayST7796.* | Sterowniki LCD; ST7796 aktywny w L0 | Tak | Zachować zachowanie; później podłączyć do DisplayManager | REFACTOR |
+| src/displays/dspcore.h, widgets/, conf/, fonts/ | Wybór DspCore według DSP_MODEL, widżety i układy LCD | Tak | Oddzielić driver od renderera; utrzymać układ L0 | REFACTOR |
 | src/displays/displaySSD1306.* | Dawny sterownik jednego backendu OLED | Nieaktywny w M0/S0/DIN0: wybór SSD1306/SSD1309 obsługuje `displayOLED128x64Runtime.*` | Zweryfikować zależności przed decyzją o usunięciu dawnego sterownika | UNKNOWN |
-| Pozostałe src/displays/display*.cpp i src/SSD1322/, src/ST7920/, src/LiquidCrystalI2C/, src/ILI9488/ | Warianty wyświetlaczy zależne od DSP_MODEL | Nie wybrane przez l0/m0/s0/din0/w0; część może być potrzebna do przyszłych LCD | Sprawdzić zależności i koszt buildów, nie usuwać na podstawie nazwy | UNKNOWN |
+| Pozostałe src/displays/display*.cpp i src/SSD1322/, src/ST7920/, src/LiquidCrystalI2C/, src/ILI9488/ | Warianty wyświetlaczy zależne od DSP_MODEL | Nie wybrane przez l0/m0/s0/din0; część może być potrzebna do przyszłych LCD | Sprawdzić zależności i koszt buildów, nie usuwać na podstawie nazwy | UNKNOWN |
 | src/displays/nextion.* | Legacy Nextion, kompilowane przy USE_NEXTION | Nie w obecnych profilach; Config i CLI nadal mają ślady kompatybilności | Ustalić, czy istnieje wspierane urządzenie/kontrakt | UNKNOWN |
 | src/yoEncoder/ | Odczyt enkodera | Tak, przez controls.cpp | Zachować zachowanie gestów; później przekazać piny z deskryptora PCB | REFACTOR |
 | src/OneButton/ | Obsługa przycisków/gestów | Tak, przez warstwę controls | Zachować timing i testy sterowania | KEEP |
-| profiles/, myoptions.h | Wybór l0/m0/s0/din0/w0 i piny; myoptions.h ładuje profile.h | Tak, każdy build | Oddzielić PCB od runtime/capabilities w CLEANUP-1B i później | REFACTOR |
+| profiles/, myoptions.h | Wybór l0/m0/s0/din0 i piny; myoptions.h ładuje profile.h | Tak, każdy build | Oddzielić PCB od runtime/capabilities w CLEANUP-1B i później | REFACTOR |
 | src/core/options.h, DSP_MODEL, stare define | Domyślne piny i ścieżki wariantów yoRadio | Tak, szeroko w core i display | Zastępować stopniowo deskryptorem; DSP_MODEL oznacza LCD, nie audio DSP | REFACTOR |
 | src/core/options.h: YOVERSION | Informacja o bazie yoRadio 0.9.720 | Tak: bootlog, Serial CLI, Nextion i zmienna yoRadioVersion WWW | Zachować atrybucję; później oddzielić ją od wersji produktu | REFACTOR |
 | src/core/version.h: VOXONE_VERSION | Wersja produktu 0.8.0 | Tak: WWW, bootlog, User-Agent i nazwy artefaktów | Pozostawić osobnym źródłem prawdy VoxOne | KEEP |

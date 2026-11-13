@@ -152,7 +152,8 @@ class FullImageValidationIntegrationTest(unittest.TestCase):
             assert BUILD_ROOT is not None
             foreign = BUILD_ROOT / "m0" / "firmware.bin"
             with self.assertRaisesRegex(
-                ValidationError, "profile identity|ELF SHA256|manifest"
+                ValidationError,
+                "flash size/frequency header|profile identity|ELF SHA256|manifest",
             ):
                 self.validate(
                     "S0", temporary, components={"firmware": foreign}

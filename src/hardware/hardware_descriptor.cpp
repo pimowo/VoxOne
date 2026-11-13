@@ -10,27 +10,7 @@ constexpr char kProfileIdentity[] =
 constexpr unsigned kProfileIdentityPrefixLength =
     sizeof(kProfileIdentityPrefix) - 1;
 
-#if defined(VOXONE_PROFILE_W0)
-constexpr BoardId kBoardId = BoardId::BoardW0;
-constexpr char kBoardFamily = 'W';
-constexpr DisplayKind kDisplayKind = DisplayKind::St7789_284x76;
-// The W0 profile does not state its default SPI bus pins.
-constexpr SpiBusPins kSpi = {kNoPin, kNoPin, kNoPin};
-constexpr I2cBusConfig kI2c = {kNoPin, kNoPin, 400000UL, 0x3C};
-constexpr RtcKind kRtcKind = RtcKind::None;
-constexpr UartPins kBtUart = {kNoPin, kNoPin};
-constexpr Pin kBacklight = kNoPin;
-constexpr Pin kDacXsmt = kNoPin;
-constexpr uint32_t kFlashBytes = 0;
-constexpr uint32_t kPsramBytes = 0;
-constexpr HardwareCapabilities kCapabilities = {
-  displaySupport(DisplayKind::St7789_284x76),
-  audioOutputSupport(AudioOutputKind::Pcm5102a),
-  inputSupport(LocalInputKind::Ec11) | inputSupport(LocalInputKind::Buttons3),
-  true, false, false, false, false, false, false, false, false,
-  bool(VOXONE_INCLUDE_DSP), false, false, false, false, false, false, false
-};
-#elif defined(VOXONE_PROFILE_M0)
+#if defined(VOXONE_PROFILE_M0)
 constexpr BoardId kBoardId = BoardId::BoardM0;
 constexpr char kBoardFamily = 'M';
 constexpr DisplayKind kDisplayKind = DisplayKind::Ssd1306_128x64;
@@ -41,8 +21,6 @@ constexpr RtcKind kRtcKind = RtcKind::None;
 constexpr UartPins kBtUart = {kNoPin, kNoPin};
 constexpr Pin kBacklight = kNoPin;
 constexpr Pin kDacXsmt = kNoPin;
-constexpr uint32_t kFlashBytes = 4u * 1024u * 1024u;
-constexpr uint32_t kPsramBytes = 2u * 1024u * 1024u;
 constexpr HardwareCapabilities kCapabilities = {
   displaySupport(DisplayKind::Ssd1306_128x64) |
       displaySupport(DisplayKind::Ssd1309_128x64) |
@@ -69,8 +47,6 @@ constexpr UartPins kBtUart = {fromLegacyPin(VOXONE_BT_UART_RX_PIN),
                                fromLegacyPin(VOXONE_BT_UART_TX_PIN)};
 constexpr Pin kBacklight = kNoPin;
 constexpr Pin kDacXsmt = kNoPin;
-constexpr uint32_t kFlashBytes = 4u * 1024u * 1024u;
-constexpr uint32_t kPsramBytes = 2u * 1024u * 1024u;
 constexpr HardwareCapabilities kCapabilities = {
   displaySupport(DisplayKind::Ssd1306_128x32) |
       displaySupport(DisplayKind::Ssd1306_128x64) |
@@ -97,8 +73,6 @@ constexpr RtcKind kRtcKind = RtcKind::None;
 constexpr UartPins kBtUart = {kNoPin, kNoPin};
 constexpr Pin kBacklight = kNoPin;
 constexpr Pin kDacXsmt = kNoPin;
-constexpr uint32_t kFlashBytes = 4u * 1024u * 1024u;
-constexpr uint32_t kPsramBytes = 2u * 1024u * 1024u;
 constexpr HardwareCapabilities kCapabilities = {
   displaySupport(DisplayKind::Ssd1306_128x64) |
       displaySupport(DisplayKind::Ssd1309_128x64) |
@@ -123,8 +97,6 @@ constexpr UartPins kBtUart = {fromLegacyPin(VOXONE_BT_UART_RX_PIN),
                                fromLegacyPin(VOXONE_BT_UART_TX_PIN)};
 constexpr Pin kBacklight = fromLegacyPin(BRIGHTNESS_PIN);
 constexpr Pin kDacXsmt = fromLegacyPin(VOXONE_DAC_XSMT_PIN);
-constexpr uint32_t kFlashBytes = 16u * 1024u * 1024u;
-constexpr uint32_t kPsramBytes = 0;  // Size not established by the current profile.
 constexpr HardwareCapabilities kCapabilities = {
   displaySupport(DisplayKind::St7796_480x320) |
       displaySupport(DisplayKind::Ssd1306_128x32) |
@@ -141,7 +113,7 @@ constexpr HardwareCapabilities kCapabilities = {
 };
 #else
 // No matching hardware profile.
-#error "HardwareDescriptor requires a complete W0, M0, S0, DIN0 or L0 profile"
+#error "HardwareDescriptor requires a complete M0, S0, DIN0 or L0 profile"
 #endif
 
 constexpr HardwareDescriptor kCurrent = {
@@ -150,7 +122,7 @@ constexpr HardwareDescriptor kCurrent = {
   // unambiguous profile identity tied to this descriptor.
   {kBoardId, kProfileIdentity + kProfileIdentityPrefixLength, kBoardFamily, 0,
    VOXONE_PROFILE_MCU == Mcu::Esp32 ? McuFamily::Esp32 : McuFamily::Esp32S3,
-   kFlashBytes, kPsramBytes},
+   VOXONE_MCU_BASE, VOXONE_MCU_FLASH_BYTES, VOXONE_MCU_PSRAM_BYTES},
   kDisplayKind,
   VOXONE_PROFILE_AUDIO,
   kSpi,
@@ -188,6 +160,15 @@ constexpr HardwareDescriptor kCurrent = {
 
 static_assert(bool(VOXONE_HAS_DISPLAY) == kCapabilities.hasLocalDisplay(),
               "Display compile gate must match board capabilities");
+static_assert(VOXONE_PROFILE_MCU == Mcu::Esp32S3,
+              "All supported MCU bases require ESP32-S3");
+static_assert((VOXONE_MCU_BASE == McuBase::Zero &&
+               VOXONE_MCU_FLASH_BYTES == 4u * 1024u * 1024u &&
+               VOXONE_MCU_PSRAM_BYTES == 2u * 1024u * 1024u) ||
+              (VOXONE_MCU_BASE == McuBase::DevKit &&
+               VOXONE_MCU_FLASH_BYTES == 16u * 1024u * 1024u &&
+               VOXONE_MCU_PSRAM_BYTES == 8u * 1024u * 1024u),
+              "MCU base memory contract is inconsistent");
 static_assert(kDisplayKind == DisplayKind::None
                   ? !kCapabilities.hasLocalDisplay()
                   : kCapabilities.supportsDisplay(kDisplayKind),
@@ -278,7 +259,16 @@ bool validateDescriptor(const HardwareDescriptor& d) {
       d.capabilities.supportsAudioOutput(AudioOutputKind::Max98357) ||
       d.capabilities.supportsAudioOutput(AudioOutputKind::Max98357Stereo) ||
       d.capabilities.supportsAudioOutput(AudioOutputKind::DspMini);
-  if ((display && !d.capabilities.supportsDisplay(d.displayKind)) ||
+  const bool validMcuBase =
+      d.board.mcu == McuFamily::Esp32S3 &&
+      ((d.board.mcuBase == McuBase::Zero &&
+        d.board.flashBytes == 4u * 1024u * 1024u &&
+        d.board.psramBytes == 2u * 1024u * 1024u) ||
+       (d.board.mcuBase == McuBase::DevKit &&
+        d.board.flashBytes == 16u * 1024u * 1024u &&
+        d.board.psramBytes == 8u * 1024u * 1024u));
+  if (!validMcuBase ||
+      (display && !d.capabilities.supportsDisplay(d.displayKind)) ||
       (!display && d.capabilities.hasLocalDisplay()) ||
       !d.capabilities.supportsAudioOutput(d.audioOutputKind) ||
       d.capabilities.supportsDspMini !=

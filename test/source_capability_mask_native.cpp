@@ -3,10 +3,10 @@
 #include <cassert>
 
 int main() {
-  const uint8_t w0 = sourceMaskForCapabilities(false, false, false, false);
-  assert(w0 == sourceBit(SourceId::Web));
-  assert(!sourceIncluded(w0, SourceId::HomeAssistant));
-  assert(!sourceIncluded(w0, SourceId::Dlna));
+  const uint8_t minimal = sourceMaskForCapabilities(false, false, false, false);
+  assert(minimal == sourceBit(SourceId::Web));
+  assert(!sourceIncluded(minimal, SourceId::HomeAssistant));
+  assert(!sourceIncluded(minimal, SourceId::Dlna));
 
   const uint8_t full = sourceMaskForCapabilities(true, true, true, true);
   assert(sourceIncluded(full, SourceId::Web));

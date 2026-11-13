@@ -30,15 +30,17 @@ std::string readFile(const char* path) {
 
 int main() {
   constexpr bool reversed = VOXONE_EC11_REVERSE_DIRECTION != 0;
-#if defined(VOXONE_PROFILE_S0)
-  static_assert(reversed, "S0 must normalize its observed reversed EC11 phase");
+#if defined(VOXONE_PROFILE_S0) || defined(VOXONE_PROFILE_DIN0)
+  static_assert(reversed,
+                "Zero profiles must normalize the reversed EC11 phase");
   static_assert(ENC_BTNL == 9 && ENC_BTNR == 8 && ENC_BTNB == 7,
-                "S0 EC11 GPIO must remain A=9, B=8, KEY=7");
+                "Zero EC11 GPIO must remain A=9, B=8, KEY=7");
 #else
-  static_assert(!reversed, "Other profiles must retain their EC11 direction");
+  static_assert(!reversed,
+                "DevKit profiles must retain their EC11 direction");
 #endif
 
-  // The physical observation is negative raw delta for S0 CW; established
+  // The Zero base normalizes the observed negative raw delta for CW; DevKit
   // profiles already report positive raw delta for CW.
   const int8_t physicalCwRaw = reversed ? -1 : 1;
   const int8_t physicalCcwRaw = reversed ? 1 : -1;

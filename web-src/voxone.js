@@ -817,6 +817,8 @@ window.VoxOneRestartWaiter = Object.freeze({
   let lastVolumeSentAt = 0;
   let pendingVolume = null;
   let awaitingVolume = null;
+  let sourceSelectionPending = null;
+  let sourceSelectionTimer = 0;
   const volumeSettingEditing = { startupMode: null, startupFixedVolume: null, lineOutEnabled: null, lineOutVolume: null };
   const volumeSettingTimers = { startupMode: 0, startupFixedVolume: 0, lineOutEnabled: 0, lineOutVolume: 0 };
   const volumeSettingDragging = { startupFixedVolume: false, lineOutVolume: false };
@@ -1495,7 +1497,12 @@ window.VoxOneRestartWaiter = Object.freeze({
       row.append(button);
       return row;
     });
-    if (!rows.length && dlnaLoaded && !dlnaBusy) {
+    if (!rows.length && !dlnaBusy && dlnaServersLoaded && !dlnaServers.length) {
+      const empty = document.createElement("li");
+      empty.className = "dlna-empty";
+      empty.textContent = "Brak serwerów DLNA.";
+      rows.push(empty);
+    } else if (!rows.length && dlnaLoaded && !dlnaBusy) {
       const empty = document.createElement("li");
       empty.className = "dlna-empty";
       empty.textContent = "Ten folder jest pusty.";
@@ -1544,7 +1551,14 @@ window.VoxOneRestartWaiter = Object.freeze({
       dlnaServers = payload.servers.filter(server => server &&
         Number.isInteger(server.index) && typeof server.name === "string" &&
         typeof server.ip === "string").slice(0, 3);
-      if (!dlnaServers.length) throw new Error("Nie znaleziono serwera DLNA.");
+      if (!dlnaServers.length) {
+        dlnaServersLoaded = true;
+        dlnaServer.textContent = "Brak serwerów";
+        const option = document.createElement("option");
+        option.textContent = "Nie wykryto serwerów";
+        dlnaServerSelect.replaceChildren(option);
+        throw new Error("Brak serwerów DLNA.");
+      }
       const options = dlnaServers.map(server => {
         const option = document.createElement("option");
         option.value = String(server.index);
@@ -2200,22 +2214,30 @@ window.VoxOneRestartWaiter = Object.freeze({
     const status = state.webStatus;
     const sources = Array.isArray(status?.availableSources) ? status.availableSources : [];
     const knownSources = ["radio", "bt", "ha", "dlna", "aux"];
-    const supportsAux = ["l0", "m0"].includes(String(state.profile || "").toLowerCase());
-    const ids = sources.filter(source => knownSources.includes(source) &&
-      (source !== "aux" || supportsAux));
-    if (status && supportsAux && !ids.includes("aux")) ids.push("aux");
+    const ids = sources.filter(source => knownSources.includes(source));
     const key = ids.join(",");
     if (sourceSelector.dataset.sources !== key) {
-      sourceSelector.replaceChildren(...ids.map(source => {
+      const children = ids.map(source => {
         const button = document.createElement("button");
         button.type = "button";
         button.dataset.source = source;
         button.textContent = source === "radio" ? "WEB (RADIO)" : source.toUpperCase();
         return button;
-      }));
+      });
+      if (!children.length && status) {
+        const empty = document.createElement("p");
+        empty.className = "empty-state";
+        empty.textContent = "Brak dostępnych źródeł.";
+        children.push(empty);
+      }
+      sourceSelector.replaceChildren(...children);
       sourceSelector.dataset.sources = key;
     }
     const active = status?.activeSource;
+    if (sourceSelectionPending && active === sourceSelectionPending) {
+      sourceSelectionPending = null;
+      clearTimeout(sourceSelectionTimer);
+    }
     for (const button of sourceSelector.querySelectorAll("button")) {
       const source = button.dataset.source;
       const offline = source === "bt" && status?.btModule?.online !== true;
@@ -2223,7 +2245,7 @@ window.VoxOneRestartWaiter = Object.freeze({
         source === "radio" ? "WEB (RADIO)" : source.toUpperCase();
       button.setAttribute("aria-pressed", source === active ? "true" : "false");
       button.disabled = state.connection !== "connected" || !status ||
-        source === active || offline;
+        sourceSelectionPending !== null || source === active || offline;
     }
   }
 
@@ -2404,7 +2426,9 @@ window.VoxOneRestartWaiter = Object.freeze({
       return state.bass === bass && state.middle === middle && state.treble === treble;
     }) : null;
     for (const button of tonePresetButtons) {
-      button.setAttribute("aria-pressed", String(button.dataset.tonePreset === activePreset));
+      const active = button.dataset.tonePreset === activePreset;
+      button.setAttribute("aria-pressed", String(active));
+      button.classList.toggle("active", active);
     }
     tonePresetUser.classList.toggle("is-active", hasTone && !activePreset);
     renderConnection();
@@ -2936,6 +2960,8 @@ window.VoxOneRestartWaiter = Object.freeze({
     pendingVolume = null;
     clearTimeout(volumeTimer);
     clearTimeout(volumeAckTimer);
+    sourceSelectionPending = null;
+    clearTimeout(sourceSelectionTimer);
     renderStatus();
     renderRssi();
     renderVolume();
@@ -2943,6 +2969,8 @@ window.VoxOneRestartWaiter = Object.freeze({
     renderDisplaySettings();
     for (const control of Object.values(audioControls)) {
       control.dragging = false;
+      control.pending = null;
+      clearTimeout(control.timer);
       clearTimeout(control.ackTimer);
     }
     renderAudio();
@@ -3331,7 +3359,15 @@ window.VoxOneRestartWaiter = Object.freeze({
   });
   sourceSelector.addEventListener("click", event => {
     const button = event.target.closest("button[data-source]");
-    if (button && !button.disabled) send("source", button.dataset.source);
+    if (!button || button.disabled || !send("source", button.dataset.source)) return;
+    sourceSelectionPending = button.dataset.source;
+    clearTimeout(sourceSelectionTimer);
+    sourceSelectionTimer = setTimeout(() => {
+      sourceSelectionPending = null;
+      renderSourceSelector();
+      send("getwebstatus", 1);
+    }, 1800);
+    renderSourceSelector();
   });
 
   myStationsTab.addEventListener("click", () => showStationView(false));
@@ -3485,8 +3521,9 @@ window.VoxOneRestartWaiter = Object.freeze({
     pendingVolume = null;
   }
 
-  for (const button of muteButtons) button.addEventListener("click", () => {
-    if (button.disabled) return;
+  document.addEventListener("click", event => {
+    const button = event.target.closest(".mute-button");
+    if (!button || button.disabled) return;
     send("mute", state.muted ? 0 : 1);
   });
 
@@ -3782,17 +3819,47 @@ window.VoxOneRestartWaiter = Object.freeze({
     sendVolumeSetting("startupFixedVolume", "startupfixedvolume", value);
   });
 
-  for (const control of Object.values(audioControls)) {
+  function sendPendingAudioControl(control) {
+    clearTimeout(control.timer);
+    if (control.pending === null) return false;
+    const value = control.pending;
+    control.pending = null;
+    if (!send(control.command, value)) return false;
+    control.lastSentAt = performance.now();
+    return true;
+  }
+
+  for (const [key, control] of Object.entries(audioControls)) {
     control.dragging = false;
+    control.pending = null;
+    control.timer = 0;
+    control.lastSentAt = 0;
     control.slider.addEventListener("input", () => {
-      if (!control.slider.disabled) control.dragging = true;
+      if (control.slider.disabled) return;
+      control.dragging = true;
+      control.pending = Number(control.slider.value);
+      text("audio-" + key, signedValue(control.pending));
+      if (key !== "balance") {
+        for (const button of tonePresetButtons) {
+          button.classList.remove("active");
+          button.setAttribute("aria-pressed", "false");
+        }
+        tonePresetUser.classList.add("is-active");
+      }
+      const wait = 120 - (performance.now() - control.lastSentAt);
+      if (wait <= 0) sendPendingAudioControl(control);
+      else {
+        clearTimeout(control.timer);
+        control.timer = setTimeout(() => sendPendingAudioControl(control), wait);
+      }
     });
     control.slider.addEventListener("change", () => {
       if (control.slider.disabled) return;
       const value = Number(control.slider.value);
       control.dragging = false;
+      control.pending = value;
       if (!Number.isInteger(value) || value < Number(control.slider.min) ||
-          value > Number(control.slider.max) || !send(control.command, value)) {
+          value > Number(control.slider.max) || !sendPendingAudioControl(control)) {
         renderAudio();
       } else {
         clearTimeout(control.ackTimer);
@@ -3805,7 +3872,14 @@ window.VoxOneRestartWaiter = Object.freeze({
     button.addEventListener("click", () => {
       if (button.disabled) return;
       const values = tonePresets[button.dataset.tonePreset];
-      if (values) send("tone", values.join(","));
+      if (values && send("tone", values.join(","))) {
+        for (const candidate of tonePresetButtons) {
+          const active = candidate === button;
+          candidate.classList.toggle("active", active);
+          candidate.setAttribute("aria-pressed", String(active));
+        }
+        tonePresetUser.classList.remove("is-active");
+      }
     });
   }
 

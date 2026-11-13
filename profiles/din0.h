@@ -1,9 +1,10 @@
 #ifndef VOXONE_PROFILE_DIN0_H
 #define VOXONE_PROFILE_DIN0_H
 
+#include "bases/zero.h"
+
 // Current ESP32-S3 Zero test hardware; future PCB capabilities are not enabled.
 #define VOXONE_PROFILE_NAME "DIN0"
-#define VOXONE_PROFILE_MCU voxone::Mcu::Esp32S3
 #define VOXONE_PROFILE_DISPLAY voxone::Display::Ssd1306_128x64
 #define VOXONE_DISPLAY_CONTROLLER VOXONE_DISPLAY_CONTROLLER_SSD1306
 #define DSP_MODEL DSP_SSD1306
@@ -20,25 +21,5 @@
 #define VOXONE_HAS_LOCAL_UI 1
 #define VOXONE_INCLUDE_DSP 0
 #define VOXONE_PIN_MAP_COMPLETE 1
-
-#define I2S_BCLK 1
-#define I2S_DOUT 2
-// GPIO3 is the dedicated POWER input. Move the provisional DIN0 I2S word
-// select to free GPIO9; the current test wiring must follow this profile.
-#define I2S_LRC 9
-
-#define POWER_BUTTON_PIN 3
-#define POWER_RELAY_PIN -1
-
-#define ENC_BTNB 4
-#define ENC_BTNR 6
-#define ENC_BTNL 5
-#define ENC_INTERNALPULLUP false
-#define ENC_BUTTON_INTERNALPULLUP false
-
-#define I2C_SDA 7
-#define I2C_SCL 8
-#define I2C_RST -1
-#define SCREEN_ADDRESS 0x3C
 
 #endif

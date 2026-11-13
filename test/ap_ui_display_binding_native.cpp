@@ -190,8 +190,8 @@ void testProfileLayoutContract() {
   assert(apScreen.find("setup128x32::title") != std::string::npos);
   assert(apScreen.find("setup128x64::title") != std::string::npos);
   assert(apScreen.find("setup128x64::detailValue") != std::string::npos);
-#elif defined(VOXONE_PROFILE_W0) || defined(VOXONE_PROFILE_M0) || \
-      defined(VOXONE_PROFILE_S0) || defined(VOXONE_PROFILE_DIN0)
+#elif defined(VOXONE_PROFILE_M0) || defined(VOXONE_PROFILE_S0) || \
+      defined(VOXONE_PROFILE_DIN0)
   const std::string apScreen = apScreenSource(display);
 #if defined(VOXONE_PROFILE_M0) || defined(VOXONE_PROFILE_S0) || \
     defined(VOXONE_PROFILE_DIN0)

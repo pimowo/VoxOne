@@ -1,9 +1,8 @@
 # Instalacja, aktualizacja i odzyskiwanie VoxOne
 
-Ta instrukcja opisuje bieżący, zaimplementowany przepływ dla profili `w0`,
-`m0`, `l0`, `s0` i `din0`. Stable 1.0.0 nie został jeszcze wydany, a kompletna
-kwalifikacja wydania dotyczy W0, M0 i L0. S0 i DIN0 pozostają buildowalne i
-zachowują tę samą procedurę instalacji, lecz ich HIL jest POST-STABLE. Aktualny
+Ta instrukcja opisuje bieżący, zaimplementowany przepływ dla profili `m0`,
+`l0`, `s0` i `din0`. Stable 1.0.0 nie został jeszcze wydany. Wszystkie cztery
+profile zachowują tę samą procedurę instalacji. Aktualny
 stan HIL znajduje się w [HARDWARE_TARGETS.md](HARDWARE_TARGETS.md) i
 [STABLE_CONTRACT.md](STABLE_CONTRACT.md).
 
@@ -28,7 +27,7 @@ Artefakty można zbudować poleceniem:
 pio run -e <profil> -t fullimage
 ```
 
-gdzie `<profil>` to `w0`, `m0`, `l0`, `s0` albo `din0`. Target najpierw
+gdzie `<profil>` to `m0`, `l0`, `s0` albo `din0`. Target najpierw
 buduje firmware i SPIFFS, następnie scala pełny obraz, sprawdza jego rozmiar
 i porównuje każdy osadzony fragment bajt po bajcie. Wyniki znajdują się w
 `.pio/build/<profil>/`.
@@ -36,9 +35,8 @@ i porównuje każdy osadzony fragment bajt po bajcie. Wyniki znajdują się w
 Wszystkie profile używają tablicy `partitions_yoradio.csv`: NVS zaczyna się
 pod `0x9000`, `otadata` pod `0xe000`, sloty `app0` i `app1` pod `0x10000` i
 `0x1f0000`, a SPIFFS pod `0x3d0000`. Układ zajmuje pierwsze 4 MiB. Obrazy
-M0/S0/DIN0 mają 4 MiB. L0 ma obraz 16 MiB, chociaż bieżące partycje zajmują
-tylko pierwsze 4 MiB. W0 używa definicji płytki `esp32dev`; przed zapisem
-trzeba potwierdzić, że fizyczny moduł ma co najmniej 4 MiB flash.
+S0/DIN0 mają 4 MiB. M0/L0 mają obraz 16 MiB, chociaż bieżące partycje zajmują
+tylko pierwsze 4 MiB.
 
 ## Pierwsze programowanie przez USB
 
@@ -51,14 +49,6 @@ pełnym obrazem flash i nie zawiera ustawienia hasła WWW.
 3. Wprowadź płytkę w tryb bootloadera zgodnie z instrukcją jej producenta.
 4. Zapisz pełny obraz od adresu `0x0` narzędziem Espressif `esptool`.
 5. Po poprawnym zapisie uruchom urządzenie normalnie i wykonaj FIRST BOOT.
-
-Przykład dla W0:
-
-```sh
-python -m esptool --chip esp32 --port <PORT> --baud 921600 \
-  --before default_reset --after hard_reset write_flash -z \
-  0x0 .pio/build/w0/VoxOne-<wersja>-full.bin
-```
 
 Przykład dla profilu ESP32-S3 (`m0`, `s0`, `din0` albo `l0`):
 
@@ -102,7 +92,7 @@ dany profil i poprosi o restart, gdy jest wymagany.
 ## Normalny panel WWW i hasło
 
 Otwórz w przeglądarce adres IP pokazany przez urządzenie lub odczytany z
-routera. Standardowe obrazy W0/M0/L0/S0/DIN0 mają włączoną produkcyjną
+routera. Standardowe obrazy M0/L0/S0/DIN0 mają włączoną produkcyjną
 ochronę HTTP/API/WebSocket i obsługują dwa tryby:
 
 - **Bez hasła (OPEN)** — panel, API i WebSocket działają bez logowania.
@@ -223,21 +213,18 @@ pozwala także wybrać `display=NONE` i `input=NONE`.
 
 | Profil | MCU / pamięć builda | Wyświetlacz runtime | Sterowanie | Pozostałe potwierdzone capability bieżącego BIN |
 |---|---|---|---|---|
-| W0 | ESP32, bez PSRAM; wymagane co najmniej 4 MiB flash | ST7789 284×76 | EC11 / Buttons3 / NONE | PCM5102A, RADIO, WWW, Web Update; bez BT, RTC i VU. |
-| M0 | ESP32-S3 Zero, 4 MiB flash, 2 MiB PSRAM | SSD1306 lub SSD1309 128×64 | EC11 / Buttons3 / NONE | PCM5102A, RADIO, WWW, Web Update; bez BT, RTC i VU. |
-| S0 | ESP32-S3 Zero, 4 MiB flash, 2 MiB PSRAM | SSD1306 lub SSD1309 128×64 | EC11 / Buttons3 / NONE | Tymczasowy pinout rewizji 0 jak M0; przyszłe wyposażenie rodziny S nie jest dostępne. |
-| DIN0 | ESP32-S3 Zero, 4 MiB flash, 2 MiB PSRAM | SSD1306 lub SSD1309 128×64 | EC11 / Buttons3 / NONE | Tymczasowy pinout rewizji 0 jak M0; przyszłe wyposażenie DIN nie jest dostępne. |
+| M0 | ESP32-S3 N16R8 DevKit, 16 MiB flash, 8 MiB PSRAM | SSD1306/SSD1309/SH1106/CH1116G | EC11 / Buttons3 / NONE | PCM5102A lub MAX98357A, RADIO, WWW, Web Update; bez BT, RTC, DSP i VU. |
+| S0 | ESP32-S3 Zero, 4 MiB flash, 2 MiB PSRAM | SSD1306 lub SSD1309 128×64 | EC11 / Buttons3 / NONE | Pinout bazy Zero współdzielony z DIN0; przyszłe wyposażenie rodziny S nie jest dostępne. |
+| DIN0 | ESP32-S3 Zero, 4 MiB flash, 2 MiB PSRAM | SSD1306 lub SSD1309 128×64 | EC11 / Buttons3 / NONE | Pinout bazy Zero współdzielony z S0; przyszłe wyposażenie DIN nie jest dostępne. |
 | L0 | ESP32-S3, build 16 MiB flash i PSRAM OPI | ST7796S 480×320 | EC11 / Buttons3 / NONE | PCM5102A lub DSPmini (I2S przygotowane, konfiguracja ADAU1701 przez I2C jeszcze nieaktywna), DS3231, VoxOneBT przez UART/I2S, VU, RADIO, WWW i Web Update. |
 
 Domyślną ścieżką audio pozostaje PCM5102A. DSPmini można wybrać wyłącznie w
 L0; bieżący etap przełącza konfigurację, UI oraz inicjalizację I2S, ale nie
 wysyła jeszcze konfiguracji do ADAU1701 przez I2C.
 
-W0, M0 i L0 są profilami kwalifikowanymi do Stable 1.0.0. S0 i DIN0 zachowują
-tymczasowy pinout M0 oraz wymagają własnego HIL w POST-STABLE; przyszłe
-dedykowane PCB będą profilami S1 i DIN1. Po wydaniu 1.0.0 W0 pozostaje
-dostępny do krytycznego utrzymania jako LEGACY, bez nowego rozwoju
-funkcjonalnego i bez usuwania env lub artefaktów builda.
+Profile M0 i L0 korzystają ze wspólnej bazy DevKit N16R8, a S0 i DIN0 ze
+wspólnej bazy Zero N4R2. Każda para współdzieli bazową mapę GPIO; profile
+zachowują niezależne capability i piny opcjonalnego wyposażenia.
 
 ## Stan weryfikacji
 
@@ -246,7 +233,8 @@ danych Web Update oraz produkcyjna ochrona HTTP/API/WebSocket mają software
 PASS. Podstawowy FIRST BOOT oraz część poprawnych aktualizacji i persistence
 mają fizyczne potwierdzenie na M0.
 
-Przed wydaniem nadal trzeba wykonać końcowy HIL W0, M0 i L0. W szczególności
+Przed wydaniem nadal trzeba wykonać końcowy HIL profili wymaganych przez
+bieżący kontrakt wydania. W szczególności
 pozostają testy produkcyjnego SECURITY OPEN/PROTECTED i wygasania sesji,
 fizyczny retest zapisu hasła w Recovery, destrukcyjny factory reset, negatywne
 przerwania zapisu/power-loss, pełny restore `.vxcf`, auto-reload WWW oraz

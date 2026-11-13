@@ -98,10 +98,7 @@ int main() {
   assert(stereoMaxAudioPlan.initializeSerialI2s);
   assert(stereoMaxAudioPlan.localPlaybackAvailable);
 
-#if defined(VOXONE_PROFILE_W0)
-  assert(defaults.display == RuntimeDisplay::St7789_284x76);
-  assert(defaults.input == RuntimeInput::Ec11);
-#elif defined(VOXONE_PROFILE_S0)
+#if defined(VOXONE_PROFILE_S0)
   assert(defaults.display == RuntimeDisplay::Ssd1306_128x64);
   assert(defaults.input == RuntimeInput::Ec11);
 #elif defined(VOXONE_PROFILE_M0) || defined(VOXONE_PROFILE_DIN0)

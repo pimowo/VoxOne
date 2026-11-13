@@ -6,6 +6,10 @@ checkpointów pozostaje w historii Git i w istniejących raportach.
 
 ## 1. HIL PENDING (do fizycznego przetestowania przez użytkownika)
 
+- [ ] Wgrać finalne `firmware.bin` i `spiffs.bin` profili L0 oraz S0 po
+  udostępnieniu w `dev-vm` kanonicznych portów `L0_NATIVE` i `S0_NATIVE`;
+  bieżąca sesja widzi wyłącznie QEMU Tablet, bez `ttyACM*`, `ttyUSB*` i
+  `/dev/serial/by-id`, więc bezpieczne programowanie nie jest obecnie możliwe.
 - [ ] Zweryfikować przycisk zasilania na L0 (GPIO42) i S0 (GPIO3): krótki
   klik (Wakeup/Mute albo Home z Menu/karuzeli), dwuklik otwierający Menu
   Główne wyłącznie z Playera oraz długie naciśnięcie uruchamiające shutdown
@@ -48,8 +52,9 @@ checkpointów pozostaje w historii Git i w istniejących raportach.
 - [ ] Fizycznie przetestować TTS/media z Home Assistant: źródło `SOURCE_HA`,
   metadane title/artist i `N/A` zamiast bitrate na TFT/OLED oraz powrót do
   wcześniej używanego źródła i jego stanu po EOF albo komendzie Stop.
-- [ ] Zweryfikować mapowanie pinów na nowym profilu DIN0 po zmianie `I2S_LRC`
-  na GPIO9.
+- [ ] Fizycznie zweryfikować na DIN0 wspólny pinout bazy Zero odziedziczony z
+  S0: I2S `BCLK5/DOUT6/LRC4`, enkoder `A9/B8/KEY7`, I2C `SDA1/SCL2` oraz
+  przycisk zasilania GPIO3.
 - [ ] Fizycznie podłączyć i przetestować przekaźnik dla trybu Hard Power.
 - [ ] Sprawdzić na L0 i S0 tryb LINE OUT: stały poziom wyjścia,
   oddzielne zapamiętywanie nastawy, napis `LINE`, konfigurację w WWW i menu
@@ -102,8 +107,8 @@ checkpointów pozostaje w historii Git i w istniejących raportach.
 
 ## 3. Wersja 1.3.0+ (Audio / Sprzęt / Sieć)
 
-- [ ] Dokończyć Etap 2 synchronizacji Hardware Matrix v2: po fizycznym
-  potwierdzeniu pinów przenieść profil M0 na ESP32-S3 N16R8 i domyślny
+- [ ] Po programowej migracji M0/L0 na wspólną bazę ESP32-S3 N16R8 DevKit
+  fizycznie potwierdzić pinout M0 przed zmianą domyślnego wyświetlacza na
   ST7796S oraz uzupełnić `AMP_ENABLE` i `MUTE/XSMT` dla L0, S0, M0 i DIN0.
 - [ ] DSPmini: obsłużyć ADAU1701 przez I2C, dodać konfigurację do WWW oraz
   Parametric EQ, Crossover, wyjście subwoofera, Loudness i AutoEQ; wykorzystać

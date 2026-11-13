@@ -37,7 +37,7 @@ MAIN ownership and success policy.
 `POST /update/bt` accepts one `.bin` with a declared byte length; it does not
 use the MAIN/SPIFFS `/update` endpoint. The L0 hardware capability gates
 the feature, and runtime PSRAM, module status, PROTO 2, `FW_UPDATE`, and source
-other than BT are also required. W0 has no BT upload runtime; its external
+other than BT are also required. Profiles without BT upload runtime use their external
 VoxOneBT module is updated directly over USB. Future Lx/Mx/Sx/DINx profiles
 may opt in only with the same capability and sufficient resources. VoxOneBT
 is a separate project/repo with its own Vx hardware family.

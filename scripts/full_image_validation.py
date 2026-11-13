@@ -35,20 +35,11 @@ class ValidationError(RuntimeError):
 
 
 PROFILE_CONTRACTS: dict[str, dict[str, Any]] = {
-    "W0": {
-        "environment": "w0",
-        "mcu": "esp32",
-        "chipId": 0,
-        "flashSize": 4 * 1024 * 1024,
-        "flashMode": "dio",
-        "flashFrequency": "40m",
-        "bootloaderOffset": 0x1000,
-    },
     "M0": {
         "environment": "m0",
         "mcu": "esp32s3",
         "chipId": 9,
-        "flashSize": 4 * 1024 * 1024,
+        "flashSize": 16 * 1024 * 1024,
         "flashMode": "dio",
         "flashFrequency": "80m",
         "bootloaderOffset": 0,
@@ -83,7 +74,6 @@ PROFILE_CONTRACTS: dict[str, dict[str, Any]] = {
 }
 
 PROFILE_DEFINE_NAMES = {
-    "W0": "VOXONE_PROFILE_W0",
     "M0": "VOXONE_PROFILE_M0",
     "S0": "VOXONE_PROFILE_S0",
     "DIN0": "VOXONE_PROFILE_DIN0",

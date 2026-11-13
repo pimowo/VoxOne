@@ -47,14 +47,6 @@ constexpr CatalogItem kSmallDisplays[] = {
     {"ssd1309_128x64", "SSD1309_128X64", ""},
     {"ch1116_128x64", "CH1116G_128X64", ""},
     {"sh1106_128x64", "SH1106_128X64", ""}};
-constexpr CatalogItem kWDisplays[] = {
-    {"none", "Brak", ""},
-    {"ssd1306_128x64", "SSD1306_128X64", ""},
-    {"ssd1309_128x64", "SSD1309_128X64", ""},
-    {"ch1116_128x64", "CH1116G_128X64", ""},
-    {"sh1106_128x64", "SH1106_128X64", ""},
-    {"st7789v_320x240", "ST7789V_320X240", ""},
-    {"st7789_284x76", "ST7789_284X76", ""}};
 constexpr CatalogItem kInputCatalog[] = {
     {"none", "Brak", ""}, {"ec11", "EC11", ""},
     {"buttons3", "BUTTONS3", "Brak fizycznego PASS"}};
@@ -76,7 +68,6 @@ constexpr CatalogItem kSAudio[] = {
      "Kanały LEFT/RIGHT wybierane sprzętowo przez SD/MODE"},
     {"none", "Brak", ""}};
 constexpr CatalogItem kDINAudio[] = {{"pcm5102a", "PCM5102A", ""}};
-constexpr CatalogItem kWAudio[] = {{"pcm5102a", "PCM5102A", ""}};
 
 constexpr CatalogItem kLModules[] = {
     {"voxonebt", "VoxOneBT", ""}, {"ds3231", "DS3231", ""},
@@ -85,7 +76,6 @@ constexpr CatalogItem kMSModules[] = {
     {"voxonebt", "VoxOneBT", ""}, {"ds3231", "DS3231", ""},
     {"battery", "Pomiar baterii", ""}};
 constexpr CatalogItem kDINModules[] = {{"voxonebt", "VoxOneBT", ""}};
-constexpr CatalogItem kWModules[] = {{"voxonebt", "VoxOneBT", ""}};
 
 template <size_t N>
 void catalog(const CatalogItem (&items)[N], const CatalogItem*& output,
@@ -100,7 +90,6 @@ void displayCatalog(BoardId board, const CatalogItem*& output, size_t& count) {
     case BoardId::BoardM0: catalog(kLargeDisplays, output, count); return;
     case BoardId::BoardS0:
     case BoardId::BoardDIN0: catalog(kSmallDisplays, output, count); return;
-    case BoardId::BoardW0: catalog(kWDisplays, output, count); return;
   }
 }
 
@@ -110,7 +99,6 @@ void audioCatalog(BoardId board, const CatalogItem*& output, size_t& count) {
     case BoardId::BoardM0: catalog(kMAudio, output, count); return;
     case BoardId::BoardS0: catalog(kSAudio, output, count); return;
     case BoardId::BoardDIN0: catalog(kDINAudio, output, count); return;
-    case BoardId::BoardW0: catalog(kWAudio, output, count); return;
   }
 }
 
@@ -120,7 +108,6 @@ void moduleCatalog(BoardId board, const CatalogItem*& output, size_t& count) {
     case BoardId::BoardM0:
     case BoardId::BoardS0: catalog(kMSModules, output, count); return;
     case BoardId::BoardDIN0: catalog(kDINModules, output, count); return;
-    case BoardId::BoardW0: catalog(kWModules, output, count); return;
   }
 }
 

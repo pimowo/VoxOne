@@ -1,63 +1,60 @@
 # VOXONE - MATRIX SPRZĘTOWY (v2)
 
-| SPRZĘT / FUNKCJA | DIN | W | S | M | L | STATUS |
-| :--- | :---: | :---: | :---: | :---: | :---: | :--- |
-| **[MIKROKONTROLERY]** | | | | | | |
-| ESP32-S3 N16R8 | NIE | NIE | NIE | TAK | TAK | 🟢 ZROBIONE |
-| ESP32-S3 Zero | TAK | NIE | TAK | NIE | NIE | 🟢 ZROBIONE |
-| ESP-WROOM-32 | NIE | TAK | NIE | NIE | NIE | 🟢 ZROBIONE |
-| **[WYŚWIETLACZE]** | | | | | | |
-| SSD1306 128x64 | TAK | TAK | TAK | TAK | NIE | 🟢 ZROBIONE |
-| SSD1306 128x32 | TAK | NIE | NIE | NIE | NIE | 🟢 ZROBIONE |
-| SSD1309, SH1106, CH1116G | TAK | TAK | TAK | TAK | NIE | 🟢 ZROBIONE |
-| SSD1322, ST7920, GC9A01 | NIE | NIE | NIE | TAK | TAK | 🔴 W PLANACH |
-| ST7789 | NIE | TAK | NIE | NIE | NIE | 🟢 ZROBIONE |
-| ST7796S | NIE | NIE | NIE | TAK | TAK | 🟡 W TESTACH (M0 w Etapie 2) |
-| **[STEROWANIE]** | | | | | | |
-| Enkoder EC11 / 3xSW | TAK | TAK | TAK | TAK | TAK | 🟢 ZROBIONE |
-| Przycisk POWER | TAK | NIE | TAK | TAK | TAK | 🟡 W TESTACH |
-| Pilot IR | NIE | NIE | TAK | TAK | TAK | 🔴 W PLANACH |
-| **[AUDIO]** | | | | | | |
-| PCM5102A | TAK | TAK | TAK | TAK | TAK | 🟢 ZROBIONE |
-| MAX98357A | NIE | NIE | TAK | TAK | NIE | 🟢 ZROBIONE |
-| DSPmini | NIE | NIE | NIE | NIE | TAK | 🟡 W TESTACH |
-| VoxOneBT RX | TAK | NIE | TAK | TAK | TAK | 🟢 ZROBIONE |
-| VoxOneBT TX | NIE | NIE | TAK | TAK | TAK | 🔴 W PLANACH |
-| AUX | NIE | NIE | NIE | TAK | TAK | 🔴 W PLANACH |
-| **[SIEĆ I PAMIĘĆ]** | | | | | | |
-| Ethernet W5500 | NIE | NIE | NIE | NIE | TAK | 🔴 W PLANACH |
-| Karta SD | NIE | NIE | NIE | TAK | TAK | 🔴 W PLANACH |
-| DLNA | TAK | NIE | NIE | TAK | TAK | ⚠️ DO POPRAWY |
-| **[ZASILANIE I RTC]** | | | | | | |
-| RTC DS3231 | NIE | NIE | TAK | TAK | TAK | 🔴 W PLANACH |
-| Przekaźnik / Pomiar napięcia | NIE | NIE | TAK | TAK | TAK | 🟡 W TESTACH |
+| SPRZĘT / FUNKCJA | DIN | S | M | L | STATUS |
+| :--- | :---: | :---: | :---: | :---: | :--- |
+| **[MIKROKONTROLERY]** | | | | | |
+| Baza DevKit — ESP32-S3 N16R8 | NIE | NIE | TAK | TAK | 🟢 ZROBIONE |
+| Baza Zero — ESP32-S3 Zero N4R2 | TAK | TAK | NIE | NIE | 🟢 ZROBIONE |
+| **[WYŚWIETLACZE]** | | | | | |
+| SSD1306 128x64 | TAK | TAK | TAK | NIE | 🟢 ZROBIONE |
+| SSD1306 128x32 | TAK | TAK | TAK | TAK | 🟢 ZROBIONE |
+| SSD1309, SH1106, CH1116G | TAK | TAK | TAK | TAK | 🟢 ZROBIONE |
+| SSD1322, ST7920, GC9A01 | NIE | NIE | TAK | TAK | 🔴 W PLANACH |
+| ST7796S | NIE | NIE | NIE | TAK | 🟢 ZROBIONE |
+| **[STEROWANIE]** | | | | | |
+| Enkoder EC11 / 3xSW | TAK | TAK | TAK | TAK | 🟢 ZROBIONE |
+| Przycisk POWER | TAK | TAK | TAK | TAK | 🟡 W TESTACH |
+| Pilot IR | NIE | TAK | TAK | TAK | 🔴 W PLANACH |
+| **[AUDIO]** | | | | | |
+| PCM5102A | TAK | TAK | TAK | TAK | 🟢 ZROBIONE |
+| MAX98357A | NIE | TAK | TAK | NIE | 🟢 ZROBIONE |
+| DSPmini | NIE | NIE | NIE | TAK | 🟡 W TESTACH |
+| VoxOneBT RX | NIE | TAK | NIE | TAK | 🟢 ZROBIONE |
+| VoxOneBT TX | NIE | NIE | NIE | NIE | 🔴 W PLANACH |
+| AUX | NIE | NIE | NIE | NIE | 🔴 W PLANACH |
+| **[SIEĆ I PAMIĘĆ]** | | | | | |
+| Ethernet W5500 | NIE | NIE | NIE | TAK | 🔴 W PLANACH |
+| Karta SD | NIE | NIE | TAK | TAK | 🔴 W PLANACH |
+| DLNA | TAK | NIE | TAK | TAK | ⚠️ DO POPRAWY |
+| **[ZASILANIE I RTC]** | | | | | |
+| RTC DS3231 | NIE | NIE | NIE | TAK | 🟢 ZROBIONE |
+| Przekaźnik / Pomiar napięcia | NIE | NIE | NIE | NIE | 🔴 W PLANACH |
 
 *(Uwaga: Piny AMP_ENABLE, MUTE/XTSM oraz konfiguracja SPI dla M0 zostaną uzupełnione w Etapie 2 po weryfikacji sprzętowej).*
 
-## Referencyjny pinout Etapu 1: L0 i S0
+## Wspólne pinouty baz MCU
 
-| Profil | Audio I²S `BCLK / DOUT / LRCK` | Display | Local input `A / B / KEY` | Pozostałe |
+| Baza / profile | Audio I²S `BCLK / DOUT / LRCK` | Display / I2C | Local input `A / B / KEY` | Pozostałe |
 |---|---|---|---|---|
-| L0 | `5 / 4 / 6` | SPI `SCK12`, `MOSI11`, `MISO13`; ST7796S `CS10`, `DC9`, `RST—`, backlight `14` | `41 / 40 / 39` | RTC `SDA8/SCL7`; BT UART `RX15/TX16`; BT I2S RX `BCLK1/WS2/DIN17`; POWER `GPIO42`; XSMT `255` |
-| S0 | MAX98357A `5 / 6 / 4` | SSD1306 128×64 I2C: `SDA1`, `SCL2`, `RST—`, adres `0x3C` | `9 / 8 / 7` | BT UART1 `RX44/TX43`; BT I2S1 RX `BCLK11/WS12/DIN13`; POWER `GPIO3`; MUTE/ENABLE `255/-1` |
+| DevKit / M0, L0 | `5 / 4 / 6` | I2C `SDA8/SCL7`; L0 dodatkowo SPI `SCK12`, `MOSI11`, `MISO13`, ST7796S `CS10`, `DC9`, `RST—`, backlight `14` | `41 / 40 / 39` | POWER `GPIO42`; XSMT `255`; L0 dodatkowo RTC oraz BT UART `RX15/TX16` i BT I2S RX `BCLK1/WS2/DIN17` |
+| Zero / S0, DIN0 | `5 / 6 / 4` | I2C `SDA1`, `SCL2`, `RST—`, adres `0x3C` | `9 / 8 / 7` | POWER `GPIO3`; S0 dodatkowo BT UART1 `RX44/TX43` i BT I2S1 RX `BCLK11/WS12/DIN13` |
 
-Powyższe GPIO są skopiowane z bieżących profili `l0.h` i `s0.h`.
-Stanowią punkt odniesienia dla mapowania M0 w Etapie 2; nie nadają M0
-żadnych pinów automatycznie.
+Powyższe wspólne GPIO są zdefiniowane w `profiles/bases/devkit.h` oraz
+`profiles/bases/zero.h`. Profile konkretnego urządzenia dodają tylko piny
+opcjonalnego wyposażenia i capability.
 
 ## Rodziny sprzętowe VoxOne
 
 Litera oznacza rodzinę, cyfra rewizję: `0` to prototyp, `1` pierwsza docelowa PCB, `2..n` następne rewizje tej samej rodziny. Rewizje mogą mieć różne GPIO. Capability wynika z konkretnego profilu i potwierdzonego sprzętu, a nie z nazwy rodziny. VoxOneBT jest osobnym projektem/repo i posiada własną rodzinę sprzętową Vx.
 
 Profil rewizji jest kontraktem konkretnego prototypu. S0 opisuje obecnie
-rzeczywisty, ręcznie okablowany ESP32-S3 Zero; DIN0 zachowuje tymczasową mapę
-GPIO M0. Przyszłe PCB S1 i DIN1 wymagają osobnych profili i nie mogą
+rzeczywisty, ręcznie okablowany ESP32-S3 Zero; DIN0 dziedziczy tę samą bazową
+mapę GPIO. Przyszłe PCB S1 i DIN1 wymagają osobnych profili i nie mogą
 nadpisywać tych definicji.
 
 Obowiązkowy fizyczny zakres Stable 1.0.0 obejmuje S0 i L0, oba z VoxOneBT.
-W0, M0 i DIN0 pozostają w repozytorium, standardowych buildach, full-image i
-testach offline, lecz ich fizyczny HIL nie blokuje wydania. Po Stable W0
-przechodzi do LEGACY, zachowując możliwość krytycznego utrzymania linii 1.0.0.
+M0 i DIN0 pozostają w standardowych buildach, full-image i testach offline,
+lecz ich fizyczny HIL nie blokuje wydania.
 
 Stan implementacji poniżej uwzględnia checkpoint
 `RC1-S0-BT-IMPLEMENT-1`. Lista capability opisuje to, co kod kandydata
@@ -69,10 +66,9 @@ rozszerzenia są rozdzielone w
 | Rodzina | Przeznaczenie | Docelowe elementy rodziny — roadmapa, nie deklaracja rewizji 0 |
 |---|---|---|
 | Lx | rozbudowana | ESP32-S3 N16R8, PCM5102, DSPmini, W5500, SSD1306/SSD1309/CH1116/SH1106/ST7290 128×64, ST7789V 320×240, SSD1322 256×64, ST7796S 480×320, GC9A01 240×240, EC11, 3×SW, VoxOneBT, DS3231 |
-| Mx | uniwersalna | ESP32-S3 Zero, PCM5102, MAX98357A, SSD1306/SSD1309/CH1116/SH1106/ST7290 128×64, ST7789V 320×240, SSD1322 256×64, ST7796S 480×320, GC9A01 240×240, EC11, 3×SW, pomiar baterii, VoxOneBT, DS3231 |
+| Mx | uniwersalna | ESP32-S3 N16R8 DevKit, PCM5102, MAX98357A, SSD1306/SSD1309/CH1116/SH1106/ST7290 128×64, ST7789V 320×240, SSD1322 256×64, ST7796S 480×320, GC9A01 240×240, EC11, 3×SW, pomiar baterii, VoxOneBT, DS3231 |
 | Sx | mini | ESP32-S3 Zero, audio PCM5102A/MAX98357A/NONE, OLED SSD1306 128×32/128×64 oraz SSD1309/CH1116/SH1106 128×64/NONE, EC11/3×SW/NONE, opcjonalny pomiar baterii i DS3231; S0 docelowo ma VoxOneBT RX/TX aktualizowany przez osobne USB, bez MAIN→BT; rewizja S1 może otrzymać nowy pinout |
 | DINx | szyna DIN | ESP32-S3 Zero, PCM5102, SSD1306 128×32/128×64, EC11, 3×SW, VoxOneBT |
-| Wx | wspierany klasyczny ESP32 DevKit | ESP32 DevKit, PCM5102, SSD1306/SSD1309/CH1116/SH1106 128×64, ST7789V 320×240, ST7789 284×76, EC11, 3×SW, VoxOneBT |
 
 Wiersz Sx opisuje rodzinę i zatwierdzony cel S0+VoxOneBT. Kandydat S0 ma
 `VOXONE_HAS_BT=1`, audio BT RX i rzeczywisty backend w
@@ -83,15 +79,14 @@ Stable S0 nadal jest otwarty.
 
 | Profil / env | MCU i pamięć deklarowana przez build/kod | Bieżący BIN i capability | Rola wydania | Status hardware |
 |---|---|---|---|---|
-| `w0` | klasyczny ESP32; build `esp32dev`, bez PSRAM; deskryptor nie deklaruje fizycznego rozmiaru flash | PCM5102A; ST7789 284×76/NONE; EC11/Buttons3/NONE; RADIO/WWW/Web Update; bufor audio 48 KiB DRAM; bez BT, HA, DLNA, DSP, RTC i VU | `RETAINED BUILD / HIL NON-BLOCKING` | Bez nowych funkcji; po wydaniu LEGACY. Stary fizyczny baseline zachowuje zakres historyczny. |
-| `m0` | ESP32-S3 Zero, flash 4 MiB, PSRAM 2 MiB | Audio PCM5102A/MAX98357A MONO/MAX98357A STEREO/NONE; display NONE, SSD1306 128×32/128×64, SSD1309, SH1106 i CH1116G 128×64; EC11/Buttons3/NONE | `RETAINED BUILD / HIL NON-BLOCKING` | Wcześniejsze PHYSICAL PASS pozostają ważne; dalszy fizyczny HIL nie blokuje Stable. |
+| `m0` | baza DevKit, ESP32-S3 N16R8, flash 16 MiB, PSRAM 8 MiB | Audio PCM5102A/MAX98357A MONO/MAX98357A STEREO/NONE; display NONE, SSD1306 128×32/128×64, SSD1309, SH1106 i CH1116G 128×64; EC11/Buttons3/NONE; bez DSP | `RETAINED BUILD / HIL NON-BLOCKING` | Wcześniejsze PHYSICAL PASS pozostają ważne; migracja bazy wymaga potwierdzenia fizycznego. |
 | `l0` | istniejąca PCB V-Tom, ESP32-S3 N16R8; build flash 16 MiB i PSRAM OPI | Audio PCM5102A/NONE; display ST7796S 480×320, pięć OLED I2C lub NONE; EC11/Buttons3/NONE; DS3231, VoxOneBT UART + I2S RX, VU i aktualizacja VoxOneBT | **`RELEASE-GATING HIL REQUIRED`** | Hardware i GPIO bez zmian. Etapowe PASS, w tym TTS D, są zachowane; pełny baseline i otwarte negatywne ścieżki PENDING. |
 | `s0` | ESP32-S3 Zero, flash 4 MiB, PSRAM 2 MiB | Audio PCM5102A/MAX98357A MONO/MAX98357A STEREO/NONE; OLED-y; EC11/Buttons3/NONE; VoxOneBT UART protocol 2 + I2S RX; `VOXONE_HAS_BT=1`, `VOXONE_HAS_VU=0`, updater BT wyłączony | **`RELEASE-GATING HIL REQUIRED`** | Fizycznie używana rewizja: UART1 RX44/TX43, I2S1 RX BCLK11/WS12/DIN13 i logi aplikacji przez native USB CDC. VU oraz MAIN→BT update pozostają wyłączone; update modułu przez osobne USB. Software PASS / fizyczny HIL PENDING. |
-| `din0` | ESP32-S3 Zero, flash 4 MiB, PSRAM 2 MiB | Pinout rewizji DIN0 jak M0; PCM5102A; OLED-y; EC11/Buttons3/NONE | `RETAINED BUILD / HIL NON-BLOCKING` | Brak fizycznego HIL obrazu DIN0 nie blokuje Stable; profil, buildy i historia pozostają zachowane. |
+| `din0` | ESP32-S3 Zero, flash 4 MiB, PSRAM 2 MiB | Bazowy pinout Zero wspólny z S0; PCM5102A; OLED-y; EC11/Buttons3/NONE | `RETAINED BUILD / HIL NON-BLOCKING` | Brak fizycznego HIL obrazu DIN0 nie blokuje Stable; profil, buildy i historia pozostają zachowane. |
 
 Zatwierdzony zakres Stable 1.0.0 wymaga fizycznego HIL PASS bazowej
 konfiguracji S0 i L0. Build-only nie kwalifikuje żadnej z tych dwóch bramek.
-W0/M0/DIN0 pozostają obowiązkowe w standardowym verify, ale bez profilowej
+M0/DIN0 pozostają obowiązkowe w standardowym verify, ale bez profilowej
 bramki fizycznej. Pełny kontrakt i skondensowaną macierz zawiera
 [STABLE_CONTRACT.md](STABLE_CONTRACT.md).
 
@@ -103,24 +98,24 @@ pull-upy i filtracja.
 
 | Profil | Audio I²S `BCLK / DOUT / LRCK` | Display | Local input `A / B / KEY` | Pozostałe |
 |---|---|---|---|---|
-| W0 | `26 / 27 / 25` | ST7789: `CS5`, `DC4`, `RST—`; SCK/MOSI korzystają z domyślnej magistrali frameworka i nie są jawnie zakontraktowane w deskryptorze | `33 / 35 / 32` | brak PSRAM, BT, RTC, VU i XSMT |
-| M0 | `1 / 2 / 3` | OLED I2C: `SDA7`, `SCL8`, `RST—`, adres `0x3C` | `5 / 6 / 4` | SSD1306 lub SSD1309 w jednym BIN |
+| M0 | `5 / 4 / 6` | OLED I2C: `SDA8`, `SCL7`, `RST—`, adres `0x3C` | `41 / 40 / 39` | baza DevKit wspólna z L0; SSD1306 lub SSD1309 w jednym BIN; POWER `GPIO42`; XSMT `255`; HIL PENDING po migracji |
 | S0 | MAX98357A `5 / 6 / 4` | SSD1306 I2C: `SDA1`, `SCL2`, `RST—`, adres `0x3C`; runtime 128×32/128×64 | `9 / 8 / 7` | BT UART1 `RX44/TX43`; BT I2S1 RX `BCLK11/WS12/DIN13`; native USB CDC dla logów, ponieważ GPIO43/44 są domyślnymi padami UART0; VU i MAIN→BT update wyłączone; fizyczny HIL PENDING |
-| DIN0 | `1 / 2 / 3` | OLED I2C: `SDA7`, `SCL8`, `RST—`, adres `0x3C` | `5 / 6 / 4` | zatwierdzona mapa rewizji 0 współdzielona z M0; HIL PENDING |
+| DIN0 | `5 / 6 / 4` | OLED I2C: `SDA1`, `SCL2`, `RST—`, adres `0x3C` | `9 / 8 / 7` | baza Zero wspólna z S0; GPIO3 jest wejściem POWER; HIL PENDING |
 | L0 | `5 / 4 / 6` | SPI `SCK12`, `MOSI11`, `MISO13`; ST7796S `CS10`, `DC9`, `RST—`, backlight `14` | `41 / 40 / 39` | RTC `SDA8/SCL7`; BT UART `RX15/TX16`; BT I2S RX `BCLK1/WS2/DIN17`; XSMT poza baseline Stable, `VOXONE_DAC_XSMT_PIN=255`, bez przypisanego GPIO; opcjonalne XSMT/MUTE/ENABLE dla przyszłych PCB pozostaje POST-STABLE |
 
 W kodzie `HardwareDescriptor.audioOut` prezentuje kolejność `BCLK/WS/DOUT`;
 powyższa tabela zachowuje kolejność nazw makr profili, aby uniknąć pomylenia
-GPIO. Żadne GPIO działających prototypów nie zostało zmienione przez rename.
+GPIO. Migracja M0 i DIN0 na wspólne bazy zmienia ich wcześniejsze tymczasowe
+mapy pinów i dlatego pozostaje do fizycznej weryfikacji.
 
 ### Rewizje 0 i rzeczywiste braki S0/DIN0
 
-`VOXONE_PIN_MAP_COMPLETE=1` oznacza, że bieżący profil ma kompletną własną
-mapę dla obecnie deklarowanych capability. S0 nie współdzieli GPIO M0:
-odpowiada ręcznie okablowanej rewizji S0 z MAX98357A, SSD1306 i EC11, a jego
+`VOXONE_PIN_MAP_COMPLETE=1` oznacza, że bieżący profil ma kompletną mapę dla
+obecnie deklarowanych capability. S0 i DIN0 współdzielą bazowe GPIO Zero.
+S0 odpowiada ręcznie okablowanej rewizji z MAX98357A, SSD1306 i EC11, a jego
 VoxOneBT używa UART1 RX GPIO44/TX GPIO43 i I2S1 RX GPIO11/12/13. S0 kieruje
 diagnostykę aplikacji przez native USB CDC, aby UART0 nie konkurował o
-GPIO43/44. DIN0 nadal zachowuje mapę M0.
+GPIO43/44. DIN0 nie deklaruje opcjonalnych pinów VoxOneBT.
 W ramach Stable S0 i L0 mają
 przejść własny HIL z potwierdzeniem flash/PSRAM, zasilania, złączy, audio,
 display, local input i VoxOneBT. Build ani test M0 nie zastępują S0.
@@ -162,8 +157,7 @@ Wszystkie env używają `partitions_yoradio.csv`: NVS `0x5000`, `otadata`
 `0x2000`, dwa sloty OTA po `0x1E0000` (1,875 MiB) i SPIFFS `0x30000`
 (192 KiB). Układ zajmuje pierwsze 4 MiB flash. Dla L0 build i pełny obraz
 mogą mieć 16 MiB, ale bieżąca tablica nie przeznacza pozostałych 12 MiB na
-dane. Dla W0 fizyczny rozmiar flash wymaga potwierdzenia mimo 4-miB układu
-partycji.
+dane. Dotyczy to profili DevKit M0 i L0.
 
 `HardwareDescriptor` podaje tożsamość PCB, magistrale, GPIO i aktualne
 capabilities, w tym jawne `supportedInputs`, `supportedDisplays` i
@@ -186,7 +180,6 @@ Każda bieżąca rodzina dopuszcza runtime stan „sprzęt nie jest zainstalowan
 | `m0` | NONE, SSD1306_128X32, SSD1306_128X64, SSD1309_128X64, SH1106_128X64, CH1116G_128X64 | NONE, EC11, BUTTONS3 |
 | `s0` | NONE, SSD1306_128X32, SSD1306_128X64, SSD1309_128X64, SH1106_128X64, CH1116G_128X64 | NONE, EC11, BUTTONS3 |
 | `din0` | NONE, SSD1306_128X32, SSD1306_128X64, SSD1309_128X64, SH1106_128X64, CH1116G_128X64 | NONE, EC11, BUTTONS3 |
-| `w0` | NONE, ST7789_284X76 | NONE, EC11, BUTTONS3 |
 
 | Profil | Runtime audio |
 |---|---|
@@ -194,7 +187,6 @@ Każda bieżąca rodzina dopuszcza runtime stan „sprzęt nie jest zainstalowan
 | `m0` | PCM5102A, MAX98357A MONO, MAX98357A STEREO, NONE |
 | `s0` | PCM5102A, MAX98357A MONO, MAX98357A STEREO, NONE |
 | `din0` | PCM5102A |
-| `w0` | PCM5102A |
 
 L0 zapisuje aktywną ścieżkę `AUDIO_PCM5102` / `AUDIO_DSPMINI` jako
 kompatybilne rozszerzenie Config v7 i synchronizuje ją z wyborem sprzętowym w

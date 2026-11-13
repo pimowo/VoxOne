@@ -55,7 +55,7 @@ SHA256_RE = re.compile(r"[0-9a-f]{64}")
 MAC_RE = re.compile(r"(?:[0-9A-Fa-f]{2}:){5}[0-9A-Fa-f]{2}")
 FINGERPRINT_NAME_RE = re.compile(r"[A-Za-z0-9][A-Za-z0-9_.-]{0,63}")
 BOOT_ID_RE = re.compile(r"[0-9A-Fa-f]{8}")
-PROFILE_NAMES = ("W0", "M0", "L0", "S0", "DIN0")
+PROFILE_NAMES = ("M0", "L0", "S0", "DIN0")
 REQUIRED_LOGICAL_FINGERPRINTS = {"vxcf", "hardware", "stations"}
 ESP32_S3_IMAGE_CHIP_ID = 9
 RESTORE_PLAN_MAX_AGE = timedelta(hours=2)

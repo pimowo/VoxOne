@@ -193,8 +193,8 @@ void testProductionPathAndSecretBoundary() {
 }  // namespace
 
 int main() {
-#if !(defined(VOXONE_PROFILE_W0) || defined(VOXONE_PROFILE_M0) || \
-      defined(VOXONE_PROFILE_L0) || defined(VOXONE_PROFILE_S0) || \
+#if !(defined(VOXONE_PROFILE_M0) || defined(VOXONE_PROFILE_L0) || \
+      defined(VOXONE_PROFILE_S0) || \
       defined(VOXONE_PROFILE_DIN0))
 #error "SECURITY-RECOVERY-DISPLAY native test requires a VoxOne profile"
 #endif

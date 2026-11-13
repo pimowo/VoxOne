@@ -9,13 +9,9 @@ int main() {
   BootKeyDetector bounce; bounce.begin(true,0); assert(bounce.update(false,20)==KeyState::Cancelled);
   BootKeyDetector wrap; wrap.begin(true,UINT32_MAX-20U); assert(wrap.update(true,28U)==KeyState::Debounce); assert(wrap.update(true,29U)==KeyState::Accepted);
   const auto& hardware=voxone::hardware::currentHardware();
-#if defined(VOXONE_PROFILE_W0)
-  assert(hardware.localInput.key==32);
-#elif defined(VOXONE_PROFILE_L0)
+#if defined(VOXONE_PROFILE_L0) || defined(VOXONE_PROFILE_M0)
   assert(hardware.localInput.key==39);
-#elif defined(VOXONE_PROFILE_S0)
+#elif defined(VOXONE_PROFILE_S0) || defined(VOXONE_PROFILE_DIN0)
   assert(hardware.localInput.key==7);
-#else
-  assert(hardware.localInput.key==4);
 #endif
 }

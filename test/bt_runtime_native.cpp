@@ -3,12 +3,12 @@
 #include <cassert>
 
 int main() {
-  BtRuntime w0(false);
-  assert(!w0.available());
-  assert(w0.configureBeforeStart(true));
-  assert(!w0.start());
-  assert(!w0.physicalStarted() && !w0.available());
-  const BtRuntimeStatus noHardware = w0.status(true, true);
+  BtRuntime noBt(false);
+  assert(!noBt.available());
+  assert(noBt.configureBeforeStart(true));
+  assert(!noBt.start());
+  assert(!noBt.physicalStarted() && !noBt.available());
+  const BtRuntimeStatus noHardware = noBt.status(true, true);
   assert(!noHardware.supportsBt && noHardware.btEnabled);
   assert(!noHardware.btOnline && !noHardware.btConnected);
 

@@ -210,7 +210,7 @@ void testProductionBoundaries() {
       "-DVOXONE_PLAYER_SCROLL_CORE_ENABLED=1";
   assert(iniSection(platformio, "m0").find(coreFlag) != std::string::npos);
   assert(iniSection(platformio, "l0").find(coreFlag) != std::string::npos);
-  for (const char* profile : {"w0", "s0", "din0"})
+  for (const char* profile : {"s0", "din0"})
     assert(iniSection(platformio, profile).find(
                "VOXONE_PLAYER_SCROLL_CORE_ENABLED") == std::string::npos);
   // Both dedicated M0 test profiles inherit env:m0 instead of carrying a

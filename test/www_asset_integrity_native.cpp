@@ -113,7 +113,7 @@ voxone::www_integrity::Report verify(std::map<std::string, Bytes> files,
 
 int main() {
   using namespace voxone::www_integrity;
-  static_assert(kVerifyBufferSize == 512, "W0 verification buffer grew");
+  static_assert(kVerifyBufferSize == 512, "verification buffer grew");
 
   const auto files = canonicalFiles();
   const auto started = std::chrono::steady_clock::now();

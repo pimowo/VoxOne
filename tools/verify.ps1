@@ -1,4 +1,4 @@
-# VoxOne regression gate for L0, M0, S0, DIN0 and W0.
+# VoxOne regression gate for L0, M0, S0 and DIN0.
 [CmdletBinding()]
 param(
  [string]$PlatformIo,
@@ -216,7 +216,7 @@ Invoke-Step 'Native tests' {
   $name=$test.BaseName
   $sources=@($test.FullName)
   if($nativeSources.ContainsKey($name)) { $sources+=@($nativeSources[$name] | ForEach-Object { Join-Path $root $_ }) }
-  $variants=if($name -eq 'security_http_adapter_native') { @('','L0','M0','S0','DIN0','W0','SECURITY-TEST') } elseif($name -eq 'ap_ui_display_binding_native' -or $name -eq 'ap_ui_www_binding_native' -or $name -eq 'config_backup_native' -or $name -eq 'ec11_direction_native' -or $name -eq 'first_boot_core_native' -or $name -eq 'first_boot_runtime_snapshot_native' -or $name -eq 'first_boot_spiffs_transaction_native' -or $name -eq 'first_boot_transaction_native' -or $name -eq 'hardware_descriptor_native' -or $name -eq 'runtime_hardware_config_native' -or $name -eq 'runtime_hardware_web_native' -or $name -eq 'runtime_display_activation_native' -or $name -eq 'security_recovery_ap_native' -or $name -eq 'security_recovery_display_native' -or $name -eq 'security_recovery_key_native' -or $name -eq 'security_recovery_session_native' -or $name -eq 'security_recovery_state_native') { @('L0','M0','S0','DIN0','W0') } elseif($name -eq 'build_identity_native') { @('L0','M0','S0','DIN0','W0','CLEAN','DIRTY') } else { @('') }
+  $variants=if($name -eq 'security_http_adapter_native') { @('','L0','M0','S0','DIN0','SECURITY-TEST') } elseif($name -eq 'ap_ui_display_binding_native' -or $name -eq 'ap_ui_www_binding_native' -or $name -eq 'config_backup_native' -or $name -eq 'ec11_direction_native' -or $name -eq 'first_boot_core_native' -or $name -eq 'first_boot_runtime_snapshot_native' -or $name -eq 'first_boot_spiffs_transaction_native' -or $name -eq 'first_boot_transaction_native' -or $name -eq 'hardware_descriptor_native' -or $name -eq 'runtime_hardware_config_native' -or $name -eq 'runtime_hardware_web_native' -or $name -eq 'runtime_display_activation_native' -or $name -eq 'security_recovery_ap_native' -or $name -eq 'security_recovery_display_native' -or $name -eq 'security_recovery_key_native' -or $name -eq 'security_recovery_session_native' -or $name -eq 'security_recovery_state_native') { @('L0','M0','S0','DIN0') } elseif($name -eq 'build_identity_native') { @('L0','M0','S0','DIN0','CLEAN','DIRTY') } else { @('') }
   foreach($variant in $variants) {
    $label=if($variant) { "$name-$variant" } else { $name }
    $exe=Join-Path $work ($label+$(if($onWindows) { '.exe' } else { '' }))
@@ -607,7 +607,7 @@ Invoke-Step 'WWW assets' {
  $changed=@($initialAssets.Keys | Where-Object { $initialAssets[$_] -ne $script:generatedAssets[$_] })
  if($changed.Count -gt 0) { Write-Host ("  normalized generated assets: " + ($changed -join ', ')) }
 }
-foreach($target in @('l0','m0','s0','din0','w0')) {
+foreach($target in @('l0','m0','s0','din0')) {
  $envName=$target
  Invoke-Step ($envName.ToUpperInvariant()) {
   Invoke-Pio "$envName-fullimage" @('run','-e',$envName,'-t','fullimage')
@@ -625,7 +625,7 @@ foreach($target in @('l0','m0','s0','din0','w0')) {
   $full=Join-Path $root ".pio/build/$envName/VoxOne-$productVersion-full.bin"
   $fullManifest=Join-Path $root ".pio/build/$envName/VoxOne-$productVersion-full.manifest.json"
   if(-not (Test-Path -LiteralPath $full) -or -not (Test-Path -LiteralPath $fullManifest)) { throw "Missing $envName complete image or manifest" }
-  $expectedFullSize=if($envName -eq 'l0') { 16*1024*1024 } else { 4*1024*1024 }
+  $expectedFullSize=if($envName -eq 'l0' -or $envName -eq 'm0') { 16*1024*1024 } else { 4*1024*1024 }
   if((Get-Item -LiteralPath $full).Length -ne $expectedFullSize) { throw "$envName complete image size mismatch" }
   $profile=$envName.ToUpperInvariant()
   $firmwareSize=(Get-Item -LiteralPath $bin).Length

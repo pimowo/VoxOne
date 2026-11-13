@@ -193,7 +193,7 @@ int main() {
 
   const std::string implementation = readFile("src/core/ui_input.cpp");
   for (const char* profile : {"PROFILE_L0", "PROFILE_M0",
-                              "PROFILE_W0", "VOXONE_PROFILE_"})
+                              "VOXONE_PROFILE_"})
     assert(implementation.find(profile) == std::string::npos);
   assert(implementation.find("hardwareCapabilities()") != std::string::npos);
   assert(implementation.find("moveBluetoothTransportSelection") ==

@@ -18,7 +18,7 @@ operację na cztery tryby:
 ## Warunki wstępne
 
 - repozytorium i obraz muszą pochodzić z zatwierdzonego checkpointu;
-- operator musi znać profil (`L0`, `M0`, `S0`, `DIN0` albo `W0`), MAC oraz
+- operator musi znać profil (`L0`, `M0`, `S0` albo `DIN0`), MAC oraz
   oczekiwany SHA256 obrazu;
 - port musi być wskazany stabilną ścieżką `/dev/serial/by-id/...`;
 - ESP32 musi zostać świadomie wprowadzony do ROM loadera; narzędzie nie

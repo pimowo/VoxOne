@@ -103,11 +103,6 @@ int main() {
   for (size_t index = 0; index < displayCount; ++index)
     assert(std::strcmp(displays[index].value,
                        expectedL0DisplayOptions[index]) == 0);
-#elif defined(VOXONE_PROFILE_W0)
-  assert(displayCount == 2);
-  assert(hasOption(displays, displayCount, "st7789_284x76"));
-  assert(!hasOption(displays, displayCount, "ssd1306_128x64"));
-  assert(!hasOption(displays, displayCount, "sh1106_128x64"));
 #endif
 
   RuntimeHardwareWebOption inputs[3]{};
@@ -189,10 +184,6 @@ int main() {
   const char* const expectedDisplays[] = {
       "none", "ssd1306_128x32", "ssd1306_128x64",
       "ssd1309_128x64", "ch1116_128x64", "sh1106_128x64"};
-#elif defined(VOXONE_PROFILE_W0)
-  const char* const expectedDisplays[] = {
-      "none", "ssd1306_128x64", "ssd1309_128x64", "ch1116_128x64",
-      "sh1106_128x64", "st7789v_320x240", "st7789_284x76"};
 #endif
   assertRoadmapOrder(displayRoadmap, displayRoadmapCount, expectedDisplays,
                      sizeof(expectedDisplays) / sizeof(expectedDisplays[0]));
@@ -246,9 +237,6 @@ int main() {
       "pcm5102a", "max98357a", "max98357a_stereo", "none"};
   const char* const expectedModules[] = {"voxonebt", "ds3231", "battery"};
 #elif defined(VOXONE_PROFILE_DIN0)
-  const char* const expectedAudio[] = {"pcm5102a"};
-  const char* const expectedModules[] = {"voxonebt"};
-#elif defined(VOXONE_PROFILE_W0)
   const char* const expectedAudio[] = {"pcm5102a"};
   const char* const expectedModules[] = {"voxonebt"};
 #endif

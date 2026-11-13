@@ -1169,7 +1169,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--password-stdin", action="store_true")
     parser.add_argument(
         "--credentials-profile",
-        choices=("W0", "M0", "L0"),
+        choices=("M0", "L0"),
         default="M0",
         help="local WWW credential profile used by verify (default: M0)",
     )

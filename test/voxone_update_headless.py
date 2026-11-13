@@ -750,6 +750,19 @@ setTimeout(async () => {
     btTestSocket.receiveVolume(27, true);
     check(muteButtons[0].getAttribute('aria-pressed') === 'true', 'external mute update');
     check(!btTestSocket.sent.some(item => /^(stop|webtransport|source)=/.test(item)), 'mute does not stop or switch source');
+    btTestSocket.onmessage({data:JSON.stringify({payload:[
+      {id:'bass',value:0},{id:'middle',value:0},{id:'treble',value:0},{id:'balance',value:0}
+    ]})});
+    const bassSlider = get('audio-bass-slider');
+    bassSlider.value = '4';
+    bassSlider.dispatchEvent(new Event('input'));
+    check(btTestSocket.sent.some(item => item === 'bass=4'),
+      'EQ input sends a throttled live command');
+    const rockPreset = document.querySelector('[data-tone-preset="rock"]');
+    rockPreset.click();
+    check(btTestSocket.sent.at(-1) === 'tone=5,-2,4' &&
+      rockPreset.classList.contains('active') && rockPreset.getAttribute('aria-pressed') === 'true',
+      'EQ preset shows immediate active feedback');
     const lineOutToggle = get('line-out-enabled-toggle');
     const lineOutSlider = get('line-out-volume-slider');
     check(!lineOutToggle.disabled && get('line-out-volume-control').hidden,
@@ -846,7 +859,14 @@ setTimeout(async () => {
       sourceButton(source).click();
       check(btTestSocket.sent.at(-1) === 'source=' + source,
         'manual ' + source.toUpperCase() + ' command');
+      check([...selector.querySelectorAll('button')].every(button => button.disabled),
+        'source controls lock while awaiting ' + source.toUpperCase());
+      const sourceName = source === 'ha' ? 'HA' : source.toUpperCase();
+      btTestSocket.receive(sourceSnapshot(sourceName,
+        ['radio','bt','ha','dlna','aux'], true));
     }
+    btTestSocket.receive(sourceSnapshot('WEB',
+      ['radio','bt','ha','dlna','aux'], true));
     check(!sourceButton('bt').disabled, 'BT available without phone connection');
     sourceButton('bt').click();
     check(btTestSocket.sent.at(-1) === 'source=bt', 'manual BT command');
@@ -889,8 +909,12 @@ setTimeout(async () => {
     btTestSocket.receive(sourceSnapshot('WEB', ['radio','bt'], false));
     check(sourceButton('bt').disabled && sourceButton('bt').textContent.includes('offline'), 'BT offline shown');
     btTestSocket.receive(sourceSnapshot('WEB', ['radio','ha','dlna'], false));
-    check(selector.querySelectorAll('button').length === 4 && !sourceButton('bt') &&
-      sourceButton('aux'), 'L0 profile keeps capability-gated AUX with core network sources');
+    check(selector.querySelectorAll('button').length === 3 && !sourceButton('bt') &&
+      !sourceButton('aux'), 'source selector renders only backend availableSources');
+    btTestSocket.receive(sourceSnapshot('WEB', [], false));
+    check(selector.querySelectorAll('button').length === 0 &&
+      selector.textContent.includes('Brak dostępnych źródeł'),
+      'Status shows an explicit empty source state');
     check(!btTestSocket.sent.some(item => /^(webtransport|stop)=/.test(item)), 'source selection sends no transport');
     const icon = document.querySelector('link[rel="icon"]');
     const headerBrand = document.querySelector('.topbar .brand .brand-logo');
@@ -1127,7 +1151,7 @@ setTimeout(async () => {
       'returning the draft to the saved values avoids an NVS write');
     for (const [profile, coreActive, pauseMs] of [
       ['L0',true,2500],['M0',true,5000],['S0',false,5000],
-      ['DIN0',false,5000],['W0',false,5000]
+      ['DIN0',false,5000]
     ]) {
       btTestSocket.onmessage({data:JSON.stringify(scrollSnapshot({
         scrollCoreActive:coreActive,scrollPauseMs:pauseMs}))});

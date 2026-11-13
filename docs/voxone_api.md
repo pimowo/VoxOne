@@ -25,7 +25,7 @@ Najważniejsze źródła kontraktu:
 
 ## Wspólne zasady HTTP
 
-W standardowych profilach W0, M0, S0, DIN0 i L0 działa centralna polityka
+W standardowych profilach M0, S0, DIN0 i L0 działa centralna polityka
 SECURITY. Każde żądanie musi mieć dokładnie jeden poprawny `Host`: lokalny
 adres IP urządzenia, skonfigurowany hostname albo `hostname.local`, opcjonalnie
 z portem `:80`. Mutacje (`POST`, `PUT`, `DELETE`, `PATCH`) wymagają również
@@ -444,7 +444,7 @@ Niezależnie od trwałego stanu istnieje tryb kompilacji:
 
 | `enforcementMode` | Użycie | `protectionEnforced` |
 |---|---|---:|
-| `production` | Wszystkie standardowe profile W0/M0/S0/DIN0/L0. Wyłączenie production w takim profilu jest błędem kompilacji. | `true` |
+| `production` | Wszystkie standardowe profile M0/S0/DIN0/L0. Wyłączenie production w takim profilu jest błędem kompilacji. | `true` |
 | `test` | Wyłącznie `m0-security-test`; uruchamia ten sam gate, ale nie może być przedstawiane jako ochrona produkcyjna. | `true` |
 | `disabled` | Niestandardowy/non-standard build bez obu flag. Centralny gate przepuszcza żądania; nie wymusza Host/Origin/cookie ani whitelisty WS. Usunięte komendy destrukcyjne nie wracają w tym trybie. Stan SECURITY może nadal być raportowany, ale nie chroni transportu. | `false` |
 

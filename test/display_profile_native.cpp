@@ -79,7 +79,6 @@ int main() {
     assert(source->find("VOXONE_PROFILE_M0") == std::string::npos);
     assert(source->find("VOXONE_PROFILE_S0") == std::string::npos);
     assert(source->find("VOXONE_PROFILE_DIN0") == std::string::npos);
-    assert(source->find("VOXONE_PROFILE_W0") == std::string::npos);
   }
   assert(display.find("VOXONE_DISPLAY_PROFILE_IS_SMALL_OLED") !=
          std::string::npos);

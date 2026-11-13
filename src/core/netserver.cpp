@@ -3780,6 +3780,20 @@ void NetServer::onWsMessage(void *arg, const uint8_t *data, size_t len,
       securityWebSocketText(clientId, "{\"pong\": 1}");
       return;
     }
+    const bool otaLockedMutation =
+        strcmp(_wscmd, "scrollsettings") == 0 ||
+        strcmp(_wscmd, "tone") == 0 ||
+        strcmp(_wscmd, "bass") == 0 ||
+        strcmp(_wscmd, "middle") == 0 ||
+        strcmp(_wscmd, "treble") == 0;
+    if (otaLockedMutation && updateLockActive()) {
+      if (strcmp(_wscmd, "scrollsettings") == 0) {
+        sendScrollSettingsResult(
+            clientId,
+            voxone::display_scroll::ScrollSettingsApplyStatus::Busy);
+      }
+      return;
+    }
     if (strcmp(_wscmd, "scrollsettings") == 0) {
       voxone::display_scroll::ScrollSettings requested{};
       if (voxone::display_scroll::parseScrollSettingsCommand(

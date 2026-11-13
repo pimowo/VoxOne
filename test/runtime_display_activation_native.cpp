@@ -194,7 +194,7 @@ int main() {
       readFile("src/displays/displayMultiRuntime.cpp");
   const std::string multiHeader =
       readFile("src/displays/displayMultiRuntime.h");
-  const std::string l0Profile = readFile("profiles/l0.h");
+  const std::string devkitBase = readFile("profiles/bases/devkit.h");
   const std::string i2cRuntime = readFile("src/hardware/i2c_runtime.cpp");
   assert(multiFacade.find("selection_.controller == ControllerId::St7796") !=
          std::string::npos);
@@ -212,7 +212,7 @@ int main() {
          std::string::npos);
   assert(multiHeader.find("RuntimeOled128x64Display* oled_ = nullptr") !=
          std::string::npos);
-  assert(l0Profile.find("#define I2CFREQ_HZ 400000UL") !=
+  assert(devkitBase.find("#define I2CFREQ_HZ 400000UL") !=
          std::string::npos);
   assert(renderer.find("_st7796PlayerReady = !smallOledActive()") !=
          std::string::npos);
@@ -227,9 +227,6 @@ int main() {
   selected = select(ignored, hardware, compiled);
   assert(selected.usedBuildDefault);
   assert(selected.display == defaults.display);
-#if defined(VOXONE_PROFILE_W0)
-  assert(selected.controller == ControllerId::St7789);
-#endif
 #endif
 
   HardwareDescriptor noDisplay = hardware;

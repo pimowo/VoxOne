@@ -13,6 +13,6 @@ Skopiuj zawartość tego pakietu do wybranego katalogu repo, np. `assets/brandin
 - INSTALLER-DOCS-BRANDING-1 — instalator, dokumentacja, przyszłe PCB i nadruki (po sprawdzeniu geometrii).
 
 ## 3. HIL
-Przed wgraniem na W0/M0/L0/S0/DIN0 wymagane odrębne zgody i testy. HIL P0 WebSocket, Buttons3, ST7789 i audio W0 pozostają PENDING.
+Przed wgraniem na M0/L0/S0/DIN0 wymagane są odrębne zgody i testy sprzętowe.
 
 Nie resetuj, nie flashuj ani nie aktualizuj SPIFFS na M0 bez osobnego zatwierdzenia. Pierwszy etap dla Codexa powinien być READ-ONLY preflight zasobów i raport różnic, nie automatyczna integracja wszystkiego.

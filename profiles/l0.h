@@ -1,8 +1,9 @@
 #ifndef VOXONE_PROFILE_L0_H
 #define VOXONE_PROFILE_L0_H
 
+#include "bases/devkit.h"
+
 #define VOXONE_PROFILE_NAME "L0"
-#define VOXONE_PROFILE_MCU voxone::Mcu::Esp32S3
 #define VOXONE_PROFILE_DISPLAY voxone::Display::St7796_480x320
 #define VOXONE_DISPLAY_PROFILE VOXONE_DISPLAY_PROFILE_ST7796_480X320
 #define VOXONE_DISPLAY_CONTROLLER VOXONE_DISPLAY_CONTROLLER_ST7796
@@ -29,32 +30,15 @@
 #define TFT_RST -1
 #define BRIGHTNESS_PIN 14
 
-// ENCODER_1: S2 = GPIO41, S1 = GPIO40, KEY = GPIO39.
-#define ENC_BTNR 40
-#define ENC_BTNL 41
-#define ENC_BTNB 39
-#define ENC_INTERNALPULLUP false
-#define ENC_BUTTON_INTERNALPULLUP false
-#define ENC_HALFQUARD false
-#define USE_BUILTIN_LED false
-
-#define I2S_DOUT 4
-#define I2S_BCLK 5
-#define I2S_LRC 6
-#define I2S_INTERNAL false
 // PCM5102A XSMT: no GPIO assigned until the physical connection is confirmed.
-#define VOXONE_DAC_XSMT_PIN 255
 
 #define RTC_MODULE DS3231
 #define RTC_SDA 8
 #define RTC_SCL 7
 // OLED modules share the existing L0 I2C bus with the RTC.  The controller
 // addresses (0x3C/0x3D) do not overlap DS3231 (0x68).
-#define I2C_SDA RTC_SDA
-#define I2C_SCL RTC_SCL
 // DS3231 and every selectable L0 OLED support the standard fast-mode rate.
 // Do not inherit the 4 MHz SSD1306-only default on this shared bus.
-#define I2CFREQ_HZ 400000UL
 
 // VoxOneBT UART uses the NEXTION connector, independently of legacy Nextion.
 #define VOXONE_BT_UART_RX_PIN 15
@@ -67,9 +51,6 @@
 #define VOXONE_BT_I2S_WS_PIN 2
 #define VOXONE_BT_I2S_DATA_PIN 17
 
-// GPIO42 is unclaimed on the current L0 PCB/profile.
-#define POWER_BUTTON_PIN 42
-#define POWER_RELAY_PIN -1
 // Future TDA7719 shares the RTC I2C pins: SCL 7, SDA 8.
 
 #endif

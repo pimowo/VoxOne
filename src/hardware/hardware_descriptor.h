@@ -14,8 +14,9 @@ constexpr Pin fromLegacyPin(int value) {
 }
 constexpr bool hasPin(Pin value) { return value != kNoPin; }
 
-enum class BoardId { BoardW0, BoardM0, BoardS0, BoardDIN0, BoardL0 };
+enum class BoardId { BoardM0, BoardS0, BoardDIN0, BoardL0 };
 enum class McuFamily { Esp32, Esp32S3 };
+enum class McuBase { Zero, DevKit };
 enum class DisplayKind {
   None,
   Ssd1306_128x64,
@@ -61,6 +62,7 @@ struct BoardIdentity {
   char family;
   uint8_t revision;
   McuFamily mcu;
+  McuBase mcuBase;
   uint32_t flashBytes;  // 0 means unconfirmed.
   uint32_t psramBytes;  // 0 means unconfirmed.
 };

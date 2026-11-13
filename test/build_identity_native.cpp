@@ -21,9 +21,7 @@ int main() {
 #endif
   assert(std::strcmp(VOXONE_BUILD_SHA, expectedBuild) == 0);
 
-#if defined(VOXONE_PROFILE_W0)
-  const char* expectedProfile = "W0";
-#elif defined(VOXONE_PROFILE_M0)
+#if defined(VOXONE_PROFILE_M0)
   const char* expectedProfile = "M0";
 #elif defined(VOXONE_PROFILE_S0)
   const char* expectedProfile = "S0";

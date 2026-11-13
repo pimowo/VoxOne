@@ -565,6 +565,12 @@ void testFirmwareIntegrationContract() {
       "void sendScrollSettingsResult");
   assert(wsCallback.find("parseScrollSettingsCommand") != std::string::npos);
   assert(wsCallback.find("enqueueScrollSettingsCommand") != std::string::npos);
+  assert(wsCallback.find("otaLockedMutation") != std::string::npos);
+  assert(wsCallback.find("updateLockActive()") <
+         wsCallback.find("enqueueScrollSettingsCommand"));
+  for (const char* command : {"\"tone\"", "\"bass\"", "\"middle\"",
+                              "\"treble\"", "\"scrollsettings\""})
+    assert(wsCallback.find(command) != std::string::npos);
   assert(wsCallback.find("applyPersistentScrollSettings") == std::string::npos);
   assert(wsCallback.find("writeScrollSettingsPersistent") == std::string::npos);
   assert(serverLoop.find("serviceScrollSettings") == std::string::npos);

@@ -13,7 +13,7 @@ from dataclasses import dataclass, field
 DEFAULT_CREDENTIALS_PATH = (
     Path.home() / ".config" / "voxone-hil" / "test-credentials.json"
 )
-SUPPORTED_PROFILES = frozenset({"W0", "M0", "L0"})
+SUPPORTED_PROFILES = frozenset({"M0", "L0"})
 MAX_CREDENTIALS_BYTES = 64 * 1024
 
 

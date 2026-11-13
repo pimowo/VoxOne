@@ -189,14 +189,14 @@ class SpiffsUsbRecoveryTest(unittest.TestCase):
         return MODULE.execute_restore(**options)
 
     def test_all_profiles_have_explicit_chip_flash_and_layout(self):
-        self.assertEqual(set(MODULE.PROFILE_SPECS), {"L0", "M0", "S0", "DIN0", "W0"})
+        self.assertEqual(set(MODULE.PROFILE_SPECS), {"L0", "M0", "S0", "DIN0"})
         for name, spec in MODULE.PROFILE_SPECS.items():
             partitions = MODULE.expected_partitions(name)
             spiffs = MODULE.spiffs_partition(partitions)
             self.assertEqual((spiffs["offset"], spiffs["size"]), (0x3D0000, 0x30000))
             self.assertLessEqual(spiffs["offset"] + spiffs["size"], spec.flash_size)
-        self.assertEqual(MODULE.PROFILE_SPECS["W0"].chip, "esp32")
         self.assertEqual(MODULE.PROFILE_SPECS["L0"].flash_size, 16 * 1024 * 1024)
+        self.assertEqual(MODULE.PROFILE_SPECS["M0"].flash_size, 16 * 1024 * 1024)
         self.assertEqual(len(MODULE.required_asset_paths("L0")), 9)
         self.assertEqual(len(MODULE.required_asset_paths("S0")), 7)
         self.assertNotIn(
