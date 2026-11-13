@@ -61,7 +61,10 @@ checkpointów pozostaje w historii Git i w istniejących raportach.
   przełączanie co najmniej dwóch serwerów w panelu WWW oraz powrót do
   poprzedniego źródła po naturalnym EOF; na urządzeniu sprawdzić nawigację
   enkoderem, klik folderu lub utworu, dwuklik do katalogu nadrzędnego oraz
-  płynność renderowania na TFT i OLED; na Windows WMPNSS potwierdzić wybór
+  płynność renderowania na TFT i OLED; test odtwarzania z Windows DLNA jest
+  **ZABLOKOWANY** do czasu włączenia komputera z Windowsem i podłączenia go do
+  sieci (obecnie VoxOne wykrywa wyłącznie serwer OMV); na Windows WMPNSS
+  potwierdzić wybór
   zasobu MP3/FLAC/AAC zamiast okładki JPEG lub WMA, poprawne długie URL z
   encjami XML bez OOM, nagłówek `User-Agent: VoxOne/<wersja>`, odtwarzanie po
   przekierowaniu 302 oraz poprawne WWW/PWA po restarcie.
