@@ -580,7 +580,7 @@ if(-not $onWindows) {
  }
 }
 Invoke-Step 'Web Update headless' {
- & $Python (Join-Path $root 'test/voxone_update_headless.py') 2>&1 | ForEach-Object { Write-Host $_ }
+ & $Python (Join-Path $root 'test/voxone_update_headless.py')
  if($LASTEXITCODE -ne 0) { throw 'Existing Chrome test failed' }
 }
 Invoke-Step 'HIL diagnostics' {

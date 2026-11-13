@@ -21,6 +21,18 @@ from www_asset_manifest import (  # noqa: E402
 )
 
 
+def run_chrome(command: list[str], output_dir: Path, label: str):
+    stdout_path = output_dir / f"{label}.stdout"
+    stderr_path = output_dir / f"{label}.stderr"
+    with stdout_path.open("wb") as stdout, stderr_path.open("wb") as stderr:
+        result = subprocess.run(
+            command, stdin=subprocess.DEVNULL, stdout=stdout, stderr=stderr,
+            timeout=CHROME_PROCESS_TIMEOUT_SECONDS)
+    result.stdout = stdout_path.read_text(encoding="utf-8", errors="replace")
+    result.stderr = stderr_path.read_text(encoding="utf-8", errors="replace")
+    return result
+
+
 def resolve_chrome():
     configured = os.environ.get("CHROME_BIN")
     if configured:
@@ -2265,9 +2277,7 @@ def main():
                    "--no-default-browser-check", "--allow-file-access-from-files",
                    "--user-data-dir=" + str(Path(temporary) / "profile"),
                    "--virtual-time-budget=2500", "--dump-dom", page.as_uri()]
-        result = subprocess.run(command, capture_output=True, text=True,
-                                encoding="utf-8", errors="replace",
-                                timeout=CHROME_PROCESS_TIMEOUT_SECONDS)
+        result = run_chrome(command, Path(temporary), "desktop")
         mobile_command = [
             str(chrome), "--headless", "--disable-gpu",
             "--disable-gpu-compositing",
@@ -2278,10 +2288,8 @@ def main():
             "--user-data-dir=" + str(Path(temporary) / "mobile-profile"),
             "--virtual-time-budget=2500", "--dump-dom", page.as_uri()
         ]
-        mobile_result = subprocess.run(
-            mobile_command, capture_output=True, text=True,
-            encoding="utf-8", errors="replace",
-            timeout=CHROME_PROCESS_TIMEOUT_SECONDS)
+        mobile_result = run_chrome(
+            mobile_command, Path(temporary), "mobile")
         recovery_page = Path(temporary) / "recovery-test.html"
         recovery_page.write_text(recovery_test_html, encoding="utf-8")
         recovery_command = [
@@ -2293,10 +2301,8 @@ def main():
             "--user-data-dir=" + str(Path(temporary) / "recovery-profile"),
             "--virtual-time-budget=1500", "--dump-dom", recovery_page.as_uri()
         ]
-        recovery_result = subprocess.run(
-            recovery_command, capture_output=True, text=True,
-            encoding="utf-8", errors="replace",
-            timeout=CHROME_PROCESS_TIMEOUT_SECONDS)
+        recovery_result = run_chrome(
+            recovery_command, Path(temporary), "recovery")
         wifi_recovery_page = Path(temporary) / "wifi-recovery-test.html"
         wifi_recovery_page.write_text(wifi_recovery_test_html, encoding="utf-8")
         wifi_recovery_command = [
@@ -2309,10 +2315,8 @@ def main():
             "--virtual-time-budget=1500", "--dump-dom",
             wifi_recovery_page.as_uri()
         ]
-        wifi_recovery_result = subprocess.run(
-            wifi_recovery_command, capture_output=True, text=True,
-            encoding="utf-8", errors="replace",
-            timeout=CHROME_PROCESS_TIMEOUT_SECONDS)
+        wifi_recovery_result = run_chrome(
+            wifi_recovery_command, Path(temporary), "wifi-recovery")
         first_boot_page = Path(temporary) / "first-boot-test.html"
         first_boot_page.write_text(first_boot_test_html, encoding="utf-8")
         first_boot_command = [
@@ -2324,10 +2328,8 @@ def main():
             "--user-data-dir=" + str(Path(temporary) / "first-boot-profile"),
             "--virtual-time-budget=2500", "--dump-dom", first_boot_page.as_uri()
         ]
-        first_boot_result = subprocess.run(
-            first_boot_command, capture_output=True, text=True,
-            encoding="utf-8", errors="replace",
-            timeout=CHROME_PROCESS_TIMEOUT_SECONDS)
+        first_boot_result = run_chrome(
+            first_boot_command, Path(temporary), "first-boot")
         first_boot_mobile_command = [
             str(chrome), "--headless", "--disable-gpu",
             "--disable-gpu-compositing",
@@ -2338,10 +2340,8 @@ def main():
             "--user-data-dir=" + str(Path(temporary) / "first-boot-mobile-profile"),
             "--virtual-time-budget=2500", "--dump-dom", first_boot_page.as_uri()
         ]
-        first_boot_mobile_result = subprocess.run(
-            first_boot_mobile_command, capture_output=True, text=True,
-            encoding="utf-8", errors="replace",
-            timeout=CHROME_PROCESS_TIMEOUT_SECONDS)
+        first_boot_mobile_result = run_chrome(
+            first_boot_mobile_command, Path(temporary), "first-boot-mobile")
     match = re.search(r'<output id="headless-result">([^<]+)</output>', result.stdout)
     outcome = match.group(1) if match else "FAIL: Chrome did not return the test result"
     print(outcome)
