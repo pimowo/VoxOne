@@ -45,10 +45,6 @@ checkpointów pozostaje w historii Git i w istniejących raportach.
   oraz zachowanie MUTE; sprawdzić brak słyszalnych ubytków przy krótkiej
   kontencji I2S, zamknięcie toru po fizycznym zatrzymaniu PCM i ograniczenie
   restartów I2S1 do pięciu kolejnych nieudanych prób.
-- [ ] Naprawić watchdog trybu captive AP bez zapisanych profili Wi-Fi:
-  po wyczyszczeniu SPIFFS L0 doszedł do `netserver.begin`, po czym po około
-  7 s zgłosił `Task watchdog` dla `IDLE0` z zadaniem `wifi` na CPU0;
-  zweryfikować również provisioning i stabilność tego trybu na S0.
 - [ ] Fizycznie przetestować TTS/media z Home Assistant: źródło `SOURCE_HA`,
   metadane title/artist i `N/A` zamiast bitrate na TFT/OLED oraz powrót do
   wcześniej używanego źródła i jego stanu po EOF albo komendzie Stop.
@@ -60,11 +56,8 @@ checkpointów pozostaje w historii Git i w istniejących raportach.
   oraz automatyczny AVRCP Absolute Volume z rzeczywistym źródłem Bluetooth.
 - [ ] Po implementacji Local Files podłączyć kartę microSD i sprawdzić
   stabilność odtwarzania przy współdzieleniu SPI z wyświetlaczem i osobnym CS.
-- [ ] Po udostępnieniu potwierdzonych portów `/dev/serial/by-id` wgrać
-  zweryfikowane SPIFFS i firmware checkpointu
-  VOXONE-WEB-OPTIMIZATION-AND-DLNA-FIX na L0 i S0 (bieżący host nie ma portów
-  USB VoxOne, a S0 pozostaje fizycznie odłączony i bez kanonicznej roli USB),
-  następnie dokończyć fizyczny test DLNA na `minidlna`: sprawdzić wykrywanie i
+- [ ] Dokończyć fizyczny test DLNA na
+  `minidlna`: sprawdzić wykrywanie i
   przełączanie co najmniej dwóch serwerów w panelu WWW oraz powrót do
   poprzedniego źródła po naturalnym EOF; na urządzeniu sprawdzić nawigację
   enkoderem, klik folderu lub utworu, dwuklik do katalogu nadrzędnego oraz

@@ -190,4 +190,9 @@ int main() {
   assert(transactionRecovery < recoveryAp);
   assert(transactionRecovery < runtimeHardware);
   assert(main.find("USB restore required") != std::string::npos);
+  const std::size_t mainLoop = main.find("void loop()");
+  const std::size_t captivePortalYield =
+      main.find("if (network.status == SOFT_AP) delay(1);", mainLoop);
+  assert(mainLoop != std::string::npos);
+  assert(captivePortalYield != std::string::npos);
 }

@@ -415,6 +415,12 @@ void loop() {
   if (loopElapsedUs > enduranceMaximumLoopUs)
     enduranceMaximumLoopUs = loopElapsedUs;
   reportEnduranceHealth(millis());
+  // On SMP builds Arduino's loopTask immediately calls loop() again without
+  // yielding.  The first-boot AP path is otherwise fully non-blocking, so it
+  // can starve IDLE0 (and the Wi-Fi task sharing Core 0) until the task
+  // watchdog fires.  Give the scheduler one tick while the captive portal is
+  // active; connected audio operation keeps its existing cadence.
+  if (network.status == SOFT_AP) delay(1);
 }
 
 #include "core/audiohandlers.h"
