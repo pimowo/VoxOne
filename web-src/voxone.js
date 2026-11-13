@@ -2163,7 +2163,7 @@ window.VoxOneRestartWaiter = Object.freeze({
 
   function renderStation() {
     const status = state.webStatus;
-    text("status-name-label", "STACJA");
+    text("status-name-label", "ŹRÓDŁO");
     text("current-station-name", status?.name || "—");
   }
 

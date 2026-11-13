@@ -780,7 +780,7 @@ setTimeout(async () => {
       name:'DLNA', artist:'DLNA Artysta', title:'DLNA Utwór', codec:'MP3',
       playback:'PLAY', transport:'playing', bitrate:320
     }));
-    check(get('status-name-label').textContent === 'STACJA' &&
+    check(get('status-name-label').textContent === 'ŹRÓDŁO' &&
       get('current-station-name').textContent === 'DLNA' &&
       get('status-artist').textContent === 'DLNA Artysta' &&
       get('status-track').textContent === 'DLNA Utwór' &&
@@ -798,7 +798,7 @@ setTimeout(async () => {
     btTestSocket.receive(sourceSnapshot('AUX', ['radio','bt'], true, {
       name:'AUX', playback:'PLAY', transport:'playing', codec:'', bitrate:0
     }));
-    check(get('status-name-label').textContent === 'STACJA' &&
+    check(get('status-name-label').textContent === 'ŹRÓDŁO' &&
       get('current-station-name').textContent === 'AUX' &&
       get('source').textContent === 'AUX', 'future AUX snapshot is accepted');
     btTestSocket.receive(sourceSnapshot('WEB', ['radio','bt','ha','dlna','aux'], true, {
@@ -809,6 +809,15 @@ setTimeout(async () => {
       'volume and mute from one snapshot');
     const sourceButton = source => selector.querySelector('button[data-source="' + source + '"]');
     check(sourceButton('radio').getAttribute('aria-pressed') === 'true', 'RADIO active');
+    const sourceSelectorStyle = getComputedStyle(selector);
+    const activeSourceStyle = getComputedStyle(sourceButton('radio'));
+    const inactiveSourceStyle = getComputedStyle(sourceButton('bt'));
+    check(sourceSelectorStyle.flexWrap === 'wrap' && activeSourceStyle.borderRadius === '999px',
+      'source selector uses wrapping pill layout');
+    check(activeSourceStyle.backgroundColor === 'rgb(59, 130, 246)' &&
+      activeSourceStyle.color === 'rgb(255, 255, 255)' && activeSourceStyle.opacity === '1' &&
+      inactiveSourceStyle.backgroundColor === 'rgb(39, 39, 42)',
+      'source pills expose clear active and inactive states');
     check(sourceButton('radio').textContent === 'WEB (RADIO)' &&
       sourceButton('ha').textContent === 'HA' && sourceButton('dlna').textContent === 'DLNA' &&
       sourceButton('aux').textContent === 'AUX', 'all source labels are rendered');
