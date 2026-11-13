@@ -1102,45 +1102,8 @@ bool Audio::connecttomarytts(const char* speech, const char* lang, const char* v
 }
 //---------------------------------------------------------------------------------------------------------------------
 void Audio::urlencode(char* buff, uint16_t buffLen, bool spacesOnly) {
-
-    uint16_t len = strlen(buff);
-    uint8_t* tmpbuff = (uint8_t*)malloc(buffLen);
-    if(!tmpbuff) {log_e("out of memory"); return;}
-    char c;
-    char code0;
-    char code1;
-    uint16_t j = 0;
-    for(int i = 0; i < len; i++) {
-        c = buff[i];
-        if(isalnum(c)) tmpbuff[j++] = c;
-        else if(spacesOnly){
-            if(c == ' '){
-                tmpbuff[j++] = '%';
-                tmpbuff[j++] = '2';
-                tmpbuff[j++] = '0';
-            }
-            else{
-                tmpbuff[j++] = c;
-            }
-        }
-        else {
-            code1 = (c & 0xf) + '0';
-            if((c & 0xf) > 9) code1 = (c & 0xf) - 10 + 'A';
-            c = (c >> 4) & 0xf;
-            code0 = c + '0';
-            if(c > 9) code0 = c - 10 + 'A';
-            tmpbuff[j++] = '%';
-            tmpbuff[j++] = code0;
-            tmpbuff[j++] = code1;
-        }
-        if(j == buffLen - 1){
-            log_e("out of memory");
-            break;
-        }
-    }
-    memcpy(buff, tmpbuff, j);
-    buff[j] ='\0';
-    free(tmpbuff);
+    if(!voxone::radio::urlEncodeInPlace(buff, buffLen, spacesOnly))
+        log_e("urlencode buffer too small");
 }
 //---------------------------------------------------------------------------------------------------------------------
 void Audio::showID3Tag(const char* tag, const char* value){

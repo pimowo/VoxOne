@@ -3,9 +3,13 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="theme-color" content="#09090B">
+  <meta name="theme-color" content="#0f1117">
+  <meta name="application-name" content="VoxOne">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <title>VoxOne — Status</title>
-  <link rel="icon" type="image/svg+xml" href="/voxone-symbol.svg?v={voxone-symbol.svg-hash}">
+  <link rel="manifest" href="/manifest.json?v={manifest.json-hash}">
+  <link rel="icon" type="image/svg+xml" href="/sprite.svg?v={sprite.svg-hash}">
   <link rel="stylesheet" href="/voxone.css?v={voxone.css-hash}">
   <script src="/variables.js"></script>
   <!-- VOXONE_DSP_BEGIN -->
@@ -19,7 +23,7 @@
   <section id="security-gate" class="security-gate" aria-labelledby="security-title" hidden>
     <article class="security-card">
       <div class="security-brand">
-        <img class="security-logo" src="/voxone-logo.svg?v={voxone-logo.svg-hash}" alt="VoxOne" width="207" height="50">
+        <svg class="security-logo" viewBox="0 0 2070 500" role="img" aria-label="VoxOne"><use href="/sprite.svg?v={sprite.svg-hash}#voxone-logo"/></svg>
         <div><p class="eyebrow">DOSTĘP DO PANELU</p><h1 id="security-title" class="sr-only">VoxOne</h1></div>
       </div>
 
@@ -39,9 +43,9 @@
         </fieldset>
         <div id="security-password-fields" class="security-password-fields">
           <label for="security-setup-password">Hasło</label>
-          <div class="security-password-control"><input id="security-setup-password" type="password" autocomplete="off" autocapitalize="off" spellcheck="false"><button class="security-password-toggle" type="button" data-password-target="security-setup-password" aria-label="Pokaż hasło" aria-pressed="false"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M2.5 12s3.5-6 9.5-6 9.5 6 9.5 6-3.5 6-9.5 6-9.5-6-9.5-6Z"/><circle cx="12" cy="12" r="2.7"/><path class="security-eye-slash" d="m4 4 16 16"/></svg></button></div>
+          <div class="security-password-control"><input id="security-setup-password" type="password" autocomplete="off" autocapitalize="off" spellcheck="false"><button class="security-password-toggle" type="button" data-password-target="security-setup-password" aria-label="Pokaż hasło" aria-pressed="false"><svg aria-hidden="true"><use href="/sprite.svg?v={sprite.svg-hash}#icon-eye"/></svg></button></div>
           <label for="security-setup-repeat">Powtórz hasło</label>
-          <div class="security-password-control"><input id="security-setup-repeat" type="password" autocomplete="off" autocapitalize="off" spellcheck="false"><button class="security-password-toggle" type="button" data-password-target="security-setup-repeat" aria-label="Pokaż hasło" aria-pressed="false"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M2.5 12s3.5-6 9.5-6 9.5 6 9.5 6-3.5 6-9.5 6-9.5-6-9.5-6Z"/><circle cx="12" cy="12" r="2.7"/><path class="security-eye-slash" d="m4 4 16 16"/></svg></button></div>
+          <div class="security-password-control"><input id="security-setup-repeat" type="password" autocomplete="off" autocapitalize="off" spellcheck="false"><button class="security-password-toggle" type="button" data-password-target="security-setup-repeat" aria-label="Pokaż hasło" aria-pressed="false"><svg aria-hidden="true"><use href="/sprite.svg?v={sprite.svg-hash}#icon-eye"/></svg></button></div>
           <p class="hint">Od 4 znaków Unicode, maksymalnie 64 bajty UTF-8.</p>
           <p id="security-weak-warning" class="security-warning" hidden>Hasło ma 4–7 znaków i zapewnia słabą ochronę.</p>
         </div>
@@ -56,7 +60,7 @@
         <p class="muted">Podaj hasło administratora VoxOne.</p>
         <p class="security-warning">Połączenie HTTP nie szyfruje hasła. Dostęp można odzyskać przez SECURITY Recovery uruchamiane przy starcie przyciskiem KEY.</p>
         <label for="security-login-password">Hasło</label>
-        <div class="security-password-control"><input id="security-login-password" type="password" autocomplete="off" autocapitalize="off" spellcheck="false"><button class="security-password-toggle" type="button" data-password-target="security-login-password" aria-label="Pokaż hasło" aria-pressed="false"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M2.5 12s3.5-6 9.5-6 9.5 6 9.5 6-3.5 6-9.5 6-9.5-6-9.5-6Z"/><circle cx="12" cy="12" r="2.7"/><path class="security-eye-slash" d="m4 4 16 16"/></svg></button></div>
+        <div class="security-password-control"><input id="security-login-password" type="password" autocomplete="off" autocapitalize="off" spellcheck="false"><button class="security-password-toggle" type="button" data-password-target="security-login-password" aria-label="Pokaż hasło" aria-pressed="false"><svg aria-hidden="true"><use href="/sprite.svg?v={sprite.svg-hash}#icon-eye"/></svg></button></div>
         <p id="security-login-message" class="security-message" role="alert"></p>
         <button id="security-login-submit" class="primary" type="submit">Zaloguj</button>
       </form>
@@ -76,7 +80,7 @@
   <div id="app-shell" class="shell">
     <header class="topbar">
       <div class="brand">
-        <div><p class="eyebrow">DEVELOPER DASHBOARD</p><img class="brand-logo" src="/voxone-logo.svg?v={voxone-logo.svg-hash}" alt="VoxOne" width="207" height="50"></div>
+        <div><p class="eyebrow">DEVELOPER DASHBOARD</p><svg class="brand-logo" viewBox="0 0 2070 500" role="img" aria-label="VoxOne"><use href="/sprite.svg?v={sprite.svg-hash}#voxone-logo"/></svg></div>
       </div>
       <div class="identity"><div class="identity-badges"><span id="header-version" class="profile">Wersja —</span><span id="header-profile" class="profile">Profil —</span></div><button id="security-logout" class="security-logout" type="button" hidden>Wyloguj</button></div>
     </header>
@@ -84,17 +88,17 @@
 
     <nav class="tabs" aria-label="Główna nawigacja">
       <span class="nav-label" aria-hidden="true">Workspace</span>
-      <a href="#status" data-tab="status" aria-current="page"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 4h6v6H4zM14 4h6v6h-6zM4 14h6v6H4zM14 14h6v6h-6z"/></svg><span>Status</span></a>
-      <a href="#stations" data-tab="stations"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 5h14v14H5zM9 5v14M12 9h4M12 13h4"/></svg><span>Stacje</span></a>
-      <a href="#dlna" data-tab="dlna"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 6h14v12H5zM8 10a5 5 0 0 1 5 5M8 13a2 2 0 0 1 2 2"/></svg><span>DLNA</span></a>
-      <a href="#audio" data-tab="audio"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 10v4M8 7v10M12 4v16M16 7v10M20 10v4"/></svg><span>Audio</span></a>
+      <a href="#status" data-tab="status" aria-current="page"><svg aria-hidden="true"><use href="/sprite.svg?v={sprite.svg-hash}#icon-status"/></svg><span>Status</span></a>
+      <a href="#stations" data-tab="stations"><svg aria-hidden="true"><use href="/sprite.svg?v={sprite.svg-hash}#icon-stations"/></svg><span>Stacje</span></a>
+      <a href="#dlna" data-tab="dlna"><svg aria-hidden="true"><use href="/sprite.svg?v={sprite.svg-hash}#icon-dlna"/></svg><span>DLNA</span></a>
+      <a href="#audio" data-tab="audio"><svg aria-hidden="true"><use href="/sprite.svg?v={sprite.svg-hash}#icon-audio"/></svg><span>Audio</span></a>
       <!-- VOXONE_DSP_BEGIN -->
-      <a href="#dsp" data-tab="dsp"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 8h3M17 8h3M4 16h7M15 16h5M7 5v6M15 13v6"/></svg><span>DSP</span></a>
+      <a href="#dsp" data-tab="dsp"><svg aria-hidden="true"><use href="/sprite.svg?v={sprite.svg-hash}#icon-dsp"/></svg><span>DSP</span></a>
       <!-- VOXONE_DSP_END -->
-      <a href="#settings" data-tab="settings"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 8a4 4 0 1 0 0 8 4 4 0 0 0 0-8ZM12 3v2M12 19v2M3 12h2M19 12h2M5.6 5.6 7 7M17 17l1.4 1.4M18.4 5.6 17 7M7 17l-1.4 1.4"/></svg><span>Ustawienia</span></a>
-      <a href="#hardware" data-tab="hardware"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 8h8v8H8zM10 2v3M14 2v3M10 19v3M14 19v3M2 10h3M19 10h3M2 14h3M19 14h3"/></svg><span>Sprzęt</span></a>
-      <a href="#system" data-tab="system"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5h16v11H4zM8 20h8M12 16v4"/></svg><span>System</span></a>
-      <a href="#update" data-tab="update"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 16V4M8 8l4-4 4 4M5 20h14"/></svg><span>Aktualizacja</span></a>
+      <a href="#settings" data-tab="settings"><svg aria-hidden="true"><use href="/sprite.svg?v={sprite.svg-hash}#icon-settings"/></svg><span>Ustawienia</span></a>
+      <a href="#hardware" data-tab="hardware"><svg aria-hidden="true"><use href="/sprite.svg?v={sprite.svg-hash}#icon-hardware"/></svg><span>Sprzęt</span></a>
+      <a href="#system" data-tab="system"><svg aria-hidden="true"><use href="/sprite.svg?v={sprite.svg-hash}#icon-system"/></svg><span>System</span></a>
+      <a href="#update" data-tab="update"><svg aria-hidden="true"><use href="/sprite.svg?v={sprite.svg-hash}#icon-update"/></svg><span>Aktualizacja</span></a>
     </nav>
 
     <main id="main">

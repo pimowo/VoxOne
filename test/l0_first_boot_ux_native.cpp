@@ -36,7 +36,7 @@ int main() {
          std::string::npos);
   assert(page.find("id=\"ssid-list\"") != std::string::npos);
   assert(page.find("id=\"manual-ssid\"") != std::string::npos);
-  assert(page.find("src=\"/voxone-logo.svg\"") != std::string::npos);
+  assert(page.find("href=\"/sprite.svg#voxone-logo\"") != std::string::npos);
   assert(page.find("name=\"display\"") != std::string::npos);
   assert(page.find("name=\"input\"") != std::string::npos);
   assert(page.find("name=\"audio\"") != std::string::npos);

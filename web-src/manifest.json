@@ -1,0 +1,17 @@
+{
+  "name": "VoxOne",
+  "short_name": "VoxOne",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#0f1117",
+  "theme_color": "#0f1117",
+  "icons": [
+    {
+      "src": "/sprite.svg?v={sprite.svg-hash}",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    }
+  ]
+}

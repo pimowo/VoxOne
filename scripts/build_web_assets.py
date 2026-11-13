@@ -67,16 +67,28 @@ def build_assets(target_dir, include_dsp):
     contract = contract_from_header(CONTRACT_HEADER, include_dsp=include_dsp)
     assets = tuple(path.removeprefix("/www/").removesuffix(".gz")
                    for path in contract["paths"])
+    expected_gzip = {name + ".gz" for name in assets}
+    for stale in target_dir.glob("*.gz"):
+        if stale.name not in expected_gzip:
+            stale.unlink()
+    rendered = {
+        name: source_bytes(name) for name in assets if name != "voxone.html"
+    }
+    if "manifest.json" in rendered and "sprite.svg" in rendered:
+        sprite_hash = hashlib.sha256(rendered["sprite.svg"]).hexdigest()[:12]
+        rendered["manifest.json"] = rendered["manifest.json"].replace(
+            b"{sprite.svg-hash}", sprite_hash.encode("ascii")
+        )
     hashes = {
-        name: hashlib.sha256(source_bytes(name)).hexdigest()[:12]
-        for name in assets if name != "voxone.html"
+        name: hashlib.sha256(data).hexdigest()[:12]
+        for name, data in rendered.items()
     }
     html = render_html(include_dsp)
     for name, digest in hashes.items():
         html = html.replace("{" + name + "-hash}", digest)
 
     for name in assets:
-        data = html.encode("utf-8") if name == "voxone.html" else source_bytes(name)
+        data = html.encode("utf-8") if name == "voxone.html" else rendered[name]
         target = target_dir / (name + ".gz")
         compressed = compress(data)
         if not target.exists() or target.read_bytes() != compressed:

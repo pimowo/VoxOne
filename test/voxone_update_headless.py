@@ -3,6 +3,7 @@
 from pathlib import Path
 import gzip
 import hashlib
+import json
 import os
 import re
 import shutil
@@ -864,10 +865,11 @@ setTimeout(async () => {
     const icon = document.querySelector('link[rel="icon"]');
     const headerBrand = document.querySelector('.topbar .brand .brand-logo');
     const securityBrand = document.querySelector('.security-brand .security-logo');
-    check(icon?.type === 'image/svg+xml' && icon.href.includes('/voxone-symbol.svg?v=') &&
-      headerBrand?.getAttribute('src')?.includes('/voxone-logo.svg?v=') &&
-      headerBrand?.alt === 'VoxOne' && securityBrand?.getAttribute('src')?.includes('/voxone-logo.svg?v=') &&
-      securityBrand?.alt === 'VoxOne', 'official VoxOne logo and symbol favicon');
+    check(icon?.type === 'image/svg+xml' && icon.href.includes('/sprite.svg?v=') &&
+      headerBrand?.querySelector('use')?.getAttribute('href')?.includes('/sprite.svg?v=') &&
+      headerBrand?.getAttribute('aria-label') === 'VoxOne' &&
+      securityBrand?.querySelector('use')?.getAttribute('href')?.includes('/sprite.svg?v=') &&
+      securityBrand?.getAttribute('aria-label') === 'VoxOne', 'VoxOne SVG sprite branding and favicon');
     check(get('header-version').classList.contains('profile') &&
       get('header-version').textContent === 'Wersja 0.8.0-dev' &&
       get('header-profile').textContent === 'Profil L0', 'header version and hardware profile tiles');
@@ -1981,6 +1983,8 @@ def main():
     html = (ROOT / "web-src/voxone.html").read_text(encoding="utf-8")
     css = (ROOT / "web-src/voxone.css").read_text(encoding="utf-8")
     route = (ROOT / "src/core/netserver.cpp").read_text(encoding="utf-8")
+    web_handlers = (ROOT / "src/AsyncWebServer/WebHandlers.cpp").read_text(
+        encoding="utf-8")
     access_policy = (ROOT / "src/core/security_access_policy.cpp").read_text(
         encoding="utf-8")
     http_adapter = (ROOT / "src/core/security_http_adapter.cpp").read_text(
@@ -1990,16 +1994,46 @@ def main():
     netserver_header = (ROOT / "src/core/netserver.h").read_text(
         encoding="utf-8")
     platformio = (ROOT / "platformio.ini").read_text(encoding="utf-8")
+    pwa_manifest = json.loads(
+        (ROOT / "web-src/manifest.json").read_text(encoding="utf-8"))
+    sprite = (ROOT / "web-src/sprite.svg").read_text(encoding="utf-8")
+    assert pwa_manifest["name"] == "VoxOne" and \
+           pwa_manifest["display"] == "standalone" and \
+           pwa_manifest["theme_color"] == "#0f1117" and \
+           pwa_manifest["icons"][0]["src"] == "/sprite.svg?v={sprite.svg-hash}", \
+        "PWA manifest must describe the standalone VoxOne application"
+    assert '<link rel="manifest" href="/manifest.json?v={manifest.json-hash}">' in html and \
+           '<meta name="theme-color" content="#0f1117">' in html and \
+           "serviceWorker" not in html and "serviceWorker" not in \
+           (ROOT / "web-src/voxone.js").read_text(encoding="utf-8"), \
+        "install metadata must not introduce a service worker before HTTPS"
+    assert sprite.count("<symbol ") >= 13 and \
+           'id="voxone-logo"' in sprite and 'id="voxone-symbol"' in sprite and \
+           "<path" not in html and "<circle" not in html and \
+           html.count("<use ") >= 13, \
+        "all panel SVG artwork must be served through the symbol sprite"
+    assert 'fs.open("/www/assets.vxwm", "r")' in web_handlers and \
+           'String(request->_tempFile.size())' not in web_handlers and \
+           "quotedSha[0] = '\"';" in web_handlers and \
+           'response->addHeader("ETag", etag)' in web_handlers, \
+        "static ETags must use quoted SHA-256 records from assets.vxwm"
+    assert re.search(
+        r'if \(request->url\(\) == "/variables\.js"\).*?'
+        r'request->send\(200, "application/javascript", netserver\.nsBuf\);',
+        route, re.S), "variables.js must use the JavaScript MIME type"
     assert '"/voxone.html"' in access_policy and \
            'SecurityRouteClass::PublicBootstrap' in access_policy, \
         "login bootstrap assets must remain public in the prepared policy"
     compressed_assets = (
-        "advanced-audio.js", "dsp-client.js", "voxone-logo.svg",
-        "voxone-symbol.svg", "voxone.css", "voxone.html", "voxone.js")
+        "advanced-audio.js", "dsp-client.js", "sprite.svg",
+        "manifest.json", "voxone.css", "voxone.html", "voxone.js")
     expected_assets = {
         asset: (ROOT / "web-src" / asset).read_bytes()
         for asset in compressed_assets
     }
+    sprite_digest = hashlib.sha256(expected_assets["sprite.svg"]).hexdigest()[:12]
+    expected_assets["manifest.json"] = expected_assets["manifest.json"].replace(
+        b"{sprite.svg-hash}", sprite_digest.encode("ascii"))
     generated_html = expected_assets["voxone.html"].decode("utf-8")
     generated_html = re.sub(
         r"[ \t]*<!-- VOXONE_DSP_BEGIN -->\s*(.*?)\s*"
@@ -2102,7 +2136,7 @@ def main():
            '20%%' in first_boot_html, \
         "first-boot hardware form must be generated from runtime capabilities"
     assert 'id="pass-toggle"' in first_boot_html and \
-           'class="eye-slash"' in first_boot_html and \
+           'href="/sprite.svg#icon-eye"' in first_boot_html and \
            'type="button"' in first_boot_html and \
            'aria-label="Poka&#380; has&#322;o"' in first_boot_html, \
         "first-boot password eye must be an accessible native button"
@@ -2129,7 +2163,7 @@ def main():
            'sessionStorage' not in wifi_recovery_html, \
         "Wi-Fi recovery must not log or persist credentials"
     assert re.search(r'webserver\.on\("/favicon\.ico", HTTP_GET,.*?'
-                     r'request->redirect\("/voxone-symbol\.svg"\);', route, re.S), \
+                     r'request->redirect\("/sprite\.svg"\);', route, re.S), \
         "favicon.ico must redirect to the official symbol"
     scripts = [
         (ROOT / "web-src" / name).read_text(encoding="utf-8")

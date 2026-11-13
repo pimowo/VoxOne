@@ -6,6 +6,7 @@
 #include <fstream>
 #include <iterator>
 #include <string>
+#include <vector>
 
 namespace {
 
@@ -44,6 +45,30 @@ int main() {
   assert(voxone::radio::spacesOnlyEncodedCapacity("") == 1);
   assert(voxone::radio::spacesOnlyEncodedCapacity("/a?b&c") == 7);
   assert(voxone::radio::spacesOnlyEncodedCapacity("/a b") == 7);
+
+  {
+    const std::string windowsPath =
+        "/WMPNSSv4/12345678-1234-1234-1234-123456789abc/"
+        "0$1$8I1000 Music/Very long artist & album name/Track 01.mp3"
+        "?format=audio/mpeg&token=0123456789abcdef0123456789abcdef";
+    std::vector<char> encoded(
+        voxone::radio::spacesOnlyEncodedCapacity(windowsPath.c_str()));
+    std::memcpy(encoded.data(), windowsPath.c_str(), windowsPath.size() + 1);
+    assert(voxone::radio::urlEncodeInPlace(encoded.data(), encoded.size(), true));
+    const std::string result(encoded.data());
+    assert(result.find(' ') == std::string::npos);
+    assert(result.find("%20") != std::string::npos);
+    assert(result.find("&token=") != std::string::npos);
+  }
+
+  {
+    char encoded[16] = "a b&c";
+    assert(voxone::radio::urlEncodeInPlace(encoded, sizeof(encoded)));
+    assert(std::strcmp(encoded, "a%20b%26c") == 0);
+    char tooSmall[4] = "a b";
+    assert(!voxone::radio::urlEncodeInPlace(tooSmall, sizeof(tooSmall)));
+    assert(std::strcmp(tooSmall, "a b") == 0);
+  }
 
   resetInjection(0);
   {
@@ -101,4 +126,13 @@ int main() {
   assert(audio.find("OwnedCString strippedHost") != std::string::npos);
   assert(audio.find("out of memory preparing URL parts") !=
          std::string::npos);
+  const std::size_t urlencodeStart = audio.find("void Audio::urlencode");
+  assert(urlencodeStart != std::string::npos);
+  const std::size_t urlencodeEnd = audio.find("//---------------------------------------------------------------------------------------------------------------------",
+                                              urlencodeStart + 1);
+  assert(urlencodeEnd != std::string::npos);
+  const std::string urlencode =
+      audio.substr(urlencodeStart, urlencodeEnd - urlencodeStart);
+  assert(urlencode.find("malloc") == std::string::npos);
+  assert(urlencode.find("urlEncodeInPlace") != std::string::npos);
 }

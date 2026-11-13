@@ -1150,7 +1150,7 @@ bool NetServer::begin(bool quiet) {
 #endif
   // Browsers may request the legacy icon path even when HTML declares the SVG icon.
   webserver.on("/favicon.ico", HTTP_GET, [](AsyncWebServerRequest* request) {
-    request->redirect("/voxone-symbol.svg");
+    request->redirect("/sprite.svg");
   });
 #if VOXONE_INCLUDE_DSP
   webserver.on("/api/dsp/state", HTTP_GET, voxone::dsp::handleDspState);
@@ -4284,7 +4284,7 @@ void handleNotFound(AsyncWebServerRequest * request) {
     const auto webBinding = voxone::first_boot::webBindingFor(presentation);
     const auto runtime = config.runtimeSnapshot();
     sprintf (netserver.nsBuf, "var voxOneVersion='%s';\nvar voxOneChannel='%s';\nvar voxOneBuild='%s';\nvar yoRadioVersion='%s';\nvar yoVersion=voxOneVersion;\nvar voxOneProfile='%s';\nvar voxOneAudioPath='%s';\nvar playMode='%s';\n", VOXONE_VERSION, VOXONE_BUILD_CHANNEL, VOXONE_BUILD_SHA, YOVERSION, VOXONE_BUILD_PROFILE, voxone::audio_path::apiName(static_cast<AudioPath>(runtime.audioPath)), webBinding.normalPanel?"player":"ap");
-    request->send(200, "text/html", netserver.nsBuf);
+    request->send(200, "application/javascript", netserver.nsBuf);
     return;
   }
   Serial.print("Not Found: ");

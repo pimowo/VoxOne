@@ -60,13 +60,18 @@ checkpointów pozostaje w historii Git i w istniejących raportach.
   oraz automatyczny AVRCP Absolute Volume z rzeczywistym źródłem Bluetooth.
 - [ ] Po implementacji Local Files podłączyć kartę microSD i sprawdzić
   stabilność odtwarzania przy współdzieleniu SPI z wyświetlaczem i osobnym CS.
-- [ ] Dokończyć fizyczny test DLNA na `minidlna`: sprawdzić wykrywanie i
+- [ ] Po udostępnieniu potwierdzonych portów `/dev/serial/by-id` wgrać
+  zweryfikowane SPIFFS i firmware checkpointu
+  VOXONE-WEB-OPTIMIZATION-AND-DLNA-FIX na L0 i S0 (bieżący host nie ma portów
+  USB VoxOne, a S0 pozostaje fizycznie odłączony i bez kanonicznej roli USB),
+  następnie dokończyć fizyczny test DLNA na `minidlna`: sprawdzić wykrywanie i
   przełączanie co najmniej dwóch serwerów w panelu WWW oraz powrót do
   poprzedniego źródła po naturalnym EOF; na urządzeniu sprawdzić nawigację
   enkoderem, klik folderu lub utworu, dwuklik do katalogu nadrzędnego oraz
   płynność renderowania na TFT i OLED; na Windows WMPNSS potwierdzić wybór
-  zasobu MP3/FLAC/AAC zamiast okładki JPEG lub WMA, poprawne URL z encjami XML,
-  nagłówek `User-Agent: VoxOne/<wersja>` oraz odtwarzanie po przekierowaniu 302.
+  zasobu MP3/FLAC/AAC zamiast okładki JPEG lub WMA, poprawne długie URL z
+  encjami XML bez OOM, nagłówek `User-Agent: VoxOne/<wersja>`, odtwarzanie po
+  przekierowaniu 302 oraz poprawne WWW/PWA po restarcie.
 - [ ] Po implementacji DSPmini przetestować posiadany moduł ADAU1701, w tym
   crossover, Parametric EQ, subwoofer i Loudness.
 - [ ] Po implementacji AUX przetestować posiadany moduł PCM1808 i przełączanie
@@ -94,8 +99,9 @@ checkpointów pozostaje w historii Git i w istniejących raportach.
 - [ ] Dodać lokalną konfigurację Wi-Fi za pomocą enkodera i ekranu urządzenia.
 - [ ] Zintegrować VoxOnePilot na ESP32-C3: obsłużyć sterowanie przez WebSocket
   oraz odbiór poleceń z pilota IR.
-- [ ] Przekształcić obecny interfejs WWW w Progressive Web App, z możliwością
-  instalacji i ikoną na telefonie.
+- [ ] Po przejściu panelu na HTTPS dodać Service Workera i tryb offline do
+  wdrożonego manifestu instalacyjnego PWA; nie rejestrować Service Workera
+  przy obecnym transporcie HTTP.
 - [ ] Dodać opcjonalną obsługę ekranu LCD ST7920 w późniejszym etapie rozwoju.
 
 ## 3. Wersja 1.3.0+ (Audio / Sprzęt / Sieć)

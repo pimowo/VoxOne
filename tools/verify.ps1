@@ -89,7 +89,7 @@ function Invoke-Pio([string]$label,[string[]]$arguments) {
  if(-not (Select-String -LiteralPath $log -Pattern '\[SUCCESS\]' -Quiet)) { throw "No SUCCESS marker: $log" }
  Write-Host "  log: $log"
 }
-$assetNames=@('voxone.html','voxone.css','voxone.js','advanced-audio.js','dsp-client.js','voxone-logo.svg','voxone-symbol.svg')
+$assetNames=@('voxone.html','voxone.css','voxone.js','advanced-audio.js','dsp-client.js','sprite.svg','manifest.json')
 function Get-AssetHashes {
  $hashes=[ordered]@{}
  foreach($name in $assetNames) {
@@ -102,9 +102,21 @@ function Get-AssetHashes {
  $hashes['assets.vxwm']=(Get-FileHash -LiteralPath $manifest -Algorithm SHA256).Hash
  return $hashes
 }
+function Get-RenderedWebAsset([string]$name) {
+ $bytes=[System.IO.File]::ReadAllBytes((Join-Path $root "web-src/$name"))
+ if($name -eq 'manifest.json') {
+  $sprite=[System.IO.File]::ReadAllBytes((Join-Path $root 'web-src/sprite.svg'))
+  $sha=[System.Security.Cryptography.SHA256]::Create()
+  try { $digest=[BitConverter]::ToString($sha.ComputeHash($sprite)).Replace('-','').ToLowerInvariant().Substring(0,12) }
+  finally { $sha.Dispose() }
+  $text=[System.Text.Encoding]::UTF8.GetString($bytes).Replace('{sprite.svg-hash}',$digest)
+  return [System.Text.Encoding]::UTF8.GetBytes($text)
+ }
+ return $bytes
+}
 function Assert-WebAssets {
  foreach($name in $assetNames) {
-  $source=[System.IO.File]::ReadAllBytes((Join-Path $root "web-src/$name"))
+  $source=Get-RenderedWebAsset $name
   if($name -eq 'voxone.html') {
    $html=[System.Text.Encoding]::UTF8.GetString($source)
    $html=[regex]::Replace(
@@ -112,7 +124,7 @@ function Assert-WebAssets {
      '(?s)[ \t]*<!-- VOXONE_DSP_BEGIN -->\s*(.*?)\s*<!-- VOXONE_DSP_END -->[ \t]*',
      '$1')
    foreach($other in $assetNames | Where-Object { $_ -ne 'voxone.html' }) {
-    $bytes=[System.IO.File]::ReadAllBytes((Join-Path $root "web-src/$other"))
+    $bytes=Get-RenderedWebAsset $other
     $sha=[System.Security.Cryptography.SHA256]::Create()
     try { $digest=[BitConverter]::ToString($sha.ComputeHash($bytes)).Replace('-','').ToLowerInvariant().Substring(0,12) }
     finally { $sha.Dispose() }

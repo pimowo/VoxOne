@@ -21,6 +21,69 @@
 #include "ESPAsyncWebServer.h"
 #include "WebHandlerImpl.h"
 
+namespace {
+
+constexpr size_t kVoxOneManifestHeaderSize = 64;
+constexpr size_t kVoxOneManifestEntrySize = 112;
+constexpr size_t kVoxOneManifestPathSize = 64;
+constexpr size_t kVoxOneSha256Size = 32;
+
+uint16_t readManifestLe16(const uint8_t* value) {
+  return static_cast<uint16_t>(value[0]) |
+         (static_cast<uint16_t>(value[1]) << 8);
+}
+
+uint32_t readManifestLe32(const uint8_t* value) {
+  return static_cast<uint32_t>(value[0]) |
+         (static_cast<uint32_t>(value[1]) << 8) |
+         (static_cast<uint32_t>(value[2]) << 16) |
+         (static_cast<uint32_t>(value[3]) << 24);
+}
+
+bool manifestEtag(FS& fs, const String& filename, size_t servedSize,
+                  String& etag) {
+  File manifest = fs.open("/www/assets.vxwm", "r");
+  if (!manifest || manifest.isDirectory()) return false;
+
+  uint8_t header[kVoxOneManifestHeaderSize];
+  if (manifest.read(header, sizeof(header)) != sizeof(header) ||
+      memcmp(header, "VXWM", 4) != 0 || readManifestLe16(header + 6) != sizeof(header) ||
+      readManifestLe16(header + 16) != kVoxOneManifestEntrySize) {
+    manifest.close();
+    return false;
+  }
+
+  const uint16_t count = readManifestLe16(header + 14);
+  String manifestPath = filename;
+  if (!manifestPath.endsWith(".gz")) manifestPath += ".gz";
+  uint8_t record[kVoxOneManifestEntrySize];
+  for (uint16_t index = 0; index < count; ++index) {
+    if (manifest.read(record, sizeof(record)) != sizeof(record)) break;
+    if (record[kVoxOneManifestPathSize - 1] != 0 ||
+        manifestPath != reinterpret_cast<const char*>(record) ||
+        readManifestLe32(record + kVoxOneManifestPathSize) != servedSize)
+      continue;
+
+    static const char hex[] = "0123456789abcdef";
+    char quotedSha[kVoxOneSha256Size * 2 + 3];
+    quotedSha[0] = '"';
+    for (size_t byte = 0; byte < kVoxOneSha256Size; ++byte) {
+      const uint8_t value = record[kVoxOneManifestPathSize + 4 + byte];
+      quotedSha[1 + byte * 2] = hex[value >> 4];
+      quotedSha[2 + byte * 2] = hex[value & 0x0f];
+    }
+    quotedSha[sizeof(quotedSha) - 2] = '"';
+    quotedSha[sizeof(quotedSha) - 1] = 0;
+    etag = quotedSha;
+    manifest.close();
+    return true;
+  }
+  manifest.close();
+  return false;
+}
+
+}  // namespace
+
 AsyncStaticWebHandler::AsyncStaticWebHandler(const char* uri, FS& fs, const char* path, const char* cache_control)
   : _fs(fs), _uri(uri), _path(path), _default_file("index.htm"), _cache_control(cache_control), _last_modified(""), _callback(nullptr)
 {
@@ -194,11 +257,12 @@ void AsyncStaticWebHandler::handleRequest(AsyncWebServerRequest *request)
       return request->requestAuthentication();
 
   if (request->_tempFile == true) {
-    String etag = String(request->_tempFile.size());
+    String etag;
+    manifestEtag(_fs, filename, request->_tempFile.size(), etag);
     if (_last_modified.length() && _last_modified == request->header("If-Modified-Since")) {
       request->_tempFile.close();
       request->send(304); // Not modified
-    } else if (_cache_control.length() && request->hasHeader("If-None-Match") && request->header("If-None-Match").equals(etag)) {
+    } else if (_cache_control.length() && etag.length() && request->hasHeader("If-None-Match") && request->header("If-None-Match").equals(etag)) {
       request->_tempFile.close();
       AsyncWebServerResponse * response = new AsyncBasicResponse(304); // Not modified
       response->addHeader("Cache-Control", _cache_control);
@@ -210,7 +274,7 @@ void AsyncStaticWebHandler::handleRequest(AsyncWebServerRequest *request)
         response->addHeader("Last-Modified", _last_modified);
       if (_cache_control.length()){
         response->addHeader("Cache-Control", _cache_control);
-        response->addHeader("ETag", etag);
+        if (etag.length()) response->addHeader("ETag", etag);
       }
       request->send(response);
     }

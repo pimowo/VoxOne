@@ -101,6 +101,12 @@ window.VoxOneRestartWaiter = Object.freeze({
     input.type = visible ? "text" : "password";
     button.setAttribute("aria-pressed", visible ? "true" : "false");
     button.setAttribute("aria-label", visible ? "Ukryj hasło" : "Pokaż hasło");
+    const icon = button.querySelector("use");
+    if (icon) {
+      const href = icon.getAttribute("href") || "";
+      icon.setAttribute("href", href.replace(/#icon-eye(?:-off)?$/,
+        visible ? "#icon-eye-off" : "#icon-eye"));
+    }
     if (restoreFocus) {
       input.focus({preventScroll: true});
       if (start !== null && end !== null)

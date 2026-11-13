@@ -5,6 +5,7 @@
 #include <stdlib.h>
 #include <string.h>
 
+#include <cctype>
 #include <limits>
 
 namespace voxone {
@@ -57,6 +58,40 @@ inline size_t spacesOnlyEncodedCapacity(const char* source) {
     length += add;
   }
   return length == std::numeric_limits<size_t>::max() ? 0 : length + 1;
+}
+
+inline bool urlEncodeInPlace(char* buffer, size_t capacity,
+                             bool spacesOnly = false) {
+  if (!buffer || !capacity) return false;
+  const size_t length = strlen(buffer);
+  if (length >= capacity) return false;
+
+  size_t encodedLength = length;
+  for (size_t index = 0; index < length; ++index) {
+    const unsigned char value = static_cast<unsigned char>(buffer[index]);
+    const bool encode = spacesOnly ? value == ' ' : !std::isalnum(value);
+    if (!encode) continue;
+    if (capacity - encodedLength <= 2) return false;
+    encodedLength += 2;
+  }
+
+  static const char hex[] = "0123456789ABCDEF";
+  buffer[encodedLength] = '\0';
+  size_t source = length;
+  size_t destination = encodedLength;
+  while (source) {
+    const unsigned char value =
+        static_cast<unsigned char>(buffer[--source]);
+    const bool encode = spacesOnly ? value == ' ' : !std::isalnum(value);
+    if (encode) {
+      buffer[--destination] = hex[value & 0x0f];
+      buffer[--destination] = hex[value >> 4];
+      buffer[--destination] = '%';
+    } else {
+      buffer[--destination] = static_cast<char>(value);
+    }
+  }
+  return true;
 }
 
 class UrlRequestParts {

@@ -63,10 +63,9 @@ kontrakt opiera się na SECURITY i cookie.
 | `GET` | `/` | brak | Publiczny bootstrap. W normalnym trybie przekierowuje do `/voxone.html`; w pierwszym uruchomieniu lub Wi-Fi recovery AP zwraca wbudowany formularz Wi-Fi; przy niedostępnym SPIFFS i `protected` zwraca wbudowany formularz logowania awaryjnego. Nie należy go mylić z osobnym SECURITY Recovery AP opisanym niżej. |
 | `POST` | `/` | Formularz: `ssid`, `pass`; na pierwszym uruchomieniu także `display`, `input`, `audio`. W recovery AP alternatywnie `retry=saved`. | Tylko tryb provisioningu. Zapisuje Wi-Fi, a przy pierwszym uruchomieniu również wybór sprzętu, po czym planuje restart. SSID ma maks. 29 B UTF-8, hasło 39 B; znaki NUL/TAB/CR/LF są odrzucane. |
 | `GET` | `/voxone.html` | brak | Publiczny asset bootstrap/logowania; właściwe API pozostaje chronione. Zasób z SPIFFS, bez cache. |
-| `GET` | `/voxone.css`, `/voxone.js`, `/voxone-symbol.svg` | brak | Publiczne zasoby bootstrap panelu, serwowane ze SPIFFS. |
+| `GET` | `/voxone.css`, `/voxone.js`, `/sprite.svg`, `/manifest.json` | brak | Publiczne zasoby bootstrap panelu i manifest PWA, serwowane ze SPIFFS. |
 | `GET` | `/advanced-audio.js`, `/dsp-client.js` | brak | Publiczne zasoby panelu DSP, obecne w SPIFFS wyłącznie w profilach z capability DSP. |
-| `GET` | `/voxone-logo.svg` | brak | Publiczny asset marki, potrzebny również w AP pierwszego uruchomienia. |
-| `GET` | `/favicon.ico` | brak | Publiczne przekierowanie do `/voxone-symbol.svg`. |
+| `GET` | `/favicon.ico` | brak | Publiczne przekierowanie do `/sprite.svg`. |
 | `GET` | `/variables.js` | query ignorowane | Trasa chroniona. Zwraca JavaScript z `voxOneVersion`, `voxOneChannel`, `voxOneBuild`, `yoRadioVersion`, `voxOneProfile` i `playMode`. |
 | `GET` | `/data/stations.tsv` | brak | Trasa chroniona. Surowa playlista ze SPIFFS (`application/octet-stream`). |
 | `GET` Upgrade | `/ws` | handshake WebSocket v13 | Chroniony handshake opisany szczegółowo w sekcji „WebSocket”. Nie jest zwykłym endpointem REST. |
@@ -75,8 +74,8 @@ kontrakt opiera się na SECURITY i cookie.
 | `GET` | `/logout` | brak | Starsza trasa Basic Auth; przy zdefiniowanym `HTTP_USER/PASS` wymusza odpowiedź 401. Nie wylogowuje cookie SECURITY — do tego służy `/api/security/logout`. |
 
 Bezpośrednie żądania skompresowanych nazw magazynowych
-`/advanced-audio.js.gz`, `/dsp-client.js.gz`, `/voxone-logo.svg.gz`,
-`/voxone-symbol.svg.gz`, `/voxone.css.gz`, `/voxone.html.gz` i
+`/advanced-audio.js.gz`, `/dsp-client.js.gz`, `/sprite.svg.gz`,
+`/manifest.json.gz`, `/voxone.css.gz`, `/voxone.html.gz` i
 `/voxone.js.gz` są znanymi trasami, ale są celowo odrzucane. Serwer sam
 wybiera plik `.gz` dla kanonicznego URL. Inne pliki `/www` nie są
 automatycznie publicznym API: centralna polityka jest fail-closed i nieznane

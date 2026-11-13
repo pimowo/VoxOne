@@ -27,7 +27,7 @@ input:focus-visible,select:focus-visible,button:focus-visible{outline:2px solid 
 button{width:100%%;min-height:46px;margin-top:22px;padding:13px;border:1px solid var(--cyan);border-radius:10px;background:var(--cyan-dark);color:var(--text);font:650 1rem system-ui,sans-serif;cursor:pointer}
 .secondary{margin-top:10px;background:transparent}.status{min-height:1.5em;margin:10px 0 0}
 .status[data-kind=error]{color:#ffb4ae}
-.password-control{position:relative}.password-control input{padding-right:54px}.password-toggle{position:absolute;top:3px;right:3px;width:42px;min-height:40px;margin:0;padding:8px;border:0;background:transparent}.password-toggle svg{display:block;width:23px;height:23px;margin:auto;fill:none;stroke:currentColor;stroke-width:1.7;stroke-linecap:round;stroke-linejoin:round}.password-toggle .eye-slash{display:none}.password-toggle[aria-pressed=true] .eye-slash{display:block}
+.password-control{position:relative}.password-control input{padding-right:54px}.password-toggle{position:absolute;top:3px;right:3px;width:42px;min-height:40px;margin:0;padding:8px;border:0;background:transparent}.password-toggle svg{display:block;width:23px;height:23px;margin:auto;fill:none;stroke:currentColor;stroke-width:1.7;stroke-linecap:round;stroke-linejoin:round}
 details{margin:24px 0;color:var(--muted)}
 summary{cursor:pointer;color:var(--cyan)}
 .service{margin-top:16px;padding-top:16px;border-top:1px solid var(--line)}
@@ -39,7 +39,7 @@ footer{text-align:center;padding:16px;color:var(--muted);font-size:.85rem}
 </head>
 <body>
 <main>
-<img class="logo" src="/voxone-logo.svg" alt="VoxOne" width="207" height="50">
+<svg class="logo" viewBox="0 0 2070 500" role="img" aria-label="VoxOne"><use href="/sprite.svg#voxone-logo"/></svg>
 <section class="card" id="wifi-setup">
 <h2>Konfiguracja</h2>
 <p>Wybierz sie&#263; Wi-Fi. Po zapisaniu VoxOne uruchomi si&#281; ponownie i otworzy panel bez has&#322;a.</p>
@@ -63,7 +63,7 @@ footer{text-align:center;padding:16px;color:var(--muted);font-size:.85rem}
 <input id="manual-ssid" type="text" autocomplete="off" autocapitalize="off" spellcheck="false"></details>
 <input id="ssid" name="ssid" type="hidden">
 <label for="pass">Has&#322;o</label>
-<div class="password-control"><input id="pass" name="pass" type="password" autocomplete="new-password" autocapitalize="off" spellcheck="false"><button id="pass-toggle" class="password-toggle" type="button" aria-label="Poka&#380; has&#322;o" aria-pressed="false"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M2.5 12s3.5-6 9.5-6 9.5 6 9.5 6-3.5 6-9.5 6-9.5-6-9.5-6Z"/><circle cx="12" cy="12" r="2.7"/><path class="eye-slash" d="m4 4 16 16"/></svg></button></div>
+<div class="password-control"><input id="pass" name="pass" type="password" autocomplete="new-password" autocapitalize="off" spellcheck="false"><button id="pass-toggle" class="password-toggle" type="button" aria-label="Poka&#380; has&#322;o" aria-pressed="false"><svg aria-hidden="true"><use href="/sprite.svg#icon-eye"/></svg></button></div>
 <button type="submit">Zapisz i po&#322;&#261;cz</button>
 </form>
 </section>
@@ -99,7 +99,7 @@ async function pollScan(activeCycle,refresh){
  }catch(error){if(activeCycle!==cycle)return;requestController=null;if(error&&error.name==='AbortError')return;show('Nie udało się odczytać listy. Wpisz SSID ręcznie lub spróbuj ponownie.',true);finishScan(activeCycle)}
 }
 function startScan(refresh){++cycle;polls=0;if(pollTimer){clearTimeout(pollTimer);pollTimer=0}if(requestController)requestController.abort();requestController=null;scan.disabled=true;show('Skanowanie sieci Wi-Fi...');pollScan(cycle,refresh)}
-function setPasswordVisible(visible){var start=pass.selectionStart,end=pass.selectionEnd,direction=pass.selectionDirection;pass.type=visible?'text':'password';passToggle.setAttribute('aria-pressed',visible?'true':'false');passToggle.setAttribute('aria-label',visible?'Ukryj hasło':'Pokaż hasło');pass.focus({preventScroll:true});if(start!==null&&end!==null)pass.setSelectionRange(start,end,direction||'none')}
+function setPasswordVisible(visible){var start=pass.selectionStart,end=pass.selectionEnd,direction=pass.selectionDirection,icon=passToggle.querySelector('use');pass.type=visible?'text':'password';passToggle.setAttribute('aria-pressed',visible?'true':'false');passToggle.setAttribute('aria-label',visible?'Ukryj hasło':'Pokaż hasło');if(icon)icon.setAttribute('href','/sprite.svg#'+(visible?'icon-eye-off':'icon-eye'));pass.focus({preventScroll:true});if(start!==null&&end!==null)pass.setSelectionRange(start,end,direction||'none')}
 scan.addEventListener('click',function(){startScan(true)});
 list.addEventListener('change',function(){ssid.value='';if(list.value.length){mode='list';manual.value='';show('Wybrano sieć z listy.')}else{mode='';show('Wybierz sieć lub wpisz SSID ręcznie.')}});
 manual.addEventListener('input',function(){ssid.value='';list.value='';mode=manual.value.length?'manual':'';show(mode==='manual'?'Tryb ręczny: użyte zostanie wpisane SSID.':'Wybierz sieć lub wpisz SSID ręcznie.')});

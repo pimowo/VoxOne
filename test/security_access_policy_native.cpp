@@ -33,9 +33,9 @@ const EndpointCase kEndpoints[] = {
      SecurityRouteClass::PublicBootstrap, false, false},
     {SecurityAccessMethod::Get, "/dsp-client.js", SecurityEndpoint::LoginAsset,
      SecurityRouteClass::PublicBootstrap, false, false},
-    {SecurityAccessMethod::Get, "/voxone-logo.svg", SecurityEndpoint::BrandAsset,
+    {SecurityAccessMethod::Get, "/sprite.svg", SecurityEndpoint::BrandAsset,
      SecurityRouteClass::PublicBootstrap, false, false},
-    {SecurityAccessMethod::Get, "/voxone-symbol.svg", SecurityEndpoint::LoginAsset,
+    {SecurityAccessMethod::Get, "/manifest.json", SecurityEndpoint::LoginAsset,
      SecurityRouteClass::PublicBootstrap, false, false},
     {SecurityAccessMethod::Get, "/favicon.ico", SecurityEndpoint::LoginAsset,
      SecurityRouteClass::PublicBootstrap, false, false},
@@ -44,10 +44,10 @@ const EndpointCase kEndpoints[] = {
      SecurityRouteClass::RejectedDirectCompressedAsset, false, false},
     {SecurityAccessMethod::Get, "/dsp-client.js.gz", SecurityEndpoint::LoginAsset,
      SecurityRouteClass::RejectedDirectCompressedAsset, false, false},
-    {SecurityAccessMethod::Get, "/voxone-logo.svg.gz",
+    {SecurityAccessMethod::Get, "/sprite.svg.gz",
      SecurityEndpoint::LoginAsset,
      SecurityRouteClass::RejectedDirectCompressedAsset, false, false},
-    {SecurityAccessMethod::Get, "/voxone-symbol.svg.gz",
+    {SecurityAccessMethod::Get, "/manifest.json.gz",
      SecurityEndpoint::LoginAsset,
      SecurityRouteClass::RejectedDirectCompressedAsset, false, false},
     {SecurityAccessMethod::Get, "/voxone.css.gz", SecurityEndpoint::LoginAsset,
@@ -332,11 +332,11 @@ void testHostOriginAndCsrfMatrix() {
 
 void testDirectCompressedAssetsAndCanonicalFallback() {
   const char* canonicalAssets[] = {
-      "/advanced-audio.js", "/dsp-client.js", "/voxone-logo.svg",
-      "/voxone-symbol.svg", "/voxone.css", "/voxone.html", "/voxone.js"};
+      "/advanced-audio.js", "/dsp-client.js", "/sprite.svg",
+      "/manifest.json", "/voxone.css", "/voxone.html", "/voxone.js"};
   const char* directCompressedAssets[] = {
       "/advanced-audio.js.gz", "/dsp-client.js.gz",
-      "/voxone-logo.svg.gz", "/voxone-symbol.svg.gz", "/voxone.css.gz",
+      "/sprite.svg.gz", "/manifest.json.gz", "/voxone.css.gz",
       "/voxone.html.gz", "/voxone.js.gz"};
 
   for (size_t index = 0;

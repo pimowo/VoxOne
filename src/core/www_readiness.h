@@ -22,8 +22,8 @@ static const char* const kCurrentWwwAssetPaths[] = {
     "/www/advanced-audio.js.gz",
     "/www/dsp-client.js.gz",
 #endif
-    "/www/voxone-logo.svg.gz",
-    "/www/voxone-symbol.svg.gz",
+    "/www/sprite.svg.gz",
+    "/www/manifest.json.gz",
 };
 
 constexpr size_t kCurrentWwwAssetCount =
