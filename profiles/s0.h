@@ -16,6 +16,9 @@
 #define VOXONE_HAS_VU 0
 #define VOXONE_HAS_BT 1
 #define VOXONE_BT_FW_UPDATE_ENABLED 0
+#define VOXONE_HAS_SD 0
+#define VOXONE_HAS_IR 1
+#define VOXONE_HAS_W5500 0
 #define VOXONE_HAS_AUX 0
 #define VOXONE_HAS_SPDIF 0
 #define VOXONE_HAS_TDA7719 false
@@ -36,6 +39,9 @@
 #define VOXONE_BT_I2S_BCLK_PIN 11
 #define VOXONE_BT_I2S_WS_PIN 12
 #define VOXONE_BT_I2S_DATA_PIN 13
+
+// Planned infrared receiver input for S0.
+#define VOXONE_IR_SIGNAL_PIN 38
 
 // The external I2C module must provide SDA/SCL pull-ups.
 

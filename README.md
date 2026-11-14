@@ -36,8 +36,8 @@ software gate, ale nie wymagają końcowego fizycznego HIL przed Stable.
 Standardowe profile M0/L0/S0/DIN0 mają włączony produkcyjny enforcement
 SECURITY: OPEN działa bez hasła, a PROTECTED wymaga ważnej sesji dla
 chronionego HTTP/API i WebSocket. Software gate ma PASS, natomiast końcowy HIL
-produkcyjnej ochrony pozostaje wymagany. Online Update, Spotify Connect, DLNA,
-DSPmini, Multiroom, natywne HA oraz Installer są pracami przyszłymi.
+produkcyjnej ochrony pozostaje wymagany. Online Update, DLNA, DSPmini,
+Multiroom, natywne HA oraz Installer są pracami przyszłymi.
 Kanoniczny i aktualny zakres otwartych prac znajduje się wyłącznie w
 [docs/TODO.md](docs/TODO.md).
 

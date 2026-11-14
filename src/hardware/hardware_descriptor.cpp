@@ -33,7 +33,9 @@ constexpr HardwareCapabilities kCapabilities = {
       audioOutputSupport(AudioOutputKind::None),
   inputSupport(LocalInputKind::Ec11) | inputSupport(LocalInputKind::Buttons3),
   true, false, false, false, false, false, false, true, false,
-  bool(VOXONE_INCLUDE_DSP), true, true, false, false, false, false, false
+  bool(VOXONE_INCLUDE_DSP), true, true,
+  bool(VOXONE_HAS_SD), bool(VOXONE_HAS_IR), bool(VOXONE_HAS_W5500),
+  bool(VOXONE_HAS_AUX), false, false, false, false
 };
 #elif defined(VOXONE_PROFILE_S0)
 constexpr BoardId kBoardId = BoardId::BoardS0;
@@ -59,8 +61,9 @@ constexpr HardwareCapabilities kCapabilities = {
       audioOutputSupport(AudioOutputKind::None),
   inputSupport(LocalInputKind::Ec11) | inputSupport(LocalInputKind::Buttons3),
   true, true, true, true, false, false, false, true, false,
-  bool(VOXONE_INCLUDE_DSP), true, bool(VOXONE_HAS_DLNA), false, false, false,
-  true, false
+  bool(VOXONE_INCLUDE_DSP), true, bool(VOXONE_HAS_DLNA),
+  bool(VOXONE_HAS_SD), bool(VOXONE_HAS_IR), bool(VOXONE_HAS_W5500),
+  bool(VOXONE_HAS_AUX), false, false, true, false
 };
 #elif defined(VOXONE_PROFILE_DIN0)
 constexpr BoardId kBoardId = BoardId::BoardDIN0;
@@ -82,7 +85,9 @@ constexpr HardwareCapabilities kCapabilities = {
   audioOutputSupport(AudioOutputKind::Pcm5102a),
   inputSupport(LocalInputKind::Ec11) | inputSupport(LocalInputKind::Buttons3),
   true, false, false, false, false, false, false, true, false,
-  bool(VOXONE_INCLUDE_DSP), true, true, false, false, false, false, false
+  bool(VOXONE_INCLUDE_DSP), true, true,
+  bool(VOXONE_HAS_SD), bool(VOXONE_HAS_IR), bool(VOXONE_HAS_W5500),
+  bool(VOXONE_HAS_AUX), false, false, false, false
 };
 #elif defined(VOXONE_PROFILE_L0)
 constexpr BoardId kBoardId = BoardId::BoardL0;
@@ -109,7 +114,9 @@ constexpr HardwareCapabilities kCapabilities = {
       audioOutputSupport(AudioOutputKind::None),
   inputSupport(LocalInputKind::Ec11) | inputSupport(LocalInputKind::Buttons3),
   true, true, true, true, true, true, true, true, false,
-  bool(VOXONE_INCLUDE_DSP), true, true, false, false, false, false, true
+  bool(VOXONE_INCLUDE_DSP), true, true,
+  bool(VOXONE_HAS_SD), bool(VOXONE_HAS_IR), bool(VOXONE_HAS_W5500),
+  bool(VOXONE_HAS_AUX), false, false, false, true
 };
 #else
 // No matching hardware profile.
@@ -154,6 +161,11 @@ constexpr HardwareDescriptor kCurrent = {
    hasPin(kBacklight) ? DisplayKind::St7796_480x320 : DisplayKind::None},
   kRtcKind,
   kDacXsmt,
+  {fromLegacyPin(VOXONE_SD_CS_PIN),
+   {fromLegacyPin(VOXONE_SD_SCK_PIN),
+    fromLegacyPin(VOXONE_SD_MOSI_PIN),
+    fromLegacyPin(VOXONE_SD_MISO_PIN)}},
+  fromLegacyPin(VOXONE_IR_SIGNAL_PIN),
   {fromLegacyPin(POWER_BUTTON_PIN), fromLegacyPin(POWER_RELAY_PIN)},
   kCapabilities
 };
@@ -187,6 +199,12 @@ static_assert(!kCapabilities.supportsBtTransportUi ||
               "BT transport UI capability requires BT and a compiled renderer");
 static_assert(bool(VOXONE_HAS_VU) == kCapabilities.supportsVu,
               "VU compile gate must match board capabilities");
+static_assert(bool(VOXONE_HAS_SD) == kCapabilities.supportsSdCard,
+              "SD compile gate must match board capabilities");
+static_assert(bool(VOXONE_HAS_IR) == kCapabilities.supportsIr,
+              "IR compile gate must match board capabilities");
+static_assert(bool(VOXONE_HAS_W5500) == kCapabilities.supportsW5500,
+              "W5500 compile gate must match board capabilities");
 static_assert(bool(VOXONE_HAS_AUX) == kCapabilities.supportsAux,
               "AUX compile gate must match board capabilities");
 static_assert(bool(VOXONE_INCLUDE_DSP) == kCapabilities.supportsDsp,
@@ -219,6 +237,14 @@ static_assert(!kCapabilities.supportsBtAudioRx ||
                hasPin(kCurrent.btAudioIn.ws) &&
                hasPin(kCurrent.btAudioIn.din)),
               "BT I2S RX requires a complete pin map");
+static_assert(kCapabilities.supportsSdCard ==
+              (hasPin(kCurrent.sdCard.cs) &&
+               hasPin(kCurrent.sdCard.spi.sck) &&
+               hasPin(kCurrent.sdCard.spi.mosi) &&
+               hasPin(kCurrent.sdCard.spi.miso)),
+              "SD capability requires a complete pin map");
+static_assert(kCapabilities.supportsIr == hasPin(kCurrent.irSignal),
+              "IR capability requires a signal pin");
 
 bool validPin(Pin pin, McuFamily mcu) {
   if (!hasPin(pin)) return true;
@@ -242,7 +268,7 @@ bool hasPinConflicts(const HardwareDescriptor& d) {
     d.btUart.rx, d.btUart.tx,
     d.localInput.a, d.localInput.b, d.localInput.key,
     d.display.cs, d.display.dc, d.display.rst, d.display.backlight,
-    d.dacXsmt, d.power.button, d.power.relay
+    d.dacXsmt, d.sdCard.cs, d.irSignal, d.power.button, d.power.relay
   };
   for (unsigned i = 0; i < sizeof(claims) / sizeof(claims[0]); ++i) {
     if (!hasPin(claims[i])) continue;
@@ -254,6 +280,9 @@ bool hasPinConflicts(const HardwareDescriptor& d) {
 
 bool validateDescriptor(const HardwareDescriptor& d) {
   const bool display = d.displayKind != DisplayKind::None;
+  const bool completeSdPinMap =
+      hasPin(d.sdCard.cs) && hasPin(d.sdCard.spi.sck) &&
+      hasPin(d.sdCard.spi.mosi) && hasPin(d.sdCard.spi.miso);
   const bool serialI2sOutput =
       d.capabilities.supportsAudioOutput(AudioOutputKind::Pcm5102a) ||
       d.capabilities.supportsAudioOutput(AudioOutputKind::Max98357) ||
@@ -287,6 +316,8 @@ bool validateDescriptor(const HardwareDescriptor& d) {
         !d.capabilities.supportsPsram ||
         d.board.mcu != McuFamily::Esp32S3)) ||
       (d.board.psramBytes != 0 && !d.capabilities.supportsPsram) ||
+      d.capabilities.supportsSdCard != completeSdPinMap ||
+      d.capabilities.supportsIr != hasPin(d.irSignal) ||
       (d.capabilities.supportsLocalUi &&
        (!d.capabilities.hasLocalDisplay() ||
         !d.capabilities.hasLocalInput())))
@@ -324,7 +355,8 @@ bool validateDescriptor(const HardwareDescriptor& d) {
     d.btUart.rx, d.btUart.tx,
     d.localInput.a, d.localInput.b, d.localInput.key,
     d.display.cs, d.display.dc, d.display.rst, d.display.backlight, d.dacXsmt,
-    d.power.button, d.power.relay
+    d.sdCard.cs, d.sdCard.spi.sck, d.sdCard.spi.mosi, d.sdCard.spi.miso,
+    d.irSignal, d.power.button, d.power.relay
   };
   for (unsigned i = 0; i < sizeof(pins) / sizeof(pins[0]); ++i)
     if (!validPin(pins[i], d.board.mcu)) return false;

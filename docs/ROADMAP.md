@@ -33,8 +33,7 @@ kanoniczną listą pozostaje [`TODO.md`](TODO.md).
 ## Sieć i źródła
 
 - Docelowa matryca źródeł: WEB Radio, Bluetooth, Home Assistant `SOURCE_HA` z
-  metadanymi, DLNA, AUX i Local Files; Spotify pozostaje koncepcją na
-  przyszłość.
+  metadanymi, DLNA, AUX i Local Files.
 - DLNA z wykorzystaniem `minidlna`, nawigacją folderów i gestami enkodera.
 - AUX przez PCM1808.
 - Local Files z karty microSD.

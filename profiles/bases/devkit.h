@@ -33,4 +33,14 @@
 #define SCREEN_ADDRESS 0x3C
 #define I2CFREQ_HZ 400000UL
 
+// Planned shared SPI storage bus for M/L. L0 shares SCK/MOSI/MISO with the
+// display bus and uses a separate chip-select for the SD card.
+#define VOXONE_SD_CS_PIN 18
+#define VOXONE_SD_MOSI_PIN 11
+#define VOXONE_SD_SCK_PIN 12
+#define VOXONE_SD_MISO_PIN 13
+
+// Planned infrared receiver input for M/L.
+#define VOXONE_IR_SIGNAL_PIN 38
+
 #endif

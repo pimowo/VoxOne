@@ -15,6 +15,9 @@
 #define VOXONE_HAS_ENCODER 1
 #define VOXONE_HAS_VU 0
 #define VOXONE_HAS_BT 0
+#define VOXONE_HAS_SD 0
+#define VOXONE_HAS_IR 0
+#define VOXONE_HAS_W5500 0
 #define VOXONE_HAS_AUX 0
 #define VOXONE_HAS_SPDIF 0
 #define VOXONE_HAS_TDA7719 false

@@ -72,7 +72,16 @@ int main() {
   assert(sourceIncluded(sourceMask, SourceId::HomeAssistant) ==
          caps.supportsHa);
   assert(sourceIncluded(sourceMask, SourceId::Dlna) == caps.supportsDlna);
-  assert(!caps.supportsAux && !caps.supportsSpdif);
+  assert(sourceIncluded(sourceMask, SourceId::Aux) == caps.supportsAux);
+  assert(caps.supportsSdCard ==
+         (d.board.id == BoardId::BoardM0 || d.board.id == BoardId::BoardL0));
+  assert(caps.supportsIr == (d.board.id == BoardId::BoardS0 ||
+                             d.board.id == BoardId::BoardM0 ||
+                             d.board.id == BoardId::BoardL0));
+  assert(caps.supportsW5500 == (d.board.id == BoardId::BoardL0));
+  assert(caps.supportsAux ==
+         (d.board.id == BoardId::BoardM0 || d.board.id == BoardId::BoardL0));
+  assert(!caps.supportsSpdif);
   assert(!caps.supportsTda7719);
 #if defined(VOXONE_PROFILE_S0)
   assert(caps.needsVoxOneBtIntroductionMigration);
@@ -119,6 +128,11 @@ int main() {
   assert(!d.btAudioRxEnabled ||
          (hasPin(d.btAudioIn.bclk) && hasPin(d.btAudioIn.ws) &&
           hasPin(d.btAudioIn.din)));
+  assert(d.sdCard.cs == fromLegacyPin(VOXONE_SD_CS_PIN));
+  assert(d.sdCard.spi.mosi == fromLegacyPin(VOXONE_SD_MOSI_PIN));
+  assert(d.sdCard.spi.sck == fromLegacyPin(VOXONE_SD_SCK_PIN));
+  assert(d.sdCard.spi.miso == fromLegacyPin(VOXONE_SD_MISO_PIN));
+  assert(d.irSignal == fromLegacyPin(VOXONE_IR_SIGNAL_PIN));
 #if VOXONE_MULTI_DISPLAY_RUNTIME
   assert(d.i2c.sda == fromLegacyPin(I2C_SDA));
   assert(d.i2c.scl == fromLegacyPin(I2C_SCL));
@@ -217,6 +231,11 @@ int main() {
   assert(caps.supportsPsram);
   assert(caps.supportsHa && caps.supportsDlna);
   assert(d.btAudioIn.bclk == 1 && d.btAudioIn.ws == 2 && d.btAudioIn.din == 17);
+  assert(caps.supportsSdCard && d.sdCard.cs == 18);
+  assert(d.sdCard.spi.mosi == 11 && d.sdCard.spi.sck == 12 &&
+         d.sdCard.spi.miso == 13);
+  assert(caps.supportsIr && d.irSignal == 38);
+  assert(caps.supportsW5500 && caps.supportsAux);
   assert(d.dacXsmt == kNoPin);
   assert(d.dacXsmt == fromLegacyPin(VOXONE_DAC_XSMT_PIN));
 #elif defined(VOXONE_PROFILE_M0)
@@ -254,6 +273,11 @@ int main() {
   assert(caps.supportsInput(LocalInputKind::Ec11) &&
          caps.supportsInput(LocalInputKind::Buttons3) && caps.supportsLocalUi);
   assert(caps.supportsPsram);
+  assert(caps.supportsSdCard && d.sdCard.cs == 18);
+  assert(d.sdCard.spi.mosi == 11 && d.sdCard.spi.sck == 12 &&
+         d.sdCard.spi.miso == 13);
+  assert(caps.supportsIr && d.irSignal == 38);
+  assert(!caps.supportsW5500 && caps.supportsAux);
   assert(d.btUart.rx == kNoPin && d.btUart.tx == kNoPin);
   assert(d.btAudioIn.bclk == kNoPin && d.btAudioIn.ws == kNoPin &&
          d.btAudioIn.din == kNoPin && !d.btAudioRxEnabled);
@@ -297,6 +321,11 @@ int main() {
   assert(caps.supportsInput(LocalInputKind::Ec11) &&
          caps.supportsInput(LocalInputKind::Buttons3) && caps.supportsLocalUi);
   assert(caps.supportsPsram);
+  assert(!caps.supportsSdCard && d.sdCard.cs == kNoPin);
+  assert(d.sdCard.spi.sck == kNoPin && d.sdCard.spi.mosi == kNoPin &&
+         d.sdCard.spi.miso == kNoPin);
+  assert(caps.supportsIr && d.irSignal == 38);
+  assert(!caps.supportsW5500 && !caps.supportsAux);
   assert(d.btUart.rx == 44 && d.btUart.tx == 43);
   assert(d.btUart.rx == fromLegacyPin(VOXONE_BT_UART_RX_PIN));
   assert(d.btUart.tx == fromLegacyPin(VOXONE_BT_UART_TX_PIN));
@@ -339,6 +368,11 @@ int main() {
   assert(caps.supportsInput(LocalInputKind::Ec11) &&
          caps.supportsInput(LocalInputKind::Buttons3) && caps.supportsLocalUi);
   assert(caps.supportsPsram);
+  assert(!caps.supportsSdCard && d.sdCard.cs == kNoPin);
+  assert(d.sdCard.spi.sck == kNoPin && d.sdCard.spi.mosi == kNoPin &&
+         d.sdCard.spi.miso == kNoPin);
+  assert(!caps.supportsIr && d.irSignal == kNoPin);
+  assert(!caps.supportsW5500 && !caps.supportsAux);
   assert(d.btUart.rx == kNoPin && d.btUart.tx == kNoPin);
   assert(d.btAudioIn.bclk == kNoPin && d.btAudioIn.ws == kNoPin &&
          d.btAudioIn.din == kNoPin && !d.btAudioRxEnabled);
@@ -353,6 +387,20 @@ int main() {
   assert(!validateDescriptor(bad));
   bad = d;
   bad.audioOut.bclk = 99;
+  assert(!validateDescriptor(bad));
+  bad = d;
+  if (d.capabilities.supportsSdCard) {
+    bad.sdCard.cs = kNoPin;
+  } else {
+    bad.capabilities.supportsSdCard = true;
+  }
+  assert(!validateDescriptor(bad));
+  bad = d;
+  if (d.capabilities.supportsIr) {
+    bad.irSignal = kNoPin;
+  } else {
+    bad.capabilities.supportsIr = true;
+  }
   assert(!validateDescriptor(bad));
   bad = d;
   bad.capabilities.supportsDsp = true;

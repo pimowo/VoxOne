@@ -42,6 +42,21 @@
 #ifndef VOXONE_BT_I2S_DATA_PIN
 #define VOXONE_BT_I2S_DATA_PIN 255
 #endif
+#ifndef VOXONE_SD_CS_PIN
+#define VOXONE_SD_CS_PIN 255
+#endif
+#ifndef VOXONE_SD_MOSI_PIN
+#define VOXONE_SD_MOSI_PIN 255
+#endif
+#ifndef VOXONE_SD_SCK_PIN
+#define VOXONE_SD_SCK_PIN 255
+#endif
+#ifndef VOXONE_SD_MISO_PIN
+#define VOXONE_SD_MISO_PIN 255
+#endif
+#ifndef VOXONE_IR_SIGNAL_PIN
+#define VOXONE_IR_SIGNAL_PIN 255
+#endif
 #ifndef ENC_BTNL
 #define ENC_BTNL 255
 #endif

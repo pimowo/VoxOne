@@ -93,9 +93,6 @@ wykrywane automatycznie przez SSDP, a opcjonalna konfiguracja ręcznego adresu I
 pozwala korzystać z serwera, którego multicast nie jest widoczny. WWW i menu
 urządzenia pokazują wybór serwera przed przeglądaniem jego biblioteki.
 
-Spotify pozostaje możliwym rozszerzeniem w przyszłości, zależnym od dostępnego
-modelu integracji i ograniczeń platformy.
-
 ## Interfejs urządzenia
 
 Menu używa kontekstowej górnej belki. Widok Player pokazuje nazwę stacji lub

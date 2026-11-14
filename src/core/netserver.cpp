@@ -3379,6 +3379,9 @@ void NetServer::processQueue(){
           {boardCapabilities.supportsDspMini, "DSPMINI"},
           {boardCapabilities.supportsHa, "HA"},
           {boardCapabilities.supportsDlna, "DLNA"},
+          {boardCapabilities.supportsSdCard, "SD"},
+          {boardCapabilities.supportsIr, "IR"},
+          {boardCapabilities.supportsW5500, "W5500"},
           {boardCapabilities.supportsAux, "AUX"},
           {boardCapabilities.supportsSpdif, "SPDIF"},
           {boardCapabilities.supportsTda7719, "TDA7719"}

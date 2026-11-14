@@ -177,6 +177,7 @@ bool moduleSupported(const HardwareCapabilities& capabilities,
                      const char* value) {
   if (strcmp(value, "voxonebt") == 0) return capabilities.supportsVoxOneBt;
   if (strcmp(value, "ds3231") == 0) return capabilities.supportsRtc;
+  if (strcmp(value, "w5500") == 0) return capabilities.supportsW5500;
   return false;
 }
 

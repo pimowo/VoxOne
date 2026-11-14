@@ -21,7 +21,7 @@
 | DSPmini | NIE | NIE | NIE | TAK | 🟡 W TESTACH |
 | VoxOneBT RX | NIE | TAK | NIE | TAK | 🟢 ZROBIONE |
 | VoxOneBT TX | NIE | NIE | NIE | NIE | 🔴 W PLANACH |
-| AUX | NIE | NIE | NIE | NIE | 🔴 W PLANACH |
+| AUX | NIE | NIE | TAK | TAK | 🔴 W PLANACH |
 | **[SIEĆ I PAMIĘĆ]** | | | | | |
 | Ethernet W5500 | NIE | NIE | NIE | TAK | 🔴 W PLANACH |
 | Karta SD | NIE | NIE | TAK | TAK | 🔴 W PLANACH |
@@ -30,14 +30,16 @@
 | RTC DS3231 | NIE | NIE | NIE | TAK | 🟢 ZROBIONE |
 | Przekaźnik / Pomiar napięcia | NIE | NIE | NIE | NIE | 🔴 W PLANACH |
 
-*(Uwaga: Piny AMP_ENABLE, MUTE/XTSM oraz konfiguracja SPI dla M0 zostaną uzupełnione w Etapie 2 po weryfikacji sprzętowej).*
+`TAK` przy elemencie ze statusem `W PLANACH` oznacza zadeklarowane capability
+profilu, a nie gotowy sterownik. Piny AMP_ENABLE i MUTE/XTSM zostaną
+uzupełnione po weryfikacji sprzętowej.
 
 ## Wspólne pinouty baz MCU
 
 | Baza / profile | Audio I²S `BCLK / DOUT / LRCK` | Display / I2C | Local input `A / B / KEY` | Pozostałe |
 |---|---|---|---|---|
-| DevKit / M0, L0 | `5 / 4 / 6` | I2C `SDA8/SCL7`; L0 dodatkowo SPI `SCK12`, `MOSI11`, `MISO13`, ST7796S `CS10`, `DC9`, `RST—`, backlight `14` | `41 / 40 / 39` | POWER `GPIO42`; XSMT `255`; L0 dodatkowo RTC oraz BT UART `RX15/TX16` i BT I2S RX `BCLK1/WS2/DIN17` |
-| Zero / S0, DIN0 | `5 / 6 / 4` | I2C `SDA1`, `SCL2`, `RST—`, adres `0x3C` | `9 / 8 / 7` | POWER `GPIO3`; S0 dodatkowo BT UART1 `RX44/TX43` i BT I2S1 RX `BCLK11/WS12/DIN13` |
+| DevKit / M0, L0 | `5 / 4 / 6` | I2C `SDA8/SCL7`; L0 dodatkowo SPI `SCK12`, `MOSI11`, `MISO13`, ST7796S `CS10`, `DC9`, `RST—`, backlight `14` | `41 / 40 / 39` | SD `CS18/MOSI11/SCK12/MISO13`; IR `GPIO38`; POWER `GPIO42`; XSMT `255`; L0 dodatkowo RTC oraz BT UART `RX15/TX16` i BT I2S RX `BCLK1/WS2/DIN17` |
+| Zero / S0, DIN0 | `5 / 6 / 4` | I2C `SDA1`, `SCL2`, `RST—`, adres `0x3C` | `9 / 8 / 7` | POWER `GPIO3`; S0 dodatkowo IR `GPIO38`, BT UART1 `RX44/TX43` i BT I2S1 RX `BCLK11/WS12/DIN13` |
 
 Powyższe wspólne GPIO są zdefiniowane w `profiles/bases/devkit.h` oraz
 `profiles/bases/zero.h`. Profile konkretnego urządzenia dodają tylko piny
@@ -98,10 +100,10 @@ pull-upy i filtracja.
 
 | Profil | Audio I²S `BCLK / DOUT / LRCK` | Display | Local input `A / B / KEY` | Pozostałe |
 |---|---|---|---|---|
-| M0 | `5 / 4 / 6` | OLED I2C: `SDA8`, `SCL7`, `RST—`, adres `0x3C` | `41 / 40 / 39` | baza DevKit wspólna z L0; SSD1306 lub SSD1309 w jednym BIN; POWER `GPIO42`; XSMT `255`; HIL PENDING po migracji |
-| S0 | MAX98357A `5 / 6 / 4` | SSD1306 I2C: `SDA1`, `SCL2`, `RST—`, adres `0x3C`; runtime 128×32/128×64 | `9 / 8 / 7` | BT UART1 `RX44/TX43`; BT I2S1 RX `BCLK11/WS12/DIN13`; native USB CDC dla logów, ponieważ GPIO43/44 są domyślnymi padami UART0; VU i MAIN→BT update wyłączone; fizyczny HIL PENDING |
+| M0 | `5 / 4 / 6` | OLED I2C: `SDA8`, `SCL7`, `RST—`, adres `0x3C` | `41 / 40 / 39` | SD `CS18/MOSI11/SCK12/MISO13`; IR `GPIO38`; POWER `GPIO42`; XSMT `255`; HIL PENDING po migracji |
+| S0 | MAX98357A `5 / 6 / 4` | SSD1306 I2C: `SDA1`, `SCL2`, `RST—`, adres `0x3C`; runtime 128×32/128×64 | `9 / 8 / 7` | IR `GPIO38`; BT UART1 `RX44/TX43`; BT I2S1 RX `BCLK11/WS12/DIN13`; native USB CDC dla logów; VU i MAIN→BT update wyłączone; fizyczny HIL PENDING |
 | DIN0 | `5 / 6 / 4` | OLED I2C: `SDA1`, `SCL2`, `RST—`, adres `0x3C` | `9 / 8 / 7` | baza Zero wspólna z S0; GPIO3 jest wejściem POWER; HIL PENDING |
-| L0 | `5 / 4 / 6` | SPI `SCK12`, `MOSI11`, `MISO13`; ST7796S `CS10`, `DC9`, `RST—`, backlight `14` | `41 / 40 / 39` | RTC `SDA8/SCL7`; BT UART `RX15/TX16`; BT I2S RX `BCLK1/WS2/DIN17`; XSMT poza baseline Stable, `VOXONE_DAC_XSMT_PIN=255`, bez przypisanego GPIO; opcjonalne XSMT/MUTE/ENABLE dla przyszłych PCB pozostaje POST-STABLE |
+| L0 | `5 / 4 / 6` | SPI `SCK12`, `MOSI11`, `MISO13`; ST7796S `CS10`, `DC9`, `RST—`, backlight `14` | `41 / 40 / 39` | SD na wspólnym SPI z `CS18`; IR `GPIO38`; RTC `SDA8/SCL7`; BT UART `RX15/TX16`; BT I2S RX `BCLK1/WS2/DIN17`; W5500 i AUX mają capability bez docelowych pinów; XSMT `255` |
 
 W kodzie `HardwareDescriptor.audioOut` prezentuje kolejność `BCLK/WS/DOUT`;
 powyższa tabela zachowuje kolejność nazw makr profili, aby uniknąć pomylenia
@@ -110,8 +112,10 @@ mapy pinów i dlatego pozostaje do fizycznej weryfikacji.
 
 ### Rewizje 0 i rzeczywiste braki S0/DIN0
 
-`VOXONE_PIN_MAP_COMPLETE=1` oznacza, że bieżący profil ma kompletną mapę dla
-obecnie deklarowanych capability. S0 i DIN0 współdzielą bazowe GPIO Zero.
+`VOXONE_PIN_MAP_COMPLETE=1` oznacza kompletną mapę uruchamianego obecnie
+baseline. Planowane capability W5500 i AUX mogą być zadeklarowane przed
+ustaleniem docelowych pinów i napisaniem sterowników. S0 i DIN0 współdzielą
+bazowe GPIO Zero.
 S0 odpowiada ręcznie okablowanej rewizji z MAX98357A, SSD1306 i EC11, a jego
 VoxOneBT używa UART1 RX GPIO44/TX GPIO43 i I2S1 RX GPIO11/12/13. S0 kieruje
 diagnostykę aplikacji przez native USB CDC, aby UART0 nie konkurował o

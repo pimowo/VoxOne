@@ -6,10 +6,6 @@ checkpointów pozostaje w historii Git i w istniejących raportach.
 
 ## 1. HIL PENDING (do fizycznego przetestowania przez użytkownika)
 
-- [ ] Wgrać finalne `firmware.bin` i `spiffs.bin` profili L0 oraz S0 po
-  udostępnieniu w `dev-vm` kanonicznych portów `L0_NATIVE` i `S0_NATIVE`;
-  bieżąca sesja widzi wyłącznie QEMU Tablet, bez `ttyACM*`, `ttyUSB*` i
-  `/dev/serial/by-id`, więc bezpieczne programowanie nie jest obecnie możliwe.
 - [ ] Zweryfikować przycisk zasilania na L0 (GPIO42) i S0 (GPIO3): krótki
   klik (Wakeup/Mute albo Home z Menu/karuzeli), dwuklik otwierający Menu
   Główne wyłącznie z Playera oraz długie naciśnięcie uruchamiające shutdown
@@ -122,8 +118,7 @@ checkpointów pozostaje w historii Git i w istniejących raportach.
 - [ ] Local Files: dodać odtwarzanie z karty microSD na SPI współdzielonym z
   wyświetlaczem, z osobnym pinem CS i bez zakłócania renderowania.
 - [ ] Po implementacji backendów AUX i Local Files dołączyć je do wspólnej
-  matrycy źródeł SourceManagera i UI; Spotify zachować jako późniejsze
-  rozszerzenie.
+  matrycy źródeł SourceManagera i UI.
 - [ ] A2DP Transmitter: dodać naprzemienne tryby RX/TX w VoxOneBT, bez ich
   jednoczesnej pracy.
 - [ ] Dodać wyjście do zewnętrznej końcówki mocy klasy D i opisać wymagania

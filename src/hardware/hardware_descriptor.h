@@ -68,6 +68,10 @@ struct BoardIdentity {
 };
 struct I2sPins { Pin bclk, ws, dout, din; };
 struct SpiBusPins { Pin sck, mosi, miso; };
+struct SdCardPins {
+  Pin cs;
+  SpiBusPins spi;
+};
 struct I2cBusConfig {
   Pin sda, scl;
   uint32_t frequencyHz;
@@ -101,6 +105,9 @@ struct HardwareCapabilities {
   bool supportsDsp;
   bool supportsHa;
   bool supportsDlna;
+  bool supportsSdCard;
+  bool supportsIr;
+  bool supportsW5500;
   bool supportsAux;
   bool supportsSpdif;
   bool supportsTda7719;
@@ -136,6 +143,8 @@ struct HardwareDescriptor {
   DisplayPins display;
   RtcKind rtcKind;
   Pin dacXsmt;
+  SdCardPins sdCard;
+  Pin irSignal;
   PowerPins power;
   HardwareCapabilities capabilities;
 };
