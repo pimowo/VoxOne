@@ -302,9 +302,11 @@ void setup() {
   voxone::dsp::initDspRuntime(
       {dspConfig.bass, dspConfig.middle, dspConfig.treble});
 #endif
-  display.init();
-  if (voxone::hardware::hardwareCapabilities().supportsSdCard)
+  if (voxone::hardware::hardwareCapabilities().supportsSdCard) {
+    voxone::sd_card::prepareSharedBus();
     voxone::sd_card::begin();
+  }
+  display.init();
   player.init();
   network.begin();
   #if VOXONE_HAS_BT && VOXONE_PIN_MAP_COMPLETE

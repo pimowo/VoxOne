@@ -870,6 +870,8 @@ void Player::browseUrl(const voxone::temporary_audio::Request& request){
   config.setDspOn(1);
   display.putRequest(PSTOP);
   setOutputPins(false);
+  armPcmOutput();
+  _pcmOutputPending = true;
   _callbackToken = token;
   fs::FS* localFs = request.source == voxone::temporary_audio::Source::Local
                         ? voxone::sd_card::filesystem() : nullptr;
@@ -879,10 +881,10 @@ void Player::browseUrl(const voxone::temporary_audio::Request& request){
   if (connected){
     _status = PLAYING;
     netserver.requestOnChange(MODE, 0);
-    setOutputPins(true);
     display.putRequest(PSTART);
-    if (player_on_start_play) player_on_start_play();
   }else{
+    _pcmOutputPending = false;
+    cancelPcmOutput();
     serialCli.printf("##ERROR#:\tError connecting to %.128s\n", request.url);
     snprintf(config.tmpBuf, sizeof(config.tmpBuf),
              "Error connecting to %.128s", request.url); setError();

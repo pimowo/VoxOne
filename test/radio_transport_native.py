@@ -142,6 +142,14 @@ struct FakeFile {
   size_t readBytes(char*, size_t) { return 0; }
 };
 
+// The extracted production read helpers use this guard only for local SD
+// files. Radio cases keep m_localFileUsesSd=false, so the host harness needs
+// no filesystem implementation; it only preserves the method dependency.
+struct SdFileIoGuard {
+  explicit SdFileIoGuard(bool) {}
+  explicit operator bool() const { return true; }
+};
+
 struct Audio {
   enum ChunkedState : uint8_t {
     CHUNK_SIZE, CHUNK_EXTENSION, CHUNK_SIZE_LF, CHUNK_PAYLOAD,
@@ -173,6 +181,7 @@ struct Audio {
   FakeClient* _client;
   FakeFile m_localFile;
   bool m_localFileActive = false;
+  bool m_localFileUsesSd = false;
   FakeBuffer InBuff;
   bool m_f_Log = false;
   bool m_f_firstCall = true;

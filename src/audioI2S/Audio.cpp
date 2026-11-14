@@ -23,7 +23,9 @@
 #include "../core/version.h"
 #include "web_file_bounds.h"
 #include "audio_ring_math.h"
+#include "local_file_read_policy.h"
 #include "../core/i2s_output_lock.h"
+#include "../core/sd_card.h"
 #include <new>
 #include <lwip/sockets.h>
 #if VOXONE_HAS_BT && VOXONE_PIN_MAP_COMPLETE && VOXONE_BT_I2S_RX_ENABLED
@@ -48,6 +50,20 @@ bool audioPsramFound() {
 constexpr TickType_t kI2SOutputLockWait = pdMS_TO_TICKS(100);
 constexpr char kVoxOneUserAgentHeader[] =
     "User-Agent: VoxOne/" VOXONE_VERSION "\r\n";
+
+class SdFileIoGuard {
+ public:
+    explicit SdFileIoGuard(bool required)
+        : required_(required), locked_(!required || voxone::sd_card::lockFileIo()) {}
+    ~SdFileIoGuard() {
+        if(required_ && locked_) voxone::sd_card::unlockFileIo();
+    }
+    explicit operator bool() const { return locked_; }
+
+ private:
+    bool required_;
+    bool locked_;
+};
 
 }  // namespace
 
@@ -545,8 +561,12 @@ void Audio::setDefaults() {
     vector_clear_and_shrink(m_playlistURL);
     vector_clear_and_shrink(m_playlistContent);
     m_hashQueue.clear(); m_hashQueue.shrink_to_fit(); // uint32_t vector
-    if(m_localFile) m_localFile.close();
+    {
+        SdFileIoGuard fileIo(m_localFileUsesSd);
+        if(fileIo && m_localFile) m_localFile.close();
+    }
     m_localFileActive = false;
+    m_localFileUsesSd = false;
     if(_client && !m_connectAttempt.active()) _client->stop();
     _client = static_cast<WiFiClient*>(&client); /* default to *something* so that no NULL deref can happen */
     playI2Sremains();
@@ -602,6 +622,8 @@ void Audio::setConnectionTimeout(uint16_t timeout_ms, uint16_t timeout_ms_ssl){
 
 int Audio::readClient() {
     if(m_localFileActive) {
+        SdFileIoGuard fileIo(m_localFileUsesSd);
+        if(!fileIo) return -1;
         const int value = m_localFile.read();
         if(value >= 0) ++m_transportProgressBytes;
         return value;
@@ -614,6 +636,8 @@ int Audio::readClient() {
 
 int Audio::readClient(uint8_t* buffer, size_t length) {
     if(m_localFileActive) {
+        SdFileIoGuard fileIo(m_localFileUsesSd);
+        if(!fileIo) return -1;
         const int bytes = m_localFile.read(buffer, length);
         if(bytes > 0) m_transportProgressBytes += static_cast<uint32_t>(bytes);
         return bytes;
@@ -626,6 +650,8 @@ int Audio::readClient(uint8_t* buffer, size_t length) {
 
 size_t Audio::readClientBytes(char* buffer, size_t length) {
     if(m_localFileActive) {
+        SdFileIoGuard fileIo(m_localFileUsesSd);
+        if(!fileIo) return 0;
         const size_t bytes = m_localFile.readBytes(buffer, length);
         m_transportProgressBytes += bytes;
         return bytes;
@@ -666,15 +692,6 @@ bool Audio::connecttohost(const char* host, const char* user, const char* pwd) {
 //---------------------------------------------------------------------------------------------------------------------
 bool Audio::connecttoFS(fs::FS& fs, const char* path) {
     if(!path || !path[0] || strlen(path) >= 256) return false;
-    setDefaults();
-    m_localFile = fs.open(path, FILE_READ);
-    if(!m_localFile || m_localFile.isDirectory() || m_localFile.size() == 0 ||
-       m_localFile.size() > UINT32_MAX) {
-        if(m_localFile) m_localFile.close();
-        AUDIO_ERROR("Failed to open local audio file");
-        return false;
-    }
-
     const char* extension = strrchr(path, '.');
     char normalized[8]{};
     if(extension) {
@@ -685,18 +702,61 @@ bool Audio::connecttoFS(fs::FS& fs, const char* path) {
                 static_cast<unsigned char>(*extension)));
         }
     }
-    if(!strcmp(normalized, "mp3")) m_codec = CODEC_MP3;
-    else if(!strcmp(normalized, "aac")) m_codec = CODEC_AAC;
-    else if(!strcmp(normalized, "m4a")) m_codec = CODEC_M4A;
-    else if(!strcmp(normalized, "wav")) m_codec = CODEC_WAV;
-    else if(!strcmp(normalized, "flac")) m_codec = CODEC_FLAC;
+    uint8_t localCodec = CODEC_NONE;
+    if(!strcmp(normalized, "mp3")) localCodec = CODEC_MP3;
+    else if(!strcmp(normalized, "aac")) localCodec = CODEC_AAC;
+    else if(!strcmp(normalized, "m4a")) localCodec = CODEC_M4A;
+    else if(!strcmp(normalized, "wav")) localCodec = CODEC_WAV;
+    else if(!strcmp(normalized, "flac")) localCodec = CODEC_FLAC;
     else {
-        m_localFile.close();
         AUDIO_ERROR("Unsupported local audio format");
         return false;
     }
 
-    m_contentlength = static_cast<uint32_t>(m_localFile.size());
+    setDefaults();
+    m_codec = localCodec;
+    m_localFileUsesSd = voxone::sd_card::filesystem() == &fs;
+    uint32_t localFileSize = 0;
+    {
+        SdFileIoGuard fileIo(m_localFileUsesSd);
+        if(!fileIo) {
+            m_localFileUsesSd = false;
+            AUDIO_ERROR("SD filesystem is busy");
+            return false;
+        }
+        m_localFile = fs.open(path, FILE_READ);
+        if(!m_localFile || m_localFile.isDirectory() || m_localFile.size() == 0 ||
+           m_localFile.size() > UINT32_MAX) {
+            if(m_localFile) m_localFile.close();
+            m_localFileUsesSd = false;
+            AUDIO_ERROR("Failed to open local audio file");
+            return false;
+        }
+        localFileSize = static_cast<uint32_t>(m_localFile.size());
+
+        uint8_t header[12]{};
+        const size_t headerBytes = m_localFile.read(header, sizeof(header));
+        const bool plausibleHeader =
+            (localCodec == CODEC_MP3 && headerBytes >= 3 &&
+             ((!memcmp(header, "ID3", 3)) ||
+              (header[0] == 0xff && (header[1] & 0xe0) == 0xe0))) ||
+            (localCodec == CODEC_AAC && headerBytes >= 2 &&
+             header[0] == 0xff && (header[1] & 0xf0) == 0xf0) ||
+            (localCodec == CODEC_M4A && headerBytes >= 8 &&
+             !memcmp(header + 4, "ftyp", 4)) ||
+            (localCodec == CODEC_WAV && headerBytes >= 12 &&
+             !memcmp(header, "RIFF", 4) && !memcmp(header + 8, "WAVE", 4)) ||
+            (localCodec == CODEC_FLAC && headerBytes >= 4 &&
+             !memcmp(header, "fLaC", 4));
+        if(!plausibleHeader || !m_localFile.seek(0)) {
+            m_localFile.close();
+            m_localFileUsesSd = false;
+            AUDIO_ERROR("Local file header does not match its supported format");
+            return false;
+        }
+    }
+
+    m_contentlength = localFileSize;
     m_streamType = ST_WEBFILE;
     m_f_chunked = false;
     m_controlCounter = 0;
@@ -706,8 +766,10 @@ bool Audio::connecttoFS(fs::FS& fs, const char* path) {
     strlcpy(m_lastHost, path, sizeof(m_lastHost));
     setDatamode(AUDIO_DATA);
     if(!initializeDecoder()) {
-        m_localFile.close();
+        SdFileIoGuard fileIo(m_localFileUsesSd);
+        if(fileIo) m_localFile.close();
         m_localFileActive = false;
+        m_localFileUsesSd = false;
         return false;
     }
     m_f_running = true;
@@ -3017,9 +3079,14 @@ void Audio::processWebFile() {
 
     if(!m_contentlength) {log_e("webfile without contentlength!"); stopSong(); return;} // guard
 
-    uint32_t availableBytes = m_localFileActive
-                                  ? static_cast<uint32_t>(m_localFile.available())
-                                  : static_cast<uint32_t>(_client->available());
+    uint32_t availableBytes = 0;
+    if(m_localFileActive) {
+        SdFileIoGuard fileIo(m_localFileUsesSd);
+        if(fileIo)
+            availableBytes = static_cast<uint32_t>(m_localFile.available());
+    } else {
+        availableBytes = static_cast<uint32_t>(_client->available());
+    }
 
     // chunked data tramsfer - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
     if(m_f_chunked){
@@ -3034,14 +3101,27 @@ void Audio::processWebFile() {
         slowStreamDetection(InBuff.bufferFilled(), maxFrameSize);
     }
 
-    InBuff.lock();
-    availableBytes = min((uint32_t)InBuff.writeSpace(), availableBytes);
-    availableBytes = min(
-        voxone::audio::webFileReadLimit(
-            m_contentlength, byteCounter, m_audioDataStart, m_audioDataSize),
-        availableBytes);
-
-    int16_t bytesAddedToBuffer = readClient(InBuff.getWritePtr(), availableBytes);
+    const uint32_t permittedBytes = voxone::audio::webFileReadLimit(
+        m_contentlength, byteCounter, m_audioDataStart, m_audioDataSize);
+    int16_t bytesAddedToBuffer = 0;
+    if(m_localFileActive) {
+        // Do not hold the ring mutex while FAT waits for the shared SPI bus.
+        // AudioTask must remain able to consume/decode already buffered data
+        // while the TFT finishes its current transaction and SD reads a burst.
+        InBuff.lock();
+        availableBytes = voxone::audio::localFileReadRequest(
+            availableBytes, static_cast<uint32_t>(InBuff.writeSpace()),
+            permittedBytes);
+        uint8_t* writePointer = InBuff.getWritePtr();
+        InBuff.unlock();
+        bytesAddedToBuffer = readClient(writePointer, availableBytes);
+        InBuff.lock();
+    } else {
+        InBuff.lock();
+        availableBytes = min((uint32_t)InBuff.writeSpace(), availableBytes);
+        availableBytes = min(permittedBytes, availableBytes);
+        bytesAddedToBuffer = readClient(InBuff.getWritePtr(), availableBytes);
+    }
 
     if(bytesAddedToBuffer > 0) {
         byteCounter  += bytesAddedToBuffer;  // Pull request #42

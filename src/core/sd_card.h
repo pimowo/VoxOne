@@ -43,6 +43,10 @@ struct BrowseListing {
 };
 
 bool begin();
+// Deselect every device before the display starts clocking the shared bus.
+// Without this early step an uninitialised SD CS can float low while the TFT
+// receives its reset sequence, leaving the card outside SPI idle state.
+void prepareSharedBus();
 bool ensureMounted();
 bool mounted();
 Status browse(const char* path, BrowseListing& listing);
@@ -51,6 +55,11 @@ const char* statusName(Status status);
 
 #ifdef ARDUINO
 fs::FS* filesystem();
+// Serialises FAT/FS access from AsyncWebServer and the audio producer. The
+// underlying SPIClass transaction mutex then arbitrates each transfer with
+// the TFT renderer on the same physical bus.
+bool lockFileIo(uint32_t timeoutMs = 750);
+void unlockFileIo();
 #endif
 
 }  // namespace sd_card

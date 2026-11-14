@@ -39,22 +39,33 @@ bool supported() {
          hardware::hasPin(descriptor.sdCard.spi.miso);
 }
 
-bool mountLocked() {
-  if (!supported()) return false;
-  if (sdMounted && SD.cardType() != CARD_NONE) return true;
-  if (sdMounted) SD.end();
+void prepareSharedBusLocked() {
+  if (!supported()) return;
   const auto& pins = hardware::currentHardware().sdCard;
   const auto& display = hardware::currentHardware().display;
-  if (hardware::hasPin(display.cs)) {
+  if (hardware::hasPin(display.cs))
     pinMode(static_cast<uint8_t>(display.cs), OUTPUT);
-    digitalWrite(static_cast<uint8_t>(display.cs), HIGH);
-  }
   pinMode(static_cast<uint8_t>(pins.cs), OUTPUT);
   digitalWrite(static_cast<uint8_t>(pins.cs), HIGH);
   SPI.begin(static_cast<int8_t>(pins.spi.sck),
             static_cast<int8_t>(pins.spi.miso),
             static_cast<int8_t>(pins.spi.mosi),
             static_cast<int8_t>(pins.cs));
+  // Wait for a possibly active TFT transaction before changing its CS. The
+  // same SPIClass mutex serialises all following SD and display transfers.
+  SPI.beginTransaction(SPISettings(kSdFallbackSpiFrequency, MSBFIRST,
+                                   SPI_MODE0));
+  if (hardware::hasPin(display.cs))
+    digitalWrite(static_cast<uint8_t>(display.cs), HIGH);
+  SPI.endTransaction();
+}
+
+bool mountLocked() {
+  if (!supported()) return false;
+  if (sdMounted && SD.cardType() != CARD_NONE) return true;
+  if (sdMounted) SD.end();
+  const auto& pins = hardware::currentHardware().sdCard;
+  prepareSharedBusLocked();
   sdMounted = SD.begin(static_cast<uint8_t>(pins.cs), SPI, kSdSpiFrequency) &&
               SD.cardType() != CARD_NONE;
   sdFrequency = sdMounted ? kSdSpiFrequency : 0;
@@ -88,6 +99,13 @@ bool childPath(const char* parent, const char* child, char* output,
 }
 
 }  // namespace
+
+void prepareSharedBus() {
+  if (!supported()) return;
+  if (!sdMutex) sdMutex = xSemaphoreCreateRecursiveMutex();
+  Lock lock;
+  if (lock) prepareSharedBusLocked();
+}
 
 bool begin() {
   if (!supported()) return false;
@@ -190,6 +208,21 @@ const char* statusName(Status status) {
 
 fs::FS* filesystem() { return supported() ? static_cast<fs::FS*>(&SD) : nullptr; }
 
+bool lockFileIo(uint32_t timeoutMs) {
+  if (!supported()) return false;
+  if (!sdMutex) sdMutex = xSemaphoreCreateRecursiveMutex();
+  if (!sdMutex ||
+      xSemaphoreTakeRecursive(sdMutex, pdMS_TO_TICKS(timeoutMs)) != pdTRUE)
+    return false;
+  // SPIClass supplies the cross-task TFT/SD bus mutex. This separate project
+  // mutex gives FAT/FS a single owner across audio and HTTP/menu browsing.
+  return true;
+}
+
+void unlockFileIo() {
+  if (sdMutex) xSemaphoreGiveRecursive(sdMutex);
+}
+
 }  // namespace sd_card
 }  // namespace voxone
 
@@ -199,6 +232,7 @@ namespace voxone {
 namespace sd_card {
 
 bool begin() { return false; }
+void prepareSharedBus() {}
 bool ensureMounted() { return false; }
 bool mounted() { return false; }
 Status browse(const char*, BrowseListing& listing) {
@@ -210,6 +244,8 @@ const char* statusName(Status status) {
   return status == Status::Unsupported ? "sd_unsupported" : "sd_error";
 }
 fs::FS* filesystem() { return nullptr; }
+bool lockFileIo(uint32_t) { return false; }
+void unlockFileIo() {}
 
 }  // namespace sd_card
 }  // namespace voxone

@@ -481,6 +481,7 @@ private:
     WiFiClientSecure      clientsecure; // @suppress("Abstract class cannot be instantiated")
     WiFiClient*           _client = nullptr;
     File                  m_localFile;
+    bool                  m_localFileUsesSd = false;
     int                   m_tunedSocketFd = -1;
     TaskHandle_t          m_audioTaskHandle = nullptr;
     SemaphoreHandle_t     m_audioTaskMutex = nullptr;

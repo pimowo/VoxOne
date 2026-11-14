@@ -58,10 +58,10 @@ checkpointów pozostaje w historii Git i w istniejących raportach.
 - [ ] Sprawdzić na L0 i S0 tryb LINE OUT: stały poziom wyjścia,
   oddzielne zapamiętywanie nastawy, napis `LINE`, konfigurację w WWW i menu
   oraz automatyczny AVRCP Absolute Volume z rzeczywistym źródłem Bluetooth.
-- [ ] Na L0 doprowadzić do zamontowania fizycznej karty microSD (test po
-  wdrożeniu Local Files zwraca `sd_not_mounted` także po próbie 4 MHz/1 MHz),
-  a następnie sprawdzić odsłuch i stabilność odtwarzania przy współdzieleniu
-  SPI z wyświetlaczem i osobnym CS.
+- [ ] Na L0 przywrócić odpowiedź fizycznej karty microSD po hard resecie
+  (`CMD0` nie odpowiada przy 4 MHz/1 MHz także wtedy, gdy montowanie odbywa się
+  przed inicjalizacją ST7796S), a następnie potwierdzić słuchowo odtwarzanie i
+  stabilność po wdrożeniu blokady FAT/SPI oraz odczytów SD w paczkach 1–4 KiB.
 - [ ] Dokończyć fizyczny test DLNA na
   `minidlna`: sprawdzić wykrywanie i
   przełączanie co najmniej dwóch serwerów w panelu WWW oraz powrót do
