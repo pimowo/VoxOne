@@ -94,8 +94,9 @@ void auditTransport() {
          std::string::npos);
   assert(player.find("transport disconnected before EOF") !=
          std::string::npos);
-  assert(player.find("const bool connected = connecttohost(request.url);") !=
+  assert(player.find("connecttoFS(*localFs, request.url)") !=
          std::string::npos);
+  assert(player.find("connecttohost(request.url)") != std::string::npos);
   assert(player.find("_temporary.signal(token);") != std::string::npos);
   assert(player.find("xQueueCreate(1, sizeof(QueuedTemporaryRequest*))") !=
          std::string::npos);

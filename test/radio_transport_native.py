@@ -136,6 +136,12 @@ struct FakeBuffer {
   }
 };
 
+struct FakeFile {
+  int read() { return -1; }
+  int read(uint8_t*, size_t) { return 0; }
+  size_t readBytes(char*, size_t) { return 0; }
+};
+
 struct Audio {
   enum ChunkedState : uint8_t {
     CHUNK_SIZE, CHUNK_EXTENSION, CHUNK_SIZE_LF, CHUNK_PAYLOAD,
@@ -165,6 +171,8 @@ struct Audio {
   void showstreamtitle(const char*) {}
 
   FakeClient* _client;
+  FakeFile m_localFile;
+  bool m_localFileActive = false;
   FakeBuffer InBuff;
   bool m_f_Log = false;
   bool m_f_firstCall = true;

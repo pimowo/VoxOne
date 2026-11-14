@@ -15,7 +15,7 @@ constexpr size_t kMetadataCapacity = 128;
 // bytes per decoded byte, plus both field names and separators.
 constexpr size_t kPlayUrlCommandCapacity = 1536;
 
-enum class Source : uint8_t { HomeAssistant, Dlna };
+enum class Source : uint8_t { HomeAssistant, Dlna, Local };
 
 struct Request {
   const char* url = "";

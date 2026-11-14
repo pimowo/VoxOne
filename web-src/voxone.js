@@ -539,6 +539,18 @@ window.VoxOneRestartWaiter = Object.freeze({
   let dlnaLoaded = false;
   let dlnaServersLoaded = false;
   let dlnaBusy = false;
+  const sdServer = document.getElementById("sd-server");
+  const sdPath = document.getElementById("sd-path");
+  const sdStatus = document.getElementById("sd-status");
+  const sdItemsElement = document.getElementById("sd-items");
+  const sdBack = document.getElementById("sd-back");
+  const sdRefresh = document.getElementById("sd-refresh");
+  const sdMount = document.getElementById("sd-mount");
+  let sdItems = [];
+  let sdPathStack = [{id: "/", title: "Główne"}];
+  let sdLoaded = false;
+  let sdMounted = false;
+  let sdBusy = false;
   const updateImages = {
     firmware: {
       file: document.getElementById("update-firmware-file"),
@@ -1695,15 +1707,154 @@ window.VoxOneRestartWaiter = Object.freeze({
     }
   }
 
+  function renderSdBrowser() {
+    sdPath.textContent = sdPathStack.map(part => part.title).join(" / ");
+    sdBack.disabled = sdBusy || sdPathStack.length <= 1;
+    sdRefresh.disabled = sdBusy;
+    sdMount.disabled = sdBusy;
+    const rows = sdItems.map((item, index) => {
+      const row = document.createElement("li");
+      const button = document.createElement("button");
+      button.type = "button";
+      button.dataset.sdIndex = String(index);
+      button.disabled = sdBusy || (item.type !== "folder" && !item.url);
+      const kind = document.createElement("span");
+      kind.className = "dlna-kind";
+      kind.textContent = item.type === "folder" ? "DIR" : "PLAY";
+      const title = document.createElement("span");
+      title.textContent = item.title || (item.type === "folder" ? "Folder" : "Utwór");
+      const mime = document.createElement("span");
+      mime.className = "dlna-mime";
+      mime.textContent = item.type === "folder" ? ">" : (item.mime || "plik");
+      button.append(kind, title, mime);
+      row.append(button);
+      return row;
+    });
+    if (!rows.length && !sdBusy && !sdMounted) {
+      const empty = document.createElement("li");
+      empty.className = "dlna-empty";
+      empty.textContent = "Brak karty SD.";
+      rows.push(empty);
+    } else if (!rows.length && sdLoaded && !sdBusy) {
+      const empty = document.createElement("li");
+      empty.className = "dlna-empty";
+      empty.textContent = "Ten folder jest pusty.";
+      rows.push(empty);
+    }
+    sdItemsElement.replaceChildren(...rows);
+  }
+
+  async function sdError(response, fallback) {
+    try {
+      const payload = await response.json();
+      if (payload?.error === "sd_not_mounted") return "Brak karty SD.";
+      if (payload?.error) return fallback + " (" + payload.error + ")";
+    } catch (_) {}
+    return fallback + " (HTTP " + response.status + ")";
+  }
+
+  async function loadSdCard() {
+    if (sdBusy) return false;
+    sdBusy = true;
+    sdStatus.textContent = "Sprawdzanie karty SD…";
+    renderSdBrowser();
+    let browseAfterMount = false;
+    try {
+      const response = await securityFetch("/api/sd/servers",
+        {cache: "no-store", credentials: "same-origin"}, 7000);
+      if (!response.ok)
+        throw new Error(await sdError(response, "Nie udało się sprawdzić karty"));
+      const payload = await response.json();
+      sdMounted = payload?.mounted === true;
+      sdServer.textContent = sdMounted ? "Karta SD" : "Brak karty";
+      sdLoaded = false;
+      sdItems = [];
+      sdPathStack = [{id: "/", title: "Główne"}];
+      if (!sdMounted) throw new Error("Brak karty SD.");
+      browseAfterMount = true;
+      return true;
+    } catch (error) {
+      sdStatus.textContent = error?.message || "Brak karty SD.";
+      return false;
+    } finally {
+      sdBusy = false;
+      renderSdBrowser();
+      if (browseAfterMount) browseSd("/");
+    }
+  }
+
+  async function browseSd(path, pathAction = null) {
+    if (sdBusy) return false;
+    sdBusy = true;
+    sdStatus.textContent = "Odczytywanie folderu…";
+    renderSdBrowser();
+    try {
+      const response = await securityFetch("/api/sd/browse?path=" +
+        encodeURIComponent(path), {cache: "no-store", credentials: "same-origin"}, 7000);
+      if (!response.ok)
+        throw new Error(await sdError(response, "Nie udało się odczytać folderu"));
+      const payload = await response.json();
+      if (payload?.status !== "ok" || !Array.isArray(payload.items))
+        throw new Error("Urządzenie zwróciło nieprawidłową listę plików.");
+      sdItems = payload.items.filter(item => item &&
+        (item.type === "folder" || item.type === "file") &&
+        typeof item.id === "string" && typeof item.title === "string");
+      if (pathAction?.push) sdPathStack.push(pathAction.push);
+      if (pathAction?.pop) sdPathStack.pop();
+      sdMounted = true;
+      sdLoaded = true;
+      sdServer.textContent = "Karta SD";
+      sdStatus.textContent = "Elementy: " + sdItems.length +
+        (payload.truncated ? " (lista skrócona)" : "");
+      return true;
+    } catch (error) {
+      if (error?.message === "Brak karty SD.") {
+        sdMounted = false;
+        sdLoaded = false;
+        sdItems = [];
+        sdServer.textContent = "Brak karty";
+      }
+      sdStatus.textContent = error?.message || "Błąd odczytu karty SD.";
+      return false;
+    } finally {
+      sdBusy = false;
+      renderSdBrowser();
+    }
+  }
+
+  async function playSdItem(item) {
+    if (sdBusy || !item?.url) return;
+    sdBusy = true;
+    sdStatus.textContent = "Uruchamianie: " + (item.title || "utwór") + "…";
+    renderSdBrowser();
+    try {
+      const response = await securityFetch("/api/sd/play", {
+        method: "POST", credentials: "same-origin", cache: "no-store",
+        headers: {"Content-Type": "application/x-www-form-urlencoded"},
+        body: new URLSearchParams({path: item.url,
+          title: item.title || "Karta SD"}).toString()
+      });
+      if (!response.ok)
+        throw new Error(await sdError(response, "Nie udało się uruchomić utworu"));
+      sdStatus.textContent = "Odtwarzanie: " + (item.title || "utwór");
+    } catch (error) {
+      sdStatus.textContent = error?.message || "Błąd uruchamiania utworu.";
+    } finally {
+      sdBusy = false;
+      renderSdBrowser();
+    }
+  }
+
   function showTab() {
     const requested = location.hash.slice(1);
     const audioPathAllows = tab =>
-      tab !== "audio" && tab !== "dsp" ||
+      (tab !== "audio" && tab !== "dsp" && tab !== "sd") ||
       (tab === "audio" && state.audioPath === "pcm5102") ||
-      (tab === "dsp" && state.audioPath === "dspmini");
+      (tab === "dsp" && state.audioPath === "dspmini") ||
+      (tab === "sd" && state.webStatus?.availableSources?.includes("local"));
     for (const tab of tabs) {
       const link = document.querySelector('[data-tab="' + tab + '"]');
-      if (link && (tab === "audio" || tab === "dsp"))
+      if (link && (tab === "audio" || tab === "dsp" || tab === "sd"))
         link.hidden = !audioPathAllows(tab);
     }
     const selected = tabs.includes(requested) && audioPathAllows(requested)
@@ -1719,6 +1870,7 @@ window.VoxOneRestartWaiter = Object.freeze({
     if (selected === "stations" && state.stationsStatus === "idle") loadStations();
     if (selected === "dlna" && !dlnaServersLoaded && !dlnaBusy)
       discoverDlnaServers();
+    if (selected === "sd" && !sdLoaded && !sdBusy) loadSdCard();
     if (selected === "settings") {
       loadTimeStatus();
       loadHaSettings();
@@ -3905,6 +4057,25 @@ window.VoxOneRestartWaiter = Object.freeze({
   });
   dlnaDiscover.addEventListener("click", discoverDlnaServers);
   dlnaServerSelect.addEventListener("change", selectDlnaServer);
+
+  sdItemsElement.addEventListener("click", event => {
+    const button = event.target.closest("button[data-sd-index]");
+    if (!button || button.disabled) return;
+    const item = sdItems[Number(button.dataset.sdIndex)];
+    if (!item) return;
+    if (item.type === "folder")
+      browseSd(item.id, {push: {id: item.id, title: item.title || "Folder"}});
+    else
+      playSdItem(item);
+  });
+  sdBack.addEventListener("click", () => {
+    if (sdBusy || sdPathStack.length <= 1) return;
+    browseSd(sdPathStack[sdPathStack.length - 2].id, {pop: true});
+  });
+  sdRefresh.addEventListener("click", () => {
+    if (!sdBusy) browseSd(sdPathStack[sdPathStack.length - 1].id);
+  });
+  sdMount.addEventListener("click", loadSdCard);
 
   window.addEventListener("hashchange", showTab);
   window.addEventListener("pageshow", event => {

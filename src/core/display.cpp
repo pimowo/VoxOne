@@ -300,6 +300,13 @@ void formatCarouselHeader(const voxone::ui_menu::MenuSnapshot& menu,
     snprintf(output, outputSize, "%s",
              !hasItems ? "DLNA" :
              (folder ? "DLNA - FOLDER" : "DLNA - UTWÓR"));
+  } else if (menu.menuId == voxone::ui_menu::MenuId::SD) {
+    const bool hasItems = voxone::ui_menu::itemCount(menu) != 0;
+    const bool folder = hasItems &&
+        voxone::ui_menu::itemHasSubmenu(menu, menu.selectedIndex);
+    snprintf(output, outputSize, "%s",
+             !hasItems ? "KARTA SD" :
+             (folder ? "SD - FOLDERY" : "SD - PLIKI"));
   } else if (menu.menuId == voxone::ui_menu::MenuId::SOURCE) {
     snprintf(output, outputSize, "ŹRÓDŁA");
   } else if (menu.menuId == voxone::ui_menu::MenuId::MAIN) {

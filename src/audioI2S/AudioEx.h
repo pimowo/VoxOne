@@ -18,6 +18,7 @@
 #include "../core/radio_reconnect_policy.h"
 #include "wav_header_parser.h"
 #include <Arduino.h>
+#include <FS.h>
 #include <libb64/cencode.h>
 #include <esp32-hal-log.h>
 
@@ -147,6 +148,7 @@ public:
     bool initializeI2S();
     void setBufsize(int rambuf_sz, int psrambuf_sz);
     bool connecttohost(const char* host, const char* user = "", const char* pwd = "");
+    bool connecttoFS(fs::FS& fs, const char* path);
     bool connecttospeech(const char* speech, const char* lang);
     bool connecttomarytts(const char* speech, const char* lang, const char* voice);
     void setConnectionTimeout(uint16_t timeout_ms, uint16_t timeout_ms_ssl);
@@ -173,7 +175,10 @@ public:
     }
     uint32_t httpContentLength() const { return m_contentlength; }
 #endif
-    bool transportConnected() const { return _client && _client->connected(); }
+    bool transportConnected() const {
+      return m_localFileActive ? !m_webFileDataComplete
+                               : (_client && _client->connected());
+    }
     bool transportBodyComplete() const {
       return m_streamType == ST_WEBFILE && m_webFileDataComplete;
     }
@@ -493,6 +498,7 @@ private:
     WiFiClient            client;       // @suppress("Abstract class cannot be instantiated")
     WiFiClientSecure      clientsecure; // @suppress("Abstract class cannot be instantiated")
     WiFiClient*           _client = nullptr;
+    File                  m_localFile;
     int                   m_tunedSocketFd = -1;
     TaskHandle_t          m_audioTaskHandle = nullptr;
     SemaphoreHandle_t     m_audioTaskMutex = nullptr;
@@ -588,6 +594,7 @@ private:
     bool            m_f_running = false;
     bool            m_f_firstCall = false;          // InitSequence for web stream processing
     bool            m_webFileDataComplete = false;  // HTTP body complete; decoder may still be draining
+    bool            m_localFileActive = false;
     bool            m_f_chunked = false ;           // Station provides chunked transfer
     bool            m_f_firstmetabyte = false;      // True if first metabyte (counter)
     bool            m_f_playing = false;            // valid mp3 stream recognized

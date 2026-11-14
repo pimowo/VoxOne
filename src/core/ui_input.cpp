@@ -4,6 +4,7 @@
 #include "config.h"
 #include "display.h"
 #include "dlna_menu_controller.h"
+#include "sd_menu_controller.h"
 #include "network.h"
 #include "player.h"
 #include "source_manager.h"
@@ -34,11 +35,16 @@ bool dispatchMenuInput(UiInputEvent event, int8_t steps) {
     if (action == MenuAction::NONE &&
         uiMenu.menuId() == voxone::ui_menu::MenuId::DLNA)
       voxone::dlna_menu::select();
+    if (action == MenuAction::NONE &&
+        uiMenu.menuId() == voxone::ui_menu::MenuId::SD)
+      voxone::sd_menu::select();
   } else if (event == UiInputEvent::Double) {
     if (voxone::dlna_menu::back()) return true;
+    if (voxone::sd_menu::back()) return true;
     const auto menuId = uiMenu.menuId();
     if (menuId == voxone::ui_menu::MenuId::SOURCE ||
         menuId == voxone::ui_menu::MenuId::DLNA ||
+        menuId == voxone::ui_menu::MenuId::SD ||
         menuId == voxone::ui_menu::MenuId::MAIN)
       action = uiMenu.handle(MenuCommand::CLOSE);
     else
@@ -51,6 +57,8 @@ bool dispatchMenuInput(UiInputEvent event, int8_t steps) {
   if (action == MenuAction::SELECTED) {
     if (uiMenu.menuId() == voxone::ui_menu::MenuId::DLNA)
       voxone::dlna_menu::select();
+    else if (uiMenu.menuId() == voxone::ui_menu::MenuId::SD)
+      voxone::sd_menu::select();
     else if (uiMenu.menuId() == voxone::ui_menu::MenuId::SOURCE)
       voxone::source_menu::select();
     else
@@ -62,6 +70,8 @@ bool dispatchMenuInput(UiInputEvent event, int8_t steps) {
     ESP_LOGI(kUiInputTag, "Opened submenu: %s", selectedLabel);
     if (uiMenu.menuId() == voxone::ui_menu::MenuId::DLNA)
       voxone::dlna_menu::entered();
+    else if (uiMenu.menuId() == voxone::ui_menu::MenuId::SD)
+      voxone::sd_menu::entered();
     else if (uiMenu.menuId() == voxone::ui_menu::MenuId::SOURCE)
       voxone::source_menu::entered();
   }
@@ -168,7 +178,18 @@ void navigateCurrentSource(SourceId source, bool next) {
     }
     return;
   }
-  if (source == SourceId::Aux || source == SourceId::Local) return;
+  if (source == SourceId::Local) {
+    if (uiMenu.open(voxone::ui_menu::MenuId::SD)) {
+      config.beginMenuTransaction();
+      voxone::sd_menu::entered();
+      if (!transitionUiMode(MENU)) {
+        config.discardMenuTransaction();
+        uiMenu.close();
+      }
+    }
+    return;
+  }
+  if (source == SourceId::Aux) return;
   // WEB and HA share Player's ordered-media navigation. HA is temporary
   // audio, so an explicit next/previous gesture hands control back to the
   // selected WEB station in that direction.
@@ -264,6 +285,16 @@ void dispatchUiInput(UiInputEvent event, int8_t steps,
       if (uiMenu.open(voxone::ui_menu::MenuId::DLNA)) {
         config.beginMenuTransaction();
         voxone::dlna_menu::entered();
+        if (!transitionUiMode(MENU)) {
+          config.discardMenuTransaction();
+          uiMenu.close();
+        }
+      }
+      break;
+    case UiInputAction::OpenLocalBrowser:
+      if (uiMenu.open(voxone::ui_menu::MenuId::SD)) {
+        config.beginMenuTransaction();
+        voxone::sd_menu::entered();
         if (!transitionUiMode(MENU)) {
           config.discardMenuTransaction();
           uiMenu.close();

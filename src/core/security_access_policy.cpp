@@ -112,6 +112,15 @@ const SecurityRouteRule kRouteRules[] = {
     {SecurityAccessMethod::Post, "/api/dlna/play",
      SecurityEndpoint::DlnaPlay, SecurityRouteClass::ProtectedRest,
      true, false},
+    {SecurityAccessMethod::Get, "/api/sd/servers",
+     SecurityEndpoint::SdServers, SecurityRouteClass::ProtectedRest,
+     false, false},
+    {SecurityAccessMethod::Get, "/api/sd/browse",
+     SecurityEndpoint::SdBrowse, SecurityRouteClass::ProtectedRest,
+     false, false},
+    {SecurityAccessMethod::Post, "/api/sd/play",
+     SecurityEndpoint::SdPlay, SecurityRouteClass::ProtectedRest,
+     true, false},
     {SecurityAccessMethod::Get, "/api/stations/export",
      SecurityEndpoint::StationsExport, SecurityRouteClass::ProtectedRest,
      false, false},
@@ -361,6 +370,9 @@ const char* securityEndpointName(SecurityEndpoint endpoint) {
     case SecurityEndpoint::DlnaSelect: return "dlna-select";
     case SecurityEndpoint::DlnaBrowse: return "dlna-browse";
     case SecurityEndpoint::DlnaPlay: return "dlna-play";
+    case SecurityEndpoint::SdServers: return "sd-servers";
+    case SecurityEndpoint::SdBrowse: return "sd-browse";
+    case SecurityEndpoint::SdPlay: return "sd-play";
     case SecurityEndpoint::StationsExport: return "stations-export";
     case SecurityEndpoint::StationsImport: return "stations-import";
     case SecurityEndpoint::StationsAdd: return "stations-add";

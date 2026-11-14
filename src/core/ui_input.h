@@ -85,6 +85,7 @@ enum class UiInputAction : uint8_t {
   OpenVolume,
   OpenStations,
   OpenDlnaBrowser,
+  OpenLocalBrowser,
   OpenBluetoothTransport,
   ShowPlayer,
   WakePlayer
@@ -211,6 +212,8 @@ inline UiInputDecision resolveUiInput(const UiInputContext& context,
         return uiInputDecision(UiInputAction::OpenVolume);
       if (context.activeSource == SourceId::Dlna)
         return uiInputDecision(UiInputAction::OpenDlnaBrowser);
+      if (context.activeSource == SourceId::Local)
+        return uiInputDecision(UiInputAction::OpenLocalBrowser);
       if (context.supportsBluetooth && context.bluetoothSelected) {
         if (!context.supportsBluetoothTransportView)
           return uiInputDecision(UiInputAction::None);

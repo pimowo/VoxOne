@@ -17,6 +17,7 @@ void sourceManagerBeginHomeAssistant(const char* title, const char* artist);
 void sourceManagerEndHomeAssistant();
 bool sourceManagerHomeAssistantActive();
 void sourceManagerBeginDlna(const char* title, const char* artist);
+void sourceManagerBeginLocal(const char* title, const char* artist);
 void sourceManagerEndTemporary();
 bool sourceManagerDlnaActive();
 class TemporaryAudioState;

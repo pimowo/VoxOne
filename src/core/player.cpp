@@ -17,6 +17,7 @@
 #include "playlist_mapping.h"
 #include "playlist_store.h"
 #include "station_format.h"
+#include "sd_card.h"
 #if defined(VOXONE_TTS_HIL_DIAGNOSTICS)
 #include "tts_hil_diagnostics.h"
 #endif
@@ -732,9 +733,15 @@ void Player::requestTemporaryUrl(
   const SourceId requestedSource =
       request.source == voxone::temporary_audio::Source::Dlna
           ? SourceId::Dlna
+      : request.source == voxone::temporary_audio::Source::Local
+          ? SourceId::Local
           : SourceId::HomeAssistant;
+  const bool validResource =
+      request.source == voxone::temporary_audio::Source::Local
+          ? voxone::sd_path::audioFile(url)
+          : voxone::temporary_audio::isSafeUrl(url, length);
   if (!_temporaryUrls ||
-      !voxone::temporary_audio::isSafeUrl(url, length) ||
+      !validResource ||
       !sourceManagerSourceAvailable(requestedSource) ||
       systemUpdateAudioBlocked() || !_localAudioAvailable) return;
   QueuedTemporaryRequest* pending = copyTemporaryRequest(request);
@@ -846,6 +853,8 @@ void Player::browseUrl(const voxone::temporary_audio::Request& request){
   const uint32_t token = _temporary.begin();
   if (request.source == voxone::temporary_audio::Source::Dlna)
     sourceManagerBeginDlna(request.title, request.artist);
+  else if (request.source == voxone::temporary_audio::Source::Local)
+    sourceManagerBeginLocal(request.title, request.artist);
   else
     sourceManagerBeginHomeAssistant(request.title, request.artist);
   _temporaryProgress.begin(token, millis(), transportProgressBytes());
@@ -862,7 +871,10 @@ void Player::browseUrl(const voxone::temporary_audio::Request& request){
   display.putRequest(PSTOP);
   setOutputPins(false);
   _callbackToken = token;
-  const bool connected = connecttohost(request.url);
+  fs::FS* localFs = request.source == voxone::temporary_audio::Source::Local
+                        ? voxone::sd_card::filesystem() : nullptr;
+  const bool connected = localFs ? connecttoFS(*localFs, request.url)
+                                 : connecttohost(request.url);
   _callbackToken = 0;
   if (connected){
     _status = PLAYING;

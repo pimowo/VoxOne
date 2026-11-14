@@ -58,8 +58,10 @@ checkpointów pozostaje w historii Git i w istniejących raportach.
 - [ ] Sprawdzić na L0 i S0 tryb LINE OUT: stały poziom wyjścia,
   oddzielne zapamiętywanie nastawy, napis `LINE`, konfigurację w WWW i menu
   oraz automatyczny AVRCP Absolute Volume z rzeczywistym źródłem Bluetooth.
-- [ ] Po implementacji Local Files podłączyć kartę microSD i sprawdzić
-  stabilność odtwarzania przy współdzieleniu SPI z wyświetlaczem i osobnym CS.
+- [ ] Na L0 doprowadzić do zamontowania fizycznej karty microSD (test po
+  wdrożeniu Local Files zwraca `sd_not_mounted` także po próbie 4 MHz/1 MHz),
+  a następnie sprawdzić odsłuch i stabilność odtwarzania przy współdzieleniu
+  SPI z wyświetlaczem i osobnym CS.
 - [ ] Dokończyć fizyczny test DLNA na
   `minidlna`: sprawdzić wykrywanie i
   przełączanie co najmniej dwóch serwerów w panelu WWW oraz powrót do
@@ -118,8 +120,6 @@ checkpointów pozostaje w historii Git i w istniejących raportach.
   aktywnego serwera bezpośrednio w menu urządzenia.
 - [ ] AUX: dodać wejście analogowe oparte na PCM1808 i zintegrować je z wyborem
   źródła; wykorzystać posiadany moduł do testów HIL.
-- [ ] Local Files: dodać odtwarzanie z karty microSD na SPI współdzielonym z
-  wyświetlaczem, z osobnym pinem CS i bez zakłócania renderowania.
 - [ ] A2DP Transmitter: dodać naprzemienne tryby RX/TX w VoxOneBT, bez ich
   jednoczesnej pracy.
 - [ ] Dodać wyjście do zewnętrznej końcówki mocy klasy D i opisać wymagania

@@ -25,6 +25,7 @@
 #include "core/dsp_runtime.h"
 #endif
 #include "core/dlna_menu_controller.h"
+#include "core/sd_card.h"
 #include "core/ui_state.h"
 #include "core/ota_boot_runtime.h"
 #include "core/security_recovery_key_runtime.h"
@@ -302,6 +303,8 @@ void setup() {
       {dspConfig.bass, dspConfig.middle, dspConfig.treble});
 #endif
   display.init();
+  if (voxone::hardware::hardwareCapabilities().supportsSdCard)
+    voxone::sd_card::begin();
   player.init();
   network.begin();
   #if VOXONE_HAS_BT && VOXONE_PIN_MAP_COMPLETE

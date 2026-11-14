@@ -545,6 +545,8 @@ void Audio::setDefaults() {
     vector_clear_and_shrink(m_playlistURL);
     vector_clear_and_shrink(m_playlistContent);
     m_hashQueue.clear(); m_hashQueue.shrink_to_fit(); // uint32_t vector
+    if(m_localFile) m_localFile.close();
+    m_localFileActive = false;
     if(_client && !m_connectAttempt.active()) _client->stop();
     _client = static_cast<WiFiClient*>(&client); /* default to *something* so that no NULL deref can happen */
     playI2Sremains();
@@ -604,6 +606,11 @@ void Audio::setConnectionTimeout(uint16_t timeout_ms, uint16_t timeout_ms_ssl){
 }
 
 int Audio::readClient() {
+    if(m_localFileActive) {
+        const int value = m_localFile.read();
+        if(value >= 0) ++m_transportProgressBytes;
+        return value;
+    }
     if(_client) tuneAudioSocket(*_client);
     const int value = _client ? _client->read() : -1;
     if(value >= 0) ++m_transportProgressBytes;
@@ -611,6 +618,11 @@ int Audio::readClient() {
 }
 
 int Audio::readClient(uint8_t* buffer, size_t length) {
+    if(m_localFileActive) {
+        const int bytes = m_localFile.read(buffer, length);
+        if(bytes > 0) m_transportProgressBytes += static_cast<uint32_t>(bytes);
+        return bytes;
+    }
     if(_client) tuneAudioSocket(*_client);
     const int bytes = _client ? _client->read(buffer, length) : -1;
     if(bytes > 0) m_transportProgressBytes += static_cast<uint32_t>(bytes);
@@ -618,6 +630,11 @@ int Audio::readClient(uint8_t* buffer, size_t length) {
 }
 
 size_t Audio::readClientBytes(char* buffer, size_t length) {
+    if(m_localFileActive) {
+        const size_t bytes = m_localFile.readBytes(buffer, length);
+        m_transportProgressBytes += bytes;
+        return bytes;
+    }
     if(_client) tuneAudioSocket(*_client);
     const size_t bytes = _client ? _client->readBytes(buffer, length) : 0;
     m_transportProgressBytes += bytes;
@@ -650,6 +667,59 @@ void Audio::connectTask(void* pvParams) {
 //---------------------------------------------------------------------------------------------------------------------
 bool Audio::connecttohost(const char* host, const char* user, const char* pwd) {
     return connectToHost(host, user, pwd, true);
+}
+//---------------------------------------------------------------------------------------------------------------------
+bool Audio::connecttoFS(fs::FS& fs, const char* path) {
+    if(!path || !path[0] || strlen(path) >= 256) return false;
+    setDefaults();
+    m_localFile = fs.open(path, FILE_READ);
+    if(!m_localFile || m_localFile.isDirectory() || m_localFile.size() == 0 ||
+       m_localFile.size() > UINT32_MAX) {
+        if(m_localFile) m_localFile.close();
+        AUDIO_ERROR("Failed to open local audio file");
+        return false;
+    }
+
+    const char* extension = strrchr(path, '.');
+    char normalized[8]{};
+    if(extension) {
+        size_t index = 0;
+        for(++extension; *extension && index + 1 < sizeof(normalized);
+            ++extension, ++index) {
+            normalized[index] = static_cast<char>(tolower(
+                static_cast<unsigned char>(*extension)));
+        }
+    }
+    if(!strcmp(normalized, "mp3")) m_codec = CODEC_MP3;
+    else if(!strcmp(normalized, "aac")) m_codec = CODEC_AAC;
+    else if(!strcmp(normalized, "m4a")) m_codec = CODEC_M4A;
+    else if(!strcmp(normalized, "wav")) m_codec = CODEC_WAV;
+    else if(!strcmp(normalized, "flac")) m_codec = CODEC_FLAC;
+    else {
+        m_localFile.close();
+        AUDIO_ERROR("Unsupported local audio format");
+        return false;
+    }
+
+    m_contentlength = static_cast<uint32_t>(m_localFile.size());
+    m_streamType = ST_WEBFILE;
+    m_f_chunked = false;
+    m_f_tts = false;
+    m_controlCounter = 0;
+    m_f_firstCall = true;
+    m_webFileDataComplete = false;
+    m_localFileActive = true;
+    strlcpy(m_lastHost, path, sizeof(m_lastHost));
+    setDatamode(AUDIO_DATA);
+    if(!initializeDecoder()) {
+        m_localFile.close();
+        m_localFileActive = false;
+        return false;
+    }
+    m_f_running = true;
+    AUDIO_INFO("Reading local file: \"%s\" (%lu bytes)", path,
+               static_cast<unsigned long>(m_contentlength));
+    return true;
 }
 //---------------------------------------------------------------------------------------------------------------------
 bool Audio::connectToHost(const char* host, const char* user, const char* pwd,
@@ -3110,7 +3180,9 @@ void Audio::processWebFile() {
 
     if(!m_contentlength) {log_e("webfile without contentlength!"); stopSong(); return;} // guard
 
-    uint32_t availableBytes = _client->available(); // available from stream
+    uint32_t availableBytes = m_localFileActive
+                                  ? static_cast<uint32_t>(m_localFile.available())
+                                  : static_cast<uint32_t>(_client->available());
 
     // chunked data tramsfer - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
     if(m_f_chunked){

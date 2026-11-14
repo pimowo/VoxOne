@@ -65,6 +65,7 @@
 #include "netserver_backpressure.h"
 #include "player.h"
 #include "temporary_audio_request.h"
+#include "sd_card.h"
 #include "serialcli.h"
 #include "display.h"
 #include "network.h"
@@ -254,6 +255,9 @@ void handleDlnaServers(AsyncWebServerRequest *request);
 void handleDlnaSelect(AsyncWebServerRequest *request);
 void handleDlnaBrowse(AsyncWebServerRequest *request);
 void handleDlnaPlay(AsyncWebServerRequest *request);
+void handleSdServers(AsyncWebServerRequest *request);
+void handleSdBrowse(AsyncWebServerRequest *request);
+void handleSdPlay(AsyncWebServerRequest *request);
 void handleStationsMutation(AsyncWebServerRequest *request);
 void handleStationMetadata(AsyncWebServerRequest *request);
 void handleStationsExport(AsyncWebServerRequest *request);
@@ -1092,6 +1096,11 @@ bool NetServer::begin(bool quiet) {
     webserver.on(voxone::dlna::kBrowseRoute, HTTP_GET, handleDlnaBrowse);
     webserver.on(voxone::dlna::kPlayRoute, HTTP_POST, handleDlnaPlay);
   }
+  if (voxone::hardware::hardwareCapabilities().supportsSdCard) {
+    webserver.on("/api/sd/servers", HTTP_GET, handleSdServers);
+    webserver.on("/api/sd/browse", HTTP_GET, handleSdBrowse);
+    webserver.on("/api/sd/play", HTTP_POST, handleSdPlay);
+  }
   webserver.on("/api/stations/add", HTTP_POST, handleStationsMutation);
   webserver.on("/api/stations/edit", HTTP_POST, handleStationsMutation);
   webserver.on("/api/stations/delete", HTTP_POST, handleStationsMutation);
@@ -1767,6 +1776,122 @@ void handleDlnaPlay(AsyncWebServerRequest* request) {
   player.requestTemporaryUrl(
       playback.view(voxone::temporary_audio::Source::Dlna));
   stationsReply(request, 202, R"({"status":"starting","source":"dlna"})");
+}
+
+void appendSdJsonString(String& output, const char* value) {
+  output += '"';
+  for (const unsigned char* cursor =
+           reinterpret_cast<const unsigned char*>(value ? value : "");
+       *cursor; ++cursor) {
+    if (*cursor == '"' || *cursor == '\\') {
+      output += '\\';
+      output += static_cast<char>(*cursor);
+    } else if (*cursor == '\n') output += F("\\n");
+    else if (*cursor == '\r') output += F("\\r");
+    else if (*cursor == '\t') output += F("\\t");
+    else if (*cursor >= 0x20) output += static_cast<char>(*cursor);
+  }
+  output += '"';
+}
+
+int sdHttpStatus(voxone::sd_card::Status status) {
+  switch (status) {
+    case voxone::sd_card::Status::Ok: return 200;
+    case voxone::sd_card::Status::InvalidPath: return 400;
+    case voxone::sd_card::Status::NotFound:
+    case voxone::sd_card::Status::NotDirectory: return 404;
+    case voxone::sd_card::Status::Busy: return 429;
+    case voxone::sd_card::Status::Unsupported:
+    case voxone::sd_card::Status::NotMounted: return 503;
+  }
+  return 500;
+}
+
+void handleSdServers(AsyncWebServerRequest* request) {
+  const bool mounted = voxone::sd_card::ensureMounted();
+  stationsReply(
+      request, 200,
+      String(R"({"status":"ok","active":0,"mounted":)") +
+          (mounted ? "true" : "false") +
+          R"(,"servers":[{"index":0,"name":"Karta SD","ip":"","udn":"sd"}]})");
+}
+
+void handleSdBrowse(AsyncWebServerRequest* request) {
+  const String path = request->hasParam("path")
+                          ? request->getParam("path")->value() : String("/");
+  std::unique_ptr<voxone::sd_card::BrowseListing> listing(
+      new (std::nothrow) voxone::sd_card::BrowseListing());
+  if (!listing) {
+    stationsReply(request, 503, R"({"error":"insufficient_memory"})");
+    return;
+  }
+  const auto status = voxone::sd_card::browse(path.c_str(), *listing);
+  if (status != voxone::sd_card::Status::Ok) {
+    stationsReply(request, sdHttpStatus(status),
+                  String("{\"error\":\"") +
+                      voxone::sd_card::statusName(status) + "\"}");
+    return;
+  }
+  String body;
+  body.reserve(320 + listing->count * 420);
+  body = R"({"status":"ok","parent":)";
+  appendSdJsonString(body, listing->path);
+  body += R"(,"server":{"name":"Karta SD","ip":"","udn":"sd","location":"sd://","contentDirectory":"/"},"numberReturned":)";
+  body += static_cast<unsigned>(listing->count);
+  body += R"(,"totalMatches":)";
+  body += static_cast<unsigned>(listing->total);
+  body += R"(,"truncated":)";
+  body += listing->truncated ? "true" : "false";
+  body += R"(,"items":[)";
+  for (size_t index = 0; index < listing->count; ++index) {
+    if (index) body += ',';
+    const auto& item = listing->items[index];
+    body += R"({"type":")";
+    body += item.folder ? "folder" : "file";
+    body += R"(","id":)";
+    appendSdJsonString(body, item.path);
+    body += R"(,"parentId":)";
+    appendSdJsonString(body, item.parent);
+    body += R"(,"title":)";
+    appendSdJsonString(body, item.title);
+    body += R"(,"url":)";
+    appendSdJsonString(body, item.playable ? item.path : "");
+    body += R"(,"mime":)";
+    appendSdJsonString(body, item.mime);
+    body += '}';
+  }
+  body += "]}";
+  stationsReply(request, 200, body);
+}
+
+void handleSdPlay(AsyncWebServerRequest* request) {
+  if (!request->hasParam("path", true)) {
+    stationsReply(request, 400, R"({"error":"missing_path"})");
+    return;
+  }
+  const String path = request->getParam("path", true)->value();
+  const auto status = voxone::sd_card::validatePlayableFile(path.c_str());
+  if (status != voxone::sd_card::Status::Ok) {
+    stationsReply(request, sdHttpStatus(status),
+                  String("{\"error\":\"") +
+                      voxone::sd_card::statusName(status) + "\"}");
+    return;
+  }
+  voxone::temporary_audio::RequestStorage playback{};
+  const String title = request->hasParam("title", true)
+                           ? request->getParam("title", true)->value()
+                           : String("Karta SD");
+  if (title.length() >= sizeof(playback.title)) {
+    stationsReply(request, 400, R"({"error":"invalid_sd_title"})");
+    return;
+  }
+  strlcpy(playback.url, path.c_str(), sizeof(playback.url));
+  strlcpy(playback.title, title.length() ? title.c_str() : "Karta SD",
+          sizeof(playback.title));
+  player.requestTemporaryUrl(
+      playback.view(voxone::temporary_audio::Source::Local));
+  stationsReply(request, 202,
+                R"({"status":"starting","source":"local"})");
 }
 namespace {
 

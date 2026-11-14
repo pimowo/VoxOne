@@ -246,6 +246,17 @@ void sourceManagerBeginDlna(const char* title, const char* artist) {
                    title ? title : "", artist ? artist : "");
 }
 
+void sourceManagerBeginLocal(const char* title, const char* artist) {
+  portENTER_CRITICAL(&sourceMux);
+  const SourceUpdate update = sourceState.beginLocal(title, artist);
+  portEXIT_CRITICAL(&sourceMux);
+  publishSourceChanged(update, ActiveSource::SOURCE_LOCAL);
+  refreshDisplay(update);
+  netserver.requestOnChange(WEBSTATUS, 0);
+  serialCli.printf("##[SOURCE]# active=LOCAL title=%.96s\n",
+                   title ? title : "");
+}
+
 void sourceManagerEndTemporary() {
   portENTER_CRITICAL(&sourceMux);
   const ActiveSource finished = sourceState.active();
@@ -258,7 +269,8 @@ void sourceManagerEndTemporary() {
   netserver.requestOnChange(WEBSTATUS, 0);
   serialCli.printf("##[SOURCE]# active=%s reason=%s-finished\n",
                    sourceName(active),
-                   finished == ActiveSource::SOURCE_DLNA ? "dlna" : "ha");
+                   finished == ActiveSource::SOURCE_DLNA ? "dlna" :
+                   finished == ActiveSource::SOURCE_LOCAL ? "local" : "ha");
 }
 
 bool sourceManagerDlnaActive() {

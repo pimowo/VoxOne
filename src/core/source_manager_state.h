@@ -89,7 +89,8 @@ class SourceManagerState {
                               const char* artist) {
     SourceUpdate update;
     if (source != ActiveSource::SOURCE_HA &&
-        source != ActiveSource::SOURCE_DLNA) return update;
+        source != ActiveSource::SOURCE_DLNA &&
+        source != ActiveSource::SOURCE_LOCAL) return update;
     update.activeChanged = !temporaryActive_ || temporarySource_ != source;
     update.stationChanged = update.activeChanged ||
                             strcmp(temporaryTitle_, title ? title : "") != 0;
@@ -103,7 +104,8 @@ class SourceManagerState {
              title && title[0]
                  ? title
                  : (source == ActiveSource::SOURCE_DLNA ? "DLNA"
-                                                        : "Home Assistant"));
+                    : source == ActiveSource::SOURCE_LOCAL ? "Karta SD"
+                                                          : "Home Assistant"));
     copyText(temporaryArtist_, sizeof(temporaryArtist_), artist);
     return update;
   }
@@ -112,6 +114,9 @@ class SourceManagerState {
   }
   SourceUpdate beginDlna(const char* title, const char* artist) {
     return beginTemporary(ActiveSource::SOURCE_DLNA, title, artist);
+  }
+  SourceUpdate beginLocal(const char* title, const char* artist) {
+    return beginTemporary(ActiveSource::SOURCE_LOCAL, title, artist);
   }
   SourceUpdate endTemporary() {
     if (!temporaryActive_) return {};
@@ -135,6 +140,9 @@ class SourceManagerState {
   }
   bool dlnaActive() const {
     return temporaryActive_ && temporarySource_ == ActiveSource::SOURCE_DLNA;
+  }
+  bool localActive() const {
+    return temporaryActive_ && temporarySource_ == ActiveSource::SOURCE_LOCAL;
   }
   RadioSourceActions radioActions(const SourceUpdate& update,
                                   bool radioPhysicallyActive) const {
@@ -264,12 +272,16 @@ class SourceManagerState {
     if (temporaryActive_) {
       view.kind = temporarySource_ == ActiveSource::SOURCE_DLNA
                       ? DisplaySourceKind::Dlna
+                  : temporarySource_ == ActiveSource::SOURCE_LOCAL
+                      ? DisplaySourceKind::Local
                       : DisplaySourceKind::HomeAssistant;
       view.connected = true;
       view.playback = radioPlaying ? DisplayPlaybackState::Playing
                                    : DisplayPlaybackState::Stopped;
       view.peerName = temporarySource_ == ActiveSource::SOURCE_DLNA
-                          ? "DLNA" : "Home Assistant";
+                          ? "DLNA"
+                      : temporarySource_ == ActiveSource::SOURCE_LOCAL
+                          ? "Karta SD" : "Home Assistant";
       view.artist = temporaryArtist_;
       view.title = temporaryTitle_;
       view.sampleRate = 0;
@@ -312,9 +324,6 @@ class SourceManagerState {
       view.artist = "";
       view.title = "";
     } else if (active_ == ActiveSource::SOURCE_LOCAL) {
-      // Local Files is intentionally selectable before its SD playback
-      // backend lands.  The source identity and presentation remain stable,
-      // while transport stays stopped and fails closed.
       view.connected = true;
       view.playback = DisplayPlaybackState::Stopped;
       view.peerName = "SD / Local";

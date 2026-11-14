@@ -23,8 +23,13 @@ enum class MenuId : uint8_t {
   SYSTEM,
   SOURCE,
   DLNA,
+  SD,
   SAVE_CONFIRM,
 };
+
+constexpr bool dynamicBrowserMenu(MenuId menuId) {
+  return menuId == MenuId::DLNA || menuId == MenuId::SD;
+}
 
 enum class MenuCommand : uint8_t {
   PREVIOUS,
@@ -213,7 +218,7 @@ inline uint8_t itemCount(const MenuSnapshot& snapshot) {
   }
   if (snapshot.menuId == MenuId::AUDIO)
     return audioItemCount(snapshot.settings);
-  if (snapshot.menuId != MenuId::DLNA) return itemCount(snapshot.menuId);
+  if (!dynamicBrowserMenu(snapshot.menuId)) return itemCount(snapshot.menuId);
   return snapshot.dynamicCount;
 }
 
@@ -223,7 +228,8 @@ inline const char* itemLabel(const MenuSnapshot& snapshot, uint8_t index) {
   }
   if (snapshot.menuId == MenuId::AUDIO)
     return audioItemLabel(snapshot.settings, index);
-  if (snapshot.menuId != MenuId::DLNA) return itemLabel(snapshot.menuId, index);
+  if (!dynamicBrowserMenu(snapshot.menuId))
+    return itemLabel(snapshot.menuId, index);
   return index < snapshot.dynamicCount
              ? snapshot.dynamicItems[index].label : "";
 }
@@ -233,7 +239,7 @@ inline bool itemIsActive(const MenuSnapshot& snapshot, uint8_t index) {
     return sourceItemAt(snapshot.sourceMask, index) == snapshot.activeSource;
   if (snapshot.menuId == MenuId::MAIN)
     return index == 4 && snapshot.activeSource == SourceId::Dlna;
-  if (snapshot.menuId == MenuId::DLNA) {
+  if (dynamicBrowserMenu(snapshot.menuId)) {
     return index < snapshot.dynamicCount &&
            snapshot.dynamicItems[index].playing;
   }
@@ -242,7 +248,7 @@ inline bool itemIsActive(const MenuSnapshot& snapshot, uint8_t index) {
 }
 
 inline bool itemHasSubmenu(const MenuSnapshot& snapshot, uint8_t index) {
-  if (snapshot.menuId != MenuId::DLNA)
+  if (!dynamicBrowserMenu(snapshot.menuId))
     return itemHasSubmenu(snapshot.menuId, index);
   return index < snapshot.dynamicCount &&
          snapshot.dynamicItems[index].folder;

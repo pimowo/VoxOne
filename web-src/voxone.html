@@ -92,6 +92,7 @@
       <a href="#status" data-tab="status" aria-current="page"><svg aria-hidden="true"><use href="/sprite.svg?v={sprite.svg-hash}#icon-status"/></svg><span>Status</span></a>
       <a href="#stations" data-tab="stations"><svg aria-hidden="true"><use href="/sprite.svg?v={sprite.svg-hash}#icon-stations"/></svg><span>Stacje</span></a>
       <a href="#dlna" data-tab="dlna"><svg aria-hidden="true"><use href="/sprite.svg?v={sprite.svg-hash}#icon-dlna"/></svg><span>DLNA</span></a>
+      <a href="#sd" data-tab="sd"><svg aria-hidden="true"><use href="/sprite.svg?v={sprite.svg-hash}#icon-sd"/></svg><span>Karta SD</span></a>
       <a href="#audio" data-tab="audio"><svg aria-hidden="true"><use href="/sprite.svg?v={sprite.svg-hash}#icon-audio"/></svg><span>Audio</span></a>
       <!-- VOXONE_DSP_BEGIN -->
       <a href="#dsp" data-tab="dsp"><svg aria-hidden="true"><use href="/sprite.svg?v={sprite.svg-hash}#icon-dsp"/></svg><span>DSP</span></a>
@@ -205,6 +206,24 @@
           </div>
           <p id="dlna-status" class="stations-message" role="status" aria-live="polite">Otwórz zakładkę, aby wyszukać serwer DLNA.</p>
           <ul id="dlna-items" class="dlna-items" aria-label="Foldery i utwory DLNA"></ul>
+        </article>
+      </section>
+
+      <section id="sd" data-panel aria-labelledby="sd-title" hidden>
+        <div class="section-heading"><div><p class="eyebrow">PLIKI LOKALNE</p><h2 id="sd-title">Karta SD</h2></div><span class="badge" id="sd-server">Karta SD</span></div>
+        <article class="card dlna-browser">
+          <div class="dlna-server-picker">
+            <label for="sd-server-select">Nośnik</label>
+            <select id="sd-server-select" class="setting-select" disabled><option>Karta SD</option></select>
+            <button id="sd-mount" type="button">Sprawdź kartę</button>
+          </div>
+          <div class="dlna-toolbar">
+            <button id="sd-back" type="button" disabled>← Wstecz</button>
+            <strong id="sd-path">Główne</strong>
+            <button id="sd-refresh" type="button">Odśwież</button>
+          </div>
+          <p id="sd-status" class="stations-message" role="status" aria-live="polite">Otwórz zakładkę, aby odczytać kartę SD.</p>
+          <ul id="sd-items" class="dlna-items" aria-label="Foldery i utwory na karcie SD"></ul>
         </article>
       </section>
 

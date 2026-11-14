@@ -32,8 +32,8 @@ int main() {
   static_assert(voxone::config_format::kConfigV7SerializedSize == 255,
                 "Config v7 layout changed");
 
-  assert(!std::ifstream("src/core/sdmanager.cpp").good());
-  assert(!std::ifstream("src/core/sdmanager.h").good());
+  assert(std::ifstream("src/core/sd_card.cpp").good());
+  assert(std::ifstream("src/core/sd_card.h").good());
 
   const auto audio = readFile("src/audioI2S/Audio.cpp");
   const auto audioHeader = readFile("src/audioI2S/AudioEx.h");
@@ -45,7 +45,7 @@ int main() {
   const auto playlistStore = readFile("src/core/playlist_store.cpp");
 
   const std::initializer_list<const char*> retired = {
-      "connecttoFS", "connecttoSD", "AUDIO_LOCALFILE", "m_resumeFilePos",
+      "connecttoSD", "AUDIO_LOCALFILE", "m_resumeFilePos",
       "audio_beginSDread", "audio_progress", "processLocalFile", "SDManager",
       "sdman", "SDFS", "<SD.h>", "<SD_MMC.h>", "setFilePos",
       "getFilePos", "getFileSize", "getAudioFileDuration", "audioFileSeek"};
@@ -59,7 +59,10 @@ int main() {
   hasAll(configHeader, {"#include <SPIFFS.h>", "PLAYLIST_PATH", "INDEX_PATH"});
   hasAll(playlistStore, {"PlaylistStore::", "SPIFFS.open", "File file"});
 
-  // ID3 parsing is shared with HTTP web files and remains intentionally active.
-  hasAll(audio, {"Audio::read_ID3_Header", "Audio::processWebFile"});
-  hasAll(audioHeader, {"audio_id3data", "ST_WEBFILE"});
+  // Local files reuse the maintained web-file decoder path and its ID3 parser.
+  hasAll(audio, {"Audio::connecttoFS", "Audio::read_ID3_Header",
+                 "Audio::processWebFile", "m_localFile.read"});
+  hasAll(audioHeader, {"connecttoFS", "audio_id3data", "ST_WEBFILE",
+                       "File                  m_localFile"});
+  hasAll(player, {"sd_card::filesystem", "temporary_audio::Source::Local"});
 }

@@ -175,6 +175,11 @@ int main() {
   assert(action(dlna, UiInputEvent::Long) ==
          UiInputAction::OpenDlnaBrowser);
 
+  UiInputContext local = radio();
+  local.activeSource = SourceId::Local;
+  assert(action(local, UiInputEvent::Long) ==
+         UiInputAction::OpenLocalBrowser);
+
   UiInputContext reversedLineOut = reversedRadio;
   reversedLineOut.lineOutEnabled = true;
   assert(action(reversedLineOut, UiInputEvent::Long) ==

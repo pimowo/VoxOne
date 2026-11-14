@@ -95,6 +95,12 @@ const EndpointCase kEndpoints[] = {
      SecurityEndpoint::DlnaBrowse, SecurityRouteClass::ProtectedRest, false, false},
     {SecurityAccessMethod::Post, "/api/dlna/play",
      SecurityEndpoint::DlnaPlay, SecurityRouteClass::ProtectedRest, true, false},
+    {SecurityAccessMethod::Get, "/api/sd/servers",
+     SecurityEndpoint::SdServers, SecurityRouteClass::ProtectedRest, false, false},
+    {SecurityAccessMethod::Get, "/api/sd/browse?path=/Music",
+     SecurityEndpoint::SdBrowse, SecurityRouteClass::ProtectedRest, false, false},
+    {SecurityAccessMethod::Post, "/api/sd/play",
+     SecurityEndpoint::SdPlay, SecurityRouteClass::ProtectedRest, true, false},
     {SecurityAccessMethod::Get, "/api/stations/export", SecurityEndpoint::StationsExport,
      SecurityRouteClass::ProtectedRest, false, false},
     {SecurityAccessMethod::Post, "/api/stations/import", SecurityEndpoint::StationsImport,
@@ -274,11 +280,11 @@ void testCompleteEndpointInventory() {
     assert(std::strcmp(securityEndpointName(actual.endpoint), "unknown") != 0);
     assert(std::strcmp(securityRouteClassName(actual.routeClass), "unknown") != 0);
   }
-  assert(sizeof(kEndpoints) / sizeof(kEndpoints[0]) == 61);
+  assert(sizeof(kEndpoints) / sizeof(kEndpoints[0]) == 64);
 
   size_t ruleCount = 0;
   const SecurityRouteRule* rules = securityAccessRouteRules(ruleCount);
-  assert(rules != nullptr && ruleCount == 61);
+  assert(rules != nullptr && ruleCount == 64);
   for (size_t index = 0; index < ruleCount; ++index) {
     const SecurityRouteRule& rule = rules[index];
     assert(rule.path && rule.path[0] == '/');

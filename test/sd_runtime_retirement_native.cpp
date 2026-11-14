@@ -70,6 +70,7 @@ int main() {
   const auto playlistStore = readFile("src/core/playlist_store.cpp");
   const auto audio = readFile("src/audioI2S/Audio.cpp");
   const auto audioHeader = readFile("src/audioI2S/AudioEx.h");
+  const auto sdCard = readFile("src/core/sd_card.cpp");
 
   const std::initializer_list<const char*> retired = {
       "PM_SDCARD", "PM_WEB", "MAX_PLAY_MODE", "changeMode(",
@@ -96,7 +97,17 @@ int main() {
   hasAll(playlistStore, {"PlaylistStore::", "PLAYLIST_PATH", "INDEX_PATH"});
   hasAll(server, {"/api/stations/import", "/api/stations/export"});
 
-  hasNone(audio, {"Audio::connecttoFS", "Audio::connecttoSD", "AUDIO_LOCALFILE"});
-  hasNone(audioHeader, {"connecttoFS", "connecttoSD", "AUDIO_LOCALFILE",
-                        "<SD.h>", "<SD_MMC.h>"});
+  hasAll(audio, {"Audio::connecttoFS", "m_localFile.read"});
+  hasAll(audioHeader, {"connecttoFS", "m_localFile", "<FS.h>"});
+  hasNone(audio, {"Audio::connecttoSD", "AUDIO_LOCALFILE"});
+  hasNone(audioHeader, {"connecttoSD", "AUDIO_LOCALFILE", "<SD_MMC.h>"});
+  hasAll(playerSource, {"sd_card::filesystem",
+                        "temporary_audio::Source::Local"});
+  hasAll(mainSource, {"sd_card::begin", "supportsSdCard"});
+  hasAll(server, {"/api/sd/servers", "/api/sd/browse", "/api/sd/play"});
+  hasAll(sdCard, {"kSdSpiFrequency = 4000000UL",
+                  "kSdFallbackSpiFrequency = 1000000UL",
+                  "digitalWrite(static_cast<uint8_t>(display.cs), HIGH)",
+                  "memset(&listing, 0, sizeof(listing))"});
+  hasNone(sdCard, {"listing = BrowseListing{}"});
 }
