@@ -91,11 +91,12 @@ int main() {
   // Source entries are capability-filtered and open on the active source.
   const uint8_t allSources = kCoreSourceMask |
       sourceBit(SourceId::Bluetooth) | sourceBit(SourceId::HomeAssistant) |
-      sourceBit(SourceId::Dlna) | sourceBit(SourceId::Aux);
+      sourceBit(SourceId::Dlna) | sourceBit(SourceId::Aux) |
+      sourceBit(SourceId::Local);
   UiMenu sourceMenu;
   assert(sourceMenu.open(MenuId::SOURCE));
   sourceMenu.configureSources(allSources, SourceId::Dlna);
-  assert(sourceMenu.itemCount() == 5 && sourceMenu.selectedIndex() == 3);
+  assert(sourceMenu.itemCount() == 6 && sourceMenu.selectedIndex() == 3);
   assert(std::string(sourceMenu.selectedLabel()) == "DLNA");
   assert(voxone::ui_menu::itemIsActive(sourceMenu.snapshot(), 3));
   assert(sourceMenu.handle(MenuCommand::SELECT) == MenuAction::SELECTED);
@@ -105,11 +106,14 @@ int main() {
       SourceId::Web);
   assert(sourceMenu.itemCount() == 3);
   assert(std::string(voxone::ui_menu::itemLabel(sourceMenu.snapshot(), 0)) ==
-         "WEB");
+         "WEB Radio");
   assert(std::string(voxone::ui_menu::itemLabel(sourceMenu.snapshot(), 1)) ==
-         "HA");
+         "Home Assistant");
   assert(std::string(voxone::ui_menu::itemLabel(sourceMenu.snapshot(), 2)) ==
          "DLNA");
+  sourceMenu.configureSources(allSources, SourceId::Local);
+  assert(sourceMenu.selectedIndex() == 5);
+  assert(std::string(sourceMenu.selectedLabel()) == "SD / Local");
 
   // L0 exposes the audio-path selector. DSPmini keeps only the path entry;
   // PCM5102 restores the existing balance/tone/LINE OUT controls.
@@ -355,6 +359,8 @@ int main() {
   assert(display.find("formatItemValue") != std::string::npos);
   assert(display.find("%s >") == std::string::npos);
   assert(carousel.find("voxone::utf8::ellipsize") != std::string::npos);
+  assert(carousel.find("printMarquee") != std::string::npos);
+  assert(carousel.find("marquee_.step(millis())") != std::string::npos);
   assert(carousel.find("model.playing") != std::string::npos);
   assert(carousel.find("\"GRA\"") != std::string::npos);
   assert(carousel.find("dsp.height() <= 64") != std::string::npos);

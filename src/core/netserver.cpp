@@ -1393,14 +1393,15 @@ static void formatWebStatus(char* output, size_t capacity) {
       sourceView, config.station.name, radioMetadata, radioArtist, radioTitle,
       getFormat(config.configFmt), config.station.bitrate);
   const uint8_t sourceMask = sourceManagerSourceMask();
-  char availableSources[64];
+  char availableSources[80];
   const int availableLength = snprintf(
       availableSources, sizeof(availableSources),
-      "\"radio\"%s%s%s%s",
+      "\"radio\"%s%s%s%s%s",
       sourceIncluded(sourceMask, SourceId::Bluetooth) ? ",\"bt\"" : "",
       sourceIncluded(sourceMask, SourceId::HomeAssistant) ? ",\"ha\"" : "",
       sourceIncluded(sourceMask, SourceId::Dlna) ? ",\"dlna\"" : "",
-      sourceIncluded(sourceMask, SourceId::Aux) ? ",\"aux\"" : "");
+      sourceIncluded(sourceMask, SourceId::Aux) ? ",\"aux\"" : "",
+      sourceIncluded(sourceMask, SourceId::Local) ? ",\"local\"" : "");
   if (availableLength < 0 ||
       static_cast<size_t>(availableLength) >= sizeof(availableSources)) {
     output[0] = '\0';

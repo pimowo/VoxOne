@@ -13,6 +13,7 @@ enum class ActiveSource : uint8_t {
   SOURCE_HA,
   SOURCE_DLNA,
   Aux,
+  SOURCE_LOCAL,
 };
 enum class SourceChangeReason : uint8_t {
   None, Manual, BtConnect, BtDisconnect, BtOffline
@@ -282,6 +283,8 @@ class SourceManagerState {
                     ? DisplaySourceKind::Dlna
                 : active_ == ActiveSource::Aux
                     ? DisplaySourceKind::Aux
+                : active_ == ActiveSource::SOURCE_LOCAL
+                    ? DisplaySourceKind::Local
                     : DisplaySourceKind::Radio;
     view.connected = active_ == ActiveSource::Bluetooth && connected_;
     if (active_ == ActiveSource::Radio) {
@@ -306,6 +309,15 @@ class SourceManagerState {
       view.connected = true;
       view.playback = DisplayPlaybackState::Stopped;
       view.peerName = "AUX";
+      view.artist = "";
+      view.title = "";
+    } else if (active_ == ActiveSource::SOURCE_LOCAL) {
+      // Local Files is intentionally selectable before its SD playback
+      // backend lands.  The source identity and presentation remain stable,
+      // while transport stays stopped and fails closed.
+      view.connected = true;
+      view.playback = DisplayPlaybackState::Stopped;
+      view.peerName = "SD / Local";
       view.artist = "";
       view.title = "";
     } else if (!connected_) {

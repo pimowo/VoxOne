@@ -21,6 +21,7 @@
 #include "update_progress.h"
 #include "update_bar_render_state.h"
 #include "station_selection_view.h"
+#include "source_icons.h"
 #include "timekeeper.h"
 #include "ui_menu.h"
 #include "unified_carousel_renderer.h"
@@ -165,6 +166,92 @@ DspCore dsp;
 
 namespace {
 
+void drawSourceIcon(int16_t left, int16_t top, DisplaySourceKind source,
+                    uint16_t color, uint8_t scale = 1) {
+  if (scale == 0) scale = 1;
+  const SourceIconBitmap& bitmap = sourceIconBitmap(sourceIconFor(source));
+  for (uint8_t row = 0; row < 8; ++row) {
+    for (uint8_t column = 0; column < 8; ++column) {
+      if ((bitmap.rows[row] & (0x80U >> column)) == 0) continue;
+      dsp.fillRect(left + column * scale, top + row * scale,
+                   scale, scale, color);
+    }
+  }
+}
+
+void drawSourceIconAndLabel(int16_t left, int16_t top, uint16_t width,
+                            uint16_t height, DisplaySourceKind source,
+                            uint8_t textSize, uint16_t foreground,
+                            uint16_t background) {
+  const char* label = displaySourceLabel(source);
+  const uint8_t iconScale = height >= 16 ? 2 : 1;
+  const uint16_t iconWidth = 8U * iconScale;
+  const uint16_t gap = iconScale == 1 ? 2 : 4;
+  const uint16_t labelWidth = strlen(label) * CHARWIDTH * textSize;
+  const uint16_t totalWidth = iconWidth + gap + labelWidth;
+  const int16_t contentLeft = left +
+      (width > totalWidth ? (width - totalWidth) / 2 : 0);
+  const int16_t iconTop = top +
+      (height > 8U * iconScale ? (height - 8U * iconScale) / 2 : 0);
+  drawSourceIcon(contentLeft, iconTop, source, foreground, iconScale);
+  dsp.setFont();
+  dsp.setTextSize(textSize);
+  dsp.setTextColor(foreground, background);
+  dsp.setCursor(contentLeft + iconWidth + gap,
+                top + (height > CHARHEIGHT * textSize
+                           ? (height - CHARHEIGHT * textSize) / 2 : 0));
+  dsp.print(label);
+}
+
+}  // namespace
+
+class SourceStatusWidget : public Widget {
+ public:
+  SourceStatusWidget(uint16_t left, uint16_t top, uint16_t width,
+                     uint16_t height, uint16_t color, uint16_t background)
+      : width_(width), height_(height) {
+    Widget::init({left, top, 1, WA_LEFT}, color, background);
+  }
+
+  void loop() override {
+    if (!_active || static_cast<uint32_t>(millis() - lastCheck_) < 100) return;
+    lastCheck_ = millis();
+    PlayerDisplayView view{};
+    capturePlayerDisplayView(view, WiFi.RSSI());
+    if (drawn_ && source_ == view.source) return;
+    source_ = view.source;
+    render();
+  }
+
+ private:
+  uint16_t width_, height_;
+  uint32_t lastCheck_ = 0;
+  DisplaySourceKind source_ = DisplaySourceKind::Radio;
+  bool drawn_ = false;
+
+  void _draw() override {
+    if (!_active) return;
+    PlayerDisplayView view{};
+    capturePlayerDisplayView(view, WiFi.RSSI());
+    source_ = view.source;
+    render();
+  }
+
+  void render() {
+    dsp.fillRect(_config.left, _config.top, width_, height_, _bgcolor);
+    drawSourceIconAndLabel(_config.left, _config.top, width_, height_, source_,
+                           1, _fgcolor, _bgcolor);
+    drawn_ = true;
+  }
+
+  void _clear() override {
+    dsp.fillRect(_config.left, _config.top, width_, height_, _bgcolor);
+    drawn_ = false;
+  }
+};
+
+namespace {
+
 UnifiedCarouselLayout activeCarouselLayout() {
 #if VOXONE_DISPLAY_COMPILES_SMALL_OLED
   if (dsp.width() == 128 && dsp.height() == 32) {
@@ -280,12 +367,35 @@ class UiMenuWidget : public Widget {
   void loop() override {
     if (!_active) return;
     const auto menu = uiMenu.snapshot();
-    if (menu.revision != revision_) render(menu);
+    if (menu.revision != revision_) {
+      render(menu);
+      return;
+    }
+    if (menu.menuId == voxone::ui_menu::MenuId::SOURCE)
+      renderer_.loop(activeCarouselLayout(), activeCarouselTheme(),
+                     modelFor(menu));
   }
 
  private:
   uint32_t revision_ = UINT32_MAX;
   UnifiedCarouselRenderer renderer_{};
+
+  UnifiedCarouselModel modelFor(
+      const voxone::ui_menu::MenuSnapshot& menu) {
+    formatCarouselHeader(menu, header_, sizeof(header_));
+    formatCarouselItem(menu, menu.selectedIndex, item_, sizeof(item_));
+    const uint16_t total = voxone::ui_menu::itemCount(menu);
+    return {header_, item_, "Brak elementów",
+            static_cast<uint16_t>(total ? menu.selectedIndex + 1U : 0U), total,
+            total && voxone::ui_menu::itemIsActive(menu, menu.selectedIndex),
+            menu.state == voxone::ui_menu::MenuState::EDITING,
+            const_cast<voxone::ui_menu::MenuSnapshot*>(&menu),
+            formatMenuCarouselItem, menuCarouselItemIsActive,
+            menu.menuId == voxone::ui_menu::MenuId::SOURCE};
+  }
+
+  char header_[64]{};
+  char item_[160]{};
 
   void _draw() override {
     if (!_active) return;
@@ -297,18 +407,7 @@ class UiMenuWidget : public Widget {
   }
 
   void render(const voxone::ui_menu::MenuSnapshot& menu) {
-    char header[64];
-    char item[160];
-    formatCarouselHeader(menu, header, sizeof(header));
-    formatCarouselItem(menu, menu.selectedIndex, item, sizeof(item));
-    const uint16_t total = voxone::ui_menu::itemCount(menu);
-    const UnifiedCarouselModel model{
-        header, item, "Brak elementów",
-        static_cast<uint16_t>(total ? menu.selectedIndex + 1U : 0U), total,
-        total && voxone::ui_menu::itemIsActive(menu, menu.selectedIndex),
-        menu.state == voxone::ui_menu::MenuState::EDITING,
-        const_cast<voxone::ui_menu::MenuSnapshot*>(&menu),
-        formatMenuCarouselItem, menuCarouselItemIsActive};
+    const UnifiedCarouselModel model = modelFor(menu);
     renderer_.render(activeCarouselLayout(), activeCarouselTheme(), model);
     revision_ = menu.revision;
   }
@@ -442,16 +541,11 @@ class Oled128x32PlayerStatusWidget : public Widget {
         break;
     }
 
-    char source[9];
-    voxone::oled128x32::formatSource(
-        source, sizeof(source), displaySourceLabel(view.source));
-    dsp.setFont();
-    dsp.setTextColor(WHITE, BLACK);
-    dsp.setTextSize(1);
-    dsp.setCursor(voxone::oled128x32::centeredTextLeft(
-                      voxone::oled128x32::kPlayerSource, strlen(source)),
-                  voxone::oled128x32::kPlayerSource.top);
-    dsp.print(source);
+    drawSourceIconAndLabel(voxone::oled128x32::kPlayerSource.left,
+                           voxone::oled128x32::kPlayerSource.top,
+                           voxone::oled128x32::kPlayerSource.width,
+                           voxone::oled128x32::kPlayerSource.height,
+                           view.source, 1, WHITE, BLACK);
 
     char level[5];
     voxone::oled128x32::formatVolume(level, sizeof(level), view.userVolume,
@@ -669,13 +763,9 @@ class Oled128x64PlayerStatusWidget : public Widget {
       dsp.setFont();
       dsp.setTextSize(1);
       dsp.setTextColor(WHITE, BLACK);
-      char source[9];
-      oled64::formatSource(source, sizeof(source),
-                           displaySourceLabel(view.source));
-      dsp.setCursor(oled64::centeredTextLeft(oled64::kSource,
-                                             strlen(source)),
-                    oled64::kSource.top);
-      dsp.print(source);
+      drawSourceIconAndLabel(oled64::kSource.left, oled64::kSource.top,
+                             oled64::kSource.width, oled64::kSource.height,
+                             view.source, 1, WHITE, BLACK);
 
       const uint16_t speakerLeft = oled64::kSpeaker.left;
       const uint16_t top = oled64::kSpeaker.top;
@@ -894,9 +984,12 @@ class St7789PlayerStatusWidget : public Widget {
                  st7789_284x76::statusHeight, config.theme.background);
     drawPlayback(view.playback);
 
-    char sourceText[10];
-    snprintf(sourceText, sizeof(sourceText), "[%s]", displaySourceLabel(view.source));
-    drawCenteredText(st7789_284x76::source, sourceText, config.theme.meta);
+    drawSourceIconAndLabel(st7789_284x76::source.left,
+                           st7789_284x76::source.top,
+                           st7789_284x76::source.width,
+                           st7789_284x76::source.height,
+                           view.source, 1, config.theme.meta,
+                           config.theme.background);
 
     char volumeBuffer[12];
     const char* volumeText = displaySt7789VolumeText(
@@ -1134,6 +1227,39 @@ class St7796LabelFrameWidget : public Widget {
     dsp.setCursor(_config.left + (width_ - textWidth) / 2,
                   _config.top + (height_ - 16) / 2);
     dsp.print(label_);
+  }
+
+  void _clear() override {
+    dsp.fillRect(_config.left, _config.top, width_, height_, _bgcolor);
+  }
+};
+
+class St7796SourceWidget : public Widget {
+ public:
+  St7796SourceWidget(FillConfig frame, uint16_t color, uint16_t background)
+      : width_(frame.width), height_(frame.height) {
+    Widget::init(frame.widget, color, background);
+  }
+
+  void setSource(DisplaySourceKind source) {
+    if (drawn_ && source_ == source) return;
+    source_ = source;
+    drawn_ = true;
+    if (_active) _draw();
+  }
+
+ private:
+  uint16_t width_, height_;
+  DisplaySourceKind source_ = DisplaySourceKind::Radio;
+  bool drawn_ = false;
+
+  void _draw() override {
+    if (!_active) return;
+    _clear();
+    dsp.drawRoundRect(_config.left, _config.top, width_, height_, 3, _fgcolor);
+    drawSourceIconAndLabel(_config.left + 1, _config.top + 1,
+                           width_ - 2, height_ - 2, source_, 2,
+                           _fgcolor, _bgcolor);
   }
 
   void _clear() override {
@@ -1632,9 +1758,10 @@ void Display::_buildPager(){
     _st7796Loud = new St7796LabelFrameWidget(st7796LoudFrameConf, config.theme.meta,
                                            config.theme.background, true);
     _st7796Loud->setLabel(displayLoudLabel(false));
-    _st7796Source = new St7796LabelFrameWidget(st7796SourceFrameConf, config.theme.meta,
-                                             config.theme.background, true);
-    _st7796Source->setLabel("WEB");
+    _st7796Source = new St7796SourceWidget(st7796SourceFrameConf,
+                                          config.theme.meta,
+                                          config.theme.background);
+    _st7796Source->setSource(DisplaySourceKind::Radio);
     _st7796Eq = new St7796LabelFrameWidget(st7796EqFrameConf, config.theme.meta,
                                          config.theme.background, true);
     _st7796Eq->setLabel(runtimeEqPresetLabel());
@@ -1646,6 +1773,21 @@ void Display::_buildPager(){
 #endif
 #if VOXONE_DISPLAY_PROFILE == VOXONE_DISPLAY_PROFILE_ST7789_284X76
   _st7789PlayerStatus = new St7789PlayerStatusWidget();
+#endif
+#if !VOXONE_DISPLAY_PROFILE_IS_SMALL_OLED && \
+    VOXONE_DISPLAY_PROFILE != VOXONE_DISPLAY_PROFILE_ST7789_284X76 && \
+    VOXONE_DISPLAY_PROFILE != VOXONE_DISPLAY_PROFILE_ST7796_480X320
+  if (!smallOledActive()) {
+    constexpr uint16_t kGenericSourceWidth = 64;
+    constexpr uint16_t kGenericSourceHeight = 8;
+    const uint16_t sourceLeft = dsp.width() > kGenericSourceWidth
+        ? (dsp.width() - kGenericSourceWidth) / 2 : 0;
+    const uint16_t sourceTop = dsp.height() > kGenericSourceHeight + 2
+        ? dsp.height() - kGenericSourceHeight - 2 : 0;
+    _sourceStatus = new SourceStatusWidget(
+        sourceLeft, sourceTop, kGenericSourceWidth, kGenericSourceHeight,
+        config.theme.meta, config.theme.background);
+  }
 #endif
 #if VOXONE_DISPLAY_COMPILES_SMALL_OLED
   if (smallOledActive())
@@ -1672,6 +1814,7 @@ void Display::_buildPager(){
 #endif
   pages[PG_PLAYER]->addWidget(_title1);
   if(_title2) pages[PG_PLAYER]->addWidget(_title2);
+  if(_sourceStatus) pages[PG_PLAYER]->addWidget(_sourceStatus);
 #if VOXONE_DISPLAY_PROFILE == VOXONE_DISPLAY_PROFILE_ST7796_480X320
   if (!smallOledActive())
     pages[PG_PLAYER]->addWidget(new FillWidget(st7796LowerDividerConf, config.theme.div));
@@ -2543,8 +2686,9 @@ void Display::render_yamaha_tft(bool bootHandoff) {
   if (!_yamahaDrawn || topSignature != _yamahaTopSignature) {
     dsp.fillRect(0, 0, kWidth, kTopBarBottom, kBackground);
     dsp.drawFastHLine(0, kTopBarBottom, kWidth, kAmber);
+    drawSourceIcon(14, 17, view.source, kAmber, 2);
     dsp.setTextSize(3);
-    dsp.setCursor(14, 16);
+    dsp.setCursor(40, 16);
     dsp.print(displaySourceLabel(view.source));
     const char* playback = displayPlaybackLabel(view.playback);
     const uint16_t playbackWidth = static_cast<uint16_t>(
@@ -2620,7 +2764,7 @@ void Display::_drawPlaylist() {
       view.empty() ? "" : config.stationByNum(view.selected),
       "Brak elementów", view.selected, view.total,
       view.selectedIsPlaying(), false, nullptr, formatStationCarouselItem,
-      stationCarouselItemIsActive};
+      stationCarouselItemIsActive, true};
   _stationCarousel->setModel(carousel);
 }
 
@@ -2886,7 +3030,7 @@ void Display::loop() {
     if (_st7796Volume) _st7796Volume->setDacMuted(dacMute.logicalMuted());
     if (_st7796Eq)
       _st7796Eq->setLabel(runtimeEqPresetLabel());
-    if (_st7796Source) _st7796Source->setLabel(displaySourceLabel(view.source));
+    if (_st7796Source) _st7796Source->setSource(view.source);
 #if VOXONE_HAS_BT && VOXONE_PIN_MAP_COMPLETE
     if (_st7796BluetoothIcon) _st7796BluetoothIcon->setConnected(view.btConnected);
 #endif

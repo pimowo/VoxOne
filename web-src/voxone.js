@@ -2213,7 +2213,10 @@ window.VoxOneRestartWaiter = Object.freeze({
   function renderSourceSelector() {
     const status = state.webStatus;
     const sources = Array.isArray(status?.availableSources) ? status.availableSources : [];
-    const knownSources = ["radio", "bt", "ha", "dlna", "aux"];
+    const knownSources = ["radio", "bt", "ha", "dlna", "aux", "local"];
+    const sourceLabel = source => source === "radio" ? "WEB (RADIO)" :
+      source === "ha" ? "HOME ASSISTANT" :
+      source === "local" ? "SD / LOCAL" : source.toUpperCase();
     const ids = sources.filter(source => knownSources.includes(source));
     const key = ids.join(",");
     if (sourceSelector.dataset.sources !== key) {
@@ -2221,7 +2224,7 @@ window.VoxOneRestartWaiter = Object.freeze({
         const button = document.createElement("button");
         button.type = "button";
         button.dataset.source = source;
-        button.textContent = source === "radio" ? "WEB (RADIO)" : source.toUpperCase();
+        button.textContent = sourceLabel(source);
         return button;
       });
       if (!children.length && status) {
@@ -2241,8 +2244,7 @@ window.VoxOneRestartWaiter = Object.freeze({
     for (const button of sourceSelector.querySelectorAll("button")) {
       const source = button.dataset.source;
       const offline = source === "bt" && status?.btModule?.online !== true;
-      button.textContent = offline ? "BT · offline" :
-        source === "radio" ? "WEB (RADIO)" : source.toUpperCase();
+      button.textContent = offline ? "BT · offline" : sourceLabel(source);
       button.setAttribute("aria-pressed", source === active ? "true" : "false");
       button.disabled = state.connection !== "connected" || !status ||
         sourceSelectionPending !== null || source === active || offline;
@@ -3144,10 +3146,10 @@ window.VoxOneRestartWaiter = Object.freeze({
       return;
     }
     const status = message.webStatus;
-    if (status && ["WEB", "BT", "HA", "DLNA", "AUX"].includes(status.source) &&
+    if (status && ["WEB", "BT", "HA", "DLNA", "AUX", "SD"].includes(status.source) &&
         ["name", "metadata", "artist", "title", "codec", "playback", "activeSource", "transport"]
           .every(key => typeof status[key] === "string") &&
-        ["radio", "bt", "ha", "dlna", "aux"].includes(status.activeSource) &&
+        ["radio", "bt", "ha", "dlna", "aux", "local"].includes(status.activeSource) &&
         ["playing", "paused", "stopped", "unavailable"].includes(status.transport) &&
         Number.isInteger(status.bitrate) && Number.isInteger(status.sampleRate) &&
         typeof status.btConnected === "boolean" &&

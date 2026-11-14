@@ -731,13 +731,13 @@ void UiMenu::unlockSettings() const {
 
 uint8_t sourceItemCount(uint8_t mask) {
   uint8_t count = 0;
-  for (uint8_t value = 0; value <= static_cast<uint8_t>(SourceId::Aux); ++value)
+  for (uint8_t value = 0; value <= static_cast<uint8_t>(SourceId::Local); ++value)
     if (sourceIncluded(mask, static_cast<SourceId>(value))) ++count;
   return count;
 }
 
 SourceId sourceItemAt(uint8_t mask, uint8_t index) {
-  for (uint8_t value = 0; value <= static_cast<uint8_t>(SourceId::Aux); ++value) {
+  for (uint8_t value = 0; value <= static_cast<uint8_t>(SourceId::Local); ++value) {
     const SourceId source = static_cast<SourceId>(value);
     if (!sourceIncluded(mask, source)) continue;
     if (index == 0) return source;

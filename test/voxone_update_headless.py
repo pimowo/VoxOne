@@ -792,7 +792,7 @@ setTimeout(async () => {
     btTestSocket.receiveVolume(27, true, true, 60, 60);
     check(lineOutSlider.max === '60' && lineOutSlider.value === '60',
       'LINE OUT fixed level is capped by global maximum');
-    const activeSourceFor = {WEB:'radio', BT:'bt', HA:'ha', DLNA:'dlna', AUX:'aux'};
+    const activeSourceFor = {WEB:'radio', BT:'bt', HA:'ha', DLNA:'dlna', AUX:'aux', SD:'local'};
     const sourceSnapshot = (source, availableSources, online, fields = {}) => ({
       source, activeSource:activeSourceFor[source], availableSources,
       name:'Radio', metadata:'', artist:'', title:'',
@@ -802,7 +802,7 @@ setTimeout(async () => {
     });
     const selector = get('source-selector');
     check(selector.querySelectorAll('button').length === 0, 'source waits for snapshot');
-    btTestSocket.receive(sourceSnapshot('WEB', ['radio','bt','ha','dlna','aux'], true, {
+    btTestSocket.receive(sourceSnapshot('WEB', ['radio','bt','ha','dlna','aux','local'], true, {
       name:'Radio A', metadata:'Artysta - Utwór', artist:'Artysta', title:'Utwór',
       playback:'STOP', transport:'stopped', volume100:41, muted:false
     }));
@@ -835,7 +835,7 @@ setTimeout(async () => {
     check(get('status-name-label').textContent === 'ŹRÓDŁO' &&
       get('current-station-name').textContent === 'AUX' &&
       get('source').textContent === 'AUX', 'future AUX snapshot is accepted');
-    btTestSocket.receive(sourceSnapshot('WEB', ['radio','bt','ha','dlna','aux'], true, {
+    btTestSocket.receive(sourceSnapshot('WEB', ['radio','bt','ha','dlna','aux','local'], true, {
       name:'Radio A', metadata:'Artysta - Utwór', artist:'Artysta', title:'Utwór',
       playback:'STOP', transport:'stopped', volume100:41, muted:false
     }));
@@ -853,20 +853,24 @@ setTimeout(async () => {
       inactiveSourceStyle.backgroundColor === 'rgb(39, 39, 42)',
       'source pills expose clear active and inactive states');
     check(sourceButton('radio').textContent === 'WEB (RADIO)' &&
-      sourceButton('ha').textContent === 'HA' && sourceButton('dlna').textContent === 'DLNA' &&
-      sourceButton('aux').textContent === 'AUX', 'all source labels are rendered');
-    for (const source of ['ha', 'dlna', 'aux']) {
+      sourceButton('ha').textContent === 'HOME ASSISTANT' &&
+      sourceButton('dlna').textContent === 'DLNA' &&
+      sourceButton('aux').textContent === 'AUX' &&
+      sourceButton('local').textContent === 'SD / LOCAL',
+      'all source labels are rendered');
+    for (const source of ['ha', 'dlna', 'aux', 'local']) {
       sourceButton(source).click();
       check(btTestSocket.sent.at(-1) === 'source=' + source,
         'manual ' + source.toUpperCase() + ' command');
       check([...selector.querySelectorAll('button')].every(button => button.disabled),
         'source controls lock while awaiting ' + source.toUpperCase());
-      const sourceName = source === 'ha' ? 'HA' : source.toUpperCase();
+      const sourceName = source === 'ha' ? 'HA' :
+        source === 'local' ? 'SD' : source.toUpperCase();
       btTestSocket.receive(sourceSnapshot(sourceName,
-        ['radio','bt','ha','dlna','aux'], true));
+        ['radio','bt','ha','dlna','aux','local'], true));
     }
     btTestSocket.receive(sourceSnapshot('WEB',
-      ['radio','bt','ha','dlna','aux'], true));
+      ['radio','bt','ha','dlna','aux','local'], true));
     check(!sourceButton('bt').disabled, 'BT available without phone connection');
     sourceButton('bt').click();
     check(btTestSocket.sent.at(-1) === 'source=bt', 'manual BT command');

@@ -5,6 +5,7 @@
 #include <stdint.h>
 
 #include "options.h"
+#include "carousel_marquee.h"
 #include "../displays/dspcore.h"
 #include "../displays/widgets/widgets.h"
 
@@ -43,13 +44,21 @@ struct UnifiedCarouselModel {
   void* itemContext;
   UnifiedCarouselItemFormatter formatItem;
   UnifiedCarouselActiveItem itemIsActive;
+  bool marqueeItem;
 };
 
 class UnifiedCarouselRenderer {
  public:
   void render(const UnifiedCarouselLayout& layout,
               const UnifiedCarouselTheme& theme,
-              const UnifiedCarouselModel& model) const;
+              const UnifiedCarouselModel& model);
+  void loop(const UnifiedCarouselLayout& layout,
+            const UnifiedCarouselTheme& theme,
+            const UnifiedCarouselModel& model);
+
+ private:
+  voxone::carousel::MarqueeState marquee_{};
+  char marqueeText_[160]{};
 };
 
 class UnifiedCarouselWidget : public Widget {
@@ -72,8 +81,10 @@ class UnifiedCarouselWidget : public Widget {
   void* itemContext_ = nullptr;
   UnifiedCarouselItemFormatter formatItem_ = nullptr;
   UnifiedCarouselActiveItem itemIsActive_ = nullptr;
+  bool marqueeItem_ = false;
   UnifiedCarouselRenderer renderer_{};
 
+  void loop() override;
   void _draw() override;
   void _clear() override;
 };

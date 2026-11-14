@@ -1,5 +1,6 @@
 #include "../src/core/st7789_284x76_layout.h"
 #include "../src/core/player_display_view.h"
+#include "../src/core/source_icons.h"
 #include "../src/core/update_bar_render_state.h"
 
 #include <cassert>
@@ -35,11 +36,14 @@ int main() {
       DisplaySourceKind::Radio, DisplaySourceKind::Bluetooth,
       DisplaySourceKind::HomeAssistant,
       DisplaySourceKind::Dlna, DisplaySourceKind::Aux,
-      DisplaySourceKind::Spdif, DisplaySourceKind::Tts};
+      DisplaySourceKind::Spdif, DisplaySourceKind::Tts,
+      DisplaySourceKind::Local};
   for (const auto kind : sources) {
-    char label[10];
-    std::snprintf(label, sizeof(label), "[%s]", displaySourceLabel(kind));
-    assert(textFits(source, label));
+    assert(8 + 2 + std::strlen(displaySourceLabel(kind)) * 6 <= source.width);
+    const auto& bitmap = sourceIconBitmap(sourceIconFor(kind));
+    bool nonEmpty = false;
+    for (uint8_t row : bitmap.rows) nonEmpty = nonEmpty || row != 0;
+    assert(nonEmpty);
   }
 
   char volumeText[12];
@@ -107,7 +111,7 @@ int main() {
   assert(display.find("RSSI %ddBm") == std::string::npos);
   assert(display.find("_st7789Clock") == std::string::npos);
   assert(display.find("view.btConnected") != std::string::npos);
-  assert(display.find("displaySourceLabel(view.source)") != std::string::npos);
+  assert(display.find("drawSourceIconAndLabel") != std::string::npos);
   assert(config.find("playlistPlayingConf PROGMEM = { 4, 60, 1, WA_RIGHT }") !=
          std::string::npos);
   // Preserve the accepted ST7789 row-scrolling timing and one-pixel step.

@@ -65,7 +65,7 @@ int main() {
 #endif
   const uint8_t sourceMask = sourceMaskForCapabilities(
       caps.supportsVoxOneBt, caps.supportsHa, caps.supportsDlna,
-      caps.supportsAux);
+      caps.supportsAux, caps.supportsSdCard);
   assert(sourceIncluded(sourceMask, SourceId::Web));
   assert(sourceIncluded(sourceMask, SourceId::Bluetooth) ==
          caps.supportsVoxOneBt);
@@ -73,6 +73,7 @@ int main() {
          caps.supportsHa);
   assert(sourceIncluded(sourceMask, SourceId::Dlna) == caps.supportsDlna);
   assert(sourceIncluded(sourceMask, SourceId::Aux) == caps.supportsAux);
+  assert(sourceIncluded(sourceMask, SourceId::Local) == caps.supportsSdCard);
   assert(caps.supportsSdCard ==
          (d.board.id == BoardId::BoardM0 || d.board.id == BoardId::BoardL0));
   assert(caps.supportsIr == (d.board.id == BoardId::BoardS0 ||

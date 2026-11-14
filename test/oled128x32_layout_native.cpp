@@ -304,8 +304,8 @@ int main() {
   assert(compact.find("fillRect") != std::string::npos);
   assert(compact.find("formatVolume") != std::string::npos);
   assert(compact.find("formatVolumePercent") == std::string::npos);
-  assert(compact.find("formatSource") != std::string::npos);
-  assert(compact.find("displaySourceLabel(view.source)") != std::string::npos);
+  assert(compact.find("drawSourceIconAndLabel") != std::string::npos);
+  assert(compact.find("view.source") != std::string::npos);
   assert(compact.find("source_ == view.source") != std::string::npos);
   assert(compact.find("wifiBars") != std::string::npos);
   assert(compact.find("network.status == CONNECTED") != std::string::npos);

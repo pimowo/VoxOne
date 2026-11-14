@@ -79,6 +79,12 @@ int main() {
   makePlayerDisplayView(playerView, raw, "Radio One", "", false,
                         50, false, false, -49, 320, BF_MP3);
   assert(std::strcmp(playerView.station, "AUX") == 0 && playerView.audioText[0] == '\0');
+  raw.kind = DisplaySourceKind::Local;
+  makePlayerDisplayView(playerView, raw, "Radio One", "Stale radio metadata",
+                        false, 50, false, false, -49, 320, BF_MP3);
+  assert(std::strcmp(playerView.station, "SD") == 0 &&
+         playerView.artist[0] == '\0' && playerView.title[0] == '\0' &&
+         playerView.audioText[0] == '\0');
   assert(playerWifiLevel(-59) == 3 && playerWifiLevel(-69) == 2 &&
          playerWifiLevel(-79) == 1 && playerWifiLevel(-81) == 0);
 
@@ -132,6 +138,13 @@ int main() {
   assert(webUpdate.activeChanged && web.active() == ActiveSource::Aux);
   web.displayView(view);
   assert(view.kind == DisplaySourceKind::Aux && !web.localPlayerOutputAllowed());
+  webUpdate = web.select(ActiveSource::SOURCE_LOCAL, webBt);
+  assert(webUpdate.activeChanged && web.active() == ActiveSource::SOURCE_LOCAL);
+  web.displayView(view);
+  assert(view.kind == DisplaySourceKind::Local && view.connected &&
+         view.playback == DisplayPlaybackState::Stopped &&
+         std::strcmp(view.peerName, "SD / Local") == 0 &&
+         !web.localPlayerOutputAllowed());
   assert(web.select(ActiveSource::Radio, webBt).activeChanged);
   assert(web.localPlayerOutputAllowed());
   webBt.connected = true;
@@ -159,6 +172,8 @@ int main() {
   assert(std::strcmp(displayPlayerStationText(view, "Radio One"), "DLNA") == 0);
   view.kind = DisplaySourceKind::Aux;
   assert(std::strcmp(displayPlayerStationText(view, "Radio One"), "AUX") == 0);
+  view.kind = DisplaySourceKind::Local;
+  assert(std::strcmp(displayPlayerStationText(view, "Radio One"), "SD") == 0);
   sources.displayView(view);
   assert(std::strcmp(displaySourceLabel(view.kind), "WEB") == 0);
   assert(std::strcmp(displaySourceLabel(DisplaySourceKind::Bluetooth), "BT") == 0);
@@ -167,6 +182,7 @@ int main() {
   assert(std::strcmp(displaySourceLabel(DisplaySourceKind::Aux), "AUX") == 0);
   assert(std::strcmp(displaySourceLabel(DisplaySourceKind::Spdif), "SPDIF") == 0);
   assert(std::strcmp(displaySourceLabel(DisplaySourceKind::Tts), "TTS") == 0);
+  assert(std::strcmp(displaySourceLabel(DisplaySourceKind::Local), "SD") == 0);
 
   // Home Assistant is a temporary presentation source. The selected base and
   // RADIO intent remain available for the one-shot restore after EOF/STOP.

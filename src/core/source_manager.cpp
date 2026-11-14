@@ -32,6 +32,7 @@ const char* sourceName(ActiveSource source) {
   if (source == ActiveSource::SOURCE_HA) return "HA";
   if (source == ActiveSource::SOURCE_DLNA) return "DLNA";
   if (source == ActiveSource::Aux) return "AUX";
+  if (source == ActiveSource::SOURCE_LOCAL) return "LOCAL";
   return "WEB";
 }
 
@@ -40,6 +41,7 @@ SourceId sourceId(ActiveSource source) {
   if (source == ActiveSource::SOURCE_HA) return SourceId::HomeAssistant;
   if (source == ActiveSource::SOURCE_DLNA) return SourceId::Dlna;
   if (source == ActiveSource::Aux) return SourceId::Aux;
+  if (source == ActiveSource::SOURCE_LOCAL) return SourceId::Local;
   return SourceId::Web;
 }
 
@@ -48,6 +50,7 @@ ActiveSource activeSource(SourceId source) {
   if (source == SourceId::HomeAssistant) return ActiveSource::SOURCE_HA;
   if (source == SourceId::Dlna) return ActiveSource::SOURCE_DLNA;
   if (source == SourceId::Aux) return ActiveSource::Aux;
+  if (source == SourceId::Local) return ActiveSource::SOURCE_LOCAL;
   return ActiveSource::Radio;
 }
 
@@ -106,7 +109,8 @@ uint8_t sourceManagerSourceMask() {
   const auto& capabilities = voxone::hardware::hardwareCapabilities();
   return sourceMaskForCapabilities(
       capabilities.supportsVoxOneBt, capabilities.supportsHa,
-      capabilities.supportsDlna, capabilities.supportsAux);
+      capabilities.supportsDlna, capabilities.supportsAux,
+      capabilities.supportsSdCard);
 }
 
 bool sourceManagerSourceAvailable(SourceId source) {

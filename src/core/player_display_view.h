@@ -118,7 +118,8 @@ inline void makePlayerDisplayView(PlayerDisplayView& out,
       source.kind == DisplaySourceKind::Dlna) {
     artist = source.artist;
     title = source.title;
-  } else if (rawRadioMetadata && rawRadioMetadata[0]) {
+  } else if (source.kind == DisplaySourceKind::Radio &&
+             rawRadioMetadata && rawRadioMetadata[0]) {
     const StationMetadataParts parts = playerStationMetadata(rawRadioMetadata, swapArtistTitle);
     stationMetaCopy(radioArtist, sizeof(radioArtist), parts.artist, parts.artistLength);
     stationMetaCopy(radioTitle, sizeof(radioTitle), parts.title, parts.titleLength);

@@ -63,6 +63,11 @@ inline WebStatusView selectWebStatusView(const DisplaySourceView& source,
             displayPlaybackLabel(source.playback),
             webTransportState(source.playback), 0, 0, false};
   }
+  if (source.kind == DisplaySourceKind::Local) {
+    return {"SD", "local", "SD / Local", "", "", "", "",
+            displayPlaybackLabel(source.playback),
+            webTransportState(source.playback), 0, 0, false};
+  }
   return {"WEB", "radio", radioStation, radioMetadata, radioArtist, radioTitle,
           strcmp(radioCodec, "bitrate") == 0 ? "" : radioCodec,
           displayPlaybackLabel(source.playback), webTransportState(source.playback),

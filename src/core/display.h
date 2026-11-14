@@ -15,7 +15,7 @@
 #endif
 
 enum class DisplaySourceKind : uint8_t {
-    Radio, Bluetooth, HomeAssistant, Dlna, Aux, Spdif, Tts
+    Radio, Bluetooth, HomeAssistant, Dlna, Aux, Spdif, Tts, Local
 };
 inline const char* displaySourceLabel(DisplaySourceKind kind) {
     switch (kind) {
@@ -26,6 +26,7 @@ inline const char* displaySourceLabel(DisplaySourceKind kind) {
         case DisplaySourceKind::Aux: return "AUX";
         case DisplaySourceKind::Spdif: return "SPDIF";
         case DisplaySourceKind::Tts: return "TTS";
+        case DisplaySourceKind::Local: return "SD";
     }
     return "";
 }
@@ -128,11 +129,13 @@ class NumWidget;
 class ClockWidget;
 class TextWidget;
 class UiMenuWidget;
+class SourceStatusWidget;
 #if VOXONE_DISPLAY_COMPILES_ST7796
 class St7796VolumeWidget;
 class St7796UpdateProgressWidget;
 class St7796BluetoothWidget;
 class St7796LabelFrameWidget;
+class St7796SourceWidget;
 class St7796PlaybackIconWidget;
 #endif
 #if VOXONE_DISPLAY_COMPILES_SMALL_OLED
@@ -190,6 +193,7 @@ class Display {
     Page *_shutdownPage = nullptr;
     Page *_menuPage = nullptr;
     UiMenuWidget *_menuWidget = nullptr;
+    SourceStatusWidget *_sourceStatus = nullptr;
     TextWidget *_bootstring = nullptr, *_volip = nullptr, *_voltxt = nullptr;
     TextWidget *_rssi = nullptr, *_bitrate = nullptr;
 #if VOXONE_DISPLAY_COMPILES_ST7796
@@ -197,7 +201,8 @@ class Display {
     St7796PlaybackIconWidget *_st7796Playback = nullptr;
     St7796VolumeWidget *_st7796Volume = nullptr;
     St7796BluetoothWidget *_st7796BluetoothIcon = nullptr;
-    St7796LabelFrameWidget *_st7796Source = nullptr, *_st7796Eq = nullptr;
+    St7796SourceWidget *_st7796Source = nullptr;
+    St7796LabelFrameWidget *_st7796Eq = nullptr;
     St7796LabelFrameWidget *_st7796Loud = nullptr, *_st7796Mode = nullptr;
     ScrollWidget *_btTransportArtist = nullptr, *_btTransportTitle = nullptr;
     Page *_btTransportPage = nullptr;

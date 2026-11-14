@@ -35,6 +35,9 @@ checkpointów pozostaje w historii Git i w istniejących raportach.
   ocenić widoki stacji, DLNA, Źródła i Menu: karuzelę (nagłówek, jedna duża
   pozycja, licznik oraz prawostronny wskaźnik `GRA`) na TFT L0 oraz
   wielowierszową listę z akcentem zaznaczenia bez inwersji na OLED S0;
+  potwierdzić płynne przewijanie długich nazw źródeł (w szczególności
+  „Home Assistant”) zamiast wielokropka oraz poprawne ikony WEB, BT, HA,
+  DLNA, AUX i SD w dolnej belce Playera na TFT/OLED;
   dla pustych list DLNA/Źródła potwierdzić wyśrodkowany napis „Brak elementów”
   oraz działające wyjście dwuklikiem (Back) i długim kliknięciem (Home);
   po zimnym starcie L0 potwierdzić wzrokowo pełne przejście TFT z logo do
@@ -117,8 +120,6 @@ checkpointów pozostaje w historii Git i w istniejących raportach.
   źródła; wykorzystać posiadany moduł do testów HIL.
 - [ ] Local Files: dodać odtwarzanie z karty microSD na SPI współdzielonym z
   wyświetlaczem, z osobnym pinem CS i bez zakłócania renderowania.
-- [ ] Po implementacji backendów AUX i Local Files dołączyć je do wspólnej
-  matrycy źródeł SourceManagera i UI.
 - [ ] A2DP Transmitter: dodać naprzemienne tryby RX/TX w VoxOneBT, bez ich
   jednoczesnej pracy.
 - [ ] Dodać wyjście do zewnętrznej końcówki mocy klasy D i opisać wymagania
