@@ -16,6 +16,7 @@ namespace {
 
 constexpr uint32_t kSdSpiFrequency = 4000000UL;
 constexpr uint32_t kSdFallbackSpiFrequency = 1000000UL;
+constexpr uint32_t kMaxFileIoWaitMs = 2000;
 SemaphoreHandle_t sdMutex = nullptr;
 bool sdMounted = false;
 uint32_t sdFrequency = 0;
@@ -138,6 +139,18 @@ bool mounted() {
   return sdMounted;
 }
 
+bool ejected() {
+  if (!supported() || !sdMutex) return true;
+  Lock lock(pdMS_TO_TICKS(100));
+  if (!lock) return false;
+  if (!sdMounted || SD.cardType() == CARD_NONE) {
+    sdMounted = false;
+    sdFrequency = 0;
+    return true;
+  }
+  return false;
+}
+
 Status browse(const char* path, BrowseListing& listing) {
   memset(&listing, 0, sizeof(listing));
   if (!supported()) return Status::Unsupported;
@@ -211,8 +224,10 @@ fs::FS* filesystem() { return supported() ? static_cast<fs::FS*>(&SD) : nullptr;
 bool lockFileIo(uint32_t timeoutMs) {
   if (!supported()) return false;
   if (!sdMutex) sdMutex = xSemaphoreCreateRecursiveMutex();
+  const uint32_t boundedTimeout =
+      timeoutMs > kMaxFileIoWaitMs ? kMaxFileIoWaitMs : timeoutMs;
   if (!sdMutex ||
-      xSemaphoreTakeRecursive(sdMutex, pdMS_TO_TICKS(timeoutMs)) != pdTRUE)
+      xSemaphoreTakeRecursive(sdMutex, pdMS_TO_TICKS(boundedTimeout)) != pdTRUE)
     return false;
   // SPIClass supplies the cross-task TFT/SD bus mutex. This separate project
   // mutex gives FAT/FS a single owner across audio and HTTP/menu browsing.
@@ -235,6 +250,7 @@ bool begin() { return false; }
 void prepareSharedBus() {}
 bool ensureMounted() { return false; }
 bool mounted() { return false; }
+bool ejected() { return true; }
 Status browse(const char*, BrowseListing& listing) {
   memset(&listing, 0, sizeof(listing));
   return Status::Unsupported;

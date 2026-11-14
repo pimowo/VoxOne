@@ -60,7 +60,7 @@ int main() {
   const auto playerSource = readFile("src/core/player.cpp");
   const auto networkHeader = readFile("src/core/network.h");
   const auto networkSource = readFile("src/core/network.cpp");
-  const auto common = readFile("src/core/common.h");
+  const auto common = readFile("src/core/core_utils.h");
   const auto display = readFile("src/core/display.cpp");
   const auto timekeeper = readFile("src/core/timekeeper.cpp");
   const auto mainSource = readFile("src/main.cpp");
@@ -71,6 +71,7 @@ int main() {
   const auto audio = readFile("src/audioI2S/Audio.cpp");
   const auto audioHeader = readFile("src/audioI2S/AudioEx.h");
   const auto sdCard = readFile("src/core/sd_card.cpp");
+  const auto web = readFile("web-src/voxone.js");
 
   const std::initializer_list<const char*> retired = {
       "PM_SDCARD", "PM_WEB", "MAX_PLAY_MODE", "changeMode(",
@@ -102,12 +103,27 @@ int main() {
   hasNone(audio, {"Audio::connecttoSD", "AUDIO_LOCALFILE"});
   hasNone(audioHeader, {"connecttoSD", "AUDIO_LOCALFILE", "<SD_MMC.h>"});
   hasAll(playerSource, {"sd_card::filesystem",
-                        "source_media::Source::Local"});
+                        "source_media::Source::Local",
+                        "sourceManagerActiveSource() == SourceId::Local",
+                        "sd_card::ejected()", "finishSourceMedia()",
+                        "kSdPresenceCheckIntervalMs = 250"});
   hasAll(mainSource, {"sd_card::begin", "supportsSdCard"});
   hasAll(server, {"/api/sd/servers", "/api/sd/browse", "/api/sd/play"});
+  hasAll(server, {"stationsReply(request, 503",
+                  R"({"status":"error","error":"sd_not_mounted"})"});
   hasAll(sdCard, {"kSdSpiFrequency = 4000000UL",
                   "kSdFallbackSpiFrequency = 1000000UL",
+                  "kMaxFileIoWaitMs = 2000",
+                  "timeoutMs > kMaxFileIoWaitMs",
+                  "SD.cardType() == CARD_NONE",
                   "digitalWrite(static_cast<uint8_t>(display.cs), HIGH)",
                   "memset(&listing, 0, sizeof(listing))"});
+  hasAll(audio, {"m_localFileClosePending", "closeLocalFile(0)",
+                 "serviceDeferredCleanup()",
+                 "closeLocalFile(kSdFileCloseTimeoutMs)"});
+  hasNone(audio, {"SdFileIoGuard fileIo(m_localFileUsesSd, UINT32_MAX)"});
+  hasAll(web, {"Brak karty SD", "response.status === 503",
+               "payload?.status === \"error\"", "sdUnavailable",
+               "markSdUnavailable()"});
   hasNone(sdCard, {"listing = BrowseListing{}"});
 }

@@ -1,4 +1,4 @@
-#include "../src/core/vu_frame_limiter.h"
+#include "../src/core/core_utils.h"
 
 #include <cassert>
 #include <cstdint>

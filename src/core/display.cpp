@@ -8,7 +8,6 @@
 #include "display_audio_info.h"
 #include "first_boot_core.h"
 #include "dac_mute.h"
-#include "eq_preset_label.h"
 #include "player.h"
 #include "volume_map.h"
 #include "station_metadata.h"

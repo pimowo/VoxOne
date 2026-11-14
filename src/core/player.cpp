@@ -385,10 +385,26 @@ void resetPlayer(){
 #ifndef PL_QUEUE_TICKS_ST
   #define PL_QUEUE_TICKS_ST 15
 #endif
+constexpr uint32_t kSdPresenceCheckIntervalMs = 250;
+
 void Player::loop() {
   if (playerQueue == nullptr) return;
+  serviceDeferredCleanup();
   servicePendingVolume();
   if (_shutdownSuspended || !processPlayerCommands()) return;
+  if (sourceMediaActive() && sourceManagerActiveSource() == SourceId::Local) {
+    const uint32_t now = millis();
+    if (static_cast<uint32_t>(now - _sdPresenceCheckMs) >=
+        kSdPresenceCheckIntervalMs) {
+      _sdPresenceCheckMs = now;
+      if (voxone::sd_card::ejected()) {
+        serialCli.printf("##[SD]# card removed during playback\n");
+        finishSourceMedia();
+      }
+    }
+  } else {
+    _sdPresenceCheckMs = 0;
+  }
   if (uxQueueMessagesWaiting(playerQueue) == 0)
     _servicePendingStationRefresh();
   serviceSourceMedia();

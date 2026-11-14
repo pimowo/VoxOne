@@ -284,7 +284,7 @@ void Config::init() {
   btRuntime.configureBeforeStart(btMigration.enableForThisBoot
                                      ? true : loaded.btEnabled);
   Serial.printf("[CONFIG] %s\n", voxone::config_format::configStartupMessage(loaded.status));
-  bootInfo(); // https://github.com/e2002/yoradio/pull/149
+  bootInfo();
   const bool migratingVolume = loaded.migratingVolume;
   store.maximumVolume = voxone::line_out::maximumOrDefault(
       store.maximumVolume);

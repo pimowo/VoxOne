@@ -550,6 +550,7 @@ window.VoxOneRestartWaiter = Object.freeze({
   let sdPathStack = [{id: "/", title: "Główne"}];
   let sdLoaded = false;
   let sdMounted = false;
+  let sdUnavailable = false;
   let sdBusy = false;
   const updateImages = {
     firmware: {
@@ -1733,7 +1734,7 @@ window.VoxOneRestartWaiter = Object.freeze({
     if (!rows.length && !sdBusy && !sdMounted) {
       const empty = document.createElement("li");
       empty.className = "dlna-empty";
-      empty.textContent = "Brak karty";
+      empty.textContent = "Brak karty SD";
       rows.push(empty);
     } else if (!rows.length && sdLoaded && !sdBusy) {
       const empty = document.createElement("li");
@@ -1747,10 +1748,21 @@ window.VoxOneRestartWaiter = Object.freeze({
   async function sdError(response, fallback) {
     try {
       const payload = await response.json();
-      if (payload?.error === "sd_not_mounted") return "Brak karty";
+      if (response.status === 503 || payload?.status === "error" ||
+          payload?.error === "sd_not_mounted") return "Brak karty SD";
       if (payload?.error) return fallback + " (" + payload.error + ")";
     } catch (_) {}
+    if (response.status === 503) return "Brak karty SD";
     return fallback + " (HTTP " + response.status + ")";
+  }
+
+  function markSdUnavailable() {
+    sdMounted = false;
+    sdLoaded = false;
+    sdUnavailable = true;
+    sdItems = [];
+    sdServer.textContent = "Brak karty SD";
+    sdStatus.textContent = "Brak karty SD";
   }
 
   async function loadSdCard() {
@@ -1765,16 +1777,19 @@ window.VoxOneRestartWaiter = Object.freeze({
       if (!response.ok)
         throw new Error(await sdError(response, "Nie udało się sprawdzić karty"));
       const payload = await response.json();
+      if (payload?.status === "error") throw new Error("Brak karty SD");
       sdMounted = payload?.mounted === true;
-      sdServer.textContent = sdMounted ? "Karta SD" : "Brak karty";
+      sdServer.textContent = sdMounted ? "Karta SD" : "Brak karty SD";
       sdLoaded = false;
       sdItems = [];
       sdPathStack = [{id: "/", title: "Główne"}];
-      if (!sdMounted) throw new Error("Brak karty");
+      if (!sdMounted) throw new Error("Brak karty SD");
+      sdUnavailable = false;
       browseAfterMount = true;
       return true;
     } catch (error) {
-      sdStatus.textContent = error?.message || "Brak karty";
+      if (error?.message === "Brak karty SD") markSdUnavailable();
+      else sdStatus.textContent = error?.message || "Brak karty SD";
       return false;
     } finally {
       sdBusy = false;
@@ -1794,6 +1809,7 @@ window.VoxOneRestartWaiter = Object.freeze({
       if (!response.ok)
         throw new Error(await sdError(response, "Nie udało się odczytać folderu"));
       const payload = await response.json();
+      if (payload?.status === "error") throw new Error("Brak karty SD");
       if (payload?.status !== "ok" || !Array.isArray(payload.items))
         throw new Error("Urządzenie zwróciło nieprawidłową listę plików.");
       sdItems = payload.items.filter(item => item &&
@@ -1802,19 +1818,15 @@ window.VoxOneRestartWaiter = Object.freeze({
       if (pathAction?.push) sdPathStack.push(pathAction.push);
       if (pathAction?.pop) sdPathStack.pop();
       sdMounted = true;
+      sdUnavailable = false;
       sdLoaded = true;
       sdServer.textContent = "Karta SD";
       sdStatus.textContent = "Elementy: " + sdItems.length +
         (payload.truncated ? " (lista skrócona)" : "");
       return true;
     } catch (error) {
-      if (error?.message === "Brak karty") {
-        sdMounted = false;
-        sdLoaded = false;
-        sdItems = [];
-        sdServer.textContent = "Brak karty";
-      }
-      sdStatus.textContent = error?.message || "Błąd odczytu karty SD.";
+      if (error?.message === "Brak karty SD") markSdUnavailable();
+      else sdStatus.textContent = error?.message || "Błąd odczytu karty SD.";
       return false;
     } finally {
       sdBusy = false;
@@ -1836,9 +1848,12 @@ window.VoxOneRestartWaiter = Object.freeze({
       });
       if (!response.ok)
         throw new Error(await sdError(response, "Nie udało się uruchomić utworu"));
+      const payload = await response.json();
+      if (payload?.status === "error") throw new Error("Brak karty SD");
       sdStatus.textContent = "Odtwarzanie: " + (item.title || "utwór");
     } catch (error) {
-      sdStatus.textContent = error?.message || "Błąd uruchamiania utworu.";
+      if (error?.message === "Brak karty SD") markSdUnavailable();
+      else sdStatus.textContent = error?.message || "Błąd uruchamiania utworu.";
     } finally {
       sdBusy = false;
       renderSdBrowser();
@@ -1870,7 +1885,8 @@ window.VoxOneRestartWaiter = Object.freeze({
     if (selected === "stations" && state.stationsStatus === "idle") loadStations();
     if (selected === "dlna" && !dlnaServersLoaded && !dlnaBusy)
       discoverDlnaServers();
-    if (selected === "sd" && !sdLoaded && !sdBusy) loadSdCard();
+    if (selected === "sd" && !sdLoaded && !sdBusy && !sdUnavailable)
+      loadSdCard();
     if (selected === "settings") {
       loadTimeStatus();
       loadHaSettings();
@@ -4073,9 +4089,16 @@ window.VoxOneRestartWaiter = Object.freeze({
     browseSd(sdPathStack[sdPathStack.length - 2].id, {pop: true});
   });
   sdRefresh.addEventListener("click", () => {
-    if (!sdBusy) browseSd(sdPathStack[sdPathStack.length - 1].id);
+    if (sdBusy) return;
+    if (sdUnavailable) {
+      sdUnavailable = false;
+      loadSdCard();
+    } else browseSd(sdPathStack[sdPathStack.length - 1].id);
   });
-  sdMount.addEventListener("click", loadSdCard);
+  sdMount.addEventListener("click", () => {
+    sdUnavailable = false;
+    loadSdCard();
+  });
 
   window.addEventListener("hashchange", showTab);
   window.addEventListener("pageshow", event => {

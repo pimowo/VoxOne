@@ -1,6 +1,6 @@
 #include <cassert>
 #include <cstring>
-#include "../src/core/eq_preset_label.h"
+#include "../src/core/core_utils.h"
 
 int main() {
   assert(std::strcmp(eqPresetLabel(0, 0, 0), "FLAT") == 0);

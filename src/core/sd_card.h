@@ -49,6 +49,9 @@ bool begin();
 void prepareSharedBus();
 bool ensureMounted();
 bool mounted();
+// Returns true only after an owned card-state check confirms removal. A busy
+// filesystem is not treated as an eject event.
+bool ejected();
 Status browse(const char* path, BrowseListing& listing);
 Status validatePlayableFile(const char* path);
 const char* statusName(Status status);

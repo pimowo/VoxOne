@@ -61,8 +61,10 @@ int main() {
 
   // Local files reuse the maintained web-file decoder path and its ID3 parser.
   hasAll(audio, {"Audio::connecttoFS", "Audio::read_ID3_Header",
-                 "Audio::processWebFile", "m_localFile.read"});
+                 "Audio::processWebFile", "m_localFile.read",
+                 "Audio::closeLocalFile", "Audio::serviceDeferredCleanup"});
   hasAll(audioHeader, {"connecttoFS", "audio_id3data", "ST_WEBFILE",
-                       "File                  m_localFile"});
+                       "File                  m_localFile",
+                       "m_localFileClosePending"});
   hasAll(player, {"sd_card::filesystem", "source_media::Source::Local"});
 }

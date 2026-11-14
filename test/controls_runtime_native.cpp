@@ -5,7 +5,7 @@
 #include <iterator>
 #include <string>
 
-#include "../src/core/common.h"
+#include "../src/core/core_utils.h"
 
 namespace {
 
@@ -28,7 +28,7 @@ int main() {
 
   const std::string implementation = readFile("src/core/controls.cpp");
   const std::string interface = readFile("src/core/controls.h");
-  const std::string events = readFile("src/core/common.h");
+  const std::string events = readFile("src/core/core_utils.h");
   const std::string player = readFile("src/core/player.cpp");
   const std::string display = readFile("src/core/display.cpp");
   const std::string uiInput = readFile("src/core/ui_input.cpp");

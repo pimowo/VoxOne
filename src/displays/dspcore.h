@@ -16,27 +16,27 @@
   #define DUMMYDISPLAY
   #define DSP_NOT_FLIPPED
 
-#elif DSP_MODEL==DSP_SSD1306    // https://k210.org/images/content/uploads/yoradio/SSD1306.jpg
+#elif DSP_MODEL==DSP_SSD1306
   #define TIME_SIZE           2
   #define DSP_OLED
   #include "displaySSD1306.h"
 
-#elif DSP_MODEL==DSP_ST7789  // https://k210.org/images/content/uploads/yoradio/ST7789.jpg
+#elif DSP_MODEL==DSP_ST7789
   #define TIME_SIZE           52
   #define PSFBUFFER
   #include "displayST7789.h"
 
-#elif DSP_MODEL==DSP_ST7789_76         // https://k210.org/images/content/uploads/yoradio/ST7789_76.mp4
+#elif DSP_MODEL==DSP_ST7789_76
   #define TIME_SIZE           35
   #define PSFBUFFER
   #include "displayST7789.h"
 
-#elif DSP_MODEL==DSP_SH1106    // https://k210.org/images/content/uploads/yoradio/SH1106.jpg
+#elif DSP_MODEL==DSP_SH1106
   #define TIME_SIZE           2
   #define DSP_OLED
   #include "displaySH1106.h"
 
-#elif DSP_MODEL==DSP_SSD1305 || DSP_MODEL==DSP_SSD1305I2C   // https://k210.org/images/content/uploads/yoradio/SSD1305.jpg
+#elif DSP_MODEL==DSP_SSD1305 || DSP_MODEL==DSP_SSD1305I2C
   #define TIME_SIZE           2
   #define DSP_OLED
   #include "displaySSD1305.h"
@@ -45,22 +45,22 @@
   #define TIME_SIZE           0
   #include "displayCustom.h"
 
-#elif DSP_MODEL==DSP_ST7796         // https://k210.org/images/content/uploads/yoradio/ST7796.jpg
+#elif DSP_MODEL==DSP_ST7796
   #define TIME_SIZE           70
   #define PSFBUFFER
   #include "displayST7796.h"
 
-#elif DSP_MODEL==DSP_GC9A01A         // https://k210.org/images/content/uploads/yoradio/GC9A01A.jpg
+#elif DSP_MODEL==DSP_GC9A01A
   #define TIME_SIZE           52
   #define PSFBUFFER
   #include "displayGC9A01A.h"
 
-#elif DSP_MODEL==DSP_SSD1322        // https://k210.org/images/content/uploads/yoradio/ssd1322.mp4
+#elif DSP_MODEL==DSP_SSD1322
   #define TIME_SIZE           35
   #define DSP_OLED
   #include "displaySSD1322.h"
 
-#elif DSP_MODEL==DSP_ST7920         // https://k210.org/images/content/uploads/yoradio/ST7920.jpg
+#elif DSP_MODEL==DSP_ST7920
   #define TIME_SIZE           2
   #define DSP_OLED
   #include "displayST7920.h"

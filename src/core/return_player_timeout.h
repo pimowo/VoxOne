@@ -2,7 +2,7 @@
 #define VOXONE_RETURN_PLAYER_TIMEOUT_H
 
 #include <cstdint>
-#include "common.h"
+#include "core_utils.h"
 
 class ReturnPlayerTimeout {
  public:

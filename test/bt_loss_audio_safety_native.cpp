@@ -1,7 +1,7 @@
 #include "../src/core/bt_manager.h"
 #include "../src/core/bt_audio_route_state.h"
 #include "../src/core/bt_link_protocol.h"
-#include "../src/core/dac_mute_state.h"
+#include "../src/core/dac_mute.h"
 #include "../src/core/mute_state.h"
 #include "../src/core/source_manager_state.h"
 #include "../src/core/source_vu_state.h"

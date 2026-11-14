@@ -23,7 +23,6 @@
 
 #include <WiFi.h>
 #include <WiFiClientSecure.h>
-#include <vector>
 // Suppress the legacy ESP-IDF driver warning around this compatibility include.
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wcpp"
@@ -179,6 +178,7 @@ public:
     void stopAudioTask();
     bool audioTaskRunning() const { return m_audioTaskRunning; }
     void loop();
+    void serviceDeferredCleanup();
     uint32_t stopSong();
     void forceMono(bool m);
     void setBalance(int8_t bal = 0);
@@ -206,6 +206,7 @@ private:
     bool latinToUTF8(char* buff, size_t bufflen);
     //void setDefaults(); // free buffers and set defaults
     void initInBuff();
+    bool closeLocalFile(uint32_t timeoutMs);
     bool httpPrint(const char* host);
     bool connectToHost(const char* host, const char* user, const char* pwd,
                        bool startResolution);
@@ -461,6 +462,7 @@ private:
     WiFiClient*           _client = nullptr;
     File                  m_localFile;
     bool                  m_localFileUsesSd = false;
+    bool                  m_localFileClosePending = false;
     int                   m_tunedSocketFd = -1;
     TaskHandle_t          m_audioTaskHandle = nullptr;
     SemaphoreHandle_t     m_audioTaskMutex = nullptr;

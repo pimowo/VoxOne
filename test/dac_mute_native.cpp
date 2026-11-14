@@ -1,4 +1,4 @@
-#include "../src/core/dac_mute_state.h"
+#include "../src/core/dac_mute.h"
 #include "../src/core/display.h"
 #include "../src/core/mute_state.h"
 

@@ -1,6 +1,6 @@
 #ifndef controls_h
 #define controls_h
-#include "common.h"
+#include "core_utils.h"
 
 boolean checklpdelay(int m, unsigned long &tstamp);
 

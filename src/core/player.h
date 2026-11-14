@@ -76,6 +76,7 @@ class Player: public Audio {
     bool _sourceMediaReturnToPrevious = false;
     bool _sourceMediaReturnPending = false;
     bool _localAudioAvailable = false;
+    uint32_t _sdPresenceCheckMs = 0;
     bool _pcmOutputPending = false;
     bool _shutdownSuspended = false;
     bool _shutdownResumeRadio = false;

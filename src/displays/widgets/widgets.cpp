@@ -13,7 +13,7 @@
 #include "../../core/network.h"   //  for Clock widget
 #include "../../core/config.h"
 #include "../../core/source_vu_state.h"
-#include "../../core/vu_frame_limiter.h"
+#include "../../core/core_utils.h"
 #include "../tools/l10n.h"
 #include "../tools/psframebuffer.h"
 

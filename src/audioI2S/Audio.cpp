@@ -48,6 +48,7 @@ bool audioPsramFound() {
 }
 
 constexpr TickType_t kI2SOutputLockWait = pdMS_TO_TICKS(100);
+constexpr uint32_t kSdFileCloseTimeoutMs = 2000;
 constexpr char kVoxOneUserAgentHeader[] =
     "User-Agent: VoxOne/" VOXONE_VERSION "\r\n";
 
@@ -555,20 +556,8 @@ void Audio::setDefaults() {
     vector_clear_and_shrink(m_playlistURL);
     vector_clear_and_shrink(m_playlistContent);
     m_hashQueue.clear(); m_hashQueue.shrink_to_fit(); // uint32_t vector
-    bool localFileClosed = !m_localFile;
-    {
-        SdFileIoGuard fileIo(m_localFileUsesSd, UINT32_MAX);
-        if(fileIo && m_localFile) {
-            m_localFile.close();
-            localFileClosed = true;
-        }
-    }
-    if(localFileClosed) {
-        m_localFileActive = false;
-        m_localFileUsesSd = false;
-    } else {
-        AUDIO_ERROR("Could not lock SD filesystem to close local file");
-    }
+    if(!closeLocalFile(kSdFileCloseTimeoutMs))
+        AUDIO_ERROR("SD file close deferred after filesystem lock timeout");
     if(_client && !m_connectAttempt.active()) _client->stop();
     _client = static_cast<WiFiClient*>(&client); /* default to *something* so that no NULL deref can happen */
     playI2Sremains();
@@ -613,6 +602,30 @@ void Audio::setDefaults() {
     m_ID3Size = 0;
     m_tunedSocketFd = -1;
     if(m_audioTaskMutex) xSemaphoreGiveRecursive(m_audioTaskMutex);
+}
+
+bool Audio::closeLocalFile(uint32_t timeoutMs) {
+    m_localFileActive = false;
+    if(!m_localFile) {
+        m_localFileClosePending = false;
+        m_localFileUsesSd = false;
+        return true;
+    }
+    SdFileIoGuard fileIo(m_localFileUsesSd, timeoutMs);
+    if(!fileIo) {
+        m_localFileClosePending = true;
+        return false;
+    }
+    m_localFile.close();
+    m_localFileClosePending = false;
+    // Keep this flag until after close(): it selects the SD filesystem mutex.
+    m_localFileUsesSd = false;
+    return true;
+}
+
+void Audio::serviceDeferredCleanup() {
+    if(m_localFileClosePending && closeLocalFile(0))
+        AUDIO_INFO("Deferred SD file close completed");
 }
 
 //---------------------------------------------------------------------------------------------------------------------
@@ -715,6 +728,10 @@ bool Audio::connecttoFS(fs::FS& fs, const char* path) {
     }
 
     setDefaults();
+    if(m_localFileClosePending) {
+        AUDIO_ERROR("Previous SD file is still awaiting close");
+        return false;
+    }
     m_codec = localCodec;
     m_localFileUsesSd = voxone::sd_card::filesystem() == &fs;
     uint32_t localFileSize = 0;
@@ -767,20 +784,8 @@ bool Audio::connecttoFS(fs::FS& fs, const char* path) {
     strlcpy(m_lastHost, path, sizeof(m_lastHost));
     setDatamode(AUDIO_DATA);
     if(!initializeDecoder()) {
-        bool localFileClosed = !m_localFile;
-        {
-            SdFileIoGuard fileIo(m_localFileUsesSd, UINT32_MAX);
-            if(fileIo && m_localFile) {
-                m_localFile.close();
-                localFileClosed = true;
-            }
-        }
-        if(localFileClosed) {
-            m_localFileActive = false;
-            m_localFileUsesSd = false;
-        } else {
-            AUDIO_ERROR("Could not lock SD filesystem to close local file");
-        }
+        if(!closeLocalFile(kSdFileCloseTimeoutMs))
+            AUDIO_ERROR("SD file close deferred after decoder init failure");
         return false;
     }
     m_f_running = true;

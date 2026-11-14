@@ -3,7 +3,7 @@
 #include <atomic>
 #include <stdint.h>
 #include <stdio.h>
-#include "common.h"
+#include "core_utils.h"
 #include "ui_state.h"
 #include "update_display_view.h"
 #include "player_scroll_runtime.h"

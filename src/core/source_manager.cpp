@@ -229,7 +229,6 @@ void sourceManagerReturnAfterUserMediaStop(SourceId previous) {
 #include "bt_link.h"
 #include "bt_audio_input.h"
 #include "bt_volume.h"
-#include "source_manager_state.h"
 #include "source_vu_state.h"
 
 namespace {

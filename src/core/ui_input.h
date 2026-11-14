@@ -3,7 +3,7 @@
 
 #include <stdint.h>
 
-#include "common.h"
+#include "core_utils.h"
 #include "source_catalog.h"
 
 // Physical input vocabulary. These events deliberately describe direction

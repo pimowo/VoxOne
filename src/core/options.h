@@ -16,12 +16,6 @@ STORE YOUR SETTINGS IN THE *** myoptions.h *** FILE.
 #if __has_include("../../mytheme.h")
   #include "../../mytheme.h"            /* <- Theme file */
 #endif
-/*******************************************************
-
-The connection tables are located here https://github.com/e2002/yoradio#connection-tables
-   
-********************************************************/
-
 #define DSP_DUMMY       0     // without display
 #define DSP_SSD1306     2     // 128x64   0.96' https://aliexpress.com/item/1005001621806398.html
 #define DSP_ST7789      4     // 320x240  2.4'  https://aliexpress.com/item/32960241206.html 

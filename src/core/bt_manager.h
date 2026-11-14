@@ -60,7 +60,6 @@ class BtRuntime {
 extern BtRuntime btRuntime;
 
 // Consolidated from bt_audio_input_state.h.
-#include "bt_link_protocol.h"
 
 // Zero means that I2S RX must be stopped. Only the formats confirmed for
 // VoxOneBT's 16-bit stereo PCM link are enabled in this diagnostic stage.

@@ -1810,11 +1810,14 @@ int sdHttpStatus(voxone::sd_card::Status status) {
 
 void handleSdServers(AsyncWebServerRequest* request) {
   const bool mounted = voxone::sd_card::ensureMounted();
+  if (!mounted) {
+    stationsReply(request, 503,
+                  R"({"status":"error","error":"sd_not_mounted"})");
+    return;
+  }
   stationsReply(
       request, 200,
-      String(R"({"status":"ok","active":0,"mounted":)") +
-          (mounted ? "true" : "false") +
-          R"(,"servers":[{"index":0,"name":"Karta SD","ip":"","udn":"sd"}]})");
+      R"({"status":"ok","active":0,"mounted":true,"servers":[{"index":0,"name":"Karta SD","ip":"","udn":"sd"}]})");
 }
 
 void handleSdBrowse(AsyncWebServerRequest* request) {

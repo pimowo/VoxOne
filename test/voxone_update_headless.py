@@ -2299,8 +2299,8 @@ def main():
     with tempfile.TemporaryDirectory(prefix="voxone-web-test-", ignore_cleanup_errors=True) as temporary:
         page = Path(temporary) / "test.html"
         page.write_text(html, encoding="utf-8")
-        command = [str(chrome), "--headless", "--disable-gpu", "--disable-gpu-compositing",
-                   "--disable-features=Vulkan,UseSkiaRenderer,CanvasOopRasterization",
+        command = [str(chrome), "--headless", "--disable-gpu",
+                   "--disable-features=Vulkan",
                    "--disable-extensions", "--no-first-run",
                    "--no-default-browser-check", "--allow-file-access-from-files",
                    "--user-data-dir=" + str(Path(temporary) / "profile"),
@@ -2308,8 +2308,7 @@ def main():
         result = run_chrome(command, Path(temporary), "desktop")
         mobile_command = [
             str(chrome), "--headless", "--disable-gpu",
-            "--disable-gpu-compositing",
-            "--disable-features=Vulkan,UseSkiaRenderer,CanvasOopRasterization",
+            "--disable-features=Vulkan",
             "--disable-extensions", "--no-first-run",
             "--no-default-browser-check", "--allow-file-access-from-files",
             "--window-size=390,844",
@@ -2322,8 +2321,7 @@ def main():
         recovery_page.write_text(recovery_test_html, encoding="utf-8")
         recovery_command = [
             str(chrome), "--headless", "--disable-gpu",
-            "--disable-gpu-compositing",
-            "--disable-features=Vulkan,UseSkiaRenderer,CanvasOopRasterization",
+            "--disable-features=Vulkan",
             "--disable-extensions", "--no-first-run",
             "--no-default-browser-check", "--allow-file-access-from-files",
             "--user-data-dir=" + str(Path(temporary) / "recovery-profile"),
@@ -2335,8 +2333,7 @@ def main():
         wifi_recovery_page.write_text(wifi_recovery_test_html, encoding="utf-8")
         wifi_recovery_command = [
             str(chrome), "--headless", "--disable-gpu",
-            "--disable-gpu-compositing",
-            "--disable-features=Vulkan,UseSkiaRenderer,CanvasOopRasterization",
+            "--disable-features=Vulkan",
             "--disable-extensions", "--no-first-run",
             "--no-default-browser-check", "--allow-file-access-from-files",
             "--user-data-dir=" + str(Path(temporary) / "wifi-recovery-profile"),
@@ -2349,8 +2346,7 @@ def main():
         first_boot_page.write_text(first_boot_test_html, encoding="utf-8")
         first_boot_command = [
             str(chrome), "--headless", "--disable-gpu",
-            "--disable-gpu-compositing",
-            "--disable-features=Vulkan,UseSkiaRenderer,CanvasOopRasterization",
+            "--disable-features=Vulkan",
             "--disable-extensions", "--no-first-run",
             "--no-default-browser-check", "--allow-file-access-from-files",
             "--user-data-dir=" + str(Path(temporary) / "first-boot-profile"),
@@ -2360,8 +2356,7 @@ def main():
             first_boot_command, Path(temporary), "first-boot")
         first_boot_mobile_command = [
             str(chrome), "--headless", "--disable-gpu",
-            "--disable-gpu-compositing",
-            "--disable-features=Vulkan,UseSkiaRenderer,CanvasOopRasterization",
+            "--disable-features=Vulkan",
             "--disable-extensions", "--no-first-run",
             "--no-default-browser-check", "--allow-file-access-from-files",
             "--window-size=390,844",
