@@ -1,3 +1,4 @@
+#include "../../profiles/profile.h"
 #include "display_backend_selection.h"
 
 namespace voxone {
@@ -16,15 +17,35 @@ Selection buildDefault(const hardware::HardwareDescriptor& hardware) {
 
 CompiledBackends compiledBackends(
     const hardware::HardwareDescriptor& hardware) {
-  ControllerMask controllers = 0;
+  ControllerMask controllers =
+      controllerSupport(display_profile::activeController());
+#if VOXONE_MULTI_DISPLAY_RUNTIME
   for (uint8_t value = static_cast<uint8_t>(hardware::DisplayKind::Ssd1306_128x64);
-       value <= static_cast<uint8_t>(hardware::DisplayKind::Ch1116g_128x64);
+       value <= static_cast<uint8_t>(hardware::DisplayKind::Gc9a01_240x240);
        ++value) {
     const auto kind = static_cast<hardware::DisplayKind>(value);
-    if (hardware.capabilities.supportsDisplay(kind))
-      controllers |= controllerSupport(display_profile::controllerFor(kind));
+    const display_profile::ControllerId controller =
+        display_profile::controllerFor(kind);
+    const bool compiledSmallOled =
+        controller == display_profile::ControllerId::Ssd1306 ||
+        controller == display_profile::ControllerId::Ssd1309 ||
+        controller == display_profile::ControllerId::Sh1106 ||
+        controller == display_profile::ControllerId::Ch1116g;
+    const bool compiledSt7796 =
+#if VOXONE_MULTI_DISPLAY_HAS_ST7796
+        controller == display_profile::ControllerId::St7796;
+#else
+        false;
+#endif
+    if (hardware.capabilities.supportsDisplay(kind) &&
+        (compiledSmallOled || compiledSt7796))
+      controllers |= controllerSupport(controller);
   }
   return CompiledBackends{controllers, true};
+#else
+  (void)hardware;
+  return CompiledBackends{controllers, false};
+#endif
 }
 
 Selection select(const hardware::RuntimeHardwareConfig& requested,
@@ -58,6 +79,8 @@ const char* runtimeDisplayName(hardware::RuntimeDisplay display) {
     case hardware::RuntimeDisplay::Ssd1306_128x32: return "SSD1306_128X32";
     case hardware::RuntimeDisplay::Sh1106_128x64: return "SH1106_128X64";
     case hardware::RuntimeDisplay::Ch1116g_128x64: return "CH1116G_128X64";
+    case hardware::RuntimeDisplay::Ssd1322_256x64: return "SSD1322_256X64";
+    case hardware::RuntimeDisplay::Gc9a01_240x240: return "GC9A01_240X240";
   }
   return "UNKNOWN";
 }
@@ -71,6 +94,8 @@ const char* controllerName(display_profile::ControllerId controller) {
     case display_profile::ControllerId::St7796: return "ST7796";
     case display_profile::ControllerId::Sh1106: return "SH1106";
     case display_profile::ControllerId::Ch1116g: return "CH1116G";
+    case display_profile::ControllerId::Ssd1322: return "SSD1322";
+    case display_profile::ControllerId::Gc9a01: return "GC9A01";
   }
   return "UNKNOWN";
 }
@@ -82,6 +107,8 @@ const char* profileName(display_profile::ProfileId profile) {
     case display_profile::ProfileId::St7789_284x76: return "ST7789_284X76";
     case display_profile::ProfileId::St7796_480x320: return "ST7796_480X320";
     case display_profile::ProfileId::Oled128x32: return "OLED_128X32";
+    case display_profile::ProfileId::Oled256x64: return "OLED_256X64";
+    case display_profile::ProfileId::Gc9a01_240x240: return "GC9A01_240X240";
   }
   return "UNKNOWN";
 }

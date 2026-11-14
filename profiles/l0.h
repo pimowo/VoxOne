@@ -24,8 +24,8 @@
 #define VOXONE_INCLUDE_DSP 1
 #define VOXONE_PIN_MAP_COMPLETE 1
 
-// L0 ST7796S uses the default ESP32-S3 SPI bus: MOSI 11, SCK 12, SS 10.
-// MISO 13 belongs to that bus but is not connected to the LCD.
+// L0 ST7796S uses the shared DevKit SPI display bus and SS 10.
+// MISO belongs to that bus but is not connected to the LCD.
 #define DSP_MODEL DSP_ST7796
 #define DSP_HSPI false
 #define TFT_DC 9

@@ -25,7 +25,11 @@ int main() {
   const HardwareDescriptor& hardware = currentHardware();
   const RuntimeHardwareConfig defaults = defaultRuntimeHardwareConfig();
   const CompiledBackends compiled = compiledBackends(hardware);
+#if VOXONE_MULTI_DISPLAY_RUNTIME
   assert(compiled.runtimeSelection);
+#else
+  assert(!compiled.runtimeSelection);
+#endif
 
   Selection selected = select(defaults, hardware, compiled);
   assert(selected.display == defaults.display);
@@ -79,7 +83,11 @@ int main() {
   assert(compiled.contains(ControllerId::Ssd1306));
   assert(compiled.contains(ControllerId::Ssd1309));
   assert(compiled.contains(ControllerId::Sh1106));
+#if defined(VOXONE_PROFILE_S0) || defined(VOXONE_PROFILE_DIN0)
   assert(compiled.contains(ControllerId::Ch1116g));
+#else
+  assert(!compiled.contains(ControllerId::Ch1116g));
+#endif
 #if defined(VOXONE_PROFILE_S0)
   assert(selected.profile == ProfileId::Oled128x64);
 #elif defined(VOXONE_PROFILE_L0)
@@ -96,8 +104,8 @@ int main() {
 #if defined(VOXONE_PROFILE_S0)
   assert(defaults.display == RuntimeDisplay::Ssd1306_128x64);
   assert(selected.controller == ControllerId::Ssd1306);
-  stored.display = RuntimeDisplay::Ssd1306_128x32;
-  assert(select(stored, hardware, compiled).controller == ControllerId::Ssd1306);
+  stored.display = RuntimeDisplay::Ssd1309_128x64;
+  assert(select(stored, hardware, compiled).controller == ControllerId::Ssd1309);
 #elif defined(VOXONE_PROFILE_L0)
   stored.display = RuntimeDisplay::Ssd1306_128x64;
   assert(select(stored, hardware, compiled).controller == ControllerId::Ssd1306);
@@ -109,30 +117,31 @@ int main() {
 #endif
   selected = select(stored, hardware, compiled);
   assert(!selected.usedBuildDefault);
-#if defined(VOXONE_PROFILE_S0)
-  assert(selected.profile == ProfileId::Oled128x32);
-#else
   assert(selected.profile == ProfileId::Oled128x64);
-#endif
 
   for (RuntimeDisplay display :
-       {RuntimeDisplay::Ssd1306_128x32,
-        RuntimeDisplay::Ssd1306_128x64,
+       {RuntimeDisplay::Ssd1306_128x64,
         RuntimeDisplay::Ssd1309_128x64,
         RuntimeDisplay::Ch1116g_128x64,
         RuntimeDisplay::Sh1106_128x64}) {
     RuntimeHardwareConfig oled = defaults;
     oled.display = display;
+    const DisplayKind kind = display == RuntimeDisplay::Ssd1306_128x64
+                                 ? DisplayKind::Ssd1306_128x64
+                             : display == RuntimeDisplay::Ssd1309_128x64
+                                 ? DisplayKind::Ssd1309_128x64
+                             : display == RuntimeDisplay::Ch1116g_128x64
+                                 ? DisplayKind::Ch1116g_128x64
+                                 : DisplayKind::Sh1106_128x64;
+    const bool supported = hardware.capabilities.supportsDisplay(kind);
     assert(validateRuntimeHardwareConfig(oled, hardware.capabilities) ==
-           RuntimeHardwareValidation::Valid);
+           (supported ? RuntimeHardwareValidation::Valid
+                      : RuntimeHardwareValidation::Unsupported));
+    if (!supported) continue;
     const Selection runtime = select(oled, hardware, compiled);
     assert(!runtime.usedBuildDefault && runtime.display == display);
-    assert(runtime.profile ==
-           (display == RuntimeDisplay::Ssd1306_128x32
-                ? ProfileId::Oled128x32 : ProfileId::Oled128x64));
-    assert(rendererKind(runtime) ==
-           (display == RuntimeDisplay::Ssd1306_128x32
-                ? RendererKind::Oled128x32 : RendererKind::Oled128x64));
+    assert(runtime.profile == ProfileId::Oled128x64);
+    assert(rendererKind(runtime) == RendererKind::Oled128x64);
   }
 
 #if defined(VOXONE_PROFILE_L0)

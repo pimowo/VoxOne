@@ -13,6 +13,8 @@
 #define VOXONE_DISPLAY_PROFILE_ST7789_284X76 2
 #define VOXONE_DISPLAY_PROFILE_ST7796_480X320 3
 #define VOXONE_DISPLAY_PROFILE_OLED_128X32 4
+#define VOXONE_DISPLAY_PROFILE_OLED_256X64 5
+#define VOXONE_DISPLAY_PROFILE_GC9A01_240X240 6
 
 #define VOXONE_DISPLAY_PROFILE_IS_SMALL_OLED \
   (VOXONE_DISPLAY_PROFILE == VOXONE_DISPLAY_PROFILE_OLED_128X64 || \
@@ -35,6 +37,8 @@
 #define VOXONE_DISPLAY_CONTROLLER_ST7796 4
 #define VOXONE_DISPLAY_CONTROLLER_SH1106 5
 #define VOXONE_DISPLAY_CONTROLLER_CH1116G 6
+#define VOXONE_DISPLAY_CONTROLLER_SSD1322 7
+#define VOXONE_DISPLAY_CONTROLLER_GC9A01 8
 
 #if defined(VOXONE_DISPLAY_PROFILE) != defined(VOXONE_DISPLAY_CONTROLLER)
 #error "Display profile and controller must be selected together"
@@ -48,7 +52,9 @@ enum class ProfileId : uint8_t {
   Oled128x64 = VOXONE_DISPLAY_PROFILE_OLED_128X64,
   St7789_284x76 = VOXONE_DISPLAY_PROFILE_ST7789_284X76,
   St7796_480x320 = VOXONE_DISPLAY_PROFILE_ST7796_480X320,
-  Oled128x32 = VOXONE_DISPLAY_PROFILE_OLED_128X32
+  Oled128x32 = VOXONE_DISPLAY_PROFILE_OLED_128X32,
+  Oled256x64 = VOXONE_DISPLAY_PROFILE_OLED_256X64,
+  Gc9a01_240x240 = VOXONE_DISPLAY_PROFILE_GC9A01_240X240
 };
 
 enum class ControllerId : uint8_t {
@@ -58,7 +64,9 @@ enum class ControllerId : uint8_t {
   St7789 = VOXONE_DISPLAY_CONTROLLER_ST7789,
   St7796 = VOXONE_DISPLAY_CONTROLLER_ST7796,
   Sh1106 = VOXONE_DISPLAY_CONTROLLER_SH1106,
-  Ch1116g = VOXONE_DISPLAY_CONTROLLER_CH1116G
+  Ch1116g = VOXONE_DISPLAY_CONTROLLER_CH1116G,
+  Ssd1322 = VOXONE_DISPLAY_CONTROLLER_SSD1322,
+  Gc9a01 = VOXONE_DISPLAY_CONTROLLER_GC9A01
 };
 
 struct Descriptor {
@@ -76,7 +84,10 @@ constexpr ProfileId profileFor(hardware::DisplayKind kind) {
        kind == hardware::DisplayKind::Sh1106_128x64 ||
        kind == hardware::DisplayKind::Ch1116g_128x64) ? ProfileId::Oled128x64 :
       kind == hardware::DisplayKind::St7789_284x76 ? ProfileId::St7789_284x76 :
-      ProfileId::St7796_480x320;
+      kind == hardware::DisplayKind::St7796_480x320 ?
+          ProfileId::St7796_480x320 :
+      kind == hardware::DisplayKind::Ssd1322_256x64 ?
+          ProfileId::Oled256x64 : ProfileId::Gc9a01_240x240;
 }
 
 constexpr ControllerId controllerFor(hardware::DisplayKind kind) {
@@ -87,7 +98,9 @@ constexpr ControllerId controllerFor(hardware::DisplayKind kind) {
       kind == hardware::DisplayKind::Sh1106_128x64 ? ControllerId::Sh1106 :
       kind == hardware::DisplayKind::Ch1116g_128x64 ? ControllerId::Ch1116g :
       kind == hardware::DisplayKind::St7789_284x76 ? ControllerId::St7789 :
-      ControllerId::St7796;
+      kind == hardware::DisplayKind::St7796_480x320 ? ControllerId::St7796 :
+      kind == hardware::DisplayKind::Ssd1322_256x64 ? ControllerId::Ssd1322 :
+      ControllerId::Gc9a01;
 }
 
 constexpr Descriptor descriptor(ProfileId id) {
@@ -95,7 +108,9 @@ constexpr Descriptor descriptor(ProfileId id) {
       id == ProfileId::Oled128x32 ? Descriptor{id, 128, 32, true} :
       id == ProfileId::Oled128x64 ? Descriptor{id, 128, 64, true} :
       id == ProfileId::St7789_284x76 ? Descriptor{id, 284, 76, false} :
-      Descriptor{id, 480, 320, false};
+      id == ProfileId::St7796_480x320 ? Descriptor{id, 480, 320, false} :
+      id == ProfileId::Oled256x64 ? Descriptor{id, 256, 64, true} :
+      Descriptor{id, 240, 240, false};
 }
 
 static_assert(profileFor(hardware::DisplayKind::Ssd1306_128x64) ==
@@ -116,6 +131,12 @@ static_assert(profileFor(hardware::DisplayKind::Ch1116g_128x64) ==
 static_assert(controllerFor(hardware::DisplayKind::Ssd1306_128x64) !=
                   controllerFor(hardware::DisplayKind::Ssd1309_128x64),
               "OLED controllers remain distinct physical backends");
+static_assert(profileFor(hardware::DisplayKind::Ssd1322_256x64) ==
+                  ProfileId::Oled256x64,
+              "SSD1322 must use the 256x64 OLED layout");
+static_assert(controllerFor(hardware::DisplayKind::Gc9a01_240x240) ==
+                  ControllerId::Gc9a01,
+              "GC9A01 requires its own controller backend");
 
 #if defined(VOXONE_DISPLAY_PROFILE)
 constexpr ProfileId activeProfile() {

@@ -27,7 +27,10 @@ enum class DisplayKind {
   Ssd1306_128x32,
   Sh1106_128x64,
   // Appended; CH1116G is a distinct controller and is not aliased to SH1106.
-  Ch1116g_128x64
+  Ch1116g_128x64,
+  // Appended to preserve all previously persisted display identities.
+  Ssd1322_256x64,
+  Gc9a01_240x240
 };
 enum class AudioOutputKind {
   None,

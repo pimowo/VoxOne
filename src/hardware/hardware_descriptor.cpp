@@ -13,8 +13,10 @@ constexpr unsigned kProfileIdentityPrefixLength =
 #if defined(VOXONE_PROFILE_M0)
 constexpr BoardId kBoardId = BoardId::BoardM0;
 constexpr char kBoardFamily = 'M';
-constexpr DisplayKind kDisplayKind = DisplayKind::Ssd1306_128x64;
-constexpr SpiBusPins kSpi = {kNoPin, kNoPin, kNoPin};
+constexpr DisplayKind kDisplayKind = DisplayKind::Ssd1322_256x64;
+constexpr SpiBusPins kSpi = {
+  VOXONE_DISPLAY_SPI_SCK_PIN, VOXONE_DISPLAY_SPI_MOSI_PIN,
+  VOXONE_DISPLAY_SPI_MISO_PIN};
 constexpr I2cBusConfig kI2c = {
   fromLegacyPin(I2C_SDA), fromLegacyPin(I2C_SCL), 4000000UL, SCREEN_ADDRESS};
 constexpr RtcKind kRtcKind = RtcKind::None;
@@ -22,11 +24,12 @@ constexpr UartPins kBtUart = {kNoPin, kNoPin};
 constexpr Pin kBacklight = kNoPin;
 constexpr Pin kDacXsmt = kNoPin;
 constexpr HardwareCapabilities kCapabilities = {
-  displaySupport(DisplayKind::Ssd1306_128x64) |
+  displaySupport(DisplayKind::St7796_480x320) |
+      displaySupport(DisplayKind::Ssd1322_256x64) |
+      displaySupport(DisplayKind::Gc9a01_240x240) |
+      displaySupport(DisplayKind::Ssd1306_128x64) |
       displaySupport(DisplayKind::Ssd1309_128x64) |
-      displaySupport(DisplayKind::Ssd1306_128x32) |
-      displaySupport(DisplayKind::Sh1106_128x64) |
-      displaySupport(DisplayKind::Ch1116g_128x64),
+      displaySupport(DisplayKind::Sh1106_128x64),
   audioOutputSupport(AudioOutputKind::Pcm5102a) |
       audioOutputSupport(AudioOutputKind::Max98357) |
       audioOutputSupport(AudioOutputKind::Max98357Stereo) |
@@ -50,8 +53,7 @@ constexpr UartPins kBtUart = {fromLegacyPin(VOXONE_BT_UART_RX_PIN),
 constexpr Pin kBacklight = kNoPin;
 constexpr Pin kDacXsmt = kNoPin;
 constexpr HardwareCapabilities kCapabilities = {
-  displaySupport(DisplayKind::Ssd1306_128x32) |
-      displaySupport(DisplayKind::Ssd1306_128x64) |
+  displaySupport(DisplayKind::Ssd1306_128x64) |
       displaySupport(DisplayKind::Ssd1309_128x64) |
       displaySupport(DisplayKind::Sh1106_128x64) |
       displaySupport(DisplayKind::Ch1116g_128x64),
@@ -79,7 +81,6 @@ constexpr Pin kDacXsmt = kNoPin;
 constexpr HardwareCapabilities kCapabilities = {
   displaySupport(DisplayKind::Ssd1306_128x64) |
       displaySupport(DisplayKind::Ssd1309_128x64) |
-      displaySupport(DisplayKind::Ssd1306_128x32) |
       displaySupport(DisplayKind::Sh1106_128x64) |
       displaySupport(DisplayKind::Ch1116g_128x64),
   audioOutputSupport(AudioOutputKind::Pcm5102a),
@@ -93,8 +94,9 @@ constexpr HardwareCapabilities kCapabilities = {
 constexpr BoardId kBoardId = BoardId::BoardL0;
 constexpr char kBoardFamily = 'L';
 constexpr DisplayKind kDisplayKind = DisplayKind::St7796_480x320;
-// SPI defaults are stated in l0.h; MISO belongs to the bus, not to LCD.
-constexpr SpiBusPins kSpi = {12, 11, 13};
+constexpr SpiBusPins kSpi = {
+  VOXONE_DISPLAY_SPI_SCK_PIN, VOXONE_DISPLAY_SPI_MOSI_PIN,
+  VOXONE_DISPLAY_SPI_MISO_PIN};
 constexpr I2cBusConfig kI2c = {
   fromLegacyPin(RTC_SDA), fromLegacyPin(RTC_SCL), I2CFREQ_HZ, 0x3C};
 constexpr RtcKind kRtcKind = RtcKind::Ds3231;
@@ -104,11 +106,11 @@ constexpr Pin kBacklight = fromLegacyPin(BRIGHTNESS_PIN);
 constexpr Pin kDacXsmt = fromLegacyPin(VOXONE_DAC_XSMT_PIN);
 constexpr HardwareCapabilities kCapabilities = {
   displaySupport(DisplayKind::St7796_480x320) |
-      displaySupport(DisplayKind::Ssd1306_128x32) |
+      displaySupport(DisplayKind::Ssd1322_256x64) |
+      displaySupport(DisplayKind::Gc9a01_240x240) |
       displaySupport(DisplayKind::Ssd1306_128x64) |
       displaySupport(DisplayKind::Ssd1309_128x64) |
-      displaySupport(DisplayKind::Sh1106_128x64) |
-      displaySupport(DisplayKind::Ch1116g_128x64),
+      displaySupport(DisplayKind::Sh1106_128x64),
   audioOutputSupport(AudioOutputKind::Pcm5102a) |
       audioOutputSupport(AudioOutputKind::DspMini) |
       audioOutputSupport(AudioOutputKind::None),

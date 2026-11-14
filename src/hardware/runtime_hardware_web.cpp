@@ -13,7 +13,8 @@ constexpr RuntimeDisplay kDisplays[] = {
     RuntimeDisplay::Ssd1306_128x64, RuntimeDisplay::Ssd1309_128x64,
     RuntimeDisplay::Ch1116g_128x64, RuntimeDisplay::Sh1106_128x64,
     RuntimeDisplay::St7789_284x76,
-    RuntimeDisplay::St7796s_480x320};
+    RuntimeDisplay::St7796s_480x320, RuntimeDisplay::Ssd1322_256x64,
+    RuntimeDisplay::Gc9a01_240x240};
 constexpr RuntimeInput kInputs[] = {
     RuntimeInput::None, RuntimeInput::Ec11, RuntimeInput::Buttons3};
 constexpr RuntimeAudioOutput kAudioOutputs[] = {
@@ -191,6 +192,8 @@ const char* runtimeDisplayWebLabel(RuntimeDisplay display) {
     case RuntimeDisplay::Ssd1306_128x32: return "SSD1306_128X32";
     case RuntimeDisplay::Sh1106_128x64: return "SH1106_128X64";
     case RuntimeDisplay::Ch1116g_128x64: return "CH1116G_128X64";
+    case RuntimeDisplay::Ssd1322_256x64: return "SSD1322_256X64";
+    case RuntimeDisplay::Gc9a01_240x240: return "GC9A01_240X240";
   }
   return nullptr;
 }
@@ -349,6 +352,8 @@ const char* runtimeDisplayWebValue(RuntimeDisplay display) {
     case RuntimeDisplay::Ssd1306_128x32: return "ssd1306_128x32";
     case RuntimeDisplay::Sh1106_128x64: return "sh1106_128x64";
     case RuntimeDisplay::Ch1116g_128x64: return "ch1116_128x64";
+    case RuntimeDisplay::Ssd1322_256x64: return "ssd1322_256x64";
+    case RuntimeDisplay::Gc9a01_240x240: return "gc9a01_240x240";
   }
   return nullptr;
 }

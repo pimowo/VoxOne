@@ -82,8 +82,8 @@ void testUnsupportedDisplayDoesNotOwnRecovery() {
   assert(!noDisplayPlan.initializeBackend && !noDisplayPlan.runRenderer);
 
   RuntimeHardwareConfig unsupported = defaults;
-#if defined(VOXONE_PROFILE_L0)
-  unsupported.display = RuntimeDisplay::St7789_284x76;
+#if defined(VOXONE_PROFILE_L0) || defined(VOXONE_PROFILE_M0)
+  unsupported.display = RuntimeDisplay::Ch1116g_128x64;
 #else
   unsupported.display = RuntimeDisplay::St7796s_480x320;
 #endif

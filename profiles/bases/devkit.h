@@ -33,12 +33,17 @@
 #define SCREEN_ADDRESS 0x3C
 #define I2CFREQ_HZ 400000UL
 
+// Shared SPI display bus for the DevKit family (M/L).
+#define VOXONE_DISPLAY_SPI_SCK_PIN 12
+#define VOXONE_DISPLAY_SPI_MOSI_PIN 11
+#define VOXONE_DISPLAY_SPI_MISO_PIN 13
+
 // Planned shared SPI storage bus for M/L. L0 shares SCK/MOSI/MISO with the
 // display bus and uses a separate chip-select for the SD card.
 #define VOXONE_SD_CS_PIN 18
-#define VOXONE_SD_MOSI_PIN 11
-#define VOXONE_SD_SCK_PIN 12
-#define VOXONE_SD_MISO_PIN 13
+#define VOXONE_SD_MOSI_PIN VOXONE_DISPLAY_SPI_MOSI_PIN
+#define VOXONE_SD_SCK_PIN VOXONE_DISPLAY_SPI_SCK_PIN
+#define VOXONE_SD_MISO_PIN VOXONE_DISPLAY_SPI_MISO_PIN
 
 // Planned infrared receiver input for M/L.
 #define VOXONE_IR_SIGNAL_PIN 38

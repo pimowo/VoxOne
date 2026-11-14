@@ -18,6 +18,8 @@ ScrollRendererProfile scrollProfile(
       return ScrollRendererProfile::St7789_284x76;
     case display_profile::ProfileId::St7796_480x320:
       return ScrollRendererProfile::St7796_480x320;
+    case display_profile::ProfileId::Oled256x64:
+    case display_profile::ProfileId::Gc9a01_240x240:
     case display_profile::ProfileId::None:
       return ScrollRendererProfile::None;
   }

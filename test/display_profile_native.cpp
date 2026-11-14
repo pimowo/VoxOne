@@ -41,6 +41,12 @@ int main() {
   static_assert(profileFor(DisplayKind::St7796_480x320) ==
                     ProfileId::St7796_480x320,
                 "ST7796 480x320 uses its own layout");
+  static_assert(profileFor(DisplayKind::Ssd1322_256x64) ==
+                    ProfileId::Oled256x64,
+                "SSD1322 uses its own 256x64 layout");
+  static_assert(profileFor(DisplayKind::Gc9a01_240x240) ==
+                    ProfileId::Gc9a01_240x240,
+                "GC9A01 uses its own 240x240 layout");
   static_assert(controllerFor(DisplayKind::Ssd1306_128x64) ==
                     ControllerId::Ssd1306,
                 "SSD1306 controller remains distinct");
@@ -56,18 +62,28 @@ int main() {
   static_assert(controllerFor(DisplayKind::Ch1116g_128x64) ==
                     ControllerId::Ch1116g,
                 "CH1116G keeps a distinct controller backend");
+  static_assert(controllerFor(DisplayKind::Ssd1322_256x64) ==
+                    ControllerId::Ssd1322,
+                "SSD1322 keeps a distinct controller backend");
+  static_assert(controllerFor(DisplayKind::Gc9a01_240x240) ==
+                    ControllerId::Gc9a01,
+                "GC9A01 keeps a distinct controller backend");
 
   const Descriptor none = descriptor(ProfileId::None);
   const Descriptor oled = descriptor(ProfileId::Oled128x64);
   const Descriptor oled32 = descriptor(ProfileId::Oled128x32);
   const Descriptor st7789 = descriptor(ProfileId::St7789_284x76);
   const Descriptor st7796 = descriptor(ProfileId::St7796_480x320);
+  const Descriptor ssd1322 = descriptor(ProfileId::Oled256x64);
+  const Descriptor gc9a01 = descriptor(ProfileId::Gc9a01_240x240);
   assert(none.width == 0 && none.height == 0 && !none.monochrome);
   assert(controllerFor(DisplayKind::None) == ControllerId::None);
   assert(oled.width == 128 && oled.height == 64 && oled.monochrome);
   assert(oled32.width == 128 && oled32.height == 32 && oled32.monochrome);
   assert(st7789.width == 284 && st7789.height == 76 && !st7789.monochrome);
   assert(st7796.width == 480 && st7796.height == 320 && !st7796.monochrome);
+  assert(ssd1322.width == 256 && ssd1322.height == 64 && ssd1322.monochrome);
+  assert(gc9a01.width == 240 && gc9a01.height == 240 && !gc9a01.monochrome);
 
   // Renderers select layouts, never PCB names. Backend drivers may retain
   // DSP_MODEL as the technical library/controller compile gate.

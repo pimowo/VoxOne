@@ -54,7 +54,12 @@ class DspCore: public yoDisplay {
     }
     #elif defined(DSP_OLED)
     inline void loop(bool force=false){
+#if DSP_MODEL==DSP_SSD1322
+      (void)force;
+      display();
+#else
       display(force);
+#endif
       //delay(DSP_MODEL==DSP_ST7920?20:5);
       vTaskDelay(DSP_MODEL==DSP_ST7920?10:0);
     }

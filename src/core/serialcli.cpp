@@ -48,6 +48,8 @@ const char* runtimeDisplayName(voxone::hardware::RuntimeDisplay display) {
       return "ssd1306_128x32";
     case voxone::hardware::RuntimeDisplay::Sh1106_128x64: return "sh1106";
     case voxone::hardware::RuntimeDisplay::Ch1116g_128x64: return "ch1116g";
+    case voxone::hardware::RuntimeDisplay::Ssd1322_256x64: return "ssd1322";
+    case voxone::hardware::RuntimeDisplay::Gc9a01_240x240: return "gc9a01";
   }
   return "unknown";
 }
@@ -190,6 +192,12 @@ void SerialCli::on_input(const char* str, uint8_t clientId) {
   } else if (strcmp(str, "hw display ch1116g") == 0 ||
              strcmp(str, "hw display ch1116") == 0) {
     requestedDisplay = voxone::hardware::RuntimeDisplay::Ch1116g_128x64;
+    setRuntimeDisplay = true;
+  } else if (strcmp(str, "hw display ssd1322") == 0) {
+    requestedDisplay = voxone::hardware::RuntimeDisplay::Ssd1322_256x64;
+    setRuntimeDisplay = true;
+  } else if (strcmp(str, "hw display gc9a01") == 0) {
+    requestedDisplay = voxone::hardware::RuntimeDisplay::Gc9a01_240x240;
     setRuntimeDisplay = true;
   }
   if (setRuntimeDisplay) {

@@ -46,7 +46,9 @@ enum class RendererKind : uint8_t {
   None,
   Oled128x32,
   Oled128x64,
-  St7796
+  Oled256x64,
+  St7796,
+  Gc9a01
 };
 
 constexpr RendererKind rendererKind(const Selection& selection) {
@@ -55,9 +57,15 @@ constexpr RendererKind rendererKind(const Selection& selection) {
              : selection.profile == display_profile::ProfileId::Oled128x64
                    ? RendererKind::Oled128x64
                    : selection.profile ==
+                             display_profile::ProfileId::Oled256x64
+                         ? RendererKind::Oled256x64
+                   : selection.profile ==
                              display_profile::ProfileId::St7796_480x320
                          ? RendererKind::St7796
-                         : RendererKind::None;
+                         : selection.profile ==
+                                   display_profile::ProfileId::Gc9a01_240x240
+                               ? RendererKind::Gc9a01
+                               : RendererKind::None;
 }
 
 constexpr ActivationPlan activationPlan(const Selection& selection) {

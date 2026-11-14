@@ -133,12 +133,12 @@ int main() {
   assert(d.sdCard.spi.sck == fromLegacyPin(VOXONE_SD_SCK_PIN));
   assert(d.sdCard.spi.miso == fromLegacyPin(VOXONE_SD_MISO_PIN));
   assert(d.irSignal == fromLegacyPin(VOXONE_IR_SIGNAL_PIN));
-#if VOXONE_MULTI_DISPLAY_RUNTIME
-  assert(d.i2c.sda == fromLegacyPin(I2C_SDA));
-  assert(d.i2c.scl == fromLegacyPin(I2C_SCL));
-#else
+#if defined(VOXONE_PROFILE_L0)
   assert(d.i2c.sda == fromLegacyPin(RTC_SDA));
   assert(d.i2c.scl == fromLegacyPin(RTC_SCL));
+#else
+  assert(d.i2c.sda == fromLegacyPin(I2C_SDA));
+  assert(d.i2c.scl == fromLegacyPin(I2C_SCL));
 #endif
 #if defined(VOXONE_PROFILE_L0)
   assert(caps.supportsRtc);
@@ -195,16 +195,17 @@ int main() {
   assert(caps.hasLocalDisplay());
   assert(caps.supportedDisplays ==
          (displaySupport(DisplayKind::St7796_480x320) |
-          displaySupport(DisplayKind::Ssd1306_128x32) |
+          displaySupport(DisplayKind::Ssd1322_256x64) |
+          displaySupport(DisplayKind::Gc9a01_240x240) |
           displaySupport(DisplayKind::Ssd1306_128x64) |
           displaySupport(DisplayKind::Ssd1309_128x64) |
-          displaySupport(DisplayKind::Sh1106_128x64) |
-          displaySupport(DisplayKind::Ch1116g_128x64)));
-  assert(caps.supportsDisplay(DisplayKind::Ssd1306_128x32));
+          displaySupport(DisplayKind::Sh1106_128x64)));
+  assert(caps.supportsDisplay(DisplayKind::Ssd1322_256x64));
+  assert(caps.supportsDisplay(DisplayKind::Gc9a01_240x240));
   assert(caps.supportsDisplay(DisplayKind::Ssd1306_128x64));
   assert(caps.supportsDisplay(DisplayKind::Ssd1309_128x64));
   assert(caps.supportsDisplay(DisplayKind::Sh1106_128x64));
-  assert(caps.supportsDisplay(DisplayKind::Ch1116g_128x64));
+  assert(!caps.supportsDisplay(DisplayKind::Ch1116g_128x64));
   assert(d.spi.mosi == 11 && d.spi.sck == 12 && d.spi.miso == 13);
   assert(d.display.cs == 10 && d.display.dc == 9 && d.display.backlight == 14);
   assert(d.display.rst == kNoPin);
@@ -244,25 +245,30 @@ int main() {
   assert(d.board.mcuBase == McuBase::DevKit);
   assert(d.board.flashBytes == 16u * 1024u * 1024u);
   assert(d.board.psramBytes == 8u * 1024u * 1024u);
-  assert(VOXONE_PROFILE_DISPLAY == Display::Ssd1306_128x64);
-  assert(d.displayKind == DisplayKind::Ssd1306_128x64);
-  assert(activeController() == ControllerId::Ssd1306);
-  assert(activeProfile() == ProfileId::Oled128x64);
-  assert(layout.width == 128 && layout.height == 64 && layout.monochrome);
-  assert(d.display.bus == BusKind::I2c);
+  assert(VOXONE_PROFILE_DISPLAY == Display::Ssd1322_256x64);
+  assert(d.displayKind == DisplayKind::Ssd1322_256x64);
+  assert(activeController() == ControllerId::Ssd1322);
+  assert(activeProfile() == ProfileId::Oled256x64);
+  assert(layout.width == 256 && layout.height == 64 && layout.monochrome);
+  assert(d.display.bus == BusKind::Spi);
   assert(caps.supportedDisplays ==
-         (displaySupport(DisplayKind::Ssd1306_128x64) |
+         (displaySupport(DisplayKind::St7796_480x320) |
+          displaySupport(DisplayKind::Ssd1322_256x64) |
+          displaySupport(DisplayKind::Gc9a01_240x240) |
+          displaySupport(DisplayKind::Ssd1306_128x64) |
           displaySupport(DisplayKind::Ssd1309_128x64) |
-          displaySupport(DisplayKind::Ssd1306_128x32) |
-          displaySupport(DisplayKind::Sh1106_128x64) |
-          displaySupport(DisplayKind::Ch1116g_128x64)));
-  assert(caps.supportsDisplay(DisplayKind::Ssd1306_128x32));
+          displaySupport(DisplayKind::Sh1106_128x64)));
+  assert(caps.supportsDisplay(DisplayKind::St7796_480x320));
+  assert(caps.supportsDisplay(DisplayKind::Ssd1322_256x64));
+  assert(caps.supportsDisplay(DisplayKind::Gc9a01_240x240));
   assert(caps.supportsDisplay(DisplayKind::Ssd1306_128x64));
   assert(caps.supportsDisplay(DisplayKind::Ssd1309_128x64));
   assert(caps.supportsDisplay(DisplayKind::Sh1106_128x64));
-  assert(caps.supportsDisplay(DisplayKind::Ch1116g_128x64));
+  assert(!caps.supportsDisplay(DisplayKind::Ch1116g_128x64));
+  assert(d.spi.mosi == 11 && d.spi.sck == 12 && d.spi.miso == 13);
   assert(d.i2c.sda == 8 && d.i2c.scl == 7);
-  assert(d.display.cs == kNoPin && d.display.dc == kNoPin);
+  assert(d.display.cs == 10 && d.display.dc == 9 &&
+         d.display.rst == kNoPin && d.display.backlight == kNoPin);
   assert(d.audioOut.bclk == 5 && d.audioOut.ws == 6 && d.audioOut.dout == 4);
   assert(d.localInput.a == 41 && d.localInput.b == 40 && d.localInput.key == 39);
   assert(!bool(ENC_INTERNALPULLUP));
@@ -294,12 +300,11 @@ int main() {
   assert(layout.width == 128 && layout.height == 64 && layout.monochrome);
   assert(d.display.bus == BusKind::I2c);
   assert(caps.supportedDisplays ==
-         (displaySupport(DisplayKind::Ssd1306_128x32) |
-          displaySupport(DisplayKind::Ssd1306_128x64) |
+         (displaySupport(DisplayKind::Ssd1306_128x64) |
           displaySupport(DisplayKind::Ssd1309_128x64) |
           displaySupport(DisplayKind::Sh1106_128x64) |
           displaySupport(DisplayKind::Ch1116g_128x64)));
-  assert(caps.supportsDisplay(DisplayKind::Ssd1306_128x32));
+  assert(!caps.supportsDisplay(DisplayKind::Ssd1306_128x32));
   assert(caps.supportsDisplay(DisplayKind::Ssd1306_128x64));
   assert(caps.supportsDisplay(DisplayKind::Ssd1309_128x64));
   assert(caps.supportsDisplay(DisplayKind::Sh1106_128x64));
@@ -348,10 +353,9 @@ int main() {
   assert(caps.supportedDisplays ==
          (displaySupport(DisplayKind::Ssd1306_128x64) |
           displaySupport(DisplayKind::Ssd1309_128x64) |
-          displaySupport(DisplayKind::Ssd1306_128x32) |
           displaySupport(DisplayKind::Sh1106_128x64) |
           displaySupport(DisplayKind::Ch1116g_128x64)));
-  assert(caps.supportsDisplay(DisplayKind::Ssd1306_128x32));
+  assert(!caps.supportsDisplay(DisplayKind::Ssd1306_128x32));
   assert(caps.supportsDisplay(DisplayKind::Ssd1306_128x64));
   assert(caps.supportsDisplay(DisplayKind::Ssd1309_128x64));
   assert(caps.supportsDisplay(DisplayKind::Sh1106_128x64));

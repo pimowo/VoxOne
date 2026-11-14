@@ -103,9 +103,9 @@ checkpointów pozostaje w historii Git i w istniejących raportach.
 
 ## 3. Wersja 1.3.0+ (Audio / Sprzęt / Sieć)
 
-- [ ] Po programowej migracji M0/L0 na wspólną bazę ESP32-S3 N16R8 DevKit
-  fizycznie potwierdzić pinout M0 przed zmianą domyślnego wyświetlacza na
-  ST7796S oraz uzupełnić `AMP_ENABLE` i `MUTE/XSMT` dla L0, S0, M0 i DIN0.
+- [ ] Fizycznie potwierdzić pinout M0 po migracji na wspólną bazę ESP32-S3
+  N16R8 DevKit i zmianie domyślnego wyświetlacza na SSD1322 oraz uzupełnić
+  `AMP_ENABLE` i `MUTE/XSMT` dla L0, S0, M0 i DIN0.
 - [ ] DSPmini: obsłużyć ADAU1701 przez I2C, dodać konfigurację do WWW oraz
   Parametric EQ, Crossover, wyjście subwoofera, Loudness i AutoEQ; wykorzystać
   posiadany moduł do testów HIL.

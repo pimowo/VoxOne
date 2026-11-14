@@ -6,11 +6,10 @@
 | Baza DevKit — ESP32-S3 N16R8 | NIE | NIE | TAK | TAK | 🟢 ZROBIONE |
 | Baza Zero — ESP32-S3 Zero N4R2 | TAK | TAK | NIE | NIE | 🟢 ZROBIONE |
 | **[WYŚWIETLACZE]** | | | | | |
-| SSD1306 128x64 | TAK | TAK | TAK | NIE | 🟢 ZROBIONE |
-| SSD1306 128x32 | TAK | TAK | TAK | TAK | 🟢 ZROBIONE |
-| SSD1309, SH1106, CH1116G | TAK | TAK | TAK | TAK | 🟢 ZROBIONE |
-| SSD1322, ST7920, GC9A01 | NIE | NIE | TAK | TAK | 🔴 W PLANACH |
-| ST7796S | NIE | NIE | NIE | TAK | 🟢 ZROBIONE |
+| SSD1306 128x64, SSD1309, SH1106 | TAK | TAK | TAK | TAK | 🟢 ZROBIONE |
+| CH1116G 128x64 | TAK | TAK | NIE | NIE | 🟢 ZROBIONE |
+| SSD1322 256x64, GC9A01 240x240 | NIE | NIE | TAK | TAK | 🟡 W TESTACH |
+| ST7796S 480x320 | NIE | NIE | TAK | TAK | 🟢 ZROBIONE |
 | **[STEROWANIE]** | | | | | |
 | Enkoder EC11 / 3xSW | TAK | TAK | TAK | TAK | 🟢 ZROBIONE |
 | Przycisk POWER | TAK | TAK | TAK | TAK | 🟡 W TESTACH |
@@ -38,7 +37,7 @@ uzupełnione po weryfikacji sprzętowej.
 
 | Baza / profile | Audio I²S `BCLK / DOUT / LRCK` | Display / I2C | Local input `A / B / KEY` | Pozostałe |
 |---|---|---|---|---|
-| DevKit / M0, L0 | `5 / 4 / 6` | I2C `SDA8/SCL7`; L0 dodatkowo SPI `SCK12`, `MOSI11`, `MISO13`, ST7796S `CS10`, `DC9`, `RST—`, backlight `14` | `41 / 40 / 39` | SD `CS18/MOSI11/SCK12/MISO13`; IR `GPIO38`; POWER `GPIO42`; XSMT `255`; L0 dodatkowo RTC oraz BT UART `RX15/TX16` i BT I2S RX `BCLK1/WS2/DIN17` |
+| DevKit / M0, L0 | `5 / 4 / 6` | SPI `SCK12`, `MOSI11`, `MISO13`, `CS10`, `DC9`, `RST—`; I2C `SDA8/SCL7`; L0 backlight `14` | `41 / 40 / 39` | SD `CS18` na wspólnym SPI; IR `GPIO38`; POWER `GPIO42`; XSMT `255`; L0 dodatkowo RTC oraz BT UART `RX15/TX16` i BT I2S RX `BCLK1/WS2/DIN17` |
 | Zero / S0, DIN0 | `5 / 6 / 4` | I2C `SDA1`, `SCL2`, `RST—`, adres `0x3C` | `9 / 8 / 7` | POWER `GPIO3`; S0 dodatkowo IR `GPIO38`, BT UART1 `RX44/TX43` i BT I2S1 RX `BCLK11/WS12/DIN13` |
 
 Powyższe wspólne GPIO są zdefiniowane w `profiles/bases/devkit.h` oraz
@@ -81,10 +80,10 @@ Stable S0 nadal jest otwarty.
 
 | Profil / env | MCU i pamięć deklarowana przez build/kod | Bieżący BIN i capability | Rola wydania | Status hardware |
 |---|---|---|---|---|
-| `m0` | baza DevKit, ESP32-S3 N16R8, flash 16 MiB, PSRAM 8 MiB | Audio PCM5102A/MAX98357A MONO/MAX98357A STEREO/NONE; display NONE, SSD1306 128×32/128×64, SSD1309, SH1106 i CH1116G 128×64; EC11/Buttons3/NONE; bez DSP | `RETAINED BUILD / HIL NON-BLOCKING` | Wcześniejsze PHYSICAL PASS pozostają ważne; migracja bazy wymaga potwierdzenia fizycznego. |
-| `l0` | istniejąca PCB V-Tom, ESP32-S3 N16R8; build flash 16 MiB i PSRAM OPI | Audio PCM5102A/NONE; display ST7796S 480×320, pięć OLED I2C lub NONE; EC11/Buttons3/NONE; DS3231, VoxOneBT UART + I2S RX, VU i aktualizacja VoxOneBT | **`RELEASE-GATING HIL REQUIRED`** | Hardware i GPIO bez zmian. Etapowe PASS, w tym TTS D, są zachowane; pełny baseline i otwarte negatywne ścieżki PENDING. |
-| `s0` | ESP32-S3 Zero, flash 4 MiB, PSRAM 2 MiB | Audio PCM5102A/MAX98357A MONO/MAX98357A STEREO/NONE; OLED-y; EC11/Buttons3/NONE; VoxOneBT UART protocol 2 + I2S RX; `VOXONE_HAS_BT=1`, `VOXONE_HAS_VU=0`, updater BT wyłączony | **`RELEASE-GATING HIL REQUIRED`** | Fizycznie używana rewizja: UART1 RX44/TX43, I2S1 RX BCLK11/WS12/DIN13 i logi aplikacji przez native USB CDC. VU oraz MAIN→BT update pozostają wyłączone; update modułu przez osobne USB. Software PASS / fizyczny HIL PENDING. |
-| `din0` | ESP32-S3 Zero, flash 4 MiB, PSRAM 2 MiB | Bazowy pinout Zero wspólny z S0; PCM5102A; OLED-y; EC11/Buttons3/NONE | `RETAINED BUILD / HIL NON-BLOCKING` | Brak fizycznego HIL obrazu DIN0 nie blokuje Stable; profil, buildy i historia pozostają zachowane. |
+| `m0` | baza DevKit, ESP32-S3 N16R8, flash 16 MiB, PSRAM 8 MiB | Domyślnie SSD1322 256×64; wspierane ST7796S, SSD1322, GC9A01, SSD1306, SSD1309 i SH1106; audio PCM5102A/MAX98357A MONO/MAX98357A STEREO/NONE; EC11/Buttons3/NONE; bez DSP | `RETAINED BUILD / HIL NON-BLOCKING` | Nowy default SSD1322 i pinout SPI wymagają potwierdzenia fizycznego. |
+| `l0` | istniejąca PCB V-Tom, ESP32-S3 N16R8; build flash 16 MiB i PSRAM OPI | Domyślnie ST7796S 480×320; wspierane ST7796S, SSD1322, GC9A01, SSD1306, SSD1309 i SH1106; audio PCM5102A/NONE; EC11/Buttons3/NONE; DS3231, VoxOneBT UART + I2S RX, VU i aktualizacja VoxOneBT | **`RELEASE-GATING HIL REQUIRED`** | Hardware i GPIO bez zmian. Etapowe PASS, w tym TTS D, są zachowane; pełny baseline i otwarte negatywne ścieżki PENDING. |
+| `s0` | ESP32-S3 Zero, flash 4 MiB, PSRAM 2 MiB | Domyślnie SSD1306 128×64; wspierane SSD1306, SSD1309, SH1106 i CH1116G; audio PCM5102A/MAX98357A MONO/MAX98357A STEREO/NONE; EC11/Buttons3/NONE; VoxOneBT UART protocol 2 + I2S RX | **`RELEASE-GATING HIL REQUIRED`** | Fizycznie używana rewizja: UART1 RX44/TX43, I2S1 RX BCLK11/WS12/DIN13 i logi aplikacji przez native USB CDC. VU oraz MAIN→BT update pozostają wyłączone; update modułu przez osobne USB. Software PASS / fizyczny HIL PENDING. |
+| `din0` | ESP32-S3 Zero, flash 4 MiB, PSRAM 2 MiB | Domyślnie SSD1306 128×64; wspierane SSD1306, SSD1309, SH1106 i CH1116G; bazowy pinout Zero wspólny z S0; PCM5102A; EC11/Buttons3/NONE | `RETAINED BUILD / HIL NON-BLOCKING` | Brak fizycznego HIL obrazu DIN0 nie blokuje Stable; profil, buildy i historia pozostają zachowane. |
 
 Zatwierdzony zakres Stable 1.0.0 wymaga fizycznego HIL PASS bazowej
 konfiguracji S0 i L0. Build-only nie kwalifikuje żadnej z tych dwóch bramek.
@@ -100,8 +99,8 @@ pull-upy i filtracja.
 
 | Profil | Audio I²S `BCLK / DOUT / LRCK` | Display | Local input `A / B / KEY` | Pozostałe |
 |---|---|---|---|---|
-| M0 | `5 / 4 / 6` | OLED I2C: `SDA8`, `SCL7`, `RST—`, adres `0x3C` | `41 / 40 / 39` | SD `CS18/MOSI11/SCK12/MISO13`; IR `GPIO38`; POWER `GPIO42`; XSMT `255`; HIL PENDING po migracji |
-| S0 | MAX98357A `5 / 6 / 4` | SSD1306 I2C: `SDA1`, `SCL2`, `RST—`, adres `0x3C`; runtime 128×32/128×64 | `9 / 8 / 7` | IR `GPIO38`; BT UART1 `RX44/TX43`; BT I2S1 RX `BCLK11/WS12/DIN13`; native USB CDC dla logów; VU i MAIN→BT update wyłączone; fizyczny HIL PENDING |
+| M0 | `5 / 4 / 6` | SSD1322 SPI: `SCK12`, `MOSI11`, `MISO13`, `CS10`, `DC9`, `RST—` | `41 / 40 / 39` | SD `CS18` na wspólnym SPI; IR `GPIO38`; POWER `GPIO42`; XSMT `255`; HIL PENDING po migracji |
+| S0 | MAX98357A `5 / 6 / 4` | SSD1306 I2C: `SDA1`, `SCL2`, `RST—`, adres `0x3C` | `9 / 8 / 7` | IR `GPIO38`; BT UART1 `RX44/TX43`; BT I2S1 RX `BCLK11/WS12/DIN13`; native USB CDC dla logów; VU i MAIN→BT update wyłączone; fizyczny HIL PENDING |
 | DIN0 | `5 / 6 / 4` | OLED I2C: `SDA1`, `SCL2`, `RST—`, adres `0x3C` | `9 / 8 / 7` | baza Zero wspólna z S0; GPIO3 jest wejściem POWER; HIL PENDING |
 | L0 | `5 / 4 / 6` | SPI `SCK12`, `MOSI11`, `MISO13`; ST7796S `CS10`, `DC9`, `RST—`, backlight `14` | `41 / 40 / 39` | SD na wspólnym SPI z `CS18`; IR `GPIO38`; RTC `SDA8/SCL7`; BT UART `RX15/TX16`; BT I2S RX `BCLK1/WS2/DIN17`; W5500 i AUX mają capability bez docelowych pinów; XSMT `255` |
 
@@ -124,13 +123,14 @@ W ramach Stable S0 i L0 mają
 przejść własny HIL z potwierdzeniem flash/PSRAM, zasilania, złączy, audio,
 display, local input i VoxOneBT. Build ani test M0 nie zastępują S0.
 
-Historyczny baseline S0 obejmuje MAX98357A MONO, runtime SSD1306
-128×32/128×64/NONE oraz EC11/Buttons3/NONE. Bieżący BIN implementuje ponadto
-PCM5102A, MAX98357A STEREO, audio NONE oraz SSD1309/SH1106/CH1116G 128×64.
-Historyczny baseline DIN0 pozostaje przy PCM5102A, runtime SSD1306/SSD1309
-128×64/NONE i EC11/Buttons3/NONE; bieżący BIN implementuje ponadto SSD1306
-128×32, SH1106 i CH1116G 128×64. S0 ma capability VoxOneBT audio; bateria,
-RTC, VU i aktualizacja firmware modułu przez MAIN pozostają wyłączone.
+Historyczny baseline S0 obejmuje MAX98357A MONO i SSD1306 128×64. Bieżący
+BIN implementuje ponadto PCM5102A, MAX98357A STEREO, audio NONE oraz
+SSD1309/SH1106/CH1116G 128×64. Historyczny baseline DIN0 pozostaje przy
+PCM5102A i SSD1306/SSD1309 128×64; bieżący BIN implementuje ponadto SH1106 i
+CH1116G 128×64. Oba profile Zero zachowują runtime `NONE` dla display i
+EC11/Buttons3/NONE dla wejścia lokalnego. S0 ma capability VoxOneBT audio;
+bateria, RTC, VU i aktualizacja firmware modułu przez MAIN pozostają
+wyłączone.
 VoxOneBT i RTC nie są capability DIN0. Status dodatkowych, już
 zaimplementowanych wariantów to
 `OPTIONAL / OFFLINE PASS / PHYSICAL HIL NOT QUALIFIED`; ich fizyczna
@@ -180,10 +180,10 @@ Każda bieżąca rodzina dopuszcza runtime stan „sprzęt nie jest zainstalowan
 
 | Profil | Runtime display | Runtime input |
 |---|---|---|
-| `l0` | NONE, ST7796S_480X320, SSD1306_128X32, SSD1306_128X64, SSD1309_128X64, SH1106_128X64, CH1116G_128X64 | NONE, EC11, BUTTONS3 |
-| `m0` | NONE, SSD1306_128X32, SSD1306_128X64, SSD1309_128X64, SH1106_128X64, CH1116G_128X64 | NONE, EC11, BUTTONS3 |
-| `s0` | NONE, SSD1306_128X32, SSD1306_128X64, SSD1309_128X64, SH1106_128X64, CH1116G_128X64 | NONE, EC11, BUTTONS3 |
-| `din0` | NONE, SSD1306_128X32, SSD1306_128X64, SSD1309_128X64, SH1106_128X64, CH1116G_128X64 | NONE, EC11, BUTTONS3 |
+| `l0` | NONE, ST7796S_480X320, SSD1322_256X64, GC9A01_240X240, SSD1306_128X64, SSD1309_128X64, SH1106_128X64 | NONE, EC11, BUTTONS3 |
+| `m0` | NONE, ST7796S_480X320, SSD1322_256X64, GC9A01_240X240, SSD1306_128X64, SSD1309_128X64, SH1106_128X64 | NONE, EC11, BUTTONS3 |
+| `s0` | NONE, SSD1306_128X64, SSD1309_128X64, SH1106_128X64, CH1116G_128X64 | NONE, EC11, BUTTONS3 |
+| `din0` | NONE, SSD1306_128X64, SSD1309_128X64, SH1106_128X64, CH1116G_128X64 | NONE, EC11, BUTTONS3 |
 
 | Profil | Runtime audio |
 |---|---|
@@ -202,7 +202,9 @@ analogicznie ukrywa ustawienia właściwe wyłącznie dla PCM5102.
 
 Wariant display nazywamy `STEROWNIK_ROZDZIELCZOŚĆ` (np. `SSD1306_128X64`, `SSD1309_128X64`, `ST7796S_480X320`). Layout `OLED_128X64` jest wspólny dla SSD1306 i SSD1309. Oznaczenie `ST7290_128X64` wymaga sprawdzenia kontrolera na fizycznym module przed nazwaniem backendu.
 
-Dla wariantu S0 `SSD1306_128X32` osobny `DisplayProfile`/layout nosi nazwę `OLED_128X32`; PLAYER, STATIONS, VOL, setup i update są ograniczone do fizycznych 32 pikseli. `SSD1322_256X64` jest wyłącznie zatwierdzonym projektem POST-STABLE; jego obecność w katalogu roadmapy nie oznacza backendu ani wsparcia runtime w obecnym BIN.
+M0 używa domyślnie backendu i layoutu `SSD1322_256X64`. Identyfikatory
+SSD1322 oraz GC9A01 zostały dopisane na końcu istniejącej listy runtime, aby
+nie zmieniać utrwalonych wartości wcześniejszych kontrolerów.
 
 Aktualizacja VoxOneBT przez MAIN wymaga modułu, capability BT firmware update
 oraz PSRAM/staging i pozostaje istniejącą funkcją L0. S0 aktualizuje VoxOneBT

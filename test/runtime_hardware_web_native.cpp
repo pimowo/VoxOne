@@ -70,36 +70,37 @@ int main() {
   const size_t displayCount =
       supportedRuntimeDisplayOptions(capabilities, displays,
                                      kRuntimeDisplayOptionCapacity);
-  assert(displayCount == 2 || displayCount == 6 || displayCount == 7);
+  assert(displayCount == 2 || displayCount == 5 || displayCount == 7);
   assert(std::strcmp(displays[0].value, "none") == 0);
   assert(std::strcmp(displays[0].label, "Brak") == 0);
-#if defined(VOXONE_PROFILE_M0) || defined(VOXONE_PROFILE_S0) || \
-    defined(VOXONE_PROFILE_DIN0)
-  assert(displayCount == 6);
-  assert(hasOption(displays, displayCount, "ssd1306_128x32"));
+#if defined(VOXONE_PROFILE_S0) || defined(VOXONE_PROFILE_DIN0)
+  assert(displayCount == 5);
   assert(hasOption(displays, displayCount, "ssd1306_128x64"));
   assert(hasOption(displays, displayCount, "ssd1309_128x64"));
   assert(hasOption(displays, displayCount, "sh1106_128x64"));
   assert(hasOption(displays, displayCount, "ch1116_128x64"));
+  assert(!hasOption(displays, displayCount, "ssd1306_128x32"));
   assert(!hasOption(displays, displayCount, "st7796s_480x320"));
   const char* const expectedRuntimeOledOptions[] = {
-      "none", "ssd1306_128x32", "ssd1306_128x64",
+      "none", "ssd1306_128x64",
       "ssd1309_128x64", "ch1116_128x64", "sh1106_128x64"};
   for (size_t index = 0; index < displayCount; ++index)
     assert(std::strcmp(displays[index].value,
                        expectedRuntimeOledOptions[index]) == 0);
-#elif defined(VOXONE_PROFILE_L0)
+#elif defined(VOXONE_PROFILE_L0) || defined(VOXONE_PROFILE_M0)
   assert(displayCount == 7);
   assert(hasOption(displays, displayCount, "st7796s_480x320"));
-  assert(hasOption(displays, displayCount, "ssd1306_128x32"));
+  assert(hasOption(displays, displayCount, "ssd1322_256x64"));
+  assert(hasOption(displays, displayCount, "gc9a01_240x240"));
   assert(hasOption(displays, displayCount, "ssd1306_128x64"));
   assert(hasOption(displays, displayCount, "ssd1309_128x64"));
-  assert(hasOption(displays, displayCount, "ch1116_128x64"));
   assert(hasOption(displays, displayCount, "sh1106_128x64"));
+  assert(!hasOption(displays, displayCount, "ch1116_128x64"));
+  assert(!hasOption(displays, displayCount, "ssd1306_128x32"));
   const char* const expectedL0DisplayOptions[] = {
-      "none", "ssd1306_128x32", "ssd1306_128x64",
-      "ssd1309_128x64", "ch1116_128x64", "sh1106_128x64",
-      "st7796s_480x320"};
+      "none", "ssd1306_128x64", "ssd1309_128x64",
+      "sh1106_128x64", "st7796s_480x320", "ssd1322_256x64",
+      "gc9a01_240x240"};
   for (size_t index = 0; index < displayCount; ++index)
     assert(std::strcmp(displays[index].value,
                        expectedL0DisplayOptions[index]) == 0);
@@ -194,8 +195,7 @@ int main() {
   const HardwareRoadmapItem* plannedDisplay = findRoadmapItem(
       displayRoadmap, displayRoadmapCount, "ch1116_128x64");
   assert(plannedDisplay);
-#if defined(VOXONE_PROFILE_M0) || defined(VOXONE_PROFILE_S0) || \
-    defined(VOXONE_PROFILE_DIN0) || defined(VOXONE_PROFILE_L0)
+#if defined(VOXONE_PROFILE_S0) || defined(VOXONE_PROFILE_DIN0)
   assert(plannedDisplay->selectable);
   assert(plannedDisplay->status == HardwareRoadmapStatus::Untested);
 #else
@@ -372,8 +372,7 @@ int main() {
              current, capabilities,
              "ch1116_128x64",
              "ec11", candidate) ==
-#if defined(VOXONE_PROFILE_M0) || defined(VOXONE_PROFILE_S0) || \
-    defined(VOXONE_PROFILE_DIN0) || defined(VOXONE_PROFILE_L0)
+#if defined(VOXONE_PROFILE_S0) || defined(VOXONE_PROFILE_DIN0)
          RuntimeHardwareValidation::Valid);
 #else
          RuntimeHardwareValidation::Unsupported);
@@ -451,7 +450,9 @@ int main() {
       sh1106Json, sizeof(sh1106Json), reloadedSh1106.config, true));
   assert(contains(sh1106Json,
                   "\"display\":\"sh1106_128x64\""));
+#endif
 
+#if defined(VOXONE_PROFILE_S0) || defined(VOXONE_PROFILE_DIN0)
   RuntimeHardwareConfig ch1116g = current;
   ch1116g.display = RuntimeDisplay::Ch1116g_128x64;
   FakeStorage ch1116gStorage;

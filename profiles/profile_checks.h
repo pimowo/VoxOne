@@ -10,7 +10,9 @@ constexpr bool displayMatchesLegacy(Display display, int dspModel) {
          (display == Display::Ssd1306_128x64 && dspModel == DSP_SSD1306) ||
          (display == Display::Ssd1309_128x64 && dspModel == DSP_SSD1305I2C) ||
          (display == Display::St7789_284x76 && dspModel == DSP_ST7789_76) ||
-         (display == Display::St7796_480x320 && dspModel == DSP_ST7796);
+         (display == Display::St7796_480x320 && dspModel == DSP_ST7796) ||
+         (display == Display::Ssd1322_256x64 && dspModel == DSP_SSD1322) ||
+         (display == Display::Gc9a01_240x240 && dspModel == DSP_GC9A01A);
 }
 
 constexpr bool displaySupportsVu(Display display) {
@@ -37,7 +39,9 @@ static_assert(displayMatchesLegacy(VOXONE_PROFILE_DISPLAY, DSP_MODEL),
 
 static_assert(!VOXONE_PIN_MAP_COMPLETE ||
               (VOXONE_PROFILE_DISPLAY != Display::St7789_284x76 &&
-               VOXONE_PROFILE_DISPLAY != Display::St7796_480x320) ||
+               VOXONE_PROFILE_DISPLAY != Display::St7796_480x320 &&
+               VOXONE_PROFILE_DISPLAY != Display::Ssd1322_256x64 &&
+               VOXONE_PROFILE_DISPLAY != Display::Gc9a01_240x240) ||
               (TFT_CS != 255 && TFT_DC != 255),
               "Complete SPI display profile requires TFT_CS and TFT_DC pins");
 
