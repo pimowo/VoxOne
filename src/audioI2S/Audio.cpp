@@ -53,8 +53,9 @@ constexpr char kVoxOneUserAgentHeader[] =
 
 class SdFileIoGuard {
  public:
-    explicit SdFileIoGuard(bool required)
-        : required_(required), locked_(!required || voxone::sd_card::lockFileIo()) {}
+    explicit SdFileIoGuard(bool required, uint32_t timeoutMs = 750)
+        : required_(required),
+          locked_(!required || voxone::sd_card::lockFileIo(timeoutMs)) {}
     ~SdFileIoGuard() {
         if(required_ && locked_) voxone::sd_card::unlockFileIo();
     }
@@ -561,12 +562,20 @@ void Audio::setDefaults() {
     vector_clear_and_shrink(m_playlistURL);
     vector_clear_and_shrink(m_playlistContent);
     m_hashQueue.clear(); m_hashQueue.shrink_to_fit(); // uint32_t vector
+    bool localFileClosed = !m_localFile;
     {
-        SdFileIoGuard fileIo(m_localFileUsesSd);
-        if(fileIo && m_localFile) m_localFile.close();
+        SdFileIoGuard fileIo(m_localFileUsesSd, UINT32_MAX);
+        if(fileIo && m_localFile) {
+            m_localFile.close();
+            localFileClosed = true;
+        }
     }
-    m_localFileActive = false;
-    m_localFileUsesSd = false;
+    if(localFileClosed) {
+        m_localFileActive = false;
+        m_localFileUsesSd = false;
+    } else {
+        AUDIO_ERROR("Could not lock SD filesystem to close local file");
+    }
     if(_client && !m_connectAttempt.active()) _client->stop();
     _client = static_cast<WiFiClient*>(&client); /* default to *something* so that no NULL deref can happen */
     playI2Sremains();
@@ -766,10 +775,20 @@ bool Audio::connecttoFS(fs::FS& fs, const char* path) {
     strlcpy(m_lastHost, path, sizeof(m_lastHost));
     setDatamode(AUDIO_DATA);
     if(!initializeDecoder()) {
-        SdFileIoGuard fileIo(m_localFileUsesSd);
-        if(fileIo) m_localFile.close();
-        m_localFileActive = false;
-        m_localFileUsesSd = false;
+        bool localFileClosed = !m_localFile;
+        {
+            SdFileIoGuard fileIo(m_localFileUsesSd, UINT32_MAX);
+            if(fileIo && m_localFile) {
+                m_localFile.close();
+                localFileClosed = true;
+            }
+        }
+        if(localFileClosed) {
+            m_localFileActive = false;
+            m_localFileUsesSd = false;
+        } else {
+            AUDIO_ERROR("Could not lock SD filesystem to close local file");
+        }
         return false;
     }
     m_f_running = true;
@@ -3172,8 +3191,8 @@ void Audio::processWebFile() {
     if(f_stream){
         static uint8_t cnt = 0;
         uint8_t compression;
-        if(m_codec == CODEC_WAV)  compression = 1;
-        if(m_codec == CODEC_FLAC) compression = 2;
+        if(m_codec == CODEC_WAV) compression = 1;
+        else if(m_codec == CODEC_FLAC) compression = 2;
         else compression = 6;
         cnt++;
         if(cnt == compression){requestAudioDecode(); cnt = 0;}

@@ -9,7 +9,7 @@
 #include "ui_input.h"
 #include "ui_state.h"
 #include "local_input_backend.h"
-#include "security_recovery_key_runtime.h"
+#include "security_recovery.h"
 #include "../hardware/hardware_descriptor.h"
 #include "../hardware/runtime_hardware_config.h"
 #include "../OneButton/OneButton.h"

@@ -1,5 +1,5 @@
 #include "../src/core/factory_reset.h"
-#include "../src/core/security_recovery_key.h"
+#include "../src/core/security_recovery.h"
 
 #include <cassert>
 #include <fstream>

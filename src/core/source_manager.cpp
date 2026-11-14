@@ -217,6 +217,13 @@ void sourceManagerEndMedia() {
                    finished == ActiveSource::SOURCE_LOCAL ? "local" : "ha");
 }
 
+void sourceManagerReturnAfterUserMediaStop(SourceId previous) {
+  // A user STOP is stronger than return_to_previous: clear the media source
+  // immediately and restore the source that owned playback before HA/DLNA/SD.
+  if (!sourceManagerSelectSource(previous))
+    netserver.requestOnChange(WEBSTATUS, 0);
+}
+
 #if VOXONE_HAS_BT && VOXONE_PIN_MAP_COMPLETE
 
 #include "bt_link.h"

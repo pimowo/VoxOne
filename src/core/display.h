@@ -7,7 +7,7 @@
 #include "ui_state.h"
 #include "update_display_view.h"
 #include "player_scroll_runtime.h"
-#include "display_scroll_runtime_config.h"
+#include "display_scroll.h"
 #include "shutdown_sequence.h"
 #include "../displays/display_profile.h"
 #if VOXONE_DISPLAY_COMPILES_ST7796

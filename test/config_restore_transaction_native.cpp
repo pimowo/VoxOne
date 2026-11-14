@@ -1,4 +1,4 @@
-#include "../src/core/config_restore_transaction.h"
+#include "../src/core/config_restore.h"
 
 #include <cassert>
 #include <initializer_list>

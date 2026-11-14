@@ -13,7 +13,7 @@
 #if defined(CONFIG_IDF_TARGET_ESP32S3) && VOXONE_HAS_BT && \
     VOXONE_PIN_MAP_COMPLETE && VOXONE_BT_FW_UPDATE_ENABLED
 #define VOXONE_BT_UPDATE_UPLOAD 1
-#include "bt_firmware_staging.h"
+#include "bt_manager.h"
 #else
 #define VOXONE_BT_UPDATE_UPLOAD 0
 #endif
@@ -39,8 +39,7 @@
 #include <cstdlib>
 #include "config.h"
 #include "audio_runtime_config.h"
-#include "config_backup_web.h"
-#include "config_restore_adapter.h"
+#include "config_restore.h"
 #include "configuration_mutation.h"
 #include "first_boot_captive.h"
 #include "first_boot_transaction_runtime.h"
@@ -76,10 +75,10 @@
 #include "security_api.h"
 #include "security_http_adapter.h"
 #if defined(VOXONE_HEAP_TRACE)
-#include "http_heap_trace.h"
+#include "diagnostics.h"
 #endif
 #include "websocket_command.h"
-#include "display_scroll_api.h"
+#include "display_scroll.h"
 #include "power_manager.h"
 #include "../displays/dspcore.h"
 #include "../displays/widgets/widgetsconfig.h" //BitrateFormat

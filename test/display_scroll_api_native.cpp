@@ -1,4 +1,4 @@
-#include "../src/core/display_scroll_api.h"
+#include "../src/core/display_scroll.h"
 #include "../src/core/player_scroll_runtime.h"
 
 #include <cassert>

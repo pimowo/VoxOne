@@ -161,21 +161,21 @@ $nativeSources=@{
  bt_loss_audio_safety_native=@('src/core/bt_link_protocol.cpp')
  bt_vu_contract_native=@('src/core/bt_link_protocol.cpp')
  bt_firmware_sender_native=@('src/core/bt_firmware_sender.cpp','src/core/bt_link_protocol.cpp')
- bt_firmware_staging_native=@('src/core/bt_firmware_staging.cpp')
+ bt_firmware_staging_native=@('src/core/bt_manager.cpp')
  bt_volume_native=@('src/core/bt_link_protocol.cpp','src/core/volume_map.cpp')
  config_format_native=@('src/core/config_format.cpp','src/core/volume_map.cpp')
- config_backup_native=@('src/core/config_backup.cpp','src/core/config_format.cpp','src/core/volume_map.cpp','src/core/display_scroll_persistence.cpp','src/hardware/runtime_hardware_config.cpp')
- config_backup_web_native=@('src/core/config_backup_web.cpp')
- config_restore_transaction_native=@('src/core/config_restore_transaction.cpp')
+ config_backup_native=@('src/core/config_restore.cpp','src/core/config_format.cpp','src/core/volume_map.cpp','src/core/display_scroll.cpp','src/hardware/runtime_hardware_config.cpp')
+ config_backup_web_native=@('src/core/config_restore.cpp','src/core/config_format.cpp','src/core/volume_map.cpp','src/core/display_scroll.cpp','src/hardware/runtime_hardware_config.cpp','src/hardware/hardware_descriptor.cpp')
+ config_restore_transaction_native=@('src/core/config_restore.cpp','src/core/config_format.cpp','src/core/volume_map.cpp','src/core/display_scroll.cpp','src/hardware/runtime_hardware_config.cpp','src/hardware/hardware_descriptor.cpp')
  config_startup_native=@('src/core/config_format.cpp','src/core/volume_map.cpp')
  config_persistence_native=@('src/core/config_format.cpp','src/core/volume_map.cpp')
  ch1116g_driver_native=@('src/displays/ch1116g_driver.cpp')
- display_scroll_persistence_native=@('src/core/display_scroll_persistence.cpp')
- display_scroll_api_native=@('src/core/display_scroll_api.cpp','src/core/display_scroll_runtime_config.cpp','src/core/display_scroll_persistence.cpp')
- display_scroll_runtime_config_native=@('src/core/display_scroll_runtime_config.cpp','src/core/display_scroll_persistence.cpp')
+ display_scroll_persistence_native=@('src/core/display_scroll.cpp')
+ display_scroll_api_native=@('src/core/display_scroll.cpp')
+ display_scroll_runtime_config_native=@('src/core/display_scroll.cpp')
  first_boot_transaction_native=@('src/core/first_boot_transaction.cpp','src/core/security_settings.cpp','src/hardware/runtime_hardware_config.cpp')
  first_boot_spiffs_transaction_native=@('src/core/first_boot_transaction.cpp','src/core/security_settings.cpp','src/hardware/runtime_hardware_config.cpp')
-  factory_reset_native=@('src/core/factory_reset.cpp','src/core/security_recovery_key.cpp')
+  factory_reset_native=@('src/core/factory_reset.cpp','src/core/security_recovery.cpp')
  dsp_model_native=@('src/core/dsp_model.cpp')
  dsp_storage_format_native=@('src/core/dsp_model.cpp','src/core/dsp_storage_format.cpp')
  dsp_service_native=@('src/core/dsp_model.cpp','src/core/dsp_service.cpp')
@@ -194,11 +194,11 @@ $nativeSources=@{
  security_http_adapter_native=@('src/core/security_access_policy.cpp','src/core/security_http_adapter.cpp')
  security_api_native=@('src/core/security_settings.cpp','src/core/security_session.cpp','src/core/security_api.cpp')
  security_runtime_native=@('src/core/security_settings.cpp','src/core/security_runtime.cpp')
- security_recovery_ap_native=@('src/core/security_recovery_ap.cpp','src/core/security_recovery_http.cpp','src/core/security_recovery_session.cpp','src/core/security_recovery_state.cpp','src/core/security_recovery_key.cpp','src/core/security_settings.cpp','src/hardware/hardware_descriptor.cpp')
+ security_recovery_ap_native=@('src/core/security_recovery.cpp','src/core/security_settings.cpp','src/hardware/hardware_descriptor.cpp')
  security_recovery_display_native=@('src/displays/display_backend_selection.cpp','src/hardware/runtime_hardware_config.cpp')
- security_recovery_key_native=@('src/core/security_recovery_key.cpp','src/hardware/hardware_descriptor.cpp','src/hardware/runtime_hardware_config.cpp')
- security_recovery_session_native=@('src/core/security_recovery_session.cpp','src/core/security_recovery_state.cpp','src/core/security_recovery_key.cpp','src/hardware/hardware_descriptor.cpp')
- security_recovery_state_native=@('src/core/security_recovery_state.cpp','src/core/security_recovery_key.cpp','src/hardware/hardware_descriptor.cpp')
+ security_recovery_key_native=@('src/core/security_recovery.cpp','src/hardware/hardware_descriptor.cpp','src/hardware/runtime_hardware_config.cpp')
+ security_recovery_session_native=@('src/core/security_recovery.cpp','src/hardware/hardware_descriptor.cpp')
+ security_recovery_state_native=@('src/core/security_recovery.cpp','src/hardware/hardware_descriptor.cpp')
  security_session_native=@('src/core/security_settings.cpp','src/core/security_session.cpp')
  station_directory_native=@('src/core/station_directory_format.cpp')
  volume_limits_native=@('src/core/volume_map.cpp')
@@ -216,7 +216,7 @@ Invoke-Step 'Native tests' {
   $name=$test.BaseName
   $sources=@($test.FullName)
   if($nativeSources.ContainsKey($name)) { $sources+=@($nativeSources[$name] | ForEach-Object { Join-Path $root $_ }) }
-  $variants=if($name -eq 'security_http_adapter_native') { @('','L0','M0','S0','DIN0','SECURITY-TEST') } elseif($name -eq 'ap_ui_display_binding_native' -or $name -eq 'ap_ui_www_binding_native' -or $name -eq 'config_backup_native' -or $name -eq 'ec11_direction_native' -or $name -eq 'first_boot_core_native' -or $name -eq 'first_boot_runtime_snapshot_native' -or $name -eq 'first_boot_spiffs_transaction_native' -or $name -eq 'first_boot_transaction_native' -or $name -eq 'hardware_descriptor_native' -or $name -eq 'runtime_hardware_config_native' -or $name -eq 'runtime_hardware_web_native' -or $name -eq 'runtime_display_activation_native' -or $name -eq 'security_recovery_ap_native' -or $name -eq 'security_recovery_display_native' -or $name -eq 'security_recovery_key_native' -or $name -eq 'security_recovery_session_native' -or $name -eq 'security_recovery_state_native') { @('L0','M0','S0','DIN0') } elseif($name -eq 'build_identity_native') { @('L0','M0','S0','DIN0','CLEAN','DIRTY') } else { @('') }
+  $variants=if($name -eq 'security_http_adapter_native') { @('','L0','M0','S0','DIN0','SECURITY-TEST') } elseif($name -eq 'ap_ui_display_binding_native' -or $name -eq 'ap_ui_www_binding_native' -or $name -eq 'config_backup_native' -or $name -eq 'ec11_direction_native' -or $name -eq 'first_boot_core_native' -or $name -eq 'first_boot_runtime_snapshot_native' -or $name -eq 'first_boot_spiffs_transaction_native' -or $name -eq 'first_boot_transaction_native' -or $name -eq 'hardware_descriptor_native' -or $name -eq 'runtime_hardware_config_native' -or $name -eq 'runtime_hardware_web_native' -or $name -eq 'runtime_display_activation_native' -or $name -eq 'security_recovery_ap_native' -or $name -eq 'security_recovery_display_native' -or $name -eq 'security_recovery_key_native' -or $name -eq 'security_recovery_session_native' -or $name -eq 'security_recovery_state_native') { @('L0','M0','S0','DIN0') } elseif($name -eq 'build_identity_native') { @('L0','M0','S0','DIN0','CLEAN','DIRTY') } elseif($name -eq 'config_backup_web_native' -or $name -eq 'config_restore_transaction_native') { @('L0') } else { @('') }
   foreach($variant in $variants) {
    $label=if($variant) { "$name-$variant" } else { $name }
    $exe=Join-Path $work ($label+$(if($onWindows) { '.exe' } else { '' }))
@@ -325,10 +325,10 @@ if(-not $onWindows) {
   $backupExe=Join-Path $work 'config_backup_sanitized'
   $backupSources=@(
    (Join-Path $root 'test/config_backup_native.cpp'),
-   (Join-Path $root 'src/core/config_backup.cpp'),
+   (Join-Path $root 'src/core/config_restore.cpp'),
    (Join-Path $root 'src/core/config_format.cpp'),
    (Join-Path $root 'src/core/volume_map.cpp'),
-   (Join-Path $root 'src/core/display_scroll_persistence.cpp'),
+   (Join-Path $root 'src/core/display_scroll.cpp'),
    (Join-Path $root 'src/hardware/runtime_hardware_config.cpp'),
    (Join-Path $root 'src/hardware/hardware_descriptor.cpp'))
   & $Cxx @sanitizerArgs '-DVOXONE_PROFILE_L0=1' '-o' $backupExe @backupSources
@@ -338,15 +338,14 @@ if(-not $onWindows) {
   $scrollPersistenceExe=Join-Path $work 'display_scroll_persistence_sanitized'
   & $Cxx @sanitizerArgs '-o' $scrollPersistenceExe `
     (Join-Path $root 'test/display_scroll_persistence_native.cpp') `
-    (Join-Path $root 'src/core/display_scroll_persistence.cpp')
+    (Join-Path $root 'src/core/display_scroll.cpp')
   if($LASTEXITCODE -ne 0) { throw 'Sanitized display scroll persistence compile failed' }
   & $scrollPersistenceExe
   if($LASTEXITCODE -ne 0) { throw 'Sanitized display scroll persistence test failed' }
   $scrollRuntimeConfigExe=Join-Path $work 'display_scroll_runtime_config_sanitized'
   & $Cxx @sanitizerArgs '-pthread' '-o' $scrollRuntimeConfigExe `
     (Join-Path $root 'test/display_scroll_runtime_config_native.cpp') `
-    (Join-Path $root 'src/core/display_scroll_runtime_config.cpp') `
-    (Join-Path $root 'src/core/display_scroll_persistence.cpp')
+    (Join-Path $root 'src/core/display_scroll.cpp')
   if($LASTEXITCODE -ne 0) { throw 'Sanitized display scroll runtime config compile failed' }
   & $scrollRuntimeConfigExe
   if($LASTEXITCODE -ne 0) { throw 'Sanitized display scroll runtime config test failed' }
@@ -397,16 +396,19 @@ if(-not $onWindows) {
   $scrollApiExe=Join-Path $work 'display_scroll_api_sanitized'
   & $Cxx @sanitizerArgs '-o' $scrollApiExe `
     (Join-Path $root 'test/display_scroll_api_native.cpp') `
-    (Join-Path $root 'src/core/display_scroll_api.cpp') `
-    (Join-Path $root 'src/core/display_scroll_runtime_config.cpp') `
-    (Join-Path $root 'src/core/display_scroll_persistence.cpp')
+    (Join-Path $root 'src/core/display_scroll.cpp')
   if($LASTEXITCODE -ne 0) { throw 'Sanitized display scroll API compile failed' }
   & $scrollApiExe
   if($LASTEXITCODE -ne 0) { throw 'Sanitized display scroll API test failed' }
   $restoreExe=Join-Path $work 'config_restore_sanitized'
-  & $Cxx @sanitizerArgs '-o' $restoreExe `
+  & $Cxx @sanitizerArgs '-DVOXONE_PROFILE_L0=1' '-o' $restoreExe `
     (Join-Path $root 'test/config_restore_transaction_native.cpp') `
-    (Join-Path $root 'src/core/config_restore_transaction.cpp')
+    (Join-Path $root 'src/core/config_restore.cpp') `
+    (Join-Path $root 'src/core/config_format.cpp') `
+    (Join-Path $root 'src/core/volume_map.cpp') `
+    (Join-Path $root 'src/core/display_scroll.cpp') `
+    (Join-Path $root 'src/hardware/runtime_hardware_config.cpp') `
+    (Join-Path $root 'src/hardware/hardware_descriptor.cpp')
   if($LASTEXITCODE -ne 0) { throw 'Sanitized config restore compile failed' }
   & $restoreExe
   if($LASTEXITCODE -ne 0) { throw 'Sanitized config restore test failed' }
@@ -428,7 +430,7 @@ if(-not $onWindows) {
   $securityRecoveryKeyExe=Join-Path $work 'security_recovery_key_sanitized'
   & $Cxx @sanitizerArgs '-DVOXONE_PROFILE_M0=1' '-o' $securityRecoveryKeyExe `
     (Join-Path $root 'test/security_recovery_key_native.cpp') `
-    (Join-Path $root 'src/core/security_recovery_key.cpp') `
+    (Join-Path $root 'src/core/security_recovery.cpp') `
     (Join-Path $root 'src/hardware/hardware_descriptor.cpp') `
     (Join-Path $root 'src/hardware/runtime_hardware_config.cpp')
   if($LASTEXITCODE -ne 0) { throw 'Sanitized security recovery KEY compile failed' }
@@ -447,15 +449,14 @@ if(-not $onWindows) {
   & $Cxx @sanitizerArgs '-o' $factoryResetExe `
     (Join-Path $root 'test/factory_reset_native.cpp') `
     (Join-Path $root 'src/core/factory_reset.cpp') `
-    (Join-Path $root 'src/core/security_recovery_key.cpp')
+    (Join-Path $root 'src/core/security_recovery.cpp')
   if($LASTEXITCODE -ne 0) { throw 'Sanitized factory reset compile failed' }
   & $factoryResetExe
   if($LASTEXITCODE -ne 0) { throw 'Sanitized factory reset test failed' }
   $securityRecoveryStateExe=Join-Path $work 'security_recovery_state_sanitized'
   & $Cxx @sanitizerArgs '-DVOXONE_PROFILE_M0=1' '-o' $securityRecoveryStateExe `
     (Join-Path $root 'test/security_recovery_state_native.cpp') `
-    (Join-Path $root 'src/core/security_recovery_state.cpp') `
-    (Join-Path $root 'src/core/security_recovery_key.cpp') `
+    (Join-Path $root 'src/core/security_recovery.cpp') `
     (Join-Path $root 'src/hardware/hardware_descriptor.cpp')
   if($LASTEXITCODE -ne 0) { throw 'Sanitized security recovery state compile failed' }
   & $securityRecoveryStateExe
@@ -463,9 +464,7 @@ if(-not $onWindows) {
   $securityRecoverySessionExe=Join-Path $work 'security_recovery_session_sanitized'
   & $Cxx @sanitizerArgs '-DVOXONE_PROFILE_M0=1' '-o' $securityRecoverySessionExe `
     (Join-Path $root 'test/security_recovery_session_native.cpp') `
-    (Join-Path $root 'src/core/security_recovery_session.cpp') `
-    (Join-Path $root 'src/core/security_recovery_state.cpp') `
-    (Join-Path $root 'src/core/security_recovery_key.cpp') `
+    (Join-Path $root 'src/core/security_recovery.cpp') `
     (Join-Path $root 'src/hardware/hardware_descriptor.cpp')
   if($LASTEXITCODE -ne 0) { throw 'Sanitized security recovery session compile failed' }
   & $securityRecoverySessionExe
@@ -473,11 +472,7 @@ if(-not $onWindows) {
   $securityRecoveryApExe=Join-Path $work 'security_recovery_ap_sanitized'
   & $Cxx @sanitizerArgs '-DVOXONE_PROFILE_M0=1' '-o' $securityRecoveryApExe `
     (Join-Path $root 'test/security_recovery_ap_native.cpp') `
-    (Join-Path $root 'src/core/security_recovery_ap.cpp') `
-    (Join-Path $root 'src/core/security_recovery_http.cpp') `
-    (Join-Path $root 'src/core/security_recovery_session.cpp') `
-    (Join-Path $root 'src/core/security_recovery_state.cpp') `
-    (Join-Path $root 'src/core/security_recovery_key.cpp') `
+    (Join-Path $root 'src/core/security_recovery.cpp') `
     (Join-Path $root 'src/core/security_settings.cpp') `
     (Join-Path $root 'src/hardware/hardware_descriptor.cpp')
   if($LASTEXITCODE -ne 0) { throw 'Sanitized security recovery AP compile failed' }

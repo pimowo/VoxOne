@@ -1,5 +1,5 @@
-#include "../src/core/security_recovery_ap.h"
-#include "../src/core/security_recovery_http.h"
+#include "../src/core/security_recovery.h"
+#include "../src/core/security_recovery.h"
 #include "../src/core/security_settings.h"
 
 #include <cassert>
@@ -429,7 +429,7 @@ void testRejectedMutationsCannotWriteSecurityRecord() {
 
 void testProductionMutationOrdering() {
   const std::string runtime =
-      readFile("src/core/security_recovery_ap_runtime.cpp");
+      readFile("src/core/security_recovery.cpp");
   const size_t passwordBegin = runtime.find("void handlePassword(");
   const size_t factoryBegin = runtime.find("void handleFactory(");
   const size_t respondBegin = runtime.find("void respond(");

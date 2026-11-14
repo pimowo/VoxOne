@@ -1,4 +1,4 @@
-#include "../src/core/bt_runtime.h"
+#include "../src/core/bt_manager.h"
 
 #include <cassert>
 

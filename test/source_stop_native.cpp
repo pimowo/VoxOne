@@ -2,7 +2,7 @@
 #include "../src/core/dac_mute_state.h"
 #include "../src/core/mute_state.h"
 #include "../src/core/source_manager_state.h"
-#include "../src/core/bt_runtime.h"
+#include "../src/core/bt_manager.h"
 
 #include <cassert>
 

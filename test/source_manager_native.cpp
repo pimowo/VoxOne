@@ -1,6 +1,6 @@
 #include "../src/core/source_manager_state.h"
 #include "../src/core/bt_transport.h"
-#include "../src/core/bt_runtime.h"
+#include "../src/core/bt_manager.h"
 #include "../src/core/player_display_view.h"
 
 #include <cassert>

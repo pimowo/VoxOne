@@ -101,12 +101,12 @@ void testUnsupportedDisplayDoesNotOwnRecovery() {
 void testProductionPathAndSecretBoundary() {
   const std::string main = readFile("src/main.cpp");
   const std::string runtime =
-      readFile("src/core/security_recovery_ap_runtime.cpp");
+      readFile("src/core/security_recovery.cpp");
   const std::string recoveryHttp =
-      readFile("src/core/security_recovery_http.cpp");
+      readFile("src/core/security_recovery.cpp");
   const std::string display = readFile("src/core/display.cpp");
   const std::string key =
-      readFile("src/core/security_recovery_key_runtime.cpp");
+      readFile("src/core/security_recovery.cpp");
   const std::string firstBoot = readFile("src/core/first_boot_core.h");
 
   const std::size_t setup = main.find("void setup()");

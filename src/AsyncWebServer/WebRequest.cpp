@@ -23,7 +23,7 @@
 #include "WebResponseImpl.h"
 #include "WebAuthentication.h"
 #if defined(VOXONE_HEAP_TRACE)
-#include "../core/http_heap_trace.h"
+#include "../core/diagnostics.h"
 #endif
 
 #ifndef ESP8266

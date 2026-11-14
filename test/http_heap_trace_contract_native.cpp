@@ -14,8 +14,12 @@ std::string readFile(const char* path) {
 
 int main() {
   const std::string ini = readFile("platformio.ini");
-  const std::string header = readFile("src/core/http_heap_trace.h");
-  const std::string trace = readFile("src/core/http_heap_trace.cpp");
+  const std::string header = readFile("src/core/diagnostics.h");
+  const std::string diagnostics = readFile("src/core/diagnostics.cpp");
+  const std::size_t traceBegin = diagnostics.find(
+      "// Consolidated from http_heap_trace.cpp.");
+  assert(traceBegin != std::string::npos);
+  const std::string trace = diagnostics.substr(traceBegin);
   const std::string request = readFile("src/AsyncWebServer/WebRequest.cpp");
   const std::string response = readFile("src/AsyncWebServer/WebResponses.cpp");
   const std::string tcp = readFile("src/AsyncWebServer/AsyncTCP.cpp");

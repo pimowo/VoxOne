@@ -1,3 +1,14 @@
+#include "bt_manager.h"
+
+// Consolidated from bt_runtime.cpp.
+#if defined(ARDUINO)
+#include "../hardware/hardware_descriptor.h"
+
+BtRuntime btRuntime(
+    voxone::hardware::hardwareCapabilities().supportsVoxOneBt);
+#endif  // ARDUINO
+
+// Consolidated from bt_firmware_staging.cpp.
 #if defined(ARDUINO)
 #include "options.h"
 #else
@@ -6,7 +17,6 @@
 
 #if !defined(ARDUINO) || VOXONE_BT_FW_UPDATE_ENABLED
 
-#include "bt_firmware_staging.h"
 #include <algorithm>
 #include <string.h>
 

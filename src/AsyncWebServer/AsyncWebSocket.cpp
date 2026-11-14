@@ -21,7 +21,7 @@
 #include "Arduino.h"
 #include "AsyncWebSocket.h"
 #if defined(VOXONE_HEAP_TRACE)
-#include "../core/http_heap_trace.h"
+#include "../core/diagnostics.h"
 #endif
 
 #include <libb64/cencode.h>

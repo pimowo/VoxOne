@@ -1,5 +1,5 @@
 #include "../src/core/config_startup.h"
-#include "../src/core/bt_runtime.h"
+#include "../src/core/bt_manager.h"
 #include <cassert>
 #include <cstdio>
 #include <cstring>

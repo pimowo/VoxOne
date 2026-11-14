@@ -21,7 +21,7 @@
 #include "ESPAsyncWebServer.h"
 #include "WebResponseImpl.h"
 #if defined(VOXONE_HEAP_TRACE)
-#include "../core/http_heap_trace.h"
+#include "../core/diagnostics.h"
 #endif
 #include "cbuf.h"
 

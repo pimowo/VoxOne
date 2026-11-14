@@ -1,4 +1,4 @@
-#include "../src/core/security_recovery_key.h"
+#include "../src/core/security_recovery.h"
 #include "../src/hardware/hardware_descriptor.h"
 #include <cassert>
 using namespace voxone::security_recovery;

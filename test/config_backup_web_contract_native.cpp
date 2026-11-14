@@ -22,7 +22,7 @@ std::string functionBody(const std::string& source, const char* signature,
 
 int main() {
   const std::string server = readFile("src/core/netserver.cpp");
-  const std::string adapter = readFile("src/core/config_restore_adapter.cpp");
+  const std::string adapter = readFile("src/core/config_restore.cpp");
   const std::string html = readFile("web-src/voxone.html");
   const std::string script = readFile("web-src/voxone.js");
 

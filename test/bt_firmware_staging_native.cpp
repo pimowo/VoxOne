@@ -3,7 +3,7 @@
 #include <cstdlib>
 #include <cstring>
 #include <vector>
-#include "../src/core/bt_firmware_staging.h"
+#include "../src/core/bt_manager.h"
 
 namespace {
 // Exact 60 bytes extracted from the V0 firmware.bin manifest at offset 3154.

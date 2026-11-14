@@ -354,12 +354,17 @@ void Player::_applyStop(int payload, bool consumeUserCommand) {
   network.lostPlaying = false;
   clearSourceMediaRequests();
   if (sourceMediaBusy()) {
+    const SourceId previous = _sourceMediaPrevious;
+    const bool restoreAfterUserStop =
+        consumeUserCommand && suppressSourceMediaReturn();
     if (!consumeUserCommand) suppressSourceMediaReturn();
     if (sourceMediaActive()) {
       finishSourceMedia();
     }
     else if (systemUpdateAudioBlocked())
       _stop(false, RadioStopReason::SourceSwitch);
+    if (restoreAfterUserStop)
+      sourceManagerReturnAfterUserMediaStop(previous);
     if (!sourceManagerRadioPlayIntent()) stopInfo();
   } else {
     _stop();
@@ -731,14 +736,14 @@ void Player::requestSourceMedia(
 
 bool Player::sourceMediaEof() {
   if (!_callbackToken) return false;
-  const bool accepted = _sourceMedia.signal(_callbackToken);
+  _sourceMedia.signal(_callbackToken);
   return true;
 }
 
 bool Player::interruptSourceMediaForNetwork() {
   const bool busy = sourceMediaBusy();
   const uint32_t token = _sourceMedia.token();
-  const bool accepted = _sourceMedia.signal(token);
+  _sourceMedia.signal(token);
   return busy;
 }
 
@@ -816,7 +821,7 @@ void Player::playSourceMedia(const voxone::source_media::Request& request){
     serialCli.printf("##ERROR#:\tError connecting to %.128s\n", request.url);
     snprintf(config.tmpBuf, sizeof(config.tmpBuf),
              "Error connecting to %.128s", request.url); setError();
-    const bool accepted = _sourceMedia.signal(token);
+    _sourceMedia.signal(token);
   }
 }
 

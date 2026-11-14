@@ -1,4 +1,4 @@
-#include "../src/core/display_scroll_model.h"
+#include "../src/core/display_scroll.h"
 
 #include <cassert>
 #include <cstddef>

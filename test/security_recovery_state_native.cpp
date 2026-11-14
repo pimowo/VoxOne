@@ -1,4 +1,4 @@
-#include "../src/core/security_recovery_state.h"
+#include "../src/core/security_recovery.h"
 #include <cassert>
 using namespace voxone::security_recovery;
 int main() {

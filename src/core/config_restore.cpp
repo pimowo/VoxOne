@@ -1,6 +1,732 @@
+#if defined(ARDUINO)
 #include "options.h"
-#include "config_restore_adapter.h"
+#endif
+#include "config_restore.h"
 
+// Consolidated from config_backup.cpp.
+#include <algorithm>
+#include <cstring>
+#include <limits>
+
+#include "station_format.h"
+
+namespace voxone {
+namespace config_backup {
+namespace {
+
+constexpr uint8_t kMagic[4] = {'V', 'X', 'C', 'F'};
+constexpr std::size_t kChecksumSize = 4;
+constexpr std::size_t kMaxStationLine = 512;
+constexpr std::size_t kMaxWifiProfiles = 5;
+
+class MemoryReader : public ByteReader {
+ public:
+  explicit MemoryReader(const Bytes& bytes) : bytes_(bytes) {}
+  std::size_t size() const override { return bytes_.size; }
+  bool read(std::size_t offset, uint8_t* output,
+            std::size_t length) override {
+    if ((length && (!output || !bytes_.data)) || offset > bytes_.size ||
+        length > bytes_.size - offset) return false;
+    if (length) std::memcpy(output, bytes_.data + offset, length);
+    return true;
+  }
+ private:
+  Bytes bytes_;
+};
+
+bool readByte(ByteReader& reader, std::size_t offset, uint8_t& value) {
+  return reader.read(offset, &value, 1);
+}
+
+void write16(uint8_t*& cursor, uint16_t value) {
+  *cursor++ = static_cast<uint8_t>(value);
+  *cursor++ = static_cast<uint8_t>(value >> 8);
+}
+
+void write32(uint8_t*& cursor, uint32_t value) {
+  write16(cursor, static_cast<uint16_t>(value));
+  write16(cursor, static_cast<uint16_t>(value >> 16));
+}
+
+uint16_t read16(const uint8_t*& cursor) {
+  const uint16_t value = static_cast<uint16_t>(cursor[0]) |
+                         (static_cast<uint16_t>(cursor[1]) << 8);
+  cursor += 2;
+  return value;
+}
+
+uint32_t read32(const uint8_t*& cursor) {
+  const uint32_t value = read16(cursor);
+  return value | (static_cast<uint32_t>(read16(cursor)) << 16);
+}
+
+bool terminated(const char* text, std::size_t size) {
+  return std::memchr(text, 0, size) != nullptr;
+}
+
+bool validConfig(const config_format::config_v7_t& value) {
+  const config_format::config_v6_t& f = value.fields;
+  return config_format::validateConfigV7(value) && f.volume <= 254 &&
+         f.balance >= -16 && f.balance <= 16 &&
+         f.trebble >= -6 && f.trebble <= 6 &&
+         f.middle >= -6 && f.middle <= 6 &&
+         f.bass >= -6 && f.bass <= 6 && f.lastSSID <= kMaxWifiProfiles &&
+         f.smartstart <= 2 && f.brightness <= 100 &&
+         f.maximumVolume >= 1 && f.maximumVolume <= 100 &&
+         f.startupMode <= 1 && f.startupFixedVolume <= 100 &&
+         f.lastUserVolume <= 100 && terminated(f.sntp1, sizeof(f.sntp1)) &&
+         terminated(f.sntp2, sizeof(f.sntp2)) &&
+         terminated(f.mdnsname, sizeof(f.mdnsname));
+}
+
+bool validUi(const UiTimeoutSettings& value) {
+  return value.stationListSeconds <= 120 && value.btTransportSeconds <= 120;
+}
+
+bool validScroll(const Data& data) {
+  if (data.scrollMode == ScrollBackupMode::PreserveExisting ||
+      data.scrollMode == ScrollBackupMode::RendererDefaults) return true;
+  return data.scrollMode == ScrollBackupMode::UserSettings &&
+         display_scroll::isValidScrollSettings(data.scrollSettings);
+}
+
+bool validWifi(ByteReader& value, std::size_t& profiles) {
+  profiles = 0;
+  std::size_t start = 0;
+  while (start < value.size()) {
+    std::size_t end = start;
+    uint8_t ch = 0;
+    while (end < value.size()) {
+      if (!readByte(value, end, ch)) return false;
+      if (ch == '\n') break;
+      ++end;
+    }
+    std::size_t length = end - start;
+    if (length) {
+      if (!readByte(value, start + length - 1, ch)) return false;
+      if (ch == '\r') --length;
+    }
+    if (!length || length > 69) return false;
+    uint8_t line[70];
+    if (!value.read(start, line, length)) return false;
+    std::size_t tab = 0;
+    while (tab < length && line[tab] != '\t') ++tab;
+    if (tab == 0 || tab > 29 || tab == length || length - tab - 1 > 39)
+      return false;
+    for (std::size_t i = 0; i < length; ++i)
+      if (line[i] == 0 || (i != tab && line[i] == '\t')) return false;
+    if (++profiles > kMaxWifiProfiles) return false;
+    start = end < value.size() ? end + 1 : end;
+  }
+  return true;
+}
+
+bool validStations(ByteReader& value, std::size_t& rows) {
+  const std::size_t headerSize = sizeof(kStationsHeader) - 1;
+  uint8_t header[sizeof(kStationsHeader) - 1];
+  if (value.size() < headerSize || !value.read(0, header, headerSize) ||
+      std::memcmp(header, kStationsHeader, headerSize) != 0) return false;
+  rows = 0;
+  std::size_t start = headerSize;
+  while (start < value.size()) {
+    std::size_t end = start;
+    uint8_t ch = 0;
+    while (end < value.size()) {
+      if (!readByte(value, end, ch)) return false;
+      if (ch == '\n') break;
+      ++end;
+    }
+    std::size_t length = end - start;
+    if (length) {
+      if (!readByte(value, start + length - 1, ch)) return false;
+      if (ch == '\r') --length;
+    }
+    if (!length || length >= kMaxStationLine) return false;
+    char line[kMaxStationLine];
+    if (!value.read(start, reinterpret_cast<uint8_t*>(line), length)) return false;
+    line[length] = '\0';
+    uint64_t id = 0;
+    char* name = nullptr;
+    char* url = nullptr;
+    int ovol = 0;
+    uint8_t metadata = 0;
+    if (!stationParseFields(line, id, name, url, ovol, metadata)) return false;
+    std::size_t prior = headerSize;
+    while (prior < start) {
+      if (start - prior < 16) return false;
+      char priorId[17];
+      if (!value.read(prior, reinterpret_cast<uint8_t*>(priorId), 16)) return false;
+      priorId[16] = '\0';
+      uint64_t parsedId = 0;
+      if (!stationParseId(priorId, parsedId) || parsedId == id) return false;
+      while (prior < start) {
+        if (!readByte(value, prior, ch)) return false;
+        if (ch == '\n') break;
+        ++prior;
+      }
+      if (prior < start) ++prior;
+    }
+    if (++rows > std::numeric_limits<uint16_t>::max()) return false;
+    start = end < value.size() ? end + 1 : end;
+  }
+  return true;
+}
+
+Status validateFixed(const Data& data,
+                     const hardware::HardwareCapabilities& capabilities) {
+  if (!validConfig(data.config)) return Status::InvalidConfig;
+  const hardware::RuntimeHardwareValidation hardwareStatus =
+      hardware::validateRuntimeHardwareConfig(data.hardware, capabilities);
+  if (hardwareStatus == hardware::RuntimeHardwareValidation::Unsupported)
+    return Status::UnsupportedHardware;
+  if (hardwareStatus != hardware::RuntimeHardwareValidation::Valid)
+    return Status::InvalidHardware;
+  if (!validUi(data.ui)) return Status::InvalidUi;
+  if (!validScroll(data)) return Status::InvalidScroll;
+  if (data.config.btEnabled && !capabilities.supportsVoxOneBt)
+    return Status::InvalidConfig;
+  return Status::Ok;
+}
+
+}  // namespace
+
+void Crc32::update(const uint8_t* data, std::size_t size) {
+  if (!data) return;
+  for (std::size_t i = 0; i < size; ++i) {
+    value_ ^= data[i];
+    for (unsigned bit = 0; bit < 8; ++bit)
+      value_ = (value_ >> 1) ^ ((value_ & 1u) ? 0xedb88320u : 0u);
+  }
+}
+
+Status validateExternal(const Data& data,
+                        const hardware::HardwareCapabilities& capabilities,
+                        ByteReader& wifi, ByteReader& stations) {
+  const Status fixed = validateFixed(data, capabilities);
+  if (fixed != Status::Ok) return fixed;
+  if (wifi.size() != data.wifi.size || stations.size() != data.stations.size)
+    return Status::InvalidLength;
+  std::size_t wifiProfiles = 0;
+  if (!validWifi(wifi, wifiProfiles)) return Status::InvalidWifi;
+  std::size_t stationRows = 0;
+  if (!validStations(stations, stationRows)) return Status::InvalidStations;
+  if (data.config.fields.lastSSID > wifiProfiles ||
+      data.config.fields.lastStation > stationRows) return Status::InvalidConfig;
+  return Status::Ok;
+}
+
+const char* statusName(Status status) {
+  switch (status) {
+    case Status::Ok: return "OK";
+    case Status::InvalidArgument: return "INVALID_ARGUMENT";
+    case Status::Empty: return "EMPTY";
+    case Status::Truncated: return "TRUNCATED";
+    case Status::WrongMagic: return "WRONG_MAGIC";
+    case Status::WrongSchema: return "WRONG_SCHEMA";
+    case Status::InvalidLength: return "INVALID_LENGTH";
+    case Status::InvalidChecksum: return "INVALID_CHECKSUM";
+    case Status::InvalidConfig: return "INVALID_CONFIG";
+    case Status::InvalidHardware: return "INVALID_HARDWARE";
+    case Status::UnsupportedHardware: return "UNSUPPORTED_HARDWARE";
+    case Status::InvalidUi: return "INVALID_UI";
+    case Status::InvalidScroll: return "INVALID_SCROLL";
+    case Status::InvalidWifi: return "INVALID_WIFI";
+    case Status::InvalidStations: return "INVALID_STATIONS";
+    case Status::OutputTooSmall: return "OUTPUT_TOO_SMALL";
+    case Status::AllocationFailed: return "ALLOCATION_FAILED";
+    case Status::StorageReadFailed: return "STORAGE_READ_FAILED";
+    case Status::StorageBeginFailed: return "STORAGE_BEGIN_FAILED";
+    case Status::StorageWriteFailed: return "STORAGE_WRITE_FAILED";
+    case Status::StorageCommitFailed: return "STORAGE_COMMIT_FAILED";
+    case Status::RecoveryPending: return "RECOVERY_PENDING";
+  }
+  return "UNKNOWN";
+}
+
+Status StreamEncoder::begin(
+    const Data& data, const hardware::HardwareCapabilities& capabilities,
+    ByteReader& wifi, ByteReader& stations) {
+  ready_ = false;
+  data_ = nullptr;
+  wifi_ = nullptr;
+  stations_ = nullptr;
+  if (data.scrollMode == ScrollBackupMode::PreserveExisting)
+    return status_ = Status::InvalidScroll;
+  total_ = serializedSize(data);
+  checksumValue_ = 0;
+  if (!total_) return status_ = Status::InvalidLength;
+  status_ = validateExternal(data, capabilities, wifi, stations);
+  if (status_ != Status::Ok) return status_;
+  status_ = encodePrefix(data, capabilities, prefix_, sizeof(prefix_));
+  if (status_ != Status::Ok) return status_;
+  Crc32 crc;
+  crc.update(prefix_, sizeof(prefix_));
+  uint8_t buffer[1024];
+  for (ByteReader* reader : {&wifi, &stations}) {
+    for (std::size_t offset = 0; offset < reader->size();) {
+      const std::size_t count =
+          std::min(sizeof(buffer), reader->size() - offset);
+      if (!reader->read(offset, buffer, count))
+        return status_ = Status::StorageReadFailed;
+      crc.update(buffer, count);
+      offset += count;
+    }
+  }
+  checksumValue_ = crc.value();
+  for (unsigned i = 0; i < sizeof(checksum_); ++i)
+    checksum_[i] = static_cast<uint8_t>(checksumValue_ >> (8 * i));
+  data_ = &data;
+  wifi_ = &wifi;
+  stations_ = &stations;
+  ready_ = true;
+  return status_ = Status::Ok;
+}
+
+std::size_t StreamEncoder::read(std::size_t offset, uint8_t* output,
+                                std::size_t capacity) {
+  if (!ready_ || !data_ || !wifi_ || !stations_ || !output ||
+      offset >= total_) return 0;
+  const std::size_t wanted = std::min(capacity, total_ - offset);
+  std::size_t copied = 0;
+  bool success = true;
+  auto copyMemory = [&](const uint8_t* source, std::size_t length) {
+    if (!success || copied >= wanted) return;
+    if (offset >= length) { offset -= length; return; }
+    const std::size_t count = std::min(wanted - copied, length - offset);
+    std::memcpy(output + copied, source + offset, count);
+    copied += count;
+    offset = 0;
+  };
+  auto copyReader = [&](ByteReader& reader, std::size_t length) {
+    if (!success || copied >= wanted) return;
+    if (offset >= length) { offset -= length; return; }
+    const std::size_t count = std::min(wanted - copied, length - offset);
+    if (!reader.read(offset, output + copied, count)) {
+      success = false;
+      return;
+    }
+    copied += count;
+    offset = 0;
+  };
+  copyMemory(prefix_, sizeof(prefix_));
+  copyReader(*wifi_, data_->wifi.size);
+  copyReader(*stations_, data_->stations.size);
+  copyMemory(checksum_, sizeof(checksum_));
+  if (!success) {
+    ready_ = false;
+    status_ = Status::StorageReadFailed;
+    return 0;
+  }
+  return copied;
+}
+
+std::size_t serializedSize(const Data& data) {
+  if (data.scrollMode == ScrollBackupMode::PreserveExisting) return 0;
+  if (data.wifi.size > std::numeric_limits<uint32_t>::max() ||
+      data.stations.size > std::numeric_limits<uint32_t>::max()) return 0;
+  if (data.wifi.size > std::numeric_limits<std::size_t>::max() -
+                           data.stations.size) return 0;
+  const std::size_t variable = data.wifi.size + data.stations.size;
+  if (variable > std::numeric_limits<std::size_t>::max() - kBackupFixedOverhead)
+    return 0;
+  return kBackupFixedOverhead + variable;
+}
+
+Status encodePrefix(const Data& data,
+                    const hardware::HardwareCapabilities& capabilities,
+                    uint8_t* output, std::size_t capacity) {
+  if (!output) return Status::InvalidArgument;
+  if (capacity < kBackupVariableOffset) return Status::OutputTooSmall;
+  const Status validation = validateFixed(data, capabilities);
+  if (validation != Status::Ok) return validation;
+  if (data.scrollMode == ScrollBackupMode::PreserveExisting)
+    return Status::InvalidScroll;
+  const std::size_t total = serializedSize(data);
+  if (!total || total > std::numeric_limits<uint32_t>::max())
+    return Status::InvalidLength;
+  uint8_t* cursor = output;
+  std::memcpy(cursor, kMagic, sizeof(kMagic)); cursor += sizeof(kMagic);
+  write16(cursor, kBackupSchemaVersion);
+  write32(cursor, static_cast<uint32_t>(total));
+  write32(cursor, config_format::kConfigV7SerializedSize);
+  write32(cursor, hardware::kRuntimeHardwareConfigSerializedSize);
+  write32(cursor, kRetiredIntegrationWireSize);
+  write32(cursor, kUiWireSize);
+  write32(cursor, static_cast<uint32_t>(data.wifi.size));
+  write32(cursor, static_cast<uint32_t>(data.stations.size));
+  if (!config_format::serializeConfigV7(data.config, cursor,
+                                        config_format::kConfigV7SerializedSize))
+    return Status::InvalidConfig;
+  cursor += config_format::kConfigV7SerializedSize;
+  if (!hardware::serializeRuntimeHardwareConfig(
+          data.hardware, cursor, hardware::kRuntimeHardwareConfigSerializedSize))
+    return Status::InvalidHardware;
+  cursor += hardware::kRuntimeHardwareConfigSerializedSize;
+  std::memset(cursor, 0, kRetiredIntegrationWireSize);
+  cursor += kRetiredIntegrationWireSize;
+  *cursor++ = 1;
+  *cursor++ = data.ui.stationListSeconds;
+  *cursor++ = data.ui.btTransportSeconds;
+  std::memset(cursor, 0, kScrollWireSize);
+  if (data.scrollMode == ScrollBackupMode::UserSettings) {
+    *cursor = 1;
+    if (!display_scroll::serializeScrollSettingsRecord(
+            data.scrollSettings, cursor + 1,
+            display_scroll::kScrollSettingsRecordSize))
+      return Status::InvalidScroll;
+  }
+  cursor += kScrollWireSize;
+  return static_cast<std::size_t>(cursor - output) == kBackupVariableOffset
+             ? Status::Ok : Status::InvalidLength;
+}
+
+Status decodePrefix(const uint8_t* input, std::size_t size,
+                    std::size_t artifactSize,
+                    const hardware::HardwareCapabilities& capabilities,
+                    Data& output) {
+  if (!input) return Status::InvalidArgument;
+  if (size < sizeof(kMagic) + sizeof(uint16_t)) return Status::Truncated;
+  if (std::memcmp(input, kMagic, sizeof(kMagic)) != 0) return Status::WrongMagic;
+  const uint8_t* cursor = input + sizeof(kMagic);
+  const uint16_t schema = read16(cursor);
+  const std::size_t variableOffset = backupVariableOffsetForSchema(schema);
+  const std::size_t fixedOverhead = backupFixedOverheadForSchema(schema);
+  if (!variableOffset) return Status::WrongSchema;
+  if (size < variableOffset || artifactSize < fixedOverhead)
+    return Status::Truncated;
+  const uint32_t total = read32(cursor);
+  const uint32_t configSize = read32(cursor);
+  const uint32_t hardwareSize = read32(cursor);
+  const uint32_t retiredIntegrationSize = read32(cursor);
+  const uint32_t uiSize = read32(cursor);
+  const uint32_t wifiSize = read32(cursor);
+  const uint32_t stationsSize = read32(cursor);
+  if (total > artifactSize) return Status::Truncated;
+  if (total < artifactSize || configSize != config_format::kConfigV7SerializedSize ||
+      hardwareSize != hardware::kRuntimeHardwareConfigSerializedSize ||
+      retiredIntegrationSize != kRetiredIntegrationWireSize ||
+      uiSize != kUiWireSize) return Status::InvalidLength;
+  const uint64_t expected = static_cast<uint64_t>(fixedOverhead) +
+                            wifiSize + stationsSize;
+  if (expected != artifactSize)
+    return expected > artifactSize ? Status::Truncated : Status::InvalidLength;
+  Data candidate{};
+  if (!config_format::deserializeConfigV7(cursor, configSize, candidate.config))
+    return Status::InvalidConfig;
+  cursor += configSize;
+  const hardware::RuntimeHardwareDecodeStatus hardwareDecode =
+      hardware::deserializeRuntimeHardwareConfig(cursor, hardwareSize,
+                                                 candidate.hardware);
+  if (hardwareDecode != hardware::RuntimeHardwareDecodeStatus::Valid)
+    return Status::InvalidHardware;
+  cursor += hardwareSize;
+  std::memcpy(candidate.retiredIntegration, cursor,
+              kRetiredIntegrationWireSize);
+  cursor += retiredIntegrationSize;
+  if (cursor[0] != 1) return Status::InvalidUi;
+  candidate.ui.stationListSeconds = cursor[1];
+  candidate.ui.btTransportSeconds = cursor[2];
+  cursor += kUiWireSize;
+  if (schema == kLegacyBackupSchemaVersion) {
+    candidate.scrollMode = ScrollBackupMode::PreserveExisting;
+  } else {
+    const uint8_t present = cursor[0];
+    const uint8_t* record = cursor + 1;
+    if (present == 0) {
+      for (std::size_t i = 0;
+           i < display_scroll::kScrollSettingsRecordSize; ++i)
+        if (record[i] != 0) return Status::InvalidScroll;
+      candidate.scrollMode = ScrollBackupMode::RendererDefaults;
+      candidate.scrollSettings = display_scroll::defaultScrollSettings();
+    } else if (present == 1) {
+      if (display_scroll::deserializeScrollSettingsRecord(
+              record, display_scroll::kScrollSettingsRecordSize,
+              candidate.scrollSettings) !=
+          display_scroll::ScrollSettingsRecordStatus::Valid)
+        return Status::InvalidScroll;
+      candidate.scrollMode = ScrollBackupMode::UserSettings;
+    } else {
+      return Status::InvalidScroll;
+    }
+  }
+  candidate.wifi = {nullptr, wifiSize};
+  candidate.stations = {nullptr, stationsSize};
+  const Status validation = validateFixed(candidate, capabilities);
+  if (validation != Status::Ok) return validation;
+  output = candidate;
+  return Status::Ok;
+}
+
+Status serialize(const Data& data,
+                 const hardware::HardwareCapabilities& capabilities,
+                 uint8_t* output, std::size_t capacity,
+                 std::size_t& written) {
+  written = 0;
+  if (!output) return Status::InvalidArgument;
+  MemoryReader wifi(data.wifi);
+  MemoryReader stations(data.stations);
+  const Status validation = validateExternal(data, capabilities, wifi, stations);
+  if (validation != Status::Ok) return validation;
+  if (data.scrollMode == ScrollBackupMode::PreserveExisting)
+    return Status::InvalidScroll;
+  const std::size_t total = serializedSize(data);
+  if (!total || total > std::numeric_limits<uint32_t>::max())
+    return Status::InvalidLength;
+  if (capacity < total) return Status::OutputTooSmall;
+
+  const Status prefix = encodePrefix(data, capabilities, output, capacity);
+  if (prefix != Status::Ok) return prefix;
+  uint8_t* cursor = output + kBackupVariableOffset;
+  if (data.wifi.size) {
+    if (cursor != data.wifi.data)
+      std::memcpy(cursor, data.wifi.data, data.wifi.size);
+    cursor += data.wifi.size;
+  }
+  if (cursor != data.stations.data)
+    std::memcpy(cursor, data.stations.data, data.stations.size);
+  cursor += data.stations.size;
+  Crc32 checksum;
+  checksum.update(output, total - kChecksumSize);
+  write32(cursor, checksum.value());
+  written = static_cast<std::size_t>(cursor - output);
+  return written == total ? Status::Ok : Status::InvalidLength;
+}
+
+Status parse(const uint8_t* input, std::size_t size,
+             const hardware::HardwareCapabilities& capabilities,
+             Data& output) {
+  if (!input) return Status::InvalidArgument;
+  if (!size) return Status::Empty;
+  if (size < sizeof(kMagic) + sizeof(uint16_t)) return Status::Truncated;
+  if (std::memcmp(input, kMagic, sizeof(kMagic)) != 0) return Status::WrongMagic;
+  const uint8_t* header = input + sizeof(kMagic);
+  const uint16_t schema = read16(header);
+  const std::size_t variableOffset = backupVariableOffsetForSchema(schema);
+  const std::size_t fixedOverhead = backupFixedOverheadForSchema(schema);
+  if (!variableOffset) return Status::WrongSchema;
+  if (size < fixedOverhead) return Status::Truncated;
+  const uint32_t total = read32(header);
+  const uint32_t configSize = read32(header);
+  const uint32_t hardwareSize = read32(header);
+  const uint32_t retiredIntegrationSize = read32(header);
+  const uint32_t uiSize = read32(header);
+  const uint32_t wifiSize = read32(header);
+  const uint32_t stationsSize = read32(header);
+  if (total > size) return Status::Truncated;
+  if (total < size || configSize != config_format::kConfigV7SerializedSize ||
+      hardwareSize != hardware::kRuntimeHardwareConfigSerializedSize ||
+      retiredIntegrationSize != kRetiredIntegrationWireSize ||
+      uiSize != kUiWireSize) return Status::InvalidLength;
+  const uint64_t expected = static_cast<uint64_t>(fixedOverhead) +
+                            wifiSize + stationsSize;
+  if (expected != size) return expected > size ? Status::Truncated : Status::InvalidLength;
+  const uint8_t* checksum = input + size - kChecksumSize;
+  const uint8_t* checksumCursor = checksum;
+  Crc32 calculated;
+  calculated.update(input, size - kChecksumSize);
+  if (read32(checksumCursor) != calculated.value())
+    return Status::InvalidChecksum;
+  Data candidate{};
+  const Status decoded = decodePrefix(input, variableOffset, size,
+                                      capabilities, candidate);
+  if (decoded != Status::Ok) return decoded;
+  const uint8_t* cursor = input + variableOffset;
+  candidate.wifi.data = cursor;
+  cursor += candidate.wifi.size;
+  candidate.stations.data = cursor;
+  MemoryReader wifi(candidate.wifi);
+  MemoryReader stations(candidate.stations);
+  const Status validation = validateExternal(candidate, capabilities, wifi, stations);
+  if (validation != Status::Ok) return validation;
+  output = candidate;
+  return Status::Ok;
+}
+
+RestoreResult restore(const uint8_t* input, std::size_t size,
+                      const hardware::HardwareCapabilities& capabilities,
+                      RestoreStorage& storage) {
+  Data candidate{};
+  const Status parsed = parse(input, size, capabilities, candidate);
+  if (parsed != Status::Ok) return {parsed, false};
+  return restoreValidated(candidate, storage);
+}
+
+RestoreResult restoreValidated(const Data& candidate, RestoreStorage& storage) {
+  if (!storage.begin()) return {Status::StorageBeginFailed, false};
+  if (!storage.stage(candidate)) {
+    return {storage.rollback() ? Status::StorageWriteFailed
+                               : Status::RecoveryPending, false};
+  }
+  if (!storage.commit()) {
+    return {storage.rollback() ? Status::StorageCommitFailed
+                               : Status::RecoveryPending, false};
+  }
+  return {Status::Ok, true};
+}
+
+}  // namespace config_backup
+}  // namespace voxone
+
+// Consolidated from config_backup_web.cpp.
+namespace voxone {
+namespace config_backup_web {
+
+UploadDecision UploadState::append(std::size_t index, std::size_t length,
+                                   std::size_t total) {
+  if (complete_) return UploadDecision::AlreadyComplete;
+  if (!started_) {
+    if (index != 0) return UploadDecision::InvalidOffset;
+    if (!total || total > kMaxUploadBytes) return UploadDecision::InvalidSize;
+    total_ = total;
+    started_ = true;
+  }
+  if (total != total_ || index != received_ || length > total_ - received_)
+    return UploadDecision::InvalidOffset;
+  received_ += length;
+  if (received_ == total_) {
+    complete_ = true;
+    return UploadDecision::Complete;
+  }
+  return UploadDecision::Accept;
+}
+
+ApiResult mapRestoreResult(const config_backup::RestoreResult& result) {
+  using config_backup::Status;
+  switch (result.status) {
+    case Status::Ok:
+      return {200, nullptr, result.restartRequired};
+    case Status::WrongSchema:
+      return {422, "wrong_schema", false};
+    case Status::InvalidChecksum:
+      return {422, "bad_crc", false};
+    case Status::UnsupportedHardware:
+      return {422, "unsupported_hardware", false};
+    case Status::RecoveryPending:
+      return {503, "recovery_pending", false};
+    case Status::StorageBeginFailed:
+    case Status::StorageReadFailed:
+    case Status::AllocationFailed:
+    case Status::StorageWriteFailed:
+    case Status::StorageCommitFailed:
+      return {500, "restore_failed", false};
+    case Status::Empty:
+    case Status::Truncated:
+    case Status::WrongMagic:
+    case Status::InvalidLength:
+    case Status::InvalidConfig:
+    case Status::InvalidHardware:
+    case Status::InvalidUi:
+    case Status::InvalidScroll:
+    case Status::InvalidWifi:
+    case Status::InvalidStations:
+    case Status::InvalidArgument:
+    case Status::OutputTooSmall:
+      return {400, "invalid_file", false};
+  }
+  return {500, "restore_failed", false};
+}
+
+}  // namespace config_backup_web
+}  // namespace voxone
+
+// Consolidated from config_restore_transaction.cpp.
+namespace voxone {
+namespace config_restore {
+
+bool TransactionStorage::begin() {
+  Phase phase = Phase::Prepared;
+  const MarkerStatus marker = backend_.readMarker(phase);
+  if (marker != MarkerStatus::None) return false;
+  return backend_.cleanupStale();
+}
+
+bool TransactionStorage::stage(const config_backup::Data& candidate) {
+  // Neither operation changes active configuration. The marker is made
+  // durable only after both candidate staging and rollback snapshot verify.
+  return backend_.stageCandidate(candidate) &&
+         backend_.createRollbackSnapshot() &&
+         backend_.writeMarker(Phase::Prepared);
+}
+
+Step TransactionStorage::commitStep() {
+  Phase phase = Phase::Prepared;
+  if (backend_.readMarker(phase) != MarkerStatus::Pending) return Step::Failed;
+  switch (phase) {
+    case Phase::Prepared:
+      return backend_.apply(Component::Config) &&
+                     backend_.writeMarker(Phase::ConfigWritten)
+                 ? Step::InProgress : Step::Failed;
+    case Phase::ConfigWritten:
+      return backend_.apply(Component::Hardware) &&
+                     backend_.writeMarker(Phase::HardwareWritten)
+                 ? Step::InProgress : Step::Failed;
+    case Phase::HardwareWritten:
+      // Marker schema 1 used this numeric checkpoint for a retired
+      // integration. Advance through it without touching legacy NVS data.
+      return backend_.writeMarker(Phase::RetiredIntegrationWritten)
+                 ? Step::InProgress : Step::Failed;
+    case Phase::RetiredIntegrationWritten:
+      return backend_.apply(Component::Ui) &&
+                     backend_.writeMarker(Phase::UiWritten)
+                 ? Step::InProgress : Step::Failed;
+    case Phase::UiWritten:
+      return backend_.apply(Component::Scroll) &&
+                     backend_.writeMarker(Phase::ScrollWritten)
+                 ? Step::InProgress : Step::Failed;
+    case Phase::ScrollWritten:
+      return backend_.apply(Component::Wifi) &&
+                     backend_.writeMarker(Phase::WifiWritten)
+                 ? Step::InProgress : Step::Failed;
+    case Phase::WifiWritten:
+      return backend_.apply(Component::Stations) &&
+                     backend_.writeMarker(Phase::StationsWritten)
+                 ? Step::InProgress : Step::Failed;
+    case Phase::StationsWritten:
+      return backend_.rebuildStationsIndex() &&
+                     backend_.writeMarker(Phase::IndexRebuilt)
+                 ? Step::InProgress : Step::Failed;
+    case Phase::IndexRebuilt:
+      return backend_.verifyCandidate() &&
+                     backend_.writeMarker(Phase::Verified)
+                 ? Step::InProgress : Step::Failed;
+    case Phase::Verified:
+      if (!backend_.clearMarker()) return Step::Failed;
+      // Once the marker is durably absent, the new complete configuration is
+      // authoritative. Stale cleanup can safely be retried on a later boot.
+      backend_.cleanupStale();
+      return Step::Complete;
+  }
+  return Step::Failed;
+}
+
+bool TransactionStorage::commit() {
+  for (;;) {
+    const Step step = commitStep();
+    if (step == Step::Complete) return true;
+    if (step == Step::Failed) return false;
+  }
+}
+
+bool TransactionStorage::rollback() {
+  return rollbackSucceeded_ = recover();
+}
+
+bool TransactionStorage::recover() {
+  Phase phase = Phase::Prepared;
+  const MarkerStatus marker = backend_.readMarker(phase);
+  if (marker == MarkerStatus::None) return backend_.cleanupStale();
+  if (marker == MarkerStatus::Error) return false;
+  if (!backend_.restoreRollbackSnapshot() ||
+      !backend_.verifyRollbackSnapshot() || !backend_.clearMarker()) return false;
+  backend_.cleanupStale();
+  return true;
+}
+
+}  // namespace config_restore
+}  // namespace voxone
+
+// Consolidated from config_restore_adapter.cpp.
+#if defined(ARDUINO)
 #include <EEPROM.h>
 #include <SPIFFS.h>
 #include <nvs.h>
@@ -11,9 +737,7 @@
 
 #include "config.h"
 #include "config_eeprom_storage.h"
-#include "config_backup_web.h"
-#include "config_restore_transaction.h"
-#include "display_scroll_persistence.h"
+#include "display_scroll.h"
 #include "playlist_store.h"
 #include "ui_timeout_config.h"
 #include "../hardware/hardware_descriptor.h"
@@ -1074,3 +1798,4 @@ config_backup::RestoreResult restoreProductionBackup(const uint8_t* input,
 
 }  // namespace config_restore
 }  // namespace voxone
+#endif  // ARDUINO

@@ -1733,7 +1733,7 @@ window.VoxOneRestartWaiter = Object.freeze({
     if (!rows.length && !sdBusy && !sdMounted) {
       const empty = document.createElement("li");
       empty.className = "dlna-empty";
-      empty.textContent = "Brak karty SD.";
+      empty.textContent = "Brak karty";
       rows.push(empty);
     } else if (!rows.length && sdLoaded && !sdBusy) {
       const empty = document.createElement("li");
@@ -1747,7 +1747,7 @@ window.VoxOneRestartWaiter = Object.freeze({
   async function sdError(response, fallback) {
     try {
       const payload = await response.json();
-      if (payload?.error === "sd_not_mounted") return "Brak karty SD.";
+      if (payload?.error === "sd_not_mounted") return "Brak karty";
       if (payload?.error) return fallback + " (" + payload.error + ")";
     } catch (_) {}
     return fallback + " (HTTP " + response.status + ")";
@@ -1770,11 +1770,11 @@ window.VoxOneRestartWaiter = Object.freeze({
       sdLoaded = false;
       sdItems = [];
       sdPathStack = [{id: "/", title: "Główne"}];
-      if (!sdMounted) throw new Error("Brak karty SD.");
+      if (!sdMounted) throw new Error("Brak karty");
       browseAfterMount = true;
       return true;
     } catch (error) {
-      sdStatus.textContent = error?.message || "Brak karty SD.";
+      sdStatus.textContent = error?.message || "Brak karty";
       return false;
     } finally {
       sdBusy = false;
@@ -1808,7 +1808,7 @@ window.VoxOneRestartWaiter = Object.freeze({
         (payload.truncated ? " (lista skrócona)" : "");
       return true;
     } catch (error) {
-      if (error?.message === "Brak karty SD.") {
+      if (error?.message === "Brak karty") {
         sdMounted = false;
         sdLoaded = false;
         sdItems = [];

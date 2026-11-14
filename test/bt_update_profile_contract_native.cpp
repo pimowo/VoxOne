@@ -16,7 +16,7 @@ int main() {
   const std::string s0 = readFile("profiles/s0.h");
   const std::string l0 = readFile("profiles/l0.h");
   const std::string netserver = readFile("src/core/netserver.cpp");
-  const std::string staging = readFile("src/core/bt_firmware_staging.cpp");
+  const std::string staging = readFile("src/core/bt_manager.cpp");
 
   assert(s0.find("#define VOXONE_HAS_BT 1") != std::string::npos);
   assert(s0.find("#define VOXONE_BT_FW_UPDATE_ENABLED 0") !=

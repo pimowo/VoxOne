@@ -1,6 +1,6 @@
 #include "../src/core/config_persistence.h"
 #include "../src/core/config_capability_migration.h"
-#include "../src/core/bt_runtime.h"
+#include "../src/core/bt_manager.h"
 #include <cassert>
 #include <cstdio>
 #include <cstring>

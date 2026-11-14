@@ -11,7 +11,7 @@
 #include "bt_link_protocol.h"
 #include "bt_link_command_queue.h"
 #include "bt_firmware_sender.h"
-#include "bt_runtime.h"
+#include "bt_manager.h"
 
 class BtLink : private BtFirmwareTransport {
  public:

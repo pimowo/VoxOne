@@ -1,4 +1,4 @@
-#include "../src/core/display_scroll_runtime_config.h"
+#include "../src/core/display_scroll.h"
 
 #include <atomic>
 #include <cassert>
@@ -187,8 +187,14 @@ void testAtomicPublication() {
 void testProductionBoundaries() {
   const std::string mainSource = readFile("src/main.cpp");
   const std::string displaySource = readFile("src/core/display.cpp");
+  const std::string scrollModule = readFile("src/core/display_scroll.cpp");
+  const std::size_t runtimeBegin = scrollModule.find(
+      "// Consolidated from display_scroll_runtime_config_nvs.cpp.");
+  const std::size_t runtimeEnd = scrollModule.find(
+      "// Consolidated from display_scroll_api.cpp.", runtimeBegin);
+  assert(runtimeBegin != std::string::npos && runtimeEnd != std::string::npos);
   const std::string runtimeSource =
-      readFile("src/core/display_scroll_runtime_config_nvs.cpp");
+      scrollModule.substr(runtimeBegin, runtimeEnd - runtimeBegin);
   const std::string platformio = readFile("platformio.ini");
 
   const std::size_t configInit = mainSource.find("config.init();");

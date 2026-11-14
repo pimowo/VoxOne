@@ -3,7 +3,7 @@
 
 #include <stdint.h>
 
-#include "display_scroll_engine.h"
+#include "display_scroll.h"
 
 namespace voxone {
 namespace display_scroll {

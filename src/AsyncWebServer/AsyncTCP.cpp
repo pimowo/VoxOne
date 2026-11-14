@@ -24,7 +24,7 @@
 #include "AsyncTCP.h"
 #include "AsyncTCPLifecycle.h"
 #if defined(VOXONE_HEAP_TRACE)
-#include "../core/http_heap_trace.h"
+#include "../core/diagnostics.h"
 #endif
 #line 25
 extern "C"{

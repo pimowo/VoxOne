@@ -1,4 +1,4 @@
-#include "../src/core/bt_audio_input_state.h"
+#include "../src/core/bt_manager.h"
 #include "../src/core/bt_audio_route_state.h"
 #include "../src/core/bt_link_protocol.h"
 #include "../src/core/dac_mute_state.h"

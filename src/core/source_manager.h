@@ -16,6 +16,7 @@ bool sourceManagerRadioPlayIntent();
 void sourceManagerBeginMedia(SourceId source, const char* title,
                              const char* artist);
 void sourceManagerEndMedia();
+void sourceManagerReturnAfterUserMediaStop(SourceId previous);
 enum class ActiveSource : uint8_t;
 bool sourceManagerSelectSource(ActiveSource source);
 bool sourceManagerSelectSource(SourceId source);

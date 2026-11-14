@@ -5,8 +5,7 @@
 #include <driver/i2s.h>
 #include <freertos/task.h>
 
-#include "bt_audio_input_state.h"
-#include "bt_runtime.h"
+#include "bt_manager.h"
 #include "bt_audio_route_state.h"
 #include "i2s_output_lock.h"
 #include "player.h"

@@ -1,6 +1,11 @@
-#ifndef VOXONE_HTTP_HEAP_TRACE_H
-#define VOXONE_HTTP_HEAP_TRACE_H
+#ifndef VOXONE_DIAGNOSTICS_H
+#define VOXONE_DIAGNOSTICS_H
 
+// Consolidated from nvs_diagnostics.h.
+// Read-only snapshot of the default NVS partition, logged once during setup().
+void logNvsStats();
+
+// Consolidated from http_heap_trace.h.
 #include <stddef.h>
 #include <stdint.h>
 
@@ -31,4 +36,4 @@ void clientReleased(const void* client);
 
 #endif  // VOXONE_HEAP_TRACE
 
-#endif  // VOXONE_HTTP_HEAP_TRACE_H
+#endif  // VOXONE_DIAGNOSTICS_H
