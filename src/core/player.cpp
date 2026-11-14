@@ -18,9 +18,6 @@
 #include "playlist_store.h"
 #include "station_format.h"
 #include "sd_card.h"
-#if defined(VOXONE_TTS_HIL_DIAGNOSTICS)
-#include "tts_hil_diagnostics.h"
-#endif
 #include "../hardware/runtime_hardware_config.h"
 #include <cstddef>
 #include <cstdlib>
@@ -33,40 +30,51 @@ portMUX_TYPE playerVolumeMux = portMUX_INITIALIZER_UNLOCKED;
 
 namespace {
 
-struct QueuedTemporaryRequest {
-  voxone::temporary_audio::Source source;
+SourceId sourceIdForMedia(voxone::source_media::Source source) {
+  return source == voxone::source_media::Source::Dlna
+             ? SourceId::Dlna
+         : source == voxone::source_media::Source::Local
+             ? SourceId::Local
+             : SourceId::HomeAssistant;
+}
+
+struct QueuedSourceMediaRequest {
+  voxone::source_media::Source source;
+  bool returnToPrevious;
   uint16_t urlBytes;
   uint16_t titleBytes;
   uint16_t artistBytes;
   char data[1];
 
-  voxone::temporary_audio::Request view() const {
+  voxone::source_media::Request view() const {
     const char* title = data + urlBytes;
     const char* artist = title + titleBytes;
-    return voxone::temporary_audio::Request(data, title, artist, source);
+    return voxone::source_media::Request(data, title, artist, source,
+                                         returnToPrevious);
   }
 };
 
-QueuedTemporaryRequest* copyTemporaryRequest(
-    const voxone::temporary_audio::Request& request) {
+QueuedSourceMediaRequest* copySourceMediaRequest(
+    const voxone::source_media::Request& request) {
   const char* url = request.url ? request.url : "";
   const char* title = request.title ? request.title : "";
   const char* artist = request.artist ? request.artist : "";
   const size_t urlBytes = strlen(url) + 1;
   const size_t titleBytes = strlen(title) + 1;
   const size_t artistBytes = strlen(artist) + 1;
-  if (urlBytes > voxone::temporary_audio::kUrlCapacity ||
-      titleBytes > voxone::temporary_audio::kMetadataCapacity ||
-      artistBytes > voxone::temporary_audio::kMetadataCapacity)
+  if (urlBytes > voxone::source_media::kUrlCapacity ||
+      titleBytes > voxone::source_media::kMetadataCapacity ||
+      artistBytes > voxone::source_media::kMetadataCapacity)
     return nullptr;
-  const size_t allocationBytes = offsetof(QueuedTemporaryRequest, data) +
+  const size_t allocationBytes = offsetof(QueuedSourceMediaRequest, data) +
       urlBytes + titleBytes + artistBytes;
   void* memory = heap_caps_malloc(
       allocationBytes, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
   if (!memory) memory = std::malloc(allocationBytes);
   if (!memory) return nullptr;
-  auto* copy = static_cast<QueuedTemporaryRequest*>(memory);
+  auto* copy = static_cast<QueuedSourceMediaRequest*>(memory);
   copy->source = request.source;
+  copy->returnToPrevious = request.returnToPrevious;
   copy->urlBytes = static_cast<uint16_t>(urlBytes);
   copy->titleBytes = static_cast<uint16_t>(titleBytes);
   copy->artistBytes = static_cast<uint16_t>(artistBytes);
@@ -76,7 +84,7 @@ QueuedTemporaryRequest* copyTemporaryRequest(
   return copy;
 }
 
-void releaseTemporaryRequest(QueuedTemporaryRequest* request) {
+void releaseSourceMediaRequest(QueuedSourceMediaRequest* request) {
   std::free(request);
 }
 
@@ -87,10 +95,6 @@ Player::Player(): Audio(voxone::hardware::currentHardware().audioOutInternal,
 
 
 void Player::init() {
-#if defined(VOXONE_TTS_HIL_DIAGNOSTICS)
-  // Construct the fixed diagnostic store during boot, never on the audio path.
-  (void)voxone::tts_hil::diagnostics();
-#endif
   const auto runtime = config.runtimeSnapshot();
   Serial.print("##[BOOT]#\tplayer.init\t");
   playerQueue=NULL;
@@ -117,7 +121,7 @@ void Player::init() {
   playerQueue = xQueueCreate( 5, sizeof( playerRequestParams_t ) );
   setOutputPins(false);
   delay(50);
-  _temporaryUrls = xQueueCreate(1, sizeof(QueuedTemporaryRequest*));
+  _sourceMediaUrls = xQueueCreate(1, sizeof(QueuedSourceMediaRequest*));
   if(MUTE_PIN!=255) pinMode(MUTE_PIN, OUTPUT);
   const auto& audioPins = voxone::hardware::currentHardware().audioOut;
   if (audioPlan.initializeSerialI2s &&
@@ -154,28 +158,26 @@ void Player::init() {
 }
 
 bool Player::ready() const {
-  return playerQueue != nullptr && _temporaryUrls != nullptr;
+  return playerQueue != nullptr && _sourceMediaUrls != nullptr;
 }
 
 void Player::sendCommand(playerRequestParams_t request){
   if(playerQueue==NULL) return;
   if(systemUpdateAudioBlocked() && request.type != PR_UPDATE_STOP) return;
   if (!_localAudioAvailable &&
-      (request.type == PR_PLAY || request.type == PR_BURL ||
+      (request.type == PR_PLAY || request.type == PR_SOURCE_MEDIA ||
        request.type == PR_RADIO_RESUME ||
        request.type == PR_RADIO_NETWORK_ONLINE)) return;
   if (request.type == PR_STATION_REFRESH) {
     _pendingStationRefresh.publishRefresh();
     return;
   }
-  // STOP while a one-shot HA stream is active only ends that stream. Keep the
-  // base RADIO intent so cleanup can restore the source that was interrupted.
-  const bool stopsTemporary = request.type == PR_STOP && temporaryBusy();
+  const bool stopsSourceMedia = request.type == PR_STOP && sourceMediaBusy();
   if(xQueueSend(playerQueue, &request, PLQ_SEND_DELAY) != pdPASS) return;
   switch (request.type) {
     case PR_PLAY:
     case PR_STOP:
-    case PR_BURL:
+    case PR_SOURCE_MEDIA:
     case PR_RADIO_SUSPEND:
     case PR_RADIO_RESUME:
     case PR_UPDATE_STOP:
@@ -186,7 +188,7 @@ void Player::sendCommand(playerRequestParams_t request){
       break;
   }
   if(request.type == PR_PLAY ||
-     (request.type == PR_STOP && !stopsTemporary))
+     (request.type == PR_STOP && !stopsSourceMedia))
     sourceManagerRadioCommandQueued(request.type == PR_PLAY,
                                    request.type == PR_PLAY && request.payload > 0
                                        ? static_cast<uint16_t>(request.payload) : 0);
@@ -196,13 +198,21 @@ void Player::resetQueue(){
   if(playerQueue!=NULL) xQueueReset(playerQueue);
 }
 
-void Player::clearTemporaryRequests() {
-  if (!_temporaryUrls) return;
-  QueuedTemporaryRequest* request = nullptr;
-  while (xQueueReceive(_temporaryUrls, &request, 0) == pdTRUE) {
-    releaseTemporaryRequest(request);
+void Player::clearSourceMediaRequests() {
+  if (!_sourceMediaUrls) return;
+  QueuedSourceMediaRequest* request = nullptr;
+  while (xQueueReceive(_sourceMediaUrls, &request, 0) == pdTRUE) {
+    releaseSourceMediaRequest(request);
     request = nullptr;
   }
+}
+
+bool Player::suppressSourceMediaReturn() {
+  const bool wasPending = _sourceMediaReturnToPrevious ||
+                          _sourceMediaReturnPending;
+  _sourceMediaReturnToPrevious = false;
+  _sourceMediaReturnPending = false;
+  return wasPending;
 }
 
 void Player::stopInfo() {
@@ -211,17 +221,7 @@ void Player::stopInfo() {
 }
 
 void Player::setError(){
-#if defined(VOXONE_TTS_HIL_DIAGNOSTICS)
-  const bool temporarySignalled = _temporary.signal(_callbackToken);
-  if (_callbackToken) {
-    voxone::tts_hil::diagnostics().transportError(
-        _callbackToken, millis(), transportProgressBytes(),
-        httpBodyProgressBytes(), httpContentLength(),
-        temporarySignalled);
-  }
-#else
-  _temporary.signal(_callbackToken);
-#endif
+  _sourceMedia.signal(_callbackToken);
   if (radioMetadataAllowed()) {
     _hasError=true;
     config.setTitle(config.tmpBuf);
@@ -335,7 +335,7 @@ void Player::_servicePendingStationRefresh() {
   }
   guard.release();
   if (_pendingStationRefresh.pending()) return;
-  if (temporaryBusy()) {
+  if (sourceMediaBusy()) {
     _pendingStationRefresh.publishRefresh();
     return;
   }
@@ -352,23 +352,11 @@ void Player::_applyStop(int payload, bool consumeUserCommand) {
   }
   _radioReconnect.cancel();
   network.lostPlaying = false;
-  clearTemporaryRequests();
-  if (temporaryBusy()) {
-    if (!consumeUserCommand) suppressTemporaryRadioRestore();
-    if (temporaryActive()) {
-#if defined(VOXONE_TTS_HIL_DIAGNOSTICS)
-      const uint32_t token = _temporary.token();
-      if (consumeUserCommand) {
-        voxone::tts_hil::diagnostics().userStop(
-            token, millis(), transportProgressBytes(),
-            httpBodyProgressBytes(), httpContentLength());
-      } else {
-        voxone::tts_hil::diagnostics().sourceSwitch(
-            token, millis(), transportProgressBytes(),
-            httpBodyProgressBytes(), httpContentLength());
-      }
-#endif
-      finishTemporary();
+  clearSourceMediaRequests();
+  if (sourceMediaBusy()) {
+    if (!consumeUserCommand) suppressSourceMediaReturn();
+    if (sourceMediaActive()) {
+      finishSourceMedia();
     }
     else if (systemUpdateAudioBlocked())
       _stop(false, RadioStopReason::SourceSwitch);
@@ -398,7 +386,7 @@ void Player::loop() {
   if (_shutdownSuspended || !processPlayerCommands()) return;
   if (uxQueueMessagesWaiting(playerQueue) == 0)
     _servicePendingStationRefresh();
-  serviceTemporaryAudio();
+  serviceSourceMedia();
   servicePcmOutputActivation();
   serviceRadioReconnect();
   serviceVolumePersistence();
@@ -453,15 +441,10 @@ bool Player::processPlayerCommands() {
     switch (requestP.type){
       case PR_UPDATE_STOP:
         _radioReconnect.cancel();
-        clearTemporaryRequests();
-        suppressTemporaryRadioRestore();
-        if (temporaryActive()) {
-#if defined(VOXONE_TTS_HIL_DIAGNOSTICS)
-          voxone::tts_hil::diagnostics().updateStop(
-              _temporary.token(), millis(), transportProgressBytes(),
-              httpBodyProgressBytes(), httpContentLength());
-#endif
-          finishTemporary();
+        clearSourceMediaRequests();
+        suppressSourceMediaReturn();
+        if (sourceMediaActive()) {
+          finishSourceMedia();
         }
         else _stop(false, RadioStopReason::SourceSwitch);
         break;
@@ -474,11 +457,11 @@ bool Player::processPlayerCommands() {
         break;
       case PR_RADIO_SUSPEND:
         _radioReconnect.cancel();
-        if (!temporaryBusy()) _stop(false, RadioStopReason::SourceSwitch);
+        if (!sourceMediaBusy()) _stop(false, RadioStopReason::SourceSwitch);
         break;
       case PR_RADIO_RESUME:
         _radioReconnect.cancel();
-        if (temporaryBusy()) break;
+        if (sourceMediaBusy()) break;
         if (sourceManagerRadioResumeAllowed()) {
           if (requestP.payload > 0 &&
               config.lastStation() != static_cast<uint16_t>(requestP.payload))
@@ -492,12 +475,12 @@ bool Player::processPlayerCommands() {
           _radioReconnect.cancel();
           break;
         }
-        if (!temporaryBusy()) _stop(false, RadioStopReason::SourceSwitch);
+        if (!sourceMediaBusy()) _stop(false, RadioStopReason::SourceSwitch);
         scheduleRadioReconnect();
         serialCli.printf("##[RADIO]# network offline, reconnect suspended\n");
         break;
       case PR_RADIO_NETWORK_ONLINE:
-        if (temporaryBusy() || systemUpdateAudioBlocked() ||
+        if (sourceMediaBusy() || systemUpdateAudioBlocked() ||
             !sourceManagerRadioResumeAllowed()) {
           _radioReconnect.cancel();
           break;
@@ -508,7 +491,7 @@ bool Player::processPlayerCommands() {
       case PR_PLAY: {
         // Accepted commands already updated canonical intent/station. Let the
         // announcement finish, then use that current intent exactly once.
-        if (temporaryBusy()) break;
+        if (sourceMediaBusy()) break;
         _radioReconnect.cancel();
         if (requestP.payload>0) {
           config.setLastStation((uint16_t)requestP.payload);
@@ -537,7 +520,7 @@ bool Player::processPlayerCommands() {
         config.reduceVuThreshold(10);
         break;
       }
-      case PR_BURL: {
+      case PR_SOURCE_MEDIA: {
         // Wake-up only. URL bytes are owned by the one-slot mailbox below.
         break;
       }
@@ -548,68 +531,48 @@ bool Player::processPlayerCommands() {
   return true;
 }
 
-void Player::serviceTemporaryAudio() {
-  QueuedTemporaryRequest* temporaryRequest = nullptr;
-  if (_temporaryUrls &&
-      xQueueReceive(_temporaryUrls, &temporaryRequest, 0) == pdTRUE &&
-      temporaryRequest) {
-    if (!systemUpdateAudioBlocked()) browseUrl(temporaryRequest->view());
-    releaseTemporaryRequest(temporaryRequest);
+void Player::serviceSourceMedia() {
+  QueuedSourceMediaRequest* mediaRequest = nullptr;
+  if (_sourceMediaUrls &&
+      xQueueReceive(_sourceMediaUrls, &mediaRequest, 0) == pdTRUE &&
+      mediaRequest) {
+    if (!systemUpdateAudioBlocked()) playSourceMedia(mediaRequest->view());
+    releaseSourceMediaRequest(mediaRequest);
   }
   // Backend EOF/error callbacks run synchronously inside these calls. They
   // signal this invocation's token; never reconnect from a decoder callback.
-  _callbackToken = _temporary.token();
-  if (!_temporary.terminal()) Audio::loop();
+  _callbackToken = _sourceMedia.token();
+  if (!_sourceMedia.terminal()) Audio::loop();
   _callbackToken = 0;
-#if defined(VOXONE_TTS_HIL_DIAGNOSTICS)
-  voxone::tts_hil::diagnostics().consumeNetworkInterrupted(
-      millis(), transportProgressBytes(), httpBodyProgressBytes(),
-      httpContentLength());
-#endif
   if (_radioReconnect.failures() && audioStreamStarted()) {
     serialCli.printf("##[RADIO]# stream recovered\n");
     _radioReconnect.reset();
   }
-  if (temporaryActive()) {
-#if defined(VOXONE_TTS_HIL_DIAGNOSTICS)
-    voxone::tts_hil::diagnostics().observeProgress(
-        _temporary.token(), millis(), transportProgressBytes(),
-        httpBodyProgressBytes(), httpContentLength());
-#endif
-    voxone::temporary_audio::serviceTemporaryAudioTransport(
-        _temporary, _temporaryProgress, millis(), transportProgressBytes(),
+  if (sourceMediaActive()) {
+    voxone::source_media::serviceSourceMediaTransport(
+        _sourceMedia, _sourceMediaProgress, millis(), transportProgressBytes(),
         isRunning(), transportConnected(), transportBodyComplete(),
         transportBufferedBytes(), transportBufferedFrameAvailable(),
         [this](uint32_t token) {
-#if defined(VOXONE_TTS_HIL_DIAGNOSTICS)
-          voxone::tts_hil::diagnostics().watchdogTimeout(
-              token, millis(), transportProgressBytes(),
-              httpBodyProgressBytes(), httpContentLength());
-#endif
           serialCli.printf(
-              "##[TTS]# transport stalled token=%lu timeout=%lu ms\n",
+              "##[SOURCE-MEDIA]# transport stalled token=%lu timeout=%lu ms\n",
               static_cast<unsigned long>(token),
               static_cast<unsigned long>(
-                  voxone::temporary_audio::kInactivityTimeoutMs));
+                  voxone::source_media::kInactivityTimeoutMs));
         },
         [this](uint32_t token) {
-#if defined(VOXONE_TTS_HIL_DIAGNOSTICS)
-          voxone::tts_hil::diagnostics().transportError(
-              token, millis(), transportProgressBytes(),
-              httpBodyProgressBytes(), httpContentLength(), true);
-#endif
           serialCli.printf(
-              "##[TTS]# transport disconnected before EOF token=%lu\n",
+              "##[SOURCE-MEDIA]# transport disconnected before EOF token=%lu\n",
               static_cast<unsigned long>(token));
         },
-        [this]() { finishTemporary(); });
+        [this]() { finishSourceMedia(); });
   } else if (!isRunning() && _status==PLAYING) {
     _stop(true, RadioStopReason::SourceSwitch);
     scheduleRadioReconnect();
   }
-  if (uxQueueMessagesWaiting(playerQueue) == 0 &&
-      (!_temporaryUrls || uxQueueMessagesWaiting(_temporaryUrls) == 0))
-    restoreTemporaryBase();
+  if (_sourceMediaReturnPending && uxQueueMessagesWaiting(playerQueue) == 0 &&
+      (!_sourceMediaUrls || uxQueueMessagesWaiting(_sourceMediaUrls) == 0))
+    restoreSourceMediaBase();
 }
 
 void Player::servicePcmOutputActivation() {
@@ -634,10 +597,10 @@ void Player::stopForShutdown() {
   _radioReconnect.cancel();
   cancelPendingConnection();
   resetQueue();
-  clearTemporaryRequests();
-  if (temporaryBusy()) {
-    suppressTemporaryRadioRestore();
-    finishTemporary();
+  clearSourceMediaRequests();
+  if (sourceMediaBusy()) {
+    suppressSourceMediaReturn();
+    finishSourceMedia();
   }
 
   // Silence the DAC synchronously before the display task can begin the
@@ -682,7 +645,7 @@ void Player::_play(uint16_t stationId, bool sourceResume) {
   
   if(!config.prepareForPlaying(stationId, sourceResume)) return;
   _loadVol(voxone::line_out::effectiveRawVolume(config.runtimeSnapshot()));
-  _temporary.allowRadioMetadata();
+  _sourceMedia.allowRadioMetadata();
   
   bool isConnected = false;
   connproc = false;
@@ -704,7 +667,7 @@ void Player::_play(uint16_t stationId, bool sourceResume) {
 }
 
 void Player::scheduleRadioReconnect() {
-  if (temporaryBusy() || systemUpdateAudioBlocked() ||
+  if (sourceMediaBusy() || systemUpdateAudioBlocked() ||
       !sourceManagerRadioResumeAllowed()) {
     _radioReconnect.cancel();
     return;
@@ -718,7 +681,7 @@ void Player::scheduleRadioReconnect() {
 }
 
 void Player::serviceRadioReconnect() {
-  const bool allowed = !temporaryBusy() && !systemUpdateAudioBlocked() &&
+  const bool allowed = !sourceMediaBusy() && !systemUpdateAudioBlocked() &&
                        sourceManagerRadioResumeAllowed();
   if (!_radioReconnect.takeDue(millis(), allowed, network.ready())) return;
   serialCli.printf("##[RADIO]# reconnect attempt=%u\n",
@@ -726,142 +689,107 @@ void Player::serviceRadioReconnect() {
   _play(config.lastStation(), true);
 }
 
-void Player::requestTemporaryUrl(
-    const voxone::temporary_audio::Request& request) {
+void Player::requestSourceMedia(
+    const voxone::source_media::Request& request) {
   const char* url = request.url ? request.url : "";
   const size_t length = strlen(url);
-  const SourceId requestedSource =
-      request.source == voxone::temporary_audio::Source::Dlna
-          ? SourceId::Dlna
-      : request.source == voxone::temporary_audio::Source::Local
-          ? SourceId::Local
-          : SourceId::HomeAssistant;
+  const SourceId requestedSource = sourceIdForMedia(request.source);
   const bool validResource =
-      request.source == voxone::temporary_audio::Source::Local
+      request.source == voxone::source_media::Source::Local
           ? voxone::sd_path::audioFile(url)
-          : voxone::temporary_audio::isSafeUrl(url, length);
-  if (!_temporaryUrls ||
+          : voxone::source_media::isSafeUrl(url, length);
+  if (!_sourceMediaUrls ||
       !validResource ||
       !sourceManagerSourceAvailable(requestedSource) ||
       systemUpdateAudioBlocked() || !_localAudioAvailable) return;
-  QueuedTemporaryRequest* pending = copyTemporaryRequest(request);
+  QueuedSourceMediaRequest* pending = copySourceMediaRequest(request);
   if (!pending) {
-    serialCli.printf("##[TTS]# temporary request allocation failed\n");
+    serialCli.printf("##[SOURCE-MEDIA]# request allocation failed\n");
     return;
   }
   // Producers may run on different tasks. The one-slot queue stores only an
   // owning pointer; when full, remove and release the older pending request.
-  // A request already consumed by Player owns its allocation until browseUrl
+  // A request already consumed by Player owns its allocation until playSourceMedia
   // returns, so replacement can never invalidate connecttohost() input.
   bool queued = false;
   for (uint8_t attempt = 0; attempt < 4 && !queued; ++attempt) {
-    queued = xQueueSend(_temporaryUrls, &pending, 0) == pdPASS;
+    queued = xQueueSend(_sourceMediaUrls, &pending, 0) == pdPASS;
     if (queued) break;
-    QueuedTemporaryRequest* replaced = nullptr;
-    if (xQueueReceive(_temporaryUrls, &replaced, 0) == pdTRUE)
-      releaseTemporaryRequest(replaced);
+    QueuedSourceMediaRequest* replaced = nullptr;
+    if (xQueueReceive(_sourceMediaUrls, &replaced, 0) == pdTRUE)
+      releaseSourceMediaRequest(replaced);
     else
       taskYIELD();
   }
   if (!queued) {
-    releaseTemporaryRequest(pending);
-    serialCli.printf("##[TTS]# temporary request mailbox busy\n");
+    releaseSourceMediaRequest(pending);
+    serialCli.printf("##[SOURCE-MEDIA]# request mailbox busy\n");
     return;
   }
-  sendCommand({PR_BURL, 0});
+  sendCommand({PR_SOURCE_MEDIA, 0});
 }
 
-bool Player::temporaryEof() {
+bool Player::sourceMediaEof() {
   if (!_callbackToken) return false;
-  const bool accepted = _temporary.signal(_callbackToken);
-#if defined(VOXONE_TTS_HIL_DIAGNOSTICS)
-  voxone::tts_hil::diagnostics().naturalEof(
-      _callbackToken, millis(), transportProgressBytes(),
-      httpBodyProgressBytes(), httpContentLength(), accepted);
-#endif
+  const bool accepted = _sourceMedia.signal(_callbackToken);
   return true;
 }
 
-bool Player::interruptTemporaryForNetwork() {
-  const bool busy = temporaryBusy();
-  const uint32_t token = _temporary.token();
-  const bool accepted = _temporary.signal(token);
-#if defined(VOXONE_TTS_HIL_DIAGNOSTICS)
-  voxone::tts_hil::diagnostics().notifyNetworkInterrupted(token, accepted);
-#endif
+bool Player::interruptSourceMediaForNetwork() {
+  const bool busy = sourceMediaBusy();
+  const uint32_t token = _sourceMedia.token();
+  const bool accepted = _sourceMedia.signal(token);
   return busy;
 }
 
-void Player::finishTemporary() {
-  const uint32_t token = _temporary.token();
+void Player::finishSourceMedia() {
+  const uint32_t token = _sourceMedia.token();
   if (!token) return;
-#if defined(VOXONE_TTS_HIL_DIAGNOSTICS)
-  // Close the narrow race where Wi-Fi signals terminal state after loop()'s
-  // first mailbox check but before the one-shot cleanup dispatcher runs.
-  voxone::tts_hil::diagnostics().consumeNetworkInterrupted(
-      millis(), transportProgressBytes(), httpBodyProgressBytes(),
-      httpContentLength());
-#endif
   _callbackToken = 0;
   // Stop/clear Player while it still owns I2S0. This is not a user RADIO STOP.
   _stop(false, RadioStopReason::SourceSwitch, true);
   remoteStationName = false;
-  if (!_temporary.finish(token)) return;
-  sourceManagerEndTemporary();
-#if defined(VOXONE_TTS_HIL_DIAGNOSTICS)
-  voxone::tts_hil::diagnostics().cleanup(
-      token, millis(), transportProgressBytes(), httpBodyProgressBytes(),
-      httpContentLength());
-#endif
-  _temporaryProgress.finish(token);
-  // The station data never changed, but consumers may have observed temporary
-  // PLAY. Publish the final source/playback view and redraw from canonical
-  // RADIO/BT state without persisting configuration.
+  if (!_sourceMedia.finish(token)) return;
+  sourceManagerEndMedia();
+  _sourceMediaProgress.finish(token);
+  _sourceMediaReturnPending = _sourceMediaReturnToPrevious;
+  _sourceMediaReturnToPrevious = false;
+  // Publish stopped playback for the selected source. An explicitly requested
+  // return is applied by the main loop after queued commands have drained.
   netserver.requestOnChange(MODE, 0);
   netserver.requestOnChange(WEBSTATUS, 0);
   display.putRequest(NEWSTATION);
   display.putRequest(NEWTITLE);
 }
 
-void Player::restoreTemporaryBase() {
-  if (!temporaryBusy() || temporaryActive()) return;
-  uint16_t station = config.lastStation();
-  if (!sourceManagerTakeTemporaryRestore(_temporary,
-          WiFi.isConnected(),
-          systemUpdateAudioBlocked(), station)) return;
-  if (station != config.lastStation()) config.setLastStation(station);
-  _play(station, true);
+void Player::restoreSourceMediaBase() {
+  if (!_sourceMediaReturnPending || sourceMediaActive()) return;
+  if (systemUpdateAudioBlocked()) {
+    _sourceMediaReturnPending = false;
+    return;
+  }
+  if (_sourceMediaPrevious == SourceId::Web && !WiFi.isConnected()) return;
+  const SourceId previous = _sourceMediaPrevious;
+  _sourceMediaReturnPending = false;
+  sourceManagerSelectSource(previous);
 }
 
-void Player::browseUrl(const voxone::temporary_audio::Request& request){
+void Player::playSourceMedia(const voxone::source_media::Request& request){
 #if VOXONE_HAS_BT && VOXONE_PIN_MAP_COMPLETE && VOXONE_BT_I2S_RX_ENABLED
   if (!btAudioInput.acquirePlayerOutput()) {
-    serialCli.printf("##ERROR#:\tTemporary URL cannot acquire I2S0\n");
+    serialCli.printf("##ERROR#:\tSource media cannot acquire I2S0\n");
     return;
   }
 #endif
   _callbackToken = 0;
-  // Replacement invalidates the previous token without changing the base.
-#if defined(VOXONE_TTS_HIL_DIAGNOSTICS)
-  const uint32_t replacedToken = _temporary.token();
-  if (replacedToken) {
-    voxone::tts_hil::diagnostics().replaced(
-        replacedToken, millis(), transportProgressBytes(),
-        httpBodyProgressBytes(), httpContentLength());
-  }
-#endif
-  const uint32_t token = _temporary.begin();
-  if (request.source == voxone::temporary_audio::Source::Dlna)
-    sourceManagerBeginDlna(request.title, request.artist);
-  else if (request.source == voxone::temporary_audio::Source::Local)
-    sourceManagerBeginLocal(request.title, request.artist);
-  else
-    sourceManagerBeginHomeAssistant(request.title, request.artist);
-  _temporaryProgress.begin(token, millis(), transportProgressBytes());
-#if defined(VOXONE_TTS_HIL_DIAGNOSTICS)
-  voxone::tts_hil::diagnostics().start(
-      token, millis(), transportProgressBytes(), httpBodyProgressBytes());
-#endif
+  const bool replacing = sourceMediaActive();
+  if (!replacing) _sourceMediaPrevious = sourceManagerActiveSource();
+  _sourceMediaReturnPending = false;
+  _sourceMediaReturnToPrevious = request.returnToPrevious;
+  const uint32_t token = _sourceMedia.begin();
+  sourceManagerBeginMedia(sourceIdForMedia(request.source), request.title,
+                          request.artist);
+  _sourceMediaProgress.begin(token, millis(), transportProgressBytes());
   stopSong();
   _pcmOutputPending = false;
   network.lostPlaying = false;
@@ -873,7 +801,7 @@ void Player::browseUrl(const voxone::temporary_audio::Request& request){
   armPcmOutput();
   _pcmOutputPending = true;
   _callbackToken = token;
-  fs::FS* localFs = request.source == voxone::temporary_audio::Source::Local
+  fs::FS* localFs = request.source == voxone::source_media::Source::Local
                         ? voxone::sd_card::filesystem() : nullptr;
   const bool connected = localFs ? connecttoFS(*localFs, request.url)
                                  : connecttohost(request.url);
@@ -888,12 +816,7 @@ void Player::browseUrl(const voxone::temporary_audio::Request& request){
     serialCli.printf("##ERROR#:\tError connecting to %.128s\n", request.url);
     snprintf(config.tmpBuf, sizeof(config.tmpBuf),
              "Error connecting to %.128s", request.url); setError();
-    const bool accepted = _temporary.signal(token);
-#if defined(VOXONE_TTS_HIL_DIAGNOSTICS)
-    voxone::tts_hil::diagnostics().connectFailed(
-        token, millis(), transportProgressBytes(), httpBodyProgressBytes(),
-        httpContentLength(), accepted);
-#endif
+    const bool accepted = _sourceMedia.signal(token);
   }
 }
 

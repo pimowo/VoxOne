@@ -1,10 +1,10 @@
-#ifndef VOXONE_TEMPORARY_AUDIO_URL_H
-#define VOXONE_TEMPORARY_AUDIO_URL_H
+#ifndef VOXONE_SOURCE_MEDIA_URL_H
+#define VOXONE_SOURCE_MEDIA_URL_H
 
 #include <stddef.h>
 
 namespace voxone {
-namespace temporary_audio {
+namespace source_media {
 
 constexpr size_t kUrlCapacity = 512;
 
@@ -41,7 +41,7 @@ inline bool isSafeUrl(const char* url, size_t length) {
   return true;
 }
 
-}  // namespace temporary_audio
+}  // namespace source_media
 }  // namespace voxone
 
 #endif

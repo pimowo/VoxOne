@@ -2,7 +2,6 @@
 #include "utf8_text.h"
 #include <Arduino.h>
 #include "source_manager_state.h"
-#include "temporary_audio_state.h"
 #include "config.h"
 #include "network.h"
 #include "system_operation_state.h"
@@ -73,11 +72,10 @@ void refreshDisplay(const SourceUpdate& update) {
 #endif
 }
 
-void stopOnSourceChange(const SourceUpdate& update, bool temporaryAtChange) {
+void stopOnSourceChange(const SourceUpdate& update, bool sourceMediaAtChange) {
   if (!update.activeChanged) return;
-  // A temporary stream owns Player until its queued STOP is consumed. Its
-  // cleanup publishes the base source selected here.
-  if (temporaryAtChange || player.temporaryBusy()) {
+  // An active URL/file stream owns Player until its queued STOP is consumed.
+  if (sourceMediaAtChange || player.sourceMediaBusy()) {
     network.lostPlaying = false;
     return;
   }
@@ -95,10 +93,10 @@ void stopOnSourceChange(const SourceUpdate& update, bool temporaryAtChange) {
 }
 
 void applyManualSourceChange(const SourceUpdate& update, ActiveSource active,
-                             bool temporaryAtChange) {
+                             bool sourceMediaAtChange) {
   if (!update.activeChanged) return;
   publishSourceChanged(update, active);
-  stopOnSourceChange(update, temporaryAtChange);
+  stopOnSourceChange(update, sourceMediaAtChange);
   serialCli.printf("##[SOURCE]# active=%s reason=manual\n", sourceName(active));
   refreshDisplay(update);
   netserver.requestOnChange(WEBSTATUS, 0);
@@ -188,82 +186,28 @@ bool sourceManagerRadioPlayIntent() {
   return play;
 }
 
-bool sourceManagerTakeTemporaryRestore(TemporaryAudioState& temporary,
-                                      bool networkReady, bool blocked,
-                                      uint16_t& station) {
+void sourceManagerBeginMedia(SourceId source, const char* title,
+                             const char* artist) {
+  const ActiveSource active = activeSource(source);
   portENTER_CRITICAL(&sourceMux);
-  // Commit the restore decision together with the current base. A controls
-  // task changing source cannot fall between reading intent and consuming it.
-  const bool play = temporary.takeRadioRestore(sourceState.radioResumeAllowed(),
-                                               networkReady, blocked);
-  if (play) {
-    station = sourceState.radioStationForResume(station);
-    sourceState.radioPlayConsumed();
-  }
+  const SourceUpdate update = sourceState.beginMedia(active, title, artist);
   portEXIT_CRITICAL(&sourceMux);
-  return play;
-}
-
-void sourceManagerBeginHomeAssistant(const char* title, const char* artist) {
-  portENTER_CRITICAL(&sourceMux);
-  const SourceUpdate update = sourceState.beginHomeAssistant(title, artist);
-  portEXIT_CRITICAL(&sourceMux);
-  publishSourceChanged(update, ActiveSource::SOURCE_HA);
-  refreshDisplay(update);
-  netserver.requestOnChange(WEBSTATUS, 0);
-  serialCli.printf("##[SOURCE]# active=HA title=%.96s artist=%.96s\n",
-                   title ? title : "", artist ? artist : "");
-}
-
-void sourceManagerEndHomeAssistant() {
-  portENTER_CRITICAL(&sourceMux);
-  const SourceUpdate update = sourceState.endHomeAssistant();
-  const ActiveSource active = sourceState.active();
-  portEXIT_CRITICAL(&sourceMux);
-  if (!update.activeChanged) return;
   publishSourceChanged(update, active);
   refreshDisplay(update);
   netserver.requestOnChange(WEBSTATUS, 0);
-  serialCli.printf("##[SOURCE]# active=%s reason=ha-finished\n",
-                   sourceName(active));
+  serialCli.printf("##[SOURCE]# active=%s title=%.96s artist=%.96s\n",
+                   sourceName(active), title ? title : "",
+                   artist ? artist : "");
 }
 
-bool sourceManagerHomeAssistantActive() {
-  portENTER_CRITICAL(&sourceMux);
-  const bool active = sourceState.homeAssistantActive();
-  portEXIT_CRITICAL(&sourceMux);
-  return active;
-}
-
-void sourceManagerBeginDlna(const char* title, const char* artist) {
-  portENTER_CRITICAL(&sourceMux);
-  const SourceUpdate update = sourceState.beginDlna(title, artist);
-  portEXIT_CRITICAL(&sourceMux);
-  publishSourceChanged(update, ActiveSource::SOURCE_DLNA);
-  refreshDisplay(update);
-  netserver.requestOnChange(WEBSTATUS, 0);
-  serialCli.printf("##[SOURCE]# active=DLNA title=%.96s artist=%.96s\n",
-                   title ? title : "", artist ? artist : "");
-}
-
-void sourceManagerBeginLocal(const char* title, const char* artist) {
-  portENTER_CRITICAL(&sourceMux);
-  const SourceUpdate update = sourceState.beginLocal(title, artist);
-  portEXIT_CRITICAL(&sourceMux);
-  publishSourceChanged(update, ActiveSource::SOURCE_LOCAL);
-  refreshDisplay(update);
-  netserver.requestOnChange(WEBSTATUS, 0);
-  serialCli.printf("##[SOURCE]# active=LOCAL title=%.96s\n",
-                   title ? title : "");
-}
-
-void sourceManagerEndTemporary() {
+void sourceManagerEndMedia() {
   portENTER_CRITICAL(&sourceMux);
   const ActiveSource finished = sourceState.active();
-  const SourceUpdate update = sourceState.endTemporary();
+  const SourceUpdate update = sourceState.endMedia();
   const ActiveSource active = sourceState.active();
   portEXIT_CRITICAL(&sourceMux);
-  if (!update.activeChanged) return;
+  if (!update.activeChanged && !update.titleChanged &&
+      !update.audioInfoChanged) return;
   publishSourceChanged(update, active);
   refreshDisplay(update);
   netserver.requestOnChange(WEBSTATUS, 0);
@@ -271,13 +215,6 @@ void sourceManagerEndTemporary() {
                    sourceName(active),
                    finished == ActiveSource::SOURCE_DLNA ? "dlna" :
                    finished == ActiveSource::SOURCE_LOCAL ? "local" : "ha");
-}
-
-bool sourceManagerDlnaActive() {
-  portENTER_CRITICAL(&sourceMux);
-  const bool active = sourceState.dlnaActive();
-  portEXIT_CRITICAL(&sourceMux);
-  return active;
 }
 
 #if VOXONE_HAS_BT && VOXONE_PIN_MAP_COMPLETE
@@ -352,11 +289,9 @@ void sourceManagerLoop() {
   portENTER_CRITICAL(&sourceMux);
   const SourceUpdate update = sourceState.observe(btLink.sourceSnapshot());
   const ActiveSource active = sourceState.active();
-  const bool temporaryAtChange = player.temporaryBusy();
-  if (temporaryBtLossRequiresRadioStop(update, temporaryAtChange))
-    player.suppressTemporaryRadioRestore();
+  const bool sourceMediaAtChange = player.sourceMediaBusy();
   portEXIT_CRITICAL(&sourceMux);
-  stopOnSourceChange(update, temporaryAtChange);
+  stopOnSourceChange(update, sourceMediaAtChange);
   const bool sessionCapable = btLink.volumeSessionCapable();
   portENTER_CRITICAL(&sourceMux);
   volumeSessionGate.setAuthorized(sessionCapable && !update.btDisconnected);
@@ -470,7 +405,7 @@ bool radioI2SOutputEnabled() {
   portEXIT_CRITICAL(&sourceMux);
   if (!playerSource) return false;
 #if VOXONE_BT_I2S_RX_ENABLED
-  return !bluetoothOwnsAudio(bluetoothSourceSelected(), player.temporaryActive()) &&
+  return !bluetoothOwnsAudio(bluetoothSourceSelected(), player.sourceMediaActive()) &&
          btAudioInput.radioOutputReady();
 #else
   return true;
@@ -547,16 +482,17 @@ bool sourceManagerSelectSource(ActiveSource source) {
 #if VOXONE_HAS_BT && VOXONE_PIN_MAP_COMPLETE
   bt = btLink.sourceSnapshot();
 #endif
-  const bool temporaryAtChange = player.temporaryBusy();
+  const bool sourceMediaAtChange = player.sourceMediaBusy();
   portENTER_CRITICAL(&sourceMux);
   const SourceUpdate update = sourceState.select(source, bt);
   portEXIT_CRITICAL(&sourceMux);
-  if (update.activeChanged && temporaryAtChange) {
-    if (source != ActiveSource::Radio)
-      player.suppressTemporaryRadioRestore();
+  if (update.activeChanged && sourceMediaAtChange) {
+    player.suppressSourceMediaReturn();
     player.sendCommand({PR_STOP, 0});
+    if (source == ActiveSource::Radio && sourceManagerRadioPlayIntent())
+      player.sendCommand({PR_RADIO_RESUME, config.lastStation()});
   }
-  applyManualSourceChange(update, source, temporaryAtChange);
+  applyManualSourceChange(update, source, sourceMediaAtChange);
 #if VOXONE_HAS_BT && VOXONE_PIN_MAP_COMPLETE
   if (update.activeChanged && source == ActiveSource::Bluetooth)
     sourceManagerApplyConfiguredBluetoothVolume();

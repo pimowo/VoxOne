@@ -148,7 +148,7 @@ int main() {
   assert(audio.find("vTaskDelete(_connectTaskHandle)") == std::string::npos);
   assert(audio.find("Connection attempt canceled or timed out") !=
          std::string::npos);
-  assert(player.find("case PR_STOP:\n    case PR_BURL:") != std::string::npos);
+  assert(player.find("case PR_STOP:\n    case PR_SOURCE_MEDIA:") != std::string::npos);
   assert(player.find("case PR_PLAY:") != std::string::npos);
   assert(player.find("cancelPendingConnection();") != std::string::npos);
 

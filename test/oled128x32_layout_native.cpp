@@ -224,7 +224,6 @@ int main() {
   assertSource("DLNA", "[DLNA]");
   assertSource("AUX", "[AUX]");
   assertSource("SPDIF", "[SPDIF]");
-  assertSource("TTS", "[TTS]");
   assertMetadata("Artysta", "Utwor", "Artysta - Utwor");
   assertMetadata("Artysta", "", "Artysta");
   assertMetadata("", "Utwor", "Utwor");

@@ -3125,9 +3125,6 @@ void Audio::processWebFile() {
 
     if(bytesAddedToBuffer > 0) {
         byteCounter  += bytesAddedToBuffer;  // Pull request #42
-#if defined(VOXONE_TTS_HIL_DIAGNOSTICS)
-        m_hilHttpBodyProgressBytes += static_cast<uint32_t>(bytesAddedToBuffer);
-#endif
         if(m_f_chunked)             m_chunkcount   -= bytesAddedToBuffer;
         if(m_controlCounter == 100) audioDataCount += bytesAddedToBuffer;
         InBuff.bytesWritten(bytesAddedToBuffer);

@@ -5,7 +5,7 @@
 #include <esp_log.h>
 
 #include "player.h"
-#include "temporary_audio_request.h"
+#include "source_media_request.h"
 #include "ui_menu.h"
 #include "ui_state.h"
 #include "source_manager.h"
@@ -97,13 +97,13 @@ void select() {
     uiMenu.setDlnaStatus("Brak URL utworu");
     return;
   }
-  temporary_audio::RequestStorage storage{};
+  source_media::RequestStorage storage{};
   strlcpy(storage.url, item.resourceUrl, sizeof(storage.url));
   strlcpy(storage.title, item.title[0] ? item.title : "DLNA",
           sizeof(storage.title));
   strlcpy(playingObjectId, item.id, sizeof(playingObjectId));
-  player.requestTemporaryUrl(
-      storage.view(temporary_audio::Source::Dlna));
+  player.requestSourceMedia(
+      storage.view(source_media::Source::Dlna, true));
   uiMenu.close();
   transitionUiMode(PLAYER);
 }

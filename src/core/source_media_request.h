@@ -1,14 +1,14 @@
-#ifndef VOXONE_TEMPORARY_AUDIO_REQUEST_H
-#define VOXONE_TEMPORARY_AUDIO_REQUEST_H
+#ifndef VOXONE_SOURCE_MEDIA_REQUEST_H
+#define VOXONE_SOURCE_MEDIA_REQUEST_H
 
 #include <stddef.h>
 #include <stdint.h>
 #include <string.h>
 
-#include "temporary_audio_url.h"
+#include "source_media_url.h"
 
 namespace voxone {
-namespace temporary_audio {
+namespace source_media {
 
 constexpr size_t kMetadataCapacity = 128;
 // URL stays below kUrlCapacity. Percent-encoded UTF-8 metadata can use three
@@ -22,12 +22,14 @@ struct Request {
   const char* title = "";
   const char* artist = "";
   Source source = Source::HomeAssistant;
+  bool returnToPrevious = false;
 
   Request() = default;
   Request(const char* requestUrl, const char* requestTitle,
-          const char* requestArtist, Source requestSource)
+          const char* requestArtist, Source requestSource,
+          bool shouldReturn = false)
       : url(requestUrl), title(requestTitle), artist(requestArtist),
-        source(requestSource) {}
+        source(requestSource), returnToPrevious(shouldReturn) {}
 };
 
 // Parsing and protocol adapters may use bounded stack storage, while the
@@ -37,9 +39,12 @@ struct RequestStorage {
   char url[kUrlCapacity]{};
   char title[kMetadataCapacity]{};
   char artist[kMetadataCapacity]{};
+  bool returnToPrevious = false;
 
-  Request view(Source source = Source::HomeAssistant) const {
-    return Request(url, title, artist, source);
+  Request view(Source source = Source::HomeAssistant,
+               bool defaultReturn = false) const {
+    return Request(url, title, artist, source,
+                   returnToPrevious || defaultReturn);
   }
 };
 
@@ -91,12 +96,30 @@ inline bool parseRequest(const char* value, size_t length,
 
   const char* titleField = findLastField(value, length, "&title=");
   const char* artistField = findLastField(value, length, "&artist=");
+  const char* returnField =
+      findLastField(value, length, "&return_to_previous=");
   size_t urlLength = length;
+  size_t fieldsEnd = length;
+  if (returnField) {
+    const char* returnValue = returnField + strlen("&return_to_previous=");
+    const size_t returnLength =
+        length - static_cast<size_t>(returnValue - value);
+    if ((returnLength == 4 && memcmp(returnValue, "true", 4) == 0) ||
+        (returnLength == 1 && returnValue[0] == '1')) {
+      storage.returnToPrevious = true;
+    } else if (!((returnLength == 5 &&
+                  memcmp(returnValue, "false", 5) == 0) ||
+                 (returnLength == 1 && returnValue[0] == '0'))) {
+      return false;
+    }
+    fieldsEnd = static_cast<size_t>(returnField - value);
+  }
   if (titleField || artistField) {
     // Metadata is an unambiguous suffix only when both fields are present in
     // the order emitted by VoxOneHA. A URL containing one similarly named
     // query parameter remains a normal URL.
-    if (!titleField || !artistField || titleField >= artistField) return false;
+    if (!titleField || !artistField || titleField >= artistField ||
+        (returnField && artistField >= returnField)) return false;
     urlLength = static_cast<size_t>(titleField - value);
     const char* titleValue = titleField + strlen("&title=");
     const char* artistValue = artistField + strlen("&artist=");
@@ -104,9 +127,11 @@ inline bool parseRequest(const char* value, size_t length,
                         static_cast<size_t>(artistField - titleValue),
                         storage.title, sizeof(storage.title)) ||
         !decodeMetadata(artistValue,
-                        length - static_cast<size_t>(artistValue - value),
+                        fieldsEnd - static_cast<size_t>(artistValue - value),
                         storage.artist, sizeof(storage.artist)))
       return false;
+  } else if (returnField) {
+    urlLength = static_cast<size_t>(returnField - value);
   } else {
     memcpy(storage.title, "Home Assistant", sizeof("Home Assistant"));
   }
@@ -119,7 +144,7 @@ inline bool parseRequest(const char* value, size_t length,
   return true;
 }
 
-}  // namespace temporary_audio
+}  // namespace source_media
 }  // namespace voxone
 
 #endif

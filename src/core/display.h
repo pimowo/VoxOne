@@ -15,7 +15,7 @@
 #endif
 
 enum class DisplaySourceKind : uint8_t {
-    Radio, Bluetooth, HomeAssistant, Dlna, Aux, Spdif, Tts, Local
+    Radio, Bluetooth, HomeAssistant, Dlna, Aux, Spdif, Local
 };
 inline const char* displaySourceLabel(DisplaySourceKind kind) {
     switch (kind) {
@@ -25,7 +25,6 @@ inline const char* displaySourceLabel(DisplaySourceKind kind) {
         case DisplaySourceKind::Dlna: return "DLNA";
         case DisplaySourceKind::Aux: return "AUX";
         case DisplaySourceKind::Spdif: return "SPDIF";
-        case DisplaySourceKind::Tts: return "TTS";
         case DisplaySourceKind::Local: return "SD";
     }
     return "";

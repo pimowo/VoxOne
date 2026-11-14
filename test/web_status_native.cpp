@@ -33,14 +33,14 @@ int main() {
   assert(webTransportAction(false, "next") == WebTransportAction::RadioNext);
 
   SourceManagerState homeAssistant;
-  homeAssistant.beginHomeAssistant("Home Assistant", "Komunikat TTS");
+  homeAssistant.beginHomeAssistant("Home Assistant", "Automatyzacja");
   homeAssistant.displayView(display, true);
   status = selectWebStatusView(display, "Radio A", "Artysta - Utwór",
                                "Artysta", "Utwór", "MP3", 320);
   assert(std::strcmp(status.source, "HA") == 0);
   assert(std::strcmp(status.activeSource, "ha") == 0);
   assert(std::strcmp(status.name, "Home Assistant") == 0);
-  assert(std::strcmp(status.artist, "Komunikat TTS") == 0);
+  assert(std::strcmp(status.artist, "Automatyzacja") == 0);
   assert(std::strcmp(status.title, "Home Assistant") == 0);
   assert(std::strcmp(status.transport, "playing") == 0);
   assert(status.bitrate == 0 && status.codec[0] == '\0');

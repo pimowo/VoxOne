@@ -8,9 +8,6 @@
 #include "bt_update_progress.h"
 #include "source_manager.h"
 #include "bt_link.h"
-#if defined(VOXONE_TTS_HIL_DIAGNOSTICS)
-#include "tts_hil_diagnostics.h"
-#endif
 #include "../hardware/hardware_descriptor.h"
 #include "../hardware/runtime_hardware_web.h"
 #if defined(CONFIG_IDF_TARGET_ESP32S3) && VOXONE_HAS_BT && \
@@ -64,7 +61,7 @@
 #include "netserver.h"
 #include "netserver_backpressure.h"
 #include "player.h"
-#include "temporary_audio_request.h"
+#include "source_media_request.h"
 #include "sd_card.h"
 #include "serialcli.h"
 #include "display.h"
@@ -328,7 +325,7 @@ bool quiesceForUpdate() {
   audioReady = btAudioInput.blockForUpdate();
 #endif
 #endif
-  player.suppressTemporaryRadioRestore();
+  player.suppressSourceMediaReturn();
   player.resetQueue();
   player.sendCommand({PR_UPDATE_STOP, 0});
   return audioReady;
@@ -1769,8 +1766,8 @@ void handleDlnaPlay(AsyncWebServerRequest* request) {
   const String& title = request->hasParam("title", true)
                             ? request->getParam("title", true)->value()
                             : defaultTitle;
-  voxone::temporary_audio::RequestStorage playback{};
-  if (!voxone::temporary_audio::isSafeUrl(url.c_str(), url.length()) ||
+  voxone::source_media::RequestStorage playback{};
+  if (!voxone::source_media::isSafeUrl(url.c_str(), url.length()) ||
       title.length() >= sizeof(playback.title)) {
     stationsReply(request, 400, R"({"error":"invalid_dlna_item"})");
     return;
@@ -1778,8 +1775,8 @@ void handleDlnaPlay(AsyncWebServerRequest* request) {
   strlcpy(playback.url, url.c_str(), sizeof(playback.url));
   strlcpy(playback.title, title.length() ? title.c_str() : "DLNA",
           sizeof(playback.title));
-  player.requestTemporaryUrl(
-      playback.view(voxone::temporary_audio::Source::Dlna));
+  player.requestSourceMedia(
+      playback.view(voxone::source_media::Source::Dlna, true));
   stationsReply(request, 202, R"({"status":"starting","source":"dlna"})");
 }
 
@@ -1884,7 +1881,7 @@ void handleSdPlay(AsyncWebServerRequest* request) {
                       voxone::sd_card::statusName(status) + "\"}");
     return;
   }
-  voxone::temporary_audio::RequestStorage playback{};
+  voxone::source_media::RequestStorage playback{};
   static const String defaultTitle("Karta SD");
   const String& title = request->hasParam("title", true)
                             ? request->getParam("title", true)->value()
@@ -1896,8 +1893,8 @@ void handleSdPlay(AsyncWebServerRequest* request) {
   strlcpy(playback.url, path.c_str(), sizeof(playback.url));
   strlcpy(playback.title, title.length() ? title.c_str() : "Karta SD",
           sizeof(playback.title));
-  player.requestTemporaryUrl(
-      playback.view(voxone::temporary_audio::Source::Local));
+  player.requestSourceMedia(
+      playback.view(voxone::source_media::Source::Local, true));
   stationsReply(request, 202,
                 R"({"status":"starting","source":"local"})");
 }
@@ -2723,27 +2720,6 @@ void handlePowerSettingsSave(AsyncWebServerRequest* request) {
 
 void handleHardwareConfigRead(AsyncWebServerRequest* request) {
   if (!deviceApiAuthorized(request)) return;
-#if defined(VOXONE_TTS_HIL_DIAGNOSTICS)
-  AsyncWebParameter* diagnosticsParameter = request->hasParam("ttsDiagnostics")
-      ? request->getParam("ttsDiagnostics") : nullptr;
-  if (diagnosticsParameter && diagnosticsParameter->value() == "1") {
-    std::unique_ptr<char[]> diagnosticsBody(new (std::nothrow)
-        char[voxone::tts_hil::Diagnostics::kJsonCapacity]);
-    if (!diagnosticsBody || !voxone::tts_hil::diagnostics().formatJson(
-            diagnosticsBody.get(),
-            voxone::tts_hil::Diagnostics::kJsonCapacity)) {
-      stationsReply(request, 500,
-                    R"({"error":"tts_diagnostics_unavailable"})");
-      return;
-    }
-    AsyncWebServerResponse* response = request->beginResponse(
-        200, "application/json; charset=utf-8", diagnosticsBody.get());
-    response->addHeader("Cache-Control", "no-store, max-age=0");
-    response->addHeader("X-Content-Type-Options", "nosniff");
-    request->send(response);
-    return;
-  }
-#endif
   std::unique_ptr<char[]> body(new (std::nothrow)
       char[voxone::hardware::kRuntimeHardwareWebJsonCapacity]);
   if (!body) {

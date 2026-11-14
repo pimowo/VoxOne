@@ -1,7 +1,7 @@
 #ifndef netserver_h
 #define netserver_h
 #include "../AsyncWebServer/ESPAsyncWebServer.h"
-#include "temporary_audio_request.h"
+#include "source_media_request.h"
 enum requestType_e : uint8_t  { STATION=2, STATIONNAME=3, ITEM=4, TITLE=5, VOLUME=6, NRSSI=7, BITRATE=8, MODE=9, EQUALIZER=10, BALANCE=11, GETINDEX=14, GETSYSTEM=16, GETSCREEN=17, WEBSTATUS=28 };
 const char first_boot_setup_html[] PROGMEM = R"(
 <!DOCTYPE html>
@@ -262,7 +262,7 @@ class NetServer {
     bool _started = false;
     requestType_e request;
     QueueHandle_t nsQueue;
-    char _wscmd[65], _wsval[voxone::temporary_audio::kPlayUrlCommandCapacity];
+    char _wscmd[65], _wsval[voxone::source_media::kPlayUrlCommandCapacity];
     char wsBuf[BUFLEN*14];
     int rssi;
     uint32_t playerBufMax;

@@ -189,10 +189,7 @@ void navigateCurrentSource(SourceId source, bool next) {
     }
     return;
   }
-  if (source == SourceId::Aux) return;
-  // WEB and HA share Player's ordered-media navigation. HA is temporary
-  // audio, so an explicit next/previous gesture hands control back to the
-  // selected WEB station in that direction.
+  if (source != SourceId::Web) return;
   if (next) player.next();
   else player.prev();
 }

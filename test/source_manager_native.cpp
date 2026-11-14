@@ -132,8 +132,10 @@ int main() {
   web.displayView(view);
   assert(view.kind == DisplaySourceKind::HomeAssistant &&
          view.playback == DisplayPlaybackState::Stopped);
+  assert(web.localPlayerOutputAllowed());
   webUpdate = web.select(ActiveSource::SOURCE_DLNA, webBt);
   assert(webUpdate.activeChanged && web.active() == ActiveSource::SOURCE_DLNA);
+  assert(web.localPlayerOutputAllowed());
   webUpdate = web.select(ActiveSource::Aux, webBt);
   assert(webUpdate.activeChanged && web.active() == ActiveSource::Aux);
   web.displayView(view);
@@ -144,7 +146,7 @@ int main() {
   assert(view.kind == DisplaySourceKind::Local && view.connected &&
          view.playback == DisplayPlaybackState::Stopped &&
          std::strcmp(view.peerName, "SD / Local") == 0 &&
-         !web.localPlayerOutputAllowed());
+         web.localPlayerOutputAllowed());
   assert(web.select(ActiveSource::Radio, webBt).activeChanged);
   assert(web.localPlayerOutputAllowed());
   webBt.connected = true;
@@ -181,11 +183,10 @@ int main() {
   assert(std::strcmp(displaySourceLabel(DisplaySourceKind::Dlna), "DLNA") == 0);
   assert(std::strcmp(displaySourceLabel(DisplaySourceKind::Aux), "AUX") == 0);
   assert(std::strcmp(displaySourceLabel(DisplaySourceKind::Spdif), "SPDIF") == 0);
-  assert(std::strcmp(displaySourceLabel(DisplaySourceKind::Tts), "TTS") == 0);
   assert(std::strcmp(displaySourceLabel(DisplaySourceKind::Local), "SD") == 0);
 
-  // Home Assistant is a temporary presentation source. The selected base and
-  // RADIO intent remain available for the one-shot restore after EOF/STOP.
+  // Home Assistant is a normal selected source. Radio intent is retained so
+  // an explicit return_to_previous request can select and resume it.
   SourceManagerState homeAssistant;
   homeAssistant.recordRadioCommand(true, 7);
   SourceUpdate haUpdate = homeAssistant.beginHomeAssistant(
@@ -193,11 +194,7 @@ int main() {
   assert(haUpdate.activeChanged && haUpdate.stationChanged &&
          haUpdate.titleChanged && haUpdate.audioInfoChanged);
   assert(homeAssistant.active() == ActiveSource::SOURCE_HA);
-  assert(homeAssistant.radioResumeAllowed());
-  // Selecting the already configured base still interrupts the visible
-  // temporary source and returns to it after cleanup.
-  assert(homeAssistant.select(ActiveSource::Radio, BtLinkState{}).activeChanged);
-  assert(homeAssistant.active() == ActiveSource::SOURCE_HA);
+  assert(!homeAssistant.radioResumeAllowed());
   homeAssistant.displayView(view, true);
   assert(view.kind == DisplaySourceKind::HomeAssistant);
   assert(view.playback == DisplayPlaybackState::Playing);
@@ -210,8 +207,10 @@ int main() {
   assert(std::strcmp(playerView.title, "Home Assistant") == 0);
   assert(std::strcmp(playerView.audioText, "N/A") == 0);
   haUpdate = homeAssistant.endHomeAssistant();
-  assert(haUpdate.activeChanged);
-  assert(homeAssistant.active() == ActiveSource::Radio);
+  assert(!haUpdate.activeChanged && haUpdate.titleChanged);
+  assert(homeAssistant.active() == ActiveSource::SOURCE_HA);
+  assert(!homeAssistant.radioResumeAllowed());
+  assert(homeAssistant.select(ActiveSource::Radio, BtLinkState{}).activeChanged);
   assert(homeAssistant.radioResumeAllowed());
 
   SourceUpdate dlnaUpdate = homeAssistant.beginDlna("Koncert.flac", "audio/flac");
@@ -227,18 +226,19 @@ int main() {
   assert(std::strcmp(playerView.station, "DLNA") == 0);
   assert(std::strcmp(playerView.artist, "audio/flac") == 0);
   assert(std::strcmp(playerView.title, "Koncert.flac") == 0);
-  assert(homeAssistant.endTemporary().activeChanged);
-  assert(homeAssistant.active() == ActiveSource::Radio);
+  assert(!homeAssistant.endMedia().activeChanged);
+  assert(homeAssistant.active() == ActiveSource::SOURCE_DLNA);
 
   BtLinkState haBt{};
   haBt.runtimeAvailable = haBt.connected = true;
   haBt.playback = BtPlayback::Playing;
-  homeAssistant.observe(haBt);
-  assert(homeAssistant.active() == ActiveSource::Bluetooth);
-  homeAssistant.beginHomeAssistant("HA", "Plik");
-  assert(homeAssistant.active() == ActiveSource::SOURCE_HA);
-  homeAssistant.endHomeAssistant();
-  assert(homeAssistant.active() == ActiveSource::Bluetooth);
+  SourceManagerState bluetoothThenHa;
+  bluetoothThenHa.observe(haBt);
+  assert(bluetoothThenHa.active() == ActiveSource::Bluetooth);
+  bluetoothThenHa.beginHomeAssistant("HA", "Plik");
+  assert(bluetoothThenHa.active() == ActiveSource::SOURCE_HA);
+  bluetoothThenHa.endHomeAssistant();
+  assert(bluetoothThenHa.active() == ActiveSource::SOURCE_HA);
   assert(!displayVolumeMuted(0));
   assert(!displayVolumeMuted(1));
   assert(displayVolumeMuted(50, true));

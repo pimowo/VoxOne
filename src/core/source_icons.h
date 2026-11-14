@@ -15,7 +15,6 @@ enum class SourceIconKind : uint8_t {
   Aux,
   Local,
   Spdif,
-  Tts,
 };
 
 struct SourceIconBitmap {
@@ -37,8 +36,6 @@ constexpr SourceIconBitmap kSourceIconBitmaps[] = {
     {{0x7C, 0x46, 0x5E, 0x5E, 0x42, 0x5A, 0x42, 0x7E}},
     // SPDIF: optical connector.
     {{0x3C, 0x42, 0x99, 0xA5, 0xA5, 0x99, 0x42, 0x3C}},
-    // TTS: speech bubble.
-    {{0x7E, 0x42, 0x5A, 0x5A, 0x42, 0x7E, 0x20, 0x10}},
 };
 
 constexpr SourceIconKind sourceIconFor(DisplaySourceKind source) {
@@ -49,15 +46,14 @@ constexpr SourceIconKind sourceIconFor(DisplaySourceKind source) {
          source == DisplaySourceKind::Dlna ? SourceIconKind::Dlna :
          source == DisplaySourceKind::Aux ? SourceIconKind::Aux :
          source == DisplaySourceKind::Local ? SourceIconKind::Local :
-         source == DisplaySourceKind::Spdif ? SourceIconKind::Spdif :
-         SourceIconKind::Tts;
+         SourceIconKind::Spdif;
 }
 
 constexpr const SourceIconBitmap& sourceIconBitmap(SourceIconKind icon) {
   return kSourceIconBitmaps[static_cast<uint8_t>(icon)];
 }
 
-static_assert(sizeof(kSourceIconBitmaps) / sizeof(kSourceIconBitmaps[0]) == 8,
+static_assert(sizeof(kSourceIconBitmaps) / sizeof(kSourceIconBitmaps[0]) == 7,
               "Every source icon identity needs an 8x8 bitmap");
 static_assert(sourceIconFor(DisplaySourceKind::Local) == SourceIconKind::Local,
               "Local Files must keep the SD-card icon");

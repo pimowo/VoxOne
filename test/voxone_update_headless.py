@@ -822,11 +822,11 @@ setTimeout(async () => {
       get('playback-state').textContent === 'PLAY',
       'DLNA snapshot shows source metadata and playback');
     btTestSocket.receive(sourceSnapshot('HA', ['radio','bt'], true, {
-      name:'Home Assistant', artist:'TTS', title:'Powiadomienie',
+      name:'Home Assistant', artist:'Automatyzacja', title:'Powiadomienie',
       playback:'PLAY', transport:'playing', codec:'', bitrate:0
     }));
     check(get('current-station-name').textContent === 'Home Assistant' &&
-      get('status-artist').textContent === 'TTS' &&
+      get('status-artist').textContent === 'Automatyzacja' &&
       get('status-track').textContent === 'Powiadomienie' &&
       get('source').textContent === 'HA', 'HA snapshot is accepted');
     btTestSocket.receive(sourceSnapshot('AUX', ['radio','bt'], true, {

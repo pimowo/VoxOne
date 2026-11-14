@@ -64,5 +64,5 @@ int main() {
                  "Audio::processWebFile", "m_localFile.read"});
   hasAll(audioHeader, {"connecttoFS", "audio_id3data", "ST_WEBFILE",
                        "File                  m_localFile"});
-  hasAll(player, {"sd_card::filesystem", "temporary_audio::Source::Local"});
+  hasAll(player, {"sd_card::filesystem", "source_media::Source::Local"});
 }

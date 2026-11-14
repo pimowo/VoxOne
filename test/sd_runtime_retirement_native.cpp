@@ -102,7 +102,7 @@ int main() {
   hasNone(audio, {"Audio::connecttoSD", "AUDIO_LOCALFILE"});
   hasNone(audioHeader, {"connecttoSD", "AUDIO_LOCALFILE", "<SD_MMC.h>"});
   hasAll(playerSource, {"sd_card::filesystem",
-                        "temporary_audio::Source::Local"});
+                        "source_media::Source::Local"});
   hasAll(mainSource, {"sd_card::begin", "supportsSdCard"});
   hasAll(server, {"/api/sd/servers", "/api/sd/browse", "/api/sd/play"});
   hasAll(sdCard, {"kSdSpiFrequency = 4000000UL",

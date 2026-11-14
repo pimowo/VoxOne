@@ -115,7 +115,7 @@ Nie udostępnia normalnego REST, statycznego WWW ani WebSocket.
 | Metoda | Ścieżka | Parametry | Odpowiedź / działanie |
 |---|---|---|---|
 | `GET` | `/api/ready` | query ignorowane | Publiczna sonda restartu. JSON: `ready`, losowy dla bootu `bootId`, obiekt `ota` (sloty, stan obrazu, rollback, health, błędy i gotowość aktualizacji) oraz `www` (integralność, zgodność kontraktu, asset-set i statystyka weryfikacji). |
-| `GET` | `/api/hardware` | brak; w specjalnym buildzie diagnostycznym opcjonalnie `ttsDiagnostics=1` | Chroniony opis rodziny/MCU, aktywnego `display`/`input`/`audio`, wspieranych opcji i statusu roadmapy sprzętowej. Parametr diagnostyczny nie istnieje w zwykłym buildzie. |
+| `GET` | `/api/hardware` | brak | Chroniony opis rodziny/MCU, aktywnego `display`/`input`/`audio`, wspieranych opcji i statusu roadmapy sprzętowej. |
 | `POST` | `/api/hardware` | `display`, `input`, `audio` | Chroniony formularz. Waliduje capability profilu, zapisuje wybór runtime i zwraca `changed`, `restartRequired:true` oraz nową konfigurację. |
 | `GET` | `/api/config/backup` | brak | Chroniony binarny backup VXCF (`application/octet-stream`, nazwa `VoxOne-<version>-backup.vxcf`), obejmujący Config, Wi-Fi, hardware i playlistę. |
 | `POST` | `/api/config/restore` | surowy body VXCF, `Content-Type: application/octet-stream`; maks. ok. 193 KiB | Chroniony, transakcyjny restore. Zwraca `{"ok":true,"restartRequired":true}` albo JSON z błędem. Nie restartuje automatycznie. |
@@ -233,10 +233,11 @@ kodem 1008. Nieprawidłowa wartość często jest tylko ignorowana.
 
 | Komenda | Wartość | Efekt |
 |---|---|---|
-| `source` | `radio`, `bt`, `ha`, `dlna` albo `aux` | Ręczny wybór źródła w `SourceManager`; `bt` i `aux` są dostępne tylko wtedy, gdy profil publikuje odpowiednie capability, a offline BT jest odrzucane. |
+| `source` | `radio`, `bt`, `ha`, `dlna`, `aux` albo `local` | Ręczny wybór źródła w `SourceManager`; opcje są filtrowane przez capability profilu, a offline BT jest odrzucane. |
 | `webtransport` | `prev`, `toggle`, `next` | Source-aware transport: stacja RADIO albo AVRCP BT. |
 | `start` | ignorowana | PLAY ostatniej stacji RADIO. |
-| `stop` | ignorowana | STOP RADIO. |
+| `stop` | ignorowana | Zatrzymuje bieżące odtwarzanie Playera, w tym media HA. |
+| `playurl`, `ha_play` | `URL[&title=...&artist=...][&return_to_previous=true|false]` | Wybiera `SOURCE_HA` i odtwarza bezpieczny URL HTTP(S). Metadane są percent-encoded. Bez flagi po EOF pozostaje na HA; `true` przywraca poprzednie źródło. |
 | `toggle` | ignorowana | Przełącza PLAY/STOP RADIO. |
 | `prev`, `next` | ignorowana | Poprzednia/następna stacja RADIO. |
 | `playstation` | liczba stacji | PLAY; liczba jest ograniczana do zakresu 1..liczność playlisty. |
@@ -487,7 +488,7 @@ jednak ustabilizowania kontraktu, synchronizacji i polityki prywatności.
 | Album BT i absolutna głośność/revision BT | `BtLinkState::album`, `volume`, `volumeRevision` | `webStatus` publikuje artist/title i wspólne `volume100`, ale nie album ani surowy stan peer volume. |
 | Diagnostyka VoxOneBT: reset reason, uptime, heap/minHeap | `BtLinkDiagnostics` | Dostępna wewnętrznie/UART, nie w HTTP/WS. |
 | Szczegółowy postęp MAIN/SPIFFS update | globalny `UpdateProgressSnapshot`: target, phase, activity, bytes, percent, error, revision | `/api/ready` pokazuje boot health, nie bieżący upload. Panel zna upload z XHR; brak stabilnego endpointu ogólnego progress. |
-| Błąd playera, temporary TTS/URL, restore i watchdog transportu | `Player::_hasError`, `_temporary`, `_temporaryProgress`, `_radioReconnect` | Częściowo tylko logi i stan końcowy; brak jawnego eventu error/result dla komend WS. |
+| Błąd playera, odtwarzanie URL/pliku, powrót źródła i watchdog transportu | `Player::_hasError`, `_sourceMedia`, `_sourceMediaProgress`, `_radioReconnect` | Częściowo tylko logi i stan końcowy; brak jawnego eventu error/result dla komend WS. |
 | Faktyczny rozmiar bufora audio w bajtach i stan dekodera | `Audio`/`Player::inBufferFilled()`, pola transportu w `src/audioI2S/Audio.cpp` | WS wystawia jedynie procent pod ID `heap`; brak pojemności, underflow i liczników błędów. |
 | Powód ostatniego disconnectu Wi-Fi, próba/profil reconnectu, gateway/DNS | `MyNetwork`, `NetworkReadyState`, `ReassocPolicy`, event info ESP Wi-Fi | Eksponowane są IP/SSID/RSSI i lista profili, lecz nie diagnostyka reconnectu. |
 | AP/recovery presentation: SSID, adres, faza provisioningu | `first_boot::RuntimeSnapshotStore` w `MyNetwork::presentationState` | Używane do renderowania routingu, nie ma normalnego JSON API. |
@@ -517,8 +518,8 @@ Mechanizm mDNS zapewnia rozwiązywanie hosta i opcjonalne discovery HA:
 5. W trybie AP ustawiany jest `WiFi.softAPsetHostname`, ale kod nie uruchamia
    tam osobnego `MDNS.begin`.
 
-Integracja Home Assistant używa MAC z TXT jako `unique_id`, a sterowanie i TTS
-realizuje przez chroniony WebSocket, bez brokera MQTT.
+Integracja Home Assistant używa MAC z TXT jako `unique_id`, a sterowanie i
+odtwarzanie mediów realizuje przez chroniony WebSocket, bez brokera MQTT.
 
 ### SSDP/UPnP i inne broadcasty
 

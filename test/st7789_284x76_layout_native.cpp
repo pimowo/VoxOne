@@ -36,8 +36,7 @@ int main() {
       DisplaySourceKind::Radio, DisplaySourceKind::Bluetooth,
       DisplaySourceKind::HomeAssistant,
       DisplaySourceKind::Dlna, DisplaySourceKind::Aux,
-      DisplaySourceKind::Spdif, DisplaySourceKind::Tts,
-      DisplaySourceKind::Local};
+      DisplaySourceKind::Spdif, DisplaySourceKind::Local};
   for (const auto kind : sources) {
     assert(8 + 2 + std::strlen(displaySourceLabel(kind)) * 6 <= source.width);
     const auto& bitmap = sourceIconBitmap(sourceIconFor(kind));

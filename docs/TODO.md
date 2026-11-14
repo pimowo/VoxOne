@@ -48,9 +48,10 @@ checkpointów pozostaje w historii Git i w istniejących raportach.
   oraz zachowanie MUTE; sprawdzić brak słyszalnych ubytków przy krótkiej
   kontencji I2S, zamknięcie toru po fizycznym zatrzymaniu PCM i ograniczenie
   restartów I2S1 do pięciu kolejnych nieudanych prób.
-- [ ] Fizycznie przetestować TTS/media z Home Assistant: źródło `SOURCE_HA`,
-  metadane title/artist i `N/A` zamiast bitrate na TFT/OLED oraz powrót do
-  wcześniej używanego źródła i jego stanu po EOF albo komendzie Stop.
+- [ ] Fizycznie przetestować media z Home Assistant jako pełnoprawne źródło
+  `SOURCE_HA`: metadane title/artist i `N/A` zamiast bitrate na TFT/OLED,
+  pozostanie na HA po EOF bez flagi, powrót do wcześniej używanego źródła po
+  EOF z `return_to_previous=true` oraz standardową komendę Stop.
 - [ ] Fizycznie zweryfikować na DIN0 wspólny pinout bazy Zero odziedziczony z
   S0: I2S `BCLK5/DOUT6/LRC4`, enkoder `A9/B8/KEY7`, I2C `SDA1/SCL2` oraz
   przycisk zasilania GPIO3.

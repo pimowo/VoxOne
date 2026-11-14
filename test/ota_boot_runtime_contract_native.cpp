@@ -100,7 +100,7 @@ int main() {
   assert(contains(main, "player.ready()"));
   assert(!contains(main, "reportBootFatal(voxone::ota::Failure::Network)"));
   assert(contains(player,
-      "return playerQueue != nullptr && _temporaryUrls != nullptr;"));
+      "return playerQueue != nullptr && _sourceMediaUrls != nullptr;"));
   assert(!contains(health, "httpApiReady"));
   assert(!contains(health, "networkRequired"));
 

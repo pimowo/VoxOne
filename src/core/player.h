@@ -5,10 +5,11 @@
 #include "config_runtime_snapshot.h"
 #include "radio_reconnect_policy.h"
 #include "radio_source_policy.h"
-#include "temporary_audio_state.h"
-#include "temporary_audio_url.h"
-#include "temporary_audio_request.h"
-#include "temporary_transport_watchdog.h"
+#include "source_media_state.h"
+#include "source_media_url.h"
+#include "source_media_request.h"
+#include "source_media_watchdog.h"
+#include "source_catalog.h"
 #include "player_pending_refresh.h"
 
 #include "../audioI2S/AudioEx.h"
@@ -24,7 +25,7 @@ enum playerRequestType_e : uint8_t {
   PR_NEXT = 4,
   PR_VOL = 5,
   PR_VUTONUS = 7,
-  PR_BURL = 8,
+  PR_SOURCE_MEDIA = 8,
   PR_TOGGLE = 9,
   PR_RADIO_SUSPEND = 10,
   PR_RADIO_RESUME = 11,
@@ -65,12 +66,15 @@ class Player: public Audio {
     plStatus_e  _status;
     MuteState _mute;
     std::atomic<uint8_t> _effectiveOutputUser{0};
-    TemporaryAudioState _temporary;
-    voxone::temporary_audio::ProgressWatchdog _temporaryProgress;
+    SourceMediaState _sourceMedia;
+    voxone::source_media::ProgressWatchdog _sourceMediaProgress;
     voxone::radio::ReconnectPolicy _radioReconnect;
     PlayerPendingRefresh _pendingStationRefresh;
     uint32_t _callbackToken = 0;
-    QueueHandle_t _temporaryUrls = nullptr;
+    QueueHandle_t _sourceMediaUrls = nullptr;
+    SourceId _sourceMediaPrevious = SourceId::Web;
+    bool _sourceMediaReturnToPrevious = false;
+    bool _sourceMediaReturnPending = false;
     bool _localAudioAvailable = false;
     bool _pcmOutputPending = false;
     bool _shutdownSuspended = false;
@@ -86,16 +90,16 @@ class Player: public Audio {
     void _servicePendingStationRefresh();
     void _clearStation(bool resetOvol);
     void _loadVol(uint8_t volume);
-    void clearTemporaryRequests();
+    void clearSourceMediaRequests();
     void servicePendingVolume();
     bool processPlayerCommands();
-    void serviceTemporaryAudio();
+    void serviceSourceMedia();
     void servicePcmOutputActivation();
     void serviceVolumePersistence();
     bool _hasError;
-    void browseUrl(const voxone::temporary_audio::Request& request);
-    void finishTemporary();
-    void restoreTemporaryBase();
+    void playSourceMedia(const voxone::source_media::Request& request);
+    void finishSourceMedia();
+    void restoreSourceMediaBase();
     void scheduleRadioReconnect();
     void serviceRadioReconnect();
     // Config calls this only while holding playerVolumeMux with its
@@ -128,16 +132,14 @@ class Player: public Audio {
       _pendingStationRefresh.publish(resetOvolIfEmpty);
     }
     void resetQueue();
-    void requestTemporaryUrl(const voxone::temporary_audio::Request& request);
-    bool temporaryActive() const { return _temporary.active(); }
-    bool temporaryBusy() const { return _temporary.busy(); }
-    bool suppressTemporaryRadioRestore() {
-      return _temporary.suppressRadioRestore();
-    }
-    bool temporaryEof();
-    bool interruptTemporaryForNetwork();
+    void requestSourceMedia(const voxone::source_media::Request& request);
+    bool sourceMediaActive() const { return _sourceMedia.active(); }
+    bool sourceMediaBusy() const { return _sourceMedia.busy(); }
+    bool suppressSourceMediaReturn();
+    bool sourceMediaEof();
+    bool interruptSourceMediaForNetwork();
     bool radioMetadataAllowed() const {
-      return _temporary.radioMetadataAllowed(_callbackToken);
+      return _sourceMedia.radioMetadataAllowed(_callbackToken);
     }
     bool remoteStationName = false;
     plStatus_e status() { return _status; }

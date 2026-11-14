@@ -110,14 +110,13 @@ int main() {
   sources.displayView(view);
   assert(btTransportAction(BtTransportInput::Toggle, view) == BtTransportAction::Play);
 
-  // Temporary/TTS audio does not change the selected base source. The local
-  // display reports BT as stopped while the temporary decoder owns output,
-  // and the AVRCP target remains the connected peer.
-  DisplaySourceView temporaryView{};
-  sources.displayView(temporaryView, false, false);
-  assert(temporaryView.kind == DisplaySourceKind::Bluetooth);
-  assert(temporaryView.connected);
-  assert(temporaryView.playback == DisplayPlaybackState::Stopped);
+  // A missing local output reports the connected BT source as stopped while
+  // retaining AVRCP control of the peer.
+  DisplaySourceView unavailableView{};
+  sources.displayView(unavailableView, false, false);
+  assert(unavailableView.kind == DisplaySourceKind::Bluetooth);
+  assert(unavailableView.connected);
+  assert(unavailableView.playback == DisplayPlaybackState::Stopped);
   assert(sources.canControlBluetooth());
 
   // BT PLAYER uses the same carousel gesture; other screens remain unchanged.

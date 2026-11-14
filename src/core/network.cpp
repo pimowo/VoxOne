@@ -217,7 +217,7 @@ void MyNetwork::WiFiReconnected(WiFiEvent_t event, WiFiEventInfo_t info){
   player.lockOutput = false;
   transitionUiMode(PLAYER);
   transitionUiMode(PLAYER);
-  if (player.temporaryBusy()) network.lostPlaying = false;
+  if (player.sourceMediaBusy()) network.lostPlaying = false;
 #if VOXONE_HAS_BT && VOXONE_PIN_MAP_COMPLETE
   if (radioWifiReconnectShouldPlay(network.lostPlaying,
                                    !bluetoothSourceSelected(),
@@ -269,7 +269,7 @@ void MyNetwork::WiFiLostConnection(WiFiEvent_t event, WiFiEventInfo_t info){
     return;
   }
   if(!network.beginReconnect){
-    const bool temporaryRecovery = player.interruptTemporaryForNetwork();
+    const bool sourceMediaInterrupted = player.interruptSourceMediaForNetwork();
     const uint8_t lastSsid = config.runtimeSnapshot().lastSsid;
     Serial.printf("Lost connection, reconnecting to %s...\n",
                   config.ssids[lastSsid-1].ssid);
@@ -279,7 +279,7 @@ void MyNetwork::WiFiLostConnection(WiFiEvent_t event, WiFiEventInfo_t info){
     const bool radioSelected = true;
 #endif
     network.lostPlaying = radioWifiDisconnectShouldSuspend(
-        temporaryRecovery, radioSelected, sourceManagerRadioPlayIntent());
+        sourceMediaInterrupted, radioSelected, sourceManagerRadioPlayIntent());
     if (network.lostPlaying) {
       player.lockOutput = true;
       player.sendCommand({PR_RADIO_NETWORK_OFFLINE, 0});

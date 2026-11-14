@@ -164,12 +164,6 @@ public:
       return m_pcmOutputReady.exchange(false, std::memory_order_acq_rel);
     }
     uint64_t transportProgressBytes() const { return m_transportProgressBytes; }
-#if defined(VOXONE_TTS_HIL_DIAGNOSTICS)
-    uint64_t httpBodyProgressBytes() const {
-      return m_hilHttpBodyProgressBytes;
-    }
-    uint32_t httpContentLength() const { return m_contentlength; }
-#endif
     bool transportConnected() const {
       return m_localFileActive ? !m_webFileDataComplete
                                : (_client && _client->connected());
@@ -562,9 +556,6 @@ private:
     uint32_t        m_bytesNotDecoded = 0;          // pictures or something else that comes with the stream
     voxone::audio::AudioBufferMetrics m_audioBufferMetrics;
     uint64_t        m_transportProgressBytes = 0;   // bytes consumed from the active HTTP transport
-#if defined(VOXONE_TTS_HIL_DIAGNOSTICS)
-    uint64_t        m_hilHttpBodyProgressBytes = 0; // cumulative web-file body bytes
-#endif
     uint16_t        m_m3u8_targetDuration = 10;     //
     bool            m_f_metadata = false;           // assume stream without metadata
     bool            m_f_unsync = false;             // set within ID3 tag but not used

@@ -69,18 +69,14 @@ bool CommandHandler::exec(const char *command, const char *value, uint32_t cid) 
   }
   if (strEquals(command, "start"))    { player.sendCommand({PR_PLAY, config.lastStation()}); return true; }
   if (strEquals(command, "stop"))     { player.sendCommand({PR_STOP, 0}); return true; }
-  if (strEquals(command, "playurl")) {
+  if (strEquals(command, "playurl") || strEquals(command, "ha_play")) {
     const size_t length = value ? strlen(value) : 0;
-    voxone::temporary_audio::RequestStorage storage{};
-    if (!voxone::temporary_audio::parseRequest(value, length, storage))
+    voxone::source_media::RequestStorage storage{};
+    if (!voxone::source_media::parseRequest(value, length, storage))
       return false;
     const auto request = storage.view();
-    const SourceId requestedSource =
-        request.source == voxone::temporary_audio::Source::Dlna
-            ? SourceId::Dlna
-            : SourceId::HomeAssistant;
-    if (!sourceManagerSourceAvailable(requestedSource)) return false;
-    player.requestTemporaryUrl(request);
+    if (!sourceManagerSourceAvailable(SourceId::HomeAssistant)) return false;
+    player.requestSourceMedia(request);
     return true;
   }
   if (strEquals(command, "toggle"))   { player.toggle(); return true; }

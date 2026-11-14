@@ -93,7 +93,7 @@ bool securityWebSocketCommandAllowed(const char* command) {
   // workflows instead of the general WebSocket dispatcher.
   static const char* const allowed[] = {
       "ping", "tone", "treble", "middle", "bass", "source",
-      "webtransport", "start", "stop", "playurl", "toggle", "prev", "next",
+      "webtransport", "start", "stop", "playurl", "ha_play", "toggle", "prev", "next",
       "playstation", "vol100", "mute", "maximumvolume", "startupmode",
       "lineoutenabled", "lineoutvolume",
       "startupfixedvolume", "dim", "getindex", "getrssi",

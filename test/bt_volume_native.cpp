@@ -437,7 +437,7 @@ int main() {
 
   const std::string manager = readFile("src/core/source_manager.cpp");
   const std::string commandHandler = readFile("src/core/commandhandler.cpp");
-  const std::string temporary = readFile("src/core/temporary_audio_state.h");
+  const std::string temporary = readFile("src/core/source_media_state.h");
   assert(manager.find("retryDue(") == std::string::npos);
   assert(manager.find("needsUserCommand(") == std::string::npos);
   assert(manager.find("if (update.btConnected)") == std::string::npos);

@@ -83,7 +83,7 @@ stanu odtwarzania i powrotu do poprzedniego źródła.
 | --- | --- |
 | WEB Radio | Podstawowe radio internetowe i zapisane stacje. |
 | Bluetooth | Odtwarzanie bezpośrednio z telefonu lub komputera. |
-| Home Assistant | `SOURCE_HA`: komunikaty TTS i media z metadanymi title/artist oraz sterowanie z automatyzacji domu. |
+| Home Assistant | `SOURCE_HA`: media i komunikaty z metadanymi title/artist oraz sterowanie z automatyzacji domu. |
 | DLNA | Przeglądanie i odtwarzanie biblioteki z NAS lub serwera `minidlna`. |
 | AUX | Sygnał analogowy doprowadzony przez PCM1808. |
 | Local Files | Biblioteka plików na lokalnej karcie microSD. |

@@ -5,7 +5,7 @@
 #include "../src/core/mute_state.h"
 #include "../src/core/source_manager_state.h"
 #include "../src/core/source_vu_state.h"
-#include "../src/core/temporary_audio_state.h"
+#include "../src/core/source_media_state.h"
 
 #include <cassert>
 #include <fstream>
@@ -58,12 +58,12 @@ AudioSafetySnapshot snapshot(const SourceManagerState& source,
                              const BtLinkState& link,
                              const MuteState& mute,
                              bool radioPlaying,
-                             bool temporaryActive,
+                             bool sourceMediaActive,
                              uint32_t radioRate,
                              uint16_t radioVu,
                              uint32_t nowMs) {
   const bool btOwnsOutput = bluetoothOwnsAudio(
-      source.active() == ActiveSource::Bluetooth, temporaryActive);
+      source.active() == ActiveSource::Bluetooth, sourceMediaActive);
   const uint32_t desiredBtRate = btAudioDesiredRate(link);
   AudioSafetySnapshot result;
   result.route = btAudioRouteTarget(
@@ -120,8 +120,6 @@ void auditProductionWiring() {
          std::string::npos);
 
   const std::string manager = readFile("src/core/source_manager.cpp");
-  assert(manager.find("temporaryBtLossRequiresRadioStop") !=
-         std::string::npos);
   assert(manager.find("sourceState.radioActions(update, radioActive)") !=
          std::string::npos);
   assert(manager.find("player.sendCommand({PR_RADIO_RESUME, resumeStation})") !=
@@ -266,25 +264,6 @@ int main() {
          state.route.outputRate == 0);
   assert(state.dac == DacPlaybackState::Stopped &&
          !dacXsmtHigh(state.dac, false));
-
-  // RADIO PLAY/STOP and the one-shot TTS suppression keep their established
-  // semantics while BT disappears.
-  SourceManagerState ttsSource;
-  TemporaryAudioState temporary;
-  ttsSource.recordRadioCommand(true, 7);
-  BtLinkState ttsLink = harness.link.state();
-  assert(ttsSource.observe(ttsLink).reason == SourceChangeReason::BtConnect);
-  const uint32_t token = temporary.begin();
-  ttsLink.connected = false;
-  ttsLink.playback = BtPlayback::Stopped;
-  update = ttsSource.observe(ttsLink);
-  assert(temporaryBtLossRequiresRadioStop(update, temporary.busy()));
-  assert(temporary.suppressRadioRestore());
-  assert(temporary.signal(token) && temporary.finish(token));
-  assert(!temporary.takeRadioRestore(ttsSource.radioResumeAllowed(), true,
-                                     false));
-  assert(ttsSource.radioPlayIntent());
-  assert(!temporary.takeRadioRestore(true, true, false));
 
   assert(!sentTransport(harness.sent));
 }

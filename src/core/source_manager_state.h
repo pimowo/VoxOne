@@ -46,13 +46,6 @@ struct SourceUpdate {
   SourceChangeReason reason = SourceChangeReason::None;
 };
 
-inline bool temporaryBtLossRequiresRadioStop(const SourceUpdate& update,
-                                             bool temporaryBusy) {
-  return temporaryBusy && update.activeChanged &&
-         (update.reason == SourceChangeReason::BtDisconnect ||
-          update.reason == SourceChangeReason::BtOffline);
-}
-
 struct RadioSourceActions {
   bool suspend = false;
   bool userStop = false;
@@ -63,9 +56,7 @@ struct RadioSourceActions {
 // remains with Player; a source change must not overwrite this intent.
 class SourceManagerState {
  public:
-  ActiveSource active() const {
-    return temporaryActive_ ? temporarySource_ : active_;
-  }
+  ActiveSource active() const { return active_; }
   bool radioPlayIntent() const { return radioPlayIntent_; }
   void recordRadioCommand(bool play, uint16_t station = 0) {
     radioPlayIntent_ = play;
@@ -85,64 +76,58 @@ class SourceManagerState {
   bool radioResumeAllowed() const {
     return active_ == ActiveSource::Radio && radioPlayIntent_;
   }
-  SourceUpdate beginTemporary(ActiveSource source, const char* title,
-                              const char* artist) {
+  SourceUpdate beginMedia(ActiveSource source, const char* title,
+                          const char* artist) {
     SourceUpdate update;
     if (source != ActiveSource::SOURCE_HA &&
         source != ActiveSource::SOURCE_DLNA &&
         source != ActiveSource::SOURCE_LOCAL) return update;
-    update.activeChanged = !temporaryActive_ || temporarySource_ != source;
+    update.activeChanged = active_ != source;
     update.stationChanged = update.activeChanged ||
-                            strcmp(temporaryTitle_, title ? title : "") != 0;
+                            strcmp(mediaTitle_, title ? title : "") != 0;
     update.titleChanged = update.activeChanged ||
-                          strcmp(temporaryArtist_, artist ? artist : "") != 0 ||
+                          strcmp(mediaArtist_, artist ? artist : "") != 0 ||
                           update.stationChanged;
     update.audioInfoChanged = update.activeChanged;
-    temporaryActive_ = true;
-    temporarySource_ = source;
-    copyText(temporaryTitle_, sizeof(temporaryTitle_),
+    active_ = source;
+    mediaPlaying_ = true;
+    copyText(mediaTitle_, sizeof(mediaTitle_),
              title && title[0]
                  ? title
                  : (source == ActiveSource::SOURCE_DLNA ? "DLNA"
                     : source == ActiveSource::SOURCE_LOCAL ? "Karta SD"
                                                           : "Home Assistant"));
-    copyText(temporaryArtist_, sizeof(temporaryArtist_), artist);
+    copyText(mediaArtist_, sizeof(mediaArtist_), artist);
     return update;
   }
   SourceUpdate beginHomeAssistant(const char* title, const char* artist) {
-    return beginTemporary(ActiveSource::SOURCE_HA, title, artist);
+    return beginMedia(ActiveSource::SOURCE_HA, title, artist);
   }
   SourceUpdate beginDlna(const char* title, const char* artist) {
-    return beginTemporary(ActiveSource::SOURCE_DLNA, title, artist);
+    return beginMedia(ActiveSource::SOURCE_DLNA, title, artist);
   }
   SourceUpdate beginLocal(const char* title, const char* artist) {
-    return beginTemporary(ActiveSource::SOURCE_LOCAL, title, artist);
+    return beginMedia(ActiveSource::SOURCE_LOCAL, title, artist);
   }
-  SourceUpdate endTemporary() {
-    if (!temporaryActive_) return {};
-    temporaryActive_ = false;
-    temporarySource_ = ActiveSource::Radio;
-    temporaryTitle_[0] = '\0';
-    temporaryArtist_[0] = '\0';
+  SourceUpdate endMedia() {
+    if (!mediaPlaying_) return {};
+    mediaPlaying_ = false;
     SourceUpdate update;
-    update.activeChanged = true;
-    update.stationChanged = true;
     update.titleChanged = true;
     update.audioInfoChanged = true;
     return update;
   }
   SourceUpdate endHomeAssistant() {
-    return temporarySource_ == ActiveSource::SOURCE_HA ? endTemporary()
-                                                       : SourceUpdate{};
+    return active_ == ActiveSource::SOURCE_HA ? endMedia() : SourceUpdate{};
   }
   bool homeAssistantActive() const {
-    return temporaryActive_ && temporarySource_ == ActiveSource::SOURCE_HA;
+    return mediaPlaying_ && active_ == ActiveSource::SOURCE_HA;
   }
   bool dlnaActive() const {
-    return temporaryActive_ && temporarySource_ == ActiveSource::SOURCE_DLNA;
+    return mediaPlaying_ && active_ == ActiveSource::SOURCE_DLNA;
   }
   bool localActive() const {
-    return temporaryActive_ && temporarySource_ == ActiveSource::SOURCE_LOCAL;
+    return mediaPlaying_ && active_ == ActiveSource::SOURCE_LOCAL;
   }
   RadioSourceActions radioActions(const SourceUpdate& update,
                                   bool radioPhysicallyActive) const {
@@ -183,11 +168,14 @@ class SourceManagerState {
 
   SourceUpdate select(ActiveSource source, const BtSourceSnapshot& bt) {
     if (source == ActiveSource::Bluetooth && !bt.runtimeAvailable) return {};
-    if (active_ == source && !temporaryActive_) return {};
+    if (active_ == source && !mediaPlaying_) return {};
     if (active_ != source) {
       active_ = source;
       if (source == ActiveSource::Bluetooth) remember(bt);
+      mediaTitle_[0] = '\0';
+      mediaArtist_[0] = '\0';
     }
+    mediaPlaying_ = false;
     SourceUpdate update;
     update.activeChanged = true;
     update.stationChanged = true;
@@ -269,24 +257,6 @@ class SourceManagerState {
 
   void displayView(DisplaySourceView& view, bool radioPlaying = false,
                    bool localPlaybackAvailable = true) const {
-    if (temporaryActive_) {
-      view.kind = temporarySource_ == ActiveSource::SOURCE_DLNA
-                      ? DisplaySourceKind::Dlna
-                  : temporarySource_ == ActiveSource::SOURCE_LOCAL
-                      ? DisplaySourceKind::Local
-                      : DisplaySourceKind::HomeAssistant;
-      view.connected = true;
-      view.playback = radioPlaying ? DisplayPlaybackState::Playing
-                                   : DisplayPlaybackState::Stopped;
-      view.peerName = temporarySource_ == ActiveSource::SOURCE_DLNA
-                          ? "DLNA"
-                      : temporarySource_ == ActiveSource::SOURCE_LOCAL
-                          ? "Karta SD" : "Home Assistant";
-      view.artist = temporaryArtist_;
-      view.title = temporaryTitle_;
-      view.sampleRate = 0;
-      return;
-    }
     view.kind = active_ == ActiveSource::Bluetooth
                     ? DisplaySourceKind::Bluetooth
                 : active_ == ActiveSource::SOURCE_HA
@@ -307,16 +277,20 @@ class SourceManagerState {
       view.title = "";
     } else if (active_ == ActiveSource::SOURCE_HA) {
       view.connected = true;
-      view.playback = DisplayPlaybackState::Stopped;
+      view.playback = mediaPlaying_ && radioPlaying
+                          ? DisplayPlaybackState::Playing
+                          : DisplayPlaybackState::Stopped;
       view.peerName = "Home Assistant";
-      view.artist = "";
-      view.title = "Home Assistant";
+      view.artist = mediaArtist_;
+      view.title = mediaTitle_[0] ? mediaTitle_ : "Home Assistant";
     } else if (active_ == ActiveSource::SOURCE_DLNA) {
       view.connected = true;
-      view.playback = DisplayPlaybackState::Stopped;
+      view.playback = mediaPlaying_ && radioPlaying
+                          ? DisplayPlaybackState::Playing
+                          : DisplayPlaybackState::Stopped;
       view.peerName = "DLNA";
-      view.artist = "";
-      view.title = "";
+      view.artist = mediaArtist_;
+      view.title = mediaTitle_;
     } else if (active_ == ActiveSource::Aux) {
       view.connected = true;
       view.playback = DisplayPlaybackState::Stopped;
@@ -325,10 +299,12 @@ class SourceManagerState {
       view.title = "";
     } else if (active_ == ActiveSource::SOURCE_LOCAL) {
       view.connected = true;
-      view.playback = DisplayPlaybackState::Stopped;
+      view.playback = mediaPlaying_ && radioPlaying
+                          ? DisplayPlaybackState::Playing
+                          : DisplayPlaybackState::Stopped;
       view.peerName = "SD / Local";
-      view.artist = "";
-      view.title = "";
+      view.artist = mediaArtist_;
+      view.title = mediaTitle_;
     } else if (!connected_) {
       view.playback = DisplayPlaybackState::None;
       view.peerName = "Bluetooth";
@@ -356,14 +332,16 @@ class SourceManagerState {
   }
 
   bool localPlayerOutputAllowed() const {
-    return temporaryActive_ || active_ == ActiveSource::Radio;
+    return active_ == ActiveSource::Radio ||
+           active_ == ActiveSource::SOURCE_HA ||
+           active_ == ActiveSource::SOURCE_DLNA ||
+           active_ == ActiveSource::SOURCE_LOCAL;
   }
 
   void stopForUpdate(const BtSourceSnapshot& bt) {
-    temporaryActive_ = false;
-    temporarySource_ = ActiveSource::Radio;
-    temporaryTitle_[0] = '\0';
-    temporaryArtist_[0] = '\0';
+    mediaPlaying_ = false;
+    mediaTitle_[0] = '\0';
+    mediaArtist_[0] = '\0';
     active_ = ActiveSource::Radio;
     radioPlayIntent_ = false;
     pendingRadioStation_ = 0;
@@ -397,10 +375,9 @@ class SourceManagerState {
   }
 
   ActiveSource active_ = ActiveSource::Radio;
-  bool temporaryActive_ = false;
-  ActiveSource temporarySource_ = ActiveSource::Radio;
-  char temporaryTitle_[128]{};
-  char temporaryArtist_[128]{};
+  bool mediaPlaying_ = false;
+  char mediaTitle_[128]{};
+  char mediaArtist_[128]{};
   bool radioPlayIntent_ = false;
   uint16_t pendingRadioStation_ = 0;
   bool pendingRadioStop_ = false;

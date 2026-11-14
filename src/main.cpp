@@ -378,11 +378,11 @@ void loop() {
       btAudioInput.loop(btLink.state(),
                         player.localAudioAvailable() &&
                             bluetoothOwnsAudio(bluetoothSourceSelected(),
-                                               player.temporaryActive()),
+                                               player.sourceMediaActive()),
                         player.getSampleRate(), millis());
   #endif
   if (network.status == CONNECTED || network.status == DISCONNECTED ||
-      player.temporaryBusy()) {
+      player.sourceMediaBusy()) {
     player.loop();
 #if USE_OTA
     ArduinoOTA.handle();
@@ -400,7 +400,7 @@ void loop() {
 #endif
     const DacPlaybackState dacPlayback = dacPlaybackForSource(
         player.localAudioAvailable() &&
-            bluetoothOwnsAudio(bluetoothSourceSelected(), player.temporaryActive()),
+            bluetoothOwnsAudio(bluetoothSourceSelected(), player.sourceMediaActive()),
         player.isRunning(),
         !btLink.hasIncompleteOnlineSnapshot() && btStatus.btOnline &&
             btStatus.btConnected && btStreamStarted,

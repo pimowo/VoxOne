@@ -6,21 +6,16 @@
 #include "source_catalog.h"
 #include <stdint.h>
 
-// Radio intent also exists on targets without Bluetooth (temporary URL restore).
+// Radio intent exists on targets without Bluetooth as well.
 void sourceManagerRadioCommandQueued(bool play, uint16_t station);
 void sourceManagerRadioPlayConsumed();
 void sourceManagerRadioStopConsumed();
 void sourceManagerPlaylistSelectionCleared();
 bool sourceManagerRadioResumeAllowed();
 bool sourceManagerRadioPlayIntent();
-void sourceManagerBeginHomeAssistant(const char* title, const char* artist);
-void sourceManagerEndHomeAssistant();
-bool sourceManagerHomeAssistantActive();
-void sourceManagerBeginDlna(const char* title, const char* artist);
-void sourceManagerBeginLocal(const char* title, const char* artist);
-void sourceManagerEndTemporary();
-bool sourceManagerDlnaActive();
-class TemporaryAudioState;
+void sourceManagerBeginMedia(SourceId source, const char* title,
+                             const char* artist);
+void sourceManagerEndMedia();
 enum class ActiveSource : uint8_t;
 bool sourceManagerSelectSource(ActiveSource source);
 bool sourceManagerSelectSource(SourceId source);
@@ -43,10 +38,6 @@ bool sourceManagerTakeEvent(SourceManagerEvent& event);
 bool sourceManagerSourceAvailable(SourceId source);
 uint8_t sourceManagerSourceMask();
 SourceId sourceManagerActiveSource();
-bool sourceManagerTakeTemporaryRestore(TemporaryAudioState& temporary,
-                                      bool networkReady, bool blocked,
-                                      uint16_t& station);
-
 struct SourceWebSnapshot {
   DisplaySourceKind kind = DisplaySourceKind::Radio;
   bool connected = false;

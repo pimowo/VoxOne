@@ -173,7 +173,8 @@ i odpowiedź peer dla tej nowej ramki; sam fallback TCP nie jest 1013 PASS.
 
 ## Home Assistant
 
-Integracja Home Assistant używa WebSocketu `GET /ws` do sterowania i TTS oraz
+Integracja Home Assistant używa WebSocketu `GET /ws` do sterowania i
+odtwarzania mediów oraz
 Zeroconf `_voxone._tcp.local.` do wykrywania. Po włączeniu
 `haDiscoveryEnabled` urządzenie publikuje usługi `_http._tcp` i
 `_voxone._tcp` na porcie 80. TXT zawiera `mac`, `name`, `model`, `version`,
@@ -195,8 +196,9 @@ Obsługiwane ścieżki obejmują MP3, AAC/AAC+, FLAC i M4A/AAC,
 HTTP/HTTPS, ICY metadata, M3U/PLS i redirect; pełna macierz realnych streamów
 pozostaje HIL.
 
-SourceManager ma dwa źródła bazowe: RADIO oraz Bluetooth, przy czym Bluetooth
-jest dostępny tylko wtedy, gdy capability i runtime VoxOneBT są dostępne.
+SourceManager ma pełnoprawne źródła WEB Radio, Bluetooth, Home Assistant,
+DLNA, AUX i Local, filtrowane przez capability profilu. Bluetooth jest
+dostępny tylko wtedy, gdy capability i runtime VoxOneBT są dostępne.
 Wybór ręczny RADIO nie jest cofany przez już istniejące połączenie BT; nowy
 edge połączenia BT może wybrać BT. Utrata połączenia lub runtime VoxOneBT
 przy aktywnym BT przełącza na RADIO. Zachowany RADIO PLAY intent pozwala
@@ -223,18 +225,18 @@ obrazu, licznika i audio, ale MAIN nie zawsze odzwierciedla ten stan jako
 LG TV, VoxOneBT ani MAIN. To jawne ograniczenie jest zaakceptowane dla Stable
 1.0.0 i samo nie blokuje wydania; nie wymaga kolejnej sesji LG TV bez nowej
 poprawki lub konkretnej hipotezy. Nie zwalnia z pozostałych kryteriów BT
-lifecycle, SourceManager ani TTS.
+lifecycle ani SourceManager.
 
-## TTS / temporary audio
+## Home Assistant jako źródło mediów
 
-Temporary audio przyjmuje pojedynczy URL; nowe żądanie zastępuje oczekujące.
-Na czas komunikatu Player przejmuje wyjście, nie zmieniając bazowego źródła ani
-RADIO PLAY/STOP intent. Po końcu, błędzie albo timeout przywrócenie jest
-jednorazowe i zależy od aktualnego źródła, sieci i blokad systemowych. Jeżeli
-BT zniknie podczas TTS, komunikat nie jest przerywany, a restore RADIO jest
-stłumiony tak, aby po zakończeniu pozostało fizyczne STOP bez autoplay.
-Timeout transportu temporary audio jest timeoutem postępu, a nie całkowitego
-czasu komunikatu: każde odebranie bajtów HTTP rozpoczyna nowe okno 10 s, a
+Polecenia `playurl` i `ha_play` wybierają `SOURCE_HA` i uruchamiają standardowe
+odtwarzanie URL z opcjonalnymi metadanymi `title`/`artist`. Bez parametru
+`return_to_previous` źródło pozostaje HA także po EOF. Wartość `true` zapisuje
+poprzedni `SourceId` i po zakończeniu odtwarzania wybiera go ponownie; RADIO
+wznawia się tylko zgodnie z zachowaną intencją PLAY. Standardowa komenda Stop
+kończy bieżący strumień. DLNA i Local używają tego samego lifecycle źródła.
+Timeout transportu jest timeoutem postępu, a nie całkowitego czasu odtwarzania:
+każde odebranie bajtów HTTP rozpoczyna nowe okno 10 s, a
 kompletne ramki już obecne w buforze pozwalają dokończyć odtwarzanie. Brak
 postępu po opróżnieniu bufora albo rozłączenie transportu kończy bieżącą
 generację przez tę samą jednorazową ścieżkę cleanup. Krótsze, istniejące limity
@@ -242,11 +244,11 @@ połączenia TCP i nagłówków HTTP pozostają bez zmian.
 Zaawansowana kolejka, priorytety, ducking i własne tryby głośności pozostają
 POST-STABLE.
 
-Fizyczny `VOXONE-RC1-TTS-STALL-D-HIL-L0-RETEST-2` zamknął scenariusz D na
+Historyczny test `VOXONE-RC1-TTS-STALL-D-HIL-L0-RETEST-2` zamknął scenariusz D
+poprzedniego mechanizmu na
 L0: pełne `3648044/3648044 B`, `watchdogTimeouts +0`, `transportErrors +0`,
 `naturalEofs +1`, `cleanups +1`, `endReason=natural_eof`, `state=cleaned` i
-READY 231/231. Dowód nie zamyka całej grupy TTS: regresje A/B/C na docelowym
-kandydacie oraz pełny HIL TTS S0+BT pozostają otwarte.
+READY 231/231. Nie jest dowodem HIL nowego lifecycle `SOURCE_HA`.
 
 ## Web Update, recovery i OTA rollback
 

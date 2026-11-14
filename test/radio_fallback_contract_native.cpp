@@ -1,7 +1,6 @@
 #include "../src/core/bt_link_protocol.h"
 #include "../src/core/radio_source_policy.h"
 #include "../src/core/source_manager_state.h"
-#include "../src/core/temporary_audio_state.h"
 
 #include <cassert>
 #include <fstream>
@@ -51,7 +50,6 @@ struct RadioCommand {
 
 struct Scenario {
   SourceManagerState source;
-  TemporaryAudioState temporary;
   std::vector<RadioCommand> queue;
   std::vector<RadioCommand> executed;
   bool radioPlaying = false;
@@ -67,8 +65,8 @@ struct Scenario {
     queue.push_back({RadioWork::Stop, 0});
   }
 
-  void applySourceUpdate(const SourceUpdate& update, bool temporaryBusy) {
-    if (!update.activeChanged || temporaryBusy) return;
+  void applySourceUpdate(const SourceUpdate& update, bool sourceMediaBusy) {
+    if (!update.activeChanged || sourceMediaBusy) return;
     const RadioSourceActions actions = source.radioActions(update, radioPlaying);
     const uint16_t resumeStation = source.radioStationForResume(lastStation);
     queue.clear();  // Player::resetQueue() in stopOnSourceChange().
@@ -110,22 +108,6 @@ struct Scenario {
     queue.clear();
   }
 
-  bool finishTemporary(uint32_t token, bool networkReady = true,
-                       bool blocked = false) {
-    assert(temporary.signal(token));
-    assert(temporary.finish(token));
-    uint16_t station = lastStation;
-    const bool restore = temporary.takeRadioRestore(
-        source.radioResumeAllowed(), networkReady, blocked);
-    if (restore) {
-      station = source.radioStationForResume(station);
-      source.radioPlayConsumed();
-      lastStation = station;
-      radioPlaying = true;
-      executed.push_back({RadioWork::Resume, station});
-    }
-    return restore;
-  }
 };
 
 std::string readFile(const char* path) {
@@ -154,7 +136,7 @@ void auditProductionWiring() {
   assert(player.find("case PR_RADIO_RESUME:") != std::string::npos);
   assert(player.find("if (sourceManagerRadioResumeAllowed())") !=
          std::string::npos);
-  assert(player.find("sourceManagerTakeTemporaryRestore(_temporary") !=
+  assert(player.find("sourceManagerSelectSource(previous)") !=
          std::string::npos);
 }
 
@@ -288,40 +270,6 @@ int main() {
     scenario.drain();
     assert(scenario.source.active() == ActiveSource::Bluetooth &&
            !scenario.radioPlaying);
-  }
-
-  // BT loss during TTS changes the base to RADIO, but performs no immediate
-  // RADIO command and consumes restoration once without autoplay. The PLAY
-  // intent remains available for a later, ordinary TTS cycle.
-  {
-    LinkHarness link;
-    Scenario scenario;
-    link.link.begin(0);
-    scenario.userPlay(29);
-    scenario.drain();
-    link.connected(1);
-    SourceUpdate update = scenario.source.observe(link.link.state());
-    scenario.applySourceUpdate(update, false);
-    scenario.drain();
-    assert(!scenario.radioPlaying && scenario.source.radioPlayIntent());
-
-    const uint32_t token = scenario.temporary.begin();
-    const size_t beforeLoss = scenario.executed.size();
-    link.line("DISCONNECTED", 20);
-    update = scenario.source.observe(link.link.state());
-    assert(temporaryBtLossRequiresRadioStop(update, scenario.temporary.busy()));
-    assert(scenario.temporary.suppressRadioRestore());
-    scenario.applySourceUpdate(update, scenario.temporary.busy());
-    scenario.drain();
-    assert(scenario.executed.size() == beforeLoss);
-    assert(!scenario.finishTemporary(token));
-    assert(!scenario.radioPlaying && scenario.source.radioPlayIntent());
-    assert(!scenario.temporary.takeRadioRestore(true, true, false));
-
-    const uint32_t later = scenario.temporary.begin();
-    assert(scenario.finishTemporary(later));
-    assert(scenario.radioPlaying && scenario.lastStation == 29);
-    assert(!scenario.temporary.takeRadioRestore(true, true, false));
   }
 
   // A user STOP accepted after RESUME was queued invalidates that stale

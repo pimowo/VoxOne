@@ -207,9 +207,9 @@ int main() {
          std::string::npos);
   assert(player.find("_servicePendingStationRefresh();") !=
          std::string::npos);
-  assert(player.find("void Player::serviceTemporaryAudio()") !=
+  assert(player.find("void Player::serviceSourceMedia()") !=
          std::string::npos);
-  assert(player.find("QueuedTemporaryRequest* temporaryRequest") !=
+  assert(player.find("QueuedSourceMediaRequest* mediaRequest") !=
          std::string::npos);
   assert(player.find("_refreshStation(static_cast<uint16_t>(requestP.payload))") !=
          std::string::npos);

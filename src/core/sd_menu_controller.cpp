@@ -7,7 +7,7 @@
 #include "player.h"
 #include "sd_card.h"
 #include "source_manager.h"
-#include "temporary_audio_request.h"
+#include "source_media_request.h"
 #include "ui_menu.h"
 #include "ui_state.h"
 
@@ -45,7 +45,7 @@ bool load(const char* path) {
     strlcpy(entry.label, item.title, sizeof(entry.label));
     entry.folder = item.folder;
     entry.playable = item.playable;
-    entry.playing = item.playable && player.temporaryActive() &&
+    entry.playing = item.playable && player.sourceMediaActive() &&
                     sourceManagerActiveSource() == SourceId::Local &&
                     strcmp(playingPath, item.path) == 0;
   }
@@ -88,12 +88,12 @@ void select() {
     uiMenu.setDlnaStatus("Nieobsługiwany plik");
     return;
   }
-  temporary_audio::RequestStorage storage{};
+  source_media::RequestStorage storage{};
   strlcpy(storage.url, item.path, sizeof(storage.url));
   strlcpy(storage.title, item.title[0] ? item.title : "Karta SD",
           sizeof(storage.title));
   strlcpy(playingPath, item.path, sizeof(playingPath));
-  player.requestTemporaryUrl(storage.view(temporary_audio::Source::Local));
+  player.requestSourceMedia(storage.view(source_media::Source::Local, true));
   uiMenu.close();
   transitionUiMode(PLAYER);
 }

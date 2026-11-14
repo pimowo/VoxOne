@@ -60,7 +60,7 @@ int main() {
   contains(player, "audioPlan.initializeSerialI2s");
   contains(player, "!_localAudioAvailable &&");
   contains(player, "request.type == PR_PLAY");
-  contains(player, "request.type == PR_BURL");
+  contains(player, "request.type == PR_SOURCE_MEDIA");
 
   const std::string source = readFile("src/core/source_manager.cpp");
   contains(source, "allowed && player.localAudioAvailable()");

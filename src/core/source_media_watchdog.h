@@ -1,16 +1,16 @@
-#ifndef VOXONE_TEMPORARY_TRANSPORT_WATCHDOG_H
-#define VOXONE_TEMPORARY_TRANSPORT_WATCHDOG_H
+#ifndef VOXONE_SOURCE_MEDIA_WATCHDOG_H
+#define VOXONE_SOURCE_MEDIA_WATCHDOG_H
 
 #include <stdint.h>
 
 #include "radio_reconnect_policy.h"
-#include "temporary_audio_state.h"
+#include "source_media_state.h"
 
 namespace voxone {
-namespace temporary_audio {
+namespace source_media {
 
-// Temporary URLs use the established transport inactivity contract. This is
-// not an absolute announcement duration: every received byte starts a fresh
+// Source media uses the established transport inactivity contract. This is
+// not an absolute playback duration: every received byte starts a fresh
 // window, and complete locally buffered frames suppress expiry until drained.
 constexpr uint32_t kInactivityTimeoutMs =
     voxone::radio::kStreamInactivityTimeoutMs;
@@ -59,7 +59,7 @@ class ProgressWatchdog {
       // declared bytes have arrived, TCP close is expected; keep servicing
       // the decoder while its input buffer drains. Actual drain progress
       // renews the same bounded inactivity window, so a stuck decoder cannot
-      // leave temporary audio active forever.
+      // leave source playback active forever.
       if (!bodyCompleteObserved_ || bufferedBytes < bufferedBytes_) {
         lastProgressMs_ = nowMs;
       }
@@ -111,7 +111,7 @@ class ProgressWatchdog {
 // current generation before requesting the same one-shot cleanup path.
 template <typename TimeoutCallback, typename DisconnectCallback,
           typename FinishCallback>
-bool serviceTemporaryAudioTransport(TemporaryAudioState& temporary,
+bool serviceSourceMediaTransport(SourceMediaState& media,
                                     ProgressWatchdog& watchdog,
                                     uint32_t nowMs,
                                     uint64_t progressBytes,
@@ -123,25 +123,25 @@ bool serviceTemporaryAudioTransport(TemporaryAudioState& temporary,
                                     TimeoutCallback onTimeout,
                                     DisconnectCallback onDisconnect,
                                     FinishCallback finish) {
-  const uint32_t token = temporary.token();
+  const uint32_t token = media.token();
   if (!token) return false;
-  if (backendRunning && !temporary.terminal()) {
+  if (backendRunning && !media.terminal()) {
     const ProgressWatchdogResult result = watchdog.evaluate(
         token, nowMs, progressBytes, connected, bodyComplete, bufferedBytes,
         bufferedFrameAvailable);
-    if (result != ProgressWatchdogResult::None && temporary.signal(token)) {
+    if (result != ProgressWatchdogResult::None && media.signal(token)) {
       if (result == ProgressWatchdogResult::Timeout)
         onTimeout(token);
       else
         onDisconnect(token);
     }
   }
-  if (backendRunning && !temporary.terminal()) return false;
+  if (backendRunning && !media.terminal()) return false;
   finish();
   return true;
 }
 
-}  // namespace temporary_audio
+}  // namespace source_media
 }  // namespace voxone
 
 #endif
