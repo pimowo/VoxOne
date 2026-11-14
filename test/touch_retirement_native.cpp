@@ -60,7 +60,7 @@ int main() {
   hasNone(build, {"XPT2046"});
 
   // Encoder 1 remains wired and emits normalized events.
-  for (const char* token : {"yoEncoder encoder", "void encoder1Loop()",
+  for (const char* token : {"VoxEncoder encoder", "void encoder1Loop()",
                             "attachClick", "attachDoubleClick",
                             "attachLongPressStart", "attachLongPressStop"}) {
     assert(controls.find(token) != std::string::npos);

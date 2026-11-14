@@ -51,8 +51,6 @@
 SPIClass  SPI2(HSPI);
 #endif
 
-extern __attribute__((weak)) void yoradio_on_setup();
-
 namespace {
 constexpr uint32_t kEnduranceReportIntervalMs = 60000;
 uint32_t enduranceLastReportMs = 0;
@@ -292,7 +290,6 @@ void setup() {
   neopixelWrite(RGB_BUILTIN, 0, 0, 0);
 #endif
   if(REAL_LEDBUILTIN!=255) pinMode(REAL_LEDBUILTIN, OUTPUT);
-  if (yoradio_on_setup) yoradio_on_setup();
   config.init();
   powerManager.begin();
   (void)voxone::display_scroll::initializeScrollSettingsRuntimePersistent();

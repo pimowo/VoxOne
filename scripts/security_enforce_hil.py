@@ -780,7 +780,7 @@ def parse_partition_size(value: str) -> int:
 
 
 def rollback_audit(project_root: Path, framework_root: Path, environment: str) -> None:
-    partition_file = project_root / "partitions_yoradio.csv"
+    partition_file = project_root / "partitions_voxone.csv"
     rows: dict[str, tuple[str, str, int, int]] = {}
     for raw in partition_file.read_text(encoding="utf-8").splitlines():
         line = raw.strip()

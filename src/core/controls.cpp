@@ -51,8 +51,8 @@ ButtonBinding buttons[] {
 constexpr uint8_t nrOfButtons = sizeof(buttons) / sizeof(buttons[0]);
 #endif
 
-#include "../yoEncoder/yoEncoder.h"
-yoEncoder encoder = yoEncoder(
+#include "../VoxEncoder/VoxEncoder.h"
+VoxEncoder encoder = VoxEncoder(
     voxone::hardware::currentHardware().localInput.a,
     voxone::hardware::currentHardware().localInput.b,
     voxone::hardware::currentHardware().localInput.ec11StepsPerDetent);

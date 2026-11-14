@@ -4419,10 +4419,10 @@ void handleVariablesJs(AsyncWebServerRequest *request) {
   snprintf(
       netserver.nsBuf, sizeof(netserver.nsBuf),
       "var voxOneVersion='%s';\nvar voxOneChannel='%s';\n"
-      "var voxOneBuild='%s';\nvar yoRadioVersion='%s';\n"
-      "var yoVersion=voxOneVersion;\nvar voxOneProfile='%s';\n"
+      "var voxOneBuild='%s';\nvar voxOneBaseVersion='%s';\n"
+      "var voxOneProfile='%s';\n"
       "var voxOneAudioPath='%s';\nvar playMode='%s';\n",
-      VOXONE_VERSION, VOXONE_BUILD_CHANNEL, VOXONE_BUILD_SHA, YOVERSION,
+      VOXONE_VERSION, VOXONE_BUILD_CHANNEL, VOXONE_BUILD_SHA, VOXONE_VERSION,
       VOXONE_BUILD_PROFILE,
       voxone::audio_path::apiName(static_cast<AudioPath>(runtime.audioPath)),
       webBinding.normalPanel ? "player" : "ap");

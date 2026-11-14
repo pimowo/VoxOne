@@ -1556,7 +1556,6 @@ void Config::bootInfo() {
   BOOTLOG("VoxOne v%s-%s", VOXONE_VERSION, VOXONE_BUILD_CHANNEL);
   BOOTLOG("build: %s", VOXONE_BUILD_SHA);
   BOOTLOG("profile: %s", VOXONE_BUILD_PROFILE);
-  BOOTLOG("based on yoRadio v%s", YOVERSION);
   BOOTLOG("************************************************");
   BOOTLOG("------------------------------------------------");
   BOOTLOG("arduino:\t%d", ARDUINO);

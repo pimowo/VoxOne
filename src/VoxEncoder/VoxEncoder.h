@@ -1,8 +1,8 @@
-// yoEncoder.h
+// VoxEncoder.h
 // based on https://github.com/igorantolic/ai-esp32-rotary-encoder code
 
-#ifndef _YOENCODER_h
-#define _YOENCODER_h
+#ifndef VOXONE_VOX_ENCODER_H
+#define VOXONE_VOX_ENCODER_H
 
 #include "Arduino.h"
 
@@ -15,7 +15,7 @@ typedef enum
 	BUT_DISABLED = 99,
 } ButtonState;
 
-class yoEncoder
+class VoxEncoder
 {
 
 private:
@@ -45,7 +45,7 @@ private:
 	void (*ISR_callback)();
 
 public:
-	yoEncoder(
+	VoxEncoder(
 		uint8_t encoderAPin,
 		uint8_t encoderBPin,
 		uint8_t encoderSteps);

@@ -66,7 +66,7 @@ kontrakt opiera się na SECURITY i cookie.
 | `GET` | `/voxone.css`, `/voxone.js`, `/sprite.svg`, `/manifest.json` | brak | Publiczne zasoby bootstrap panelu i manifest PWA, serwowane ze SPIFFS. |
 | `GET` | `/advanced-audio.js`, `/dsp-client.js` | brak | Publiczne zasoby panelu DSP, obecne w SPIFFS wyłącznie w profilach z capability DSP. |
 | `GET` | `/favicon.ico` | brak | Publiczne przekierowanie do `/sprite.svg`. |
-| `GET` | `/variables.js` | query ignorowane | Trasa chroniona. Zwraca JavaScript z `voxOneVersion`, `voxOneChannel`, `voxOneBuild`, `yoRadioVersion`, `voxOneProfile` i `playMode`. |
+| `GET` | `/variables.js` | query ignorowane | Trasa chroniona. Zwraca JavaScript z `voxOneVersion`, `voxOneChannel`, `voxOneBuild`, `voxOneBaseVersion`, `voxOneProfile` i `playMode`. |
 | `GET` | `/data/stations.tsv` | brak | Trasa chroniona. Surowa playlista ze SPIFFS (`application/octet-stream`). |
 | `GET` Upgrade | `/ws` | handshake WebSocket v13 | Chroniony handshake opisany szczegółowo w sekcji „WebSocket”. Nie jest zwykłym endpointem REST. |
 | `GET` | `/emergency` | brak | Strona awaryjnego uploadu osadzona w firmware; dostęp zależy od polityki update/recovery danego stanu SECURITY. |

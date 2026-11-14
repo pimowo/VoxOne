@@ -1,12 +1,9 @@
 /*************************************************************************************
-    ST7796 480X320 displays configuration file.
-    Copy this file to yoRadio/src/displays/conf/displayST7789conf_custom.h
-    and modify it
-    More info on https://github.com/e2002/yoradio/wiki/Widgets#widgets-description
+    ST7796 480x320 display configuration for VoxOne.
 *************************************************************************************/
 
-#ifndef displayST7789conf_h
-#define displayST7789conf_h
+#ifndef VOXONE_DISPLAY_ST7796_CONF_H
+#define VOXONE_DISPLAY_ST7796_CONF_H
 
 #define DSP_WIDTH       480
 #define DSP_HEIGHT      320

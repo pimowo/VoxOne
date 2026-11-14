@@ -1,12 +1,9 @@
 /*************************************************************************************
-    SSD1305 128x64 displays configuration file.
-    Copy this file to yoRadio/src/displays/conf/displaySSD1305conf_custom.h
-    and modify it
-    More info on https://github.com/e2002/yoradio/wiki/Widgets#widgets-description
+    SSD1305 128x64 display configuration for VoxOne.
 *************************************************************************************/
 
-#ifndef displaySSD1305conf_h
-#define displaySSD1305conf_h
+#ifndef VOXONE_DISPLAY_SSD1305_CONF_H
+#define VOXONE_DISPLAY_SSD1305_CONF_H
 
 #define DSP_WIDTH       128
 #define TFT_FRAMEWDT    1

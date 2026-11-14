@@ -125,7 +125,7 @@ class FullImageValidationIntegrationTest(unittest.TestCase):
             components,
             overrides.get("firmware_elf", build / "firmware.elf"),
             overrides.get("firmware_manifest", build / "firmware.validation.json"),
-            ROOT / "partitions_yoradio.csv",
+            ROOT / "partitions_voxone.csv",
             build / "spiffs-data",
             temporary,
         )

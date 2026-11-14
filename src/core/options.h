@@ -2,7 +2,6 @@
 #define options_h
 #pragma once
 
-#define YOVERSION "0.9.720"
 #include "version.h"
 
 /*******************************************************

@@ -32,7 +32,7 @@ buduje firmware i SPIFFS, następnie scala pełny obraz, sprawdza jego rozmiar
 i porównuje każdy osadzony fragment bajt po bajcie. Wyniki znajdują się w
 `.pio/build/<profil>/`.
 
-Wszystkie profile używają tablicy `partitions_yoradio.csv`: NVS zaczyna się
+Wszystkie profile używają tablicy `partitions_voxone.csv`: NVS zaczyna się
 pod `0x9000`, `otadata` pod `0xe000`, sloty `app0` i `app1` pod `0x10000` i
 `0x1f0000`, a SPIFFS pod `0x3d0000`. Układ zajmuje pierwsze 4 MiB. Obrazy
 S0/DIN0 mają 4 MiB. M0/L0 mają obraz 16 MiB, chociaż bieżące partycje zajmują

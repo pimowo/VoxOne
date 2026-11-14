@@ -79,13 +79,13 @@ class ProfileSpec(NamedTuple):
 
 PROFILE_SPECS = {
     "M0": ProfileSpec("M0", "esp32s3", 16 * 1024 * 1024,
-                      ROOT / "partitions_yoradio.csv"),
+                      ROOT / "partitions_voxone.csv"),
     "S0": ProfileSpec("S0", "esp32s3", 4 * 1024 * 1024,
-                      ROOT / "partitions_yoradio.csv"),
+                      ROOT / "partitions_voxone.csv"),
     "DIN0": ProfileSpec("DIN0", "esp32s3", 4 * 1024 * 1024,
-                        ROOT / "partitions_yoradio.csv"),
+                        ROOT / "partitions_voxone.csv"),
     "L0": ProfileSpec("L0", "esp32s3", 16 * 1024 * 1024,
-                      ROOT / "partitions_yoradio.csv"),
+                      ROOT / "partitions_voxone.csv"),
 }
 
 

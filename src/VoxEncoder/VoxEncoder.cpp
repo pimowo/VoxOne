@@ -3,11 +3,11 @@
 //
 
 #include "esp_log.h"
-#define LOG_TAG "yoEncoder"
+#define LOG_TAG "VoxEncoder"
 
-#include "yoEncoder.h"
+#include "VoxEncoder.h"
 
-void IRAM_ATTR yoEncoder::readEncoder_ISR()
+void IRAM_ATTR VoxEncoder::readEncoder_ISR()
 {
 
 	unsigned long now = millis();
@@ -79,7 +79,7 @@ void IRAM_ATTR yoEncoder::readEncoder_ISR()
 }
 
 
-yoEncoder::yoEncoder(uint8_t encoder_APin, uint8_t encoder_BPin, uint8_t encoderSteps)
+VoxEncoder::VoxEncoder(uint8_t encoder_APin, uint8_t encoder_BPin, uint8_t encoderSteps)
 {
 	this->old_AB = 0;
 
@@ -88,7 +88,7 @@ yoEncoder::yoEncoder(uint8_t encoder_APin, uint8_t encoder_BPin, uint8_t encoder
 	this->encoderSteps = encoderSteps;
 }
 
-void yoEncoder::setBoundaries(long minEncoderValue, long maxEncoderValue, bool circleValues)
+void VoxEncoder::setBoundaries(long minEncoderValue, long maxEncoderValue, bool circleValues)
 {
 	this->_minEncoderValue = minEncoderValue * this->encoderSteps;
 	this->_maxEncoderValue = maxEncoderValue * this->encoderSteps;
@@ -96,17 +96,17 @@ void yoEncoder::setBoundaries(long minEncoderValue, long maxEncoderValue, bool c
 	this->_circleValues = circleValues;
 }
 
-long yoEncoder::readEncoder()
+long VoxEncoder::readEncoder()
 {
 	return (this->encoder0Pos / this->encoderSteps);
 }
 
-void yoEncoder::setEncoderValue(long newValue)
+void VoxEncoder::setEncoderValue(long newValue)
 {
 	reset(newValue);
 }
 
-long yoEncoder::encoderChanged()
+long VoxEncoder::encoderChanged()
 {
 	long _encoder0Pos = readEncoder();
 	long encoder0Diff = _encoder0Pos - this->lastReadEncoder0Pos;
@@ -116,20 +116,20 @@ long yoEncoder::encoderChanged()
 	return encoder0Diff;
 }
 
-void yoEncoder::setup(void (*ISR_callback)(void))
+void VoxEncoder::setup(void (*ISR_callback)(void))
 {
 	attachInterrupt(digitalPinToInterrupt(this->encoderAPin), ISR_callback, CHANGE);
 	attachInterrupt(digitalPinToInterrupt(this->encoderBPin), ISR_callback, CHANGE);
 }
 
-void yoEncoder::begin()
+void VoxEncoder::begin()
 {
 	pinMode(this->encoderAPin, INPUT);
 	pinMode(this->encoderBPin, INPUT);
 	this->lastReadEncoder0Pos = 0;
 }
 
-void yoEncoder::reset(long newValue_)
+void VoxEncoder::reset(long newValue_)
 {
 	newValue_ = newValue_ * this->encoderSteps;
 	this->encoder0Pos = newValue_;
@@ -140,11 +140,11 @@ void yoEncoder::reset(long newValue_)
 		this->encoder0Pos = this->_circleValues ? this->_maxEncoderValue : this->_minEncoderValue;
 }
 
-void yoEncoder::enable()
+void VoxEncoder::enable()
 {
 	this->isEnabled = true;
 }
-void yoEncoder::disable()
+void VoxEncoder::disable()
 {
 	this->isEnabled = false;
 }

@@ -183,25 +183,18 @@ public:
     void forceMono(bool m);
     void setBalance(int8_t bal = 0);
     void setVolume(uint8_t vol);
-    uint8_t getVolume();
-
     uint32_t getSampleRate();
     uint8_t  getBitsPerSample();
     uint8_t  getChannels();
     uint32_t getBitRate(bool avg = false);
 
     void setDefaults();
-    /* VU METER */
-    void     setVUmeter() {};
-    void     getVUlevel() {};
     uint16_t get_VUlevel(uint16_t dimension);
     
     bool     eofHeader;
     esp_err_t i2s_mclk_pin_select(const uint8_t pin);
     uint32_t inBufferFilled(); // returns the number of stored bytes in the inputbuffer
     void setTone(int8_t gainLowPass, int8_t gainBandPass, int8_t gainHighPass);
-    int getCodec() {return m_codec;}
-    const char *getCodecname() {return codecname[m_codec];}
 private:
 
     #ifndef ESP_ARDUINO_VERSION_VAL
@@ -247,7 +240,6 @@ private:
     int  read_FLAC_Header(uint8_t *data, size_t len);
     int  read_ID3_Header(uint8_t* data, size_t len);
     int  read_M4A_Header(uint8_t* data, size_t len);
-    int  read_OGG_Header(uint8_t *data, size_t len);
     size_t process_m3u8_ID3_Header(uint8_t* packet);
     bool setSampleRate(uint32_t hz);
     bool setBitsPerSample(int bits);
@@ -262,7 +254,6 @@ private:
     bool parseContentType(char* ct);
     bool parseHttpResponseHeader();
     bool initializeDecoder();
-    esp_err_t I2Sstart(uint8_t i2s_num);
     esp_err_t I2Sstop(uint8_t i2s_num);
     void urlencode(char* buff, uint16_t buffLen, bool spacesOnly = false);
     int16_t* IIR_filterChain0(int16_t iir_in[2], bool clear = false);
@@ -270,7 +261,6 @@ private:
     int16_t* IIR_filterChain2(int16_t* iir_in, bool clear = false);
     inline void setDatamode(uint8_t dm){m_datamode=dm;}
     inline uint8_t getDatamode(){return m_datamode;}
-    inline uint32_t streamavail(){ return _client ? _client->available() : 0;}
     void IIR_calculateCoefficients(int8_t G1, int8_t G2, int8_t G3);
     bool ts_parsePacket(uint8_t* packet, uint8_t* packetStart, uint8_t* packetLength);
     void _computeVUlevel(int16_t sample[2]);
@@ -424,7 +414,6 @@ private:
   }
 
 private:
-    const char *codecname[9] = {"unknown", "WAV", "MP3", "AAC", "M4A", "FLAC", "OGG", "OGG FLAC", "OPUS"};
     enum : int { APLL_AUTO = -1, APLL_ENABLE = 1, APLL_DISABLE = 0 };
     enum : int { EXTERNAL_I2S = 0, INTERNAL_DAC = 1, INTERNAL_PDM = 2 };
     enum : int { FORMAT_NONE = 0, FORMAT_M3U = 1, FORMAT_PLS = 2, FORMAT_ASX = 3, FORMAT_M3U8 = 4};
@@ -434,9 +423,8 @@ private:
                  FLAC_SEEK = 6, FLAC_VORBIS = 7, FLAC_CUESHEET = 8, FLAC_PICTURE = 9, FLAC_OKAY = 100};
     enum : int { M4A_BEGIN = 0, M4A_FTYP = 1, M4A_CHK = 2, M4A_MOOV = 3, M4A_FREE = 4, M4A_TRAK = 5, M4A_MDAT = 6,
                  M4A_ILST = 7, M4A_MP4A = 8, M4A_AMRDY = 99, M4A_OKAY = 100};
-    enum : int { OGG_BEGIN = 0, OGG_MAGIC = 1, OGG_HEADER = 2, OGG_FIRST = 3, OGG_AMRDY = 99, OGG_OKAY = 100};
     enum : int { CODEC_NONE = 0, CODEC_WAV = 1, CODEC_MP3 = 2, CODEC_AAC = 3, CODEC_M4A = 4, CODEC_FLAC = 5,
-                 CODEC_OGG = 6, CODEC_OGG_FLAC = 7, CODEC_OGG_OPUS = 8, CODEC_AACP = 9};
+                 CODEC_OGG = 6};
     enum : int { ST_NONE = 0, ST_WEBFILE = 1, ST_WEBSTREAM = 2};
     enum ChunkedState : uint8_t {
         CHUNK_SIZE,
@@ -454,9 +442,6 @@ private:
     };
     typedef enum { LEFTCHANNEL=0, RIGHTCHANNEL=1 } SampleIndex;
     typedef enum { LOWSHELF = 0, PEAKEQ = 1, HIFGSHELF =2 } FilterType;
-
-    const uint8_t volumetable[22]={   0,  1,  2,  3,  4 , 6 , 8, 10, 12, 14, 17,
-                                     20, 23, 27, 30 ,34, 38, 43 ,48, 52, 58, 64}; //22 elements
 
     typedef struct _filter{
         float a0;
@@ -558,7 +543,6 @@ private:
     uint64_t        m_transportProgressBytes = 0;   // bytes consumed from the active HTTP transport
     uint16_t        m_m3u8_targetDuration = 10;     //
     bool            m_f_metadata = false;           // assume stream without metadata
-    bool            m_f_unsync = false;             // set within ID3 tag but not used
     bool            m_f_exthdr = false;             // ID3 extended header
     bool            m_f_ssl = false;
     bool            m_f_running = false;

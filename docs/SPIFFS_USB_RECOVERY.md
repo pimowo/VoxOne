@@ -26,7 +26,7 @@ operację na cztery tryby:
 - logger lub inny właściciel portu musi zostać jawnie zwolniony;
 - należy zachować pełny backup urządzenia oraz sprawdzony sposób powrotu.
 
-Wszystkie obecne profile używają wersjonowanego `partitions_yoradio.csv`.
+Wszystkie obecne profile używają wersjonowanego `partitions_voxone.csv`.
 Narzędzie mimo to odczytuje rzeczywistą tablicę urządzenia dwa razy i wymaga
 jej dokładnej zgodności. Dla bieżącego layoutu jedynym dozwolonym celem jest:
 

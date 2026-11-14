@@ -91,9 +91,9 @@ int main() {
   assert(controls.find("keyInternalPullup") == std::string::npos);
   assert(controls.find("abInternalPullup") == std::string::npos);
 
-  const std::string encoder = readFile("src/yoEncoder/yoEncoder.cpp");
-  const size_t constructor = encoder.find("yoEncoder::yoEncoder");
-  const size_t begin = encoder.find("void yoEncoder::begin");
+  const std::string encoder = readFile("src/VoxEncoder/VoxEncoder.cpp");
+  const size_t constructor = encoder.find("VoxEncoder::VoxEncoder");
+  const size_t begin = encoder.find("void VoxEncoder::begin");
   assert(constructor != std::string::npos && begin != std::string::npos);
   assert(encoder.substr(constructor, begin - constructor).find("pinMode") ==
          std::string::npos);

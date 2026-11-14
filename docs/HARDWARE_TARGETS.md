@@ -157,7 +157,7 @@ DIN0. Ich szczegółowy backlog pozostaje w [TODO.md](TODO.md).
 
 ### Flash i partycje
 
-Wszystkie env używają `partitions_yoradio.csv`: NVS `0x5000`, `otadata`
+Wszystkie env używają `partitions_voxone.csv`: NVS `0x5000`, `otadata`
 `0x2000`, dwa sloty OTA po `0x1E0000` (1,875 MiB) i SPIFFS `0x30000`
 (192 KiB). Układ zajmuje pierwsze 4 MiB flash. Dla L0 build i pełny obraz
 mogą mieć 16 MiB, ale bieżąca tablica nie przeznacza pozostałych 12 MiB na

@@ -492,13 +492,6 @@ bool Audio::tuneAudioSocket(WiFiClient& socketClient) {
 }
 
 //---------------------------------------------------------------------------------------------------------------------
-esp_err_t Audio::I2Sstart(uint8_t i2s_num) {
-    // It is not necessary to call this function after i2s_driver_install() (it is started automatically),
-    // however it is necessary to call it after i2s_stop()
-    voxone::i2s_output::Guard outputGuard(kI2SOutputLockWait);
-    return outputGuard ? i2s_start((i2s_port_t) i2s_num) : ESP_ERR_TIMEOUT;
-}
-
 esp_err_t Audio::I2Sstop(uint8_t i2s_num) {
     voxone::i2s_output::Guard outputGuard(kI2SOutputLockWait);
     return outputGuard ? i2s_stop((i2s_port_t) i2s_num) : ESP_ERR_TIMEOUT;
@@ -590,7 +583,6 @@ void Audio::setDefaults() {
     m_f_firstCall = true;                                   // InitSequence for web stream processing
     m_webFileDataComplete = false;
     m_f_running = false;
-    m_f_unsync = false;                                     // set within ID3 tag but not used
     m_f_exthdr = false;                                     // ID3 extended header
     m_f_m3u8data = false;                                   // set again in processM3U8entries() if necessary
     m_f_continue = false;
@@ -1629,12 +1621,10 @@ int Audio::read_ID3_Header(uint8_t *data, size_t len) {
         ID3version = *(data + 3);
         switch(ID3version){
             case 2:
-                m_f_unsync = (*(data + 5) & 0x80);
                 m_f_exthdr = false;
                 break;
             case 3:
             case 4:
-                m_f_unsync = (*(data + 5) & 0x80); // bit7
                 m_f_exthdr = (*(data + 5) & 0x40); // bit6 extended header
                 break;
         };
@@ -2088,217 +2078,15 @@ int Audio::read_M4A_Header(uint8_t *data, size_t len) {
     return 0;
 }
 //---------------------------------------------------------------------------------------------------------------------
-int Audio::read_OGG_Header(uint8_t *data, size_t len){
-    static size_t retvalue = 0;
-    static size_t pageLen = 0;
-    static bool   f_firstPacket = false;
-
-    if(retvalue) {
-        if(retvalue > len) { // if returnvalue > bufferfillsize
-            if(len > InBuff.getMaxBlockSize()) len = InBuff.getMaxBlockSize();
-            retvalue -= len; // and wait for more bufferdata
-            return len;
-        }
-        else {
-            size_t tmp = retvalue;
-            retvalue = 0;
-            return tmp;
-        }
-        return 0;
-    }
-    // - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
-    if(m_controlCounter == OGG_BEGIN) {  // init
-        retvalue = 0;
-        m_audioDataStart = 0;
-        f_firstPacket = true;
-        m_controlCounter = OGG_MAGIC;
-        return 0;
-    }
-    // - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
-    if(m_controlCounter == OGG_MAGIC) { /* check MAGIC STRING */
-        if(specialIndexOf(data, "OggS", 10) != 0) {
-            log_e("Magic String 'OggS' not found in header");
-            stopSong();
-            return -1;
-        }
-        m_controlCounter = OGG_HEADER;
-        retvalue = 4;
-        return 0;
-    }
-    // - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
-    if(m_controlCounter == OGG_HEADER) { /* check OGG PAGE HEADER */
-        uint8_t i = 0;
-        uint8_t ssv = *(data + i);                  // stream_structure_version
-        (void)ssv;
-        i++;
-        uint8_t htf = *(data + i);                  // header_type_flag
-        (void)htf;
-        i++;
-        uint32_t tmp = bigEndian(data + i, 4);      // absolute granule position
-        uint64_t agp = (uint64_t) tmp << 32;
-        i += 4;
-        agp += bigEndian(data + i, 4);
-        i += 4;
-        uint32_t ssnr = bigEndian(data + i, 4);     // stream serial number
-        (void)ssnr;
-        i += 4;
-        uint32_t psnr = bigEndian(data + i, 4);     // page sequence no
-        (void)psnr;
-        i += 4;
-        uint32_t pchk = bigEndian(data + i, 4);     // page checksum
-        (void)pchk;
-        i += 4;
-        uint8_t psegm = *(data + i);
-        i++;
-        uint8_t psegmBuff[256];
-        pageLen = 0;
-        for(uint8_t j = 0; j < psegm; j++){
-            psegmBuff[j] = *(data + i);
-            pageLen += psegmBuff[j];
-            i++;
-        }
-        retvalue = i;
-        if(agp == 0){
-            if(f_firstPacket == true){
-                f_firstPacket = false;
-                m_controlCounter = OGG_FIRST; // ogg first pages
-            }
-            else{
-                retvalue += pageLen;
-                m_controlCounter = OGG_MAGIC;
-            }
-        }
-        else{
-            if(m_codec == CODEC_OGG_FLAC){
-                m_controlCounter = OGG_AMRDY;
-            }
-            else {
-                AUDIO_INFO("unknown format");
-                stopSong();
-                return -1;
-            }
-        }
-        return 0;
-    }
-    // - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
-    if(m_controlCounter == OGG_FIRST) { /* check OGG FIRST PAGES (has no streaming content) */
-        uint8_t i = 0;
-        uint8_t obp = *(data + i);                  // oneBytePacket shold be 0x7F
-        (void)obp;
-        i++;
-        if(specialIndexOf(data + i, "FLAC", 10) == 0){
-        }
-        else{
-            log_e("ogg/flac support only"); // ogg/vorbis or ogg//opus not supported yet
-            stopSong();
-            return -1;
-        }
-        i += 4;
-        uint8_t major_vers = *(data + i);
-        (void)major_vers;
-        i++;
-        uint8_t minor_vers = *(data + i);
-        (void)minor_vers;
-        i++;
-        uint16_t nonah = bigEndian(data + i, 2); // number of non audio headers (0x00 = unknown)
-        (void)nonah;
-        i += 2;
-        if(specialIndexOf(data + i, "fLaC", 10) == 0){
-            m_codec = CODEC_OGG_FLAC;
-        }
-        i += 4;
-        // STREAMINFO metadata block begins
-        uint32_t mblen = bigEndian(data + i, 4);
-        (void)mblen;
-        i += 4; // skip metadata block header + length
-        i += 2; // skip minimun block size
-        m_flacMaxBlockSize = bigEndian(data + i, 2);
-        i += 2;
-        vTaskDelay(2);
-        AUDIO_INFO("FLAC maxBlockSize: %u", m_flacMaxBlockSize);
-        i += 3; // skip minimun frame size
-        vTaskDelay(2);
-        m_flacMaxFrameSize = bigEndian(data + i, 3);
-        i += 3;
-        if(m_flacMaxFrameSize){
-            AUDIO_INFO("FLAC maxFrameSize: %lu",
-                       static_cast<unsigned long>(m_flacMaxFrameSize));
-        }
-        else {
-            AUDIO_INFO("FLAC maxFrameSize: N/A");
-        }
-        if(m_flacMaxFrameSize > InBuff.getMaxBlockSize()) {
-            log_e("FLAC maxFrameSize too large!");
-            stopSong();
-            return -1;
-        }
-        vTaskDelay(2);
-        uint32_t nextval = bigEndian(data + i, 3);
-        i += 3;
-        m_flacSampleRate = nextval >> 4;
-        AUDIO_INFO("FLAC sampleRate: %lu", m_flacSampleRate);
-        vTaskDelay(2);
-        m_flacNumChannels = ((nextval & 0x06) >> 1) + 1;
-        AUDIO_INFO("FLAC numChannels: %u", m_flacNumChannels);
-        if(m_flacNumChannels != 1 && m_flacNumChannels != 2){
-            vTaskDelay(2);
-            AUDIO_INFO("numChannels must be 1 or 2");
-            stopSong();
-            return -1;
-        }
-        vTaskDelay(2);
-        uint8_t bps = (nextval & 0x01) << 4;
-        bps += (*(data +i) >> 4) + 1;
-        i++;
-        m_flacBitsPerSample = bps;
-        if((bps != 8) && (bps != 16)){
-            log_e("bits per sample must be 8 or 16, is %i", bps);
-            stopSong();
-            return -1;
-        }
-        AUDIO_INFO("FLAC bitsPerSample: %u", m_flacBitsPerSample);
-        m_flacTotalSamplesInStream = bigEndian(data + i, 4);
-        i++;
-        if(m_flacTotalSamplesInStream) {
-            AUDIO_INFO("total samples in stream: %lu", m_flacTotalSamplesInStream);
-        }
-        else {
-            AUDIO_INFO("total samples in stream: N/A");
-        }
-        if(bps != 0 && m_flacTotalSamplesInStream) {
-            AUDIO_INFO("audio file duration: %lu seconds", m_flacTotalSamplesInStream / m_flacSampleRate);
-        }
-        m_controlCounter = OGG_MAGIC;
-        retvalue = pageLen;
-        return 0;
-    }
-    if(m_controlCounter == OGG_AMRDY){ // ogg almost ready
-        if(!audioPsramFound() || !InBuff.havePSRAM()){
-            AUDIO_INFO("FLAC requires the PSRAM input buffer; DRAM fallback is too small");
-            m_f_running = false; stopSong();
-            return -1;
-        }
-        if(!FLACDecoder_AllocateBuffers()) {m_f_running = false; stopSong(); return -1;}
-        InBuff.changeMaxBlockSize(m_frameSizeFLAC);
-        AUDIO_INFO("FLACDecoder has been initialized, free Heap: %lu bytes", ESP.getFreeHeap());
-
-        m_controlCounter = OGG_OKAY; // 100
-        eofHeader = true;
-        retvalue = 0;
-        return 0;
-    }
-    return 0;
-}
-//---------------------------------------------------------------------------------------------------------------------
 size_t Audio::process_m3u8_ID3_Header(uint8_t* packet){
     uint8_t         ID3version;
     size_t          id3Size;
-    bool            m_f_unsync = false, m_f_exthdr = false;
+    bool            m_f_exthdr = false;
     static uint64_t last_timestamp;  // remember the last timestamp
     static uint32_t lastSampleRate;
     uint64_t        current_timestamp = 0;
     uint32_t        newSampleRate = 0;
-    (void)m_f_unsync; (void)last_timestamp; (void)lastSampleRate; (void)current_timestamp; (void)newSampleRate;
+    (void)last_timestamp; (void)lastSampleRate; (void)current_timestamp; (void)newSampleRate;
     if(specialIndexOf(packet, "ID3", 4) != 0) { // ID3 not found
         if(m_f_Log) log_i("m3u8 file has no mp3 tag");
         return 0; // error, no ID3 signature found
@@ -2306,12 +2094,10 @@ size_t Audio::process_m3u8_ID3_Header(uint8_t* packet){
     ID3version = *(packet + 3);
     switch(ID3version){
             case 2:
-                m_f_unsync = (*(packet + 5) & 0x80);
                 m_f_exthdr = false;
                 break;
             case 3:
             case 4:
-                m_f_unsync = (*(packet + 5) & 0x80); // bit7
                 m_f_exthdr = (*(packet + 5) & 0x40); // bit6 extended header
                 break;
     };
@@ -3996,19 +3782,9 @@ int Audio::findNextSync(uint8_t* data, size_t len){
                               m_flacBitsPerSample, m_flacTotalSamplesInStream, m_audioDataSize);
         nextSync = FLACFindSyncWord(data, len);
     }
-    if(m_codec == CODEC_OGG_FLAC) {
-        FLACSetRawBlockParams(m_flacNumChannels,   m_flacSampleRate,
-                              m_flacBitsPerSample, m_flacTotalSamplesInStream, m_audioDataSize);
-        nextSync = FLACFindSyncWord(data, len);
-    }
     if(nextSync == -1) {
          if(audio_info && swnf == 0) audio_info("syncword not found");
-         if(m_codec == CODEC_OGG_FLAC){
-             nextSync = len;
-         }
-         else {
-             swnf++; // syncword not found counter, can be multimediadata
-         }
+         swnf++; // syncword not found counter, can be multimediadata
      }
      if (nextSync == 0){
          if(audio_info && swnf>0){
@@ -4050,7 +3826,6 @@ int Audio::sendBytes(uint8_t* data, size_t len) {
         case CODEC_AAC:      ret = AACDecode(data, &bytesLeft, m_outBuff);    break;
         case CODEC_M4A:      ret = AACDecode(data, &bytesLeft, m_outBuff);    break;
         case CODEC_FLAC:     ret = FLACDecode(data, &bytesLeft, m_outBuff);   break;
-        case CODEC_OGG_FLAC: ret = FLACDecode(data, &bytesLeft, m_outBuff);   break; // FLAC webstream wrapped in OGG
         default: {log_e("no valid codec found codec = %d", m_codec); stopSong();}
     }
 
@@ -4099,7 +3874,7 @@ int Audio::sendBytes(uint8_t* data, size_t len) {
                 setBitsPerSample(AACGetBitsPerSample());
                 setBitrate(AACGetBitrate());
             }
-            if(m_codec == CODEC_FLAC || m_codec == CODEC_OGG_FLAC){
+            if(m_codec == CODEC_FLAC){
                 setChannels(FLACGetChannels());
                 setSampleRate(FLACGetSampRate());
                 setBitsPerSample(FLACGetBitsPerSample());
@@ -4113,7 +3888,7 @@ int Audio::sendBytes(uint8_t* data, size_t len) {
         if((m_codec == CODEC_AAC) || (m_codec == CODEC_M4A)){
             m_validSamples = AACGetOutputSamps() / getChannels();
         }
-        if((m_codec == CODEC_FLAC) || (m_codec == CODEC_OGG_FLAC)){
+        if(m_codec == CODEC_FLAC){
             m_validSamples = FLACGetOutputSamps() / getChannels();
         }
     }
@@ -4410,17 +4185,6 @@ void Audio::setBalance(int8_t bal){ // bal -16...16
 void Audio::setVolume(uint8_t vol) { // vol 22 steps, 0...21
     if(vol > 254) vol = 254;
     m_vol.store(vol, std::memory_order_relaxed);
-/*    if(vol > 21) vol = 21;
-    m_vol = volumetable[vol];*/
-}
-//---------------------------------------------------------------------------------------------------------------------
-uint8_t Audio::getVolume() {
-    return m_vol.load(std::memory_order_relaxed);
-    /*for(uint8_t i = 0; i < 22; i++) {
-        if(volumetable[i] == m_vol) return i;
-    }
-    m_vol = 12; // if m_vol not found in table
-    return m_vol;*/
 }
 //---------------------------------------------------------------------------------------------------------------------
 int32_t Audio::Gain(int16_t s[2]) {

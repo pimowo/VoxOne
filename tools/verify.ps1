@@ -55,7 +55,7 @@ print(module.resolve_esptool_runtime()[0])
  }
  return $lines[0]
 }
-$partitionsPath=Join-Path $root 'partitions_yoradio.csv'
+$partitionsPath=Join-Path $root 'partitions_voxone.csv'
 $partitionRows=Import-Csv -LiteralPath $partitionsPath -Header Name,Type,SubType,Offset,Size,Flags
 function Get-PartitionSize([string]$name) {
  $row=$partitionRows | Where-Object { $_.Name.Trim() -eq $name } | Select-Object -First 1

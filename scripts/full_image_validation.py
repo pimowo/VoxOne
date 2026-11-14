@@ -471,7 +471,7 @@ def validate_partition_binary(
             "flags": flags,
         })
     if entries != expected:
-        raise ValidationError("partition image does not match partitions_yoradio.csv")
+        raise ValidationError("partition image does not match partitions_voxone.csv")
     trailer_offset = len(expected) * PARTITION_ENTRY_SIZE
     if struct.unpack_from("<H", data, trailer_offset)[0] != PARTITION_MD5_MAGIC:
         raise ValidationError("partition image has no MD5 trailer")

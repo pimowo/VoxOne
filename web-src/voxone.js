@@ -804,7 +804,7 @@ window.VoxOneRestartWaiter = Object.freeze({
     audioPath: typeof voxOneAudioPath === "string" &&
       ["pcm5102", "dspmini"].includes(voxOneAudioPath)
         ? voxOneAudioPath : "pcm5102",
-    baseVersion: typeof yoRadioVersion === "string" ? yoRadioVersion : null
+    baseVersion: typeof voxOneBaseVersion === "string" ? voxOneBaseVersion : null
   };
   const advancedAudio = typeof window.createAdvancedAudioLive === "function"
     ? window.createAdvancedAudioLive(
@@ -2599,7 +2599,7 @@ window.VoxOneRestartWaiter = Object.freeze({
     text("update-version", "VoxOne " + version);
     text("update-build", state.build || "—");
     text("update-profile", profile);
-    text("system-base", "yoRadio " + (state.baseVersion || "—"));
+    text("system-base", "Base: VoxOne " + (state.baseVersion || "—"));
   }
 
   function updateCurrentMarker(previous) {

@@ -18,7 +18,7 @@ POSTCHECK na tym samym urządzeniu.
 
 ## Kontrakt pamięci
 
-S0 i L0 używają tej samej tablicy `partitions_yoradio.csv` w pierwszych
+S0 i L0 używają tej samej tablicy `partitions_voxone.csv` w pierwszych
 4 MiB:
 
 | Obszar | Offset | Rozmiar |

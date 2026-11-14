@@ -22,11 +22,11 @@ Aktywne profile i capabilities opisuje teraz
 | src/displays/displaySSD1306.* | Dawny sterownik jednego backendu OLED | Nieaktywny w M0/S0/DIN0: wybór SSD1306/SSD1309 obsługuje `displayOLED128x64Runtime.*` | Zweryfikować zależności przed decyzją o usunięciu dawnego sterownika | UNKNOWN |
 | Pozostałe src/displays/display*.cpp i src/SSD1322/, src/ST7920/, src/LiquidCrystalI2C/, src/ILI9488/ | Warianty wyświetlaczy zależne od DSP_MODEL | Nie wybrane przez l0/m0/s0/din0; część może być potrzebna do przyszłych LCD | Sprawdzić zależności i koszt buildów, nie usuwać na podstawie nazwy | UNKNOWN |
 | src/displays/nextion.* | Legacy Nextion, kompilowane przy USE_NEXTION | Nie w obecnych profilach; Config i CLI nadal mają ślady kompatybilności | Ustalić, czy istnieje wspierane urządzenie/kontrakt | UNKNOWN |
-| src/yoEncoder/ | Odczyt enkodera | Tak, przez controls.cpp | Zachować zachowanie gestów; później przekazać piny z deskryptora PCB | REFACTOR |
+| src/VoxEncoder/ | Odczyt enkodera | Tak, przez controls.cpp | Zachować zachowanie gestów; piny przekazuje deskryptor PCB | MIGRATED |
 | src/OneButton/ | Obsługa przycisków/gestów | Tak, przez warstwę controls | Zachować timing i testy sterowania | KEEP |
 | profiles/, myoptions.h | Wybór l0/m0/s0/din0 i piny; myoptions.h ładuje profile.h | Tak, każdy build | Oddzielić PCB od runtime/capabilities w CLEANUP-1B i później | REFACTOR |
 | src/core/options.h, DSP_MODEL, stare define | Domyślne piny i ścieżki wariantów yoRadio | Tak, szeroko w core i display | Zastępować stopniowo deskryptorem; DSP_MODEL oznacza LCD, nie audio DSP | REFACTOR |
-| src/core/options.h: YOVERSION | Informacja o bazie yoRadio 0.9.720 | Tak: bootlog, Serial CLI, Nextion i zmienna yoRadioVersion WWW | Zachować atrybucję; później oddzielić ją od wersji produktu | REFACTOR |
+| src/core/version.h: VOXONE_VERSION | Wersja produktu VoxOne | Tak: bootlog, Serial CLI i WWW | Używać jako jedynej wersji produktu | MIGRATED |
 | src/core/version.h: VOXONE_VERSION | Wersja produktu 0.8.0 | Tak: WWW, bootlog, User-Agent i nazwy artefaktów | Pozostawić osobnym źródłem prawdy VoxOne | KEEP |
 | src/core/config.*, playlist_store.*, station_* | EEPROM, SPIFFS, stacje i migracje | Tak | Zachować format Config oraz dane użytkownika; refaktor niezależnie od relokacji | REFACTOR |
 | src/core/netserver.*, data/www/, web-src/ | API, WS, Web Update, legacy i nowa strona WWW | Tak | Zachować kontrakty; osobno ocenić zbędne endpointy | REFACTOR |
@@ -38,8 +38,8 @@ Aktywne profile i capabilities opisuje teraz
 | src/async-mqtt-client/ i mqtt.cpp | Historyczny klient MQTT | Nie: usunięty po przejściu integracji HA na mDNS i WebSocket | Brak kodu runtime; stary namespace NVS jest wyłącznie czyszczony przez factory reset | RETIRED |
 | Nazwy e2002/yoRadio w komentarzach i docs | Atrybucja i ślady pochodzenia kodu | Tak, dokumentacyjne | Zachować atrybucję; nie traktować komentarzy jako zbędnego kodu | KEEP |
 
-Dowody użycia: platformio.ini definiuje pięć aktywnych profili i wyklucza IRremoteESP8266; src/core/player.cpp wybiera AudioI2S, gdy VS1053_CS=255; src/core/display.cpp, src/displays/dspcore.h i widgets używają DSP_MODEL; src/core/controls.cpp używa enkodera; src/main.cpp wywołuje pluginsManager; src/core/netserver.cpp i security_access_policy.cpp definiują bieżący HTTP/API; src/core/options.h zawiera YOVERSION. Żadna pozycja UNKNOWN ani REMOVE_LATER nie jest zgodą na usunięcie w tym etapie.
+Dowody użycia: platformio.ini definiuje pięć aktywnych profili i wyklucza IRremoteESP8266; src/core/player.cpp wybiera AudioI2S, gdy VS1053_CS=255; src/core/display.cpp, src/displays/dspcore.h i widgets używają DSP_MODEL; src/core/controls.cpp używa enkodera; src/main.cpp wywołuje pluginsManager; src/core/netserver.cpp i security_access_policy.cpp definiują bieżący HTTP/API; src/core/version.h zawiera VOXONE_VERSION. Żadna pozycja UNKNOWN ani REMOVE_LATER nie jest zgodą na usunięcie bez osobnego audytu.
 
-Wersje: VoxOne używa src/core/version.h; yoRadio ma YOVERSION w src/core/options.h; osobne repo VoxOneBT ma include/Version.h i własną wersję. CONFIG_VERSION i wersja protokołu UART są odrębne.
+Wersje: VoxOne używa src/core/version.h; osobne repo VoxOneBT ma include/Version.h i własną wersję. CONFIG_VERSION i wersja protokołu UART są odrębne.
 
 \n

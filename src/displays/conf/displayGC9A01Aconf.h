@@ -1,12 +1,9 @@
 /*************************************************************************************
-    ST7789 240x240 displays configuration file.
-    Copy this file to yoRadio/src/displays/conf/displayST7789conf_custom.h
-    and modify it
-    More info on https://github.com/e2002/yoradio/wiki/Widgets#widgets-description
+    GC9A01A 240x240 display configuration for VoxOne.
 *************************************************************************************/
 
-#ifndef displayGC9A01Aconf_h
-#define displayGC9A01Aconf_h
+#ifndef VOXONE_DISPLAY_GC9A01A_CONF_H
+#define VOXONE_DISPLAY_GC9A01A_CONF_H
 
 #define DSP_WIDTH       240
 #define TFT_FRAMEWDT    8
