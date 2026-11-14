@@ -54,7 +54,7 @@ int main() {
   assert(stHeader.find("Adafruit_ST7789.h") != std::string::npos);
   assert(stSource.find("init(76,284)") != std::string::npos);
   assert(stSource.find("init(240,320)") != std::string::npos);
-  assert(build.find("Adafruit ST7735 and ST7789 Library@1.11.0") !=
+  assert(build.find("Adafruit ST7735 and ST7789 Library") ==
          std::string::npos);
 
   for (const char* path : {"src/displays/displayST7789.cpp",

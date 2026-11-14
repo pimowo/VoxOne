@@ -389,7 +389,7 @@ void Audio::initInBuff() {
             AUDIO_INFO("PSRAM %sfound, inputBufferSize: %u bytes", InBuff.havePSRAM()?"":"not ", size - 1);
         }
     }
-    changeMaxBlockSize(1600); // default size mp3 or aac
+    InBuff.changeMaxBlockSize(1600); // default size mp3 or aac
 }
 
 bool Audio::startAudioTask() {
@@ -555,17 +555,14 @@ void Audio::setDefaults() {
     AUDIO_INFO("buffers freed, free Heap: %lu bytes", ESP.getFreeHeap());
 
     m_f_chunked = false;                                    // Assume not chunked
-    m_f_firstmetabyte = false;
     m_f_playing = false;
     m_f_ssl = false;
     m_f_metadata = false;
-    m_f_tts = false;
     m_f_firstCall = true;                                   // InitSequence for web stream processing
     m_webFileDataComplete = false;
     m_f_running = false;
     m_f_unsync = false;                                     // set within ID3 tag but not used
     m_f_exthdr = false;                                     // ID3 extended header
-    m_f_rtsp = false;                                       // RTSP (m3u8)stream
     m_f_m3u8data = false;                                   // set again in processM3U8entries() if necessary
     m_f_continue = false;
     m_f_ts = false;
@@ -574,7 +571,6 @@ void Audio::setDefaults() {
     m_codec = CODEC_NONE;
     m_playlistFormat = FORMAT_NONE;
     m_datamode = AUDIO_NONE;
-    m_audioCurrentTime = 0;                                 // Reset playtimer
     m_audioDataStart = 0;
     m_audioDataSize = 0;
     m_wavHeaderParser.reset();
@@ -590,7 +586,6 @@ void Audio::setDefaults() {
     m_contentlength = 0;                                    // If Content-Length is known, count it
     m_curSample = 0;
     m_metaint = 0;                                          // No metaint yet
-    m_LFcount = 0;                                          // For end of header detection
     m_controlCounter = 0;                                   // Status within readID3data() and readWaveHeader()
     m_channels = 2;                                         // assume stereo #209
     m_streamTitleHash = 0;
@@ -704,7 +699,6 @@ bool Audio::connecttoFS(fs::FS& fs, const char* path) {
     m_contentlength = static_cast<uint32_t>(m_localFile.size());
     m_streamType = ST_WEBFILE;
     m_f_chunked = false;
-    m_f_tts = false;
     m_controlCounter = 0;
     m_f_firstCall = true;
     m_webFileDataComplete = false;
@@ -1029,146 +1023,6 @@ bool Audio::httpPrint(const char* host) {
     m_streamType = ST_WEBSTREAM;
     m_contentlength = 0;
     m_f_chunked = false;
-
-    return true;
-}
-//---------------------------------------------------------------------------------------------------------------------
-bool Audio::connecttospeech(const char* speech, const char* lang){
-
-    setDefaults();
-    char host[] = "translate.google.com.vn";
-    char path[] = "/translate_tts";
-
-    uint16_t speechLen = strlen(speech);
-    uint16_t speechBuffLen = speechLen + 300;
-    memcpy(m_lastHost, speech, 256);
-    char* speechBuff = (char*)malloc(speechBuffLen);
-    if(!speechBuff) {log_e("out of memory"); return false;}
-    memcpy(speechBuff, speech, speechLen);
-    speechBuff[speechLen] = '\0';
-    urlencode(speechBuff, speechBuffLen);
-
-    char resp[strlen(speechBuff) + 200] = "";
-    strcat(resp, "GET ");
-    strcat(resp, path);
-    strcat(resp, "?ie=UTF-8&tl=");
-    strcat(resp, lang);
-    strcat(resp, "&client=tw-ob&q=");
-    strcat(resp, speechBuff);
-    strcat(resp, " HTTP/1.1\r\n");
-    strcat(resp, "Host: ");
-    strcat(resp, host);
-    strcat(resp, "\r\n");
-    strcat(resp, "User-Agent: Mozilla/5.0 \r\n");
-    strcat(resp, "Accept-Encoding: identity\r\n");
-    strcat(resp, "Accept: text/html\r\n");
-    strcat(resp, "Connection: close\r\n\r\n");
-
-    if(speechBuff){free(speechBuff); speechBuff = NULL;}
-    _client = static_cast<WiFiClient*>(&client);
-    if(!_client->connect(host, 80)) {
-        log_e("Connection failed");
-        return false;
-    }
-    _client->print(resp);
-
-    m_streamType = ST_WEBSTREAM;
-    m_f_running = true;
-    m_f_ssl = false;
-    m_f_tts = true;
-    setDatamode(HTTP_RESPONSE_HEADER);
-
-    return true;
-}
-//---------------------------------------------------------------------------------------------------------------------
-bool Audio::connecttomarytts(const char* speech, const char* lang, const char* voice){
-
-    //lang:     fr, te, ru, en_US, en_GB, sv, lb, tr, de, it
-
-    //voice:    upmc-pierre-hsmm             fr male hmm
-    //          upmc-pierre                  fr male unitselection general
-    //          upmc-jessica-hsmm            fr female hmm
-    //          upmc-jessica                 fr female unitselection general
-    //          marylux                      lb female unitselection general
-    //          istc-lucia-hsmm              it female hmm
-    //          enst-dennys-hsmm             fr male hmm
-    //          enst-camille-hsmm            fr female hmm
-    //          enst-camille                 fr female unitselection general
-    //          dfki-spike-hsmm              en_GB male hmm
-    //          dfki-spike                   en_GB male unitselection general
-    //          dfki-prudence-hsmm           en_GB female hmm
-    //          dfki-prudence                en_GB female unitselection general
-    //          dfki-poppy-hsmm              en_GB female hmm
-    //          dfki-poppy                   en_GB female unitselection general
-    //          dfki-pavoque-styles          de male unitselection general
-    //          dfki-pavoque-neutral-hsmm    de male hmm
-    //          dfki-pavoque-neutral         de male unitselection general
-    //          dfki-ot-hsmm                 tr male hmm
-    //          dfki-ot                      tr male unitselection general
-    //          dfki-obadiah-hsmm            en_GB male hmm
-    //          dfki-obadiah                 en_GB male unitselection general
-    //          cmu-slt-hsmm                 en_US female hmm
-    //          cmu-slt                      en_US female unitselection general
-    //          cmu-rms-hsmm                 en_US male hmm
-    //          cmu-rms                      en_US male unitselection general
-    //          cmu-nk-hsmm                  te female hmm
-    //          cmu-bdl-hsmm                 en_US male hmm
-    //          cmu-bdl                      en_US male unitselection general
-    //          bits4                        de female unitselection general
-    //          bits3-hsmm                   de male hmm
-    //          bits3                        de male unitselection general
-    //          bits2                        de male unitselection general
-    //          bits1-hsmm                   de female hmm
-    //          bits1                        de female unitselection general
-
-    setDefaults();
-    char host[] = "mary.dfki.de";
-    char path[] = "/process";
-    int port = 59125;
-
-    uint16_t speechLen = strlen(speech);
-    uint16_t speechBuffLen = speechLen + 300;
-    memcpy(m_lastHost, speech, 256);
-    char* speechBuff = (char*)malloc(speechBuffLen);
-    if(!speechBuff) {log_e("out of memory"); return false;}
-    memcpy(speechBuff, speech, speechLen);
-    speechBuff[speechLen] = '\0';
-    urlencode(speechBuff, speechBuffLen);
-
-    char resp[strlen(speechBuff) + 200] = "";
-    strcat(resp, "GET ");
-    strcat(resp, path);
-    strcat(resp, "?INPUT_TEXT=");
-    strcat(resp, speechBuff);
-    strcat(resp, "&INPUT_TYPE=TEXT");
-    strcat(resp, "&OUTPUT_TYPE=AUDIO");
-    strcat(resp, "&AUDIO=WAVE_FILE");
-    strcat(resp, "&LOCALE=");
-    strcat(resp, lang);
-    strcat(resp, "&VOICE=");
-    strcat(resp, voice);
-    strcat(resp, " HTTP/1.1\r\n");
-    strcat(resp, "Host: ");
-    strcat(resp, host);
-    strcat(resp, "\r\n");
-    strcat(resp, "User-Agent: Mozilla/5.0 \r\n");
-    strcat(resp, "Accept-Encoding: identity\r\n");
-    strcat(resp, "Accept: text/html\r\n");
-    strcat(resp, "Connection: close\r\n\r\n");
-
-    if(speechBuff){free(speechBuff); speechBuff = NULL;}
-    _client = static_cast<WiFiClient*>(&client);
-    if(!_client->connect(host, port)) {
-        log_e("Connection failed");
-        return false;
-    }
-    _client->print(resp);
-
-    m_streamType = ST_WEBSTREAM;
-    m_f_running = true;
-    m_f_ssl = false;
-    m_f_tts = true;
-    setDatamode(HTTP_RESPONSE_HEADER);
 
     return true;
 }
@@ -2433,23 +2287,6 @@ void Audio::playI2Sremains() { // returns true if all dma_buffs flushed
     return;
 }
 //---------------------------------------------------------------------------------------------------------------------
-bool Audio::pauseResume() {
-    bool retVal = false;
-    if(m_streamType == ST_WEBSTREAM) {
-        m_f_running = !m_f_running;
-        retVal = true;
-        if(!m_f_running) {
-            memset(m_outBuff, 0, sizeof(m_outBuff));               //Clear OutputBuffer
-            if (radioCanUseI2S()) {
-                voxone::i2s_output::Guard outputGuard(kI2SOutputLockWait);
-                if(outputGuard && radioCanUseI2S())
-                    i2s_zero_dma_buffer((i2s_port_t) m_i2s_num);
-            }
-        }
-    }
-    return retVal;
-}
-//---------------------------------------------------------------------------------------------------------------------
 bool Audio::playChunk() {
     // If we've got data, try and pump it out..
     if(!radioCanUseI2S()) {
@@ -3249,14 +3086,8 @@ void Audio::processWebFile() {
         }
         playI2Sremains();
         stopSong(); // Correct close when play known length sound #74 and before callback #11
-        if(m_f_tts){
-            AUDIO_INFO("End of speech: \"%s\"", m_lastHost);
-            if(audio_eof_speech) audio_eof_speech(m_lastHost);
-        }
-        else{
-            AUDIO_INFO("End of webstream: \"%s\"", m_lastHost);
-            if(audio_eof_stream) audio_eof_stream(m_lastHost);
-        }
+        AUDIO_INFO("End of webstream: \"%s\"", m_lastHost);
+        if(audio_eof_stream) audio_eof_stream(m_lastHost);
         return;
     }
 
@@ -4160,8 +3991,6 @@ int Audio::sendBytes(uint8_t* data, size_t len) {
     else{  // ret>=0
         if(f_setDecodeParamsOnce){
             f_setDecodeParamsOnce = false;
-            m_PlayingStartTime = millis();
-
             if(m_codec == CODEC_MP3){
                 setChannels(MP3GetChannels());
                 setSampleRate(MP3GetSampRate());
@@ -4203,7 +4032,7 @@ int Audio::sendBytes(uint8_t* data, size_t len) {
     } else if(m_codec != CODEC_FLAC) {
         m_flacBitrateMeter.reset();
     }
-    compute_audioCurrentTime(bytesDecoded);
+    updateBitrate();
 
     if(audio_process_extern){
         bool continueI2S = false;
@@ -4226,7 +4055,7 @@ int Audio::sendBytes(uint8_t* data, size_t len) {
     return bytesDecoded;
 }
 //---------------------------------------------------------------------------------------------------------------------
-void Audio::compute_audioCurrentTime(int bd) {
+void Audio::updateBitrate() {
     static uint16_t loop_counter = 0;
     static int old_bitrate = 0;
     static uint64_t sum_bitrate = 0;
@@ -4268,7 +4097,6 @@ void Audio::compute_audioCurrentTime(int bd) {
     else {
         if(loop_counter == 2) m_avr_bitrate = getBitRate();
     }
-    m_audioCurrentTime += ((float)bd / m_avr_bitrate) * 8;
 }
 //---------------------------------------------------------------------------------------------------------------------
 void Audio::printDecodeError(int r) {
@@ -4356,16 +4184,6 @@ bool Audio::setPinout(uint8_t BCLK, uint8_t LRC, uint8_t DOUT, int8_t DIN, int8_
     return (result == ESP_OK);
 }
 //---------------------------------------------------------------------------------------------------------------------
-uint32_t Audio::getAudioCurrentTime() {  // return current time in seconds
-    return (uint32_t) m_audioCurrentTime;
-}
-//---------------------------------------------------------------------------------------------------------------------
-uint32_t Audio::getTotalPlayingTime() {
-    // Is set to zero by a connectToXXX() and starts as soon as the first audio data is available,
-    // the time counting is not interrupted by a 'pause / resume'
-    return millis() - m_PlayingStartTime;
-}
-//---------------------------------------------------------------------------------------------------------------------
 bool Audio::setSampleRate(uint32_t sampRate) {
     if(!sampRate) sampRate = 16000; // fuse, if there is no value -> set default #209
     if (radioCanUseI2S()) {
@@ -4422,47 +4240,6 @@ uint32_t Audio::getBitRate(bool avg){
     if (avg)
         return m_avr_bitrate;
     return m_bitRate;
-}
-//---------------------------------------------------------------------------------------------------------------------
-void Audio::setI2SCommFMT_LSB(bool commFMT) {
-    // false: I2S communication format is by default I2S_COMM_FORMAT_I2S_MSB, right->left (AC101, PCM5102A)
-    // true:  changed to I2S_COMM_FORMAT_I2S_LSB for some DACs (PT8211)
-    //        Japanese or called LSBJ (Least Significant Bit Justified) format
-
-    if (commFMT) {
-        if(m_f_Log) log_i("commFMT LSB");
-
-        #if ESP_ARDUINO_VERSION_MAJOR >= 2
-            m_i2s_config.communication_format = (i2s_comm_format_t)(I2S_COMM_FORMAT_STAND_MSB); // v >= 2.0.0
-        #else
-            m_i2s_config.communication_format = (i2s_comm_format_t)(I2S_COMM_FORMAT_I2S | I2S_COMM_FORMAT_I2S_LSB);
-        #endif
-
-    }
-    else {
-        if(m_f_Log) log_i("commFMT MSB");
-
-        #if ESP_ARDUINO_VERSION_MAJOR >= 2
-            m_i2s_config.communication_format = (i2s_comm_format_t)(I2S_COMM_FORMAT_STAND_I2S); // vers >= 2.0.0
-        #else
-            m_i2s_config.communication_format = (i2s_comm_format_t)(I2S_COMM_FORMAT_I2S | I2S_COMM_FORMAT_I2S_MSB);
-        #endif
-
-    }
-    AUDIO_INFO("commFMT = %i", m_i2s_config.communication_format);
-    voxone::i2s_output::Guard outputGuard(kI2SOutputLockWait);
-    if(!outputGuard) {
-        log_e("I2S format lock timeout");
-        return;
-    }
-    const esp_err_t uninstallError =
-        i2s_driver_uninstall((i2s_port_t)m_i2s_num);
-    const esp_err_t installError = uninstallError == ESP_OK
-        ? i2s_driver_install((i2s_port_t)m_i2s_num, &m_i2s_config, 0, NULL)
-        : uninstallError;
-    if(uninstallError != ESP_OK || installError != ESP_OK)
-        log_e("I2S format reconfigure failed: uninstall=%d install=%d",
-              uninstallError, installError);
 }
 //---------------------------------------------------------------------------------------------------------------------
 bool Audio::playSample(int16_t sample[2]) {
@@ -4550,10 +4327,6 @@ uint8_t Audio::getVolume() {
     return m_vol;*/
 }
 //---------------------------------------------------------------------------------------------------------------------
-uint8_t Audio::getI2sPort() {
-    return m_i2s_num;
-}
-//---------------------------------------------------------------------------------------------------------------------
 int32_t Audio::Gain(int16_t s[2]) {
     const voxone::audio_balance::StereoGain gain =
         voxone::audio_balance::calculateStereoGain(
@@ -4565,11 +4338,6 @@ int32_t Audio::Gain(int16_t s[2]) {
 uint32_t Audio::inBufferFilled() {
     // current audio input buffer fillsize in bytes
     return InBuff.bufferFilled();
-}
-//---------------------------------------------------------------------------------------------------------------------
-uint32_t Audio::inBufferFree() {
-    // current audio input buffer free space in bytes
-    return InBuff.freeSpace();
 }
 //---------------------------------------------------------------------------------------------------------------------
 //            ***     D i g i t a l   b i q u a d r a t i c     f i l t e r     ***

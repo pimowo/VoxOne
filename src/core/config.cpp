@@ -1260,13 +1260,15 @@ bool Config::loadStation(uint16_t ls) {
   if (index.readBytes((char *) &pos, 4) != 4 || pos >= playlist.size() ||
       !playlist.seek(pos, SeekSet)) return false;
   index.close();
-  String loadedLine = playlist.readStringUntil('\n');
-  if (loadedLine.endsWith("\r")) loadedLine.remove(loadedLine.length() - 1);
   static char nativeLine[BUFLEN * 3]; // Loads are serialized by PlaylistGuard.
-  loadedLine.toCharArray(nativeLine, sizeof(nativeLine));
+  size_t loadedLength =
+      playlist.readBytesUntil('\n', nativeLine, sizeof(nativeLine) - 1);
+  const bool completeLine = loadedLength < sizeof(nativeLine) - 1;
+  if (loadedLength && nativeLine[loadedLength - 1] == '\r') --loadedLength;
+  nativeLine[loadedLength] = '\0';
   char* name = nullptr;
   char* url = nullptr;
-  const bool parsed = loadedLine.length() < sizeof(nativeLine) &&
+  const bool parsed = completeLine &&
                       stationParseFields(nativeLine, station.id, name, url,
                                          sOvol, station.metadataMode);
   if (parsed) {
@@ -1302,8 +1304,16 @@ char * Config::stationByNum(uint16_t num){
   index.readBytes((char *) &pos, 4);
   index.close();
   playlist.seek(pos, SeekSet);
-  playlist.readStringUntil('\t'); // Skip immutable station ID.
-  strncpy(_stationBuf, playlist.readStringUntil('\t').c_str(), sizeof(_stationBuf));
+  char stationId[17];
+  const size_t idLength =
+      playlist.readBytesUntil('\t', stationId, sizeof(stationId));
+  if (idLength != 16) {
+    playlist.close();
+    return _stationBuf;
+  }
+  const size_t nameLength =
+      playlist.readBytesUntil('\t', _stationBuf, sizeof(_stationBuf) - 1);
+  _stationBuf[nameLength] = '\0';
   playlist.close();
   return _stationBuf;
 }

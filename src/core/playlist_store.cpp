@@ -406,8 +406,12 @@ PlaylistWriteError PlaylistStore::commit(const std::vector<PlaylistRow>& rows,
       timing.validateUs = timestamp() - phaseStartedUs;
       return finish(PlaylistWriteError::INVALID);
     }
+    char ovol[12];
+    const int ovolLength = snprintf(ovol, sizeof(ovol), "%d", row.ovol);
+    if (ovolLength <= 0 || static_cast<size_t>(ovolLength) >= sizeof(ovol))
+      return finish(PlaylistWriteError::INVALID);
     bytesNeeded += 16 + row.name.length() + row.url.length() +
-                   String(row.ovol).length() +
+                   static_cast<size_t>(ovolLength) +
                    (row.metadataMode == STATION_META_SWAP ? 4 : 6) + 5;
   }
   for (size_t i = 0; i < rows.size(); ++i)
@@ -439,16 +443,32 @@ PlaylistWriteError PlaylistStore::commit(const std::vector<PlaylistRow>& rows,
   }
   bool written = tmp.write(reinterpret_cast<const uint8_t*>(kStationsHeader),
                            sizeof(kStationsHeader) - 1) == sizeof(kStationsHeader) - 1;
+  auto writeChunk = [&](const char* bytes, size_t length) {
+    if (written &&
+        tmp.write(reinterpret_cast<const uint8_t*>(bytes), length) != length)
+      written = false;
+  };
   for (const PlaylistRow& row : rows) {
     char id[17];
     stationFormatId(row.id, id);
-    String line = String(id) + '\t' + row.name + '\t' + row.url + '\t' +
-                  String(row.ovol) + '\t' +
-                  (row.metadataMode == STATION_META_SWAP ? "swap\n" : "normal\n");
-    if (tmp.write(reinterpret_cast<const uint8_t*>(line.c_str()), line.length()) != line.length()) {
+    char ovol[12];
+    const int ovolLength = snprintf(ovol, sizeof(ovol), "%d", row.ovol);
+    if (ovolLength <= 0 || static_cast<size_t>(ovolLength) >= sizeof(ovol)) {
       written = false;
       break;
     }
+    writeChunk(id, 16);
+    writeChunk("\t", 1);
+    writeChunk(row.name.c_str(), row.name.length());
+    writeChunk("\t", 1);
+    writeChunk(row.url.c_str(), row.url.length());
+    writeChunk("\t", 1);
+    writeChunk(ovol, static_cast<size_t>(ovolLength));
+    writeChunk("\t", 1);
+    const char* metadata =
+        row.metadataMode == STATION_META_SWAP ? "swap\n" : "normal\n";
+    writeChunk(metadata, strlen(metadata));
+    if (!written) break;
   }
   tmp.flush();
   tmp.close();

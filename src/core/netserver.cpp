@@ -578,7 +578,7 @@ void handleBtUpload(AsyncWebServerRequest* request, const String& filename,
       session->error = "Missing image size";
       return;
     }
-    const String sizeText = request->getParam("filesize", true)->value();
+    const String& sizeText = request->getParam("filesize", true)->value();
     if (sizeText.isEmpty() || sizeText.length() > 10) {
       session->error = "Invalid image size";
       return;
@@ -1557,7 +1557,7 @@ void handleStationDirectorySearch(AsyncWebServerRequest* request) {
   const stationDirectory::SearchRequest kind = stationDirectory::classifySearchRequest(
       request->hasParam("job"), request->hasParam("q"));
   if (kind == stationDirectory::SearchRequest::POLL) {
-    const String jobText = request->getParam("job")->value();
+    const String& jobText = request->getParam("job")->value();
     char* end = nullptr;
     const unsigned long parsed = strtoul(jobText.c_str(), &end, 10);
     if (!jobText.length() || !end || *end || !parsed || parsed > UINT32_MAX) {
@@ -1578,12 +1578,14 @@ void handleStationDirectorySearch(AsyncWebServerRequest* request) {
     stationsReply(request, 400, R"({"error":"missing_query"})");
     return;
   }
-  const String query = request->getParam("q")->value();
-  const String country = request->hasParam("country") ?
-      request->getParam("country")->value() : String("PL");
+  const String& query = request->getParam("q")->value();
+  static const String defaultCountry("PL");
+  const String& country = request->hasParam("country")
+                              ? request->getParam("country")->value()
+                              : defaultCountry;
   unsigned limit = stationDirectory::kDefaultLimit;
   if (request->hasParam("limit")) {
-    const String limitText = request->getParam("limit")->value();
+    const String& limitText = request->getParam("limit")->value();
     char* end = nullptr;
     const unsigned long parsed = strtoul(limitText.c_str(), &end, 10);
     if (!limitText.length() || !end || *end || parsed > UINT_MAX) {
@@ -1616,7 +1618,7 @@ void handleStationDirectorySearch(AsyncWebServerRequest* request) {
 
 void handleDlnaServers(AsyncWebServerRequest* request) {
   if (request->hasParam("job")) {
-    const String jobText = request->getParam("job")->value();
+    const String& jobText = request->getParam("job")->value();
     char* end = nullptr;
     const unsigned long parsed = strtoul(jobText.c_str(), &end, 10);
     if (!jobText.length() || !end || *end || !parsed || parsed > UINT32_MAX) {
@@ -1667,9 +1669,9 @@ void handleDlnaSelect(AsyncWebServerRequest* request) {
     return;
   }
   int index = -1;
-  String ip;
+  const char* ip = nullptr;
   if (hasIndex) {
-    const String value = request->getParam("index", true)->value();
+    const String& value = request->getParam("index", true)->value();
     char* end = nullptr;
     const long parsed = strtol(value.c_str(), &end, 10);
     if (!value.length() || !end || *end || parsed < 0 ||
@@ -1679,15 +1681,16 @@ void handleDlnaSelect(AsyncWebServerRequest* request) {
     }
     index = static_cast<int>(parsed);
   } else {
-    ip = request->getParam("ip", true)->value();
-    if (!ip.length() || ip.length() >= sizeof(voxone::dlna::DlnaServerInfo::ip)) {
+    const String& value = request->getParam("ip", true)->value();
+    if (!value.length() ||
+        value.length() >= sizeof(voxone::dlna::DlnaServerInfo::ip)) {
       stationsReply(request, 400, R"({"error":"bad_server_ip"})");
       return;
     }
+    ip = value.c_str();
   }
   String body;
-  switch (voxone::dlna::selectServer(index, hasIp ? ip.c_str() : nullptr,
-                                     body)) {
+  switch (voxone::dlna::selectServer(index, ip, body)) {
     case voxone::dlna::SelectResult::Selected:
       stationsReply(request, 200, body);
       break;
@@ -1705,7 +1708,7 @@ void handleDlnaSelect(AsyncWebServerRequest* request) {
 
 void handleDlnaBrowse(AsyncWebServerRequest* request) {
   if (request->hasParam("job")) {
-    const String jobText = request->getParam("job")->value();
+    const String& jobText = request->getParam("job")->value();
     char* end = nullptr;
     const unsigned long parsed = strtoul(jobText.c_str(), &end, 10);
     if (!jobText.length() || !end || *end || !parsed || parsed > UINT32_MAX) {
@@ -1724,9 +1727,10 @@ void handleDlnaBrowse(AsyncWebServerRequest* request) {
     return;
   }
 
-  const String parent = request->hasParam("parent")
-                            ? request->getParam("parent")->value()
-                            : String("0");
+  static const String rootObject("0");
+  const String& parent = request->hasParam("parent")
+                             ? request->getParam("parent")->value()
+                             : rootObject;
   if (!voxone::dlna::validObjectId(parent.c_str())) {
     stationsReply(request, 400, R"({"error":"bad_parent"})");
     return;
@@ -1760,10 +1764,11 @@ void handleDlnaPlay(AsyncWebServerRequest* request) {
     stationsReply(request, 400, R"({"error":"missing_url"})");
     return;
   }
-  const String url = request->getParam("url", true)->value();
-  const String title = request->hasParam("title", true)
-                           ? request->getParam("title", true)->value()
-                           : String("DLNA");
+  const String& url = request->getParam("url", true)->value();
+  static const String defaultTitle("DLNA");
+  const String& title = request->hasParam("title", true)
+                            ? request->getParam("title", true)->value()
+                            : defaultTitle;
   voxone::temporary_audio::RequestStorage playback{};
   if (!voxone::temporary_audio::isSafeUrl(url.c_str(), url.length()) ||
       title.length() >= sizeof(playback.title)) {
@@ -1817,8 +1822,10 @@ void handleSdServers(AsyncWebServerRequest* request) {
 }
 
 void handleSdBrowse(AsyncWebServerRequest* request) {
-  const String path = request->hasParam("path")
-                          ? request->getParam("path")->value() : String("/");
+  static const String rootPath("/");
+  const String& path = request->hasParam("path")
+                           ? request->getParam("path")->value()
+                           : rootPath;
   std::unique_ptr<voxone::sd_card::BrowseListing> listing(
       new (std::nothrow) voxone::sd_card::BrowseListing());
   if (!listing) {
@@ -1869,7 +1876,7 @@ void handleSdPlay(AsyncWebServerRequest* request) {
     stationsReply(request, 400, R"({"error":"missing_path"})");
     return;
   }
-  const String path = request->getParam("path", true)->value();
+  const String& path = request->getParam("path", true)->value();
   const auto status = voxone::sd_card::validatePlayableFile(path.c_str());
   if (status != voxone::sd_card::Status::Ok) {
     stationsReply(request, sdHttpStatus(status),
@@ -1878,9 +1885,10 @@ void handleSdPlay(AsyncWebServerRequest* request) {
     return;
   }
   voxone::temporary_audio::RequestStorage playback{};
-  const String title = request->hasParam("title", true)
-                           ? request->getParam("title", true)->value()
-                           : String("Karta SD");
+  static const String defaultTitle("Karta SD");
+  const String& title = request->hasParam("title", true)
+                            ? request->getParam("title", true)->value()
+                            : defaultTitle;
   if (title.length() >= sizeof(playback.title)) {
     stationsReply(request, 400, R"({"error":"invalid_sd_title"})");
     return;
@@ -2601,7 +2609,7 @@ void handleHaSettingsSave(AsyncWebServerRequest* request) {
     stationsReply(request, 400, R"({"error":"missing_name"})");
     return;
   }
-  const String name = request->getParam("name", true)->value();
+  const String& name = request->getParam("name", true)->value();
   if (!voxone::ha_name::valid(name.c_str(), name.length())) {
     stationsReply(request, 400, R"({"error":"invalid_name"})");
     return;
@@ -2648,7 +2656,7 @@ void handleDisplayThemeSave(AsyncWebServerRequest* request) {
     stationsReply(request, 400, R"({"error":"missing_theme"})");
     return;
   }
-  const String requested = request->getParam("theme", true)->value();
+  const String& requested = request->getParam("theme", true)->value();
   TftTheme theme = THEME_DEFAULT;
   if (!voxone::tft_theme::parseApiName(requested.c_str(), theme)) {
     stationsReply(request, 400, R"({"error":"invalid_theme"})");
@@ -2697,7 +2705,7 @@ void handlePowerSettingsSave(AsyncWebServerRequest* request) {
     stationsReply(request, 400, R"({"error":"missing_mode"})");
     return;
   }
-  const String requested = request->getParam("mode", true)->value();
+  const String& requested = request->getParam("mode", true)->value();
   PowerMode mode = MODE_SOFT_STANDBY;
   if (!voxone::power_mode::parseApiName(requested.c_str(), mode)) {
     stationsReply(request, 400, R"({"error":"invalid_mode"})");
@@ -2771,9 +2779,9 @@ void handleHardwareConfigSave(AsyncWebServerRequest* request) {
     stationsReply(request, 400, R"({"error":"missing_field"})");
     return;
   }
-  const String display = request->getParam("display", true)->value();
-  const String input = request->getParam("input", true)->value();
-  const String audio = request->getParam("audio", true)->value();
+  const String& display = request->getParam("display", true)->value();
+  const String& input = request->getParam("input", true)->value();
+  const String& audio = request->getParam("audio", true)->value();
   if (!display.length() || display.length() > 31 || !input.length() ||
       input.length() > 15 || !audio.length() || audio.length() > 15) {
     stationsReply(request, 400, R"({"error":"invalid_value"})");
@@ -4102,7 +4110,7 @@ void handleWebUpdateUpload(AsyncWebServerRequest *request, const String& filenam
       session->error = "Missing update target";
       return;
     }
-    const String target = request->getParam("updatetarget", true)->value();
+    const String& target = request->getParam("updatetarget", true)->value();
     if (target == "firmware" || target == "fw") {
       session->target = U_FLASH;
     } else if (target == "spiffs") {
@@ -4151,7 +4159,7 @@ void handleWebUpdateUpload(AsyncWebServerRequest *request, const String& filenam
     }
     session->limit = partition->size;
     if (request->hasParam("filesize", true)) {
-      const String sizeText = request->getParam("filesize", true)->value();
+      const String& sizeText = request->getParam("filesize", true)->value();
       for (size_t i = 0; i < sizeText.length(); ++i) {
         if (!isDigit(sizeText[i])) {
           session->error = "Invalid image size";
@@ -4509,9 +4517,9 @@ void handleIndex(AsyncWebServerRequest * request) {
           request->send(400, "text/plain", "Missing hardware selection");
           return;
         }
-        const String display = request->getParam("display", true)->value();
-        const String input = request->getParam("input", true)->value();
-        const String audio = request->getParam("audio", true)->value();
+        const String& display = request->getParam("display", true)->value();
+        const String& input = request->getParam("input", true)->value();
+        const String& audio = request->getParam("audio", true)->value();
         if (!display.length() || display.length() > 31 || !input.length() ||
             input.length() > 15 || !audio.length() || audio.length() > 15) {
           request->send(400, "text/plain", "Invalid hardware selection");

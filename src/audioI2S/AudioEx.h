@@ -7,7 +7,6 @@
  */
 
 #pragma once
-#pragma GCC optimize ("Ofast")
 #include <atomic>
 #include <vector>
 #include "../core/radio_url_resolution.h"
@@ -50,7 +49,6 @@ extern __attribute__((weak)) void audio_commercial(const char*);
 extern __attribute__((weak)) void audio_icyurl(const char*);
 extern __attribute__((weak)) void audio_icydescription(const char*);
 extern __attribute__((weak)) void audio_lasthost(const char*);
-extern __attribute__((weak)) void audio_eof_speech(const char*);
 extern __attribute__((weak)) void audio_eof_stream(const char*); // The webstream comes to an end
 extern __attribute__((weak)) void audio_process_extern(int16_t* buff, uint16_t len, bool *continueI2S); // record audiodata or send via BT
 extern __attribute__((weak)) void audio_error(const char*);
@@ -137,7 +135,7 @@ protected:
 
 struct Audio;
 
-class Audio : private AudioBuffer{
+class Audio {
 
     AudioBuffer InBuff; // instance of input buffer
 
@@ -149,12 +147,9 @@ public:
     void setBufsize(int rambuf_sz, int psrambuf_sz);
     bool connecttohost(const char* host, const char* user = "", const char* pwd = "");
     bool connecttoFS(fs::FS& fs, const char* path);
-    bool connecttospeech(const char* speech, const char* lang);
-    bool connecttomarytts(const char* speech, const char* lang, const char* voice);
     void setConnectionTimeout(uint16_t timeout_ms, uint16_t timeout_ms_ssl);
     void cancelPendingConnection();
     bool setPinout(uint8_t BCLK, uint8_t LRC, uint8_t DOUT, int8_t DIN = I2S_PIN_NO_CHANGE, int8_t MCK = I2S_PIN_NO_CHANGE);
-    bool pauseResume();
     bool isRunning() {return m_f_running;}
     bool audioStreamStarted() const {return m_f_playing;}
     void armPcmOutput() {
@@ -195,14 +190,11 @@ public:
     void setBalance(int8_t bal = 0);
     void setVolume(uint8_t vol);
     uint8_t getVolume();
-    uint8_t getI2sPort();
 
     uint32_t getSampleRate();
     uint8_t  getBitsPerSample();
     uint8_t  getChannels();
     uint32_t getBitRate(bool avg = false);
-    uint32_t getAudioCurrentTime();
-    uint32_t getTotalPlayingTime();
 
     void setDefaults();
     /* VU METER */
@@ -213,9 +205,7 @@ public:
     bool     eofHeader;
     esp_err_t i2s_mclk_pin_select(const uint8_t pin);
     uint32_t inBufferFilled(); // returns the number of stored bytes in the inputbuffer
-    uint32_t inBufferFree();   // returns the number of free bytes in the inputbuffer
     void setTone(int8_t gainLowPass, int8_t gainBandPass, int8_t gainHighPass);
-    void setI2SCommFMT_LSB(bool commFMT);
     int getCodec() {return m_codec;}
     const char *getCodecname() {return codecname[m_codec];}
 private:
@@ -254,7 +244,7 @@ private:
     void showCodecParams();
     int  findNextSync(uint8_t* data, size_t len);
     int  sendBytes(uint8_t* data, size_t len);
-    void compute_audioCurrentTime(int bd);
+    void updateBitrate();
     void printDecodeError(int r);
     void showID3Tag(const char* tag, const char* val);
     void unicode2utf8(char* buff, uint32_t len);
@@ -418,14 +408,6 @@ private:
         }
         return false;
     }
-    size_t urlencode_expected_len(const char* source){
-        size_t expectedLen = strlen(source);
-        for(int i = 0; i < strlen(source); i++) {
-            if(isalnum(source[i])){;}
-            else expectedLen += 2;
-        }
-        return expectedLen;
-    }
     void vector_clear_and_shrink(vector<char*>&vec){
         uint size = vec.size();
         for (int i = 0; i < size; i++) {
@@ -539,12 +521,10 @@ private:
     char*           m_playlistBuff = NULL;          // stores playlistdata
     const uint16_t  m_plsBuffEntryLen = 256;        // length of each entry in playlistBuff
     filter_t        m_filter[3];                    // digital filters
-    int             m_LFcount = 0;                  // Detection of end of header
     uint32_t        m_sampleRate=16000;
     uint32_t        m_bitRate=0;                    // current bitrate given fom decoder
     uint32_t        m_avr_bitrate = 0;              // average bitrate, median computed by VBR
     voxone::audio::FlacBitrateMeter m_flacBitrateMeter;
-    int             m_readbytes = 0;                // bytes read
     uint32_t        m_metacount = 0;                // counts down bytes between metadata
     int             m_controlCounter = 0;           // Status within readID3data() and readWaveHeader()
     int8_t          m_balance = 0;                  // -16 (mute left) ... +16 (mute right)
@@ -556,7 +536,6 @@ private:
     uint8_t         m_codec = CODEC_NONE;           //
     uint8_t         m_expectedCodec = CODEC_NONE;   // set in connecttohost (e.g. http://url.mp3 -> CODEC_MP3)
     uint8_t         m_expectedPlsFmt = FORMAT_NONE; // set in connecttohost (e.g. streaming01.m3u) -> FORMAT_M3U)
-    uint8_t         m_filterType[2];                // lowpass, highpass
     uint8_t         m_streamType = ST_NONE;
     uint8_t         m_ID3Size = 0;                  // lengt of ID3frame - ID3header
     int16_t         m_outBuff[2048*2];              // Interleaved L/R
@@ -585,7 +564,6 @@ private:
 #if defined(VOXONE_TTS_HIL_DIAGNOSTICS)
     uint64_t        m_hilHttpBodyProgressBytes = 0; // cumulative web-file body bytes
 #endif
-    uint32_t        m_PlayingStartTime = 0;         // Stores the milliseconds after the start of the audio
     uint16_t        m_m3u8_targetDuration = 10;     //
     bool            m_f_metadata = false;           // assume stream without metadata
     bool            m_f_unsync = false;             // set within ID3 tag but not used
@@ -596,35 +574,26 @@ private:
     bool            m_webFileDataComplete = false;  // HTTP body complete; decoder may still be draining
     bool            m_localFileActive = false;
     bool            m_f_chunked = false ;           // Station provides chunked transfer
-    bool            m_f_firstmetabyte = false;      // True if first metabyte (counter)
     bool            m_f_playing = false;            // valid mp3 stream recognized
     std::atomic<bool> m_pcmOutputArmed{false};       // wait for the first decoded PCM frame
     std::atomic<bool> m_pcmOutputReady{false};       // first frame reached I2S while DAC was muted
-    bool            m_f_tts = false;                // text to speech
     bool            m_f_forceMono = false;          // if true stereo -> mono
     bool            m_f_internalDAC = false;        // false: output vis I2S, true output via internal DAC
     bool            m_f_i2sInstalled = false;
-    bool            m_f_rtsp = false;               // set if RTSP is used (m3u8 stream)
     bool            m_f_m3u8data = false;           // used in processM3U8entries
     bool            m_f_Log = false;                // set in platformio.ini  -DAUDIO_LOG and -DCORE_DEBUG_LEVEL=3 or 4
     bool            m_f_continue = false;           // next m3u8 chunk is available
     bool            m_f_ts = true;                  // transport stream
     uint8_t         m_f_channelEnabled = 3;         // internal DAC, both channels
-    float           m_audioCurrentTime = 0;
     uint32_t        m_audioDataStart = 0;           // in bytes
     size_t          m_audioDataSize = 0;            //
     voxone::audio::WavHeaderParser m_wavHeaderParser;
     float           m_filterBuff[3][2][2][2];       // IIR filters memory for Audio DSP
     size_t          m_i2s_bytesWritten = 0;         // set in i2s_write() but not used
-    uint16_t        m_filterFrequency[2];
     int8_t          m_gain0 = 0;                    // cut or boost filters (EQ)
     int8_t          m_gain1 = 0;
     int8_t          m_gain2 = 0;
 
-    pid_array       m_pidsOfPMT;
-    int16_t         m_pidOfAAC;
-    uint8_t         m_packetBuff[m_tsPacketSize];
-    int16_t         m_pesDataLength = 0;
     uint16_t  vuLeft, vuRight;
 };
 
