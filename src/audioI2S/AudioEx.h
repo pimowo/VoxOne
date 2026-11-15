@@ -16,6 +16,7 @@
 #include "../core/radio_connect_lifetime.h"
 #include "../core/radio_reconnect_policy.h"
 #include "wav_header_parser.h"
+#include "mpeg_ts_aac_parser.h"
 #include <Arduino.h>
 #include <FS.h>
 #include <libb64/cencode.h>
@@ -261,7 +262,6 @@ private:
     inline void setDatamode(uint8_t dm){m_datamode=dm;}
     inline uint8_t getDatamode(){return m_datamode;}
     void IIR_calculateCoefficients(int8_t G1, int8_t G2, int8_t G3);
-    bool ts_parsePacket(uint8_t* packet, uint8_t* packetStart, uint8_t* packetLength);
     void _computeVUlevel(int16_t sample[2]);
     static void connectTask(void* pvParams);
 
@@ -450,11 +450,6 @@ private:
         float b2;
     } filter_t;
 
-    typedef struct _pis_array{
-        int number;
-        int pids[4];
-    } pid_array;
-
     WiFiClient            client;       // @suppress("Abstract class cannot be instantiated")
     WiFiClientSecure      clientsecure; // @suppress("Abstract class cannot be instantiated")
     WiFiClient*           _client = nullptr;
@@ -486,6 +481,8 @@ private:
     };
     voxone::radio::ConnectAttemptLifetime m_connectAttempt;
     voxone::radio::SegmentTransportWatchdog m_segmentTransportWatchdog;
+    voxone::audio::MpegTsAacParser m_tsParser;
+    voxone::audio::TsStreamRecoveryPolicy m_tsRecoveryPolicy;
     
     const size_t    m_frameSizeWav  = 1024 * 8;
     const size_t    m_frameSizeMP3  = 1600;

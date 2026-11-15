@@ -24,6 +24,7 @@ struct AudioFormatDetection {
   AudioFormat format;
   AudioFormatSource source;
   bool aacPlus;
+  bool transportStream;
 };
 
 // A recognized Content-Type always wins. A URL/playlist hint is considered

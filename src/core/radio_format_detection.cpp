@@ -33,8 +33,9 @@ bool equals(const MimeView& mime, const char* expected) {
   return true;
 }
 
-AudioFormatDetection contentType(AudioFormat format, bool aacPlus = false) {
-  return {format, AudioFormatSource::ContentType, aacPlus};
+AudioFormatDetection contentType(AudioFormat format, bool aacPlus = false,
+                                 bool transportStream = false) {
+  return {format, AudioFormatSource::ContentType, aacPlus, transportStream};
 }
 
 }  // namespace
@@ -44,8 +45,8 @@ AudioFormatDetection detectAudioFormat(const char* value, AudioFormat hint) {
   if (mime.length == 0)
     return hint == AudioFormat::Unknown
         ? AudioFormatDetection{AudioFormat::Unknown, AudioFormatSource::None,
-                               false}
-        : AudioFormatDetection{hint, AudioFormatSource::Hint, false};
+                               false, false}
+        : AudioFormatDetection{hint, AudioFormatSource::Hint, false, false};
 
   if (equals(mime, "audio/mpeg") || equals(mime, "audio/mp3") ||
       equals(mime, "audio/mpeg3") || equals(mime, "audio/x-mpeg") ||
@@ -56,6 +57,8 @@ AudioFormatDetection detectAudioFormat(const char* value, AudioFormat hint) {
     return contentType(AudioFormat::Aac);
   if (equals(mime, "audio/aacp"))
     return contentType(AudioFormat::Aac, true);
+  if (equals(mime, "video/mp2t"))
+    return contentType(AudioFormat::Aac, false, true);
 
   // M4A is an AAC container. It keeps a distinct container result so the
   // existing M4A header parser can prepare raw AAC blocks for the AAC decoder.
@@ -69,9 +72,9 @@ AudioFormatDetection detectAudioFormat(const char* value, AudioFormat hint) {
   const bool generic = equals(mime, "application/octet-stream") ||
                        equals(mime, "text/plain");
   if (generic && hint != AudioFormat::Unknown)
-    return {hint, AudioFormatSource::Hint, false};
+    return {hint, AudioFormatSource::Hint, false, false};
 
-  return {AudioFormat::Unknown, AudioFormatSource::None, false};
+  return {AudioFormat::Unknown, AudioFormatSource::None, false, false};
 }
 
 }  // namespace radio

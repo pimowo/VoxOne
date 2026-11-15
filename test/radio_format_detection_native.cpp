@@ -22,6 +22,7 @@ int main() {
   expectMime("audio/aac", AudioFormat::Aac);
   expectMime("audio/aacp", AudioFormat::Aac);
   expectMime("audio/x-aac", AudioFormat::Aac);
+  expectMime("video/mp2t", AudioFormat::Aac);
   expectMime("audio/flac", AudioFormat::Flac);
   expectMime("audio/x-flac", AudioFormat::Flac);
 
@@ -30,6 +31,9 @@ int main() {
   expectMime("audio/aacp; charset=utf-8", AudioFormat::Aac);
   expectMime("  audio/aacp  ; charset=utf-8  ", AudioFormat::Aac);
   assert(detectAudioFormat("audio/aacp").aacPlus);
+  const auto transportStream = detectAudioFormat("video/mp2t");
+  assert(transportStream.transportStream);
+  assert(!transportStream.aacPlus);
 
   expectMime("audio/mp4", AudioFormat::M4aAac);
   expectMime("audio/m4a", AudioFormat::M4aAac);

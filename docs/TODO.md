@@ -9,7 +9,9 @@ checkpointów pozostaje w historii Git i w istniejących raportach.
 - [ ] Po VOXONE-HLS-MEMORY-SAFETY-1 fizycznie potwierdzić na L0 i S0
   odtwarzanie HLS z absolutnymi i względnymi URL wariantów oraz segmentów, w
   tym playlistą bazową zakończoną `/`, bez regresji przełączania i ponawiania
-  strumienia.
+  strumienia; po VOXONE-TS-PARSER-SAFETY-1/2/3 objąć ten HIL również standardowymi
+  segmentami AAC-in-TS z PAT/PMT zawierającymi pola adaptacyjne, ciągłością
+  wielu segmentów oraz rzeczywistą telemetrią AAC, bitrate i sample rate.
 - [ ] Zweryfikować przycisk zasilania na L0 (GPIO42) i S0 (GPIO3): krótki
   klik (Wakeup/Mute albo Home z Menu/karuzeli), dwuklik otwierający Menu
   Główne wyłącznie z Playera oraz długie naciśnięcie uruchamiające shutdown
@@ -140,6 +142,14 @@ checkpointów pozostaje w historii Git i w istniejących raportach.
 
 ## 4. Backlog / Inne
 
+- [ ] MPEG-TS PSI: dodać weryfikację CRC32 PAT/PMT, poprawnie ignorować
+  duplikaty continuity counter podczas składania sekcji wielopakietowych oraz
+  zastąpić albo formalnie uzasadnić limit pierwszych czterech PID PMT wraz z
+  wyborem programu; zachować ograniczone bufory i testy ASan/UBSan.
+- [ ] MPEG-TS: dodać natywny harness integracyjny wejścia
+  `Audio::processWebStreamTS` z kontrolowanym klientem i atrapą `InBuff`, aby
+  sprawdzać zapis wyłącznie dla `AudioData`, odrzucanie pojedynczych błędów i
+  jedno przerwanie po osiągnięciu limitu bez zależności od Arduino/Wi-Fi.
 - [ ] HLS: dodać testy integracyjne rzeczywistego `Audio::parsePlaylist_M3U8`
   (nie tylko resolvera) oraz kontrolowaną obsługę nieprawidłowych i
   niekompletnych URL, `#EXTINF` bez następnego URL i rozdzielenie błędu

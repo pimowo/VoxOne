@@ -184,6 +184,7 @@ $nativeSources=@{
  ota_boot_health_native=@('src/core/ota_boot_health.cpp')
  ota_update_policy_native=@('src/core/ota_update_policy.cpp')
  radio_format_detection_native=@('src/core/radio_format_detection.cpp')
+ mpeg_ts_aac_parser_native=@('src/audioI2S/mpeg_ts_aac_parser.cpp')
  radio_fallback_contract_native=@('src/core/bt_link_protocol.cpp')
  radio_url_resolution_native=@('src/core/radio_url_resolution.cpp')
  runtime_display_activation_native=@('src/displays/display_backend_selection.cpp','src/hardware/runtime_hardware_config.cpp')
@@ -268,6 +269,13 @@ if(-not $onWindows) {
   if($LASTEXITCODE -ne 0) { throw 'Sanitized radio URL resolution compile failed' }
   & $radioUrlResolutionExe
   if($LASTEXITCODE -ne 0) { throw 'Sanitized radio URL resolution test failed' }
+  $mpegTsParserExe=Join-Path $work 'mpeg_ts_aac_parser_sanitized'
+  & $Cxx @sanitizerArgs '-o' $mpegTsParserExe `
+    (Join-Path $root 'test/mpeg_ts_aac_parser_native.cpp') `
+    (Join-Path $root 'src/audioI2S/mpeg_ts_aac_parser.cpp')
+  if($LASTEXITCODE -ne 0) { throw 'Sanitized MPEG-TS AAC parser compile failed' }
+  & $mpegTsParserExe
+  if($LASTEXITCODE -ne 0) { throw 'Sanitized MPEG-TS AAC parser test failed' }
   $btSingleOwnerExe=Join-Path $work 'bt_link_single_owner_sanitized'
   & $Cxx @sanitizerArgs '-pthread' '-o' $btSingleOwnerExe `
     (Join-Path $root 'test/bt_link_single_owner_native.cpp')
