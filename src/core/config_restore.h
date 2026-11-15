@@ -180,10 +180,6 @@ RestoreResult restoreValidated(const Data& candidate, RestoreStorage& storage);
 }  // namespace voxone
 
 // Consolidated from config_backup_web.h.
-#include <cstddef>
-#include <cstdint>
-
-
 namespace voxone {
 namespace config_backup_web {
 
@@ -240,9 +236,6 @@ ApiResult mapRestoreResult(const config_backup::RestoreResult& result);
 }  // namespace voxone
 
 // Consolidated from config_restore_transaction.h.
-#include <cstdint>
-
-
 namespace voxone {
 namespace config_restore {
 
@@ -310,10 +303,6 @@ class TransactionStorage : public config_backup::RestoreStorage {
 }  // namespace voxone
 
 // Consolidated from config_restore_adapter.h.
-#include <cstddef>
-#include <cstdint>
-
-
 namespace voxone {
 namespace config_restore {
 

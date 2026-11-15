@@ -2,6 +2,7 @@
 #define VOXONE_SECURITY_RECOVERY_H
 
 // Consolidated from security_recovery_key.h.
+#include <stddef.h>
 #include <stdint.h>
 
 namespace voxone {
@@ -43,7 +44,6 @@ class BootKeyDetector {
 }  // namespace voxone
 
 // Consolidated from security_recovery_state.h.
-#include <stdint.h>
 
 namespace voxone {
 namespace security_recovery {
@@ -169,8 +169,6 @@ const char* recoveryApStartResultName(RecoveryApStartResult result);
 }  // namespace voxone
 
 // Consolidated from security_recovery_http.h.
-#include <stddef.h>
-#include <stdint.h>
 namespace voxone { namespace security_recovery {
 // A trusted browser form navigation includes Sec-Fetch-User and can exceed
 // 768 bytes even for the minimal Recovery page. Keep a bounded 1 KiB header.
@@ -234,7 +232,6 @@ namespace security_recovery {
 RecoveryApStartResult beginSecurityRecoveryAp(uint32_t nowMs);
 bool serviceSecurityRecoveryAp(uint32_t nowMs);
 bool securityRecoveryApOwnsRuntime();
-bool securityRecoveryApRunning();
 
 }  // namespace security_recovery
 }  // namespace voxone

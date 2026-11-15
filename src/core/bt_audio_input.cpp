@@ -219,7 +219,7 @@ void BtAudioInput::readTask(void* context) {
 }
 
 void BtAudioInput::readContinuously() {
-  int16_t pcm[512];
+  int16_t pcm[256];
   while (!stopRequested_.load()) {
     size_t bytesRead = 0;
     const esp_err_t error = i2s_read(kBtI2sPort, pcm, sizeof(pcm), &bytesRead,

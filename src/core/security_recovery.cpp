@@ -483,12 +483,9 @@ RecoveryTransition completeRecoverySession(bool success) { return session.comple
 #include "network.h"
 #include "security_settings.h"
 
-#include <Arduino.h>
 #include <WiFi.h>
 #include <WiFiServer.h>
 #include <esp_system.h>
-#include <cstdio>
-#include <cstring>
 
 namespace voxone { namespace security_recovery { namespace {
 
@@ -566,13 +563,13 @@ class RuntimeApPlatform : public RecoveryApPlatform {
   void clearRequest() { secureRuntimeZero(request_,sizeof(request_)); requestLength_=0; }
   void closeClient() { client_.flush(); client_.stop(); clientActive_=false; clearRequest(); }
   void sendResponse(int status,const char* reason,const char* type,const char* body) {
-    char header[768]; const size_t bodyLength=std::strlen(body);
+    char header[512]; const size_t bodyLength=std::strlen(body);
     const int length=std::snprintf(header,sizeof(header),"HTTP/1.1 %d %s\r\nContent-Type: %s\r\nContent-Length: %u\r\nCache-Control: no-store, max-age=0\r\nPragma: no-cache\r\nX-Content-Type-Options: nosniff\r\nContent-Security-Policy: default-src 'none'; style-src 'unsafe-inline'; form-action 'self'; base-uri 'none'; frame-ancestors 'none'\r\nReferrer-Policy: same-origin\r\nConnection: close\r\n\r\n",status,reason,type,static_cast<unsigned>(bodyLength));
     if(length>0&&static_cast<size_t>(length)<sizeof(header)) { client_.write(reinterpret_cast<const uint8_t*>(header),static_cast<size_t>(length)); client_.write(reinterpret_cast<const uint8_t*>(body),bodyLength); }
     closeClient();
   }
   void sendRoot() {
-    char body[2300];
+    char body[1536];
     const int length=renderRecoveryRootPage(csrf_,body,sizeof(body));
     if(length<=0||static_cast<size_t>(length)>=sizeof(body)) sendResponse(500,"Internal Server Error","text/plain; charset=utf-8",kInternalBody);
     else sendResponse(200,"OK","text/html; charset=utf-8",body);
@@ -637,7 +634,6 @@ RecoveryApStartResult beginSecurityRecoveryAp(uint32_t nowMs) {
 }
 bool serviceSecurityRecoveryAp(uint32_t nowMs) { return controller.service(nowMs); }
 bool securityRecoveryApOwnsRuntime() { return controller.ownsRuntime(); }
-bool securityRecoveryApRunning() { return controller.running(); }
 
 } }
 #endif  // ARDUINO

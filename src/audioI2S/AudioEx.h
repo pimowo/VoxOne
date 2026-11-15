@@ -192,7 +192,6 @@ public:
     uint16_t get_VUlevel(uint16_t dimension);
     
     bool     eofHeader;
-    esp_err_t i2s_mclk_pin_select(const uint8_t pin);
     uint32_t inBufferFilled(); // returns the number of stored bytes in the inputbuffer
     void setTone(int8_t gainLowPass, int8_t gainBandPass, int8_t gainHighPass);
 private:
@@ -255,7 +254,6 @@ private:
     bool parseContentType(char* ct);
     bool parseHttpResponseHeader();
     bool initializeDecoder();
-    esp_err_t I2Sstop(uint8_t i2s_num);
     void urlencode(char* buff, uint16_t buffLen, bool spacesOnly = false);
     int16_t* IIR_filterChain0(int16_t iir_in[2], bool clear = false);
     int16_t* IIR_filterChain1(int16_t* iir_in, bool clear = false);
@@ -495,13 +493,9 @@ private:
     const size_t    m_frameSizeFLAC =
         voxone::audio_runtime::kFlacFrameReserveBytes;
 
-    static const uint8_t m_tsPacketSize  = 188;
-    static const uint8_t m_tsHeaderSize  = 4;
-
     char            chbuf[512 + 128];               // must be greater than m_lastHost #254
     char            m_lastHost[512];                // Store the last URL to a webstream
     char*           m_playlistBuff = NULL;          // stores playlistdata
-    const uint16_t  m_plsBuffEntryLen = 256;        // length of each entry in playlistBuff
     filter_t        m_filter[3];                    // digital filters
     uint32_t        m_sampleRate=16000;
     uint32_t        m_bitRate=0;                    // current bitrate given fom decoder

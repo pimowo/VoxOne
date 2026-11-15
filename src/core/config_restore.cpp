@@ -261,7 +261,7 @@ Status StreamEncoder::begin(
   if (status_ != Status::Ok) return status_;
   Crc32 crc;
   crc.update(prefix_, sizeof(prefix_));
-  uint8_t buffer[1024];
+  uint8_t buffer[256];
   for (ByteReader* reader : {&wifi, &stations}) {
     for (std::size_t offset = 0; offset < reader->size();) {
       const std::size_t count =
@@ -731,8 +731,6 @@ bool TransactionStorage::recover() {
 #include <SPIFFS.h>
 #include <nvs.h>
 
-#include <algorithm>
-#include <cstring>
 #include <new>
 
 #include "config.h"

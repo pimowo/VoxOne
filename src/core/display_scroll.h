@@ -2,6 +2,7 @@
 #define VOXONE_DISPLAY_SCROLL_H
 
 // Consolidated from display_scroll_model.h.
+#include <stddef.h>
 #include <stdint.h>
 
 namespace voxone {
@@ -200,9 +201,6 @@ inline ResolvedScrollParameters resolveScrollParameters(
 }  // namespace voxone
 
 // Consolidated from display_scroll_engine.h.
-#include <stdint.h>
-
-
 namespace voxone {
 namespace display_scroll {
 
@@ -517,10 +515,6 @@ class ScrollGroupEngine {
 }  // namespace voxone
 
 // Consolidated from display_scroll_persistence.h.
-#include <stddef.h>
-#include <stdint.h>
-
-
 namespace voxone {
 namespace display_scroll {
 
@@ -638,9 +632,6 @@ ScrollSettingsEraseStatus eraseScrollSettingsPersistent();
 
 // Consolidated from display_scroll_runtime_config.h.
 #include <atomic>
-#include <stdint.h>
-
-
 namespace voxone {
 namespace display_scroll {
 
@@ -690,10 +681,6 @@ ScrollSettingsLoadResult reloadScrollSettingsRuntimePersistent();
 }  // namespace voxone
 
 // Consolidated from display_scroll_api.h.
-#include <stddef.h>
-#include <stdint.h>
-
-
 namespace voxone {
 namespace display_scroll {
 

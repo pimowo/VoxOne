@@ -75,9 +75,6 @@ class SdFileIoGuard {
 #ifndef DMA_BUFLEN
   #define DMA_BUFLEN  512   //  (512)
 #endif
-#if defined(ESP_ARDUINO_3)
-#include "soc/io_mux_reg.h"
-#endif
 #ifdef ESP_ARDUINO_3
 #define dma_buf_count dma_desc_num
 #define dma_buf_len dma_frame_num
@@ -493,46 +490,10 @@ bool Audio::tuneAudioSocket(WiFiClient& socketClient) {
 }
 
 //---------------------------------------------------------------------------------------------------------------------
-esp_err_t Audio::I2Sstop(uint8_t i2s_num) {
-    voxone::i2s_output::Guard outputGuard(kI2SOutputLockWait);
-    return outputGuard ? i2s_stop((i2s_port_t) i2s_num) : ESP_ERR_TIMEOUT;
-}
-//---------------------------------------------------------------------------------------------------------------------
-esp_err_t Audio::i2s_mclk_pin_select(const uint8_t pin) {
-    // IDF >= 4.4 use setPinout(BCLK, LRC, DOUT, DIN, MCK) only, i2s_mclk_pin_select() is no longer needed
-
-    if(pin != 0 && pin != 1 && pin != 3) {
-        log_e("Only support GPIO0/GPIO1/GPIO3, gpio_num:%d", pin);
-        return ESP_ERR_INVALID_ARG;
-    }
-
-    #ifdef CONFIG_IDF_TARGET_ESP32
-        switch(pin){
-            case 0:
-                PIN_FUNC_SELECT(PERIPHS_IO_MUX_GPIO0_U, FUNC_GPIO0_CLK_OUT1);
-                WRITE_PERI_REG(PIN_CTRL, 0xFFF0);
-                break;
-            case 1:
-                PIN_FUNC_SELECT(PERIPHS_IO_MUX_U0TXD_U, FUNC_U0TXD_CLK_OUT3);
-                WRITE_PERI_REG(PIN_CTRL, 0xF0F0);
-                break;
-            case 3:
-                PIN_FUNC_SELECT(PERIPHS_IO_MUX_U0RXD_U, FUNC_U0RXD_CLK_OUT2);
-                WRITE_PERI_REG(PIN_CTRL, 0xFF00);
-                break;
-            default:
-                break;
-        }
-    #endif
-
-    return ESP_OK;
-}
-//---------------------------------------------------------------------------------------------------------------------
 Audio::~Audio() {
     stopAudioTask();
     cancelPendingConnection();
     while(m_connectAttempt.active()) vTaskDelay(1);
-    //I2Sstop(m_i2s_num);
     //InBuff.~AudioBuffer(); #215 the AudioBuffer is automatically destroyed by the destructor
     setDefaults();
     if(m_playlistBuff) {free(m_playlistBuff); m_playlistBuff = NULL;}
@@ -3284,8 +3245,8 @@ bool Audio::parseHttpResponseHeader() { // this is the response to a GET / reque
       return false;
     }
     notavailablefor = 0;
-    char rhl[512]; // responseHeaderline
-    char redirectUrl[voxone::radio::kMaxResolvedUrlLength] = {};
+    char rhl[256]; // responseHeaderline
+    char redirectUrl[256] = {};
     bool ct_seen = false;
     int httpStatus = 0;
     uint32_t ctime = millis();
@@ -3320,8 +3281,11 @@ bool Audio::parseHttpResponseHeader() { // this is the response to a GET / reque
             if(b < 0x20) continue;
             rhl[pos] = b;
             pos++;
-            if(pos == 511){pos = 510; continue;}
-            if(pos == 510){
+            if(pos == sizeof(rhl) - 1U) {
+                pos = sizeof(rhl) - 2U;
+                continue;
+            }
+            if(pos == sizeof(rhl) - 2U) {
                 rhl[pos] = '\0';
                 if(m_f_Log) log_i("responseHeaderline overflow");
             }

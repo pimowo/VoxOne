@@ -1,7 +1,8 @@
 #include "display_scroll.h"
 
-// Consolidated from display_scroll_persistence.cpp.
 #include <string.h>
+
+// Consolidated from display_scroll_persistence.cpp.
 
 namespace voxone {
 namespace display_scroll {
@@ -200,7 +201,6 @@ ScrollSettingsEraseStatus eraseScrollSettings(ScrollSettingsStorage& storage) {
 #if defined(ARDUINO)
 #include <nvs.h>
 
-#include <string.h>
 
 namespace voxone {
 namespace display_scroll {
@@ -449,7 +449,6 @@ ScrollSettingsLoadResult reloadScrollSettingsRuntimePersistent() {
 #endif  // ARDUINO
 // Consolidated from display_scroll_api.cpp.
 #include <stdio.h>
-#include <string.h>
 
 namespace voxone {
 namespace display_scroll {
