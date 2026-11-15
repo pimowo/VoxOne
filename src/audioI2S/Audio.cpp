@@ -963,7 +963,10 @@ bool Audio::resolutionError(const char* reason) {
     AUDIO_ERROR("URL resolution failed: %s", reason);
     if(_client) _client->stop();
     if(m_playlistBuff) {free(m_playlistBuff); m_playlistBuff = NULL;}
+    vector_clear_and_shrink(m_playlistURL);
     vector_clear_and_shrink(m_playlistContent);
+    m_hashQueue.clear();
+    m_hashQueue.shrink_to_fit();
     setDatamode(AUDIO_NONE);
     stopSong();
     return false;
@@ -2414,7 +2417,13 @@ bool Audio::readPlayListData() {
 
         if(startsWith(pl, "<!DOCTYPE")) {AUDIO_INFO("url is a webpage!"); goto exit;}
         if(startsWith(pl, "<html"))     {AUDIO_INFO("url is a webpage!"); goto exit;}
-        if(strlen(pl) > 0) m_playlistContent.push_back(strdup((const char*)pl));
+        if(strlen(pl) > 0) {
+            voxone::radio::OwnedCString playlistLine;
+            if(!playlistLine.assign(pl))
+                return resolutionError("out of memory storing playlist");
+            m_playlistContent.push_back(playlistLine.get());
+            playlistLine.release();
+        }
         if(m_playlistContent.size() == 100){
             if(m_f_Log) log_i("the maximum number of lines in the playlist has been reached");
             break;
@@ -2576,6 +2585,10 @@ const char* Audio::parsePlaylist_M3U8(){
             if(startsWith(m_playlistContent[i],"#EXT-X-STREAM-INF:")){
                 if(occurence > 0) break; // no more than one #EXT-X-STREAM-INF: (can have different BANDWIDTH)
                 occurence++;
+                if(i + 1 >= lines) {
+                    resolutionError("HLS variant is missing its URL");
+                    return NULL;
+                }
                 if(!endsWith(m_playlistContent[i+1], "m3u8")){ // we have a new m3u8 playlist, skip to next line
                     int pos = indexOf(m_playlistContent[i], "CODECS=\"mp4a", 18);
                     // 'mp4a.40.01' AAC Main
@@ -2587,28 +2600,31 @@ const char* Audio::parsePlaylist_M3U8(){
                         int pos1 = indexOf(m_playlistContent[i], "CODECS=", 18);
                         if(pos1 < 0) pos1 = 0;
                         log_e("codec %s in m3u8 playlist not supported", m_playlistContent[i] + pos1);
-                        goto exit;
+                        resolutionError("unsupported codec in HLS playlist");
+                        return NULL;
                     }
                 }
                 i++;                                                    // next line
-                if(i == lines) continue; // and exit for()
 
-                char* tmp = nullptr;
-                if(!startsWith(m_playlistContent[i], "http")){
-                  //http://livees.com/prog_index.m3u8 and prog_index48347.aac --> http://livees.com/prog_index48347.aac
-                  //http://livees.com/prog_index.m3u8 and chunklist022.m3u8   --> http://livees.com/chunklist022.m3u8
-                    tmp = (char*)malloc(strlen(m_lastHost)+ strlen(m_playlistContent[i]));
-                    strcpy(tmp, m_lastHost);
-                    int idx = lastIndexOf(tmp, "/");
-                    strcpy(tmp + idx + 1, m_playlistContent[i]);
+                char resolvedUrl[sizeof(m_lastHost)];
+                const auto result = voxone::radio::resolveHlsUrl(
+                    m_lastHost, m_playlistContent[i], resolvedUrl,
+                    sizeof(resolvedUrl));
+                if(result != voxone::radio::UrlResolutionResult::Ok) {
+                    resolutionError(
+                        result == voxone::radio::UrlResolutionResult::TooLong
+                            ? "HLS variant URL is too long"
+                            : "invalid HLS variant URL");
+                    return NULL;
                 }
-                else{
-                    tmp = strdup(m_playlistContent[i]);
+                voxone::radio::OwnedCString redirectUrl;
+                if(!redirectUrl.assign(resolvedUrl)) {
+                    resolutionError("out of memory storing HLS variant URL");
+                    return NULL;
                 }
                 if(m_playlistContent[i]){free(m_playlistContent[i]); m_playlistContent[i] = NULL;}
-                m_playlistContent[i] = strdup(tmp);
-                strcpy(m_lastHost, tmp);
-                if(tmp){free(tmp); tmp = NULL;}
+                m_playlistContent[i] = redirectUrl.release();
+                strlcpy(m_lastHost, resolvedUrl, sizeof(m_lastHost));
                 if(m_f_Log) log_i("redirect %s", m_playlistContent[i]);
                 return m_playlistContent[i];                            // it's a redirection, a new m3u8 playlist
             }
@@ -2637,40 +2653,50 @@ const char* Audio::parsePlaylist_M3U8(){
                 i++;
                 if(i == lines) continue; // and exit for()
 
-                char* tmp = nullptr;
-                if(!startsWith(m_playlistContent[i], "http")){
-                    //http://livees.com/prog_index.m3u8 and prog_index48347.aac --> http://livees.com/prog_index48347.aac
-                    tmp = (char*)malloc(strlen(m_lastHost)+ strlen(m_playlistContent[i]));
-                    strcpy(tmp, m_lastHost);
-                    int idx = lastIndexOf(tmp, "/");
-                    strcpy(tmp + idx + 1, m_playlistContent[i]);
-                }
-                else{
-                    tmp = strdup(m_playlistContent[i]);
+                char resolvedUrl[sizeof(m_lastHost)];
+                const auto result = voxone::radio::resolveHlsUrl(
+                    m_lastHost, m_playlistContent[i], resolvedUrl,
+                    sizeof(resolvedUrl));
+                if(result != voxone::radio::UrlResolutionResult::Ok) {
+                    resolutionError(
+                        result == voxone::radio::UrlResolutionResult::TooLong
+                            ? "HLS segment URL is too long"
+                            : "invalid HLS segment URL");
+                    return NULL;
                 }
 
-                uint32_t hash = simpleHash(tmp);
+                uint32_t hash = simpleHash(resolvedUrl);
                 if(m_hashQueue.size() == 0){
+                    voxone::radio::OwnedCString queuedUrl;
+                    if(!queuedUrl.assign(resolvedUrl)) {
+                        resolutionError("out of memory storing HLS segment URL");
+                        return NULL;
+                    }
                     m_hashQueue.insert(m_hashQueue.begin(), hash);
-                    m_playlistURL.insert(m_playlistURL.begin(), strdup(tmp));
+                    m_playlistURL.insert(m_playlistURL.begin(), queuedUrl.get());
+                    queuedUrl.release();
                 }
                 else{
                     bool known = false;
                     for(int i = 0; i< m_hashQueue.size(); i++){
                         if(hash == m_hashQueue[i]){
-                            if(m_f_Log) log_i("file already known %s", tmp);
+                            if(m_f_Log) log_i("file already known %s", resolvedUrl);
                             known = true;
                         }
                     }
                     if(!known){
+                        voxone::radio::OwnedCString queuedUrl;
+                        if(!queuedUrl.assign(resolvedUrl)) {
+                            resolutionError("out of memory storing HLS segment URL");
+                            return NULL;
+                        }
                         m_hashQueue.insert(m_hashQueue.begin(), hash);
-                        m_playlistURL.insert(m_playlistURL.begin(), strdup(tmp));
+                        m_playlistURL.insert(m_playlistURL.begin(), queuedUrl.get());
+                        queuedUrl.release();
                     }
                 }
 
                 if(m_hashQueue.size() > 20)  m_hashQueue.pop_back();
-
-                if(tmp){free(tmp); tmp = NULL;}
 
                 if(m_playlistURL.size() == 20){
                     ESP_LOGD("", "can't stuff anymore");
@@ -2686,8 +2712,7 @@ const char* Audio::parsePlaylist_M3U8(){
         if(m_playlistBuff) {free(m_playlistBuff); m_playlistBuff = NULL;}
 
         if(m_playlistURL[m_playlistURL.size() -1]) {
-                m_playlistBuff = strdup(m_playlistURL[m_playlistURL.size() -1]);
-                free( m_playlistURL[m_playlistURL.size() -1]);
+                m_playlistBuff = m_playlistURL[m_playlistURL.size() -1];
                 m_playlistURL[m_playlistURL.size() -1] = NULL;
                 m_playlistURL.pop_back();
                 m_playlistURL.shrink_to_fit();
@@ -2698,9 +2723,6 @@ const char* Audio::parsePlaylist_M3U8(){
     else{
         return NULL;
     }
-exit:
-    stopSong();
-    return NULL;
 }
 //---------------------------------------------------------------------------------------------------------------------
 bool Audio::STfromEXTINF(char* str){

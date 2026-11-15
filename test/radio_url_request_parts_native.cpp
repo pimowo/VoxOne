@@ -119,13 +119,37 @@ int main() {
   }
   assert(releaseCount == 1);
 
+  resetInjection(0);
+  {
+    voxone::radio::OwnedCString string;
+    assert(string.assign("https://radio.example/segment.aac", injectedAllocate,
+                         injectedRelease));
+    char* transferred = string.release();
+    assert(transferred != nullptr);
+    assert(string.get() == nullptr);
+    assert(releaseCount == 0);
+    injectedRelease(transferred);
+  }
+  assert(releaseCount == 1);
+
   const std::string audio = readFile("src/audioI2S/Audio.cpp");
   assert(audio.find("memcpy(extension, h_host + pos_slash, extLen)") ==
          std::string::npos);
   assert(audio.find("UrlRequestParts requestParts") != std::string::npos);
   assert(audio.find("OwnedCString strippedHost") != std::string::npos);
+  assert(audio.find("OwnedCString queuedUrl") != std::string::npos);
+  assert(audio.find("resolveHlsUrl") != std::string::npos);
+  assert(audio.find("HLS segment URL is too long") != std::string::npos);
   assert(audio.find("out of memory preparing URL parts") !=
          std::string::npos);
+  const std::size_t hlsStart = audio.find("Audio::parsePlaylist_M3U8");
+  assert(hlsStart != std::string::npos);
+  const std::size_t hlsEnd = audio.find("Audio::STfromEXTINF", hlsStart);
+  assert(hlsEnd != std::string::npos);
+  const std::string hls = audio.substr(hlsStart, hlsEnd - hlsStart);
+  assert(hls.find("malloc(") == std::string::npos);
+  assert(hls.find("strdup(") == std::string::npos);
+  assert(hls.find("strcpy(") == std::string::npos);
   const std::size_t urlencodeStart = audio.find("void Audio::urlencode");
   assert(urlencodeStart != std::string::npos);
   const std::size_t urlencodeEnd = audio.find("//---------------------------------------------------------------------------------------------------------------------",

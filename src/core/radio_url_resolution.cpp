@@ -247,6 +247,31 @@ UrlResolutionResult resolveRelativeUrl(const char* baseUrl,
   return normalizePathUrl(combined, output, outputSize);
 }
 
+UrlResolutionResult resolveHlsUrl(const char* baseUrl, const char* reference,
+                                  char* output, size_t outputSize) {
+  if (!output || outputSize == 0) return UrlResolutionResult::TooLong;
+  output[0] = '\0';
+  if (!reference || !reference[0]) return UrlResolutionResult::Empty;
+
+  const size_t referenceLength = strlen(reference);
+  if (strncmp(reference, "http", 4) == 0) {
+    if (referenceLength >= outputSize) return UrlResolutionResult::TooLong;
+    memcpy(output, reference, referenceLength + 1);
+    return UrlResolutionResult::Ok;
+  }
+
+  if (!baseUrl || !baseUrl[0]) return UrlResolutionResult::Malformed;
+  const char* slash = strrchr(baseUrl, '/');
+  if (!slash) return UrlResolutionResult::Malformed;
+  const size_t prefixLength = static_cast<size_t>(slash - baseUrl) + 1;
+  if (prefixLength >= outputSize ||
+      referenceLength >= outputSize - prefixLength)
+    return UrlResolutionResult::TooLong;
+  memcpy(output, baseUrl, prefixLength);
+  memcpy(output + prefixLength, reference, referenceLength + 1);
+  return UrlResolutionResult::Ok;
+}
+
 UrlResolutionResult parseM3uEntry(const char* line, const char* baseUrl,
                                   char* output, size_t outputSize) {
   const TextView value = trimView(line);

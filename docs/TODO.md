@@ -6,6 +6,10 @@ checkpointów pozostaje w historii Git i w istniejących raportach.
 
 ## 1. HIL PENDING (do fizycznego przetestowania przez użytkownika)
 
+- [ ] Po VOXONE-HLS-MEMORY-SAFETY-1 fizycznie potwierdzić na L0 i S0
+  odtwarzanie HLS z absolutnymi i względnymi URL wariantów oraz segmentów, w
+  tym playlistą bazową zakończoną `/`, bez regresji przełączania i ponawiania
+  strumienia.
 - [ ] Zweryfikować przycisk zasilania na L0 (GPIO42) i S0 (GPIO3): krótki
   klik (Wakeup/Mute albo Home z Menu/karuzeli), dwuklik otwierający Menu
   Główne wyłącznie z Playera oraz długie naciśnięcie uruchamiające shutdown
@@ -136,5 +140,12 @@ checkpointów pozostaje w historii Git i w istniejących raportach.
 
 ## 4. Backlog / Inne
 
+- [ ] HLS: dodać testy integracyjne rzeczywistego `Audio::parsePlaylist_M3U8`
+  (nie tylko resolvera) oraz kontrolowaną obsługę nieprawidłowych i
+  niekompletnych URL, `#EXTINF` bez następnego URL i rozdzielenie błędu
+  playlisty od prawidłowego braku nowego segmentu.
+- [ ] HLS: zastąpić zgodnościowe łączenie URL pełnym rozwiązywaniem referencji
+  według RFC 3986 oraz jawnie ograniczyć schematy do HTTP/HTTPS, zabezpieczając
+  `httpPrint` przed błędnym lub niezgodnym schematem.
 - [ ] GPL / yoRadio: przeprowadzić analizę prawną i w razie potrzeby usunąć
   zależności.

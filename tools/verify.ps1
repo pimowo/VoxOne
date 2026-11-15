@@ -261,6 +261,13 @@ if(-not $onWindows) {
   if($LASTEXITCODE -ne 0) { throw 'Sanitized radio URL request parts compile failed' }
   & $radioUrlPartsExe
   if($LASTEXITCODE -ne 0) { throw 'Sanitized radio URL request parts test failed' }
+  $radioUrlResolutionExe=Join-Path $work 'radio_url_resolution_sanitized'
+  & $Cxx @sanitizerArgs '-o' $radioUrlResolutionExe `
+    (Join-Path $root 'test/radio_url_resolution_native.cpp') `
+    (Join-Path $root 'src/core/radio_url_resolution.cpp')
+  if($LASTEXITCODE -ne 0) { throw 'Sanitized radio URL resolution compile failed' }
+  & $radioUrlResolutionExe
+  if($LASTEXITCODE -ne 0) { throw 'Sanitized radio URL resolution test failed' }
   $btSingleOwnerExe=Join-Path $work 'bt_link_single_owner_sanitized'
   & $Cxx @sanitizerArgs '-pthread' '-o' $btSingleOwnerExe `
     (Join-Path $root 'test/bt_link_single_owner_native.cpp')

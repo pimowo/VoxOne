@@ -41,6 +41,12 @@ class OwnedCString {
   }
 
   char* get() const { return data_; }
+  char* release() {
+    char* released = data_;
+    data_ = nullptr;
+    releaser_ = nullptr;
+    return released;
+  }
 
  private:
   char* data_ = nullptr;

@@ -38,6 +38,12 @@ UrlResolutionResult resolveRelativeUrl(const char* baseUrl,
                                        char* output,
                                        size_t outputSize);
 
+// Preserves the HLS parser's legacy URL joining rule: absolute references are
+// copied unchanged, while relative references replace everything after the
+// final slash in baseUrl.
+UrlResolutionResult resolveHlsUrl(const char* baseUrl, const char* reference,
+                                  char* output, size_t outputSize);
+
 // Returns the first playable, non-comment M3U line resolved against baseUrl.
 UrlResolutionResult parseM3uEntry(const char* line, const char* baseUrl,
                                   char* output, size_t outputSize);

@@ -2,6 +2,7 @@
 
 #include <cassert>
 #include <cstring>
+#include <string>
 
 using voxone::radio::UrlHopBudget;
 using voxone::radio::UrlHopResult;
@@ -11,6 +12,7 @@ using voxone::radio::httpResponseAction;
 using voxone::radio::isRedirectStatus;
 using voxone::radio::parseM3uEntry;
 using voxone::radio::parsePlsEntry;
+using voxone::radio::resolveHlsUrl;
 using voxone::radio::resolveRelativeUrl;
 
 namespace {
@@ -181,6 +183,55 @@ void testHopBudgetAndNestedResolution() {
   assert(nested.follow(nestedM3u) == UrlHopResult::Loop);
 }
 
+void testHlsUrlBounds() {
+  char output[kUrlSize];
+
+  // Absolute HLS URL.
+  assert(resolveHlsUrl("https://radio.example/live/index.m3u8",
+                       "https://cdn.example/audio/1.aac", output,
+                       sizeof(output)) == UrlResolutionResult::Ok);
+  assert(std::strcmp(output, "https://cdn.example/audio/1.aac") == 0);
+
+  // Relative URL and a base URL whose path ends in '/'. The legacy HLS
+  // allocation was one byte short for this exact base shape.
+  assert(resolveHlsUrl("https://radio.example/live/index.m3u8", "1.aac",
+                       output, sizeof(output)) == UrlResolutionResult::Ok);
+  assert(std::strcmp(output, "https://radio.example/live/1.aac") == 0);
+  assert(resolveHlsUrl("https://radio.example/live/", "1.aac", output,
+                       sizeof(output)) == UrlResolutionResult::Ok);
+  assert(std::strcmp(output, "https://radio.example/live/1.aac") == 0);
+
+  // 511 URL bytes plus NUL exactly fill the destination.
+  const std::string prefix = "https://radio.example/";
+  const std::string boundary =
+      prefix + std::string(kUrlSize - 1 - prefix.size(), 'a');
+  assert(boundary.size() == kUrlSize - 1);
+  assert(resolveHlsUrl("https://base.example/index.m3u8", boundary.c_str(),
+                       output, sizeof(output)) ==
+         UrlResolutionResult::Ok);
+  assert(std::strlen(output) == kUrlSize - 1);
+
+  const std::string tooLong = boundary + "b";
+  assert(resolveHlsUrl("https://base.example/index.m3u8", tooLong.c_str(),
+                       output, sizeof(output)) ==
+         UrlResolutionResult::TooLong);
+
+  const std::string relativeBase = "https://radio.example/live/";
+  const std::string relativeBoundary(
+      kUrlSize - 1 - relativeBase.size(), 's');
+  assert(resolveHlsUrl(relativeBase.c_str(), relativeBoundary.c_str(), output,
+                       sizeof(output)) == UrlResolutionResult::Ok);
+  assert(std::strlen(output) == kUrlSize - 1);
+  const std::string relativeTooLong = relativeBoundary + "s";
+  assert(resolveHlsUrl(relativeBase.c_str(), relativeTooLong.c_str(), output,
+                       sizeof(output)) == UrlResolutionResult::TooLong);
+
+  assert(resolveHlsUrl("not-a-url", "1.aac", output, sizeof(output)) ==
+         UrlResolutionResult::Malformed);
+  assert(resolveHlsUrl("https://base.example/index.m3u8", nullptr, output,
+                       sizeof(output)) == UrlResolutionResult::Empty);
+}
+
 }  // namespace
 
 int main() {
@@ -188,4 +239,5 @@ int main() {
   testPls();
   testRedirectsAndUrls();
   testHopBudgetAndNestedResolution();
+  testHlsUrlBounds();
 }
