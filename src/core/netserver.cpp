@@ -79,6 +79,7 @@
 #endif
 #include "websocket_command.h"
 #include "display_scroll.h"
+#include "web_tone_command.h"
 #include "power_manager.h"
 #include "../displays/dspcore.h"
 #include "../displays/widgets/widgetsconfig.h" //BitrateFormat
@@ -119,6 +120,7 @@ static bool updateNetworkShutdownStarted = false;  // MAIN-loop owner.
 
 namespace {
 constexpr UBaseType_t kScrollSettingsCommandQueueLength = 4;
+constexpr UBaseType_t kToneCommandQueueLength = 4;
 constexpr UBaseType_t kNetserverQueueLength = 20;
 constexpr size_t kTrackedClientRequests = kNetserverQueueLength;
 constexpr size_t kTrackedWebSocketClients = 8;
@@ -147,7 +149,15 @@ struct QueuedScrollSettingsCommand {
   bool bindingCaptured;
 };
 
+struct QueuedToneCommand {
+  uint32_t clientId;
+  voxone::web_tone::Command tone;
+  voxone::security::SecuritySessionBinding binding;
+  bool bindingCaptured;
+};
+
 QueueHandle_t scrollSettingsCommandQueue = nullptr;
+QueueHandle_t toneCommandQueue = nullptr;
 SemaphoreHandle_t configurationMutationMutex = nullptr;
 
 voxone::netserver_backpressure::InsertResult reserveSnapshot(
@@ -894,6 +904,85 @@ WebSocketAuthorization queuedScrollCommandAuthorization(
   return authorization;
 }
 
+enum class ToneCommandQueueStatus : uint8_t {
+  Queued,
+  Denied,
+  Busy
+};
+
+ToneCommandQueueStatus enqueueToneCommand(
+    uint32_t clientId, const voxone::web_tone::Command& tone) {
+  if (!voxone::web_tone::valid(tone))
+    return ToneCommandQueueStatus::Denied;
+
+  QueuedToneCommand command{};
+  command.clientId = clientId;
+  command.tone = tone;
+
+  WebSocketAuthorization authorization = WebSocketAuthorization::Denied;
+  websocket.forEachClient([&](AsyncWebSocketClient* client) {
+    if (!client || client->id() != clientId ||
+        client->status() != WS_CONNECTED)
+      return;
+    if (!voxone::security::securityHttpEnforcementEnabled()) {
+      authorization = WebSocketAuthorization::Authorized;
+      return;
+    }
+    SecurityRuntimeLock lock(true, 0);
+    if (!lock.locked()) {
+      authorization = WebSocketAuthorization::Busy;
+      return;
+    }
+    const auto* binding = webSocketBinding(client);
+    if (!binding ||
+        !voxone::security::deviceSecuritySessionService().validateBinding(
+            *binding, millis(), false))
+      return;
+    command.binding = *binding;
+    command.bindingCaptured = true;
+    authorization = WebSocketAuthorization::Authorized;
+  });
+  if (authorization == WebSocketAuthorization::Denied)
+    return ToneCommandQueueStatus::Denied;
+  if (authorization == WebSocketAuthorization::Busy)
+    return ToneCommandQueueStatus::Busy;
+
+  if (!configurationMutationMutex || !toneCommandQueue ||
+      xSemaphoreTake(configurationMutationMutex, 0) != pdTRUE)
+    return ToneCommandQueueStatus::Busy;
+  const bool queued = xQueueSend(toneCommandQueue, &command, 0) == pdTRUE;
+  xSemaphoreGive(configurationMutationMutex);
+  return queued ? ToneCommandQueueStatus::Queued
+                : ToneCommandQueueStatus::Busy;
+}
+
+WebSocketAuthorization queuedToneCommandAuthorization(
+    const QueuedToneCommand& command) {
+  WebSocketAuthorization authorization = WebSocketAuthorization::Denied;
+  websocket.forEachClient([&](AsyncWebSocketClient* client) {
+    if (!client || client->id() != command.clientId ||
+        client->status() != WS_CONNECTED)
+      return;
+    if (!voxone::security::securityHttpEnforcementEnabled()) {
+      authorization = WebSocketAuthorization::Authorized;
+      return;
+    }
+    SecurityRuntimeLock lock(true, 0);
+    if (!lock.locked()) {
+      authorization = WebSocketAuthorization::Busy;
+      return;
+    }
+    const auto* binding = webSocketBinding(client);
+    if (!command.bindingCaptured || !binding ||
+        !equalSecurityBinding(command.binding, *binding))
+      return;
+    if (voxone::security::deviceSecuritySessionService().validateBinding(
+            *binding, millis(), false))
+      authorization = WebSocketAuthorization::Authorized;
+  });
+  return authorization;
+}
+
 void sendScrollSettingsResult(
     uint32_t clientId,
     voxone::display_scroll::ScrollSettingsApplyStatus status,
@@ -1046,8 +1135,12 @@ bool NetServer::begin(bool quiet) {
     scrollSettingsCommandQueue = xQueueCreate(
         kScrollSettingsCommandQueueLength,
         sizeof(QueuedScrollSettingsCommand));
-  if (!configurationMutationMutex || !scrollSettingsCommandQueue) {
-    Serial.println("##[ERROR]# scroll settings queue unavailable");
+  if (!toneCommandQueue)
+    toneCommandQueue = xQueueCreate(
+        kToneCommandQueueLength, sizeof(QueuedToneCommand));
+  if (!configurationMutationMutex || !scrollSettingsCommandQueue ||
+      !toneCommandQueue) {
+    Serial.println("##[ERROR]# configuration command queue unavailable");
     return false;
   }
   if(!quiet) Serial.print("##[BOOT]#\tnetserver.begin\t");
@@ -2559,7 +2652,8 @@ void handleConfigRestore(AsyncWebServerRequest* request) {
       xSemaphoreTake(configurationMutationMutex, 0) == pdTRUE;
   if (!mutationLocked ||
       (scrollSettingsCommandQueue &&
-       uxQueueMessagesWaiting(scrollSettingsCommandQueue) != 0)) {
+       uxQueueMessagesWaiting(scrollSettingsCommandQueue) != 0) ||
+      (toneCommandQueue && uxQueueMessagesWaiting(toneCommandQueue) != 0)) {
     if (mutationLocked) xSemaphoreGive(configurationMutationMutex);
     configApiReply(request, 409, R"({"error":"configuration_busy"})");
     finishConfigRestoreUpload(request);
@@ -3823,9 +3917,39 @@ void NetServer::serviceUpdateRestart() {
 }
 
 void NetServer::serviceScrollSettings() {
-  if (!scrollSettingsCommandQueue || !configurationMutationMutex ||
+  if (!scrollSettingsCommandQueue || !toneCommandQueue ||
+      !configurationMutationMutex ||
       systemOperationState.blocksRequests() || updateNetworkQuiescing.load())
     return;
+
+  QueuedToneCommand toneCommand{};
+  if (xQueuePeek(toneCommandQueue, &toneCommand, 0) == pdTRUE) {
+    if (xSemaphoreTake(configurationMutationMutex, 0) != pdTRUE)
+      return;
+
+    // The async_tcp callback only validates and enqueues. Authorization is
+    // checked again immediately before loopTask performs the durable write.
+    const WebSocketAuthorization authorization =
+        queuedToneCommandAuthorization(toneCommand);
+    if (authorization == WebSocketAuthorization::Busy) {
+      xSemaphoreGive(configurationMutationMutex);
+      return;
+    }
+    xQueueReceive(toneCommandQueue, &toneCommand, 0);
+    if (authorization == WebSocketAuthorization::Denied) {
+      xSemaphoreGive(configurationMutationMutex);
+      websocket.close(toneCommand.clientId, 1008, "Session expired");
+      return;
+    }
+
+    const auto runtime = config.runtimeSnapshot();
+    const voxone::web_tone::Values current{
+        runtime.bass, runtime.middle, runtime.treble};
+    voxone::web_tone::Values requested{};
+    if (voxone::web_tone::resolve(toneCommand.tone, current, requested))
+      config.setTone(requested.bass, requested.middle, requested.treble);
+    xSemaphoreGive(configurationMutationMutex);
+  }
 
   QueuedScrollSettingsCommand command{};
   if (xQueuePeek(scrollSettingsCommandQueue, &command, 0) != pdTRUE ||
@@ -3945,27 +4069,57 @@ void NetServer::onWsMessage(void *arg, const uint8_t *data, size_t len,
     }
     if (strcmp(_wscmd, "tone") == 0) {
       int8_t bass, middle, treble;
-      if (len <= 64 && parseToneValue(_wsval, bass, middle, treble)) {
-        config.setTone(bass, middle, treble);
+      if (len > 64 || !parseToneValue(_wsval, bass, middle, treble)) return;
+      const voxone::web_tone::Command command{
+          voxone::web_tone::Kind::Preset, {bass, middle, treble}};
+      switch (enqueueToneCommand(clientId, command)) {
+        case ToneCommandQueueStatus::Queued:
+          break;
+        case ToneCommandQueueStatus::Denied:
+          websocket.close(clientId, 1008, "Unauthorized");
+          break;
+        case ToneCommandQueueStatus::Busy:
+          scheduleOverloadRejection(clientId);
+          break;
       }
       return;
     }
-    if (strcmp(_wscmd, "treble") == 0) {
-      int8_t valb = atoi(_wsval);
-      const auto runtime = config.runtimeSnapshot();
-      config.setTone(runtime.bass, runtime.middle, valb);
-      return;
-    }
-    if (strcmp(_wscmd, "middle") == 0) {
-      int8_t valb = atoi(_wsval);
-      const auto runtime = config.runtimeSnapshot();
-      config.setTone(runtime.bass, valb, runtime.treble);
-      return;
-    }
-    if (strcmp(_wscmd, "bass") == 0) {
-      int8_t valb = atoi(_wsval);
-      const auto runtime = config.runtimeSnapshot();
-      config.setTone(valb, runtime.middle, runtime.treble);
+    voxone::web_tone::Kind toneKind{};
+    if (strcmp(_wscmd, "bass") == 0)
+      toneKind = voxone::web_tone::Kind::Bass;
+    else if (strcmp(_wscmd, "middle") == 0)
+      toneKind = voxone::web_tone::Kind::Middle;
+    else if (strcmp(_wscmd, "treble") == 0)
+      toneKind = voxone::web_tone::Kind::Treble;
+    else
+      toneKind = voxone::web_tone::Kind::Preset;
+    if (toneKind != voxone::web_tone::Kind::Preset) {
+      int8_t value = 0;
+      if (!voxone::web_tone::parseSingleValue(_wsval, value)) return;
+      voxone::web_tone::Command command{toneKind, {0, 0, 0}};
+      switch (toneKind) {
+        case voxone::web_tone::Kind::Bass:
+          command.values.bass = value;
+          break;
+        case voxone::web_tone::Kind::Middle:
+          command.values.middle = value;
+          break;
+        case voxone::web_tone::Kind::Treble:
+          command.values.treble = value;
+          break;
+        case voxone::web_tone::Kind::Preset:
+          break;
+      }
+      switch (enqueueToneCommand(clientId, command)) {
+        case ToneCommandQueueStatus::Queued:
+          break;
+        case ToneCommandQueueStatus::Denied:
+          websocket.close(clientId, 1008, "Unauthorized");
+          break;
+        case ToneCommandQueueStatus::Busy:
+          scheduleOverloadRejection(clientId);
+          break;
+      }
       return;
     }
     if(cmd.exec(_wscmd, _wsval, clientId)){

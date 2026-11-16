@@ -16,6 +16,10 @@ checkpointów pozostaje w historii Git i w istniejących raportach.
   przełączanie NEXT/PREV z WWW, w tym zawijanie pierwsza/ostatnia i szybką
   sekwencję poleceń, bez restartu `async_tcp`, utraty kolejności ani błędnego
   zapisu wybranej stacji.
+- [ ] Po VOXONE-WWW-AUDIO-CONFIG-CRASH-FIX-1 fizycznie potwierdzić na L0
+  zmianę presetów barwy oraz Bass/Middle/Treble z WWW, zachowanie kolejności
+  szybkich poleceń i trwałość ustawień po restarcie, bez panic, restartu
+  `async_tcp` ani przedwczesnego potwierdzenia zapisu.
 - [ ] Zweryfikować przycisk zasilania na L0 (GPIO42) i S0 (GPIO3): krótki
   klik (Wakeup/Mute albo Home z Menu/karuzeli), dwuklik otwierający Menu
   Główne wyłącznie z Playera oraz długie naciśnięcie uruchamiające shutdown
@@ -146,6 +150,12 @@ checkpointów pozostaje w historii Git i w istniejących raportach.
 
 ## 4. Backlog / Inne
 
+- [ ] WWW/Config: przenieść poza `async_tcp` pozostałe bezpośrednie trwałe
+  zapisy ustawień wykonywane przez komendy WebSocket (balance, startup
+  mode/volume, brightness, encoder reversed, flip, timeouty UI, interwały
+  czasu i Home Assistant discovery), wykorzystując istniejący mechanizm
+  wykonawczy konfiguracji w `loopTask`; zachować kolejność i publikować
+  potwierdzenie dopiero po rzeczywistym zapisie.
 - [ ] MPEG-TS PSI: dodać weryfikację CRC32 PAT/PMT, poprawnie ignorować
   duplikaty continuity counter podczas składania sekcji wielopakietowych oraz
   zastąpić albo formalnie uzasadnić limit pierwszych czterech PID PMT wraz z
