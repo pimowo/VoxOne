@@ -6,6 +6,13 @@ checkpointów pozostaje w historii Git i w istniejących raportach.
 
 ## 1. HIL PENDING (do fizycznego przetestowania przez użytkownika)
 
+- [ ] Po VOXONE-STABILIZE-01B.2B fizycznie potwierdzić Hardware REST na L0/S0:
+  POST `202` → `saved` z zapisaną konfiguracją i `restartRequired`, trwałość
+  pojedynczego rekordu NVS, błąd zapisu i ponowienie, sesje/Origin oraz
+  kolejność względem WS/HA/Theme/Power. Zapis nie może automatycznie restartować
+  urządzenia ani aktywować nowego mapowania GPIO. Osobno, po zgodzie na restart,
+  sprawdzić zastosowanie wyboru sprzętu. Testy natywne symulują NVS/HTTP;
+  nie potwierdzają odporności fizycznej pamięci na zanik zasilania ani zapasu stosu.
 - [ ] Po VOXONE-STABILIZE-01B.2A fizycznie potwierdzić Power REST na L0/S0:
   GET bieżącego trybu, POST `202` → `saved`, trwałość i ponowienie po błędzie
   NVS, sesje/Origin oraz brak restartów `async_tcp`. Zapis preferencji nie
@@ -164,11 +171,6 @@ checkpointów pozostaje w historii Git i w istniejących raportach.
 
 ## 4. Backlog / Inne
 
-- [ ] WWW/Config — etap 01B.2B: przenieść poza `async_tcp` pozostały zwykły
-  trwały zapis endpointu REST hardware, bez
-  zmiany enforcement ani transakcyjnego restore; zachować lifetime żądań
-  i potwierdzać zapis dopiero po sukcesie. Uwzględnić ponowienie tej samej
-  wartości po błędzie persistence (RAM nie jest dowodem trwałości).
 - [ ] WWW/Config — wykonać pełny test przeglądarki HA/theme z dostosowanym
   harnessem `test/voxone_update_headless.py` (`202` → odczyt wyniku operacji).
   Celowane testy Node wykonują produkcyjne formularze i wspólne scenariusze
@@ -176,6 +178,9 @@ checkpointów pozostaje w historii Git i w istniejących raportach.
   Chromium ani HIL. Zachować wcześniejszą diagnostykę timeoutu Chromium.
   Dodać analogiczny scenariusz Power REST do harnessu przeglądarki;
   jego formularz i kontrakt `202` są obecnie objęte celowanym testem Node.
+  Dostosować również stary mock Hardware (`200`) do `202` i wyniku operacji
+  z `restartRequired`, bez automatycznego rebootu formularza. Hardware obejmuje
+  celowany test Node; nie modyfikowano istniejącej diagnostyki Chromium.
 - [ ] MPEG-TS PSI: dodać weryfikację CRC32 PAT/PMT, poprawnie ignorować
   duplikaty continuity counter podczas składania sekcji wielopakietowych oraz
   zastąpić albo formalnie uzasadnić limit pierwszych czterech PID PMT wraz z

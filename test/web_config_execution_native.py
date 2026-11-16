@@ -3,8 +3,9 @@
 
 FreeRTOS queues, client transport, clock and NVS backend are controlled fakes.
 No ESP32, real NVS or audio is claimed. Config's actual Tone/Balance/startup,
-HA/theme/power methods and saveValue template are included; hardware-only setters are
-adapters. The REST policy/session adapter is fake (tested separately natively).
+HA/theme/power methods, Hardware NVS adapter and saveValue template are included;
+other device-only setters are adapters. The REST policy/session adapter is fake
+(tested separately natively). NVS calls model a single atomic blob commit.
 """
 import argparse
 import os
@@ -21,6 +22,7 @@ ROOT = Path(__file__).resolve().parents[1]
 PREFIX = r'''
 #include "src/core/web_config_command.h"
 #include "src/core/rest_config_operation.h"
+#include "src/hardware/runtime_hardware_web.h"
 #include "src/core/configuration_mutation.h"
 #include "src/core/tft_theme_config.h"
 #include "src/core/power_mode_config.h"
@@ -38,6 +40,7 @@ PREFIX = r'''
 #include <string>
 #include <vector>
 #include <iostream>
+#include <memory>
 #define VOXONE_INCLUDE_DSP 0
 #define VOXONE_HAS_BT 0
 #define VOXONE_PIN_MAP_COMPLETE 0
@@ -213,19 +216,51 @@ MIDDLE = r'''
 CommandHandler cmd;
 // GET metadata only. No actuator API is exposed to this harness.
 struct PowerManager {bool standby(){return false;}} powerManager;
-namespace voxone { namespace hardware {
-struct Hardware {struct {int button=42, relay=-1;} power;};
-static const Hardware& currentHardware(){static Hardware h;return h;}
-static bool hasPin(int pin){return pin>=0;}
-} }
+// Execute the unmodified production NVS adapter with failure injection at
+// open/set/commit. This models the NVS API, not physical flash/power failure.
+using esp_err_t=int;
+using nvs_handle_t=int;
+constexpr int ESP_OK=0, ESP_ERR_NVS_NOT_FOUND=1, NVS_READONLY=0, NVS_READWRITE=1;
+static int nvsFailure=0;
+static unsigned nvsAttempts=0;
+static std::vector<uint8_t> nvsStored,nvsStaged;
+static int nvs_open(const char* ns,int mode,int* h){
+  assert(std::string(ns)=="voxhw");*h=1;
+  if(mode==NVS_READWRITE){assert(!callback);++nvsAttempts;if(nvsFailure==1)return 2;}
+  else if(nvsStored.empty())return ESP_ERR_NVS_NOT_FOUND;
+  nvsStaged=nvsStored;return ESP_OK;
+}
+static int nvs_get_blob(int,const char*,void* out,size_t* size){
+  if(nvsStored.empty())return ESP_ERR_NVS_NOT_FOUND;
+  if(out){assert(*size>=nvsStored.size());memcpy(out,nvsStored.data(),nvsStored.size());}
+  *size=nvsStored.size();return ESP_OK;
+}
+static int nvs_set_blob(int,const char* key,const void* data,size_t size){
+  assert(!callback && std::string(key)=="selection" && size==10);
+  if(nvsFailure==2)return 2;
+  const auto* bytes=static_cast<const uint8_t*>(data);nvsStaged.assign(bytes,bytes+size);return ESP_OK;
+}
+static int nvs_commit(int){
+  assert(!callback);if(nvsFailure==3)return 2;
+  if(!commit())return 2;
+  nvsStored=nvsStaged;return ESP_OK;
+}
+static int nvs_erase_key(int,const char*){nvsStaged.clear();return ESP_OK;}
+static void nvs_close(int){nvsStaged.clear();}
 struct Param {std::string data; const std::string& value()const{return data;}};
 struct AsyncWebServerRequest {
   Param parameter;
+  Param hardwareDisplay{"none"},hardwareInput{"ec11"},hardwareAudio{"none"};
   bool has=true,allowed=true;
   int status=0;
   std::string body;
   bool hasParam(const char*,bool=false){return has;}
-  Param* getParam(const char*,bool=false){return &parameter;}
+  Param* getParam(const char* name,bool=false){
+    if(!strcmp(name,"display"))return &hardwareDisplay;
+    if(!strcmp(name,"input"))return &hardwareInput;
+    if(!strcmp(name,"audio"))return &hardwareAudio;
+    return &parameter;
+  }
 };
 static bool deviceApiAuthorized(AsyncWebServerRequest*){return true;}
 struct Decision{bool allowed;int httpStatus;};
@@ -257,6 +292,8 @@ static void reset(){
   securityBusy=false;sessionValid=true;generation=1;client=AsyncWebSocketClient{};
   storageOk=true;updateLocked=false;
   restConfigOperations=decltype(restConfigOperations){};testNow=100;
+  nvsFailure=0;nvsAttempts=0;nvsStored.clear();nvsStaged.clear();
+  voxone::hardware::loadRuntimeHardwareConfig();
 }
 static void step(const char* name){currentCommand=name;netserver.serviceScrollSettings();}
 static bool replyHas(const char* s){
@@ -435,7 +472,80 @@ int main(){
   post.parameter.data="yamaha";handleDisplayThemeSave(&post);
   step("tone");step("ha");step("power");step("theme");
   assert((writes==std::vector<std::string>{"tone","ha","power","theme"}));
-  std::cout<<"PASS production WS/REST handlers (HA/theme/power), FIFO, consumer and setters; fake RTOS/HTTP/NVS\n"
+  // Hardware: real handler, candidate validation, queue, consumer, serializer,
+  // NVS adapter and RAM publication. No request survives callback scope.
+  using namespace voxone::hardware;
+  using voxone::rest_config::Status;
+  reset();AsyncWebServerRequest hw;
+  const auto original=runtimeHardwareConfig();
+  callback=true;handleHardwareConfigSave(&hw);callback=false;
+  assert(hw.status==202 && nvsAttempts==0 && runtimeHardwareConfig()==original);
+  get.parameter.data=restConfigOperations.find(1)->id;handleConfigOperationRead(&get);
+  assert(get.body.find("restartRequired")==std::string::npos);
+  step("hardware");handleConfigOperationRead(&get);
+  assert(nvsAttempts==1 && nvsStored.size()==10 && runtimeHardwareConfig()!=original);
+  assert(get.body.find("\"status\":\"saved\"")!=std::string::npos);
+  assert(get.body.find("\"restartRequired\":true")!=std::string::npos);
+  assert(get.body.find("\"changed\":true")!=std::string::npos);
+  RuntimeHardwareConfig decoded{};
+  assert(deserializeRuntimeHardwareConfig(nvsStored.data(),nvsStored.size(),decoded)==RuntimeHardwareDecodeStatus::Valid);
+  assert(decoded==runtimeHardwareConfig());
+  handleHardwareConfigSave(&hw);step("hardware-noop");
+  assert(nvsAttempts==1 && restConfigOperations.find(2)->status==Status::Saved);
+  get.parameter.data=restConfigOperations.find(2)->id;handleConfigOperationRead(&get);
+  assert(get.body.find("\"changed\":false")!=std::string::npos);
+  assert(get.body.find("\"restartRequired\":true")!=std::string::npos);
+  callback=true;handleHardwareConfigRead(&get);callback=false;
+  assert(get.status==200 && get.body.find("supportedDisplays")!=std::string::npos);
+  mutationHeld=true;callback=true;handleHardwareConfigRead(&get);callback=false;
+  assert(get.status==503 && mutationHeld);mutationHeld=false;
+  callback=true;handleHardwareConfigRead(&get);callback=false;
+  assert(get.status==200 && !mutationHeld);
+  for(int failure:{1,2,3}){
+    reset();assert(writeRuntimeHardwarePersistent(original));
+    nvsAttempts=0;writes.clear();const auto prior=nvsStored;
+    nvsFailure=failure;handleHardwareConfigSave(&hw);step("hw-fail");
+    assert(restConfigOperations.find(1)->status==Status::Failed);
+    assert(nvsStored==prior && runtimeHardwareConfig()==original && nvsAttempts==1);
+    get.parameter.data=restConfigOperations.find(1)->id;handleConfigOperationRead(&get);
+    assert(get.body.find("restartRequired")==std::string::npos);
+    nvsFailure=0;handleHardwareConfigSave(&hw);step("hw-retry");
+    assert(nvsAttempts==2 && restConfigOperations.find(2)->status==Status::Saved);
+    assert(runtimeHardwareConfig()!=original && nvsStored!=prior);
+  }
+  reset();for(int i=0;i<4;++i)send("bass=1");handleHardwareConfigSave(&hw);
+  assert(hw.status==503 && nvsAttempts==0 && !restConfigOperations.find(1));
+  reset();for(int i=0;i<4;++i)handleHardwareConfigSave(&hw);
+  handleHardwareConfigSave(&hw);assert(hw.status==503 && nvsAttempts==0);
+  reset();hw.has=false;handleHardwareConfigSave(&hw);assert(hw.status==400);hw.has=true;
+  for(const char* invalid:{"GPIO42","-1","999999999999999999999999999999999","invalid"}){
+    reset();hw.hardwareDisplay.data=invalid;handleHardwareConfigSave(&hw);
+    assert(hw.status==400 && tone.entries.empty() && nvsAttempts==0);
+  }
+  reset();hw.hardwareDisplay.data="none";hw.hardwareAudio.data="max98357a";
+  handleHardwareConfigSave(&hw);assert(hw.status==422 && tone.entries.empty());
+  hw.hardwareAudio.data="none";
+  reset();hw.allowed=false;handleHardwareConfigSave(&hw);assert(hw.status==403 && tone.entries.empty());hw.allowed=true;
+  reset();sessionValid=false;handleHardwareConfigSave(&hw);assert(hw.status==401 && tone.entries.empty());
+  for(int reason:{0,1,2}){
+    reset();handleHardwareConfigSave(&hw);
+    if(reason==0)sessionValid=false;else if(reason==1)++generation;else testNow+=30000;
+    step("hw-cancel");assert(nvsAttempts==0 && restConfigOperations.find(1)->status==Status::Cancelled);
+  }
+  reset();handleHardwareConfigSave(&hw);get.parameter.data=restConfigOperations.find(1)->id;
+  ++generation;handleConfigOperationRead(&get);assert(get.status==404);
+  reset();{AsyncWebServerRequest gone;handleHardwareConfigSave(&gone);assert(gone.status==202);}
+  step("hw-detached");assert(nvsAttempts==1);
+  reset();handleHardwareConfigSave(&hw);
+  restConfigOperations.find(1)->hardware.audio=static_cast<RuntimeAudioOutput>(255);
+  step("hw-invalid-execution");assert(nvsAttempts==0 && restConfigOperations.find(1)->status==Status::Failed);
+  reset();send("bass=1");handleHardwareConfigSave(&hw);
+  post.parameter.data="hard_power";handlePowerSettingsSave(&post);
+  hw.hardwareAudio.data="pcm5102a";handleHardwareConfigSave(&hw);
+  step("tone");step("hardware-1");step("power");step("hardware-2");
+  assert((writes==std::vector<std::string>{"tone","hardware-1","power","hardware-2"}));
+  assert(runtimeHardwareConfig().audio==RuntimeAudioOutput::Pcm5102a);
+  std::cout<<"PASS production WS/REST handlers (HA/theme/power/hardware), FIFO, consumer and setters; fake RTOS/HTTP/NVS\n"
            <<"Result store bytes="<<sizeof(restConfigOperations)<<" queue item bytes="<<sizeof(QueuedToneCommand)<<"\n";
 }
 '''
@@ -451,6 +561,8 @@ def main():
     config_h = (ROOT / "src/core/config.h").read_text()
     handler = (ROOT / "src/core/commandhandler.cpp").read_text()
     source = PREFIX + "template<typename T>\n" + extract_function(config_h, "bool saveValue(T *field") + MIDDLE
+    hardware_nvs = (ROOT / "src/hardware/runtime_hardware_config_nvs.cpp").read_text()
+    source += hardware_nvs.replace('#include "runtime_hardware_config.h"', '').replace('#include <nvs.h>', '')
     for name in ("bool Config::setPowerMode", "bool Config::setHaName", "bool Config::setTftTheme", "bool Config::setTone", "bool Config::setBalance", "bool Config::setStartupMode", "bool Config::setStartupFixedVolume",
                  "bool Config::setLineOutEnabled", "bool Config::setLineOutVolume", "bool Config::setVuMeter"):
         source += extract_function(config, name) + "\n"
@@ -470,17 +582,21 @@ def main():
                  "bool captureRestConfigOwner", "void enqueueRestConfig", "void handleConfigOperationRead(AsyncWebServerRequest* request) {", "bool executeRestConfig",
                  "void handleHaSettingsSave(AsyncWebServerRequest* request) {", "void handleDisplayThemeSave(AsyncWebServerRequest* request) {",
                  "void handlePowerSettingsSave(AsyncWebServerRequest* request) {", "void handlePowerSettingsRead(AsyncWebServerRequest* request) {",
+                 "void handleHardwareConfigSave(AsyncWebServerRequest* request) {", "void handleHardwareConfigRead(AsyncWebServerRequest* request) {",
                  "void NetServer::serviceScrollSettings", "void NetServer::onWsMessage"):
         source += extract_function(server, name) + "\n"
     source += TESTS
     with tempfile.TemporaryDirectory(prefix="voxone-ws-config-") as work:
         cpp, binary = Path(work) / "harness.cpp", Path(work) / "harness"
         cpp.write_text(source)
-        flags = ["-std=c++11", "-O1", "-g", "-Wall", "-Wextra", "-Werror", "-Wno-unused-parameter"]
+        flags = ["-std=c++11", "-O1", "-g", "-Wall", "-Wextra", "-Werror", "-Wno-unused-parameter", "-DVOXONE_PROFILE_L0=1"]
         if args.sanitize:
             flags += ["-fsanitize=address,undefined", "-fno-omit-frame-pointer", "-no-pie"]
         subprocess.run([args.cxx, *flags, "-I", str(ROOT), str(cpp),
                         str(ROOT / "src/core/websocket_command.cpp"), str(ROOT / "src/core/display_scroll.cpp"),
+                        str(ROOT / "src/hardware/runtime_hardware_config.cpp"),
+                        str(ROOT / "src/hardware/runtime_hardware_web.cpp"),
+                        str(ROOT / "src/hardware/hardware_descriptor.cpp"),
                         "-o", str(binary)], check=True)
         subprocess.run([str(binary)], cwd=work, check=True)
 

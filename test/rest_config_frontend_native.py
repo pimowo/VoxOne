@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Run the production HA/theme/power submitters and result poller in Node.
+"""Run the production HA/theme/power/hardware submitters and result poller in Node.
 
 DOM fields, fetch and timers are fakes. This is not a browser/layout test.
 Use --node when Node is not on PATH. No mutation is sent to a physical device.
@@ -26,6 +26,18 @@ const tftThemeStatus = {textContent: '', dataset: {}};
 const powerModeSelect = {value:'hard_power'};
 const powerModeStatus = {textContent:'', dataset:{}};
 const powerModeSave = {disabled:false};
+let hardwareSaving=false, hardwareConfigLoaded=true, savedHardwareConfig;
+const hardwareDisplay={value:'none',selectedOptions:[{disabled:false}]};
+const hardwareInput={value:'ec11',selectedOptions:[{disabled:false}]};
+const hardwareAudio={value:'none',selectedOptions:[{disabled:false}]};
+const hardwareFeedback={textContent:'',dataset:{}};
+const hardwareSaveRestart={disabled:false}, hardwareDirtyBadge={hidden:true};
+const hardwareInputLabels={};
+let missingHardwareResult=false, hardwareReadStatus=200;
+function replaceHardwareOptions(select,options,value){select.value=value;}
+function text(){}
+function send(){throw new Error('Hardware must not send reboot or other WS commands');}
+function waitForDeviceRestart(){throw new Error('Hardware must not restart');}
 let powerReadStatus = 200;
 let feedback = '', feedbackError = false, posts = 0, gets = 0;
 let replies = [], postStatus = 202, networkFailure = false, otherId = false;
@@ -37,23 +49,35 @@ function setTimeout(callback) {callback();}
 async function fetch(url, options) {
   if (options.method === 'POST') {
     ++posts;
-    assert(['/api/ha','/api/display/theme','/api/power'].includes(url));
-    assert(haSettingsSaving || tftThemeSaving || powerModeSaving);
+    assert(['/api/ha','/api/display/theme','/api/power','/api/hardware'].includes(url));
+    assert(haSettingsSaving || tftThemeSaving || powerModeSaving || hardwareSaving);
+    if(url==='/api/hardware') {
+      const data=new URLSearchParams(options.body);
+      assert.equal(data.get('display'),hardwareDisplay.value);
+      assert.equal(data.get('input'),hardwareInput.value);
+      assert.equal(data.get('audio'),hardwareAudio.value);
+    }
     if (url === '/api/power') assert.equal(options.body.get('mode'),powerModeSelect.value);
     if (networkFailure) throw new Error('network disconnected');
     return {status: postStatus, json: async () => ({id, status:'pending'})};
   }
   if (url === '/api/power') return {ok:powerReadStatus===200,status:powerReadStatus,
     json:async()=>({mode:'soft_standby',standby:false,buttonPin:42,relayAvailable:false})};
+  if (url === '/api/hardware') return {ok:hardwareReadStatus===200,status:hardwareReadStatus,json:async()=>({
+    config:{display:'none',input:'ec11',audio:'none'},
+    supportedDisplays:[],supportedInputs:[],supportedAudioOutputs:[],roadmap:{audio:[]}})};
   ++gets;
   assert.equal(url, '/api/config/operation?id=' + id);
   assert.equal(options.cache, 'no-store');
   assert(!feedback.startsWith('Zapisano'));
   assert(!tftThemeStatus.textContent.startsWith('Zapisano'));
   assert(!powerModeStatus.textContent.startsWith('Zapisano'));
+  assert(!hardwareFeedback.textContent.includes('została zapisana'));
   const next = replies.shift() || 'pending';
   const status = typeof next === 'number' ? next : 200;
-  return {status, ok:status===200, json:async()=>({id:otherId?'bad':id,status:next})};
+  return {status, ok:status===200, json:async()=>({id:otherId?'bad':id,status:next,
+    result:missingHardwareResult?undefined:{ok:true,restartRequired:true,changed:true,
+      config:{display:'none',input:'ec11',audio:'none'}}})};
 }
 function reset() {
   posts=gets=0;feedback='';feedbackError=false;tftThemeStatus.textContent='';
@@ -63,6 +87,11 @@ function reset() {
   powerModeSelect.value='hard_power';powerModeStatus.textContent='';powerModeStatus.dataset.kind='';
   haNameInput.value='Kitchen';tftThemeSelect.value='yamaha';
   replies=['pending',503,'saved'];
+  hardwareSaving=false;hardwareConfigLoaded=true;missingHardwareResult=false;hardwareReadStatus=200;
+  savedHardwareConfig={display:'st7796s_480x320',input:'ec11',audio:'pcm5102a'};
+  hardwareDisplay.value='none';hardwareInput.value='ec11';hardwareAudio.value='none';
+  hardwareDisplay.selectedOptions=[{disabled:false}];
+  hardwareFeedback.textContent='';hardwareFeedback.dataset.kind='';
 }
 const event = {preventDefault(){}};
 '''
@@ -132,7 +161,43 @@ TESTS = r'''
   assert.equal(powerModeSelect.value,'soft_standby');
   reset();powerReadStatus=401;await loadPowerMode();assert.equal(state.powerMode,null);
   assert(powerModeSave.disabled && powerModeSelect.disabled);
-  console.log('PASS production HA/theme/power forms, GET and REST result polling; fake DOM/fetch/timers');
+  reset();await saveHardwareConfig();
+  assert.equal(posts,1);assert.equal(gets,3);assert.equal(savedHardwareConfig.audio,'none');
+  assert(hardwareFeedback.textContent.includes('została zapisana'));
+  assert(hardwareFeedback.textContent.includes('Uruchom ponownie'));
+  assert(hardwareSaveRestart.disabled && !hardwareSaving);
+  await saveHardwareConfig();assert.equal(posts,1); // unchanged, no duplicate submit
+  for(const result of ['failed','cancelled','applied_but_not_persisted',401,403,404]) {
+    reset();replies=[result];await saveHardwareConfig();
+    assert.equal(posts,1);assert.equal(gets,1);
+    assert.equal(savedHardwareConfig.audio,'pcm5102a');
+    assert.equal(hardwareFeedback.dataset.kind,'error');
+    assert(!hardwareSaveRestart.disabled && !hardwareSaving);
+    replies=['saved'];await saveHardwareConfig();assert.equal(posts,2);
+    assert.equal(savedHardwareConfig.audio,'none');
+  }
+  for(const status of [400,401,403,422,503]){
+    reset();postStatus=status;await saveHardwareConfig();
+    assert.equal(posts,1);assert.equal(gets,0);assert.equal(hardwareFeedback.dataset.kind,'error');
+    assert.equal(savedHardwareConfig.audio,'pcm5102a');
+  }
+  reset();networkFailure=true;await saveHardwareConfig();
+  assert.equal(posts,1);assert.equal(gets,0);assert.equal(hardwareFeedback.dataset.kind,'error');
+  reset();replies=[];await saveHardwareConfig();assert.equal(posts,1);assert.equal(gets,60);
+  assert.equal(hardwareFeedback.dataset.kind,'error');
+  reset();otherId=true;replies=['saved'];await saveHardwareConfig();
+  assert.equal(hardwareFeedback.dataset.kind,'error');
+  reset();missingHardwareResult=true;replies=['saved'];await saveHardwareConfig();
+  assert.equal(hardwareFeedback.dataset.kind,'error');assert.equal(savedHardwareConfig.audio,'pcm5102a');
+  reset();hardwareDisplay.selectedOptions[0].disabled=true;await saveHardwareConfig();assert.equal(posts,0);
+  reset();hardwareConfigLoaded=false;await saveHardwareConfig();assert.equal(posts,0);
+  reset();hardwareSaving=true;await saveHardwareConfig();assert.equal(posts,0);
+  reset();await loadHardwareConfig();assert.equal(posts,0);assert(hardwareSaveRestart.disabled);
+  reset();hardwareReadStatus=503;await loadHardwareConfig();
+  assert.equal(posts,0);assert(!hardwareConfigLoaded && hardwareSaveRestart.disabled);
+  assert.equal(hardwareFeedback.dataset.kind,'error');
+  hardwareReadStatus=200;await loadHardwareConfig();assert.equal(posts,0);assert(hardwareConfigLoaded);
+  console.log('PASS production HA/theme/power/hardware forms, GET and REST result polling; fake DOM/fetch/timers');
 })().catch(error=>{console.error(error);process.exitCode=1;});
 '''
 
@@ -147,7 +212,11 @@ def main():
     script = PREFIX + '\n'.join(extract_function(source, name) for name in (
         'async function awaitConfigPersistence', 'async function saveHaSettings',
         'async function saveTftTheme', 'async function savePowerMode',
-        'async function loadPowerMode', 'function renderPowerMode')) + TESTS
+        'async function loadPowerMode', 'function renderPowerMode',
+        'async function saveHardwareConfig', 'async function loadHardwareConfig',
+        'function hardwareSaveError', 'function setHardwareFeedback',
+        'function hardwareDirty', 'function hardwareSelectionSaveable',
+        'function renderHardwareFormState')) + TESTS
     with tempfile.TemporaryDirectory(prefix='voxone-rest-frontend-') as work:
         path = Path(work) / 'test.cjs'
         path.write_text(script)

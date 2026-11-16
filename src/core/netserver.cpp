@@ -2731,7 +2731,8 @@ bool captureRestConfigOwner(AsyncWebServerRequest* request,
 }
 
 void enqueueRestConfig(AsyncWebServerRequest* request, voxone::rest_config::Kind kind,
-                       const char* value) {
+                       const char* value,
+                       const voxone::hardware::RuntimeHardwareConfig* hardware = nullptr) {
   voxone::security::SecuritySessionBinding owner{};
   if (!captureRestConfigOwner(request, owner)) return;
   if (systemRestartPending() || systemOperationState.blocksRequests() ||
@@ -2749,6 +2750,7 @@ void enqueueRestConfig(AsyncWebServerRequest* request, voxone::rest_config::Kind
   QueuedToneCommand command{};
   bool queued = false;
   if (operation) {
+    if (hardware) operation->hardware = *hardware; // bounded value copy, never retain request data
     command.restTicket = operation->ticket;
     command.sequence = configurationCommandSequence;
     queued = xQueueSend(toneCommandQueue, &command, 0) == pdTRUE;
@@ -2781,8 +2783,15 @@ void handleConfigOperationRead(AsyncWebServerRequest* request) {
   }
   const auto* operation = restConfigOperations.read(
       request->getParam("id")->value().c_str(), owner, millis());
-  char body[144]{};
-  if (operation)
+  char body[320]{};
+  if (operation && operation->kind == voxone::rest_config::Kind::Hardware &&
+      operation->status == voxone::rest_config::Status::Saved) {
+    char result[192]{};
+    if (voxone::hardware::formatRuntimeHardwareWebSaveJson(
+            result, sizeof(result), operation->hardware, operation->hardwareChanged))
+      snprintf(body, sizeof(body), "{\"id\":\"%s\",\"status\":\"saved\",\"result\":%s}",
+               operation->id, result);
+  } else if (operation)
     snprintf(body, sizeof(body), "{\"id\":\"%s\",\"status\":\"%s\"}",
              operation->id, voxone::rest_config::statusName(operation->status));
   xSemaphoreGive(configurationMutationMutex);
@@ -2805,6 +2814,7 @@ bool executeRestConfig(uint32_t ticket) {
       voxone::configuration_mutation::deviceCoordinator(),
       operation->kind == Kind::HaName ? voxone::configuration_mutation::Owner::HaSettingsApi
       : operation->kind == Kind::PowerMode ? voxone::configuration_mutation::Owner::PowerSettingsApi
+      : operation->kind == Kind::Hardware ? voxone::configuration_mutation::Owner::HardwareApi
                                           : voxone::configuration_mutation::Owner::DisplayThemeApi);
   if (!mutation.acquired()) return false; // tryAcquire never waits
   {
@@ -2836,6 +2846,15 @@ bool executeRestConfig(uint32_t ticket) {
     }
     // Only persist the preference; do not initiate standby, relay or restart.
     persisted = config.setPowerMode(mode);
+  } else if (operation->kind == Kind::Hardware) {
+    // One existing CRC-protected NVS record. The hardware setter publishes
+    // its RAM selection only after commit; no GPIO activation or reboot here.
+    const auto saved = voxone::hardware::saveRuntimeHardwareConfig(operation->hardware);
+    operation->hardwareChanged = saved == voxone::hardware::RuntimeHardwareSaveStatus::Saved;
+    persisted = operation->hardwareChanged ||
+        saved == voxone::hardware::RuntimeHardwareSaveStatus::Unchanged;
+    restConfigOperations.finish(*operation, persisted ? Status::Saved : Status::Failed, millis());
+    return true;
   } else {
     restConfigOperations.finish(*operation, Status::Failed, millis());
     return true;
@@ -2965,6 +2984,15 @@ void handlePowerSettingsSave(AsyncWebServerRequest* request) {
 
 void handleHardwareConfigRead(AsyncWebServerRequest* request) {
   if (!deviceApiAuthorized(request)) return;
+  // The deferred writer runs on loopTask. Copy a coherent selection without
+  // waiting for its NVS transaction or holding the mutex while formatting JSON.
+  if (!configurationMutationMutex ||
+      xSemaphoreTake(configurationMutationMutex, 0) != pdTRUE) {
+    stationsReply(request, 503, R"({"error":"configuration_busy"})");
+    return;
+  }
+  const auto selected = voxone::hardware::runtimeHardwareConfig();
+  xSemaphoreGive(configurationMutationMutex);
   std::unique_ptr<char[]> body(new (std::nothrow)
       char[voxone::hardware::kRuntimeHardwareWebJsonCapacity]);
   if (!body) {
@@ -2974,7 +3002,7 @@ void handleHardwareConfigRead(AsyncWebServerRequest* request) {
   if (!voxone::hardware::formatRuntimeHardwareWebJson(
           body.get(), voxone::hardware::kRuntimeHardwareWebJsonCapacity,
           voxone::hardware::currentHardware(),
-          voxone::hardware::runtimeHardwareConfig())) {
+          selected)) {
     stationsReply(request, 500, R"({"error":"hardware_config_unavailable"})");
     return;
   }
@@ -3023,28 +3051,7 @@ void handleHardwareConfigSave(AsyncWebServerRequest* request) {
     return;
   }
 
-  const auto saved = voxone::hardware::saveRuntimeHardwareConfig(requested);
-  if (saved == voxone::hardware::RuntimeHardwareSaveStatus::Invalid) {
-    stationsReply(request, 400, R"({"error":"invalid_value"})");
-    return;
-  }
-  if (saved == voxone::hardware::RuntimeHardwareSaveStatus::Unsupported) {
-    stationsReply(request, 422, R"({"error":"unsupported_hardware"})");
-    return;
-  }
-  if (saved == voxone::hardware::RuntimeHardwareSaveStatus::StorageError) {
-    stationsReply(request, 500, R"({"error":"storage_failed"})");
-    return;
-  }
-
-  char body[192];
-  if (!voxone::hardware::formatRuntimeHardwareWebSaveJson(
-          body, sizeof(body), requested,
-          saved == voxone::hardware::RuntimeHardwareSaveStatus::Saved)) {
-    stationsReply(request, 500, R"({"error":"hardware_response_failed"})");
-    return;
-  }
-  stationsReply(request, 200, body);
+  enqueueRestConfig(request, voxone::rest_config::Kind::Hardware, "", &requested);
 }
 
 static void apiError(AsyncWebServerRequest* request, int code, const char* error) {

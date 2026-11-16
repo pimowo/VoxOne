@@ -2008,7 +2008,7 @@ window.VoxOneRestartWaiter = Object.freeze({
       if (!statusResponse.ok) throw new Error("Nie można potwierdzić zapisu. Sprawdź sesję i ustawienia.");
       const result = await statusResponse.json();
       if (result.id !== accepted.id) throw new Error("Nieprawidłowy wynik operacji.");
-      if (result.status === "saved") return;
+      if (result.status === "saved") return result;
       if (result.status === "pending") continue;
       if (result.status === "applied_but_not_persisted")
         throw new Error("Zastosowano w RAM, ale zapis trwały nie powiódł się. Ponów zapis.");
@@ -2261,28 +2261,7 @@ window.VoxOneRestartWaiter = Object.freeze({
     return error || "błąd połączenia";
   }
 
-  async function restartAfterHardwareSave() {
-    hardwareSaving = true;
-    renderHardwareFormState();
-    setHardwareFeedback("Restartowanie urządzenia...");
-    if (!send("reboot", 1)) {
-      hardwareSaving = false;
-      renderHardwareFormState();
-      setHardwareFeedback("Konfiguracja została zapisana, ale brak połączenia potrzebnego do restartu.", true);
-      return;
-    }
-    await waitForDeviceRestart({
-      delay: 1200,
-      onReturn: () => location.replace("/voxone.html?restarted=" + Date.now() + "#hardware"),
-      onTimeout: () => {
-        hardwareSaving = false;
-        renderHardwareFormState();
-        setHardwareFeedback("Konfiguracja została zapisana, ale nie udało się ponownie połączyć z VoxOne.", true);
-      }
-    });
-  }
-
-  async function saveHardwareConfig(restart) {
+  async function saveHardwareConfig() {
     if (hardwareSaving || !hardwareConfigLoaded) return;
     if (!hardwareDirty() || !hardwareSelectionSaveable()) return;
     hardwareSaving = true;
@@ -2298,9 +2277,17 @@ window.VoxOneRestartWaiter = Object.freeze({
         headers: { "Content-Type": "application/x-www-form-urlencoded;charset=UTF-8" },
         body: body.toString(), cache: "no-store"
       });
-      const result = await response.json();
-      if (!response.ok || result.ok !== true || result.restartRequired !== true || !result.config)
-        throw new Error(hardwareSaveError(result.error || ("HTTP " + response.status)));
+      if (response.status !== 202) {
+        const rejected = await response.json();
+        throw new Error(hardwareSaveError(rejected.error || ("HTTP " + response.status)));
+      }
+      setHardwareFeedback("Zapis przyjęty. Oczekiwanie na potwierdzenie…");
+      const operation = await awaitConfigPersistence(response);
+      const result = operation.result;
+      if (!result || result.ok !== true || result.restartRequired !== true ||
+          !result.config || typeof result.config.display !== "string" ||
+          typeof result.config.input !== "string" || typeof result.config.audio !== "string")
+        throw new Error("Nieprawidłowe potwierdzenie konfiguracji sprzętu.");
       savedHardwareConfig = {
         display: result.config.display,
         input: result.config.input,
@@ -2318,7 +2305,6 @@ window.VoxOneRestartWaiter = Object.freeze({
       hardwareSaving = false;
       renderHardwareFormState();
     }
-    if (restart) await restartAfterHardwareSave();
   }
 
   function renderConnection() {
@@ -4178,7 +4164,7 @@ window.VoxOneRestartWaiter = Object.freeze({
   });
   hardwareForm.addEventListener("submit", event => {
     event.preventDefault();
-    saveHardwareConfig(true);
+    saveHardwareConfig();
   });
   hardwareDisplay.addEventListener("change", () => {
     setHardwareFeedback("");

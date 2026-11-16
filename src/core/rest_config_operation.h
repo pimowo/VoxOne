@@ -2,10 +2,11 @@
 
 #include <cstdint>
 #include <cstring>
+#include "../hardware/runtime_hardware_config.h"
 
 namespace voxone { namespace rest_config {
 
-enum class Kind : uint8_t { HaName, Theme, PowerMode };
+enum class Kind : uint8_t { HaName, Theme, PowerMode, Hardware };
 enum class Status : uint8_t { Pending, Saved, AppliedNotPersisted, Failed, Cancelled };
 inline const char* statusName(Status status) {
   switch (status) {
@@ -40,6 +41,8 @@ template<class Owner> class Store {
     Owner owner{};
     char id[33]{}; // 128 random bits; never a cookie/session token
     char value[33]{};
+    hardware::RuntimeHardwareConfig hardware{};
+    bool hardwareChanged = false;
     Kind kind = Kind::HaName;
     Status status = Status::Pending;
   };
