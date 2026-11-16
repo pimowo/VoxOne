@@ -6,6 +6,15 @@ checkpointów pozostaje w historii Git i w istniejących raportach.
 
 ## 1. HIL PENDING (do fizycznego przetestowania przez użytkownika)
 
+- [ ] Po VOXONE-STABILIZE-03 fizycznie potwierdzić na L0/S0 szybkie zmiany
+  Tone/Bass/Middle/Treble/presetów i Balance podczas PCM, STOP oraz zmian
+  źródła/sample rate i ponownego PLAY. Sprawdzić odsłuchowo przejścia bez
+  dodatkowych trzasków, underflow, CPU i zapas stosu AudioTask. Publikacja
+  parametrów jest atomowa, a kompletny Tone jest stosowany na granicy bloku;
+  szybkie publikacje przed kolejnym blokiem zlewają się do ostatniej wartości.
+  Historia filtrów i równania pozostają zachowane, bez nowego wygładzania.
+  Test natywny/TSan wykonuje metody produkcyjne, ale zastępuje FreeRTOS/I2S
+  adapterami hosta; nie mierzy rzeczywistego opóźnienia ani jakości dźwięku.
 - [ ] Po VOXONE-STABILIZE-02 fizycznie potwierdzić na L0/S0 STOP przy pełnej
   kolejce, podczas ConnectTask i reconnect oraz przy zmianie źródła; starsze
   PLAY/NEXT/PREV nie mogą ponownie uruchamiać audio. Sprawdzić FIFO szybkich

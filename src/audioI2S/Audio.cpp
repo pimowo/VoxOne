@@ -2135,6 +2135,9 @@ uint32_t Audio::stopSong() {
 //---------------------------------------------------------------------------------------------------------------------
 void Audio::playI2Sremains() { // returns true if all dma_buffs flushed
     if (!radioCanUseI2S()) return;
+    // EOF can drain from loopTask; serialize it with the AudioTask consumer.
+    // Same lock order as decoding: audioTaskMutex -> I2S output guard.
+    if(m_audioTaskMutex) xSemaphoreTakeRecursive(m_audioTaskMutex, portMAX_DELAY);
     if(!getSampleRate()) setSampleRate(96000);
     if(!getChannels()) setChannels(2);
     if(getBitsPerSample() > 8) memset(m_outBuff,   0, sizeof(m_outBuff));     //Clear OutputBuffer (signed)
@@ -2144,6 +2147,7 @@ void Audio::playI2Sremains() { // returns true if all dma_buffs flushed
     while(m_validSamples) {
         playChunk();
     }
+    if(m_audioTaskMutex) xSemaphoreGiveRecursive(m_audioTaskMutex);
     return;
 }
 //---------------------------------------------------------------------------------------------------------------------
@@ -2160,6 +2164,7 @@ bool Audio::playChunk() {
         m_curSample = 0;
         return false;
     }
+    applyPendingAudioParameters();
     int16_t sample[2];
     if(getBitsPerSample() == 8) {
         if(getChannels() == 1) {
@@ -4149,13 +4154,15 @@ bool Audio::setSampleRate(uint32_t sampRate) {
                 return false;
             }
         }
+        // Publish while still holding the same guard as the PCM consumer.
+        m_sampleRate.store(sampRate, std::memory_order_relaxed);
+    } else {
+        m_sampleRate.store(sampRate, std::memory_order_relaxed);
     }
-    m_sampleRate = sampRate;
-    IIR_calculateCoefficients(m_gain0, m_gain1, m_gain2); // must be recalculated after each samplerate change
     return true;
 }
 uint32_t Audio::getSampleRate(){
-    return m_sampleRate;
+    return m_sampleRate.load(std::memory_order_relaxed);
 }
 //---------------------------------------------------------------------------------------------------------------------
 bool Audio::setBitsPerSample(int bits) {
@@ -4229,24 +4236,30 @@ void Audio::setTone(int8_t gainLowPass, int8_t gainBandPass, int8_t gainHighPass
     // see https://www.earlevel.com/main/2013/10/13/biquad-calculator-v2/
     // values can be between -40 ... +6 (dB)
 
-    m_gain0 = gainLowPass;
-    m_gain1 = gainBandPass;
-    m_gain2 = gainHighPass;
-
-    IIR_calculateCoefficients(m_gain0, m_gain1, m_gain2);
-
-    /*
-        This will cause a clicking sound when adjusting the EQ.
-        Because when the EQ is adjusted, the IIR filter will be cleared and played,
-        mixed in the audio data frame, and a click-like sound will be produced.
-    */
-    /*
-    int16_t tmp[2]; tmp[0] = 0; tmp[1]= 0;
-
-    IIR_filterChain0(tmp, true ); // flush the filter
-    IIR_filterChain1(tmp, true ); // flush the filter
-    IIR_filterChain2(tmp, true ); // flush the filter
-    */
+    const uint32_t tone = static_cast<uint32_t>(gainLowPass + 128) |
+        (static_cast<uint32_t>(gainBandPass + 128) << 8) |
+        (static_cast<uint32_t>(gainHighPass + 128) << 16);
+    m_requestedTone.store(tone, std::memory_order_relaxed);
+}
+//---------------------------------------------------------------------------------------------------------------------
+void Audio::applyPendingAudioParameters() {
+    // Only the serialized PCM consumer touches coefficients and filter history.
+    // No Config/NVS lock, allocation, publication retry or per-sample lock.
+    // Calculate only on change, before processing the block. Doing this here
+    // also pairs Tone with the current I2S sample rate, never a producer's stale
+    // sample-rate snapshot. Existing filter equations and history are retained:
+    // clearing history on EQ changes causes clicks.
+    const uint32_t tone = m_requestedTone.load(std::memory_order_relaxed);
+    const uint32_t rate = getSampleRate();
+    if(tone != m_appliedTone || rate != m_filterSampleRate) {
+        IIR_calculateCoefficients(
+            static_cast<int8_t>(static_cast<int>(tone & 0xff) - 128),
+            static_cast<int8_t>(static_cast<int>((tone >> 8) & 0xff) - 128),
+            static_cast<int8_t>(static_cast<int>((tone >> 16) & 0xff) - 128), rate);
+        m_appliedTone = tone;
+        m_filterSampleRate = rate;
+    }
+    m_balance = m_requestedBalance.load(std::memory_order_relaxed);
 }
 //---------------------------------------------------------------------------------------------------------------------
 void Audio::forceMono(bool m) { // #100 mono option
@@ -4256,7 +4269,7 @@ void Audio::forceMono(bool m) { // #100 mono option
 void Audio::setBalance(int8_t bal){ // bal -16...16
     if(bal < -16) bal = -16;
     if(bal >  16) bal =  16;
-    m_balance = bal;
+    m_requestedBalance.store(bal, std::memory_order_relaxed);
 }
 //---------------------------------------------------------------------------------------------------------------------
 void Audio::setVolume(uint8_t vol) { // vol 22 steps, 0...21
@@ -4279,14 +4292,14 @@ uint32_t Audio::inBufferFilled() {
 //---------------------------------------------------------------------------------------------------------------------
 //            ***     D i g i t a l   b i q u a d r a t i c     f i l t e r     ***
 //---------------------------------------------------------------------------------------------------------------------
-void Audio::IIR_calculateCoefficients(int8_t G0, int8_t G1, int8_t G2){  // Infinite Impulse Response (IIR) filters
+void Audio::IIR_calculateCoefficients(int8_t G0, int8_t G1, int8_t G2, uint32_t sampleRate){  // Infinite Impulse Response (IIR) filters
 
     // G1 - gain low shelf   set between -40 ... +6 dB
     // G2 - gain peakEQ      set between -40 ... +6 dB
     // G3 - gain high shelf  set between -40 ... +6 dB
     // https://www.earlevel.com/main/2012/11/26/biquad-c-source-code/
 
-    if(getSampleRate() < 1000) return;  // fuse
+    if(sampleRate < 1000) return;  // fuse
 
 // - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 
@@ -4304,7 +4317,7 @@ void Audio::IIR_calculateCoefficients(int8_t G0, int8_t G1, int8_t G2){  // Infi
     float K, norm, Q, Fc, V ;
 
     // LOWSHELF
-    Fc = (float)FcLS / (float)getSampleRate(); // Cutoff frequency
+    Fc = (float)FcLS / (float)sampleRate; // Cutoff frequency
     K = tanf((float)PI * Fc);
     V = powf(10, fabs(G0) / 20.0);
 
@@ -4326,7 +4339,7 @@ void Audio::IIR_calculateCoefficients(int8_t G0, int8_t G1, int8_t G2){  // Infi
     }
 
     // PEAK EQ
-    Fc = (float)FcPKEQ / (float)getSampleRate(); // Cutoff frequency
+    Fc = (float)FcPKEQ / (float)sampleRate; // Cutoff frequency
     K = tanf((float)PI * Fc);
     V = powf(10, fabs(G1) / 20.0);
     Q = 2.5; // Quality factor
@@ -4348,7 +4361,7 @@ void Audio::IIR_calculateCoefficients(int8_t G0, int8_t G1, int8_t G2){  // Infi
     }
 
     // HIGHSHELF
-    Fc = (float)FcHS / (float)getSampleRate(); // Cutoff frequency
+    Fc = (float)FcHS / (float)sampleRate; // Cutoff frequency
     K = tanf((float)PI * Fc);
     V = powf(10, fabs(G2) / 20.0);
     if (G2 >= 0) {  // boost

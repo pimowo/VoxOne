@@ -273,7 +273,8 @@ private:
     int16_t* IIR_filterChain2(int16_t* iir_in, bool clear = false);
     inline void setDatamode(uint8_t dm){m_datamode=dm;}
     inline uint8_t getDatamode(){return m_datamode;}
-    void IIR_calculateCoefficients(int8_t G1, int8_t G2, int8_t G3);
+    void IIR_calculateCoefficients(int8_t G1, int8_t G2, int8_t G3, uint32_t sampleRate);
+    void applyPendingAudioParameters(); // PCM block boundary, under I2S output guard
     void _computeVUlevel(int16_t sample[2]);
     static void connectTask(void* pvParams);
 
@@ -507,14 +508,15 @@ private:
     char            m_lastHost[512];                // Store the last URL to a webstream
     char*           m_playlistBuff = NULL;          // stores playlistdata
     filter_t        m_filter[3];                    // digital filters
-    uint32_t        m_sampleRate=16000;
+    std::atomic<uint32_t> m_sampleRate{16000};
     std::atomic<uint32_t> m_decodedSampleRate{0};   // published only after decoded PCM
     uint32_t        m_bitRate=0;                    // current bitrate given fom decoder
     uint32_t        m_avr_bitrate = 0;              // average bitrate, median computed by VBR
     voxone::audio::FlacBitrateMeter m_flacBitrateMeter;
     uint32_t        m_metacount = 0;                // counts down bytes between metadata
     int             m_controlCounter = 0;           // Status within readID3data() and readWaveHeader()
-    int8_t          m_balance = 0;                  // -16 (mute left) ... +16 (mute right)
+    std::atomic<int8_t> m_requestedBalance{0};
+    int8_t          m_balance = 0;                  // PCM consumer-owned block snapshot
     std::atomic<uint8_t> m_vol{64};                 // cross-task volume
     uint8_t         m_bitsPerSample = 16;           // bitsPerSample
     uint8_t         m_channels = 2;
@@ -575,9 +577,13 @@ private:
     voxone::audio::WavHeaderParser m_wavHeaderParser;
     float           m_filterBuff[3][2][2][2];       // IIR filters memory for Audio DSP
     size_t          m_i2s_bytesWritten = 0;         // set in i2s_write() but not used
-    int8_t          m_gain0 = 0;                    // cut or boost filters (EQ)
-    int8_t          m_gain1 = 0;
-    int8_t          m_gain2 = 0;
+    // One lock-free publication for all three controls (offset binary bytes).
+    // Rapid updates coalesce to the latest complete value at the next block.
+    static_assert(ATOMIC_INT_LOCK_FREE == 2 && ATOMIC_CHAR_LOCK_FREE == 2,
+                  "Audio parameter publication must be lock-free");
+    std::atomic<uint32_t> m_requestedTone{0x808080};
+    uint32_t        m_appliedTone = 0x808080;
+    uint32_t        m_filterSampleRate = 0;
 
     uint16_t  vuLeft, vuRight;
 };

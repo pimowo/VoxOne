@@ -112,12 +112,17 @@ void testFirmwareIntegrationContract() {
   assert(callback.find("config.setTone") == std::string::npos);
   assert(callback.find("persistV7") == std::string::npos);
 
+  // REST tickets share this queue but authorize inside executeRestConfig().
+  // This assertion concerns the later WebSocket Tone branch, not the first
+  // (REST) dequeue in the whole service function.
+  const std::size_t authorization = service.find("queuedToneCommandAuthorization");
+  assert(authorization != std::string::npos);
   const std::size_t receive = service.find(
-      "xQueueReceive(toneCommandQueue");
+      "xQueueReceive(toneCommandQueue", authorization);
   const std::size_t persist = service.find("config.setTone");
   assert(receive != std::string::npos && persist != std::string::npos);
   assert(receive < persist);
-  assert(service.find("queuedToneCommandAuthorization") < receive);
+  assert(authorization < receive);
   assert(service.find("configurationMutationMutex") != std::string::npos);
 
   const std::size_t durableWrite = setTone.find("persistV7()");

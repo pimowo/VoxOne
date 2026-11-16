@@ -252,6 +252,8 @@ Invoke-Step 'Native tests' {
  if($LASTEXITCODE -ne 0) { throw 'WebSocket configuration execution failed' }
  & $Python (Join-Path $root 'test/player_queue_execution_native.py') '--cxx' $Cxx 2>&1 | ForEach-Object { Write-Host $_ }
  if($LASTEXITCODE -ne 0) { throw 'Player command execution failed' }
+ & $Python (Join-Path $root 'test/audio_parameter_execution_native.py') '--cxx' $Cxx 2>&1 | ForEach-Object { Write-Host $_ }
+ if($LASTEXITCODE -ne 0) { throw 'Audio parameter execution failed' }
  Write-Host "  $($tests.Count) native tests passed"
 }
 if(-not $onWindows) {
@@ -262,6 +264,8 @@ if(-not $onWindows) {
   if($LASTEXITCODE -ne 0) { throw 'WebSocket configuration execution sanitizers failed' }
   & $Python (Join-Path $root 'test/player_queue_execution_native.py') '--cxx' $Cxx '--sanitize' 2>&1 | ForEach-Object { Write-Host $_ }
   if($LASTEXITCODE -ne 0) { throw 'Player command execution sanitizers failed' }
+  & $Python (Join-Path $root 'test/audio_parameter_execution_native.py') '--cxx' $Cxx '--sanitize' 2>&1 | ForEach-Object { Write-Host $_ }
+  if($LASTEXITCODE -ne 0) { throw 'Audio parameter execution sanitizers failed' }
   & $Cxx @sanitizerArgs '-o' $widgetBlockersExe `
     (Join-Path $root 'test/code_audit_widget_blockers_native.cpp')
   if($LASTEXITCODE -ne 0) { throw 'Sanitized code-audit widget blockers compile failed' }
