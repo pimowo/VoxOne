@@ -127,6 +127,8 @@ const EndpointCase kEndpoints[] = {
      SecurityRouteClass::ProtectedRest, false, false},
     {SecurityAccessMethod::Post, "/api/display/theme", SecurityEndpoint::DisplayThemeWrite,
      SecurityRouteClass::ProtectedRest, true, false},
+    {SecurityAccessMethod::Get, "/api/config/operation", SecurityEndpoint::ConfigOperationRead,
+     SecurityRouteClass::ProtectedRest, false, false},
     {SecurityAccessMethod::Get, "/api/config/backup", SecurityEndpoint::ConfigBackup,
      SecurityRouteClass::ProtectedRest, false, false},
     {SecurityAccessMethod::Post, "/api/config/restore", SecurityEndpoint::ConfigRestore,
@@ -280,11 +282,11 @@ void testCompleteEndpointInventory() {
     assert(std::strcmp(securityEndpointName(actual.endpoint), "unknown") != 0);
     assert(std::strcmp(securityRouteClassName(actual.routeClass), "unknown") != 0);
   }
-  assert(sizeof(kEndpoints) / sizeof(kEndpoints[0]) == 64);
+  assert(sizeof(kEndpoints) / sizeof(kEndpoints[0]) == 65);
 
   size_t ruleCount = 0;
   const SecurityRouteRule* rules = securityAccessRouteRules(ruleCount);
-  assert(rules != nullptr && ruleCount == 64);
+  assert(rules != nullptr && ruleCount == 65);
   for (size_t index = 0; index < ruleCount; ++index) {
     const SecurityRouteRule& rule = rules[index];
     assert(rule.path && rule.path[0] == '/');

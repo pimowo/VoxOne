@@ -81,6 +81,7 @@
 #include "display_scroll.h"
 #include "web_tone_command.h"
 #include "web_config_command.h"
+#include "rest_config_operation.h"
 #include "power_manager.h"
 #include "../displays/dspcore.h"
 #include "../displays/widgets/widgetsconfig.h" //BitrateFormat
@@ -152,6 +153,7 @@ struct QueuedScrollSettingsCommand {
 };
 
 struct QueuedToneCommand {
+  uint32_t restTicket;
   uint32_t sequence;
   uint32_t clientId;
   voxone::web_tone::Command tone;
@@ -167,6 +169,7 @@ SemaphoreHandle_t configurationMutationMutex = nullptr;
 // Both existing queues share admission ordering, including uint32 wraparound.
 // Access only while configurationMutationMutex is held.
 uint32_t configurationCommandSequence = 0;
+voxone::rest_config::Store<voxone::security::SecuritySessionBinding> restConfigOperations;
 
 voxone::netserver_backpressure::InsertResult reserveSnapshot(
     uint32_t clientId) {
@@ -282,6 +285,7 @@ void handleHardwareConfigRead(AsyncWebServerRequest *request);
 void handleHardwareConfigSave(AsyncWebServerRequest *request);
 void handleHaSettingsRead(AsyncWebServerRequest *request);
 void handleHaSettingsSave(AsyncWebServerRequest *request);
+void handleConfigOperationRead(AsyncWebServerRequest *request);
 void handleDisplayThemeRead(AsyncWebServerRequest *request);
 void handleDisplayThemeSave(AsyncWebServerRequest *request);
 void handlePowerSettingsRead(AsyncWebServerRequest *request);
@@ -1227,6 +1231,7 @@ bool NetServer::begin(bool quiet) {
   webserver.on("/api/hardware", HTTP_POST, handleHardwareConfigSave);
   webserver.on("/api/ha", HTTP_GET, handleHaSettingsRead);
   webserver.on("/api/ha", HTTP_POST, handleHaSettingsSave);
+  webserver.on("/api/config/operation", HTTP_GET, handleConfigOperationRead);
   webserver.on("/api/display/theme", HTTP_GET, handleDisplayThemeRead);
   webserver.on("/api/display/theme", HTTP_POST, handleDisplayThemeSave);
   webserver.on("/api/power", HTTP_GET, handlePowerSettingsRead);
@@ -2703,6 +2708,131 @@ void handleConfigRestore(AsyncWebServerRequest* request) {
                      : R"({"ok":true,"restartRequired":false})");
 }
 
+bool captureRestConfigOwner(AsyncWebServerRequest* request,
+                           voxone::security::SecuritySessionBinding& owner) {
+  if (!deviceApiAuthorized(request)) return false;
+  const auto decision = authorizeHttpRequest(request);
+  if (!decision.allowed) {
+    stationsReply(request, decision.httpStatus, R"({"error":"request_rejected"})");
+    return false;
+  }
+  SecurityRuntimeLock lock(true, 0);
+  if (!lock.locked()) {
+    stationsReply(request, 503, R"({"error":"configuration_busy"})");
+    return false;
+  }
+  char token[voxone::security::kSecuritySessionTokenBufferSize]{};
+  const bool hasToken = requestSessionToken(request, token);
+  const bool bound = voxone::security::deviceSecuritySessionService().bind(
+      hasToken ? token : nullptr, millis(), owner);
+  clearSensitive(token, sizeof(token));
+  if (!bound) stationsReply(request, 401, R"({"error":"unauthorized"})");
+  return bound;
+}
+
+void enqueueRestConfig(AsyncWebServerRequest* request, voxone::rest_config::Kind kind,
+                       const char* value) {
+  voxone::security::SecuritySessionBinding owner{};
+  if (!captureRestConfigOwner(request, owner)) return;
+  if (systemRestartPending() || systemOperationState.blocksRequests() ||
+      updateNetworkQuiescing.load() || !toneCommandQueue ||
+      !configurationMutationMutex ||
+      xSemaphoreTake(configurationMutationMutex, 0) != pdTRUE) {
+    stationsReply(request, 503, R"({"error":"configuration_busy"})");
+    return;
+  }
+  char id[33];
+  snprintf(id, sizeof(id), "%08lx%08lx%08lx%08lx",
+           static_cast<unsigned long>(esp_random()), static_cast<unsigned long>(esp_random()),
+           static_cast<unsigned long>(esp_random()), static_cast<unsigned long>(esp_random()));
+  auto* operation = restConfigOperations.create(id, kind, value, owner, millis());
+  QueuedToneCommand command{};
+  bool queued = false;
+  if (operation) {
+    command.restTicket = operation->ticket;
+    command.sequence = configurationCommandSequence;
+    queued = xQueueSend(toneCommandQueue, &command, 0) == pdTRUE;
+    if (queued) ++configurationCommandSequence;
+    else restConfigOperations.discard(operation->ticket);
+  }
+  xSemaphoreGive(configurationMutationMutex);
+  if (!queued) {
+    stationsReply(request, 503, R"({"error":"configuration_busy"})");
+    return;
+  }
+  char body[100];
+  snprintf(body, sizeof(body), "{\"id\":\"%s\",\"status\":\"pending\"}", id);
+  stationsReply(request, 202, body);
+}
+
+void handleConfigOperationRead(AsyncWebServerRequest* request) {
+  voxone::security::SecuritySessionBinding owner{};
+  if (!captureRestConfigOwner(request, owner)) return;
+  if (!request->hasParam("id") ||
+      !voxone::rest_config::Store<voxone::security::SecuritySessionBinding>::validId(
+          request->getParam("id")->value().c_str())) {
+    stationsReply(request, 400, R"({"error":"invalid_operation"})");
+    return;
+  }
+  if (!configurationMutationMutex ||
+      xSemaphoreTake(configurationMutationMutex, 0) != pdTRUE) {
+    stationsReply(request, 503, R"({"error":"configuration_busy"})");
+    return;
+  }
+  const auto* operation = restConfigOperations.read(
+      request->getParam("id")->value().c_str(), owner, millis());
+  char body[144]{};
+  if (operation)
+    snprintf(body, sizeof(body), "{\"id\":\"%s\",\"status\":\"%s\"}",
+             operation->id, voxone::rest_config::statusName(operation->status));
+  xSemaphoreGive(configurationMutationMutex);
+  stationsReply(request, body[0] ? 200 : 404,
+                body[0] ? body : R"({"error":"operation_not_found"})");
+}
+
+// Called only by the 01A consumer, with configurationMutationMutex held.
+// Returns false only for transient contention: retain the FIFO head.
+bool executeRestConfig(uint32_t ticket) {
+  using namespace voxone::rest_config;
+  auto* operation = restConfigOperations.find(ticket);
+  if (!operation) return true;
+  if (operation->status != Status::Pending) return true;
+  if (uint32_t(millis() - operation->created) >= kPendingMs || systemRestartPending()) {
+    restConfigOperations.finish(*operation, Status::Cancelled, millis());
+    return true;
+  }
+  voxone::configuration_mutation::Lease mutation(
+      voxone::configuration_mutation::deviceCoordinator(),
+      operation->kind == Kind::HaName ? voxone::configuration_mutation::Owner::HaSettingsApi
+                                      : voxone::configuration_mutation::Owner::DisplayThemeApi);
+  if (!mutation.acquired()) return false; // tryAcquire never waits
+  {
+    SecurityRuntimeLock lock(true, 0);
+    if (!lock.locked()) return false;
+    if (!voxone::security::deviceSecuritySessionService().validateBinding(
+            operation->owner, millis(), false)) {
+      restConfigOperations.finish(*operation, Status::Cancelled, millis());
+      return true;
+    }
+    // Authorization linearizes the start of execution here. Do not hold the
+    // security mutex over NVS and stall the HTTP authorization gate.
+  }
+  bool persisted = false;
+  if (operation->kind == Kind::HaName) {
+    persisted = config.setHaName(operation->value);
+  } else {
+    TftTheme theme = THEME_DEFAULT;
+    if (!voxone::tft_theme::parseApiName(operation->value, theme)) {
+      restConfigOperations.finish(*operation, Status::Failed, millis());
+      return true;
+    }
+    persisted = config.setTftTheme(theme);
+  }
+  restConfigOperations.finish(*operation,
+      persisted ? Status::Saved : Status::AppliedNotPersisted, millis());
+  return true;
+}
+
 void handleHaSettingsRead(AsyncWebServerRequest* request) {
   if (!deviceApiAuthorized(request)) return;
   const auto runtime = config.runtimeSnapshot();
@@ -2736,16 +2866,7 @@ void handleHaSettingsSave(AsyncWebServerRequest* request) {
     stationsReply(request, 400, R"({"error":"invalid_name"})");
     return;
   }
-  if (!config.setHaName(name.c_str())) {
-    stationsReply(request, 500, R"({"error":"storage_failed"})");
-    return;
-  }
-  char body[176];
-  if (!formatHaSettingsJson(body, sizeof(body), name.c_str(), true)) {
-    stationsReply(request, 500, R"({"error":"ha_response_failed"})");
-    return;
-  }
-  stationsReply(request, 200, body);
+  enqueueRestConfig(request, voxone::rest_config::Kind::HaName, name.c_str());
 }
 
 void handleDisplayThemeRead(AsyncWebServerRequest* request) {
@@ -2784,15 +2905,8 @@ void handleDisplayThemeSave(AsyncWebServerRequest* request) {
     stationsReply(request, 400, R"({"error":"invalid_theme"})");
     return;
   }
-  if (!config.setTftTheme(theme)) {
-    stationsReply(request, 500, R"({"error":"storage_failed"})");
-    return;
-  }
-  char body[96];
-  snprintf(body, sizeof(body),
-           "{\"ok\":true,\"theme\":\"%s\"}",
-           voxone::tft_theme::apiName(theme));
-  stationsReply(request, 200, body);
+  enqueueRestConfig(request, voxone::rest_config::Kind::Theme,
+                    voxone::tft_theme::apiName(theme));
 }
 
 void handlePowerSettingsRead(AsyncWebServerRequest* request) {
@@ -3953,6 +4067,9 @@ void NetServer::serviceScrollSettings() {
   QueuedToneCommand toneCommand{};
   QueuedScrollSettingsCommand command{};
   if (xSemaphoreTake(configurationMutationMutex, 0) != pdTRUE) return;
+  // Reap terminal results even with no clients/pending commands. Do not retain
+  // session bindings until the next HTTP request (or a millis wraparound).
+  restConfigOperations.expire(millis());
   const bool hasTone = xQueuePeek(toneCommandQueue, &toneCommand, 0) == pdTRUE;
   const bool hasScroll = xQueuePeek(scrollSettingsCommandQueue, &command, 0) == pdTRUE;
   if (!hasTone && !hasScroll) {
@@ -3961,6 +4078,13 @@ void NetServer::serviceScrollSettings() {
   }
   if (hasTone && (!hasScroll || voxone::web_config::before(
                                     toneCommand.sequence, command.sequence))) {
+
+    if (toneCommand.restTicket) {
+      if (executeRestConfig(toneCommand.restTicket))
+        xQueueReceive(toneCommandQueue, &toneCommand, 0);
+      xSemaphoreGive(configurationMutationMutex);
+      return;
+    }
 
     // The async_tcp callback only validates and enqueues. Authorization is
     // checked again immediately before loopTask performs the durable write.

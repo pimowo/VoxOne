@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
-"""Execute unchanged production WS admission/authorization/consumer/dispatcher.
+"""Execute production WS/REST admission, authorization, consumer and dispatcher.
 
 FreeRTOS queues, client transport, clock and NVS backend are controlled fakes.
-No ESP32, real NVS or audio is claimed. Config's actual Tone/Balance/startup
-methods and saveValue template are included; hardware-only setters are adapters.
+No ESP32, real NVS or audio is claimed. Config's actual Tone/Balance/startup,
+HA/theme methods and saveValue template are included; hardware-only setters are
+adapters. The REST policy/session adapter is fake (tested separately natively).
 """
 import argparse
 import os
@@ -19,6 +20,9 @@ ROOT = Path(__file__).resolve().parents[1]
 
 PREFIX = r'''
 #include "src/core/web_config_command.h"
+#include "src/core/rest_config_operation.h"
+#include "src/core/configuration_mutation.h"
+#include "src/core/tft_theme_config.h"
 #include "src/core/web_tone_command.h"
 #include "src/core/websocket_command.h"
 #include "src/core/audio_balance.h"
@@ -74,17 +78,24 @@ static int xSemaphoreTake(bool* held,unsigned wait) {
   assert(wait==0); if(*held) return 0; *held=true; return 1;
 }
 static void xSemaphoreGive(bool* held) { assert(*held); *held=false; }
-static uint32_t millis(){return 100;}
+static uint32_t testNow=100;
+static uint32_t millis(){return testNow;}
+static bool systemRestartPending(){return false;}
+static uint32_t esp_random(){static uint32_t n=1;return n++;}
 namespace voxone { namespace security {
 struct SecuritySessionBinding { uint32_t securityGeneration=1; int mode=1; uint8_t tokenHash[32]={}; };
 static bool securityHttpEnforcementEnabled(){return true;}
 static bool securityWebSocketCommandAllowed(const char*){return true;}
 struct Sessions {
+  bool bind(const char*,uint32_t,SecuritySessionBinding& b) {
+    b.securityGeneration=generation;return sessionValid;
+  }
   bool validateBinding(const SecuritySessionBinding& b,uint32_t,bool) {
     return sessionValid && b.securityGeneration==generation;
   }
 };
 static Sessions& deviceSecuritySessionService(){static Sessions s;return s;}
+constexpr size_t kSecuritySessionTokenBufferSize=33;
 } }
 struct SecurityRuntimeLock {
   SecurityRuntimeLock(bool,unsigned){}
@@ -151,6 +162,8 @@ struct Player {
 } player;
 struct Config {
   struct Store {
+    char haName[33]{};
+    TftTheme tftTheme=THEME_DEFAULT;
     int8_t bass=0,middle=0,trebble=0,balance=0;
     uint8_t startupMode=0,startupFixedVolume=0;
     bool flipscreen=false,haDiscoveryEnabled=false;
@@ -176,6 +189,8 @@ struct Config {
   struct Runtime {int8_t bass,middle,treble;};
   Runtime runtimeSnapshot(){return {store.bass,store.middle,store.trebble};}
   bool setTone(int8_t,int8_t,int8_t);
+  bool setHaName(const char*);
+  bool setTftTheme(TftTheme);
   bool setBalance(int8_t);
   bool setStartupMode(uint8_t);
   bool setStartupFixedVolume(uint8_t);
@@ -193,6 +208,21 @@ struct Config {
 MIDDLE = r'''
 } config;
 CommandHandler cmd;
+struct Param {std::string data; const std::string& value()const{return data;}};
+struct AsyncWebServerRequest {
+  Param parameter;
+  bool has=true,allowed=true;
+  int status=0;
+  std::string body;
+  bool hasParam(const char*,bool=false){return has;}
+  Param* getParam(const char*,bool=false){return &parameter;}
+};
+static bool deviceApiAuthorized(AsyncWebServerRequest*){return true;}
+struct Decision{bool allowed;int httpStatus;};
+static Decision authorizeHttpRequest(AsyncWebServerRequest* r){return {r->allowed,r->allowed?200:403};}
+static bool requestSessionToken(AsyncWebServerRequest*,char*){return false;}
+static void stationsReply(AsyncWebServerRequest* r,int status,const char* body){r->status=status;r->body=body;}
+using String=std::string;
 namespace voxone { namespace display_scroll {
 ScrollSettingsWebView currentScrollSettingsWebView(){
   ScrollSettingsWebView v{};v.canScrollSettings=true;v.scrollCoreActive=true;return v;
@@ -216,6 +246,7 @@ static void reset(){
   writes.clear();replies.clear();config=Config{};mutationHeld=false;
   securityBusy=false;sessionValid=true;generation=1;client=AsyncWebSocketClient{};
   storageOk=true;updateLocked=false;
+  restConfigOperations=decltype(restConfigOperations){};testNow=100;
 }
 static void step(const char* name){currentCommand=name;netserver.serviceScrollSettings();}
 static bool replyHas(const char* s){
@@ -288,7 +319,64 @@ int main(){
   assert(voxone::web_config::parse("dim","999",parsed)==voxone::web_config::Parse::Ok);
   assert(std::string(parsed.value)=="100");
   assert(voxone::web_config::parse("timeint","999999999999999999999999",parsed)==voxone::web_config::Parse::Invalid);
-  std::cout<<"PASS production WS callback/admission/authorization/consumer/dispatcher; fake RTOS/NVS\n";
+  // Real REST handlers -> same FIFO consumer -> real setters. HTTP transport
+  // and authorization adapter are fakes; policy/session have native tests.
+  reset();AsyncWebServerRequest post;post.parameter.data="Kitchen";
+  callback=true;handleHaSettingsSave(&post);callback=false;
+  assert(post.status==202 && writes.empty());
+  const auto* op=restConfigOperations.find(tone.entries.empty()?0:1);
+  assert(op);std::string id=op->id;
+  AsyncWebServerRequest get;get.parameter.data=id;
+  handleConfigOperationRead(&get);assert(get.status==200 && get.body.find("pending")!=std::string::npos);
+  step("rest-ha");assert(writes.size()==1 && std::string(config.store.haName)=="Kitchen");
+  handleConfigOperationRead(&get);assert(get.body.find("saved")!=std::string::npos);
+  testNow+=voxone::rest_config::kRetentionMs;step("idle-expiry");
+  assert(!restConfigOperations.find(1));
+  reset();post.parameter.data="yamaha";
+  callback=true;handleDisplayThemeSave(&post);callback=false;
+  assert(post.status==202 && writes.empty());storageOk=false;step("rest-theme-fail");
+  assert(restConfigOperations.find(1)->status==voxone::rest_config::Status::AppliedNotPersisted);
+  assert(config.store.tftTheme==THEME_YAMAHA);
+  storageOk=true;handleDisplayThemeSave(&post);step("rest-theme-retry");
+  assert(writes.size()==2 && restConfigOperations.find(2)->status==voxone::rest_config::Status::Saved);
+  reset();post.parameter.data="Retry";storageOk=false;handleHaSettingsSave(&post);step("ha-fail");
+  handleHaSettingsSave(&post);step("ha-fail-again");assert(writes.size()==2);
+  assert(restConfigOperations.find(2)->status==voxone::rest_config::Status::AppliedNotPersisted);
+  storageOk=true;handleHaSettingsSave(&post);step("ha-retry");assert(writes.size()==3);
+  handleHaSettingsSave(&post);step("ha-noop");assert(writes.size()==3);
+  assert(restConfigOperations.find(4)->status==voxone::rest_config::Status::Saved);
+  reset();post.parameter.data="Queued";for(int i=0;i<4;++i)send("bass=1");
+  handleHaSettingsSave(&post);assert(post.status==503 && !restConfigOperations.find(1));
+  reset();for(int i=0;i<4;++i)handleHaSettingsSave(&post);
+  handleHaSettingsSave(&post);assert(post.status==503);
+  reset();handleHaSettingsSave(&post);sessionValid=false;step("expired");
+  assert(writes.empty() && restConfigOperations.find(1)->status==voxone::rest_config::Status::Cancelled);
+  reset();handleHaSettingsSave(&post);++generation;step("revoked");assert(writes.empty());
+  reset();handleHaSettingsSave(&post);id=restConfigOperations.find(1)->id;
+  get.parameter.data=id;++generation;handleConfigOperationRead(&get);assert(get.status==404);
+  reset();post.has=false;handleHaSettingsSave(&post);assert(post.status==400 && tone.entries.empty());post.has=true;
+  reset();post.parameter.data=std::string(33,'x');handleHaSettingsSave(&post);assert(post.status==400);
+  reset();post.parameter.data="invalid";handleDisplayThemeSave(&post);assert(post.status==400);
+  reset();post.parameter.data="Queued";handleHaSettingsSave(&post);securityBusy=true;step("busy");
+  assert(writes.empty() && tone.entries.size()==1);securityBusy=false;step("ha");assert(writes.size()==1);
+  reset();handleHaSettingsSave(&post);
+  {voxone::configuration_mutation::Lease busy(voxone::configuration_mutation::deviceCoordinator(),
+       voxone::configuration_mutation::Owner::ConfigBackup);
+   step("busy");assert(writes.empty() && tone.entries.size()==1);}
+  step("ha");assert(writes.size()==1);
+  reset();post.allowed=false;handleHaSettingsSave(&post);assert(post.status==403 && tone.entries.empty());post.allowed=true;
+  reset();{AsyncWebServerRequest disconnected;disconnected.parameter.data="Detached";
+    handleHaSettingsSave(&disconnected);assert(disconnected.status==202);}
+  // Request and its input buffer destroyed before execution (ASan use-after-scope).
+  step("disconnected");assert(writes.size()==1);
+  reset();post.parameter.data="Timeout";handleHaSettingsSave(&post);testNow+=30000;step("timeout");
+  assert(writes.empty() && restConfigOperations.find(1)->status==voxone::rest_config::Status::Cancelled);
+  reset();configurationCommandSequence=0xfffffffeU;send("bass=2");
+  handleHaSettingsSave(&post);send("scrollsettings=true,normal,1000");send("balance=2");
+  step("bass");step("rest");step("scroll");step("balance");
+  assert((writes==std::vector<std::string>{"bass","rest","scroll","balance"}));
+  std::cout<<"PASS production WS/REST handlers, FIFO, consumer and setters; fake RTOS/HTTP/NVS\n"
+           <<"Result store bytes="<<sizeof(restConfigOperations)<<" queue item bytes="<<sizeof(QueuedToneCommand)<<"\n";
 }
 '''
 
@@ -303,7 +391,7 @@ def main():
     config_h = (ROOT / "src/core/config.h").read_text()
     handler = (ROOT / "src/core/commandhandler.cpp").read_text()
     source = PREFIX + "template<typename T>\n" + extract_function(config_h, "bool saveValue(T *field") + MIDDLE
-    for name in ("bool Config::setTone", "bool Config::setBalance", "bool Config::setStartupMode", "bool Config::setStartupFixedVolume",
+    for name in ("bool Config::setHaName", "bool Config::setTftTheme", "bool Config::setTone", "bool Config::setBalance", "bool Config::setStartupMode", "bool Config::setStartupFixedVolume",
                  "bool Config::setLineOutEnabled", "bool Config::setLineOutVolume", "bool Config::setVuMeter"):
         source += extract_function(config, name) + "\n"
     for name in ("static bool parseVolumeValue", "static bool parseTimeInterval", "bool CommandHandler::exec"):
@@ -318,6 +406,9 @@ def main():
     for name in ("static bool parseToneValue", "bool equalSecurityBinding", "ScrollCommandQueueStatus enqueueScrollSettingsCommand",
                  "WebSocketAuthorization queuedScrollCommandAuthorization", "ToneCommandQueueStatus enqueueToneCommand",
                  "WebSocketAuthorization queuedToneCommandAuthorization", "void sendScrollSettingsResult", "void sendConfigResult",
+                 "void clearSensitive(char* value, size_t size) {",
+                 "bool captureRestConfigOwner", "void enqueueRestConfig", "void handleConfigOperationRead(AsyncWebServerRequest* request) {", "bool executeRestConfig",
+                 "void handleHaSettingsSave(AsyncWebServerRequest* request) {", "void handleDisplayThemeSave(AsyncWebServerRequest* request) {",
                  "void NetServer::serviceScrollSettings", "void NetServer::onWsMessage"):
         source += extract_function(server, name) + "\n"
     source += TESTS

@@ -157,6 +157,9 @@ const SecurityRouteRule kRouteRules[] = {
     {SecurityAccessMethod::Post, "/api/display/theme",
      SecurityEndpoint::DisplayThemeWrite, SecurityRouteClass::ProtectedRest,
      true, false},
+    {SecurityAccessMethod::Get, "/api/config/operation",
+     SecurityEndpoint::ConfigOperationRead, SecurityRouteClass::ProtectedRest,
+     false, false},
     {SecurityAccessMethod::Get, "/api/config/backup",
      SecurityEndpoint::ConfigBackup, SecurityRouteClass::ProtectedRest, false,
      false},
@@ -386,6 +389,7 @@ const char* securityEndpointName(SecurityEndpoint endpoint) {
     case SecurityEndpoint::HaSettingsWrite: return "ha-settings-write";
     case SecurityEndpoint::DisplayThemeRead: return "display-theme-read";
     case SecurityEndpoint::DisplayThemeWrite: return "display-theme-write";
+    case SecurityEndpoint::ConfigOperationRead: return "config-operation-read";
     case SecurityEndpoint::ConfigBackup: return "config-backup";
     case SecurityEndpoint::ConfigRestore: return "config-restore";
     case SecurityEndpoint::TimeRead: return "time-read";

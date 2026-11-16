@@ -625,7 +625,8 @@ bool Config::setHaName(const char* value) {
   const size_t length = strlen(value);
   if (!voxone::ha_name::valid(value, length)) return false;
   WriteLock lock(_persistMutex);
-  if (strcmp(store.haName, value) == 0) return true;
+  if (strcmp(store.haName, value) == 0)
+    return !_storage.dirty() || (!_startupReadOnly && persistV7());
   if (!voxone::ha_name::encode(
           value, length, store.reservedWeather,
           sizeof(store.reservedWeather)))
@@ -639,7 +640,8 @@ bool Config::setHaName(const char* value) {
 bool Config::setTftTheme(TftTheme theme) {
   if (!voxone::tft_theme::valid(theme)) return false;
   WriteLock lock(_persistMutex);
-  if (store.tftTheme == theme) return true;
+  if (store.tftTheme == theme)
+    return !_storage.dirty() || (!_startupReadOnly && persistV7());
   if (!voxone::tft_theme::encode(
           theme, store.reservedWeather, sizeof(store.reservedWeather)))
     return false;

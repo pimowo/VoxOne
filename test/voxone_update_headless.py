@@ -158,6 +158,94 @@ const securityResponse = (status, body = {}, headers = {}) => ({
   headers:{get:name => headers[name] || headers[name.toLowerCase()] || null},
   json:() => Promise.resolve(body)
 });
+// REST transport fixture, not the production security/NVS implementation.
+// Browser-synthesized Host/Origin are explicit inputs even on a file:// page.
+window.restConfigContext = {host:'voxone.test', origin:'http://voxone.test'};
+window.restConfigSession = 'session-a';
+window.restConfigGeneration = 1;
+window.restConfigOperations = new Map();
+window.restConfigPlans = [];
+window.restConfigQueueFull = false;
+window.restConfigSerial = 0;
+window.restConfigTrace = [];
+window.restConfigDurable = {};
+window.restConfigPollTimers = [];
+window.restConfigControlledPolling = false;
+const restConfigNativeTimeout = window.setTimeout.bind(window);
+window.setTimeout = (handler, delay, ...args) => {
+  // Only the 500 ms REST poll is manually advanced inside REST scenarios.
+  // All other timers, browser process limits and diagnostics stay unchanged.
+  if (window.restConfigControlledPolling && delay === 500) {
+    window.restConfigPollTimers.push(() => handler(...args));
+    return 0;
+  }
+  return restConfigNativeTimeout(handler, delay, ...args);
+};
+function restConfigOwner() {
+  return securityServerState.state + ':' + restConfigGeneration + ':' +
+    (securityServerState.state === 'protected' ? restConfigSession : '');
+}
+function restConfigAdvance(operation) {
+  if (operation.status !== 'pending') return;
+  if (operation.owner !== restConfigOwner() ||
+      (securityServerState.state === 'protected' && !securityServerState.authenticated)) {
+    operation.status = 'cancelled';
+    return;
+  }
+  operation.status = operation.plan.shift() || 'pending';
+  if (['saved','applied_but_not_persisted'].includes(operation.status)) {
+    if (operation.path === '/api/ha') window.haSettings.name = operation.value;
+    else window.tftTheme = operation.value;
+  }
+  if (operation.status === 'saved') restConfigDurable[operation.path] = operation.value;
+}
+function restConfigFetch(url, options) {
+  const parsed = new URL(String(url), 'http://voxone.test');
+  const path = parsed.pathname;
+  if (!['/api/ha','/api/display/theme','/api/config/operation'].includes(path)) return null;
+  const method = options.method || 'GET';
+  const reply = (status, body) => {
+    restConfigTrace.push({path,method,status,body});
+    return Promise.resolve(securityResponse(status, body));
+  };
+  if (restConfigContext.host !== 'voxone.test' ||
+      (restConfigContext.origin && restConfigContext.origin !== 'http://voxone.test') ||
+      (method === 'POST' && !restConfigContext.origin))
+    return reply(403, {error:'request_rejected'});
+  if (securityServerState.state === 'protected' && !securityServerState.authenticated)
+    return reply(401, {error:'unauthorized'});
+  if (!['open','protected'].includes(securityServerState.state))
+    return reply(403, {error:'request_rejected'});
+  if (path === '/api/config/operation') {
+    if (method !== 'GET') return reply(405, {error:'method_not_allowed'});
+    const id = parsed.searchParams.get('id');
+    if (!/^[0-9a-f]{32}$/.test(id || '')) return reply(400, {error:'invalid_operation'});
+    const operation = restConfigOperations.get(id);
+    if (!operation || operation.owner !== restConfigOwner())
+      return reply(404, {error:'operation_not_found'});
+    restConfigAdvance(operation);
+    return reply(200, {id,status:operation.status});
+  }
+  if (method === 'GET') return reply(200, path === '/api/ha' ? {...haSettings} : {
+    supported:window.tftThemeSupported === true, theme:window.tftTheme || 'default'
+  });
+  if (method !== 'POST') return reply(405, {error:'method_not_allowed'});
+  const request = Object.fromEntries(new URLSearchParams(options.body || ''));
+  const value = path === '/api/ha' ? request.name : request.theme;
+  const field = path === '/api/ha' ? 'name' : 'theme';
+  if (typeof value !== 'string') return reply(400, {error:'missing_' + field});
+  if (path === '/api/ha' ?
+      new TextEncoder().encode(value).length > 32 || /[\u0000-\u001f\u007f]/u.test(value) :
+      !['default','yamaha'].includes(value))
+    return reply(400, {error:'invalid_' + field});
+  if (restConfigQueueFull) return reply(503, {error:'configuration_busy'});
+  if (path === '/api/ha') haSettingsRequests.push(request);
+  // Deterministic test ids have the production shape; production uses RNG.
+  const id = (++window.restConfigSerial).toString(16).padStart(32, '0');
+  restConfigOperations.set(id, {id,path,value,owner:restConfigOwner(),status:'pending',
+    plan:restConfigPlans.shift() || ['pending','saved']});
+  return reply(202, {id,status:'pending'});
+}
 window.hardwareSnapshot = {
   family:'M0', mcu:'ESP32-S3', restartRequired:false,
   config:{display:'ssd1309_128x64', input:'ec11', audio:'pcm5102a'},
@@ -225,6 +313,8 @@ window.stationListResponse = {
 };
 const originalFetch = window.fetch.bind(window);
 window.fetch = (url, options = {}) => {
+  const restResponse = restConfigFetch(url, options);
+  if (restResponse) return restResponse;
   if (url === '/api/security/state') {
     window.securityStateRequests++;
     const prepared = window.securityStateResponses.shift();
@@ -317,29 +407,6 @@ window.fetch = (url, options = {}) => {
       config:{display:request.display,input:request.input,audio:request.audio}};
     return Promise.resolve({ok:true,status:200,json:() => Promise.resolve(result)});
   }
-  if (url === '/api/ha') {
-    if ((options.method || 'GET') === 'GET')
-      return Promise.resolve({ok:true,status:200,
-        json:() => Promise.resolve({...window.haSettings})});
-    const request = Object.fromEntries(new URLSearchParams(options.body || ''));
-    window.haSettingsRequests.push(request);
-    window.haSettings.name = request.name;
-    return Promise.resolve({ok:true,status:200,json:() => Promise.resolve({
-      ok:true,name:request.name,maximumBytes:32
-    })});
-  }
-  if (url === '/api/display/theme') {
-    if ((options.method || 'GET') === 'GET')
-      return Promise.resolve({ok:true,status:200,json:() => Promise.resolve({
-        supported:window.tftThemeSupported === true,
-        theme:window.tftTheme || 'default'
-      })});
-    const request = Object.fromEntries(new URLSearchParams(options.body || ''));
-    window.tftTheme = request.theme;
-    return Promise.resolve({ok:true,status:200,json:() => Promise.resolve({
-      ok:true,theme:request.theme
-    })});
-  }
   if (url === '/api/time') {
     window.timeRequests++;
     return Promise.resolve({ok:true,status:200,json:() => Promise.resolve({rtcSupported:false})});
@@ -358,6 +425,139 @@ window.setInterval = (handler, delay, ...args) => {
 };
 </script>
 """
+REST_CHECK = r"""
+// Shared by the browser scenario and the Node-only contract check below.
+async function restConfigPollOnce(check, settle) {
+  check(restConfigPollTimers.length === 1, 'exactly one outstanding REST poll');
+  restConfigPollTimers.shift()();
+  await settle();
+}
+async function checkRestConfigProtocol(check) {
+  const savedSecurity = window.securityServerState;
+  const savedContext = window.restConfigContext;
+  const savedSession = window.restConfigSession;
+  const savedGeneration = window.restConfigGeneration;
+  const savedName = haSettings.name;
+  const savedTheme = window.tftTheme;
+  const savedDurable = {...restConfigDurable};
+  const savedOperations = window.restConfigOperations;
+  window.restConfigOperations = new Map();
+  window.securityServerState = {state:'protected', authenticated:true};
+  const post = (path, value) => fetch(path, {method:'POST',
+    body:new URLSearchParams({[path === '/api/ha' ? 'name' : 'theme']:value})});
+  const read = id => fetch('/api/config/operation?id=' + id);
+  try {
+    for (const path of ['/api/ha','/api/display/theme']) {
+      const value = path === '/api/ha' ? 'Contract name' : 'yamaha';
+      const before = path === '/api/ha' ? haSettings.name : window.tftTheme;
+      const accepted = await post(path, value);
+      const job = await accepted.json();
+      check(accepted.status === 202 && job.status === 'pending' &&
+        /^[0-9a-f]{32}$/.test(job.id), path + ': accepted is not persisted');
+      check((path === '/api/ha' ? haSettings.name : window.tftTheme) === before,
+        'acceptance does not change simulated RAM');
+      check((await (await read(job.id)).json()).status === 'pending', 'pending result');
+      window.restConfigSession = 'session-b';
+      check((await read(job.id)).status === 404, 'another session cannot read the result');
+      window.restConfigSession = savedSession;
+      check((await (await read(job.id)).json()).status === 'saved' &&
+        restConfigDurable[path] === value, 'saved result follows simulated persistence');
+      window.restConfigQueueFull = true;
+      const count = restConfigOperations.size;
+      check((await post(path, value)).status === 503 && restConfigOperations.size === count,
+        'full queue rejects without creating an operation');
+      window.restConfigQueueFull = false;
+      for (const context of [{host:'evil.test',origin:'http://voxone.test'},
+          {host:'voxone.test',origin:'http://evil.test'}, {host:'voxone.test',origin:''}]) {
+        window.restConfigContext = context;
+        check((await post(path, value)).status === 403, 'Host/Origin/CSRF rejection');
+      }
+      window.restConfigContext = savedContext;
+      securityServerState.authenticated = false;
+      check((await post(path, value)).status === 401 && (await read(job.id)).status === 401,
+        'PROTECTED requires a session for submission and result');
+      securityServerState.authenticated = true;
+      const revoked = await (await post(path, value)).json();
+      const operation = restConfigOperations.get(revoked.id);
+      window.restConfigGeneration++;
+      restConfigAdvance(operation); // simulate executor after session revocation
+      check(operation.status === 'cancelled' && (await read(revoked.id)).status === 404,
+        'revoked generation cannot execute or disclose a result');
+      window.restConfigGeneration = savedGeneration;
+    }
+    check((await read('bad-id')).status === 400, 'malformed operation id');
+  } finally {
+    window.securityServerState = savedSecurity;
+    window.restConfigContext = savedContext;
+    window.restConfigSession = savedSession;
+    window.restConfigGeneration = savedGeneration;
+    window.restConfigQueueFull = false;
+    window.restConfigOperations = savedOperations;
+    window.restConfigDurable = savedDurable;
+    haSettings.name = savedName;
+    window.tftTheme = savedTheme;
+  }
+}
+async function checkRestConfigForms(driver, check, settle) {
+  const savedSecurity = window.securityServerState;
+  window.securityServerState = {state:'protected', authenticated:true};
+  window.restConfigControlledPolling = true;
+  try {
+    for (const kind of ['ha','theme']) {
+      const path = kind === 'ha' ? '/api/ha' : '/api/display/theme';
+      for (const terminal of ['saved','applied_but_not_persisted','failed','cancelled']) {
+        const durableBefore = restConfigDurable[path];
+        window.restConfigPlans.push(['pending',terminal]);
+        driver.submit(kind);
+        await settle();
+        check(restConfigTrace.at(-1).status === 202, kind + ': POST returns 202');
+        check(!driver.feedback(kind).includes('Zapisano'), kind + ': no success on acceptance');
+        await restConfigPollOnce(check, settle);
+        check(restConfigTrace.at(-1).body.status === 'pending' &&
+          !driver.feedback(kind).includes('Zapisano'), kind + ': no success while pending');
+        await restConfigPollOnce(check, settle);
+        check(restConfigTrace.at(-1).body.status === terminal, kind + ': terminal result polled');
+        if (terminal === 'saved') {
+          check(driver.feedback(kind).includes('Zapisano') && !driver.error(kind),
+            kind + ': success only after saved');
+        } else {
+          check(driver.error(kind) && !driver.feedback(kind).includes('Zapisano'),
+            kind + ': visible persistence/cancellation error');
+          check(restConfigDurable[path] === durableBefore, 'failure is not durable');
+          if (terminal === 'applied_but_not_persisted') {
+            check(driver.feedback(kind).includes('RAM'), 'RAM is distinguished from NVS');
+            window.restConfigPlans.push(['saved']);
+            driver.submit(kind); // retry exactly the same draft, not a different value
+            await settle();
+            check(!driver.feedback(kind).includes('Zapisano'), 'retry still awaits persistence');
+            await restConfigPollOnce(check, settle);
+            check(driver.feedback(kind).includes('Zapisano'), 'same-value retry can complete');
+          }
+        }
+      }
+      window.restConfigQueueFull = true;
+      driver.submit(kind);
+      await settle();
+      check(restConfigTrace.at(-1).status === 503 && driver.error(kind) &&
+        !driver.feedback(kind).includes('Zapisano') && restConfigPollTimers.length === 0,
+        kind + ': queue overload is visible, not polled as accepted');
+      window.restConfigQueueFull = false;
+      securityServerState.authenticated = false;
+      driver.submit(kind);
+      await settle();
+      check(restConfigTrace.at(-1).status === 401 && driver.error(kind),
+        kind + ': protected form surfaces authorization failure');
+      securityServerState.authenticated = true;
+    }
+  } finally {
+    window.securityServerState = savedSecurity;
+    window.restConfigControlledPolling = false;
+    window.restConfigQueueFull = false;
+  }
+}
+"""
+MOCK = MOCK.replace('</script>', REST_CHECK + '\n</script>', 1)
+
 CHECK = r"""
 <script>
 setTimeout(async () => {
@@ -1074,11 +1274,39 @@ setTimeout(async () => {
       get('ha-discovery-feedback').textContent.includes('ponownym uruchomieniu'),
       'HA discovery toggle persists through the WebSocket API');
     get('ha-name').value = 'Kuchnia';
+    window.restConfigControlledPolling = true;
     get('ha-settings-form').dispatchEvent(new Event('submit', {cancelable:true}));
     await settleSecurity();
+    check(!get('ha-name-feedback').textContent.includes('Zapisano'), 'HA acceptance is pending');
+    await restConfigPollOnce(check, settleSecurity);
+    check(!get('ha-name-feedback').textContent.includes('Zapisano'), 'HA pending is not saved');
+    await restConfigPollOnce(check, settleSecurity);
+    window.restConfigControlledPolling = false;
     check(haSettingsRequests.at(-1)?.name === 'Kuchnia' &&
       get('ha-name-feedback').textContent.includes('Zapisano'),
       'Home Assistant name persists through the protected REST API');
+    await checkRestConfigProtocol(check);
+    const restOriginalHash = location.hash;
+    window.tftThemeSupported = true;
+    location.hash = '#settings';
+    window.dispatchEvent(new Event('hashchange'));
+    await settleSecurity();
+    await checkRestConfigForms({
+      submit(kind) {
+        if (kind === 'ha') get('ha-name').value = 'Kuchnia';
+        else get('tft-theme').value = 'yamaha';
+        get(kind === 'ha' ? 'ha-settings-form' : 'tft-theme-form')
+          .dispatchEvent(new Event('submit', {cancelable:true}));
+      },
+      feedback:kind => get(kind === 'ha' ? 'ha-name-feedback' : 'tft-theme-status').textContent,
+      error:kind => get(kind === 'ha' ? 'ha-name-feedback' : 'tft-theme-status').dataset.kind === 'error'
+    }, check, settleSecurity);
+    window.tftThemeSupported = false;
+    window.dispatchEvent(new Event('hashchange'));
+    await settleSecurity();
+    location.hash = restOriginalHash;
+    window.dispatchEvent(new Event('hashchange'));
+    await settleSecurity();
     check(!get('network-profiles').textContent.includes('secret'), 'no password value rendered');
     const settingsLayout = get('settings').querySelector('.settings-layout');
     const settingsColumns = [...settingsLayout.querySelectorAll(':scope > .settings-column')];
@@ -2419,8 +2647,88 @@ def main():
         raise SystemExit(1)
 
 
+def run_rest_contract_tests(node):
+    """No Chromium: shared mock/scenarios + actual submitters, simulated DOM.
+
+    This checks the browser fixture contract, not ESP32 authorization or NVS.
+    The normal main() still runs every original browser assertion.
+    """
+    sys.dont_write_bytecode = True
+    from hls_ts_transport_native import extract_function
+
+    source = (ROOT / 'web-src/voxone.js').read_text()
+    production = '\n'.join(extract_function(source, name) for name in (
+        'async function awaitConfigPersistence', 'async function saveHaSettings',
+        'async function saveTftTheme'))
+    prefix = r'''
+const assert = require('node:assert/strict');
+globalThis.window = globalThis;
+window.matchMedia = () => ({matches:false});
+window.fetch = async url => {throw Error('unexpected fetch: ' + url);};
+globalThis.HTMLAnchorElement = class {click() {}};
+'''
+    forms = r'''
+let haSettingsSaving = false, tftThemeSaving = false;
+const state = {connection:'connected',canTftTheme:true,haName:'Old',tftTheme:'default'};
+const haNameInput = {value:'Kuchnia'};
+const tftThemeSelect = {value:'yamaha'};
+const tftThemeStatus = {textContent:'',dataset:{}};
+let feedback = '', feedbackError = false;
+function renderHaSettings() {}
+function renderTftTheme() {}
+function setHaNameFeedback(value, error = false) {feedback=value;feedbackError=error;}
+'''
+    tests = r'''
+(async () => {
+  const check = (ok, message) => assert(ok, message);
+  const settle = () => new Promise(resolve => restConfigNativeTimeout(resolve, 0));
+  await checkRestConfigProtocol(check);
+  await checkRestConfigForms({
+    submit:kind => (kind === 'ha' ? saveHaSettings : saveTftTheme)({preventDefault(){}}),
+    feedback:kind => kind === 'ha' ? feedback : tftThemeStatus.textContent,
+    error:kind => kind === 'ha' ? feedbackError : tftThemeStatus.dataset.kind === 'error'
+  }, check, settle);
+  check(restConfigPollTimers.length === 0 && !haSettingsSaving && !tftThemeSaving,
+    'no unfinished submit or poll');
+  for (const terminal of ['pending','saved','applied_but_not_persisted','failed','cancelled'])
+    check(restConfigTrace.some(item => item.path === '/api/config/operation' &&
+      item.body.status === terminal), 'observed result: ' + terminal);
+  console.log('PASS shared Chromium REST mocks/scenarios + production HA/theme submitters');
+  console.log('PASS 202/pending/saved/failures/503, PROTECTED/session/Host/Origin/CSRF fixture');
+  console.log('Simulated DOM, HTTP, authorization and persistence; Chromium NOT RUN');
+})().catch(error => {console.error(error);process.exitCode=1;});
+'''
+    def strip_script(value):
+        scripts = re.findall(r'<script>(.*?)</script>', value, re.DOTALL)
+        return '\n'.join(scripts) if scripts else value
+    with tempfile.TemporaryDirectory(prefix='voxone-rest-contract-') as work:
+        directory = Path(work)
+        # Parse every existing browser script without launching a browser.
+        for name, value in globals().items():
+            if name.endswith(('_MOCK', '_CHECK')) or name in ('MOCK', 'CHECK'):
+                if not isinstance(value, str):
+                    continue
+                path = directory / (name + '.cjs')
+                path.write_text(strip_script(value))
+                subprocess.run([node, '--check', str(path)], check=True, timeout=30)
+        print('PASS syntax of all browser mocks/scenarios', flush=True)
+        path = directory / 'rest-contract.cjs'
+        path.write_text(prefix + strip_script(MOCK) + forms + production + tests)
+        subprocess.run([node, str(path)], check=True, timeout=30)
+
+
 if __name__ == "__main__":
     try:
-        main()
+        if '--rest-contract-only' in sys.argv:
+            import argparse
+            parser = argparse.ArgumentParser()
+            parser.add_argument('--rest-contract-only', action='store_true')
+            parser.add_argument('--node', default=shutil.which('node'))
+            args = parser.parse_args()
+            if not args.node:
+                parser.error('Node is required; specify --node')
+            run_rest_contract_tests(args.node)
+        else:
+            main()
     except FileNotFoundError as error:
         raise SystemExit(str(error)) from error

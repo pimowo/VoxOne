@@ -1,4 +1,5 @@
 #include "../src/core/security_session.h"
+#include "../src/core/rest_config_operation.h"
 
 #include <cassert>
 #include <cstdint>
@@ -349,6 +350,53 @@ void testLoginRateLimitAndWrap() {
              token) == SecurityLoginStatus::Created);
 }
 
+void testRestResultOwnershipAndRetention() {
+  using namespace voxone::rest_config;
+  Fixture fixture;
+  char first[kSecuritySessionTokenBufferSize], second[kSecuritySessionTokenBufferSize];
+  assert(fixture.sessions.login("abcd", 100, first) == SecurityLoginStatus::Created);
+  assert(fixture.sessions.login("abcd", 101, second) == SecurityLoginStatus::Created);
+  SecuritySessionBinding a{}, b{};
+  assert(fixture.sessions.bind(first, 102, a));
+  assert(fixture.sessions.bind(second, 102, b));
+  Store<SecuritySessionBinding> store;
+  const char* id = "0123456789abcdef0123456789abcdef";
+  auto* op = store.create(id, Kind::HaName, "Kitchen", a, 103);
+  assert(op && store.read(id, a, 104) == op);
+  assert(!store.read(id, b, 104)); // Knowing another session's id is insufficient.
+  assert(!store.create(id, Kind::Theme, "yamaha", b, 104));
+  assert(!store.create("bad", Kind::Theme, "yamaha", a, 104));
+  assert(!store.create("1123456789abcdef0123456789abcdef", Kind::HaName,
+                       "123456789012345678901234567890123", a, 104));
+  store.finish(*op, Status::Saved, 105);
+  assert(store.read(id, a, 105 + kRetentionMs - 1));
+  assert(!store.read(id, a, 105 + kRetentionMs));
+  assert(fixture.sessions.logout(first));
+  assert(!fixture.sessions.validateBinding(a, 106, false));
+  assert(!fixture.sessions.bind(first, 106, a));
+  assert(fixture.sessions.validateBinding(b, 106, false));
+  assert(!fixture.sessions.validateBinding(b, 102 + kSecuritySessionIdleTimeoutMs, false));
+
+  Store<SecuritySessionBinding> wrapping;
+  const uint32_t nearWrap = 0xfffffff0U;
+  auto* pending = wrapping.create(id, Kind::Theme, "default", b, nearWrap);
+  assert(pending);
+  wrapping.expire(nearWrap + kPendingMs - 1);
+  assert(pending->status == Status::Pending);
+  wrapping.expire(nearWrap + kPendingMs);
+  assert(pending->status == Status::Cancelled);
+  wrapping.expire(nearWrap + kPendingMs + kRetentionMs);
+  assert(!wrapping.read(id, b, nearWrap + kPendingMs + kRetentionMs));
+  for (unsigned i = 0; i < kCapacity; ++i) {
+    char unique[33]; std::memcpy(unique, id, 33); unique[0] = '0' + i;
+    assert(wrapping.create(unique, Kind::Theme, "default", b, 100));
+  }
+  assert(!wrapping.create("f123456789abcdef0123456789abcdef", Kind::Theme, "default", b, 100));
+  wrapping.expire(100 + kPendingMs);
+  wrapping.expire(100 + kPendingMs + kRetentionMs);
+  assert(wrapping.create(id, Kind::Theme, "default", b, 100 + kPendingMs + kRetentionMs));
+}
+
 }  // namespace
 
 int main() {
@@ -360,5 +408,6 @@ int main() {
   testRecoveryPasswordStateAndSessionInvalidation();
   testLongLivedConnectionBindings();
   testLoginRateLimitAndWrap();
+  testRestResultOwnershipAndRetention();
   return 0;
 }

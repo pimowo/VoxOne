@@ -6,6 +6,11 @@ checkpointów pozostaje w historii Git i w istniejących raportach.
 
 ## 1. HIL PENDING (do fizycznego przetestowania przez użytkownika)
 
+- [ ] Po VOXONE-STABILIZE-01B.1 fizycznie potwierdzić na L0/S0 zapis HA name
+  i display theme przez REST `202` → odczyt wyniku operacji: oczekiwanie,
+  trwałość ustawień, izolację sesji, anulowanie po wygaśnięciu uprawnień,
+  kolejność z ustawieniami WS i brak restartów `async_tcp`. Testy natywne
+  używają symulowanego HTTP/NVS i nie zastępują HIL ani pomiaru stosu.
 - [ ] Po VOXONE-STABILIZE-01A (wraz z otwartym HIL
   VOXONE-WWW-AUDIO-CONFIG-CRASH-FIX-1) fizycznie potwierdzić na L0/S0 zwykłe
   ustawienia WebSocket (barwa, balance, startup, jasność, encoder/flip,
@@ -154,10 +159,16 @@ checkpointów pozostaje w historii Git i w istniejących raportach.
 
 ## 4. Backlog / Inne
 
-- [ ] WWW/Config — etap 01B: przenieść poza `async_tcp` zwykłe trwałe
-  zapisy endpointów REST (HA name, display theme, power, hardware), bez
+- [ ] WWW/Config — etap 01B.2: przenieść poza `async_tcp` pozostałe zwykłe
+  trwałe zapisy endpointów REST (power, hardware), bez
   zmiany enforcement ani transakcyjnego restore; zachować lifetime żądań
-  i potwierdzać zapis dopiero po sukcesie. Etap 01A dotyczy wyłącznie WS.
+  i potwierdzać zapis dopiero po sukcesie. Uwzględnić ponowienie tej samej
+  wartości po błędzie persistence (RAM nie jest dowodem trwałości).
+- [ ] WWW/Config — wykonać pełny test przeglądarki HA/theme z dostosowanym
+  harnessem `test/voxone_update_headless.py` (`202` → odczyt wyniku operacji).
+  Celowane testy Node wykonują produkcyjne formularze i wspólne scenariusze
+  mocków REST, ale symulują DOM/HTTP/autoryzację/persistence; nie zastępują
+  Chromium ani HIL. Zachować wcześniejszą diagnostykę timeoutu Chromium.
 - [ ] MPEG-TS PSI: dodać weryfikację CRC32 PAT/PMT, poprawnie ignorować
   duplikaty continuity counter podczas składania sekcji wielopakietowych oraz
   zastąpić albo formalnie uzasadnić limit pierwszych czterech PID PMT wraz z

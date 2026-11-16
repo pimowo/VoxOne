@@ -1957,15 +1957,13 @@ window.VoxOneRestartWaiter = Object.freeze({
         headers: { "Content-Type": "application/x-www-form-urlencoded;charset=UTF-8" },
         body
       });
-      if (!response.ok) throw new Error("HTTP " + response.status);
-      const settings = await response.json();
-      if (settings?.ok !== true || typeof settings.name !== "string")
-        throw new Error("invalid HA settings response");
-      state.haName = settings.name;
-      haNameInput.value = settings.name;
+      setHaNameFeedback("Oczekiwanie na trwały zapis…");
+      await awaitConfigPersistence(response);
+      state.haName = name;
+      haNameInput.value = name;
       setHaNameFeedback("Zapisano. Nowa nazwa mDNS zacznie obowiązywać po ponownym uruchomieniu urządzenia.");
     } catch (error) {
-      setHaNameFeedback("Nie zapisano nazwy Home Assistant.", true);
+      setHaNameFeedback(error.message || "Nie zapisano nazwy Home Assistant.", true);
     } finally {
       haSettingsSaving = false;
       renderHaSettings();
@@ -1996,6 +1994,30 @@ window.VoxOneRestartWaiter = Object.freeze({
     }
   }
 
+  async function awaitConfigPersistence(response) {
+    if (response.status !== 202) throw new Error("Żądanie zapisu zostało odrzucone.");
+    const accepted = await response.json();
+    if (accepted.status !== "pending" || !/^[0-9a-f]{32}$/.test(accepted.id))
+      throw new Error("Nieprawidłowe potwierdzenie przyjęcia zapisu.");
+    // A lost response is not a reason to repeat a mutation automatically.
+    for (let attempt = 0; attempt < 60; ++attempt) {
+      await new Promise(resolve => setTimeout(resolve, 500));
+      const statusResponse = await fetch("/api/config/operation?id=" + accepted.id,
+        {cache: "no-store"});
+      if (statusResponse.status === 503) continue;
+      if (!statusResponse.ok) throw new Error("Nie można potwierdzić zapisu. Sprawdź sesję i ustawienia.");
+      const result = await statusResponse.json();
+      if (result.id !== accepted.id) throw new Error("Nieprawidłowy wynik operacji.");
+      if (result.status === "saved") return;
+      if (result.status === "pending") continue;
+      if (result.status === "applied_but_not_persisted")
+        throw new Error("Zastosowano w RAM, ale zapis trwały nie powiódł się. Ponów zapis.");
+      if (result.status === "cancelled") throw new Error("Zapis anulowano. Sprawdź sesję i ponów zapis.");
+      throw new Error("Zapis nie powiódł się.");
+    }
+    throw new Error("Nie potwierdzono zapisu w wyznaczonym czasie. Sprawdź ustawienia.");
+  }
+
   async function saveTftTheme(event) {
     event.preventDefault();
     const theme = tftThemeSelect.value;
@@ -2010,15 +2032,14 @@ window.VoxOneRestartWaiter = Object.freeze({
         headers: {"Content-Type": "application/x-www-form-urlencoded;charset=UTF-8"},
         body: new URLSearchParams({theme})
       });
-      const result = await response.json();
-      if (!response.ok || result.ok !== true || result.theme !== theme)
-        throw new Error(result.error || ("HTTP " + response.status));
-      state.tftTheme = result.theme;
+      tftThemeStatus.textContent = "Oczekiwanie na trwały zapis…";
+      await awaitConfigPersistence(response);
+      state.tftTheme = theme;
       tftThemeStatus.dataset.kind = "notice";
       tftThemeStatus.textContent = "Zapisano. Motyw został zastosowany.";
-    } catch (_) {
+    } catch (error) {
       tftThemeStatus.dataset.kind = "error";
-      tftThemeStatus.textContent = "Nie zapisano motywu TFT.";
+      tftThemeStatus.textContent = error.message || "Nie zapisano motywu TFT.";
     } finally {
       tftThemeSaving = false;
       renderTftTheme();
