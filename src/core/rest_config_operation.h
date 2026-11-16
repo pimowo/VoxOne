@@ -5,7 +5,7 @@
 
 namespace voxone { namespace rest_config {
 
-enum class Kind : uint8_t { HaName, Theme };
+enum class Kind : uint8_t { HaName, Theme, PowerMode };
 enum class Status : uint8_t { Pending, Saved, AppliedNotPersisted, Failed, Cancelled };
 inline const char* statusName(Status status) {
   switch (status) {

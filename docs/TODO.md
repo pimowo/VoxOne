@@ -6,6 +6,11 @@ checkpointów pozostaje w historii Git i w istniejących raportach.
 
 ## 1. HIL PENDING (do fizycznego przetestowania przez użytkownika)
 
+- [ ] Po VOXONE-STABILIZE-01B.2A fizycznie potwierdzić Power REST na L0/S0:
+  GET bieżącego trybu, POST `202` → `saved`, trwałość i ponowienie po błędzie
+  NVS, sesje/Origin oraz brak restartów `async_tcp`. Zapis preferencji nie
+  może sam wywołać standby ani przełączenia przekaźnika. Testy programowe
+  używają symulowanego HTTP/NVS, bez sterowania fizycznym zasilaniem.
 - [ ] Po VOXONE-STABILIZE-01B.1 fizycznie potwierdzić na L0/S0 zapis HA name
   i display theme przez REST `202` → odczyt wyniku operacji: oczekiwanie,
   trwałość ustawień, izolację sesji, anulowanie po wygaśnięciu uprawnień,
@@ -159,8 +164,8 @@ checkpointów pozostaje w historii Git i w istniejących raportach.
 
 ## 4. Backlog / Inne
 
-- [ ] WWW/Config — etap 01B.2: przenieść poza `async_tcp` pozostałe zwykłe
-  trwałe zapisy endpointów REST (power, hardware), bez
+- [ ] WWW/Config — etap 01B.2B: przenieść poza `async_tcp` pozostały zwykły
+  trwały zapis endpointu REST hardware, bez
   zmiany enforcement ani transakcyjnego restore; zachować lifetime żądań
   i potwierdzać zapis dopiero po sukcesie. Uwzględnić ponowienie tej samej
   wartości po błędzie persistence (RAM nie jest dowodem trwałości).
@@ -169,6 +174,8 @@ checkpointów pozostaje w historii Git i w istniejących raportach.
   Celowane testy Node wykonują produkcyjne formularze i wspólne scenariusze
   mocków REST, ale symulują DOM/HTTP/autoryzację/persistence; nie zastępują
   Chromium ani HIL. Zachować wcześniejszą diagnostykę timeoutu Chromium.
+  Dodać analogiczny scenariusz Power REST do harnessu przeglądarki;
+  jego formularz i kontrakt `202` są obecnie objęte celowanym testem Node.
 - [ ] MPEG-TS PSI: dodać weryfikację CRC32 PAT/PMT, poprawnie ignorować
   duplikaty continuity counter podczas składania sekcji wielopakietowych oraz
   zastąpić albo formalnie uzasadnić limit pierwszych czterech PID PMT wraz z

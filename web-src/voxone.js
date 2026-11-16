@@ -2084,15 +2084,14 @@ window.VoxOneRestartWaiter = Object.freeze({
         headers: {"Content-Type": "application/x-www-form-urlencoded;charset=UTF-8"},
         body: new URLSearchParams({mode})
       });
-      const result = await response.json();
-      if (!response.ok || result.ok !== true || result.mode !== mode)
-        throw new Error(result.error || ("HTTP " + response.status));
-      state.powerMode = result.mode;
+      powerModeStatus.textContent = "Oczekiwanie na trwały zapis…";
+      await awaitConfigPersistence(response);
+      state.powerMode = mode;
       powerModeStatus.dataset.kind = "notice";
       powerModeStatus.textContent = "Zapisano tryb zasilania.";
-    } catch (_) {
+    } catch (error) {
       powerModeStatus.dataset.kind = "error";
-      powerModeStatus.textContent = "Nie zapisano trybu zasilania.";
+      powerModeStatus.textContent = error.message || "Nie zapisano trybu zasilania.";
     } finally {
       powerModeSaving = false;
       renderPowerMode();

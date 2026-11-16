@@ -58,6 +58,8 @@ enum class SecurityEndpoint : uint8_t {
   HaSettingsWrite,
   DisplayThemeRead,
   DisplayThemeWrite,
+  PowerSettingsRead,
+  PowerSettingsWrite,
   ConfigOperationRead,
   ConfigBackup,
   ConfigRestore,

@@ -2804,7 +2804,8 @@ bool executeRestConfig(uint32_t ticket) {
   voxone::configuration_mutation::Lease mutation(
       voxone::configuration_mutation::deviceCoordinator(),
       operation->kind == Kind::HaName ? voxone::configuration_mutation::Owner::HaSettingsApi
-                                      : voxone::configuration_mutation::Owner::DisplayThemeApi);
+      : operation->kind == Kind::PowerMode ? voxone::configuration_mutation::Owner::PowerSettingsApi
+                                          : voxone::configuration_mutation::Owner::DisplayThemeApi);
   if (!mutation.acquired()) return false; // tryAcquire never waits
   {
     SecurityRuntimeLock lock(true, 0);
@@ -2820,13 +2821,24 @@ bool executeRestConfig(uint32_t ticket) {
   bool persisted = false;
   if (operation->kind == Kind::HaName) {
     persisted = config.setHaName(operation->value);
-  } else {
+  } else if (operation->kind == Kind::Theme) {
     TftTheme theme = THEME_DEFAULT;
     if (!voxone::tft_theme::parseApiName(operation->value, theme)) {
       restConfigOperations.finish(*operation, Status::Failed, millis());
       return true;
     }
     persisted = config.setTftTheme(theme);
+  } else if (operation->kind == Kind::PowerMode) {
+    PowerMode mode = MODE_SOFT_STANDBY;
+    if (!voxone::power_mode::parseApiName(operation->value, mode)) {
+      restConfigOperations.finish(*operation, Status::Failed, millis());
+      return true;
+    }
+    // Only persist the preference; do not initiate standby, relay or restart.
+    persisted = config.setPowerMode(mode);
+  } else {
+    restConfigOperations.finish(*operation, Status::Failed, millis());
+    return true;
   }
   restConfigOperations.finish(*operation,
       persisted ? Status::Saved : Status::AppliedNotPersisted, millis());
@@ -2947,14 +2959,8 @@ void handlePowerSettingsSave(AsyncWebServerRequest* request) {
     stationsReply(request, 400, R"({"error":"invalid_mode"})");
     return;
   }
-  if (!config.setPowerMode(mode)) {
-    stationsReply(request, 500, R"({"error":"storage_failed"})");
-    return;
-  }
-  char body[96];
-  snprintf(body, sizeof(body), "{\"ok\":true,\"mode\":\"%s\"}",
-           voxone::power_mode::apiName(mode));
-  stationsReply(request, 200, body);
+  enqueueRestConfig(request, voxone::rest_config::Kind::PowerMode,
+                    voxone::power_mode::apiName(mode));
 }
 
 void handleHardwareConfigRead(AsyncWebServerRequest* request) {

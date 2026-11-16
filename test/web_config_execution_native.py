@@ -3,7 +3,7 @@
 
 FreeRTOS queues, client transport, clock and NVS backend are controlled fakes.
 No ESP32, real NVS or audio is claimed. Config's actual Tone/Balance/startup,
-HA/theme methods and saveValue template are included; hardware-only setters are
+HA/theme/power methods and saveValue template are included; hardware-only setters are
 adapters. The REST policy/session adapter is fake (tested separately natively).
 """
 import argparse
@@ -23,6 +23,7 @@ PREFIX = r'''
 #include "src/core/rest_config_operation.h"
 #include "src/core/configuration_mutation.h"
 #include "src/core/tft_theme_config.h"
+#include "src/core/power_mode_config.h"
 #include "src/core/web_tone_command.h"
 #include "src/core/websocket_command.h"
 #include "src/core/audio_balance.h"
@@ -164,6 +165,7 @@ struct Config {
   struct Store {
     char haName[33]{};
     TftTheme tftTheme=THEME_DEFAULT;
+    PowerMode powerMode=MODE_SOFT_STANDBY;
     int8_t bass=0,middle=0,trebble=0,balance=0;
     uint8_t startupMode=0,startupFixedVolume=0;
     bool flipscreen=false,haDiscoveryEnabled=false;
@@ -186,11 +188,12 @@ struct Config {
   bool persistV7(){bool ok=commit();if(ok)_storage.dirty_=false;return ok;}
   static int8_t clampTone(int8_t v){return std::max(-6,std::min(6,int(v)));}
   static int8_t clampBalance(int8_t v){return std::max(-16,std::min(16,int(v)));}
-  struct Runtime {int8_t bass,middle,treble;};
-  Runtime runtimeSnapshot(){return {store.bass,store.middle,store.trebble};}
+  struct Runtime {int8_t bass,middle,treble; PowerMode powerMode;};
+  Runtime runtimeSnapshot(){return {store.bass,store.middle,store.trebble,store.powerMode};}
   bool setTone(int8_t,int8_t,int8_t);
   bool setHaName(const char*);
   bool setTftTheme(TftTheme);
+  bool setPowerMode(PowerMode);
   bool setBalance(int8_t);
   bool setStartupMode(uint8_t);
   bool setStartupFixedVolume(uint8_t);
@@ -208,6 +211,13 @@ struct Config {
 MIDDLE = r'''
 } config;
 CommandHandler cmd;
+// GET metadata only. No actuator API is exposed to this harness.
+struct PowerManager {bool standby(){return false;}} powerManager;
+namespace voxone { namespace hardware {
+struct Hardware {struct {int button=42, relay=-1;} power;};
+static const Hardware& currentHardware(){static Hardware h;return h;}
+static bool hasPin(int pin){return pin>=0;}
+} }
 struct Param {std::string data; const std::string& value()const{return data;}};
 struct AsyncWebServerRequest {
   Param parameter;
@@ -375,7 +385,57 @@ int main(){
   handleHaSettingsSave(&post);send("scrollsettings=true,normal,1000");send("balance=2");
   step("bass");step("rest");step("scroll");step("balance");
   assert((writes==std::vector<std::string>{"bass","rest","scroll","balance"}));
-  std::cout<<"PASS production WS/REST handlers, FIFO, consumer and setters; fake RTOS/HTTP/NVS\n"
+  // Production power POST -> shared FIFO -> actual Config setter, never NVS in callback.
+  for(const char* mode:{"soft_standby","hard_power","mute_only"}) {
+    reset();post.parameter.data=mode;
+    callback=true;handlePowerSettingsSave(&post);callback=false;
+    assert(post.status==202 && writes.empty());
+    get.parameter.data=restConfigOperations.find(1)->id;
+    handleConfigOperationRead(&get);assert(get.body.find("pending")!=std::string::npos);
+    step("power");handleConfigOperationRead(&get);
+    assert(get.body.find("saved")!=std::string::npos);
+    assert(std::string(voxone::power_mode::apiName(config.store.powerMode))==mode);
+    callback=true;handlePowerSettingsRead(&get);callback=false;
+    assert(get.status==200 && get.body==std::string("{\"mode\":\"")+mode+
+      "\",\"standby\":false,\"buttonPin\":42,\"relayAvailable\":false}");
+  }
+  reset();post.parameter.data="hard_power";storageOk=false;
+  handlePowerSettingsSave(&post);step("power-fail");
+  assert(config.store.powerMode==MODE_HARD_POWER && writes.size()==1);
+  get.parameter.data=restConfigOperations.find(1)->id;handleConfigOperationRead(&get);
+  assert(get.body.find("applied_but_not_persisted")!=std::string::npos);
+  handlePowerSettingsSave(&post);step("power-fail-again");assert(writes.size()==2);
+  storageOk=true;handlePowerSettingsSave(&post);step("power-retry");assert(writes.size()==3);
+  assert(restConfigOperations.find(3)->status==voxone::rest_config::Status::Saved);
+  handlePowerSettingsSave(&post);step("power-noop");assert(writes.size()==3);
+  reset();for(int i=0;i<4;++i)send("bass=1");handlePowerSettingsSave(&post);
+  assert(post.status==503 && !restConfigOperations.find(1));
+  reset();for(int i=0;i<4;++i)handlePowerSettingsSave(&post);
+  handlePowerSettingsSave(&post);assert(post.status==503);
+  reset();post.has=false;handlePowerSettingsSave(&post);assert(post.status==400);post.has=true;
+  reset();post.parameter.data="invalid";handlePowerSettingsSave(&post);assert(post.status==400 && writes.empty());
+  reset();post.parameter.data="mute_only";post.allowed=false;
+  handlePowerSettingsSave(&post);assert(post.status==403 && tone.entries.empty());post.allowed=true;
+  reset();sessionValid=false;handlePowerSettingsSave(&post);assert(post.status==401 && tone.entries.empty());
+  reset();handlePowerSettingsSave(&post);sessionValid=false;step("power-expired");
+  assert(writes.empty() && restConfigOperations.find(1)->status==voxone::rest_config::Status::Cancelled);
+  reset();handlePowerSettingsSave(&post);++generation;step("power-revoked");
+  assert(writes.empty() && restConfigOperations.find(1)->status==voxone::rest_config::Status::Cancelled);
+  get.parameter.data=restConfigOperations.find(1)->id;handleConfigOperationRead(&get);assert(get.status==404);
+  reset();handlePowerSettingsSave(&post);testNow+=30000;step("power-timeout");
+  assert(writes.empty() && restConfigOperations.find(1)->status==voxone::rest_config::Status::Cancelled);
+  reset();{AsyncWebServerRequest disconnected;disconnected.parameter.data="hard_power";
+    handlePowerSettingsSave(&disconnected);assert(disconnected.status==202);}
+  step("power-detached");assert(writes.size()==1);
+  reset();handlePowerSettingsSave(&post);
+  std::strcpy(restConfigOperations.find(1)->value,"invalid");step("power-invalid-execution");
+  assert(writes.empty() && restConfigOperations.find(1)->status==voxone::rest_config::Status::Failed);
+  reset();send("bass=1");post.parameter.data="Mixed";handleHaSettingsSave(&post);
+  post.parameter.data="hard_power";handlePowerSettingsSave(&post);
+  post.parameter.data="yamaha";handleDisplayThemeSave(&post);
+  step("tone");step("ha");step("power");step("theme");
+  assert((writes==std::vector<std::string>{"tone","ha","power","theme"}));
+  std::cout<<"PASS production WS/REST handlers (HA/theme/power), FIFO, consumer and setters; fake RTOS/HTTP/NVS\n"
            <<"Result store bytes="<<sizeof(restConfigOperations)<<" queue item bytes="<<sizeof(QueuedToneCommand)<<"\n";
 }
 '''
@@ -391,7 +451,7 @@ def main():
     config_h = (ROOT / "src/core/config.h").read_text()
     handler = (ROOT / "src/core/commandhandler.cpp").read_text()
     source = PREFIX + "template<typename T>\n" + extract_function(config_h, "bool saveValue(T *field") + MIDDLE
-    for name in ("bool Config::setHaName", "bool Config::setTftTheme", "bool Config::setTone", "bool Config::setBalance", "bool Config::setStartupMode", "bool Config::setStartupFixedVolume",
+    for name in ("bool Config::setPowerMode", "bool Config::setHaName", "bool Config::setTftTheme", "bool Config::setTone", "bool Config::setBalance", "bool Config::setStartupMode", "bool Config::setStartupFixedVolume",
                  "bool Config::setLineOutEnabled", "bool Config::setLineOutVolume", "bool Config::setVuMeter"):
         source += extract_function(config, name) + "\n"
     for name in ("static bool parseVolumeValue", "static bool parseTimeInterval", "bool CommandHandler::exec"):
@@ -409,6 +469,7 @@ def main():
                  "void clearSensitive(char* value, size_t size) {",
                  "bool captureRestConfigOwner", "void enqueueRestConfig", "void handleConfigOperationRead(AsyncWebServerRequest* request) {", "bool executeRestConfig",
                  "void handleHaSettingsSave(AsyncWebServerRequest* request) {", "void handleDisplayThemeSave(AsyncWebServerRequest* request) {",
+                 "void handlePowerSettingsSave(AsyncWebServerRequest* request) {", "void handlePowerSettingsRead(AsyncWebServerRequest* request) {",
                  "void NetServer::serviceScrollSettings", "void NetServer::onWsMessage"):
         source += extract_function(server, name) + "\n"
     source += TESTS

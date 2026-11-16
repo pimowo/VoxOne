@@ -109,6 +109,32 @@ std::string readFile(const char* path) {
           std::istreambuf_iterator<char>()};
 }
 
+void testPowerRestAccess() {
+  for (auto method : {SecurityAccessMethod::Get, SecurityAccessMethod::Post}) {
+    for (auto state : {SecurityState::Open, SecurityState::Protected, SecurityState::Locked}) {
+      auto access = request(state, method, "/api/power");
+      for (bool session : {false, true}) {
+        access.sessionValid = session;
+        auto decision = evaluateSecurityHttpRequest(access, true, false);
+        const bool allowed = state == SecurityState::Open ||
+                             (state == SecurityState::Protected && session);
+        assert(decision.allowed == allowed);
+        assert(decision.httpStatus == (allowed ? 200 : state == SecurityState::Locked ? 403 : 401));
+      }
+      access.sessionValid = true;
+      access.hostValid = false;
+      assert(evaluateSecurityHttpRequest(access, true, false).httpStatus == 403);
+      access.hostValid = true;
+      access.originPresent = true;
+      access.originValid = false;
+      assert(evaluateSecurityHttpRequest(access, true, false).httpStatus == 403);
+      access.originPresent = false;
+      if (method == SecurityAccessMethod::Post)
+        assert(evaluateSecurityHttpRequest(access, true, false).httpStatus == 403);
+    }
+  }
+}
+
 void testDisabledAndWebSocketEnforced() {
   SecurityAccessRequest protectedRead = request(
       SecurityState::Protected, SecurityAccessMethod::Get, "/api/stations");
@@ -131,7 +157,7 @@ void testStrictHandshakeAndFakeUpgradeCannotBypassHttp() {
   const char* protectedPosts[] = {
       "/update", "/update/bt", "/api/config/restore",
       "/api/stations/import", "/api/time/sync", "/api/hardware",
-      "/api/display/theme", "/api/stations/add"};
+      "/api/display/theme", "/api/power", "/api/stations/add"};
   unsigned writes = 0;
   for (const char* path : protectedPosts) {
     const std::string raw = std::string("POST ") + path +
@@ -525,6 +551,7 @@ void testBuildSwitchIsMonotonic() {
 }  // namespace
 
 int main() {
+  testPowerRestAccess();
   testDisabledAndWebSocketEnforced();
   testStrictHandshakeAndFakeUpgradeCannotBypassHttp();
   testSubprotocolAndCommandContract();

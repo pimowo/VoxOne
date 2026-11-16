@@ -654,7 +654,8 @@ bool Config::setTftTheme(TftTheme theme) {
 bool Config::setPowerMode(PowerMode mode) {
   if (!voxone::power_mode::valid(mode)) return false;
   WriteLock lock(_persistMutex);
-  if (store.powerMode == mode) return true;
+  if (store.powerMode == mode)
+    return !_storage.dirty() || (!_startupReadOnly && persistV7());
   if (!voxone::power_mode::encode(
           mode, store.reservedWeather, sizeof(store.reservedWeather)))
     return false;
