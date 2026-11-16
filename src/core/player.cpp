@@ -28,8 +28,33 @@
 Player player;
 QueueHandle_t playerQueue;
 portMUX_TYPE playerVolumeMux = portMUX_INITIALIZER_UNLOCKED;
+static portMUX_TYPE playerCommandMux = portMUX_INITIALIZER_UNLOCKED;
 
 namespace {
+
+bool startsPlayerTransport(playerRequestType_e type) {
+  return type == PR_PLAY || type == PR_PREV || type == PR_NEXT ||
+         type == PR_TOGGLE || type == PR_SOURCE_MEDIA ||
+         type == PR_RADIO_RESUME || type == PR_RADIO_NETWORK_ONLINE;
+}
+
+void consumeRadioPlayUnlessQueued() {
+  // SourceManager remembers the newest accepted station for source-switch
+  // resume. Consuming an older FIFO entry must not erase that newer intent.
+  // Inspect at most five entries, preserving their order under admission lock.
+  portENTER_CRITICAL(&playerCommandMux);
+  bool newerPlay = false;
+  const UBaseType_t count = uxQueueMessagesWaiting(playerQueue);
+  playerRequestParams_t queued;
+  for (UBaseType_t i = 0; i < count; ++i) {
+    if (xQueueReceive(playerQueue, &queued, 0) != pdTRUE) break;
+    newerPlay = newerPlay || queued.type == PR_PLAY ||
+                queued.type == PR_NEXT || queued.type == PR_PREV;
+    xQueueSend(playerQueue, &queued, 0);
+  }
+  if (!newerPlay) sourceManagerRadioPlayConsumed();
+  portEXIT_CRITICAL(&playerCommandMux);
+}
 
 SourceId sourceIdForMedia(voxone::source_media::Source source) {
   return source == voxone::source_media::Source::Dlna
@@ -162,20 +187,48 @@ bool Player::ready() const {
   return playerQueue != nullptr && _sourceMediaUrls != nullptr;
 }
 
-void Player::sendCommand(playerRequestParams_t request){
-  if(playerQueue==NULL) return;
-  if(systemUpdateAudioBlocked() && request.type != PR_UPDATE_STOP) return;
+bool Player::sendCommand(playerRequestParams_t request){
+  if(playerQueue==NULL ||
+     (systemUpdateAudioBlocked() && request.type != PR_UPDATE_STOP)) {
+    ++_rejectedCommands;
+    return false;
+  }
   if (!_localAudioAvailable &&
       (request.type == PR_PLAY || request.type == PR_PREV ||
        request.type == PR_NEXT || request.type == PR_SOURCE_MEDIA ||
        request.type == PR_RADIO_RESUME ||
-       request.type == PR_RADIO_NETWORK_ONLINE)) return;
+       request.type == PR_RADIO_NETWORK_ONLINE)) {
+    ++_rejectedCommands;
+    return false;
+  }
   if (request.type == PR_STATION_REFRESH) {
     _pendingStationRefresh.publishRefresh();
-    return;
+    return true;
   }
+  QueuedSourceMediaRequest* discardedMedia = nullptr;
+  portENTER_CRITICAL(&playerCommandMux);
   const bool stopsSourceMedia = request.type == PR_STOP && sourceMediaBusy();
-  if(xQueueSend(playerQueue, &request, PLQ_SEND_DELAY) != pdPASS) return;
+  if (request.type == PR_STOP) {
+    // Bounded drain (capacity remains five). Preserve non-start commands;
+    // no older PLAY/NEXT/PREV/resume/URL wakeup may cross this STOP barrier.
+    const UBaseType_t count = uxQueueMessagesWaiting(playerQueue);
+    playerRequestParams_t queued;
+    for (UBaseType_t i = 0; i < count; ++i) {
+      if (xQueueReceive(playerQueue, &queued, 0) != pdTRUE) break;
+      if (!startsPlayerTransport(queued.type))
+        xQueueSend(playerQueue, &queued, 0);
+    }
+    if (_sourceMediaUrls)
+      xQueueReceive(_sourceMediaUrls, &discardedMedia, 0);
+    if (!_stopPending || request.payload < _stopPayload)
+      _stopPayload = request.payload;
+    _stopPending = true;
+    setConnectionStopRequested(true);
+  } else if(xQueueSend(playerQueue, &request, 0) != pdPASS) {
+    portEXIT_CRITICAL(&playerCommandMux);
+    ++_rejectedCommands;
+    return false;
+  }
   switch (request.type) {
     case PR_PLAY:
     case PR_PREV:
@@ -199,10 +252,16 @@ void Player::sendCommand(playerRequestParams_t request){
     sourceManagerRadioCommandQueued(radioPlayRequest,
                                    request.type == PR_PLAY && request.payload > 0
                                        ? static_cast<uint16_t>(request.payload) : 0);
+  portEXIT_CRITICAL(&playerCommandMux);
+  if (discardedMedia) releaseSourceMediaRequest(discardedMedia);
+  return true;
 }
 
 void Player::resetQueue(){
+  portENTER_CRITICAL(&playerCommandMux);
   if(playerQueue!=NULL) xQueueReset(playerQueue);
+  // A source switch cannot erase an already accepted STOP.
+  portEXIT_CRITICAL(&playerCommandMux);
 }
 
 void Player::clearSourceMediaRequests() {
@@ -359,7 +418,7 @@ void Player::_applyStop(int payload, bool consumeUserCommand) {
   }
   _radioReconnect.cancel();
   network.lostPlaying = false;
-  clearSourceMediaRequests();
+  if (!consumeUserCommand) clearSourceMediaRequests();
   if (sourceMediaBusy()) {
     const SourceId previous = _sourceMediaPrevious;
     const bool restoreAfterUserStop =
@@ -376,7 +435,7 @@ void Player::_applyStop(int payload, bool consumeUserCommand) {
   } else {
     _stop();
   }
-  if (consumeUserCommand) sourceManagerRadioStopConsumed();
+  // User STOP intent is consumed under playerCommandMux before this cleanup.
 }
 
 void resetPlayer(){
@@ -463,7 +522,29 @@ void Player::servicePendingVolume() {
 
 bool Player::processPlayerCommands() {
   playerRequestParams_t requestP;
-  if(xQueueReceive(playerQueue, &requestP, isRunning()?PL_QUEUE_TICKS:PL_QUEUE_TICKS_ST)){
+  portENTER_CRITICAL(&playerCommandMux);
+  // Update keeps its existing exclusive PR_UPDATE_STOP cleanup contract.
+  const bool stopping = _stopPending && !systemUpdateAudioBlocked();
+  const int stopPayload = _stopPayload;
+  if (stopping) {
+    _stopPending = false;
+    sourceManagerRadioStopConsumed();
+  }
+  const bool received = !stopping && xQueueReceive(playerQueue, &requestP, 0) == pdTRUE;
+  portEXIT_CRITICAL(&playerCommandMux);
+  if (stopping) {
+    _applyStop(stopPayload, true);
+    portENTER_CRITICAL(&playerCommandMux);
+    if (!_stopPending) setConnectionStopRequested(false);
+    portEXIT_CRITICAL(&playerCommandMux);
+    return false; // no reconnect/audio servicing in the STOP cleanup iteration
+  }
+  // Keep the original stopped-player idle budget, outside the command lock.
+  // STOP has at most this existing 15-tick polling delay, never producer wait.
+  if (!received && !isRunning()) vTaskDelay(PL_QUEUE_TICKS_ST);
+  if (received) {
+    if (connectionStopRequested() && startsPlayerTransport(requestP.type))
+      return false;
     if (systemUpdateAudioBlocked() && requestP.type != PR_UPDATE_STOP)
       return false;
     switch (requestP.type){
@@ -494,7 +575,7 @@ bool Player::processPlayerCommands() {
           if (requestP.payload > 0 &&
               config.lastStation() != static_cast<uint16_t>(requestP.payload))
             config.setLastStation(static_cast<uint16_t>(requestP.payload));
-          sourceManagerRadioPlayConsumed();
+          consumeRadioPlayUnlessQueued();
           _play(static_cast<uint16_t>(requestP.payload), true);
         }
         break;
@@ -521,10 +602,17 @@ bool Player::processPlayerCommands() {
         // announcement finish, then use that current intent exactly once.
         if (sourceMediaBusy()) break;
         _radioReconnect.cancel();
+        const uint16_t count = config.playlistLength();
+        if (count == 0) {
+          consumeRadioPlayUnlessQueued();
+          sourceManagerPlaylistSelectionCleared();
+          break;
+        }
+        if (requestP.payload > count) requestP.payload = count;
         if (requestP.payload>0) {
           config.setLastStation((uint16_t)requestP.payload);
         }
-        sourceManagerRadioPlayConsumed();
+        consumeRadioPlayUnlessQueued();
         _play((uint16_t)abs(requestP.payload)); 
         if (player_on_station_change) player_on_station_change(); 
         break;
@@ -537,14 +625,14 @@ bool Player::processPlayerCommands() {
             ? voxone::player_navigation::previous(current, count)
             : voxone::player_navigation::next(current, count);
         if (target == 0) {
-          sourceManagerRadioPlayConsumed();
+          consumeRadioPlayUnlessQueued();
           sourceManagerPlaylistSelectionCleared();
           break;
         }
         config.setLastStation(target);
         if (sourceMediaBusy()) break;
         _radioReconnect.cancel();
-        sourceManagerRadioPlayConsumed();
+        consumeRadioPlayUnlessQueued();
         _play(target);
         if (player_on_station_change) player_on_station_change();
         break;
@@ -581,12 +669,16 @@ bool Player::processPlayerCommands() {
 
 void Player::serviceSourceMedia() {
   QueuedSourceMediaRequest* mediaRequest = nullptr;
-  if (_sourceMediaUrls &&
-      xQueueReceive(_sourceMediaUrls, &mediaRequest, 0) == pdTRUE &&
-      mediaRequest) {
-    if (!systemUpdateAudioBlocked()) playSourceMedia(mediaRequest->view());
+  portENTER_CRITICAL(&playerCommandMux);
+  if (_sourceMediaUrls && !connectionStopRequested())
+    xQueueReceive(_sourceMediaUrls, &mediaRequest, 0);
+  portEXIT_CRITICAL(&playerCommandMux);
+  if (mediaRequest) {
+    if (!systemUpdateAudioBlocked() && !connectionStopRequested())
+      playSourceMedia(mediaRequest->view());
     releaseSourceMediaRequest(mediaRequest);
   }
+  if (connectionStopRequested()) return;
   // Backend EOF/error callbacks run synchronously inside these calls. They
   // signal this invocation's token; never reconnect from a decoder callback.
   _callbackToken = _sourceMedia.token();
@@ -624,6 +716,7 @@ void Player::serviceSourceMedia() {
 }
 
 void Player::servicePcmOutputActivation() {
+  if (connectionStopRequested()) return;
   if (!_pcmOutputPending || !takePcmOutputReady()) return;
   _pcmOutputPending = false;
   if (_status != PLAYING || systemUpdateAudioBlocked()) return;
@@ -684,6 +777,7 @@ void Player::setOutputPins(bool isPlaying) {
 }
 
 void Player::_play(uint16_t stationId, bool sourceResume) {
+  if (connectionStopRequested()) return;
   log_i("%s called, stationId=%d", __func__, stationId);
   _hasError=false;
   setDefaults();
@@ -692,6 +786,7 @@ void Player::_play(uint16_t stationId, bool sourceResume) {
   remoteStationName = false;
   
   if(!config.prepareForPlaying(stationId, sourceResume)) return;
+  if (connectionStopRequested()) return;
   _loadVol(voxone::line_out::effectiveRawVolume(config.runtimeSnapshot()));
   _sourceMedia.allowRadioMetadata();
   
@@ -701,6 +796,7 @@ void Player::_play(uint16_t stationId, bool sourceResume) {
   _pcmOutputPending = true;
   isConnected=connecttohost(config.station.url);
   connproc = true;
+  if (connectionStopRequested()) return; // loop-owned STOP performs cleanup
   if(isConnected){
     _status = PLAYING;
     config.configPostPlaying();
@@ -715,7 +811,7 @@ void Player::_play(uint16_t stationId, bool sourceResume) {
 }
 
 void Player::scheduleRadioReconnect() {
-  if (sourceMediaBusy() || systemUpdateAudioBlocked() ||
+  if (connectionStopRequested() || sourceMediaBusy() || systemUpdateAudioBlocked() ||
       !sourceManagerRadioResumeAllowed()) {
     _radioReconnect.cancel();
     return;
@@ -729,6 +825,7 @@ void Player::scheduleRadioReconnect() {
 }
 
 void Player::serviceRadioReconnect() {
+  if (connectionStopRequested() || uxQueueMessagesWaiting(playerQueue) != 0) return;
   const bool allowed = !sourceMediaBusy() && !systemUpdateAudioBlocked() &&
                        sourceManagerRadioResumeAllowed();
   if (!_radioReconnect.takeDue(millis(), allowed, network.ready())) return;
@@ -737,7 +834,7 @@ void Player::serviceRadioReconnect() {
   _play(config.lastStation(), true);
 }
 
-void Player::requestSourceMedia(
+bool Player::requestSourceMedia(
     const voxone::source_media::Request& request) {
   const char* url = request.url ? request.url : "";
   const size_t length = strlen(url);
@@ -749,32 +846,28 @@ void Player::requestSourceMedia(
   if (!_sourceMediaUrls ||
       !validResource ||
       !sourceManagerSourceAvailable(requestedSource) ||
-      systemUpdateAudioBlocked() || !_localAudioAvailable) return;
+      systemUpdateAudioBlocked() || !_localAudioAvailable) return false;
   QueuedSourceMediaRequest* pending = copySourceMediaRequest(request);
   if (!pending) {
     serialCli.printf("##[SOURCE-MEDIA]# request allocation failed\n");
-    return;
+    return false;
   }
-  // Producers may run on different tasks. The one-slot queue stores only an
-  // owning pointer; when full, remove and release the older pending request.
-  // A request already consumed by Player owns its allocation until playSourceMedia
-  // returns, so replacement can never invalidate connecttohost() input.
-  bool queued = false;
-  for (uint8_t attempt = 0; attempt < 4 && !queued; ++attempt) {
-    queued = xQueueSend(_sourceMediaUrls, &pending, 0) == pdPASS;
-    if (queued) break;
-    QueuedSourceMediaRequest* replaced = nullptr;
-    if (xQueueReceive(_sourceMediaUrls, &replaced, 0) == pdTRUE)
-      releaseSourceMediaRequest(replaced);
-    else
-      taskYIELD();
+  // Admission, mailbox replacement and STOP use the same recursive portMUX.
+  // Allocation/free stay outside it. A rejected wake-up cannot publish a URL.
+  QueuedSourceMediaRequest* replaced = nullptr;
+  portENTER_CRITICAL(&playerCommandMux);
+  const bool queued = sendCommand({PR_SOURCE_MEDIA, 0});
+  if (queued) {
+    xQueueReceive(_sourceMediaUrls, &replaced, 0);
+    xQueueSend(_sourceMediaUrls, &pending, 0);
   }
+  portEXIT_CRITICAL(&playerCommandMux);
+  releaseSourceMediaRequest(replaced);
   if (!queued) {
     releaseSourceMediaRequest(pending);
-    serialCli.printf("##[SOURCE-MEDIA]# request mailbox busy\n");
-    return;
+    return false;
   }
-  sendCommand({PR_SOURCE_MEDIA, 0});
+  return true;
 }
 
 bool Player::sourceMediaEof() {
@@ -811,6 +904,7 @@ void Player::finishSourceMedia() {
 }
 
 void Player::restoreSourceMediaBase() {
+  if (connectionStopRequested()) return;
   if (!_sourceMediaReturnPending || sourceMediaActive()) return;
   if (systemUpdateAudioBlocked()) {
     _sourceMediaReturnPending = false;
@@ -823,6 +917,7 @@ void Player::restoreSourceMediaBase() {
 }
 
 void Player::playSourceMedia(const voxone::source_media::Request& request){
+  if (connectionStopRequested()) return;
 #if VOXONE_HAS_BT && VOXONE_PIN_MAP_COMPLETE && VOXONE_BT_I2S_RX_ENABLED
   if (!btAudioInput.acquirePlayerOutput()) {
     serialCli.printf("##ERROR#:\tSource media cannot acquire I2S0\n");
@@ -854,6 +949,7 @@ void Player::playSourceMedia(const voxone::source_media::Request& request){
   const bool connected = localFs ? connecttoFS(*localFs, request.url)
                                  : connecttohost(request.url);
   _callbackToken = 0;
+  if (connectionStopRequested()) return;
   if (connected){
     _status = PLAYING;
     netserver.requestOnChange(MODE, 0);
@@ -868,26 +964,23 @@ void Player::playSourceMedia(const voxone::source_media::Request& request){
   }
 }
 
-void Player::prev() {
-  if (systemUpdateAudioBlocked()) return;
-  if (config.playlistLength() == 0) return;
-  sendCommand({PR_PREV, 0});
+bool Player::prev() {
+  if (systemUpdateAudioBlocked()) return false;
+  return sendCommand({PR_PREV, 0});
 }
 
-void Player::next() {
-  if (systemUpdateAudioBlocked()) return;
-  if (config.playlistLength() == 0) return;
-  sendCommand({PR_NEXT, 0});
+bool Player::next() {
+  if (systemUpdateAudioBlocked()) return false;
+  return sendCommand({PR_NEXT, 0});
 }
 
-void Player::toggle() {
-  if (systemUpdateAudioBlocked()) return;
+bool Player::toggle() {
+  if (systemUpdateAudioBlocked()) return false;
   if (sourceManagerRadioPlayIntent()) {
-    sendCommand({PR_STOP, 0});
+    return sendCommand({PR_STOP, 0});
   } else {
     const uint16_t selected = config.lastStation();
-    if (selected == 0 && config.playlistLength() == 0) return;
-    sendCommand({PR_PLAY, selected == 0 ? 1 : selected});
+    return sendCommand({PR_PLAY, selected == 0 ? 1 : selected});
   }
 }
 

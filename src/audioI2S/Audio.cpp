@@ -665,6 +665,7 @@ void Audio::connectTask(void* pvParams) {
 
 //---------------------------------------------------------------------------------------------------------------------
 bool Audio::connecttohost(const char* host, const char* user, const char* pwd) {
+    if (connectionStopRequested()) return false;
     return connectToHost(host, user, pwd, true);
 }
 //---------------------------------------------------------------------------------------------------------------------
@@ -879,6 +880,10 @@ bool Audio::connectToHost(const char* host, const char* user, const char* pwd,
     uint32_t t = millis();
     const uint16_t connectTimeout = m_f_ssl ? m_timeout_ms_ssl : m_timeout_ms;
     if(m_f_Log) AUDIO_INFO("connect to %s on port %d path %s", hostwoext, port, extension);
+    if (connectionStopRequested()) {
+      free(l_host);
+      return false;
+    }
     if(!config.runtimeSnapshot().watchdog){
       res = _client->connect(hostwoext, port, connectTimeout);
     }else{
@@ -906,6 +911,7 @@ bool Audio::connectToHost(const char* host, const char* user, const char* pwd,
           AUDIO_ERROR("Cannot create connection worker");
         } else {
           for(;;) {
+            if (connectionStopRequested()) m_connectAttempt.requestCancel();
             if (!m_connectAttempt.active()) break;
             if (m_connectAttempt.cancellationRequested()) break;
             if (voxone::radio::connectWaitExpired(t, millis(), connectTimeout)) {
@@ -922,6 +928,7 @@ bool Audio::connectToHost(const char* host, const char* user, const char* pwd,
         }
       }
     }
+    if (connectionStopRequested()) res = false;
     if(res){
         uint32_t dt = millis() - t;
         strcpy(m_lastHost, l_host);

@@ -4324,7 +4324,9 @@ void NetServer::onWsMessage(void *arg, const uint8_t *data, size_t len,
     }
     // Fail closed for future setters: they must explicitly join the deferred
     // configuration path, not silently fall through to synchronous execution.
-    if(voxone::web_config::immediate(_wscmd) && cmd.exec(_wscmd, _wsval, clientId)){
+    if(voxone::web_config::immediate(_wscmd)){
+      if (!cmd.exec(_wscmd, _wsval, clientId))
+        securityWebSocketText(clientId, "{\"error\":\"command_rejected\"}");
       return;
     }
   }

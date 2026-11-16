@@ -54,9 +54,9 @@ bool CommandHandler::exec(const char *command, const char *value, uint32_t cid,
     bluetoothSelected = bluetoothSourceSelected();
 #endif
     switch (webTransportAction(bluetoothSelected, value)) {
-      case WebTransportAction::RadioPrevious: player.prev(); return true;
-      case WebTransportAction::RadioToggle: player.toggle(); return true;
-      case WebTransportAction::RadioNext: player.next(); return true;
+      case WebTransportAction::RadioPrevious: return player.prev();
+      case WebTransportAction::RadioToggle: return player.toggle();
+      case WebTransportAction::RadioNext: return player.next();
 #if VOXONE_HAS_BT && VOXONE_PIN_MAP_COMPLETE
       case WebTransportAction::BluetoothPrevious:
         sourceManagerTransport(BtTransportInput::Previous); return true;
@@ -68,8 +68,8 @@ bool CommandHandler::exec(const char *command, const char *value, uint32_t cid,
       default: return false;
     }
   }
-  if (strEquals(command, "start"))    { player.sendCommand({PR_PLAY, config.lastStation()}); return true; }
-  if (strEquals(command, "stop"))     { player.sendCommand({PR_STOP, 0}); return true; }
+  if (strEquals(command, "start"))    { return player.sendCommand({PR_PLAY, config.lastStation()}); }
+  if (strEquals(command, "stop"))     { return player.sendCommand({PR_STOP, 0}); }
   if (strEquals(command, "playurl") || strEquals(command, "ha_play")) {
     const size_t length = value ? strlen(value) : 0;
     voxone::source_media::RequestStorage storage{};
@@ -77,12 +77,11 @@ bool CommandHandler::exec(const char *command, const char *value, uint32_t cid,
       return false;
     const auto request = storage.view();
     if (!sourceManagerSourceAvailable(SourceId::HomeAssistant)) return false;
-    player.requestSourceMedia(request);
-    return true;
+    return player.requestSourceMedia(request);
   }
-  if (strEquals(command, "toggle"))   { player.toggle(); return true; }
-  if (strEquals(command, "prev"))     { player.prev(); return true; }
-  if (strEquals(command, "next"))     { player.next(); return true; }
+  if (strEquals(command, "toggle"))   { return player.toggle(); }
+  if (strEquals(command, "prev"))     { return player.prev(); }
+  if (strEquals(command, "next"))     { return player.next(); }
   if (voxone::audio_balance::isBalanceCommand(command)) {
     int8_t balance;
     if (!voxone::audio_balance::parseValue(value, balance)) return false;
@@ -91,10 +90,7 @@ bool CommandHandler::exec(const char *command, const char *value, uint32_t cid,
   if (strEquals(command, "playstation")) {
     int id = atoi(value);
     if (id < 1) id = 1;
-    uint16_t cs = config.playlistLength();
-    if (id > cs) id = cs;
-    player.sendCommand({PR_PLAY, id});
-    return true;
+    return player.sendCommand({PR_PLAY, id});
   }
   if (strEquals(command, "vol100")) {
     long user;

@@ -52,6 +52,7 @@ static uint32_t generation=1;
 static std::vector<std::string> writes, replies, commands;
 static std::string currentCommand;
 static unsigned nextCount=0, prevCount=0;
+static bool transportAccepted=true;
 static bool commit() {
   assert(!callback); // A regression that persists from onWsMessage aborts here.
   writes.push_back(currentCommand);
@@ -155,9 +156,9 @@ static bool parseRequest(const char*,size_t,RequestStorage&){return true;}
 } namespace config_format { enum class ConfigStorageMode {V7}; } }
 struct Player {
   struct Request {int type,payload;};
-  void sendCommand(Request){}
-  void prev(){++prevCount;} void next(){++nextCount;} void toggle(){}
-  void requestSourceMedia(int){}
+  bool sendCommand(Request){return transportAccepted;}
+  bool prev(){++prevCount;return transportAccepted;} bool next(){++nextCount;return transportAccepted;} bool toggle(){return transportAccepted;}
+  bool requestSourceMedia(int){return transportAccepted;}
   void setUserVol(uint8_t){assert(!callback);}
   void setMuted(bool){assert(!callback);}
   void requestMaximumVolume(uint8_t){}
@@ -359,6 +360,10 @@ int main(){
   reset();for(int i=0;i<4;++i)assert(enqueueScrollSettingsCommand(7,settingsValue)==ScrollCommandQueueStatus::Queued);
   assert(enqueueScrollSettingsCommand(7,settingsValue)==ScrollCommandQueueStatus::Busy);
   reset();send("next=1");send("prev=1");assert(nextCount==1 && prevCount==1);
+  for(const char* command:{"next=1","prev=1","start=1","stop=1","toggle=1","playstation=1","webtransport=next"}){
+    reset();transportAccepted=false;send(command);assert(replyHas("command_rejected"));
+    transportAccepted=true;
+  }
   send("getscreen=1");assert(replyHas("snapshot"));assert(writes.empty());
   reset();for(const char* s:{"balance=17","timeint=0","startupmode=3","dim=abc"})send(s);
   assert(tone.entries.empty());assert(replyHas("invalid"));

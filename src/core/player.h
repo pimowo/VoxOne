@@ -14,10 +14,6 @@
 
 #include "../audioI2S/AudioEx.h"
 
-#ifndef PLQ_SEND_DELAY
-  #define PLQ_SEND_DELAY pdMS_TO_TICKS(1000) //portMAX_DELAY
-#endif
-
 enum playerRequestType_e : uint8_t {
   PR_PLAY = 1,
   PR_STOP = 2,
@@ -63,7 +59,7 @@ class Player: public Audio {
     volatile bool    _volumePending;
     volatile uint8_t _pendingMaximum;
     volatile bool _maximumPending;
-    plStatus_e  _status;
+    std::atomic<plStatus_e> _status{STOPPED};
     MuteState _mute;
     std::atomic<uint8_t> _effectiveOutputUser{0};
     SourceMediaState _sourceMedia;
@@ -72,6 +68,11 @@ class Player: public Audio {
     PlayerPendingRefresh _pendingStationRefresh;
     uint32_t _callbackToken = 0;
     QueueHandle_t _sourceMediaUrls = nullptr;
+    // Admission/dequeue use playerCommandMux; transport cancellation is atomic
+    // in Audio. STOP never occupies a slot in the five-entry FIFO.
+    bool _stopPending = false;
+    int _stopPayload = PR_STOP_KEEP_STATION;
+    std::atomic<uint32_t> _rejectedCommands{0};
     SourceId _sourceMediaPrevious = SourceId::Web;
     bool _sourceMediaReturnToPrevious = false;
     bool _sourceMediaReturnPending = false;
@@ -116,7 +117,7 @@ class Player: public Audio {
     friend class Config;
   public:
     bool lockOutput = true;
-    volatile bool connproc = true;
+    std::atomic<bool> connproc{true};
   public:
     Player();
     void init();
@@ -126,14 +127,15 @@ class Player: public Audio {
     void setError();
     void setError(const char *e);
     //bool hasError() { return strlen(_plError)>0; }
-    void sendCommand(playerRequestParams_t request);
+    bool sendCommand(playerRequestParams_t request);
+    uint32_t rejectedCommands() const { return _rejectedCommands.load(); }
     // Playlist committers call this while still holding PlaylistGuard, making
     // the latest committed request authoritative without blocking its task.
     void requestPlaylistSync(bool resetOvolIfEmpty = false) {
       _pendingStationRefresh.publish(resetOvolIfEmpty);
     }
     void resetQueue();
-    void requestSourceMedia(const voxone::source_media::Request& request);
+    bool requestSourceMedia(const voxone::source_media::Request& request);
     bool sourceMediaActive() const { return _sourceMedia.active(); }
     bool sourceMediaBusy() const { return _sourceMedia.busy(); }
     bool suppressSourceMediaReturn();
@@ -144,9 +146,9 @@ class Player: public Audio {
     }
     bool remoteStationName = false;
     plStatus_e status() { return _status; }
-    void prev();
-    void next();
-    void toggle();
+    bool prev();
+    bool next();
+    bool toggle();
     void stepVol(bool up);
     void setVol(uint8_t volume);
     void setUserVol(uint8_t user);

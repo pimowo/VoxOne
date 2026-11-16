@@ -6,6 +6,14 @@ checkpointów pozostaje w historii Git i w istniejących raportach.
 
 ## 1. HIL PENDING (do fizycznego przetestowania przez użytkownika)
 
+- [ ] Po VOXONE-STABILIZE-02 fizycznie potwierdzić na L0/S0 STOP przy pełnej
+  kolejce, podczas ConnectTask i reconnect oraz przy zmianie źródła; starsze
+  PLAY/NEXT/PREV nie mogą ponownie uruchamiać audio. Sprawdzić FIFO szybkich
+  NEXT/PREV, jawne odrzucanie przeciążenia WWW i regresję HA/DLNA/Local/BT.
+  Zmierzyć czas STOP i zapas stosu; test natywny wykonuje metody Playera,
+  ale symuluje FreeRTOS, transport, NVS i wyjście audio. Przy wyłączonym
+  watchdogu synchroniczne TCP oraz rozpoczęte operacje nagłówków/socketów
+  pozostają ograniczone dotychczasowym timeoutem, nie są przerywane siłowo.
 - [ ] Po VOXONE-STABILIZE-01B.2B fizycznie potwierdzić Hardware REST na L0/S0:
   POST `202` → `saved` z zapisaną konfiguracją i `restartRequired`, trwałość
   pojedynczego rekordu NVS, błąd zapisu i ponowienie, sesje/Origin oraz

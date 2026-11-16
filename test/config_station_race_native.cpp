@@ -190,16 +190,16 @@ int main() {
   assert(playerHeader.find("PR_STOP_CLEAR_STATION") != std::string::npos);
   assert(player.find("case PR_STATION_REFRESH:") != std::string::npos);
   const std::string sendCommand = section(
-      player, "void Player::sendCommand(playerRequestParams_t request)",
+      player, "bool Player::sendCommand(playerRequestParams_t request)",
       "void Player::resetQueue()");
   const std::size_t publish = sendCommand.find("_pendingStationRefresh.publish");
-  const std::size_t publishReturn = sendCommand.find("return;", publish);
+  const std::size_t publishReturn = sendCommand.find("return true;", publish);
   const std::size_t queueSend = sendCommand.find("xQueueSend", publishReturn);
   assert(publish != std::string::npos && publishReturn != std::string::npos &&
          queueSend != std::string::npos && publish < publishReturn &&
          publishReturn < queueSend);
   assert(sendCommand.find("portMAX_DELAY") == std::string::npos);
-  assert(sendCommand.find("xQueueSend(playerQueue, &request, PLQ_SEND_DELAY)") !=
+  assert(sendCommand.find("xQueueSend(playerQueue, &request, 0)") !=
          std::string::npos);
   assert(sendCommand.find("sourceManagerRadioCommandQueued", queueSend) !=
          std::string::npos);

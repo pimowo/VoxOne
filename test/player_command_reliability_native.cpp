@@ -123,8 +123,9 @@ int main() {
   }
   assert(selected == 1);  // 4 -> 5 -> 1 -> 5 -> 1.
 
-  // A full queue rejects ordinary transport without changing user intent, but
-  // a committed playlist reconcile is retained without occupying that queue.
+  // Historical bounded-FIFO baseline for playlist reconciliation. This model
+  // intentionally has no priority STOP: production STOP/admission/consumer are
+  // exercised by player_queue_execution_native.py (including this full case).
   ReliabilityModel full(5);
   full.sources.recordRadioCommand(true, 1);
   full.sources.radioPlayConsumed();
@@ -235,10 +236,10 @@ int main() {
   }
 
   const std::string sendCommand = section(
-      player, "void Player::sendCommand(playerRequestParams_t request)",
+      player, "bool Player::sendCommand(playerRequestParams_t request)",
       "void Player::resetQueue()");
   assert(sendCommand.find("portMAX_DELAY") == std::string::npos);
-  assert(sendCommand.find("xQueueSend(playerQueue, &request, PLQ_SEND_DELAY)") !=
+  assert(sendCommand.find("xQueueSend(playerQueue, &request, 0)") !=
          std::string::npos);
   assert(playerHeader.find("requestPlaylistSync") != std::string::npos);
   assert(player.find("if (uxQueueMessagesWaiting(playerQueue) == 0)\n"
@@ -249,9 +250,9 @@ int main() {
          std::string::npos);
 
   const std::string previousCommand = section(
-      player, "void Player::prev()", "void Player::next()");
+      player, "bool Player::prev()", "bool Player::next()");
   const std::string nextCommand = section(
-      player, "void Player::next()", "void Player::toggle()");
+      player, "bool Player::next()", "bool Player::toggle()");
   assert(previousCommand.find("sendCommand({PR_PREV, 0})") != std::string::npos);
   assert(nextCommand.find("sendCommand({PR_NEXT, 0})") != std::string::npos);
   assert(previousCommand.find("config.lastStation(") == std::string::npos);

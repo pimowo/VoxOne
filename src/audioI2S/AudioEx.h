@@ -149,6 +149,15 @@ public:
     bool connecttoFS(fs::FS& fs, const char* path);
     void setConnectionTimeout(uint16_t timeout_ms, uint16_t timeout_ms_ssl);
     void cancelPendingConnection();
+    // Player STOP barrier: stays asserted until its loop-owned cleanup finishes.
+    // Unlike cancellation of an active worker, this also covers pre-connect setup.
+    void setConnectionStopRequested(bool requested) {
+        m_connectionStopRequested.store(requested, std::memory_order_release);
+        if (requested) cancelPendingConnection();
+    }
+    bool connectionStopRequested() const {
+        return m_connectionStopRequested.load(std::memory_order_acquire);
+    }
     bool setPinout(uint8_t BCLK, uint8_t LRC, uint8_t DOUT, int8_t DIN = I2S_PIN_NO_CHANGE, int8_t MCK = I2S_PIN_NO_CHANGE);
     bool isRunning() {return m_f_running;}
     bool audioStreamStarted() const {return m_f_playing;}
@@ -483,6 +492,7 @@ private:
         : hostwoext(h), port(p), timeoutMs(timeout), client(c), instance(a) {}
     };
     voxone::radio::ConnectAttemptLifetime m_connectAttempt;
+    std::atomic<bool> m_connectionStopRequested{false};
     voxone::radio::SegmentTransportWatchdog m_segmentTransportWatchdog;
     voxone::audio::MpegTsAacParser m_tsParser;
     voxone::audio::TsStreamRecoveryPolicy m_tsRecoveryPolicy;
