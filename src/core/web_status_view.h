@@ -36,7 +36,8 @@ inline WebStatusView selectWebStatusView(const DisplaySourceView& source,
                                          const char* radioArtist,
                                          const char* radioTitle,
                                          const char* radioCodec,
-                                         uint16_t radioBitrate) {
+                                         uint16_t radioBitrate,
+                                         uint32_t radioSampleRate = 0) {
   if (source.kind == DisplaySourceKind::Bluetooth) {
     return {"BT", "bt", source.connected ? source.peerName : "Bluetooth", "",
             source.connected ? source.artist : "",
@@ -71,7 +72,9 @@ inline WebStatusView selectWebStatusView(const DisplaySourceView& source,
   return {"WEB", "radio", radioStation, radioMetadata, radioArtist, radioTitle,
           strcmp(radioCodec, "bitrate") == 0 ? "" : radioCodec,
           displayPlaybackLabel(source.playback), webTransportState(source.playback),
-          radioBitrate, 0, false};
+          radioBitrate,
+          source.playback == DisplayPlaybackState::Playing ? radioSampleRate : 0,
+          false};
 }
 
 #endif

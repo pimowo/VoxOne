@@ -10,6 +10,16 @@ namespace radio {
 
 constexpr size_t kMaxHttpRequestHeaderLength = 4096;
 
+inline bool httpRequestWriteComplete(size_t expectedBytes,
+                                     size_t writtenBytes) {
+  return expectedBytes != 0 && writtenBytes == expectedBytes;
+}
+
+inline bool httpConnectionMustReconnect(bool responseRequestedClose,
+                                        bool socketConnected) {
+  return responseRequestedClose || !socketConnected;
+}
+
 enum class HttpRequestBuildResult {
   Ok,
   Invalid,

@@ -34,5 +34,11 @@ int main() {
          HttpRequestBuildResult::TooLarge);
   assert(header.build("/", "host", nullptr, "User-Agent: test\r\n", false,
                       failAllocation) == HttpRequestBuildResult::NoMemory);
+  assert(httpRequestWriteComplete(128, 128));
+  assert(!httpRequestWriteComplete(128, 64));
+  assert(!httpRequestWriteComplete(0, 0));
+  assert(httpConnectionMustReconnect(true, true));
+  assert(httpConnectionMustReconnect(false, false));
+  assert(!httpConnectionMustReconnect(false, true));
   return 0;
 }

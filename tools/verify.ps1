@@ -245,6 +245,9 @@ Invoke-Step 'Native tests' {
  & $Python (Join-Path $root 'test/radio_transport_native.py') '--strict' 2>&1 | ForEach-Object { Write-Host $_ }
  if($LASTEXITCODE -ne 0) { throw 'Radio transport strict test failed' }
  Write-Host '  PASS radio_transport_native strict'
+ & $Python (Join-Path $root 'test/hls_ts_transport_native.py') 2>&1 | ForEach-Object { Write-Host $_ }
+ if($LASTEXITCODE -ne 0) { throw 'HLS TS production transport test failed' }
+ Write-Host '  PASS hls_ts_transport_native'
  Write-Host "  $($tests.Count) native tests passed"
 }
 if(-not $onWindows) {
@@ -276,6 +279,8 @@ if(-not $onWindows) {
   if($LASTEXITCODE -ne 0) { throw 'Sanitized MPEG-TS AAC parser compile failed' }
   & $mpegTsParserExe
   if($LASTEXITCODE -ne 0) { throw 'Sanitized MPEG-TS AAC parser test failed' }
+  & $Python (Join-Path $root 'test/hls_ts_transport_native.py') '--sanitize' 2>&1 | ForEach-Object { Write-Host $_ }
+  if($LASTEXITCODE -ne 0) { throw 'Sanitized HLS TS production transport test failed' }
   $btSingleOwnerExe=Join-Path $work 'bt_link_single_owner_sanitized'
   & $Cxx @sanitizerArgs '-pthread' '-o' $btSingleOwnerExe `
     (Join-Path $root 'test/bt_link_single_owner_native.cpp')

@@ -14,7 +14,7 @@ int main() {
   sources.displayView(display, true);
   WebStatusView status = selectWebStatusView(display, "Radio A", "Artysta - Utwór",
                                             "Artysta", "Utwór",
-                                            "MP3", 320);
+                                            "MP3", 320, 44100);
   assert(std::strcmp(status.source, "WEB") == 0);
   assert(std::strcmp(status.activeSource, "radio") == 0);
   assert(std::strcmp(status.transport, "playing") == 0);
@@ -24,6 +24,7 @@ int main() {
   assert(std::strcmp(status.title, "Utwór") == 0);
   assert(std::strcmp(status.playback, "PLAY") == 0);
   assert(std::strcmp(status.codec, "MP3") == 0 && status.bitrate == 320);
+  assert(status.sampleRate == 44100);
 
   status = selectWebStatusView(display, "Radio A", "", "", "",
                                "FLAC", 1124);
@@ -115,7 +116,8 @@ int main() {
   bt.connected = false;
   sources.observe(bt);  // BT -> RADIO; current radio data returns immediately.
   sources.displayView(display, false);
-  status = selectWebStatusView(display, "Radio B", "Nowe metadata", "", "", "AAC", 128);
+  status = selectWebStatusView(display, "Radio B", "Nowe metadata", "", "", "AAC", 128,
+                               44100);
   assert(std::strcmp(status.source, "WEB") == 0);
   assert(std::strcmp(status.name, "Radio B") == 0);
   assert(std::strcmp(status.metadata, "Nowe metadata") == 0);
@@ -123,6 +125,7 @@ int main() {
   assert(std::strcmp(status.codec, "AAC") == 0 && status.bitrate == 128);
   assert(std::strcmp(status.playback, "STOP") == 0);
   assert(std::strcmp(status.transport, "stopped") == 0);
+  assert(status.sampleRate == 0);
 
   sources.cycle(bt);  // Manual BT selection while the phone is disconnected.
   sources.displayView(display);

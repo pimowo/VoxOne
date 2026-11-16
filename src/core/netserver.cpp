@@ -1396,7 +1396,8 @@ static void formatWebStatus(char* output, size_t capacity) {
 #endif
   const WebStatusView status = selectWebStatusView(
       sourceView, config.station.name, radioMetadata, radioArtist, radioTitle,
-      getFormat(config.configFmt), config.station.bitrate);
+      getFormat(config.configFmt), config.station.bitrate,
+      player.decodedSampleRate());
   const uint8_t sourceMask = sourceManagerSourceMask();
   char availableSources[80];
   const int availableLength = snprintf(

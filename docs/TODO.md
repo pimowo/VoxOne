@@ -146,14 +146,21 @@ checkpointów pozostaje w historii Git i w istniejących raportach.
   duplikaty continuity counter podczas składania sekcji wielopakietowych oraz
   zastąpić albo formalnie uzasadnić limit pierwszych czterech PID PMT wraz z
   wyborem programu; zachować ograniczone bufory i testy ASan/UBSan.
-- [ ] MPEG-TS: dodać natywny harness integracyjny wejścia
-  `Audio::processWebStreamTS` z kontrolowanym klientem i atrapą `InBuff`, aby
-  sprawdzać zapis wyłącznie dla `AudioData`, odrzucanie pojedynczych błędów i
-  jedno przerwanie po osiągnięciu limitu bez zależności od Arduino/Wi-Fi.
 - [ ] HLS: dodać testy integracyjne rzeczywistego `Audio::parsePlaylist_M3U8`
   (nie tylko resolvera) oraz kontrolowaną obsługę nieprawidłowych i
   niekompletnych URL, `#EXTINF` bez następnego URL i rozdzielenie błędu
   playlisty od prawidłowego braku nowego segmentu.
+- [ ] HLS/MPEG-TS: dodać pełny test integracyjny ścieżki
+  `Audio::loop()` → `httpPrint()` → `parsePlaylist_M3U8()` →
+  `processWebStreamTS()` → rzeczywisty `InBuff`/dekoder oraz zachowania
+  Playera i SourceManagera. Obecny natywny harness wykonuje wyciętą bez zmian
+  metodę produkcyjną `processWebStreamTS()` z produkcyjnym parserem i recovery,
+  ale używa `FakeClient`/`FakeBuffer` i nie obejmuje pobierania playlisty,
+  żądań HTTP ani zewnętrznego przejścia PLAYING/STOP/reconnect.
+- [ ] HLS: zweryfikować i w razie potrzeby skorygować 10-sekundowy timeout
+  transportu, gdy w `InBuff` nadal są dostępne dane audio lub dekoder wywiera
+  backpressure; dodać regresję wykluczającą fałszywy STOP/reconnect bez
+  maskowania rzeczywistego braku postępu transportu.
 - [ ] HLS: zastąpić zgodnościowe łączenie URL pełnym rozwiązywaniem referencji
   według RFC 3986 oraz jawnie ograniczyć schematy do HTTP/HTTPS, zabezpieczając
   `httpPrint` przed błędnym lub niezgodnym schematem.

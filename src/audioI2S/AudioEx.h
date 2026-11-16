@@ -185,6 +185,9 @@ public:
     void setBalance(int8_t bal = 0);
     void setVolume(uint8_t vol);
     uint32_t getSampleRate();
+    uint32_t decodedSampleRate() const {
+      return m_decodedSampleRate.load(std::memory_order_acquire);
+    }
     uint8_t  getBitsPerSample();
     uint8_t  getChannels();
     uint32_t getBitRate(bool avg = false);
@@ -495,6 +498,7 @@ private:
     char*           m_playlistBuff = NULL;          // stores playlistdata
     filter_t        m_filter[3];                    // digital filters
     uint32_t        m_sampleRate=16000;
+    std::atomic<uint32_t> m_decodedSampleRate{0};   // published only after decoded PCM
     uint32_t        m_bitRate=0;                    // current bitrate given fom decoder
     uint32_t        m_avr_bitrate = 0;              // average bitrate, median computed by VBR
     voxone::audio::FlacBitrateMeter m_flacBitrateMeter;
@@ -543,6 +547,8 @@ private:
     bool            m_webFileDataComplete = false;  // HTTP body complete; decoder may still be draining
     bool            m_localFileActive = false;
     bool            m_f_chunked = false ;           // Station provides chunked transfer
+    bool            m_f_contentLength = false;      // HTTP response declared Content-Length
+    bool            m_f_connectionClose = false;    // active response cannot be reused
     bool            m_f_playing = false;            // valid mp3 stream recognized
     std::atomic<bool> m_pcmOutputArmed{false};       // wait for the first decoded PCM frame
     std::atomic<bool> m_pcmOutputReady{false};       // first frame reached I2S while DAC was muted

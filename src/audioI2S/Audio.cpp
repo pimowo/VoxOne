@@ -528,6 +528,8 @@ void Audio::setDefaults() {
     AUDIO_INFO("buffers freed, free Heap: %lu bytes", ESP.getFreeHeap());
 
     m_f_chunked = false;                                    // Assume not chunked
+    m_f_contentLength = false;
+    m_f_connectionClose = false;
     m_f_playing = false;
     m_f_ssl = false;
     m_f_metadata = false;
@@ -988,15 +990,22 @@ bool Audio::followResolutionUrl(const char* host, const char* source) {
 bool Audio::httpPrint(const char* host) {
     // user and pwd for authentification only, can be empty
 
+    const auto failRequest = [this](const char* reason) -> bool {
+        AUDIO_ERROR("HLS HTTP request failed: %s", reason);
+        if(_client) _client->stop();
+        setDatamode(AUDIO_NONE);
+        stopSong();
+        return false;
+    };
+
     if(host == NULL) {
         AUDIO_INFO("Hostaddress is empty");
-        return false;
+        return failRequest("empty host");
     }
 
     voxone::radio::OwnedCString strippedHost;
     if(!strippedHost.assign(m_f_ssl ? host + 8 : host + 7)) {
-        AUDIO_ERROR("Out of memory preparing URL");
-        return false;
+        return failRequest("out of memory preparing URL");
     }
     char* h_host = strippedHost.get(); // host without http:// or https://
 
@@ -1013,8 +1022,7 @@ bool Audio::httpPrint(const char* host) {
 
     voxone::radio::UrlRequestParts requestParts;
     if(!requestParts.assign(h_host, pos_slash)) {
-        AUDIO_ERROR("Out of memory preparing URL parts");
-        return false;
+        return failRequest("out of memory preparing URL parts");
     }
     char *hostwoext = requestParts.authority();
     char *extension = requestParts.path();
@@ -1031,26 +1039,32 @@ bool Audio::httpPrint(const char* host) {
     const auto headerResult = requestHeader.build(
         extension, hostwoext, nullptr, kVoxOneUserAgentHeader, false);
     if(headerResult != voxone::radio::HttpRequestBuildResult::Ok) {
-        AUDIO_ERROR("Cannot build HTTP request header: %s",
-                    headerResult ==
-                            voxone::radio::HttpRequestBuildResult::NoMemory
-                        ? "out of memory"
-                        : "header too large");
-        return false;
+        return failRequest(
+            headerResult == voxone::radio::HttpRequestBuildResult::NoMemory
+                ? "out of memory building request header"
+                : "invalid or oversized request header");
     }
 
     if(m_f_ssl){ _client = static_cast<WiFiClient*>(&clientsecure); if(port == 80) port = 443;}
     else       { _client = static_cast<WiFiClient*>(&client);}
 
-    if(!_client->connected()){
+    const bool reconnect = voxone::radio::httpConnectionMustReconnect(
+        m_f_connectionClose, _client->connected());
+    if(m_f_connectionClose) {
+        _client->stop();
+        m_f_connectionClose = false;
+    }
+    if(reconnect){
         AUDIO_INFO("The host has disconnected, reconnecting");
         if(!_client->connect(hostwoext, port)){
             log_e("connection lost");
-            stopSong();
-            return false;
+            return failRequest("connection failed");
         }
     }
-    _client->print(requestHeader.get());
+    const size_t requestLength = strlen(requestHeader.get());
+    const size_t requestBytes = _client->print(requestHeader.get());
+    if(!voxone::radio::httpRequestWriteComplete(requestLength, requestBytes))
+        return failRequest("incomplete request write");
 
     if(endsWith(extension, ".mp3"))   m_expectedCodec = CODEC_MP3;
     if(endsWith(extension, ".aac"))   m_expectedCodec = CODEC_AAC;
@@ -1065,6 +1079,7 @@ bool Audio::httpPrint(const char* host) {
     setDatamode(HTTP_RESPONSE_HEADER);   // Handle header
     m_streamType = ST_WEBSTREAM;
     m_contentlength = 0;
+    m_f_contentLength = false;
     m_f_chunked = false;
 
     return true;
@@ -2098,6 +2113,7 @@ uint32_t Audio::stopSong() {
     if(m_audioTaskMutex) xSemaphoreTakeRecursive(m_audioTaskMutex, portMAX_DELAY);
     cancelPendingConnection();
     m_f_running = false;
+    m_decodedSampleRate.store(0, std::memory_order_release);
     m_audioDecodeReady = false;
     cancelPcmOutput();
     memset(m_outBuff, 0, sizeof(m_outBuff));     //Clear OutputBuffer
@@ -2983,7 +2999,6 @@ void Audio::processWebStreamTS(bool monitorTransport) {
     static bool     f_stream;                                   // first audio data received
     static bool     f_firstPacket;
     static int      bytesDecoded;
-    static uint32_t byteCounter;                                // count received data
     static uint32_t tmr_1s;                                     // timer 1 sec
     static uint8_t  ts_packet[188];                             // m3u8 transport stream is 188 bytes long
     size_t          ts_packetStart = 0;
@@ -2996,11 +3011,11 @@ void Audio::processWebStreamTS(bool monitorTransport) {
         m_tsParser.beginSegment();
         f_stream = false;
         f_firstPacket = true;
-        byteCounter = 0;
         bytesDecoded = 0;
         tmr_1s = millis();
         m_t0 = millis();
-        m_segmentTransportWatchdog.reset(m_t0);
+        m_segmentTransportWatchdog.begin(
+            m_f_contentLength, m_contentlength, m_f_chunked, m_t0);
         ts_packetPtr = 0;
         m_controlCounter = 0;
         m_f_firstCall = false;
@@ -3015,17 +3030,22 @@ void Audio::processWebStreamTS(bool monitorTransport) {
         uint8_t readedBytes = 0;
         if(m_f_chunked) {
             if(!m_chunkcount) chunkedDataTransfer(&readedBytes);
-            if(m_chunkState == CHUNK_DONE) {m_f_continue = true; return;}
-            if(getDatamode() != AUDIO_DATA) return;
-            availableBytes = min((uint32_t)_client->available(), m_chunkcount);
+            if(m_chunkState == CHUNK_DONE) {
+                m_segmentTransportWatchdog.chunkComplete();
+                availableBytes = 0;
+            }
+            else {
+                if(getDatamode() != AUDIO_DATA) return;
+                availableBytes = min((uint32_t)_client->available(), m_chunkcount);
+            }
         }
+        availableBytes = m_segmentTransportWatchdog.readLimit(availableBytes);
         const uint32_t requested = min(availableBytes, (uint32_t)(ts_packetsize - ts_packetPtr));
         int res = readClient(ts_packet + ts_packetPtr, requested);
         if(res > 0){
-            m_segmentTransportWatchdog.received(millis());
+            m_segmentTransportWatchdog.received(static_cast<uint32_t>(res), millis());
             if(m_f_chunked) m_chunkcount -= res;
             ts_packetPtr += res;
-            byteCounter += res;
             if(ts_packetPtr < ts_packetsize)  return;
             ts_packetPtr = 0;
             if(f_firstPacket){  // search for ID3 Header in the first packet
@@ -3096,11 +3116,6 @@ void Audio::processWebStreamTS(bool monitorTransport) {
                 }
                 InBuff.unlock();
             }
-            if(m_contentlength && byteCounter == m_contentlength){
-                byteCounter = 0;
-                m_f_continue = true;
-            }
-            if(byteCounter > m_contentlength) log_e("byteCounter overflow");
         }
 
     }
@@ -3123,8 +3138,9 @@ void Audio::processWebStreamTS(bool monitorTransport) {
     }
 
     const auto transport = m_segmentTransportWatchdog.evaluate(
-        m_f_continue, monitorTransport, _client->connected(),
-        InBuff.bufferFilled() > maxFrameSize, millis());
+        monitorTransport, _client->connected(),
+        static_cast<uint32_t>(_client->available()),
+        InBuff.bufferFilled() > maxFrameSize, ts_packetPtr, millis());
     if(transport == voxone::radio::SegmentTransportResult::RecoverStation) {
         AUDIO_INFO("HLS/TS transport stalled; returning recovery to Player");
         _client->stop();
@@ -3132,8 +3148,10 @@ void Audio::processWebStreamTS(bool monitorTransport) {
         stopSong();
         return;
     }
-    if(transport == voxone::radio::SegmentTransportResult::SegmentComplete)
+    if(transport == voxone::radio::SegmentTransportResult::SegmentComplete) {
+        m_f_continue = true;
         return;
+    }
 
     // buffer fill routine  - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
     if(true) { // statement has no effect
@@ -3162,17 +3180,16 @@ void Audio::processWebStreamHLS(bool monitorTransport) {
     static bool     f_tmr_1s;
     static bool     f_stream;                                   // first audio data received
     static int      bytesDecoded;
-    static uint32_t byteCounter;                                // count received data
     static uint32_t tmr_1s;                                     // timer 1 sec
     (void)bytesDecoded;
     // first call, set some values to default - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
     if(m_f_firstCall) { // runs only ont time per connection, prepare for start
         f_stream = false;
-        byteCounter = 0;
         bytesDecoded = 0;
         tmr_1s = millis();
         m_t0 = millis();
-        m_segmentTransportWatchdog.reset(m_t0);
+        m_segmentTransportWatchdog.begin(
+            m_f_contentLength, m_contentlength, m_f_chunked, m_t0);
          m_f_firstCall = false;
     }
 
@@ -3183,10 +3200,16 @@ void Audio::processWebStreamHLS(bool monitorTransport) {
         uint8_t readedBytes = 0;
         if(m_f_chunked) {
             if(!m_chunkcount) chunkedDataTransfer(&readedBytes);
-            if(m_chunkState == CHUNK_DONE) {m_f_continue = true; return;}
-            if(getDatamode() != AUDIO_DATA) return;
-            availableBytes = min((uint32_t)_client->available(), m_chunkcount);
+            if(m_chunkState == CHUNK_DONE) {
+                m_segmentTransportWatchdog.chunkComplete();
+                availableBytes = 0;
+            }
+            else {
+                if(getDatamode() != AUDIO_DATA) return;
+                availableBytes = min((uint32_t)_client->available(), m_chunkcount);
+            }
         }
+        availableBytes = m_segmentTransportWatchdog.readLimit(availableBytes);
         int bytesWasWritten = 0;
         InBuff.lock();
         if(InBuff.writeSpace() >= availableBytes){
@@ -3196,14 +3219,10 @@ void Audio::processWebStreamHLS(bool monitorTransport) {
             bytesWasWritten = readClient(InBuff.getWritePtr(), InBuff.writeSpace());
         }
         if(bytesWasWritten > 0) {
-            m_segmentTransportWatchdog.received(millis());
+            m_segmentTransportWatchdog.received(
+                static_cast<uint32_t>(bytesWasWritten), millis());
             InBuff.bytesWritten(bytesWasWritten);
-            byteCounter += bytesWasWritten;
             if(m_f_chunked) m_chunkcount -= bytesWasWritten;
-            if(m_contentlength && byteCounter == m_contentlength){
-                byteCounter = 0;
-                m_f_continue = true;
-            }
         }
         InBuff.unlock();
     }
@@ -3226,8 +3245,9 @@ void Audio::processWebStreamHLS(bool monitorTransport) {
     }
 
     const auto transport = m_segmentTransportWatchdog.evaluate(
-        m_f_continue, monitorTransport, _client->connected(),
-        InBuff.bufferFilled() > maxFrameSize, millis());
+        monitorTransport, _client->connected(),
+        static_cast<uint32_t>(_client->available()),
+        InBuff.bufferFilled() > maxFrameSize, 0, millis());
     if(transport == voxone::radio::SegmentTransportResult::RecoverStation) {
         AUDIO_INFO("HLS transport stalled; returning recovery to Player");
         _client->stop();
@@ -3235,8 +3255,10 @@ void Audio::processWebStreamHLS(bool monitorTransport) {
         stopSong();
         return;
     }
-    if(transport == voxone::radio::SegmentTransportResult::SegmentComplete)
+    if(transport == voxone::radio::SegmentTransportResult::SegmentComplete) {
+        m_f_continue = true;
         return;
+    }
 
     if(InBuff.bufferFilled() > maxFrameSize && !f_stream) {  // waiting for buffer filled
         f_stream = true;  // ready to play the audio data
@@ -3428,7 +3450,9 @@ bool Audio::parseHttpResponseHeader() { // this is the response to a GET / reque
         // }
 
         else if(startsWith(rhl, "connection:")) {
-            if(indexOf(rhl, "close", 0) >= 0) {; /* do nothing */}
+            for(char* value = rhl + 11; *value; ++value)
+                *value = toLowerCase(*value);
+            if(indexOf(rhl, "close", 0) >= 0) m_f_connectionClose = true;
         }
 
         else if(startsWith(rhl, "icy-genre:")) {
@@ -3462,8 +3486,15 @@ bool Audio::parseHttpResponseHeader() { // this is the response to a GET / reque
 
         else if(startsWith(rhl, "content-length:")) {
             const char* c_cl = (rhl + 15);
-            int32_t i_cl = atoi(c_cl);
-            m_contentlength = i_cl;
+            char* end = nullptr;
+            const unsigned long long parsed = strtoull(c_cl, &end, 10);
+            while(end && *end == ' ') ++end;
+            if(!end || end == c_cl || *end || parsed > UINT32_MAX) {
+                AUDIO_ERROR("Invalid content-length: %s", c_cl);
+                goto exit;
+            }
+            m_contentlength = static_cast<uint32_t>(parsed);
+            m_f_contentLength = true;
             m_streamType = ST_WEBFILE; // Stream comes from a fileserver
             if(m_f_Log) AUDIO_INFO("content-length: %lu", m_contentlength);
         }
@@ -3934,6 +3965,15 @@ int Audio::sendBytes(uint8_t* data, size_t len) {
         m_flacBitrateMeter.reset();
     }
     updateBitrate();
+
+    uint32_t decodedSampleRate = 0;
+    if(m_codec == CODEC_WAV) decodedSampleRate = getSampleRate();
+    if(m_codec == CODEC_MP3) decodedSampleRate = MP3GetSampRate();
+    if(m_codec == CODEC_AAC || m_codec == CODEC_M4A)
+        decodedSampleRate = AACGetSampRate();
+    if(m_codec == CODEC_FLAC) decodedSampleRate = FLACGetSampRate();
+    if(m_validSamples > 0 && decodedSampleRate)
+        m_decodedSampleRate.store(decodedSampleRate, std::memory_order_release);
 
     if(audio_process_extern){
         bool continueI2S = false;
@@ -4539,9 +4579,10 @@ size_t Audio::chunkedDataTransfer(uint8_t* bytes){
 
     const auto fail = [this](const char* reason) -> size_t {
         log_e("chunked transfer error: %s", reason);
-        stopSong();
         m_chunkState = CHUNK_ERROR;
         m_chunkcount = 0;
+        setDatamode(AUDIO_NONE);
+        stopSong();
         return 0;
     };
     const auto finish = [this]() -> size_t {
