@@ -12,6 +12,10 @@ checkpointów pozostaje w historii Git i w istniejących raportach.
   strumienia; po VOXONE-TS-PARSER-SAFETY-1/2/3 objąć ten HIL również standardowymi
   segmentami AAC-in-TS z PAT/PMT zawierającymi pola adaptacyjne, ciągłością
   wielu segmentów oraz rzeczywistą telemetrią AAC, bitrate i sample rate.
+- [ ] Po VOXONE-WWW-NEXT-PREV-STACK-FIX-1 fizycznie potwierdzić na L0
+  przełączanie NEXT/PREV z WWW, w tym zawijanie pierwsza/ostatnia i szybką
+  sekwencję poleceń, bez restartu `async_tcp`, utraty kolejności ani błędnego
+  zapisu wybranej stacji.
 - [ ] Zweryfikować przycisk zasilania na L0 (GPIO42) i S0 (GPIO3): krótki
   klik (Wakeup/Mute albo Home z Menu/karuzeli), dwuklik otwierający Menu
   Główne wyłącznie z Playera oraz długie naciśnięcie uruchamiające shutdown

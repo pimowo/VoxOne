@@ -1,5 +1,6 @@
 #include "options.h"
 #include "player.h"
+#include "player_station_navigation.h"
 #include "config.h"
 #include "serialcli.h"
 #include "display.h"
@@ -165,7 +166,8 @@ void Player::sendCommand(playerRequestParams_t request){
   if(playerQueue==NULL) return;
   if(systemUpdateAudioBlocked() && request.type != PR_UPDATE_STOP) return;
   if (!_localAudioAvailable &&
-      (request.type == PR_PLAY || request.type == PR_SOURCE_MEDIA ||
+      (request.type == PR_PLAY || request.type == PR_PREV ||
+       request.type == PR_NEXT || request.type == PR_SOURCE_MEDIA ||
        request.type == PR_RADIO_RESUME ||
        request.type == PR_RADIO_NETWORK_ONLINE)) return;
   if (request.type == PR_STATION_REFRESH) {
@@ -176,6 +178,8 @@ void Player::sendCommand(playerRequestParams_t request){
   if(xQueueSend(playerQueue, &request, PLQ_SEND_DELAY) != pdPASS) return;
   switch (request.type) {
     case PR_PLAY:
+    case PR_PREV:
+    case PR_NEXT:
     case PR_STOP:
     case PR_SOURCE_MEDIA:
     case PR_RADIO_SUSPEND:
@@ -187,9 +191,12 @@ void Player::sendCommand(playerRequestParams_t request){
     default:
       break;
   }
-  if(request.type == PR_PLAY ||
+  const bool radioPlayRequest = request.type == PR_PLAY ||
+                                request.type == PR_PREV ||
+                                request.type == PR_NEXT;
+  if(radioPlayRequest ||
      (request.type == PR_STOP && !stopsSourceMedia))
-    sourceManagerRadioCommandQueued(request.type == PR_PLAY,
+    sourceManagerRadioCommandQueued(radioPlayRequest,
                                    request.type == PR_PLAY && request.payload > 0
                                        ? static_cast<uint16_t>(request.payload) : 0);
 }
@@ -522,6 +529,26 @@ bool Player::processPlayerCommands() {
         if (player_on_station_change) player_on_station_change(); 
         break;
       }
+      case PR_PREV:
+      case PR_NEXT: {
+        const uint16_t count = config.playlistLength();
+        const uint16_t current = config.lastStation();
+        const uint16_t target = requestP.type == PR_PREV
+            ? voxone::player_navigation::previous(current, count)
+            : voxone::player_navigation::next(current, count);
+        if (target == 0) {
+          sourceManagerRadioPlayConsumed();
+          sourceManagerPlaylistSelectionCleared();
+          break;
+        }
+        config.setLastStation(target);
+        if (sourceMediaBusy()) break;
+        _radioReconnect.cancel();
+        sourceManagerRadioPlayConsumed();
+        _play(target);
+        if (player_on_station_change) player_on_station_change();
+        break;
+      }
       case PR_TOGGLE: {
         toggle();
         break;
@@ -843,21 +870,14 @@ void Player::playSourceMedia(const voxone::source_media::Request& request){
 
 void Player::prev() {
   if (systemUpdateAudioBlocked()) return;
-  uint16_t lastStation = config.lastStation();
-  const uint16_t count = config.playlistLength();
-  if (count == 0) return;
-  if (lastStation <= 1) config.lastStation(count); else config.lastStation(lastStation-1);
-  sendCommand({PR_PLAY, config.lastStation()});
+  if (config.playlistLength() == 0) return;
+  sendCommand({PR_PREV, 0});
 }
 
 void Player::next() {
   if (systemUpdateAudioBlocked()) return;
-  uint16_t lastStation = config.lastStation();
-  const uint16_t count = config.playlistLength();
-  if (count == 0) return;
-  if (lastStation == 0 || lastStation >= count) config.lastStation(1);
-  else config.lastStation(lastStation+1);
-  sendCommand({PR_PLAY, config.lastStation()});
+  if (config.playlistLength() == 0) return;
+  sendCommand({PR_NEXT, 0});
 }
 
 void Player::toggle() {

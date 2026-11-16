@@ -1,4 +1,5 @@
 #include "../src/core/player_pending_refresh.h"
+#include "../src/core/player_station_navigation.h"
 #include "../src/core/source_manager_state.h"
 
 #include <cassert>
@@ -101,6 +102,27 @@ struct ReliabilityModel {
 }  // namespace
 
 int main() {
+  using voxone::player_navigation::next;
+  using voxone::player_navigation::previous;
+
+  assert(next(0, 0) == 0 && previous(0, 0) == 0);
+  assert(next(0, 5) == 1 && previous(0, 5) == 5);
+  assert(next(5, 5) == 1 && previous(1, 5) == 5);
+  assert(next(3, 5) == 4 && previous(3, 5) == 2);
+  assert(next(1, 1) == 1 && previous(1, 1) == 1);
+
+  // Directions are resolved by the FIFO consumer, so consecutive commands
+  // advance from the result of the preceding command rather than enqueueing
+  // duplicate absolute station numbers from the producer's stale snapshot.
+  std::deque<bool> directions{true, true, false, true};
+  uint16_t selected = 4;
+  while (!directions.empty()) {
+    const bool forward = directions.front();
+    directions.pop_front();
+    selected = forward ? next(selected, 5) : previous(selected, 5);
+  }
+  assert(selected == 1);  // 4 -> 5 -> 1 -> 5 -> 1.
+
   // A full queue rejects ordinary transport without changing user intent, but
   // a committed playlist reconcile is retained without occupying that queue.
   ReliabilityModel full(5);
@@ -225,4 +247,21 @@ int main() {
   assert(player.find("sourceManagerRadioResumeAllowed()") != std::string::npos);
   assert(player.find("_applyStop(PR_STOP_KEEP_STATION, false);") !=
          std::string::npos);
+
+  const std::string previousCommand = section(
+      player, "void Player::prev()", "void Player::next()");
+  const std::string nextCommand = section(
+      player, "void Player::next()", "void Player::toggle()");
+  assert(previousCommand.find("sendCommand({PR_PREV, 0})") != std::string::npos);
+  assert(nextCommand.find("sendCommand({PR_NEXT, 0})") != std::string::npos);
+  assert(previousCommand.find("config.lastStation(") == std::string::npos);
+  assert(nextCommand.find("config.lastStation(") == std::string::npos);
+  assert(sendCommand.find("case PR_PREV:") != std::string::npos);
+  assert(sendCommand.find("case PR_NEXT:") != std::string::npos);
+
+  const std::string consumer = section(
+      player, "bool Player::processPlayerCommands()", "void Player::serviceSourceMedia()");
+  assert(consumer.find("case PR_PREV:") != std::string::npos);
+  assert(consumer.find("case PR_NEXT:") != std::string::npos);
+  assert(consumer.find("config.setLastStation(target);") != std::string::npos);
 }
