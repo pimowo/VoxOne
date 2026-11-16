@@ -235,10 +235,12 @@ void testProductionBindings() {
       "bool Config::setVuMeter");
   assert(lineOutEnabled.find("_pendingConfigSave.store") !=
          std::string::npos);
-  assert(lineOutEnabled.find("persistV7") == std::string::npos);
+  assert(lineOutEnabled.find("if (persistNow) persisted = persistV7();") !=
+         std::string::npos);
   assert(lineOutVolume.find("_pendingConfigSave.store") !=
          std::string::npos);
-  assert(lineOutVolume.find("persistV7") == std::string::npos);
+  assert(lineOutVolume.find("if (persistNow) persisted = persistV7();") !=
+         std::string::npos);
   assert(configSource.find("void Config::servicePendingSave()") !=
          std::string::npos);
   assert(main.find("config.servicePendingSave();") != std::string::npos);

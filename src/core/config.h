@@ -195,9 +195,9 @@ class Config {
     bool setTftTheme(TftTheme theme);
     bool setPowerMode(PowerMode mode);
     bool setEncoderUiReversed(bool reversed);
-    bool setLineOutEnabled(bool enabled);
-    bool setLineOutVolume(uint8_t volume);
-    bool setVuMeter(bool enabled);
+    bool setLineOutEnabled(bool enabled, bool persistNow=false);
+    bool setLineOutVolume(uint8_t volume, bool persistNow=false);
+    bool setVuMeter(bool enabled, bool persistNow=false);
     bool setAudioPath(AudioPath path);
     void beginMenuTransaction();
     void previewMenuSettings(const voxone::ui_menu::MenuSettings& settings);
@@ -218,12 +218,12 @@ class Config {
     uint8_t setVolumeState(uint8_t raw, uint8_t user);
     uint8_t applyConfiguredStartupVolume();
     void saveVolume();
-    void setMaximumVolume(uint8_t maximum);
-    void setStartupMode(uint8_t mode);
-    void setStartupFixedVolume(uint8_t user);
+    bool setMaximumVolume(uint8_t maximum);
+    bool setStartupMode(uint8_t mode);
+    bool setStartupFixedVolume(uint8_t user);
     // Returns whether the EEPROM commit succeeded (or no persistence was needed).
     bool setTone(int8_t bass, int8_t middle, int8_t trebble);
-    void setBalance(int8_t balance);
+    bool setBalance(int8_t balance);
     uint8_t setLastStation(uint16_t val);
     bool setLastStationChecked(uint16_t val, bool intentionalZero=true);
     uint8_t setLastSSID(uint8_t val);
@@ -247,7 +247,7 @@ class Config {
     void lastStation(uint16_t newstation);
     char * stationByNum(uint16_t num);
     void setTimezone(int8_t tzh, int8_t tzm);
-    void setBrightness(bool dosave=false);
+    bool setBrightness(bool dosave=false);
     void setRuntimeBrightness(uint8_t value);
     void setDspOn(bool dspon, bool saveval = true);
     void sleepForAfter(uint16_t sleepfor, uint16_t sleepafter=0);
@@ -268,11 +268,12 @@ class Config {
     void configPostPlaying();
     bool isRTCFound(){ return _rtcFound; };
     template <typename T>
-    void saveValue(T *field, const T &value, bool commit=true, bool force=false){
+    bool saveValue(T *field, const T &value, bool commit=true, bool force=false){
       WriteLock lock(_persistMutex);
       _storage.update(*field, value, force);
       _publishRuntimeLocked();
-      if (commit && _storage.dirty() && !_startupReadOnly) persistV7();
+      if (commit && _storage.dirty()) return !_startupReadOnly && persistV7();
+      return true;
     }
     void saveValue(char *field, const char *value, size_t N, bool commit=true, bool force=false) {
       WriteLock lock(_persistMutex);

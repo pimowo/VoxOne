@@ -156,7 +156,8 @@ void auditProductionWiring() {
   const std::string vuSetterBlock = config.substr(vuSetter,
                                                    nextSetter - vuSetter);
   assert(vuSetterBlock.find("_pendingConfigSave.store") != std::string::npos);
-  assert(vuSetterBlock.find("persistV7") == std::string::npos);
+  assert(vuSetterBlock.find("if (persistNow) return persistV7();") !=
+         std::string::npos);
 
   const std::string server = readFile("src/core/netserver.cpp");
   assert(server.find("\"{\\\"sst\\\":%d,\\\"vu\\\":%d,\\\"canVu\\\":%d") !=

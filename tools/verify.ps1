@@ -248,12 +248,16 @@ Invoke-Step 'Native tests' {
  & $Python (Join-Path $root 'test/hls_ts_transport_native.py') 2>&1 | ForEach-Object { Write-Host $_ }
  if($LASTEXITCODE -ne 0) { throw 'HLS TS production transport test failed' }
  Write-Host '  PASS hls_ts_transport_native'
+ & $Python (Join-Path $root 'test/web_config_execution_native.py') '--cxx' $Cxx 2>&1 | ForEach-Object { Write-Host $_ }
+ if($LASTEXITCODE -ne 0) { throw 'WebSocket configuration execution failed' }
  Write-Host "  $($tests.Count) native tests passed"
 }
 if(-not $onWindows) {
  Invoke-Step 'Native sanitizers' {
   $sanitizerArgs=@('-std=c++11','-O1','-g','-fsanitize=address,undefined','-fno-omit-frame-pointer','-Wall','-Wextra','-Werror','-Wno-unused-parameter')
   $widgetBlockersExe=Join-Path $work 'code_audit_widget_blockers_sanitized'
+  & $Python (Join-Path $root 'test/web_config_execution_native.py') '--cxx' $Cxx '--sanitize' 2>&1 | ForEach-Object { Write-Host $_ }
+  if($LASTEXITCODE -ne 0) { throw 'WebSocket configuration execution sanitizers failed' }
   & $Cxx @sanitizerArgs '-o' $widgetBlockersExe `
     (Join-Path $root 'test/code_audit_widget_blockers_native.cpp')
   if($LASTEXITCODE -ne 0) { throw 'Sanitized code-audit widget blockers compile failed' }

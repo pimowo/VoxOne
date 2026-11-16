@@ -665,6 +665,7 @@ bool Config::setPowerMode(PowerMode mode) {
 bool Config::setEncoderUiReversed(bool reversed) {
   WriteLock lock(_persistMutex);
   if (store.encoderUiReversed == reversed) {
+    if (_storage.dirty() && !persistV7()) return false;
     uiMenu.configureEncoderUiReversed(reversed);
     netserver.requestOnChange(GETSCREEN, 0);
     return true;
@@ -681,10 +682,12 @@ bool Config::setEncoderUiReversed(bool reversed) {
   return persisted;
 }
 
-bool Config::setLineOutEnabled(bool enabled) {
+bool Config::setLineOutEnabled(bool enabled, bool persistNow) {
+  bool persisted = true;
   {
     WriteLock lock(_persistMutex);
-    if (store.lineOutEnabled == enabled) return true;
+    if (store.lineOutEnabled == enabled)
+      return !persistNow || !_storage.dirty() || persistV7();
     if (!voxone::line_out::encode(
             enabled, store.lineOutVolume, store.reservedWeather,
             sizeof(store.reservedWeather)))
@@ -693,24 +696,27 @@ bool Config::setLineOutEnabled(bool enabled) {
     _storage.markDirty();
     _publishRuntimeLocked();
     if (_startupReadOnly) return false;
-    _pendingConfigSave.store(true, std::memory_order_release);
+    if (persistNow) persisted = persistV7();
+    else _pendingConfigSave.store(true, std::memory_order_release);
   }
   player.applyCurrentVolume();
 #if VOXONE_HAS_BT && VOXONE_PIN_MAP_COMPLETE
   sourceManagerApplyConfiguredBluetoothVolume();
 #endif
   display.putRequest(DRAWVOL);
-  netserver.requestOnChange(VOLUME, 0);
-  return true;
+  if (persisted) netserver.requestOnChange(VOLUME, 0);
+  return persisted;
 }
 
-bool Config::setLineOutVolume(uint8_t volume) {
+bool Config::setLineOutVolume(uint8_t volume, bool persistNow) {
   if (volume > 100) return false;
+  bool persisted = true;
   bool enabled = false;
   {
     WriteLock lock(_persistMutex);
     if (volume > store.maximumVolume) return false;
-    if (store.lineOutVolume == volume) return true;
+    if (store.lineOutVolume == volume)
+      return !persistNow || !_storage.dirty() || persistV7();
     if (!voxone::line_out::encode(
             store.lineOutEnabled, volume, store.reservedWeather,
             sizeof(store.reservedWeather)))
@@ -720,7 +726,8 @@ bool Config::setLineOutVolume(uint8_t volume) {
     _storage.markDirty();
     _publishRuntimeLocked();
     if (_startupReadOnly) return false;
-    _pendingConfigSave.store(true, std::memory_order_release);
+    if (persistNow) persisted = persistV7();
+    else _pendingConfigSave.store(true, std::memory_order_release);
   }
   if (enabled) {
     player.applyCurrentVolume();
@@ -729,18 +736,19 @@ bool Config::setLineOutVolume(uint8_t volume) {
 #endif
     display.putRequest(DRAWVOL);
   }
-  netserver.requestOnChange(VOLUME, 0);
-  return true;
+  if (persisted) netserver.requestOnChange(VOLUME, 0);
+  return persisted;
 }
 
-bool Config::setVuMeter(bool enabled) {
+bool Config::setVuMeter(bool enabled, bool persistNow) {
   WriteLock lock(_persistMutex);
-  if (store.vumeter == enabled) return true;
+  if (store.vumeter == enabled)
+    return !persistNow || !_storage.dirty() || persistV7();
   _storage.update(store.vumeter, enabled);
   _publishRuntimeLocked();
   if (_startupReadOnly) return false;
-  // WebSocket commands execute on async_tcp. EEPROM/NVS commits use a deep
-  // flash stack and must stay on loopTask, where servicePendingSave() runs.
+  if (persistNow) return persistV7();
+  // Local callers may retain the existing deferred-save behavior.
   _pendingConfigSave.store(true, std::memory_order_release);
   return true;
 }
@@ -1069,13 +1077,14 @@ uint8_t Config::applyConfiguredStartupVolume() {
   return startup.user;
 }
 
-void Config::setMaximumVolume(uint8_t maximum) {
+bool Config::setMaximumVolume(uint8_t maximum) {
   WriteLock lock(_persistMutex);
-  if (maximum < 1 || maximum > 100) return;
+  if (maximum < 1 || maximum > 100) return false;
   const uint8_t oldMaximum = store.maximumVolume;
   const uint8_t boundedLineOut = voxone::line_out::clampToMaximum(
       store.lineOutVolume, maximum);
-  if (maximum == oldMaximum && boundedLineOut == store.lineOutVolume) return;
+  if (maximum == oldMaximum && boundedLineOut == store.lineOutVolume)
+    return !_storage.dirty() || persistV7();
   portENTER_CRITICAL(&playerVolumeMux);
   const uint8_t oldUser = userVolume;
   portEXIT_CRITICAL(&playerVolumeMux);
@@ -1086,7 +1095,7 @@ void Config::setMaximumVolume(uint8_t maximum) {
     if (!voxone::line_out::encode(
             store.lineOutEnabled, boundedLineOut, store.reservedWeather,
             sizeof(store.reservedWeather)))
-      return;
+      return false;
     store.lineOutVolume = boundedLineOut;
   }
   _storage.markDirty();
@@ -1096,18 +1105,19 @@ void Config::setMaximumVolume(uint8_t maximum) {
     adjusted.user = volumeRawToUser(adjusted.raw, maximum);
   }
   setVolumeState(adjusted.raw, adjusted.user);
-  persistV7();
+  const bool persisted = persistV7();
   player.applyCurrentVolume();
+  return persisted;
 }
 
-void Config::setStartupMode(uint8_t mode) {
-  if (mode != STARTUP_LAST && mode != STARTUP_FIXED) return;
-  saveValue(&store.startupMode, mode);
+bool Config::setStartupMode(uint8_t mode) {
+  if (mode != STARTUP_LAST && mode != STARTUP_FIXED) return false;
+  return saveValue(&store.startupMode, mode);
 }
 
-void Config::setStartupFixedVolume(uint8_t user) {
-  if (user > 100) return;
-  saveValue(&store.startupFixedVolume, user);
+bool Config::setStartupFixedVolume(uint8_t user) {
+  if (user > 100) return false;
+  return saveValue(&store.startupFixedVolume, user);
 }
 
 bool Config::setTone(int8_t bass, int8_t middle, int8_t trebble) {
@@ -1128,7 +1138,7 @@ bool Config::setTone(int8_t bass, int8_t middle, int8_t trebble) {
     persisted = persistV7();
   }
   player.setTone(store.bass, store.middle, store.trebble);
-  netserver.requestOnChange(EQUALIZER, 0);
+  if (persisted) netserver.requestOnChange(EQUALIZER, 0);
 #if VOXONE_INCLUDE_DSP
   voxone::dsp::dspTransportToneChanged(
       {store.bass, store.middle, store.trebble});
@@ -1141,11 +1151,12 @@ void Config::setSmartStart(uint8_t ss) {
   saveValue(&store.smartstart, ss);
 }
 
-void Config::setBalance(int8_t balance) {
+bool Config::setBalance(int8_t balance) {
   balance = clampBalance(balance);
-  saveValue(&store.balance, balance);
+  const bool persisted = saveValue(&store.balance, balance);
   player.setBalance(balance);
-  netserver.requestOnChange(BALANCE, 0);
+  if (persisted) netserver.requestOnChange(BALANCE, 0);
+  return persisted;
 }
 
 uint8_t Config::setLastStation(uint16_t val) {
@@ -1407,8 +1418,9 @@ bool Config::initNetwork() {
   return true;
 }
 
-void Config::setBrightness(bool dosave){
-  if (!localBacklightInstalled()) return;
+bool Config::setBrightness(bool dosave){
+  if (!localBacklightInstalled()) return !dosave;
+  bool persisted = true;
   bool wake = false;
   uint8_t brightness = 0;
   {
@@ -1421,12 +1433,13 @@ void Config::setBrightness(bool dosave){
       _storage.update(store.dspon, store.dspon, true);
     }
     _publishRuntimeLocked();
-    if (dosave && !_startupReadOnly) persistV7();
+    if (dosave) persisted = !_startupReadOnly && persistV7();
   }
   if(wake) display.wakeup();
   analogWrite(voxone::hardware::currentHardware().display.backlight,
               map(brightness, 0, 100, 0, 255));
-  if (dosave) netserver.requestOnChange(GETSCREEN, 0);
+  if (dosave && persisted) netserver.requestOnChange(GETSCREEN, 0);
+  return persisted;
 }
 
 void Config::setRuntimeBrightness(uint8_t value) {

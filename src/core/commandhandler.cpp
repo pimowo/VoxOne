@@ -35,7 +35,8 @@ static bool parseTimeInterval(const char* value, long minimum, long maximum, uin
   return true;
 }
 
-bool CommandHandler::exec(const char *command, const char *value, uint32_t cid) {
+bool CommandHandler::exec(const char *command, const char *value, uint32_t cid,
+                          bool durableConfig) {
   if (updateLockActive() &&
       !strEquals(command, "getsystem") &&
       !strEquals(command, "getwebstatus") &&
@@ -85,8 +86,7 @@ bool CommandHandler::exec(const char *command, const char *value, uint32_t cid) 
   if (voxone::audio_balance::isBalanceCommand(command)) {
     int8_t balance;
     if (!voxone::audio_balance::parseValue(value, balance)) return false;
-    config.setBalance(balance);
-    return true;
+    return config.setBalance(balance);
   }
   if (strEquals(command, "playstation")) {
     int id = atoi(value);
@@ -111,14 +111,14 @@ bool CommandHandler::exec(const char *command, const char *value, uint32_t cid) 
   if (strEquals(command, "lineoutenabled")) {
     if (!value || (strcmp(value, "0") != 0 && strcmp(value, "1") != 0))
       return false;
-    return config.setLineOutEnabled(value[0] == '1');
+    return config.setLineOutEnabled(value[0] == '1', durableConfig);
   }
   if (strEquals(command, "lineoutvolume")) {
     long lineOutVolume;
     if (!parseVolumeValue(value, lineOutVolume) || lineOutVolume < 0 ||
         lineOutVolume > 100)
       return false;
-    return config.setLineOutVolume(static_cast<uint8_t>(lineOutVolume));
+    return config.setLineOutVolume(static_cast<uint8_t>(lineOutVolume), durableConfig);
   }
   if (strEquals(command, "mute")) {
     if (value && (strcmp(value, "0") == 0 || strcmp(value, "1") == 0))
@@ -127,14 +127,17 @@ bool CommandHandler::exec(const char *command, const char *value, uint32_t cid) 
   }
   if (strEquals(command, "maximumvolume")) {
     long maximum;
-    if (parseVolumeValue(value, maximum) && maximum >= 1 && maximum <= 100)
+    if (parseVolumeValue(value, maximum) && maximum >= 1 && maximum <= 100) {
+      if (durableConfig)
+        return config.setMaximumVolume(static_cast<uint8_t>(maximum));
       player.requestMaximumVolume(static_cast<uint8_t>(maximum));
+    }
     return true;
   }
   if (strEquals(command, "startupmode")) {
     long mode;
     if (parseVolumeValue(value, mode) && mode >= STARTUP_LAST && mode <= STARTUP_FIXED) {
-      config.setStartupMode(static_cast<uint8_t>(mode));
+      if (!config.setStartupMode(static_cast<uint8_t>(mode))) return false;
       netserver.requestOnChange(VOLUME, 0);
     }
     return true;
@@ -142,12 +145,12 @@ bool CommandHandler::exec(const char *command, const char *value, uint32_t cid) 
   if (strEquals(command, "startupfixedvolume")) {
     long user;
     if (parseVolumeValue(value, user) && user >= 0 && user <= 100) {
-      config.setStartupFixedVolume(static_cast<uint8_t>(user));
+      if (!config.setStartupFixedVolume(static_cast<uint8_t>(user))) return false;
       netserver.requestOnChange(VOLUME, 0);
     }
     return true;
   }
-  if (strEquals(command, "dim"))       { int d=atoi(value); config.setRuntimeBrightness((uint8_t)(d < 0 ? 0 : (d > 100 ? 100 : d))); config.setBrightness(true); return true; }
+  if (strEquals(command, "dim"))       { int d=atoi(value); config.setRuntimeBrightness((uint8_t)(d < 0 ? 0 : (d > 100 ? 100 : d))); return config.setBrightness(true); }
   if (strEquals(command, "getindex"))  { netserver.requestOnChange(GETINDEX, cid); return true; }
   if (strEquals(command, "getrssi"))   { netserver.requestOnChange(NRSSI, cid); return true; }
   
@@ -171,28 +174,28 @@ bool CommandHandler::exec(const char *command, const char *value, uint32_t cid) 
     return true;
   }
   if (strEquals(command, "flipscreen")) {
-    config.saveValue(&config.store.flipscreen, static_cast<bool>(atoi(value)));
+    if (!config.saveValue(&config.store.flipscreen, static_cast<bool>(atoi(value)))) return false;
     display.flip();
     transitionUiMode(CLEAR);
     transitionUiMode(PLAYER);
     netserver.requestOnChange(GETSCREEN, 0);
     return true;
   }
-  if (strEquals(command, "timeint"))    { uint16_t minutes; if (!parseTimeInterval(value, 1, 10080, minutes)) return false; config.saveValue(&config.store.timeSyncInterval, minutes); return true; }
-  if (strEquals(command, "timeintrtc")) { uint16_t hours; if (!parseTimeInterval(value, 1, 1000, hours)) return false; config.saveValue(&config.store.timeSyncIntervalRTC, hours); return true; }
+  if (strEquals(command, "timeint"))    { uint16_t minutes; if (!parseTimeInterval(value, 1, 10080, minutes)) return false; return config.saveValue(&config.store.timeSyncInterval, minutes); }
+  if (strEquals(command, "timeintrtc")) { uint16_t hours; if (!parseTimeInterval(value, 1, 1000, hours)) return false; return config.saveValue(&config.store.timeSyncIntervalRTC, hours); }
 
   if (strEquals(command, "reboot"))  { requestSystemRestart(); return true; }
 
   if (strEquals(command, "vumeter")) {
     if (!value || (strcmp(value, "0") != 0 && strcmp(value, "1") != 0) ||
-        !config.setVuMeter(value[0] == '1'))
+        !config.setVuMeter(value[0] == '1', durableConfig))
       return false;
     display.putRequest(SHOWVUMETER);
     netserver.requestOnChange(GETSYSTEM, 0);
     return true;
   }
   if (strEquals(command, "hadiscovery")) {
-    config.saveValue(&config.store.haDiscoveryEnabled, static_cast<bool>(atoi(value)));
+    if (!config.saveValue(&config.store.haDiscoveryEnabled, static_cast<bool>(atoi(value)))) return false;
     netserver.requestOnChange(GETSYSTEM, 0);
     return true;
   }
